@@ -1,0 +1,161 @@
+{
+ "tile": "nordic",
+ "classes": 638,
+ "windows": 30,
+ "dtype": "float32-le",
+ "full_lse": [
+  10.455642506202356,
+  12.84050034195876,
+  12.510997793002065,
+  10.365339685571346,
+  10.346959770410525,
+  12.077373980192327,
+  10.195550049801746,
+  11.346181085805513,
+  10.96828097772816,
+  10.377506470066749,
+  10.522499797280975,
+  10.371579997144565,
+  10.298214156763388,
+  10.201217247480647,
+  11.282287972694698,
+  10.295316481964793,
+  10.447715065475968,
+  12.329340800258809,
+  12.077955747799843,
+  11.873644771886106,
+  10.932848864422064,
+  11.223634938733847,
+  10.374003132239709,
+  10.821951002956725,
+  10.654913117247402,
+  11.322131539825445,
+  10.82125603945445,
+  11.456701902447264,
+  10.2068286814862,
+  11.87081303967671
+ ],
+ "windows_src": [
+  {
+   "clip_sha256": "06ef9437bec3ed3b86f2d202aea82aff39460d463a0007ec87d815d424d5180e",
+   "window": 0
+  },
+  {
+   "clip_sha256": "0bde2151062160a0661a80755c2d563b785007f8672e0ea4e88fe221b44a918f",
+   "window": 20
+  },
+  {
+   "clip_sha256": "0fabcba9aba85da0723bf8dc0fc3eb35e4324954ecc33d2da7f9b898250b0689",
+   "window": 5
+  },
+  {
+   "clip_sha256": "129572d54cd1a34e2fb4cace4273204a871a01a9a6580379332bf31d5d267543",
+   "window": 12
+  },
+  {
+   "clip_sha256": "151ea953544647edc7e7593bd7eb23237a08b45ebfeeb1c15e6acf50437b3086",
+   "window": 20
+  },
+  {
+   "clip_sha256": "253f67a3515055b1a955de1431d03a1c7a88753f6576ec7d80c8042523a71979",
+   "window": 8
+  },
+  {
+   "clip_sha256": "2acdea3b4c7c6c34466a4330e1a73625cfdfebffe8cda4941e9bd29c1f9dc995",
+   "window": 47
+  },
+  {
+   "clip_sha256": "31a62b412ec5e101846818e8f6cfb11e28fd7bdb03450be6b68cb0914665808c",
+   "window": 24
+  },
+  {
+   "clip_sha256": "3f3181f1a90b98f1980b423236a780a1d75ac1da1addb242b02d3cbdd427fa39",
+   "window": 6
+  },
+  {
+   "clip_sha256": "49d2bb87dc44179c99d7e7d4494b785066631c85149fc21b3b1188ac5b9d6b6b",
+   "window": 5
+  },
+  {
+   "clip_sha256": "5233ace18543d98bdd3c3dbb9e917c3f41c71ee3b83f7fc7758f5152493bd6a1",
+   "window": 3
+  },
+  {
+   "clip_sha256": "5c491b1b8642f329f07dc63641e4b875f32f8fabedf16d3be0921fcddafd8eef",
+   "window": 30
+  },
+  {
+   "clip_sha256": "60e2978fe262aa042c1710bb52541434731570f35fc39618da73b96602aa655c",
+   "window": 0
+  },
+  {
+   "clip_sha256": "61e137839b4c4563f9325fe0a7317eae27515f171ebc628d55803481820f067a",
+   "window": 12
+  },
+  {
+   "clip_sha256": "68a9a463874e3661cc9feef0253e2e7e3d27255c6a93764fca841dbc2e0e2727",
+   "window": 18
+  },
+  {
+   "clip_sha256": "740bce71ff2790d9f5bec7e922a1d276f97198bb6bdb17c1f10d13a0a4dd3b40",
+   "window": 24
+  },
+  {
+   "clip_sha256": "7dc4dfeb63c3172810fe52d3cba9eb92ec266ac0c1a7484415b34ee0baa9f422",
+   "window": 16
+  },
+  {
+   "clip_sha256": "81036b45a877c6a29883a7a1a6d0cb4a525f83f0948ef550925ef3b27945cf48",
+   "window": 23
+  },
+  {
+   "clip_sha256": "90528cfb0ca42a2e5c565b4b9fca2098b4eaea4c889c3b9ea2d3f992e67ad189",
+   "window": 20
+  },
+  {
+   "clip_sha256": "9b110087d3ed7df152307f368727332550314b356f5eaabb1dd4b051ccebe3ab",
+   "window": 1
+  },
+  {
+   "clip_sha256": "9cd032d70f5de764e8d1d7cad2b709444165c42d8138ff989e820880bfcb0a34",
+   "window": 22
+  },
+  {
+   "clip_sha256": "a5eca9b96566490977ed3254dcc4d4b1803eedd01330655d3298b6f6f1861c54",
+   "window": 11
+  },
+  {
+   "clip_sha256": "aee96645c30934df957f23df0de5ad81fad7e70b5bec1fb238f543fba0e56e7e",
+   "window": 16
+  },
+  {
+   "clip_sha256": "bfcc2e4defd076ad80e17c3208d51f056bebb85315386a97e0fb1fb189c1f8de",
+   "window": 4
+  },
+  {
+   "clip_sha256": "c7680b15591de11ff7d6b5ce03a217a1b4792d76a91d0c4ac98bf4c3ea1d9446",
+   "window": 20
+  },
+  {
+   "clip_sha256": "d4f789a925c4ea2fb54dd1e1ccbea9d377d93dac81774bedba776cefa8b06e42",
+   "window": 3
+  },
+  {
+   "clip_sha256": "db51d1f758d2380629e89ded2bac7b80fbd7d2b328b45a92b0b9e9c317a66da1",
+   "window": 21
+  },
+  {
+   "clip_sha256": "e8d0885bb657e13fd2ce5239375aa5f106ec33702ffee6ec01217153f7f94141",
+   "window": 1
+  },
+  {
+   "clip_sha256": "f2e9baa30e038b43245958c1d4f5a0a3c80acfa41f75c1fadf9fe7c716135f53",
+   "window": 10
+  },
+  {
+   "clip_sha256": "f70d56a1f85ab586eb7b89d777811ef0927cc8340db1f71c595d2c34fc235c5f",
+   "window": 17
+  }
+ ],
+ "candidates": 1622
+}

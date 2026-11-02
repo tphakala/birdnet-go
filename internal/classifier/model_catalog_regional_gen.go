@@ -1582,6 +1582,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_int8_arm.onnx", LocalName: "perch_v2_amazonia_int8_arm.onnx", Role: RoleModel, SHA256: "b437370c33478d18cddb2bd0e5ca448b92c8daaa7248b62cca18dd48dc76416b", SizeBytes: 61492034},
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_labels.txt", LocalName: "perch_v2_amazonia_labels.txt", Role: RoleLabels, SHA256: "cd2dd3763bcc9b0ce23f444714ac7d0134bc4420e158ca5285afa29c957a2303", SizeBytes: 68249},
@@ -1600,6 +1601,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_no_dft_fp32.onnx", LocalName: "perch_v2_amazonia_no_dft.onnx", Role: RoleModel, SHA256: "c09d8e946dc8393a78af9d4c81bc42f79bb6a6f0eff2c973385fff675005571e", SizeBytes: 132660858},
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_labels.txt", LocalName: "perch_v2_amazonia_labels.txt", Role: RoleLabels, SHA256: "cd2dd3763bcc9b0ce23f444714ac7d0134bc4420e158ca5285afa29c957a2303", SizeBytes: 68249},
@@ -1614,6 +1616,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/perch_v2_andes_int8_arm.onnx", LocalName: "perch_v2_andes_int8_arm.onnx", Role: RoleModel, SHA256: "b991348630b1513f704be6742fa0d83858b3bebaad4a35c1b293417f3fd0316b", SizeBytes: 62398142},
 				{RemotePath: "regional/andes/perch_v2_andes_labels.txt", LocalName: "perch_v2_andes_labels.txt", Role: RoleLabels, SHA256: "49473b50116a9df66a785fb8dd47d8d2cc17fe7235160cdf3d41c04436290d89", SizeBytes: 71180},
@@ -1632,6 +1635,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/perch_v2_andes_no_dft_fp32.onnx", LocalName: "perch_v2_andes_no_dft.onnx", Role: RoleModel, SHA256: "b187ce10356600dedbdb46d1803b9d1999fef59b603cbf3335bb106c55e824c8", SizeBytes: 136276470},
 				{RemotePath: "regional/andes/perch_v2_andes_labels.txt", LocalName: "perch_v2_andes_labels.txt", Role: RoleLabels, SHA256: "49473b50116a9df66a785fb8dd47d8d2cc17fe7235160cdf3d41c04436290d89", SizeBytes: 71180},
@@ -1646,6 +1650,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.33},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_int8_arm.onnx", LocalName: "perch_v2_australia-east_int8_arm.onnx", Role: RoleModel, SHA256: "5ea3d89a79ec077ab45bdc0f5995998f1a866b6c034fccab1d8ba35382bc7a7e", SizeBytes: 46439545},
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_labels.txt", LocalName: "perch_v2_australia-east_labels.txt", Role: RoleLabels, SHA256: "53d4d6e75dbc168d40289314bade69666081f51a3be0cd956ecee3f4738a89b8", SizeBytes: 17304},
@@ -1664,6 +1669,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.33},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_no_dft_fp32.onnx", LocalName: "perch_v2_australia-east_no_dft.onnx", Role: RoleModel, SHA256: "c6133316df9f1509705468524d9857629e6abf452b7d573319d93c3dba623ef5", SizeBytes: 72597424},
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_labels.txt", LocalName: "perch_v2_australia-east_labels.txt", Role: RoleLabels, SHA256: "53d4d6e75dbc168d40289314bade69666081f51a3be0cd956ecee3f4738a89b8", SizeBytes: 17304},
@@ -1678,6 +1684,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.28},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/perch_v2_azores_int8_arm.onnx", LocalName: "perch_v2_azores_int8_arm.onnx", Role: RoleModel, SHA256: "952c8408ab8eae9069c8e35fc714a30d07dc504e70c49e8e580a3cb89f6ebb10", SizeBytes: 43234264},
 				{RemotePath: "regional/azores/perch_v2_azores_labels.txt", LocalName: "perch_v2_azores_labels.txt", Role: RoleLabels, SHA256: "e257c47585cf32cd9b288945a7778354c03d3cbe5ae57cc6b5bbe527b9b393a5", SizeBytes: 6559},
@@ -1696,6 +1703,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.28},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/perch_v2_azores_no_dft_fp32.onnx", LocalName: "perch_v2_azores_no_dft.onnx", Role: RoleModel, SHA256: "de0651c03fc0874741b5bdd02595056684da2a14612357852e85715232531018", SizeBytes: 59807504},
 				{RemotePath: "regional/azores/perch_v2_azores_labels.txt", LocalName: "perch_v2_azores_labels.txt", Role: RoleLabels, SHA256: "e257c47585cf32cd9b288945a7778354c03d3cbe5ae57cc6b5bbe527b9b393a5", SizeBytes: 6559},
@@ -1710,6 +1718,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/perch_v2_baltics_int8_arm.onnx", LocalName: "perch_v2_baltics_int8_arm.onnx", Role: RoleModel, SHA256: "dbeee9d02760f04efc50d6cb1198fc91c5c183149249dc3b17e451f9d7ec0b0a", SizeBytes: 44645820},
 				{RemotePath: "regional/baltics/perch_v2_baltics_labels.txt", LocalName: "perch_v2_baltics_labels.txt", Role: RoleLabels, SHA256: "26503d5cde0bb41f0da3964d8de3f5c5094f41d5a5dd19e4d5e5c0cbefdb8745", SizeBytes: 10617},
@@ -1728,6 +1737,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/perch_v2_baltics_no_dft_fp32.onnx", LocalName: "perch_v2_baltics_no_dft.onnx", Role: RoleModel, SHA256: "959841211a94971025ddd3c6ecdd6b0d23a87a60645befc80127d51ba560c855", SizeBytes: 65439988},
 				{RemotePath: "regional/baltics/perch_v2_baltics_labels.txt", LocalName: "perch_v2_baltics_labels.txt", Role: RoleLabels, SHA256: "26503d5cde0bb41f0da3964d8de3f5c5094f41d5a5dd19e4d5e5c0cbefdb8745", SizeBytes: 10617},
@@ -1742,6 +1752,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.71},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_int8_arm.onnx", LocalName: "perch_v2_british-isles_int8_arm.onnx", Role: RoleModel, SHA256: "03d4f63413299473397f57f829e14504e54978a9a95de83bf9d9cbc96cc063b1", SizeBytes: 45391664},
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_labels.txt", LocalName: "perch_v2_british-isles_labels.txt", Role: RoleLabels, SHA256: "ff4bff5fd55271fa062413ce33f686c3d54e269423890eeba6605a1ef7955f2a", SizeBytes: 12955},
@@ -1760,6 +1771,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.71},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_no_dft_fp32.onnx", LocalName: "perch_v2_british-isles_no_dft.onnx", Role: RoleModel, SHA256: "1281cece7d01319c6b010eb13b7ea5cbe8c1fcf4f15d6ad3e2ccd1bd1b2c53c1", SizeBytes: 68416104},
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_labels.txt", LocalName: "perch_v2_british-isles_labels.txt", Role: RoleLabels, SHA256: "ff4bff5fd55271fa062413ce33f686c3d54e269423890eeba6605a1ef7955f2a", SizeBytes: 12955},
@@ -1774,6 +1786,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.88},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_int8_arm.onnx", LocalName: "perch_v2_canada-alaska_int8_arm.onnx", Role: RoleModel, SHA256: "4a7f3f9946ece497f906621f0383f589cf878595ea938099163ab71e069c2cf5", SizeBytes: 46538169},
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_labels.txt", LocalName: "perch_v2_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0", SizeBytes: 16870},
@@ -1792,6 +1805,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.88},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx", LocalName: "perch_v2_canada-alaska_no_dft.onnx", Role: RoleModel, SHA256: "d0cb954c79fd6d1c130c4979c8aec72be09b22b3e7fd6056fbbde5d8ff869ebb", SizeBytes: 72990960},
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_labels.txt", LocalName: "perch_v2_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0", SizeBytes: 16870},
@@ -1806,6 +1820,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.18},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_int8_arm.onnx", LocalName: "perch_v2_canary-islands_int8_arm.onnx", Role: RoleModel, SHA256: "4db63a7b969324604280a1f915a4f9339791f1dd051d2dd78b04187dbfb73fd4", SizeBytes: 44294472},
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_labels.txt", LocalName: "perch_v2_canary-islands_labels.txt", Role: RoleLabels, SHA256: "b25ebc0c0e20f6eae828274e8f1c25162aaf07f8d49da073a72b70caa15f9f25", SizeBytes: 9753},
@@ -1824,6 +1839,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.18},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_no_dft_fp32.onnx", LocalName: "perch_v2_canary-islands_no_dft.onnx", Role: RoleModel, SHA256: "08938826166b4277fc8f948da1f273ace306b2369f65bb184cb2e1c54315f298", SizeBytes: 64038016},
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_labels.txt", LocalName: "perch_v2_canary-islands_labels.txt", Role: RoleLabels, SHA256: "b25ebc0c0e20f6eae828274e8f1c25162aaf07f8d49da073a72b70caa15f9f25", SizeBytes: 9753},
@@ -1838,6 +1854,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_int8_arm.onnx", LocalName: "perch_v2_cape-verde_int8_arm.onnx", Role: RoleModel, SHA256: "03e10868fcdc90eb0b5215f202f0d3184a7e9c60814866a9385b92ca3317541a", SizeBytes: 42741144},
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_labels.txt", LocalName: "perch_v2_cape-verde_labels.txt", Role: RoleLabels, SHA256: "7cb7ca2d60aa9c2dc80eca532ff85387fc62d8e6b7ca00d062565438a73eaeaf", SizeBytes: 5263},
@@ -1856,6 +1873,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_no_dft_fp32.onnx", LocalName: "perch_v2_cape-verde_no_dft.onnx", Role: RoleModel, SHA256: "bbddef61153b0e9a05639d221cb022878055622b892cc52b38af97592a765425", SizeBytes: 57839824},
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_labels.txt", LocalName: "perch_v2_cape-verde_labels.txt", Role: RoleLabels, SHA256: "7cb7ca2d60aa9c2dc80eca532ff85387fc62d8e6b7ca00d062565438a73eaeaf", SizeBytes: 5263},
@@ -1870,6 +1888,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.1},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_int8_arm.onnx", LocalName: "perch_v2_central-africa_int8_arm.onnx", Role: RoleModel, SHA256: "245984e3f3188293cd8efcd3896d886edcd62a7438e646801c5c957ec28ef7b8", SizeBytes: 52215214},
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_labels.txt", LocalName: "perch_v2_central-africa_labels.txt", Role: RoleLabels, SHA256: "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1", SizeBytes: 35791},
@@ -1888,6 +1907,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.1},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_no_dft_fp32.onnx", LocalName: "perch_v2_central-africa_no_dft.onnx", Role: RoleModel, SHA256: "d9f29b5cef3b9b7e54b454feb34fe8a7a6be9b3c375cbe670b017c48b7ed622c", SizeBytes: 95643878},
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_labels.txt", LocalName: "perch_v2_central-africa_labels.txt", Role: RoleLabels, SHA256: "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1", SizeBytes: 35791},
@@ -1902,6 +1922,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.67},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_int8_arm.onnx", LocalName: "perch_v2_central-europe_int8_arm.onnx", Role: RoleModel, SHA256: "a5b7da4d147679b3ef0f2cde39bc4cacabfa7a9c462fed7adac4935c8781813e", SizeBytes: 45989572},
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_labels.txt", LocalName: "perch_v2_central-europe_labels.txt", Role: RoleLabels, SHA256: "ac7c30b45b85404bc67830e8341e53ea47ad0d899a30789454c072abc6828072", SizeBytes: 14787},
@@ -1920,6 +1941,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.67},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_no_dft_fp32.onnx", LocalName: "perch_v2_central-europe_no_dft.onnx", Role: RoleModel, SHA256: "8f2e40a11c89812fa61ea8d6faa1d6710ee3b6ae9a8292bc3f9429df1af6f4c3", SizeBytes: 70801916},
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_labels.txt", LocalName: "perch_v2_central-europe_labels.txt", Role: RoleLabels, SHA256: "ac7c30b45b85404bc67830e8341e53ea47ad0d899a30789454c072abc6828072", SizeBytes: 14787},
@@ -1934,6 +1956,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.06},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_int8_arm.onnx", LocalName: "perch_v2_china-north-central_int8_arm.onnx", Role: RoleModel, SHA256: "dae3b0d45eb698662a2d544f53de20d53e5db71e11e4296547dd12526a8cb3b8", SizeBytes: 46624464},
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_labels.txt", LocalName: "perch_v2_china-north-central_labels.txt", Role: RoleLabels, SHA256: "80eecb6579f4f7534422c21460dc481fc213e69b80c6e994ef361fa9c969281b", SizeBytes: 17447},
@@ -1952,6 +1975,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.06},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_no_dft_fp32.onnx", LocalName: "perch_v2_china-north-central_no_dft.onnx", Role: RoleModel, SHA256: "adb89e88eb8d670cee4d6596388931267a63f861ae01c7147b19cd187f1af9ba", SizeBytes: 73335304},
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_labels.txt", LocalName: "perch_v2_china-north-central_labels.txt", Role: RoleLabels, SHA256: "80eecb6579f4f7534422c21460dc481fc213e69b80c6e994ef361fa9c969281b", SizeBytes: 17447},
@@ -1966,6 +1990,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.02},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_int8_arm.onnx", LocalName: "perch_v2_china-northeast_int8_arm.onnx", Role: RoleModel, SHA256: "169c07f6004f8e5473170c8823ad2e84746c509115e0279425b8520972993d34", SizeBytes: 46014228},
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_labels.txt", LocalName: "perch_v2_china-northeast_labels.txt", Role: RoleLabels, SHA256: "2cbd9b12a2f23f0813b3eadaeb367612b4ad70960612229b648c37912687ebfb", SizeBytes: 15253},
@@ -1984,6 +2009,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.02},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_no_dft_fp32.onnx", LocalName: "perch_v2_china-northeast_no_dft.onnx", Role: RoleModel, SHA256: "139385aadb17dcd0e0724a047c8e99c73bc516680fbed8d659297c80798c890b", SizeBytes: 70900300},
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_labels.txt", LocalName: "perch_v2_china-northeast_labels.txt", Role: RoleLabels, SHA256: "2cbd9b12a2f23f0813b3eadaeb367612b4ad70960612229b648c37912687ebfb", SizeBytes: 15253},
@@ -1998,6 +2024,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.17},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_int8_arm.onnx", LocalName: "perch_v2_china-southeast_int8_arm.onnx", Role: RoleModel, SHA256: "be17c31fae6974213a9f7ae525f27b4c65fa42a29f4e676b0773b7145464dca0", SizeBytes: 49071575},
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_labels.txt", LocalName: "perch_v2_china-southeast_labels.txt", Role: RoleLabels, SHA256: "4d850c34ee5f3a7704e9a8cd60b2e88a504e6d63e2b7d5d311f9191c5f5b10f4", SizeBytes: 25436},
@@ -2016,6 +2043,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.17},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_no_dft_fp32.onnx", LocalName: "perch_v2_china-southeast_no_dft.onnx", Role: RoleModel, SHA256: "a9c4acf8b47b44ac3858d8afa12d5d1dec8278315e410dd75d53c2ad1e2ce854", SizeBytes: 83099918},
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_labels.txt", LocalName: "perch_v2_china-southeast_labels.txt", Role: RoleLabels, SHA256: "4d850c34ee5f3a7704e9a8cd60b2e88a504e6d63e2b7d5d311f9191c5f5b10f4", SizeBytes: 25436},
@@ -2030,6 +2058,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.2},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_int8_arm.onnx", LocalName: "perch_v2_china-southwest_int8_arm.onnx", Role: RoleModel, SHA256: "d214093463cc3fbf8c9dccbedd9c26e87575c87ed3839b19b3fda02085c4341d", SizeBytes: 49293479},
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_labels.txt", LocalName: "perch_v2_china-southwest_labels.txt", Role: RoleLabels, SHA256: "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750", SizeBytes: 26299},
@@ -2048,6 +2077,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.2},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_no_dft_fp32.onnx", LocalName: "perch_v2_china-southwest_no_dft.onnx", Role: RoleModel, SHA256: "11292464054e8c2b6b7d309a6518fe8c81f43b19f98e151b0ef3cbd21261ed0f", SizeBytes: 83985374},
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_labels.txt", LocalName: "perch_v2_china-southwest_labels.txt", Role: RoleLabels, SHA256: "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750", SizeBytes: 26299},
@@ -2062,6 +2092,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.99},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_int8_arm.onnx", LocalName: "perch_v2_east-africa_int8_arm.onnx", Role: RoleModel, SHA256: "4113d0a8c05368fd685b4c4dfbc6fa07a4cfbb979cdf43f5428bedcac3c03118", SizeBytes: 53916478},
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_labels.txt", LocalName: "perch_v2_east-africa_labels.txt", Role: RoleLabels, SHA256: "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329", SizeBytes: 41028},
@@ -2080,6 +2111,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.99},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_no_dft_fp32.onnx", LocalName: "perch_v2_east-africa_no_dft.onnx", Role: RoleModel, SHA256: "e652c100096db2bced141215edc253c633706993e4c3e027f40959e59f6b169e", SizeBytes: 102432374},
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_labels.txt", LocalName: "perch_v2_east-africa_labels.txt", Role: RoleLabels, SHA256: "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329", SizeBytes: 41028},
@@ -2094,6 +2126,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.01},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_int8_arm.onnx", LocalName: "perch_v2_eastern-brazil_int8_arm.onnx", Role: RoleModel, SHA256: "34736f02b138a64f9aef1e5bcffbe5d8bd6a9a5cb4226a052b9d2ff000c89cbc", SizeBytes: 54070578},
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt", LocalName: "perch_v2_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "84ebe24f0f0fd8efd4339bc5a5260fe8779fcd06b575aa5fe58eb62186bbdc7b", SizeBytes: 43185},
@@ -2112,6 +2145,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.01},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_no_dft_fp32.onnx", LocalName: "perch_v2_eastern-brazil_no_dft.onnx", Role: RoleModel, SHA256: "89008391609eb31f5ece4d66fbea557f4b1bdde09ff3d79994302062812901ed", SizeBytes: 103047274},
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt", LocalName: "perch_v2_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "84ebe24f0f0fd8efd4339bc5a5260fe8779fcd06b575aa5fe58eb62186bbdc7b", SizeBytes: 43185},
@@ -2126,6 +2160,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.73},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_int8_arm.onnx", LocalName: "perch_v2_eastern-europe_int8_arm.onnx", Role: RoleModel, SHA256: "5c06c2639b2080f84d93896f1528ebb20962ff19986c09908bd498c41ebaa007", SizeBytes: 45163596},
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_labels.txt", LocalName: "perch_v2_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "88e92e524bf2a7875026fcfb4db40efd7d0bd74f2dc72157ce0cc76be5a620a1", SizeBytes: 12294},
@@ -2144,6 +2179,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.73},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_no_dft_fp32.onnx", LocalName: "perch_v2_eastern-europe_no_dft.onnx", Role: RoleModel, SHA256: "d8a93f1ef28e26fddeda80833d865463656713471714c1f4cbf92dfb191e6b9b", SizeBytes: 67506052},
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_labels.txt", LocalName: "perch_v2_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "88e92e524bf2a7875026fcfb4db40efd7d0bd74f2dc72157ce0cc76be5a620a1", SizeBytes: 12294},
@@ -2158,6 +2194,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.15},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_int8_arm.onnx", LocalName: "perch_v2_galapagos_int8_arm.onnx", Role: RoleModel, SHA256: "67ef0140c533e3e3658fe5d317ab64558d7d15353f1679650053397e91fbec73", SizeBytes: 42679502},
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_labels.txt", LocalName: "perch_v2_galapagos_labels.txt", Role: RoleLabels, SHA256: "72af08800a5640949dbce00bb2ccb8190c32f8aab3f3584d4e3fefd583ededae", SizeBytes: 5068},
@@ -2176,6 +2213,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.15},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_no_dft_fp32.onnx", LocalName: "perch_v2_galapagos_no_dft.onnx", Role: RoleModel, SHA256: "f80b3b91be5a589358609718acfa0d202c86d2b95c49cadb2d4f46e63ad8bff1", SizeBytes: 57593864},
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_labels.txt", LocalName: "perch_v2_galapagos_labels.txt", Role: RoleLabels, SHA256: "72af08800a5640949dbce00bb2ccb8190c32f8aab3f3584d4e3fefd583ededae", SizeBytes: 5068},
@@ -2190,6 +2228,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.17},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_int8_arm.onnx", LocalName: "perch_v2_hawaii_int8_arm.onnx", Role: RoleModel, SHA256: "f14cf802633c1e1ff4f1d71046faf49763211352901fd49038b8365d4fd60403", SizeBytes: 43554792},
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_labels.txt", LocalName: "perch_v2_hawaii_labels.txt", Role: RoleLabels, SHA256: "049c0a97c16f458119e734d11daf60a456cb6edd693a4eb3c507911eaded46a6", SizeBytes: 7694},
@@ -2208,6 +2247,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.17},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_no_dft_fp32.onnx", LocalName: "perch_v2_hawaii_no_dft.onnx", Role: RoleModel, SHA256: "c39a3654096e705f1c8888cac2e9f431c8dee1b92b543680b81eede29deb66df", SizeBytes: 61086496},
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_labels.txt", LocalName: "perch_v2_hawaii_labels.txt", Role: RoleLabels, SHA256: "049c0a97c16f458119e734d11daf60a456cb6edd693a4eb3c507911eaded46a6", SizeBytes: 7694},
@@ -2222,6 +2262,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_int8_arm.onnx", LocalName: "perch_v2_himalaya_int8_arm.onnx", Role: RoleModel, SHA256: "3024a89395052e971f6f3dc14525020c174d964f53ebd43a5ad72cc8cf37da00", SizeBytes: 49281151},
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_labels.txt", LocalName: "perch_v2_himalaya_labels.txt", Role: RoleLabels, SHA256: "4790bca0d3e41872cb00b7bd0ce0427cda5e4d02c1d837c25c6437c596875206", SizeBytes: 26124},
@@ -2240,6 +2281,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_no_dft_fp32.onnx", LocalName: "perch_v2_himalaya_no_dft.onnx", Role: RoleModel, SHA256: "d30ee51f106712694f11940336a82621810789dd1237bcfed977d9095a102486", SizeBytes: 83936182},
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_labels.txt", LocalName: "perch_v2_himalaya_labels.txt", Role: RoleLabels, SHA256: "4790bca0d3e41872cb00b7bd0ce0427cda5e4d02c1d837c25c6437c596875206", SizeBytes: 26124},
@@ -2254,6 +2296,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.73},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/perch_v2_iberia_int8_arm.onnx", LocalName: "perch_v2_iberia_int8_arm.onnx", Role: RoleModel, SHA256: "02e6756a3de2f661b7e612e1487800a3d8ac67dd1d10e21f3269547f4ecb21a5", SizeBytes: 45884784},
 				{RemotePath: "regional/iberia/perch_v2_iberia_labels.txt", LocalName: "perch_v2_iberia_labels.txt", Role: RoleLabels, SHA256: "2e735ca086bfff35a2e6f308d476c324431003c98ac93e0a07373f5e3da058bd", SizeBytes: 14490},
@@ -2272,6 +2315,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.73},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/perch_v2_iberia_no_dft_fp32.onnx", LocalName: "perch_v2_iberia_no_dft.onnx", Role: RoleModel, SHA256: "0a1f5717b91ceac3bd48378cecbbad1946cdfd3ad0ff72e2fe608c561198a638", SizeBytes: 70383784},
 				{RemotePath: "regional/iberia/perch_v2_iberia_labels.txt", LocalName: "perch_v2_iberia_labels.txt", Role: RoleLabels, SHA256: "2e735ca086bfff35a2e6f308d476c324431003c98ac93e0a07373f5e3da058bd", SizeBytes: 14490},
@@ -2286,6 +2330,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.82},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/perch_v2_iceland_int8_arm.onnx", LocalName: "perch_v2_iceland_int8_arm.onnx", Role: RoleModel, SHA256: "6757c6aba4a4eb26ac9ccc6cb195ee298be00a35c0d2beb5aed06b57b3bf82a4", SizeBytes: 44251324},
 				{RemotePath: "regional/iceland/perch_v2_iceland_labels.txt", LocalName: "perch_v2_iceland_labels.txt", Role: RoleLabels, SHA256: "4766fd47a89f837b4e46df8c27f5e4755e291311917ceb319420fbe2aa60f793", SizeBytes: 9560},
@@ -2304,6 +2349,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.82},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/perch_v2_iceland_no_dft_fp32.onnx", LocalName: "perch_v2_iceland_no_dft.onnx", Role: RoleModel, SHA256: "d6c41558e362a69e9e7dba65ad900cf53becf8420d9302b1f164a1f45876fd45", SizeBytes: 63865844},
 				{RemotePath: "regional/iceland/perch_v2_iceland_labels.txt", LocalName: "perch_v2_iceland_labels.txt", Role: RoleLabels, SHA256: "4766fd47a89f837b4e46df8c27f5e4755e291311917ceb319420fbe2aa60f793", SizeBytes: 9560},
@@ -2318,6 +2364,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.02},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_int8_arm.onnx", LocalName: "perch_v2_indo-gangetic_int8_arm.onnx", Role: RoleModel, SHA256: "3391d6be6c98637847be9936aa00b00a01dc66bf5d6ee2419690f4321374afeb", SizeBytes: 49274987},
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt", LocalName: "perch_v2_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "5e87bec2ac06853a9d00d7bee48bdb648beb487acd0ed6e88279f3fce4b353be", SizeBytes: 26076},
@@ -2336,6 +2383,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.02},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_no_dft_fp32.onnx", LocalName: "perch_v2_indo-gangetic_no_dft.onnx", Role: RoleModel, SHA256: "e5a397ccfb8e803095147c239c5ee716065e3d8e5322b108f372dbde885d955f", SizeBytes: 83911586},
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt", LocalName: "perch_v2_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "5e87bec2ac06853a9d00d7bee48bdb648beb487acd0ed6e88279f3fce4b353be", SizeBytes: 26076},
@@ -2350,6 +2398,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.31},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/perch_v2_japan_int8_arm.onnx", LocalName: "perch_v2_japan_int8_arm.onnx", Role: RoleModel, SHA256: "5839117a9311d7ecf4772a262c8f5b2887debc7d13192d66f7d8d910990bcdeb", SizeBytes: 45533436},
 				{RemotePath: "regional/japan/perch_v2_japan_labels.txt", LocalName: "perch_v2_japan_labels.txt", Role: RoleLabels, SHA256: "feb134cc8734fc521e4a91682a464336b3c72f31174cb9e027b52ba80142bf8d", SizeBytes: 13791},
@@ -2368,6 +2417,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.31},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/perch_v2_japan_no_dft_fp32.onnx", LocalName: "perch_v2_japan_no_dft.onnx", Role: RoleModel, SHA256: "740778772ace4d8d6889ec7b890073518e915b457ee66180fc09cad1caf329f7", SizeBytes: 68981812},
 				{RemotePath: "regional/japan/perch_v2_japan_labels.txt", LocalName: "perch_v2_japan_labels.txt", Role: RoleLabels, SHA256: "feb134cc8734fc521e4a91682a464336b3c72f31174cb9e027b52ba80142bf8d", SizeBytes: 13791},
@@ -2382,6 +2432,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.07},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/perch_v2_madeira_int8_arm.onnx", LocalName: "perch_v2_madeira_int8_arm.onnx", Role: RoleModel, SHA256: "598e826eacc21a3cea1a27c8aec1eca733e308517c63c0a24bd81222cc7ab138", SizeBytes: 43437676},
 				{RemotePath: "regional/madeira/perch_v2_madeira_labels.txt", LocalName: "perch_v2_madeira_labels.txt", Role: RoleLabels, SHA256: "ad1620ef0f51c8186f8a156f90f20114b494be71aedd61f4609b8bb0fd35c8a5", SizeBytes: 7176},
@@ -2400,6 +2451,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.07},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/perch_v2_madeira_no_dft_fp32.onnx", LocalName: "perch_v2_madeira_no_dft.onnx", Role: RoleModel, SHA256: "3b7f918d84f711485a6258b08dcfd216c727b99d7717b9b935d20a2e80a49ae2", SizeBytes: 60619172},
 				{RemotePath: "regional/madeira/perch_v2_madeira_labels.txt", LocalName: "perch_v2_madeira_labels.txt", Role: RoleLabels, SHA256: "ad1620ef0f51c8186f8a156f90f20114b494be71aedd61f4609b8bb0fd35c8a5", SizeBytes: 7176},
@@ -2414,6 +2466,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_int8_arm.onnx", LocalName: "perch_v2_mauritius_int8_arm.onnx", Role: RoleModel, SHA256: "0993bce471bfed702c56e808d8a1b8014b8e25a6905f9f79e0b5dbf2f27846e8", SizeBytes: 42285006},
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_labels.txt", LocalName: "perch_v2_mauritius_labels.txt", Role: RoleLabels, SHA256: "a45703c5091d0b2b4eab83b69a7ea47286565faf9879a735f19a98db56a0b33e", SizeBytes: 3888},
@@ -2432,6 +2485,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_no_dft_fp32.onnx", LocalName: "perch_v2_mauritius_no_dft.onnx", Role: RoleModel, SHA256: "03381abc5b75d2fb49c2f60fafa9c80e1f0e0ac0d9657b5842695f09baf1f4ca", SizeBytes: 56019720},
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_labels.txt", LocalName: "perch_v2_mauritius_labels.txt", Role: RoleLabels, SHA256: "a45703c5091d0b2b4eab83b69a7ea47286565faf9879a735f19a98db56a0b33e", SizeBytes: 3888},
@@ -2446,6 +2500,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.15},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_int8_arm.onnx", LocalName: "perch_v2_new-caledonia_int8_arm.onnx", Role: RoleModel, SHA256: "01787c1a20d7b0ebe1d1ec3e1c28803c97ab45fa2490f6ed8c5c338dde8b0751", SizeBytes: 42932228},
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_labels.txt", LocalName: "perch_v2_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "b565e7e9c0fd031ba84e8ea1555975a7e50293994c8f90679eb2c89e11f782c8", SizeBytes: 5962},
@@ -2464,6 +2519,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.15},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_no_dft_fp32.onnx", LocalName: "perch_v2_new-caledonia_no_dft.onnx", Role: RoleModel, SHA256: "c103abcf0699889a17464ba5276ee270688cbf3daf9e125bc4ce63301ea588c0", SizeBytes: 58602300},
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_labels.txt", LocalName: "perch_v2_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "b565e7e9c0fd031ba84e8ea1555975a7e50293994c8f90679eb2c89e11f782c8", SizeBytes: 5962},
@@ -2478,6 +2534,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.38},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_int8_arm.onnx", LocalName: "perch_v2_new-zealand_int8_arm.onnx", Role: RoleModel, SHA256: "ebf3c3a7021c2f2c4ab53d1cd2caaf3f92e798483f7f86000e19f7f362e1ded5", SizeBytes: 43604104},
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_labels.txt", LocalName: "perch_v2_new-zealand_labels.txt", Role: RoleLabels, SHA256: "c7c3636e1d56dd4602a18f3b97d60b649790593dbbcdd22f1de218caaf4f2355", SizeBytes: 8006},
@@ -2496,6 +2553,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.38},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_no_dft_fp32.onnx", LocalName: "perch_v2_new-zealand_no_dft.onnx", Role: RoleModel, SHA256: "a82854470d31363d410b1744ccec6c7c5d97c44d5041622e2c31acebfe0f2403", SizeBytes: 61283264},
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_labels.txt", LocalName: "perch_v2_new-zealand_labels.txt", Role: RoleLabels, SHA256: "c7c3636e1d56dd4602a18f3b97d60b649790593dbbcdd22f1de218caaf4f2355", SizeBytes: 8006},
@@ -2510,6 +2568,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/perch_v2_nordic_int8_arm.onnx", LocalName: "perch_v2_nordic_int8_arm.onnx", Role: RoleModel, SHA256: "1048a9a73aaa9838a68927148768dfcb46a9a765ac3a97cf62030f4a45d3b3bb", SizeBytes: 44541032},
 				{RemotePath: "regional/nordic/perch_v2_nordic_labels.txt", LocalName: "perch_v2_nordic_labels.txt", Role: RoleLabels, SHA256: "4de466ccab9c0abb50ffd24fb0262ad2bba1cf811dfce6d6c34699d17682a5d8", SizeBytes: 10348},
@@ -2528,6 +2587,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/perch_v2_nordic_no_dft_fp32.onnx", LocalName: "perch_v2_nordic_no_dft.onnx", Role: RoleModel, SHA256: "14649846088e6156eb0b1d40d2e90362fcf60d466f9543b8834cdf0c78a15081", SizeBytes: 65021856},
 				{RemotePath: "regional/nordic/perch_v2_nordic_labels.txt", LocalName: "perch_v2_nordic_labels.txt", Role: RoleLabels, SHA256: "4de466ccab9c0abb50ffd24fb0262ad2bba1cf811dfce6d6c34699d17682a5d8", SizeBytes: 10348},
@@ -2542,6 +2602,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.92},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_int8_arm.onnx", LocalName: "perch_v2_north-america-east_int8_arm.onnx", Role: RoleModel, SHA256: "5a64e006e1617ac22bc3e1d35012435d8b8db2e9b8b3e8d3298c3d04827abaa0", SizeBytes: 46766237},
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_labels.txt", LocalName: "perch_v2_north-america-east_labels.txt", Role: RoleLabels, SHA256: "fc43269a24c11481b4bccd1564e80a9b1974f704601fa520ef467374fe71d71f", SizeBytes: 17860},
@@ -2560,6 +2621,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.92},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_no_dft_fp32.onnx", LocalName: "perch_v2_north-america-east_no_dft.onnx", Role: RoleModel, SHA256: "80d640c44e0775a7ef68967e5d9f073970d918486c7686ac4a14c77f3bab5d71", SizeBytes: 73901012},
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_labels.txt", LocalName: "perch_v2_north-america-east_labels.txt", Role: RoleLabels, SHA256: "fc43269a24c11481b4bccd1564e80a9b1974f704601fa520ef467374fe71d71f", SizeBytes: 17860},
@@ -2574,6 +2636,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_int8_arm.onnx", LocalName: "perch_v2_north-america-west_int8_arm.onnx", Role: RoleModel, SHA256: "deabb5e7192a110838356021d2ac78f3800e25783f61b99e6fdcd491db910915", SizeBytes: 46784729},
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_labels.txt", LocalName: "perch_v2_north-america-west_labels.txt", Role: RoleLabels, SHA256: "9176dd2e04e07614f85fc14b35d572ad060d0c4632f818210bbec681700b2838", SizeBytes: 17852},
@@ -2592,6 +2655,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.91},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_no_dft_fp32.onnx", LocalName: "perch_v2_north-america-west_no_dft.onnx", Role: RoleModel, SHA256: "50899fc74072a58d2da28c180e15d32282fef270982c21d67a04ebcd3f0b65f2", SizeBytes: 73974800},
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_labels.txt", LocalName: "perch_v2_north-america-west_labels.txt", Role: RoleLabels, SHA256: "9176dd2e04e07614f85fc14b35d572ad060d0c4632f818210bbec681700b2838", SizeBytes: 17852},
@@ -2606,6 +2670,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/perch_v2_reunion_int8_arm.onnx", LocalName: "perch_v2_reunion_int8_arm.onnx", Role: RoleModel, SHA256: "2a9888cac580e55ec41771e5d27aae9c8a5766434569aa727264d5238525a4b5", SizeBytes: 42297334},
 				{RemotePath: "regional/reunion/perch_v2_reunion_labels.txt", LocalName: "perch_v2_reunion_labels.txt", Role: RoleLabels, SHA256: "efc819b560679d3fccf6af5fe8b3c0678fdddc48a6778f5d5d95f2efbd698ab6", SizeBytes: 3937},
@@ -2624,6 +2689,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/perch_v2_reunion_no_dft_fp32.onnx", LocalName: "perch_v2_reunion_no_dft.onnx", Role: RoleModel, SHA256: "cc0c2a3f511fb981a28a5d1d3515b5f98e7e42215a1bb6b32cfec1790b087857", SizeBytes: 56068912},
 				{RemotePath: "regional/reunion/perch_v2_reunion_labels.txt", LocalName: "perch_v2_reunion_labels.txt", Role: RoleLabels, SHA256: "efc819b560679d3fccf6af5fe8b3c0678fdddc48a6778f5d5d95f2efbd698ab6", SizeBytes: 3937},
@@ -2638,6 +2704,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_int8_arm.onnx", LocalName: "perch_v2_sao-tome-principe_int8_arm.onnx", Role: RoleModel, SHA256: "a9cd8bbe8ff608c97e38098349451766dd02f16acc7e9422a216c831970de99c", SizeBytes: 42605534},
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt", LocalName: "perch_v2_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "4e7ae7e54da68b2dd801acb3e7eb1aedb1eb4d07f55810ea0ff2facb770ff42e", SizeBytes: 4792},
@@ -2656,6 +2723,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.19},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_no_dft_fp32.onnx", LocalName: "perch_v2_sao-tome-principe_no_dft.onnx", Role: RoleModel, SHA256: "e01153e0900fc9c1d971310ee25c7a0b9a0e6c4462670f43651cadc3cca4793d", SizeBytes: 57298712},
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt", LocalName: "perch_v2_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "4e7ae7e54da68b2dd801acb3e7eb1aedb1eb4d07f55810ea0ff2facb770ff42e", SizeBytes: 4792},
@@ -2670,6 +2738,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.18},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_int8_arm.onnx", LocalName: "perch_v2_seychelles_int8_arm.onnx", Role: RoleModel, SHA256: "543a734df159e86c50f112d83d7bdb9cb6143442ac540ed1796725adb0b9b843", SizeBytes: 42568550},
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_labels.txt", LocalName: "perch_v2_seychelles_labels.txt", Role: RoleLabels, SHA256: "99ab268c4adce3de6d3a8b92004b55eec605054dc6a0480485314cc376903ead", SizeBytes: 4710},
@@ -2688,6 +2757,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.18},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_no_dft_fp32.onnx", LocalName: "perch_v2_seychelles_no_dft.onnx", Role: RoleModel, SHA256: "c50ea0af5c068ae34cde58f3fa342ffefee498a1d3a1ba357b5487a5786861d3", SizeBytes: 57151136},
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_labels.txt", LocalName: "perch_v2_seychelles_labels.txt", Role: RoleLabels, SHA256: "99ab268c4adce3de6d3a8b92004b55eec605054dc6a0480485314cc376903ead", SizeBytes: 4710},
@@ -2702,6 +2772,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.11},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_int8_arm.onnx", LocalName: "perch_v2_south-asia-peninsular_int8_arm.onnx", Role: RoleModel, SHA256: "a84c872c56ddb5d5a76f6abb0c27926807b9da336de526c8bb91194c1c5bf4b9", SizeBytes: 46026556},
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt", LocalName: "perch_v2_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "29b5c2a26ff857f7958710e1b047966e5c943943238dbffd182eda00967f7aa9", SizeBytes: 15505},
@@ -2720,6 +2791,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.11},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_no_dft_fp32.onnx", LocalName: "perch_v2_south-asia-peninsular_no_dft.onnx", Role: RoleModel, SHA256: "1ab0884a4986dadbeb74a906a8f33568b2856d014f02fc4cf9175ef8e20a2390", SizeBytes: 70949492},
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt", LocalName: "perch_v2_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "29b5c2a26ff857f7958710e1b047966e5c943943238dbffd182eda00967f7aa9", SizeBytes: 15505},
@@ -2734,6 +2806,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.12},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_int8_arm.onnx", LocalName: "perch_v2_southern-africa_int8_arm.onnx", Role: RoleModel, SHA256: "d2e6ae6d660d717a53f93d3cacfae2c851c907f8c873e99739181017e7e39a73", SizeBytes: 46784728},
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_labels.txt", LocalName: "perch_v2_southern-africa_labels.txt", Role: RoleLabels, SHA256: "0d8f8ed51cf7a474350a38d57a2737c950d21044d87a6e0ced843d43e9fc56d5", SizeBytes: 18157},
@@ -2752,6 +2825,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.12},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_no_dft_fp32.onnx", LocalName: "perch_v2_southern-africa_no_dft.onnx", Role: RoleModel, SHA256: "4053c167196575495dbf34cb56914d64600ee19b54153931182f4c613983930e", SizeBytes: 73974800},
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_labels.txt", LocalName: "perch_v2_southern-africa_labels.txt", Role: RoleLabels, SHA256: "0d8f8ed51cf7a474350a38d57a2737c950d21044d87a6e0ced843d43e9fc56d5", SizeBytes: 18157},
@@ -2766,6 +2840,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.02},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_int8_arm.onnx", LocalName: "perch_v2_southern-cone_int8_arm.onnx", Role: RoleModel, SHA256: "e8584ffa2c7cd23e8a6dc9af2f85a2af6b02b9fe181555abb6c3f9143e353c22", SizeBytes: 52042622},
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_labels.txt", LocalName: "perch_v2_southern-cone_labels.txt", Role: RoleLabels, SHA256: "2c2ba9ec2e4bda2cd81661fc4e9cb90c6ae7286b3ae83be4c44b62b551d37870", SizeBytes: 36197},
@@ -2784,6 +2859,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.02},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_no_dft_fp32.onnx", LocalName: "perch_v2_southern-cone_no_dft.onnx", Role: RoleModel, SHA256: "d6f782b9ea06c80a78b58f928b9276c92eedb4fbb2a8a2d596cf835b7722606b", SizeBytes: 94955190},
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_labels.txt", LocalName: "perch_v2_southern-cone_labels.txt", Role: RoleLabels, SHA256: "2c2ba9ec2e4bda2cd81661fc4e9cb90c6ae7286b3ae83be4c44b62b551d37870", SizeBytes: 36197},
@@ -2798,6 +2874,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.71},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_int8_arm.onnx", LocalName: "perch_v2_southern-europe_int8_arm.onnx", Role: RoleModel, SHA256: "6957554e294967aa26d72f332f62b68e8a6aa08ed6766791a28f0b4ff10d880c", SizeBytes: 45779996},
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_labels.txt", LocalName: "perch_v2_southern-europe_labels.txt", Role: RoleLabels, SHA256: "0469015312dc9a34effd398e72c28b8dcd6da8bf8d783d4d14a5e39172578344", SizeBytes: 14163},
@@ -2816,6 +2893,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.71},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_no_dft_fp32.onnx", LocalName: "perch_v2_southern-europe_no_dft.onnx", Role: RoleModel, SHA256: "9ba9cd864529efc506941c366c50e7dbf3f3a173adb3dce244e3a6e940ef9045", SizeBytes: 69965652},
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_labels.txt", LocalName: "perch_v2_southern-europe_labels.txt", Role: RoleLabels, SHA256: "0469015312dc9a34effd398e72c28b8dcd6da8bf8d783d4d14a5e39172578344", SizeBytes: 14163},
@@ -2830,6 +2908,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.06},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_int8_arm.onnx", LocalName: "perch_v2_svalbard_int8_arm.onnx", Role: RoleModel, SHA256: "eb98b17da3822b356b3b53d152e8a087a4bb6d9cf58e72fcd1ecc7190cf3819d", SizeBytes: 43567120},
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_labels.txt", LocalName: "perch_v2_svalbard_labels.txt", Role: RoleLabels, SHA256: "0ec05815ecc36859dc06b8b0f3c9d592245834bba8cbe27ebb545767519554b2", SizeBytes: 7451},
@@ -2848,6 +2927,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.06},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_no_dft_fp32.onnx", LocalName: "perch_v2_svalbard_no_dft.onnx", Role: RoleModel, SHA256: "01d30871ccf82c9f7a73aa3e5d7bbf61a6337fe8dd7584ebaa001cca30b7b563", SizeBytes: 61135688},
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_labels.txt", LocalName: "perch_v2_svalbard_labels.txt", Role: RoleLabels, SHA256: "0ec05815ecc36859dc06b8b0f3c9d592245834bba8cbe27ebb545767519554b2", SizeBytes: 7451},
@@ -2862,6 +2942,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.9},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/perch_v2_tibet_int8_arm.onnx", LocalName: "perch_v2_tibet_int8_arm.onnx", Role: RoleModel, SHA256: "78daa7110aa3dec88aa2d5cb1587c7af7c59ce3c70f4c74fc8cdd8ff98c053d9", SizeBytes: 49281151},
 				{RemotePath: "regional/tibet/perch_v2_tibet_labels.txt", LocalName: "perch_v2_tibet_labels.txt", Role: RoleLabels, SHA256: "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b", SizeBytes: 26056},
@@ -2880,6 +2961,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.9},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/perch_v2_tibet_no_dft_fp32.onnx", LocalName: "perch_v2_tibet_no_dft.onnx", Role: RoleModel, SHA256: "d309474cdebccbd49c5d8c785e75058900060665e0ac624f9c7c67ab9ec3fb6e", SizeBytes: 83936182},
 				{RemotePath: "regional/tibet/perch_v2_tibet_labels.txt", LocalName: "perch_v2_tibet_labels.txt", Role: RoleLabels, SHA256: "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b", SizeBytes: 26056},
@@ -2894,6 +2976,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.1},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_int8_arm.onnx", LocalName: "perch_v2_west-africa_int8_arm.onnx", Role: RoleModel, SHA256: "e88f50be2254a4f134d6cf8d896c1b4f47aecab27f7d89a2856c305735f62845", SizeBytes: 48677078},
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_labels.txt", LocalName: "perch_v2_west-africa_labels.txt", Role: RoleLabels, SHA256: "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd", SizeBytes: 24127},
@@ -2912,6 +2995,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 10.1},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_no_dft_fp32.onnx", LocalName: "perch_v2_west-africa_no_dft.onnx", Role: RoleModel, SHA256: "4983b759cb77ce8a59d9fd6dcb853836195961a67b19bb09f23c4c9aa478a8ac", SizeBytes: 81525774},
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_labels.txt", LocalName: "perch_v2_west-africa_labels.txt", Role: RoleLabels, SHA256: "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd", SizeBytes: 24127},
@@ -2926,6 +3010,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Backends: map[string]BackendSupport{
 				"onnxruntime-cpu": {Supported: true, Recommended: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.61},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_int8_arm.onnx", LocalName: "perch_v2_western-palearctic_int8_arm.onnx", Role: RoleModel, SHA256: "5417cf33b6d7a195810e63c825e9108e73c30889a12da72130616297255c4154", SizeBytes: 50464638},
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_labels.txt", LocalName: "perch_v2_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1", SizeBytes: 28913},
@@ -2944,6 +3029,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 				"openvino-gpu":    {Supported: true, Recommended: true},
 				"tensorrt":        {Supported: true},
 			},
+			ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.61},
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_no_dft_fp32.onnx", LocalName: "perch_v2_western-palearctic_no_dft.onnx", Role: RoleModel, SHA256: "d3c329afbc2b614f17002dea45282698df879d3fb714cd070ab74cf4d7a13b67", SizeBytes: 88658614},
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_labels.txt", LocalName: "perch_v2_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1", SizeBytes: 28913},

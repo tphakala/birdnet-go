@@ -119,11 +119,32 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 
 				// Excludes pass through verbatim from the manifest requirements.
 				assert.ElementsMatchf(t, e.Requirements.Excludes, v.Requirements.Excludes, "excludes for %q", e.Path)
+
+				// Score calibration: every Perch regional entry carries the manifest's
+				// value verbatim; the sigmoid-scored BirdNET v3.0 entries carry none.
+				assertGeneratedScoreCalibration(t, entry.RegistryID == RegistryIDPerchV2, e.Path, e.ScoreCalibration, v.ScoreCalibration)
 			}
 			assert.Equalf(t, regionalTilesPerFamily, regional, "manifest %s must describe %d regional tiles", tc.manifestFile, regionalTilesPerFamily)
 			assert.Lenf(t, byModelPath, regionalTilesPerFamily, "%s must expose exactly %d regional model paths", tc.entryID, regionalTilesPerFamily)
 		})
 	}
+}
+
+// assertGeneratedScoreCalibration checks a generated variant's calibration against
+// the manifest's block for the same entry: Perch entries must carry a usable copy,
+// every other family must carry none.
+func assertGeneratedScoreCalibration(t *testing.T, wantPresent bool, modelPath string, manifest, generated *ScoreCalibration) {
+	t.Helper()
+	if !wantPresent {
+		assert.Nilf(t, manifest, "manifest entry %q must not carry score_calibration", modelPath)
+		assert.Nilf(t, generated, "generated variant for %q must not carry a score calibration", modelPath)
+		return
+	}
+	require.NotNilf(t, manifest, "manifest entry %q must carry score_calibration", modelPath)
+	require.NotNilf(t, generated, "generated variant for %q must carry a score calibration", modelPath)
+	assert.Equalf(t, manifest.Method, generated.Method, "calibration method for %q", modelPath)
+	assert.InDeltaf(t, manifest.RestLogit, generated.RestLogit, 0, "rest logit for %q", modelPath)
+	assert.Truef(t, validScoreCalibration(generated), "calibration for %q must be usable", modelPath)
 }
 
 // testManifest mirrors only the manifest fields this test compares.
@@ -140,6 +161,7 @@ type testManifest struct {
 			MinRAMMB int      `json:"min_ram_mb"`
 			Excludes []string `json:"excludes"`
 		} `json:"requirements"`
+		ScoreCalibration *ScoreCalibration `json:"score_calibration"`
 	} `json:"models"`
 }
 

@@ -1,0 +1,272 @@
+Accelerating_and_revving_and_vroom
+Accordion
+Acoustic_guitar
+Acridotheres tristis
+Actitis hypoleucos
+Aerodramus francicus
+Aircraft
+Alarm
+Anas platyrhynchos
+Animal
+Anous stolidus
+Anous tenuirostris
+Applause
+Ardea alba
+Ardea cinerea
+Ardea ibis
+Ardea purpurea
+Ardenna gravis
+Ardenna grisea
+Ardenna pacifica
+Arenaria interpres
+Bark
+Bass_drum
+Bass_guitar
+Bathtub_(filling_or_washing)
+Bell
+Bicycle
+Bicycle_bell
+Boat_and_Water_vehicle
+Boiling
+Boom
+Bowed_string_instrument
+Brass_instrument
+Breathing
+Burping_and_eructation
+Bus
+Butorides striata
+Buzz
+Camera
+Car
+Car_passing_by
+Cat
+Charadrius hiaticula
+Chatter
+Cheering
+Chewing_and_mastication
+Chicken_and_rooster
+Child_speech_and_kid_speaking
+Chime
+Chink_and_clink
+Chirp_and_tweet
+Chuckle_and_chortle
+Church_bell
+Circus maillardi
+Clapping
+Clock
+Coin_(dropping)
+Columba livia
+Computer_keyboard
+Conversation
+Corvus albus
+Cough
+Cowbell
+Crack
+Crackle
+Crash_cymbal
+Cricket
+Crithagra mozambica
+Crow
+Crowd
+Crumpling_and_crinkling
+Crushing
+Crying_and_sobbing
+Cupboard_open_or_close
+Cutlery_and_silverware
+Cymbal
+Dishes_and_pots_and_pans
+Dog
+Domestic_animals_and_pets
+Domestic_sounds_and_home_sounds
+Door
+Doorbell
+Drawer_open_or_close
+Drill
+Drip
+Drum
+Drum_kit
+Egretta garzetta
+Electric_guitar
+Engine
+Engine_starting
+Estrilda astrild
+Explosion
+Falco peregrinus
+Falco punctatus
+Fart
+Female_singing
+Female_speech_and_woman_speaking
+Fill_(with_liquid)
+Finger_snapping
+Fire
+Fireworks
+Fixed-wing_aircraft_and_airplane
+Foudia madagascariensis
+Foudia rubra
+Fowl
+Frog
+Frying_(food)
+Gallinula chloropus
+Gasp
+Geopelia striata
+Giggle
+Glass
+Glockenspiel
+Gong
+Growling
+Guitar
+Gull_and_seagull
+Gunshot_and_gunfire
+Gurgling
+Hammer
+Hands
+Harmonica
+Harp
+Hi-hat
+Hirundo rustica
+Hiss
+Human_group_actions
+Human_voice
+Hydrobates leucorhous
+Hypsipetes borbonicus
+Hypsipetes olivaceus
+Idling
+Insect
+Keyboard_(musical)
+Keys_jangling
+Knock
+Lalage typica
+Laughter
+Liquid
+Livestock_and_farm_animals_and_working_animals
+Male_singing
+Male_speech_and_man_speaking
+Mallet_percussion
+Marimba_and_xylophone
+Mechanical_fan
+Mechanisms
+Meow
+Microcarbo africanus
+Microwave_oven
+Milvus migrans
+Motor_vehicle_(road)
+Motorcycle
+Music
+Musical_instrument
+Nesoenas mayeri
+Nesoenas picturatus
+Numenius phaeopus
+Nycticorax nycticorax
+Ocean
+Oceanites oceanicus
+Onychoprion anaethetus
+Onychoprion fuscatus
+Organ
+Ortygornis pondicerianus
+Packing_tape_and_duct_tape
+Pandion haliaetus
+Passer domesticus
+Percussion
+Phaethon lepturus
+Phaethon rubricauda
+Phalacrocorax carbo
+Phalaropus lobatus
+Phedina borbonica
+Piano
+Plucked_string_instrument
+Pluvialis squatarola
+Pour
+Power_tool
+Printer
+Psittacula eques
+Psittacula krameri
+Pterodroma baraui
+Puffinus bailloni
+Purr
+Pycnonotus jocosus
+Race_car_and_auto_racing
+Rail_transport
+Rain
+Raindrop
+Ratchet_and_pawl
+Rattle
+Rattle_(instrument)
+Respiratory_sounds
+Ringtone
+Riparia riparia
+Run
+Sawing
+Saxicola tectes
+Scissors
+Sclerophrys gutturalis
+Scratching_(performance_technique)
+Screaming
+Screech
+Shatter
+Shout
+Sigh
+Singing
+Sink_(filling_or_washing)
+Siren
+Skateboard
+Slam
+Sliding_door
+Snare_drum
+Sneeze
+Speech
+Speech_synthesizer
+Spilopelia chinensis
+Splash_and_splatter
+Squeak
+Stercorarius longicaudus
+Stercorarius parasiticus
+Stercorarius pomarinus
+Sterna hirundo
+Sterna paradisaea
+Stream
+Strum
+Sturnus vulgaris
+Subway_and_metro_and_underground
+Tabla
+Tambourine
+Tap
+Tearing
+Telephone
+Terpsiphone bourbonnensis
+Thalassarche melanophris
+Thalasseus bergii
+Thump_and_thud
+Thunder
+Thunderstorm
+Tick
+Tick-tock
+Toilet_flush
+Tools
+Traffic_noise_and_roadway_noise
+Train
+Trickle_and_dribble
+Tringa nebularia
+Truck
+Trumpet
+Typewriter
+Typing
+Vehicle
+Vehicle_horn_and_car_horn_and_honking
+Walk_and_footsteps
+Water
+Water_tap_and_faucet
+Waves_and_surf
+Whispering
+Whoosh_and_swoosh_and_swish
+Wild_animals
+Wind
+Wind_chime
+Wind_instrument_and_woodwind_instrument
+Wood
+Writing
+Yell
+Zipper_(clothing)
+Zosterops borbonicus
+Zosterops chloronothos
+Zosterops mauritianus
+Zosterops olivaceus

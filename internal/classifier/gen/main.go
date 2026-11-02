@@ -13,6 +13,12 @@
 // refresh that sidecar from HuggingFace; normal "go generate" is fully offline
 // so the CI drift gate needs no network.
 //
+// Perch v2 regional entries must carry a score_calibration block (the rest logit
+// the classifier adds to the slice softmax so slice scores match the full model's
+// scale); the generator hard-fails when it is missing, unknown or out of range,
+// and when a manifest labels_sha256 disagrees with the checksum sidecar, so a
+// constant can never be attached to a different labels file than it was fitted on.
+//
 // Determinism matters: the output is committed and guarded by a CI drift gate,
 // so the generator must produce byte-identical output for a given input. Entries
 // are sorted by (region slug, variant token), backend map keys are emitted
@@ -35,11 +41,13 @@ import (
 	"go/format"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -71,6 +79,8 @@ var families = []family{
 		repo:         "tphakala/Perch-v2-Models",
 		manifestFile: "gen/manifests/Perch-v2-Models.models.json",
 		regionsFile:  "region/data/Perch-v2-Models.regions.json",
+		// Softmax over the loaded labels: a slice needs its rest logit.
+		requireScoreCalibration: true,
 		// perch_v2_<slug>_<infix>.onnx, matching the global naming
 		// (perch_v2_no_dft.onnx, perch_v2_int8_arm.onnx).
 		modelLocalName: func(slug, token string) string {
@@ -96,13 +106,17 @@ func perchInfix(token string) string {
 }
 
 type family struct {
-	key             string
-	funcName        string
-	repo            string
-	manifestFile    string
-	regionsFile     string
-	modelLocalName  func(slug, token string) string
-	labelsLocalName func(slug string) string
+	key          string
+	funcName     string
+	repo         string
+	manifestFile string
+	regionsFile  string
+	// requireScoreCalibration marks a family whose scores depend on the label set
+	// (Perch v2 softmax). A family with per-class sigmoid scores (BirdNET v3.0)
+	// must not carry the field.
+	requireScoreCalibration bool
+	modelLocalName          func(slug, token string) string
+	labelsLocalName         func(slug string) string
 }
 
 // manifest and its nested types mirror only the acoustic-models schema-2 fields
@@ -124,6 +138,18 @@ type manifestModel struct {
 	SizeBytes    int64                      `json:"size_bytes"`
 	SupersededBy *string                    `json:"superseded_by"`
 	Requirements *manifestRequirements      `json:"requirements"`
+	// LabelsSHA256 is the checksum of the entry's labels file; when set it must
+	// equal the sidecar checksum, and a family that requires a score calibration
+	// needs it set.
+	LabelsSHA256     string                    `json:"labels_sha256"`
+	ScoreCalibration *manifestScoreCalibration `json:"score_calibration"`
+}
+
+// manifestScoreCalibration mirrors the manifest's per-entry score_calibration block.
+// RestLogit is a pointer so a missing value is told apart from zero.
+type manifestScoreCalibration struct {
+	Method    string   `json:"method"`
+	RestLogit *float64 `json:"rest_logit"`
 }
 
 type manifestBackend struct {
@@ -159,6 +185,14 @@ type labelChecksum struct {
 }
 
 const (
+	// scoreCalibrationMethod, scoreCalibrationRestLogitMin and Max mirror
+	// ScoreCalibrationSoftmaxRestLogit and the bounds in model_catalog.go (this
+	// program cannot import the package it generates for) and the
+	// acoustic-models validator.
+	scoreCalibrationMethod       = "softmax-rest-logit"
+	scoreCalibrationRestLogitMin = 8.0
+	scoreCalibrationRestLogitMax = 12.0
+
 	labelsSidecar = "gen/manifests/labels-checksums.json"
 	outputFile    = "model_catalog_regional_gen.go"
 	// expectedRegions is hand-maintained on purpose: an upstream tile addition
@@ -303,6 +337,10 @@ type genVariant struct {
 	labelsLocal    string
 	labelsSHA256   string
 	labelsSize     int64
+	// restLogit is the validated score calibration, meaningful only when
+	// hasCalibration is set.
+	restLogit      float64
+	hasCalibration bool
 }
 
 type backendRow struct {
@@ -349,6 +387,17 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 	}
 	if lc.Lines != species {
 		return genVariant{}, fmt.Errorf("variant %s@%s: labels line count %d != species count %d", e.Variant, e.Region, lc.Lines, species)
+	}
+
+	if e.LabelsSHA256 == "" && f.requireScoreCalibration {
+		return genVariant{}, fmt.Errorf("variant %s@%s: manifest labels_sha256 is missing, so its score_calibration cannot be tied to a labels file", e.Variant, e.Region)
+	}
+	if e.LabelsSHA256 != "" && e.LabelsSHA256 != lc.SHA256 {
+		return genVariant{}, fmt.Errorf("variant %s@%s: manifest labels_sha256 %s != labels checksum sidecar %s for %q", e.Variant, e.Region, e.LabelsSHA256, lc.SHA256, labelKey)
+	}
+	restLogit, hasCalibration, err := f.scoreCalibration(e)
+	if err != nil {
+		return genVariant{}, err
 	}
 
 	var arch []string
@@ -399,7 +448,33 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		labelsLocal:    f.labelsLocalName(e.Region),
 		labelsSHA256:   lc.SHA256,
 		labelsSize:     lc.SizeBytes,
+		restLogit:      restLogit,
+		hasCalibration: hasCalibration,
 	}, nil
+}
+
+// scoreCalibration validates the entry's score_calibration block against the
+// family's rule. It returns the rest logit and true, or false when the family takes
+// no calibration (and the entry correctly carries none).
+func (f *family) scoreCalibration(e *manifestModel) (restLogit float64, has bool, err error) {
+	if !f.requireScoreCalibration {
+		if e.ScoreCalibration != nil {
+			return 0, false, fmt.Errorf("variant %s@%s: score_calibration is not allowed for family %s", e.Variant, e.Region, f.key)
+		}
+		return 0, false, nil
+	}
+	sc := e.ScoreCalibration
+	if sc == nil || sc.RestLogit == nil {
+		return 0, false, fmt.Errorf("variant %s@%s: missing score_calibration (publish the calibration in the manifest first)", e.Variant, e.Region)
+	}
+	if sc.Method != scoreCalibrationMethod {
+		return 0, false, fmt.Errorf("variant %s@%s: unknown score_calibration method %q", e.Variant, e.Region, sc.Method)
+	}
+	v := *sc.RestLogit
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < scoreCalibrationRestLogitMin || v > scoreCalibrationRestLogitMax {
+		return 0, false, fmt.Errorf("variant %s@%s: score_calibration rest_logit %v outside [%v, %v]", e.Variant, e.Region, v, scoreCalibrationRestLogitMin, scoreCalibrationRestLogitMax)
+	}
+	return v, true, nil
 }
 
 // normalizePrecision maps manifest precision tokens to the recommender's
@@ -411,8 +486,9 @@ func normalizePrecision(p string) string {
 	return p
 }
 
-// render emits the Go source for one CatalogVariant literal. gofmt fixes the
-// indentation afterwards, so this only needs valid syntax.
+// render emits the Go source for one CatalogVariant literal, including its
+// ScoreCalibration when the variant has one. gofmt fixes the indentation
+// afterwards, so this only needs valid syntax.
 func render(v *genVariant) string {
 	var b strings.Builder
 	b.WriteString("{\n")
@@ -466,6 +542,11 @@ func render(v *genVariant) string {
 	}
 	if v.supersededBy != "" {
 		fmt.Fprintf(&b, "SupersededBy: %q,\n", v.supersededBy)
+	}
+
+	if v.hasCalibration {
+		fmt.Fprintf(&b, "ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: %s},\n",
+			strconv.FormatFloat(v.restLogit, 'f', -1, 64))
 	}
 
 	b.WriteString("Files: slices.Concat([]CatalogFile{\n")
