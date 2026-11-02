@@ -79,10 +79,11 @@ func TestElevateImport_InsufficientSpace(t *testing.T) {
 // back because passwordless elevation does not work. With in-app elevation on
 // and no password yet, the handler asks for one ("password_required"); with a
 // password already supplied, or with in-app elevation off, it returns the
-// copy-paste commands. No row starts a job. The staged source row uses a regular
+// copy-paste commands. No row starts a job. The staged source rows use a regular
 // file that is not a BirdNET-Pi database: discovery.Probe reports it invalid
 // whatever the uid, so the handler takes the staging path (as root too) and
-// needs no chmod.
+// needs no chmod. Only that path asks the disk probe for free space, which is how
+// each row shows whether staging ran.
 func TestElevateImport_LadderFallback(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -92,6 +93,7 @@ func TestElevateImport_LadderFallback(t *testing.T) {
 		wantMethod     string
 	}{
 		{name: "staged source with elevation off", stagedSource: true, wantMethod: responseMethodFallback},
+		{name: "staged source, elevation on, no password", stagedSource: true, allowElevation: true, wantMethod: responseMethodPasswordRequired},
 		{name: "valid database, elevation on, no password", allowElevation: true, wantMethod: responseMethodPasswordRequired},
 		{name: "valid database, elevation on, wrong password", allowElevation: true, password: "wrongpass", wantMethod: responseMethodFallback},
 		{name: "valid database, elevation off, no password", wantMethod: responseMethodFallback},
@@ -110,7 +112,11 @@ func TestElevateImport_LadderFallback(t *testing.T) {
 			h.isContainerEnv = func() bool { return false }
 			h.stagingBase = t.TempDir()
 			h.verifyTrustedBase = func(string) error { return nil }
-			h.freeBytesFn = func(string) (uint64, error) { return 1 << 30, nil }
+			freeProbes := 0
+			h.freeBytesFn = func(string) (uint64, error) {
+				freeProbes++
+				return 1 << 30, nil
+			}
 			h.newLadder = func() (*elevation.Ladder, error) {
 				return &elevation.Ladder{
 					Runner:  failingRunner{},
@@ -141,6 +147,11 @@ func TestElevateImport_LadderFallback(t *testing.T) {
 			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 			assert.Equal(t, tt.wantMethod, resp.Method)
 			assert.Empty(t, resp.JobID)
+			if tt.stagedSource {
+				assert.Equal(t, 1, freeProbes, "a source that is not a valid database must go through staging")
+			} else {
+				assert.Zero(t, freeProbes, "a valid database is read directly and skips staging")
+			}
 			if tt.wantMethod == responseMethodPasswordRequired {
 				assert.Empty(t, resp.FallbackCommands, "asking for a password must not also hand out commands")
 			} else {
