@@ -43,11 +43,13 @@ func AssertRoutesRegistered(t *testing.T, e *echo.Echo, expectedRoutes []string)
 	}
 }
 
-// AssertRoutesRequireAuth verifies that every expected route is registered by
-// register and sits behind the handler's auth middleware. Each expected entry is
-// a "METHOD PATH" string with the full path (for example
+// AssertRoutesRequireAuth verifies that the routes register adds are exactly the
+// expected routes and that each sits behind the handler's auth middleware. Each
+// expected entry is a "METHOD PATH" string with the full path (for example
 // "POST /api/v2/control/restart"); ":name" parameters are filled in for the
-// probe request.
+// probe request. A route register adds that is not listed fails, so a new route
+// has to be listed here and gated. Routes the Echo instance already held before
+// register ran are ignored.
 //
 // It installs a rejecting middleware as core.AuthMiddleware before calling
 // register, so the group is built with it, then sends a request to each route
@@ -59,6 +61,7 @@ func AssertRoutesRegistered(t *testing.T, e *echo.Echo, expectedRoutes []string)
 func AssertRoutesRequireAuth(tb testing.TB, core *apicore.Core, register func(*echo.Group), routes []string) {
 	tb.Helper()
 
+	existing := routeKeys(core.Echo)
 	reached := make(map[string]bool, len(routes))
 	core.AuthMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
@@ -67,6 +70,16 @@ func AssertRoutesRequireAuth(tb testing.TB, core *apicore.Core, register func(*e
 		}
 	}
 	register(core.Group)
+
+	expected := make(map[string]bool, len(routes))
+	for _, route := range routes {
+		expected[route] = true
+	}
+	for key := range routeKeys(core.Echo) {
+		if !existing[key] {
+			assert.True(tb, expected[key], "%s is registered but missing from the expected routes", key)
+		}
+	}
 
 	for _, route := range routes {
 		method, template, ok := strings.Cut(route, " ")
@@ -81,4 +94,16 @@ func AssertRoutesRequireAuth(tb testing.TB, core *apicore.Core, register func(*e
 
 		assert.True(tb, reached[route], "%s must reach the auth middleware as its own route", route)
 	}
+}
+
+// routeKeys returns the "METHOD PATH" key of every route registered on e,
+// leaving out the not-found handlers Echo adds behind a group's middleware.
+func routeKeys(e *echo.Echo) map[string]bool {
+	keys := make(map[string]bool)
+	for _, r := range e.Routes() {
+		if r.Method != echo.RouteNotFound {
+			keys[r.Method+" "+r.Path] = true
+		}
+	}
+	return keys
 }

@@ -58,7 +58,7 @@ func TestAssertRoutesRequireAuth(t *testing.T) {
 		{
 			name: "expected route that is not registered fails",
 			register: func(g *echo.Group, gate echo.MiddlewareFunc) {
-				g.Group("/gated", gate).GET("/other", okHandler)
+				g.Group("/gated", gate)
 			},
 			routes:     []string{gatedRoute},
 			wantFailed: true,
@@ -68,16 +68,26 @@ func TestAssertRoutesRequireAuth(t *testing.T) {
 			register: func(g *echo.Group, gate echo.MiddlewareFunc) {
 				g.Group("/gated", gate).GET("/item", okHandler)
 			},
-			routes:     []string{"POST /api/v2/gated/item"},
+			routes:     []string{gatedRoute, "POST /api/v2/gated/item"},
 			wantFailed: true,
 		},
 		{
 			name: "route registered outside the gated group fails",
 			register: func(g *echo.Group, gate echo.MiddlewareFunc) {
-				g.Group("/gated", gate).GET("/other", okHandler)
+				g.Group("/gated", gate)
 				g.GET("/open/item", okHandler)
 			},
 			routes:     []string{"GET /api/v2/open/item"},
+			wantFailed: true,
+		},
+		{
+			name: "registered route missing from the list fails",
+			register: func(g *echo.Group, gate echo.MiddlewareFunc) {
+				gated := g.Group("/gated", gate)
+				gated.GET("/item", okHandler)
+				gated.GET("/extra", okHandler)
+			},
+			routes:     []string{gatedRoute},
 			wantFailed: true,
 		},
 		{
@@ -111,4 +121,22 @@ func TestAssertRoutesRequireAuth(t *testing.T) {
 			assert.Equal(t, tt.wantFailed, rec.failures > 0, "failures recorded: %d", rec.failures)
 		})
 	}
+}
+
+// TestAssertRoutesRequireAuthIgnoresExistingRoutes tests that a route the Echo
+// instance held before register ran is neither probed nor reported as missing
+// from the expected list.
+func TestAssertRoutesRequireAuthIgnoresExistingRoutes(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	e.GET("/preexisting", okHandler)
+	core := NewCore(t, WithEcho(e), WithoutSettingsPublish())
+	rec := &errorRecorder{TB: t}
+
+	AssertRoutesRequireAuth(rec, core, func(g *echo.Group) {
+		g.Group("/gated", core.AuthMiddleware).GET("/item", okHandler)
+	}, []string{"GET /api/v2/gated/item"})
+
+	assert.Zero(t, rec.failures)
 }
