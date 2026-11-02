@@ -138,13 +138,14 @@ const (
 	MsgErrBackupV2NotInit         = "errors.backup.v2NotInitialized"
 
 	// Migration errors
-	MsgErrMigrationNotConfigured = "errors.migration.notConfigured"
-	MsgErrMigrationPreFlight     = "errors.migration.preFlightFailed"
-	MsgErrMigrationInvalidBody   = "errors.migration.invalidBody"
-	MsgErrMigrationRecordCount   = "errors.migration.recordCountFailed"
-	MsgErrMigrationStartFailed   = "errors.migration.startFailed"
-	MsgErrMigrationInitFailed    = "errors.migration.initFailed"
-	MsgErrMigrationResumeFailed  = "errors.migration.resumeFailed"
+	MsgErrMigrationNotConfigured  = "errors.migration.notConfigured"
+	MsgErrMigrationPreFlight      = "errors.migration.preFlightFailed"
+	MsgErrMigrationInvalidBody    = "errors.migration.invalidBody"
+	MsgErrMigrationPrereqNotReady = "errors.migration.prerequisitesNotReady"
+	MsgErrMigrationRecordCount    = "errors.migration.recordCountFailed"
+	MsgErrMigrationStartFailed    = "errors.migration.startFailed"
+	MsgErrMigrationInitFailed     = "errors.migration.initFailed"
+	MsgErrMigrationResumeFailed   = "errors.migration.resumeFailed"
 
 	// Legacy cleanup errors
 	MsgErrCleanupNoLegacyDB      = "errors.cleanup.noLegacyDB"

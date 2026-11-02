@@ -5343,7 +5343,8 @@
     },
     "migration": {
       "notConfigured": "La migration n'est pas configurée",
-      "preFlightFailed": "Les vérifications préalables ont échoué",
+      "preFlightFailed": "Échec de la vérification préalable à la migration : {check}",
+      "prerequisitesNotReady": "Lancez les vérifications préalables à la migration et attendez qu'elles réussissent avant de démarrer la migration.",
       "invalidBody": "Corps de requête invalide",
       "recordCountFailed": "Impossible de déterminer le nombre total d'enregistrements",
       "startFailed": "Impossible de démarrer la migration",

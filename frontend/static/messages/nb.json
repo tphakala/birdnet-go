@@ -5343,7 +5343,8 @@
     },
     "migration": {
       "notConfigured": "Migrering er ikke konfigurert",
-      "preFlightFailed": "Forhåndssjekker mislyktes",
+      "preFlightFailed": "Kontrollen før migreringen mislyktes: {check}",
+      "prerequisitesNotReady": "Kjør kontrollene før migreringen, og vent til de er bestått før du starter migreringen.",
       "invalidBody": "Ugyldig forespørselskropp",
       "recordCountFailed": "Bestemmelse av totalt posterantall mislyktes",
       "startFailed": "Oppstart av migrering mislyktes",

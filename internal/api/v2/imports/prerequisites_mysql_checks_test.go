@@ -230,7 +230,7 @@ func TestRunCriticalPrerequisiteChecks_ServerChecks(t *testing.T) {
 	t.Run("mysql runs the version check before the charset check", func(t *testing.T) {
 		_, controller, _ := setupPrerequisitesTestEnvironment(t)
 		useMySQLSettings(t, controller)
-		got := ids(controller.runCriticalPrerequisiteChecks(t.Context()))
+		got := ids(controller.runCriticalPrerequisiteChecks(t.Context(), nil))
 		version, charset := slices.Index(got, "mysql_server_version"), slices.Index(got, "mysql_charset")
 		health := slices.Index(got, "mysql_table_health")
 		require.GreaterOrEqual(t, version, 0, got)
@@ -240,7 +240,7 @@ func TestRunCriticalPrerequisiteChecks_ServerChecks(t *testing.T) {
 
 	t.Run("sqlite runs neither", func(t *testing.T) {
 		_, controller, _ := setupPrerequisitesTestEnvironment(t)
-		got := ids(controller.runCriticalPrerequisiteChecks(t.Context()))
+		got := ids(controller.runCriticalPrerequisiteChecks(t.Context(), nil))
 		assert.NotContains(t, got, "mysql_server_version")
 		assert.NotContains(t, got, "mysql_charset")
 	})
@@ -251,9 +251,10 @@ func TestStartMigration_BlocksUnsupportedServer(t *testing.T) {
 		name      string
 		version   string
 		wantNamed bool
+		wantCode  int
 	}{
-		{name: "unsupported server is named in the refusal", version: "8.0.46", wantNamed: true},
-		{name: "supported server is not the blocker", version: "8.4.13", wantNamed: false},
+		{name: "unsupported server is named in the refusal", version: "8.0.46", wantNamed: true, wantCode: http.StatusBadRequest},
+		{name: "supported server is not the blocker", version: "8.4.13", wantNamed: false, wantCode: http.StatusOK},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -270,23 +271,25 @@ func TestStartMigration_BlocksUnsupportedServer(t *testing.T) {
 				return dbserver.CharsetReport{SchemaCharset: dbserver.CharsetUTF8MB4}, nil
 			}
 
+			seedPassingResult(t, controller)
+
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start",
 				strings.NewReader(`{"total_records": 1000}`))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
 			require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
-			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Equal(t, tt.wantCode, rec.Code, rec.Body.String())
+			state, err := sm.GetState()
+			require.NoError(t, err)
+			if !tt.wantNamed {
+				assert.Equal(t, "dual_write", string(state.State))
+				return
+			}
 			var resp apicore.ErrorResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, notification.MsgErrMigrationPreFlight, resp.ErrorKey)
-			if tt.wantNamed {
-				assert.Contains(t, resp.Error, "'Database Server Version'")
-			} else {
-				assert.NotContains(t, resp.Error, "'Database Server Version'")
-			}
-			state, err := sm.GetState()
-			require.NoError(t, err)
+			assert.Contains(t, resp.Error, "'Database Server Version'")
 			assert.Equal(t, "idle", string(state.State))
 		})
 	}

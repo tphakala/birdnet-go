@@ -5343,7 +5343,8 @@
     },
     "migration": {
       "notConfigured": "Migrering är inte konfigurerad",
-      "preFlightFailed": "Förkontroller misslyckades",
+      "preFlightFailed": "Kontrollen före migreringen misslyckades: {check}",
+      "prerequisitesNotReady": "Kör kontrollerna före migreringen och vänta tills de godkänns innan du startar migreringen.",
       "invalidBody": "Ogiltigt förfrågningsinnehåll",
       "recordCountFailed": "Kunde inte bestämma totalt antal poster",
       "startFailed": "Kunde inte starta migrering",

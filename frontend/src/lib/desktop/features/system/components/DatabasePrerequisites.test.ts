@@ -655,6 +655,54 @@ describe('DatabasePrerequisites', () => {
       );
     });
 
+    it('drops a stale result announcement when another run starts, and announces only that run', async () => {
+      const completed = (runId: number): PrerequisitesResponse => ({
+        ...response([check('ok', 'passed')], 0, 0),
+        all_passed: true,
+        can_start_migration: true,
+        run_id: runId,
+      });
+      const view = createComponentTestFactory(DatabasePrerequisites, {
+        prerequisites: { ...runningSnapshot, run_id: 1 },
+      }).render({ props: { onRefresh: async () => {} } });
+      const allPassed = t('system.database.migration.prerequisites.allPassed');
+
+      await view.rerender({ prerequisites: completed(1) });
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(allPassed));
+
+      // A run started from outside the panel replaces the stale result text at once
+      await view.rerender({ prerequisites: { ...runningSnapshot, run_id: 2 } });
+      expect(screen.getByRole('status')).not.toHaveTextContent(allPassed);
+
+      await view.rerender({ prerequisites: completed(2) });
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(allPassed));
+    });
+
+    it('drops the result text of an earlier run when another run completes without being seen running', async () => {
+      const completed = (runId: number): PrerequisitesResponse => ({
+        ...response([check('ok', 'passed')], 0, 0),
+        all_passed: true,
+        can_start_migration: true,
+        run_id: runId,
+      });
+      const view = createComponentTestFactory(DatabasePrerequisites, {
+        prerequisites: { ...runningSnapshot, run_id: 1 },
+      }).render({ props: { onRefresh: async () => {} } });
+      const allPassed = t('system.database.migration.prerequisites.allPassed');
+
+      await view.rerender({ prerequisites: completed(1) });
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(allPassed));
+
+      // The same run handed over again keeps its text
+      await view.rerender({ prerequisites: completed(1) });
+      expect(screen.getByRole('status')).toHaveTextContent(allPassed);
+
+      // Another run arrives already completed (a reuse, a run another tab started): its result
+      // is not read out here, and the text of the earlier run must not stay for it
+      await view.rerender({ prerequisites: completed(2) });
+      await waitFor(() => expect(screen.getByRole('status')).not.toHaveTextContent(allPassed));
+    });
+
     it('shows the run failure with its error and a Retry that calls onRefresh', async () => {
       let calls = 0;
       renderTyped(DatabasePrerequisites, {

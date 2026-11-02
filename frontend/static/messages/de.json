@@ -5343,7 +5343,8 @@
     },
     "migration": {
       "notConfigured": "Migration ist nicht konfiguriert",
-      "preFlightFailed": "Vorabprüfungen fehlgeschlagen",
+      "preFlightFailed": "Prüfung vor der Migration fehlgeschlagen: {check}",
+      "prerequisitesNotReady": "Führen Sie die Prüfungen vor der Migration aus und warten Sie, bis sie bestanden sind, bevor Sie die Migration starten.",
       "invalidBody": "Ungültiger Anfragekörper",
       "recordCountFailed": "Gesamtanzahl der Datensätze konnte nicht ermittelt werden",
       "startFailed": "Migration konnte nicht gestartet werden",

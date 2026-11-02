@@ -1216,7 +1216,7 @@ func TestRunCriticalPrerequisiteChecks_PublishesPrereqTag(t *testing.T) {
 				ctx, cancel = context.WithCancel(ctx)
 				cancel()
 			}
-			controller.runCriticalPrerequisiteChecks(ctx)
+			controller.runCriticalPrerequisiteChecks(ctx, nil)
 
 			event := hub.Scope().ApplyToEvent(&sentry.Event{}, nil, client)
 			require.NotNil(t, event)

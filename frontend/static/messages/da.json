@@ -5343,7 +5343,8 @@
     },
     "migration": {
       "notConfigured": "Migrering er ikke konfigureret",
-      "preFlightFailed": "Forhåndskontrol mislykkedes",
+      "preFlightFailed": "Kontrollen før migreringen mislykkedes: {check}",
+      "prerequisitesNotReady": "Kør kontrollerne før migreringen, og vent på, at de består, før du starter migreringen.",
       "invalidBody": "Ugyldig forespørgselsindhold",
       "recordCountFailed": "Kunne ikke bestemme det samlede antal poster",
       "startFailed": "Kunne ikke starte migrering",
