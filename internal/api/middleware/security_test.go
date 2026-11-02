@@ -296,6 +296,28 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		assert.Empty(t, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 
+	t.Run("explicit origins with credentials works normally", func(t *testing.T) {
+		t.Parallel()
+
+		corsMiddleware := NewCORS(&SecurityConfig{
+			AllowedOrigins:   []string{"https://trusted.example.com"},
+			AllowCredentials: true,
+		})
+
+		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://trusted.example.com")
+
+		handler := corsMiddleware(func(c echo.Context) error {
+			return c.String(http.StatusOK, "ok")
+		})
+
+		err := handler(c)
+		require.NoError(t, err)
+
+		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
+		assert.Equal(t, "https://trusted.example.com", allowOrigin)
+		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
+	})
+
 	// The exact Access-Control-Allow-Origin value a credentialed GET from
 	// another origin receives for each kind of origin list; the rows pin the
 	// current answers.
