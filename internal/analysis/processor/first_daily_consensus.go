@@ -29,6 +29,10 @@ const (
 	// the rule fails open meanwhile.
 	firstDailySeedRetry = time.Minute
 
+	// firstDailySeedPageSize is how many of today's detections one repository
+	// read returns while the seed collects the species already detected.
+	firstDailySeedPageSize = 1000
+
 	// reasonFirstDailyConsensus is the discard reason logged by the flusher.
 	reasonFirstDailyConsensus = "first daily detection confirmed by only one model"
 )
@@ -69,7 +73,7 @@ func (p *Processor) prepareFirstDailyConsensus(now time.Time, settings *conf.Set
 		c.modelSpecies, c.modelSpeciesSnapshot = p.Bn.ModelSpeciesSets(), snapshot
 	}
 	today := now.Format(time.DateOnly)
-	if c.day == today || now.Before(c.retryAt) || p.Ds == nil {
+	if c.day == today || now.Before(c.retryAt) || p.Repo == nil {
 		return
 	}
 
@@ -79,7 +83,7 @@ func (p *Processor) prepareFirstDailyConsensus(now time.Time, settings *conf.Set
 	}
 	ctx, cancel := context.WithTimeout(ctx, firstDailySeedTimeout)
 	defer cancel()
-	rows, err := p.Ds.GetSpeciesSummaryData(ctx, today, today)
+	accepted, err := p.speciesDetectedOn(ctx, today)
 	if err != nil {
 		c.accepted, c.retryAt = nil, now.Add(firstDailySeedRetry)
 		if !errors.Is(err, context.Canceled) { // expected during shutdown
@@ -89,11 +93,27 @@ func (p *Processor) prepareFirstDailyConsensus(now time.Time, settings *conf.Set
 		}
 		return
 	}
-	accepted := make(map[string]struct{}, len(rows))
-	for i := range rows {
-		accepted[speciesindex.CanonicalKey(rows[i].ScientificName)] = struct{}{}
-	}
 	c.day, c.accepted = today, accepted
+}
+
+// speciesDetectedOn returns the canonical keys of every species with a stored
+// detection on day, paging through the detection repository. A detection saved
+// while the pages are read can shift a row past a page boundary; the worst case
+// is one species gated once more, which its next confirmed detection settles.
+func (p *Processor) speciesDetectedOn(ctx context.Context, day string) (map[string]struct{}, error) {
+	accepted := make(map[string]struct{})
+	for offset := 0; ; offset += firstDailySeedPageSize {
+		page, total, err := p.Repo.GetByDateRange(ctx, day, day, firstDailySeedPageSize, offset)
+		if err != nil {
+			return nil, err
+		}
+		for _, result := range page {
+			accepted[speciesindex.CanonicalKey(result.Species.ScientificName)] = struct{}{}
+		}
+		if len(page) == 0 || int64(offset+len(page)) >= total {
+			return accepted, nil
+		}
+	}
 }
 
 // lacksFirstDailyConsensus reports whether item is its species' first detection

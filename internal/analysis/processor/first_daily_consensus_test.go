@@ -12,7 +12,6 @@ import (
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -46,24 +45,25 @@ func firstDailySettings(enabled bool) *conf.Settings {
 
 // newFirstDailyProcessor returns a processor whose source is analyzed by models,
 // and its mock datastore, on which the caller sets the seed expectation.
-func newFirstDailyProcessor(t *testing.T, models ...string) (*Processor, *mocks.MockInterface) {
+func newFirstDailyProcessor(t *testing.T, models ...string) (*Processor, *mocks.MockDetectionRepository) {
 	t.Helper()
 	mgr := audioBuffer.NewManager(GetLogger())
 	for _, id := range models {
 		require.NoError(t, mgr.AllocateAnalysis(fdSource, id, fdBufferCapacity, fdBufferOverlap, fdBufferRead))
 	}
-	ds := mocks.NewMockInterface(t)
-	return &Processor{Ds: ds, BufferMgr: mgr}, ds
+	repo := mocks.NewMockDetectionRepository(t)
+	return &Processor{Repo: repo, BufferMgr: mgr}, repo
 }
 
 // expectSeed makes the next seed query for fdNow's day return the given species or error.
-func expectSeed(ds *mocks.MockInterface, err error, species ...string) {
-	rows := make([]datastore.SpeciesSummaryData, 0, len(species))
+func expectSeed(repo *mocks.MockDetectionRepository, err error, species ...string) {
+	rows := make([]*detection.Result, 0, len(species))
 	for _, sci := range species {
-		rows = append(rows, datastore.SpeciesSummaryData{ScientificName: sci})
+		rows = append(rows, &detection.Result{Species: detection.Species{ScientificName: sci}})
 	}
 	today := fdNow.Format(time.DateOnly)
-	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, today, today).Return(rows, err).Once()
+	repo.EXPECT().GetByDateRange(mock.Anything, today, today, firstDailySeedPageSize, 0).
+		Return(rows, int64(len(rows)), err).Once()
 }
 
 // firstDailyItem builds a pending detection of sci at ts contributed by models.
@@ -182,8 +182,8 @@ func TestFlushPendingDetections_FirstDailyConsensus(t *testing.T) {
 	t.Cleanup(func() { conf.StoreSettings(previous) })
 
 	p, ds := newFirstDailyProcessor(t, fdModelA, fdModelB)
-	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, now.Format(time.DateOnly), now.Format(time.DateOnly)).
-		Return(nil, nil).Once()
+	ds.EXPECT().GetByDateRange(mock.Anything, now.Format(time.DateOnly), now.Format(time.DateOnly), firstDailySeedPageSize, 0).
+		Return(nil, 0, nil).Once()
 	p.Settings = settings
 	// A queue that is never started rejects the approved detection's actions, so
 	// approval runs without touching the mock datastore.
@@ -211,4 +211,26 @@ func TestFlushPendingDetections_FirstDailyConsensus(t *testing.T) {
 	p.pendingDetections = map[string]PendingDetection{"single": due(fdModelA)}
 	_, flushed = p.flushPendingDetections()
 	assert.Equal(t, 1, flushed, "once approved, the species needs only one model")
+}
+
+// TestSpeciesDetectedOnPages verifies the seed reads every page of the day's
+// detections, not only the first.
+func TestSpeciesDetectedOnPages(t *testing.T) {
+	t.Parallel()
+
+	repo := mocks.NewMockDetectionRepository(t)
+	day := fdNow.Format(time.DateOnly)
+	full := make([]*detection.Result, firstDailySeedPageSize)
+	for i := range full {
+		full[i] = &detection.Result{Species: detection.Species{ScientificName: "Parus major"}}
+	}
+	total := int64(firstDailySeedPageSize + 1)
+	repo.EXPECT().GetByDateRange(mock.Anything, day, day, firstDailySeedPageSize, 0).Return(full, total, nil).Once()
+	repo.EXPECT().GetByDateRange(mock.Anything, day, day, firstDailySeedPageSize, firstDailySeedPageSize).
+		Return([]*detection.Result{{Species: detection.Species{ScientificName: "Turdus merula"}}}, total, nil).Once()
+
+	got, err := (&Processor{Repo: repo}).speciesDetectedOn(t.Context(), day)
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+	assert.Contains(t, got, speciesindex.CanonicalKey("Turdus merula"))
 }
