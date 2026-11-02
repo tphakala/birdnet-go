@@ -234,7 +234,7 @@
     <div class="flex items-center gap-2">
       <button
         type="button"
-        class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-muted disabled:opacity-50 disabled:cursor-not-allowed"
+        class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-muted disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
         onclick={() => {
           if (!isRunning) void handleRefresh();
         }}
@@ -282,32 +282,37 @@
       </div>
     {/if}
     {#if isRunning}
-      <div id={RUNNING_ROW_ID} class="mt-3 flex items-start gap-2 px-3 py-2 text-sm text-muted">
-        <RefreshCw class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 animate-spin" aria-hidden="true" />
-        <div>
-          <div>
-            {t('system.database.migration.prerequisites.running')}
-            {#if progress}
-              {t('system.database.migration.prerequisites.checkingStep', {
-                current: progress.completed_steps + 1,
-                total: progress.total_steps,
-              })}
-            {/if}
-          </div>
-          {#if progress?.current_check_name}
-            <div>
-              {t('system.database.migration.prerequisites.currentCheck', {
-                name: progress.current_check_name,
-                seconds: elapsedSeconds(progress.current_check_elapsed_ms),
-              })}
-            </div>
-          {/if}
-          <div class="text-xs">{t('system.database.migration.prerequisites.slowHint')}</div>
-        </div>
-      </div>
+      <span class="sr-only">{t('system.database.migration.prerequisites.running')}</span>
     {/if}
     <span class="sr-only">{announcement}</span>
   </div>
+
+  <!-- Progress detail sits outside the live region: its text changes on every poll -->
+  {#if isRunning}
+    <div id={RUNNING_ROW_ID} class="mt-3 flex items-start gap-2 px-3 py-2 text-sm text-muted">
+      <RefreshCw class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 animate-spin" aria-hidden="true" />
+      <div>
+        <div>
+          {t('system.database.migration.prerequisites.running')}
+          {#if progress}
+            {t('system.database.migration.prerequisites.checkingStep', {
+              current: progress.completed_steps + 1,
+              total: progress.total_steps,
+            })}
+          {/if}
+        </div>
+        {#if progress?.current_check_name}
+          <div>
+            {t('system.database.migration.prerequisites.currentCheck', {
+              name: progress.current_check_name,
+              seconds: elapsedSeconds(progress.current_check_elapsed_ms),
+            })}
+          </div>
+        {/if}
+        <div class="text-xs">{t('system.database.migration.prerequisites.slowHint')}</div>
+      </div>
+    </div>
+  {/if}
 
   {#if showError}
     <ErrorAlert className="mt-3">

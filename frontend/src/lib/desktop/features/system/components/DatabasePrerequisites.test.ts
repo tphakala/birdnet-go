@@ -469,18 +469,24 @@ describe('DatabasePrerequisites', () => {
         props: { prerequisites: runningSnapshot, onRefresh: async () => {} },
       });
 
+      const checking = t('system.database.migration.prerequisites.checkingStep', {
+        current: 3,
+        total: 9,
+      });
+      const currentCheck = t('system.database.migration.prerequisites.currentCheck', {
+        name: 'Database Integrity',
+        seconds: 125,
+      });
+      expect(screen.getByText(new RegExp(checking))).toBeInTheDocument();
+      expect(screen.getByText(currentCheck)).toBeInTheDocument();
+      expect(
+        screen.getByText(t('system.database.migration.prerequisites.slowHint'))
+      ).toBeInTheDocument();
+      // The live region carries only the stable running text, not the text that changes on every poll
       const status = screen.getByRole('status');
       expect(status).toHaveTextContent(RUNNING_KEY);
-      expect(status).toHaveTextContent(
-        t('system.database.migration.prerequisites.checkingStep', { current: 3, total: 9 })
-      );
-      expect(status).toHaveTextContent(
-        t('system.database.migration.prerequisites.currentCheck', {
-          name: 'Database Integrity',
-          seconds: 125,
-        })
-      );
-      expect(status).toHaveTextContent(t('system.database.migration.prerequisites.slowHint'));
+      expect(status).not.toHaveTextContent(currentCheck);
+      expect(status).not.toHaveTextContent(checking);
       // Finished checks show as they arrive, non-passing ones without expanding
       expect(screen.getByText('Check disk_warn:')).toBeInTheDocument();
     });
@@ -500,6 +506,7 @@ describe('DatabasePrerequisites', () => {
         name: t('system.database.migration.prerequisites.rerun'),
       });
       expect(rerun).toHaveAttribute('aria-disabled', 'true');
+      expect(rerun).toHaveClass('aria-disabled:cursor-not-allowed', 'aria-disabled:opacity-50');
       const reason = document.getElementById(rerun.getAttribute('aria-describedby') ?? '');
       expect(reason).toHaveTextContent(RUNNING_KEY);
 
