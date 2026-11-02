@@ -441,6 +441,33 @@ describe('ErrorAlert', () => {
       }
     });
 
+    it('does not take focus from another element when the alert is removed after a press on it', async () => {
+      const outside = document.createElement('button');
+      const field = document.createElement('input');
+      document.body.append(outside, field);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        // A press counts as holding focus even where the click does not focus (Safari), so the
+        // alert still holds it when the user then moves to a field that takes focus
+        await fireEvent.pointerDown(screen.getByRole('button', { name: 'common.retry' }));
+        field.focus();
+
+        unmount();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.activeElement).toBe(field);
+      } finally {
+        outside.remove();
+        field.remove();
+      }
+    });
+
     it('does not move focus when the alert never held it and focus is on the page body', async () => {
       const outside = document.createElement('button');
       document.body.appendChild(outside);
