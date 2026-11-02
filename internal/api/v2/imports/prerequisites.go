@@ -654,8 +654,9 @@ func (c *Handler) checkMySQLPermissions(ctx context.Context) PrerequisiteCheck {
 
 	// Ensure cleanup even if function returns early due to error
 	// Cleanup errors are silently ignored - orphan test tables are harmless
-	// The cleanup runs on a context detached from ctx so a cancelled run neither
-	// hangs nor leaks the test table.
+	// The cleanup runs on a context detached from ctx, so cancelling ctx does not
+	// skip the DROP while this step is still running. A step the run abandoned
+	// at shutdown is not waited for, so the table can then remain.
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mysqlServerProbeTimeout)
 		defer cancel()
