@@ -1213,6 +1213,8 @@ export type TranslationKey =
   | 'system.database.migration.completedNote'
   | 'system.database.migration.starting'
   | 'system.database.migration.status.idle'
+  | 'system.database.migration.status.checking'
+  | 'system.database.migration.status.notReady'
   | 'system.database.migration.status.initializing'
   | 'system.database.migration.status.dual_write'
   | 'system.database.migration.status.migrating'

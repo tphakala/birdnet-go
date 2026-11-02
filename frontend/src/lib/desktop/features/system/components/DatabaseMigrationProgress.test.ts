@@ -128,6 +128,8 @@ interface StartStateCase {
   loading: boolean;
   error: string | null;
   helper: string;
+  /** Header badge text; the idle label falls back to its title-cased status in this test. */
+  badge: string;
   absent: string[];
   /** Text colour class the helper must carry. */
   tone: string;
@@ -138,6 +140,7 @@ const notMet = render('system.database.migration.progress.prerequisitesNotMet');
 const cases: StartStateCase[] = [
   {
     name: 'loading',
+    badge: 'system.database.migration.status.checking',
     prerequisites: null,
     loading: true,
     error: null,
@@ -147,6 +150,7 @@ const cases: StartStateCase[] = [
   },
   {
     name: 'loading with a stale blocked result',
+    badge: 'system.database.migration.status.checking',
     prerequisites: blockedPrerequisites,
     loading: true,
     error: null,
@@ -156,6 +160,7 @@ const cases: StartStateCase[] = [
   },
   {
     name: 'request error',
+    badge: 'system.database.migration.status.notReady',
     prerequisites: null,
     loading: false,
     error: 'Request timeout.',
@@ -165,6 +170,7 @@ const cases: StartStateCase[] = [
   },
   {
     name: 'request error with a stale blocked result',
+    badge: 'system.database.migration.status.notReady',
     prerequisites: blockedPrerequisites,
     loading: false,
     error: 'Request timeout.',
@@ -174,6 +180,7 @@ const cases: StartStateCase[] = [
   },
   {
     name: 'a failed critical check',
+    badge: 'system.database.migration.status.notReady',
     prerequisites: blockedPrerequisites,
     loading: false,
     error: null,
@@ -185,17 +192,19 @@ const cases: StartStateCase[] = [
   },
   {
     name: 'several blocking checks among passed and non-critical ones',
+    badge: 'system.database.migration.status.notReady',
     prerequisites: severalBlocked,
     loading: false,
     error: null,
     helper: render('system.database.migration.progress.prerequisitesFailedList', {
-      checks: 'Disk Space, Database Integrity',
+      checks: 'Disk Space and Database Integrity',
     }),
     absent: [notMet, 'Record Count', 'Optional Tweak'],
     tone: 'text-[var(--text-error)]',
   },
   {
     name: 'blocked with no failing check listed',
+    badge: 'system.database.migration.status.notReady',
     prerequisites: blockedWithoutFailedCheck,
     loading: false,
     error: null,
@@ -230,6 +239,7 @@ describe('DatabaseMigrationProgress start button', () => {
     const helper = screen.getByText(c.helper);
     expect(helper).toHaveAttribute('role', 'status');
     expect(helper).toHaveClass(c.tone);
+    expect(screen.getByText(c.badge)).toBeInTheDocument();
     expect(start.getAttribute('aria-describedby')).toBe(helper.id);
     for (const text of c.absent) {
       expect(screen.queryByText(text, { exact: false })).not.toBeInTheDocument();
@@ -249,6 +259,7 @@ describe('DatabaseMigrationProgress start button', () => {
 
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByText('Idle')).toBeInTheDocument();
     // The live region stays mounted, empty and hidden, so the next reason is announced
     expect(screen.getByRole('status')).toHaveClass('sr-only');
     expect(screen.getByRole('status').textContent.trim()).toBe('');

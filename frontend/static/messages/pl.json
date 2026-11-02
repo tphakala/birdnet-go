@@ -1572,6 +1572,8 @@
         "starting": "Rozpoczynanie migracji...",
         "status": {
           "idle": "Gotowy do rozpoczęcia",
+          "checking": "Sprawdzanie wymagań",
+          "notReady": "Niegotowe",
           "initializing": "Inicjalizacja",
           "dual_write": "Podwójny zapis aktywny",
           "migrating": "Migrowanie danych podstawowych",

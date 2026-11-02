@@ -12,7 +12,7 @@
     AlertTriangle,
   } from '@lucide/svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { generateId } from '$lib/utils/uuid';
   import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
   import type { MigrationStatus, DatabaseStats, PrerequisitesResponse } from '$lib/types/migration';
@@ -60,7 +60,6 @@
   let banner = $derived(bannerMessage(migState));
 
   const START_HELP_ID = generateId('migration-start-help');
-  const LIST_SEPARATOR = ', ';
 
   let canStart = $derived(prerequisites?.can_start_migration === true);
 
@@ -76,10 +75,20 @@
     if (prerequisitesError) return t('system.database.migration.progress.prerequisitesUnavailable');
     if (blockingCheckNames.length > 0) {
       return t('system.database.migration.progress.prerequisitesFailedList', {
-        checks: blockingCheckNames.join(LIST_SEPARATOR),
+        checks: new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(
+          blockingCheckNames
+        ),
       });
     }
     return t('system.database.migration.progress.prerequisitesNotMet');
+  });
+
+  /** The idle badge says Ready only when the checks allow the start. */
+  let stateBadgeLabel = $derived.by((): string => {
+    if (!isIdle || isPaused || startBlockedReason === null) return stateLabel(migState);
+    return prerequisitesLoading
+      ? t('system.database.migration.status.checking')
+      : t('system.database.migration.status.notReady');
   });
 
   let startHelpClass = $derived(
@@ -162,7 +171,7 @@
           isPaused ? 'paused' : migState
         )}"
       >
-        {isPaused ? t('system.database.migration.status.paused') : stateLabel(migState)}
+        {isPaused ? t('system.database.migration.status.paused') : stateBadgeLabel}
       </span>
     </div>
   </div>

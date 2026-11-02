@@ -1572,6 +1572,8 @@
         "starting": "Zahajuje se migrace...",
         "status": {
           "idle": "Připraveno ke spuštění",
+          "checking": "Kontrola předpokladů",
+          "notReady": "Nepřipraveno",
           "initializing": "Inicializace",
           "dual_write": "Duální zápis aktivní",
           "migrating": "Migrace primární",

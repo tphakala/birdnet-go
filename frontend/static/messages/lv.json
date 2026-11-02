@@ -1572,6 +1572,8 @@
         "starting": "Sāk migrāciju...",
         "status": {
           "idle": "Gatavs sākšanai",
+          "checking": "Priekšnosacījumu pārbaude",
+          "notReady": "Nav gatavs",
           "initializing": "Inicializē",
           "dual_write": "Dubultrakstīšana aktīva",
           "migrating": "Migrē primāros",

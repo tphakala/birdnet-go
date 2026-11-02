@@ -1572,6 +1572,8 @@
         "starting": "Starter migrering...",
         "status": {
           "idle": "Klar til start",
+          "checking": "Kontrollerer forudsætninger",
+          "notReady": "Ikke klar",
           "initializing": "Initialiserer",
           "dual_write": "Dobbeltskrivning aktiv",
           "migrating": "Migrerer primær",

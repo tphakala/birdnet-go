@@ -1572,6 +1572,8 @@
         "starting": "Migratie wordt gestart...",
         "status": {
           "idle": "Klaar om te starten",
+          "checking": "Vereisten controleren",
+          "notReady": "Niet gereed",
           "initializing": "Initialiseren",
           "dual_write": "Dubbel schrijven actief",
           "migrating": "Primaire gegevens migreren",

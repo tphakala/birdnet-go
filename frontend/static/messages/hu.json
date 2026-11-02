@@ -1572,6 +1572,8 @@
         "starting": "Migráció indítása...",
         "status": {
           "idle": "Indításra kész",
+          "checking": "Előfeltételek ellenőrzése",
+          "notReady": "Nem kész",
           "initializing": "Inicializálás",
           "dual_write": "Dupla-írás aktív",
           "migrating": "Elsődleges migrálása",
