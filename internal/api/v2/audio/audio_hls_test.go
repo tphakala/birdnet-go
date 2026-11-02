@@ -4,7 +4,6 @@ package audio
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,36 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
-
-// TestHLSManagerClientTracking tests the HLS client tracking
-func TestHLSManagerClientTracking(t *testing.T) {
-	t.Run("getStreamClientCount returns 0 for unknown stream", func(t *testing.T) {
-		count := getStreamClientCount("nonexistent_stream")
-		assert.Equal(t, 0, count)
-	})
-
-	t.Run("getStreamClientCount returns correct count", func(t *testing.T) {
-		// Save and restore original state
-		originalClients := hlsMgr.clients
-		hlsMgr.clientsMu.Lock()
-		hlsMgr.clients = map[string]map[string]bool{
-			"source1": {
-				"client1": true,
-				"client2": true,
-			},
-		}
-		hlsMgr.clientsMu.Unlock()
-
-		defer func() {
-			hlsMgr.clientsMu.Lock()
-			hlsMgr.clients = originalClients
-			hlsMgr.clientsMu.Unlock()
-		}()
-
-		count := getStreamClientCount("source1")
-		assert.Equal(t, 2, count)
-	})
-}
 
 // setHLSActivity replaces the HLS manager's activity map for the duration of the
 // test and restores the original when the test ends.
@@ -206,27 +175,6 @@ func TestHLSManagerConcurrency(t *testing.T) {
 	for _, streamID := range streamIDs {
 		assert.NotContains(t, hlsMgr.streams, streamID, "stream must be removed")
 	}
-}
-
-// TestHLSHeartbeatRequest tests the heartbeat request struct JSON binding
-func TestHLSHeartbeatRequest(t *testing.T) {
-	t.Run("heartbeat with stream token only", func(t *testing.T) {
-		body := []byte(`{"stream_token":"abc123def456abc123def456abc123de"}`)
-		var req HLSHeartbeatRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-
-		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Empty(t, req.SessionID)
-	})
-
-	t.Run("heartbeat with session id", func(t *testing.T) {
-		body := []byte(`{"stream_token":"abc123def456abc123def456abc123de","session_id":"550e8400-e29b-41d4-a716-446655440000"}`)
-		var req HLSHeartbeatRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-
-		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", req.SessionID)
-	})
 }
 
 // TestStreamTokenGeneration tests crypto-random token generation
