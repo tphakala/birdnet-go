@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from 'svelte';
+  import { tick } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -205,9 +205,9 @@
    */
   async function runPrerequisites(force: boolean): Promise<void> {
     try {
-      // Loading covers only the wait for the first snapshot
-      // untrack: the mount effect calls this and must not depend on the snapshot it writes
-      prerequisites.loading = untrack(() => prerequisites.data === null);
+      // Loading covers every wait for the start response, so an older snapshot, even a
+      // passing one, cannot enable Start while a new run is being requested
+      prerequisites.loading = true;
       prerequisites.data = await api.post<PrerequisitesResponse>(
         '/api/v2/system/database/migration/prerequisites/run',
         { force }

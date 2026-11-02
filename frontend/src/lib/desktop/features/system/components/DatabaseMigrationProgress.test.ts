@@ -317,11 +317,21 @@ describe('DatabaseMigrationProgress start button', () => {
     expect(started).toBe(true);
   });
 
-  it.each([
-    { name: 'loading', loading: true, error: null },
-    { name: 'a failed refresh', loading: false, error: 'Request timeout.' },
-  ])('stays enabled on a result that allows the start while $name', c => {
-    renderProgress({ prerequisites: allowedPrerequisites, loading: c.loading, error: c.error });
+  it('is blocked on a result that allows the start while a new run is being requested', () => {
+    renderProgress({ prerequisites: allowedPrerequisites, loading: true, error: null });
+
+    expect(screen.getByRole('button', { name: t(startKey) })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+  });
+
+  it('stays enabled on a result that allows the start after a failed refresh', () => {
+    renderProgress({
+      prerequisites: allowedPrerequisites,
+      loading: false,
+      error: 'Request timeout.',
+    });
 
     expect(screen.getByRole('button', { name: t(startKey) })).not.toHaveAttribute('aria-disabled');
   });

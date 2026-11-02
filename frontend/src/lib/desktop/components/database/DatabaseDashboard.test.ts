@@ -559,6 +559,33 @@ describe('DatabaseDashboard prerequisites run', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: true }));
   });
 
+  it('blocks Start while a forced run request is in flight over an old passing snapshot', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
+
+    renderTyped(DatabaseDashboard);
+    const rerun = await screen.findByRole('button', {
+      name: t('system.database.migration.prerequisites.rerun'),
+    });
+    await waitFor(() => expect(startBlocked()).toBe(false));
+
+    // The forced run POST stays pending: the old passing snapshot must not enable Start
+    let resolveRun: (value: unknown) => void = () => {};
+    apiPost.mockImplementation((url: string) =>
+      url === RUN_URL
+        ? new Promise(resolve => {
+            resolveRun = resolve;
+          })
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    await user.click(rerun);
+
+    await waitFor(() => expect(startBlocked()).toBe(true));
+
+    resolveRun(startablePrerequisites);
+    await waitFor(() => expect(startBlocked()).toBe(false));
+  });
+
   it('keeps Start blocked and says the checks did not finish when the run failed', async () => {
     serve({
       [STATUS_URL]: idleStatus,
