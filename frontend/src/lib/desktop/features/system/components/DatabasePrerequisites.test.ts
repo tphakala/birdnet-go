@@ -120,18 +120,21 @@ describe('DatabasePrerequisites', () => {
       props: { isLoading: true },
       expected: RUNNING_KEY,
       role: 'status',
+      alerts: 0,
     },
     {
       name: 'a request error',
       props: { error: 'Request timeout.' },
       expected: 'Request timeout.',
       role: 'alert',
+      alerts: 1,
     },
     {
       name: 'neither loading nor an error',
       props: {},
       expected: FETCH_FAILED_KEY,
       role: 'alert',
+      alerts: 1,
     },
   ])('never renders an empty body without data while $name', c => {
     const { container } = renderTyped(DatabasePrerequisites, {
@@ -143,6 +146,8 @@ describe('DatabasePrerequisites', () => {
     });
 
     expect(screen.getByRole(c.role)).toHaveTextContent(c.expected);
+    // Exactly one of the loading row and the alert
+    expect(screen.queryAllByRole('alert')).toHaveLength(c.alerts);
     expect(container.textContent).not.toContain(NOT_MET_KEY);
     expect(
       container.querySelector('#prerequisites-details, [aria-controls="prerequisites-details"]')

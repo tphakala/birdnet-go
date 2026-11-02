@@ -52,6 +52,30 @@ const blockedPrerequisites = {
   checked_at: '2026-10-24T10:00:00Z',
 } satisfies PrerequisitesResponse;
 
+const databaseIntegrity = {
+  id: 'database_integrity',
+  name: 'Database Integrity',
+  description: '',
+  status: 'error',
+  message: 'Check could not run',
+  severity: 'critical',
+} satisfies PrerequisiteCheck;
+
+const optionalCheck = {
+  id: 'optional',
+  name: 'Optional Tweak',
+  description: '',
+  status: 'failed',
+  message: 'Not required',
+  severity: 'warning',
+} satisfies PrerequisiteCheck;
+
+const severalBlocked = {
+  ...blockedPrerequisites,
+  checks: [diskSpace, optionalCheck, recordCount, databaseIntegrity],
+  critical_failures: 2,
+} satisfies PrerequisitesResponse;
+
 const blockedWithoutFailedCheck = {
   ...blockedPrerequisites,
   checks: [recordCount],
@@ -74,6 +98,8 @@ interface StartStateCase {
   error: string | null;
   helper: string;
   absent: string[];
+  /** Text colour class the helper must carry. */
+  tone: string;
 }
 
 const notMet = render('system.database.migration.progress.prerequisitesNotMet');
@@ -86,6 +112,16 @@ const cases: StartStateCase[] = [
     error: null,
     helper: render('system.database.migration.prerequisites.running'),
     absent: [notMet],
+    tone: 'text-muted',
+  },
+  {
+    name: 'loading with a stale blocked result',
+    prerequisites: blockedPrerequisites,
+    loading: true,
+    error: null,
+    helper: render('system.database.migration.prerequisites.running'),
+    absent: ['Disk Space'],
+    tone: 'text-muted',
   },
   {
     name: 'request error',
@@ -94,6 +130,16 @@ const cases: StartStateCase[] = [
     error: 'Request timeout.',
     helper: render('system.database.migration.progress.prerequisitesUnavailable'),
     absent: [notMet],
+    tone: 'text-[var(--text-error)]',
+  },
+  {
+    name: 'request error with a stale blocked result',
+    prerequisites: blockedPrerequisites,
+    loading: false,
+    error: 'Request timeout.',
+    helper: render('system.database.migration.progress.prerequisitesUnavailable'),
+    absent: ['Disk Space'],
+    tone: 'text-[var(--text-error)]',
   },
   {
     name: 'a failed critical check',
@@ -104,6 +150,18 @@ const cases: StartStateCase[] = [
       checks: 'Disk Space',
     }),
     absent: [notMet, 'Record Count'],
+    tone: 'text-[var(--text-error)]',
+  },
+  {
+    name: 'several blocking checks among passed and non-critical ones',
+    prerequisites: severalBlocked,
+    loading: false,
+    error: null,
+    helper: render('system.database.migration.progress.prerequisitesFailedList', {
+      checks: 'Disk Space, Database Integrity',
+    }),
+    absent: [notMet, 'Record Count', 'Optional Tweak'],
+    tone: 'text-[var(--text-error)]',
   },
   {
     name: 'blocked with no failing check listed',
@@ -112,6 +170,7 @@ const cases: StartStateCase[] = [
     error: null,
     helper: notMet,
     absent: [],
+    tone: 'text-[var(--text-error)]',
   },
 ];
 
@@ -147,6 +206,8 @@ describe('DatabaseMigrationProgress start button', () => {
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).toHaveAttribute('aria-disabled', 'true');
     const helper = screen.getByText(c.helper);
+    expect(helper).toHaveAttribute('role', 'status');
+    expect(helper).toHaveClass(c.tone);
     expect(start.getAttribute('aria-describedby')).toBe(helper.id);
     for (const text of c.absent) {
       expect(screen.queryByText(text, { exact: false })).not.toBeInTheDocument();
@@ -175,7 +236,33 @@ describe('DatabaseMigrationProgress start button', () => {
 
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).not.toHaveAttribute('aria-disabled');
+    // The live region stays mounted, empty and hidden, so the next reason is announced
+    expect(screen.getByRole('status')).toHaveClass('sr-only');
+    expect(screen.getByRole('status').textContent.trim()).toBe('');
     start.click();
     expect(started).toBe(true);
+  });
+
+  it.each([
+    { name: 'loading', loading: true, error: null },
+    { name: 'a failed refresh', loading: false, error: 'Request timeout.' },
+  ])('stays enabled on a result that allows the start while $name', c => {
+    renderTyped(DatabaseMigrationProgress, {
+      props: {
+        status: idleStatus,
+        legacyStats: null,
+        v2Stats: null,
+        prerequisites: { ...blockedPrerequisites, can_start_migration: true, all_passed: true },
+        prerequisitesLoading: c.loading,
+        prerequisitesError: c.error,
+        onStart: () => {},
+        onPause: noop,
+        onResume: noop,
+        onRetryValidation: noop,
+        onCancel: noop,
+      },
+    });
+
+    expect(screen.getByRole('button', { name: t(startKey) })).not.toHaveAttribute('aria-disabled');
   });
 });
