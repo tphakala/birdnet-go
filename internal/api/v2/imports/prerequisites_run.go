@@ -252,6 +252,11 @@ func (r *prereqRunner) execute(ctx context.Context, cancel context.CancelFunc, g
 		r.mu.Unlock()
 		return
 	}
+	if ctx.Err() != nil {
+		r.failLocked(ctxFailureMessage(ctx))
+		r.mu.Unlock()
+		return
+	}
 	checks := slices.Clone(r.checks)
 	r.mu.Unlock()
 
@@ -260,6 +265,12 @@ func (r *prereqRunner) execute(ctx context.Context, cancel context.CancelFunc, g
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.generation != gen {
+		return
+	}
+	// The context may have ended while the result was built; a run that was cut
+	// short is failed, not completed.
+	if ctx.Err() != nil {
+		r.failLocked(ctxFailureMessage(ctx))
 		return
 	}
 	r.finishedAt = r.clock()

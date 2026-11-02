@@ -300,6 +300,31 @@ func TestPrereqRunner_CancelledParent(t *testing.T) {
 	})
 }
 
+// TestPrereqRunner_CancelledAfterLastStep pins that a run whose context ends
+// after the final step returned, while the result is being built, is failed and
+// commits nothing instead of reporting completed.
+func TestPrereqRunner_CancelledAfterLastStep(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var wg sync.WaitGroup
+		r := &prereqRunner{spawn: func(fn func()) { wg.Go(fn) }}
+		var runs atomic.Int32
+		parent, cancel := context.WithCancel(t.Context())
+		finish := func(checks []PrerequisiteCheck) PrerequisitesResponse {
+			cancel() // the server stops after the last step, before the commit
+			return summarizeForTest(checks)
+		}
+
+		r.start(parent, false, dbFingerprint{}, stepsOf(fakeStep(testStepA, 0, &runs, passCheck)), finish)
+		wg.Wait()
+
+		snap := r.snapshot()
+		assert.Equal(t, PrereqRunStatusFailed, snap.Status)
+		assert.Equal(t, msgPrereqRunCancelled, snap.Error)
+		_, reason := r.passingResult(dbFingerprint{})
+		assert.Equal(t, prereqReuseNoResult, reason, "a failed run must not leave a reusable result")
+	})
+}
+
 // TestPrereqRunner_StepIgnoringContext pins that a step which never looks at its
 // context cannot keep the run at running: the run fails when the context ends,
 // and a panic the abandoned step raises later is dropped instead of crashing.
