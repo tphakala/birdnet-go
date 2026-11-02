@@ -313,7 +313,7 @@
           {t('system.database.migration.prerequisites.running')}
           {#if progress}
             {t('system.database.migration.prerequisites.checkingStep', {
-              current: progress.completed_steps + 1,
+              current: Math.min(progress.completed_steps + 1, progress.total_steps),
               total: progress.total_steps,
             })}
           {/if}

@@ -593,6 +593,25 @@ describe('DatabasePrerequisites', () => {
       );
     });
 
+    it('never shows a step beyond the total when every step has finished but the run is still running', () => {
+      vi.mocked(t).mockClear();
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: {
+            ...runningSnapshot,
+            progress: { completed_steps: 9, total_steps: 9, current_check_name: 'Record Count' },
+          },
+          onRefresh: async () => {},
+        },
+      });
+
+      const steps = vi
+        .mocked(t)
+        .mock.calls.filter(([key]) => key === STEP_KEY)
+        .map(([, params]) => params);
+      expect(steps).toEqual([{ current: 9, total: 9 }]);
+    });
+
     it('blocks Re-run with the running text as its reason and ignores clicks', async () => {
       let calls = 0;
       renderTyped(DatabasePrerequisites, {
