@@ -79,10 +79,18 @@ func DefaultSecurityConfig() *SecurityConfig {
 	}
 }
 
-// hasExplicitOrigins reports whether the origin list is non-empty and free of
-// the wildcard "*", the only kind of list credentials may be allowed for.
+// corsPatternChars are the characters the CORS middleware treats as pattern
+// syntax in an allowed origin: "*" matches any run of characters and "?" any
+// single character.
+const corsPatternChars = "*?"
+
+// hasExplicitOrigins reports whether the origin list is non-empty and holds
+// only literal origins, with no "*" wildcard and no entry containing a pattern
+// character. It is the only kind of list credentials may be allowed for.
 func hasExplicitOrigins(origins []string) bool {
-	return len(origins) > 0 && !slices.Contains(origins, "*")
+	return len(origins) > 0 && !slices.ContainsFunc(origins, func(origin string) bool {
+		return strings.ContainsAny(origin, corsPatternChars)
+	})
 }
 
 // NewCORS creates a CORS middleware with the given configuration.
