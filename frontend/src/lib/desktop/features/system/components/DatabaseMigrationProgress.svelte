@@ -89,6 +89,9 @@
     return t('system.database.migration.progress.prerequisitesNotMet');
   });
 
+  let startBlocked = $derived(startBlockedReason !== null);
+  let startDisabled = $derived(startBlocked || isStarting);
+
   /** The idle badge says Ready only when the checks allow the start. */
   let stateBadgeLabel = $derived.by((): string => {
     if (!isIdle || isPaused || startBlockedReason === null) return stateLabel(migState);
@@ -327,16 +330,16 @@
     <button
       type="button"
       onclick={() => {
-        if (startBlockedReason === null && !isStarting) onStart();
+        if (!startDisabled) onStart();
       }}
-      aria-disabled={startBlockedReason !== null || isStarting ? 'true' : undefined}
-      aria-describedby={startBlockedReason !== null ? START_HELP_ID : undefined}
+      aria-disabled={startDisabled ? 'true' : undefined}
+      aria-describedby={startBlocked ? START_HELP_ID : undefined}
       class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors aria-disabled:cursor-not-allowed {startBlockedReason ===
       null
         ? 'cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] aria-disabled:opacity-60'
         : 'bg-slate-400/50 text-slate-500'}"
     >
-      {#if isStarting && startBlockedReason === null}
+      {#if isStarting && !startBlocked}
         <Loader2 class="w-4 h-4 animate-spin" />
         {t('system.database.migration.starting')}
       {:else}
