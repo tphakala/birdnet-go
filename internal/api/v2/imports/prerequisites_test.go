@@ -218,6 +218,64 @@ func TestCheckSQLiteIntegrity_Success(t *testing.T) {
 	assert.Contains(t, check.Message, "verified")
 }
 
+// fakeIntegrityDS is a datastore whose cached integrity result is set by the
+// test, standing in for the legacy SQLiteStore's IntegrityResult.
+type fakeIntegrityDS struct {
+	*testDatastoreWrapper
+	result  string
+	latched bool
+	reads   int
+}
+
+// IntegrityResult implements integrityResulter.
+func (f *fakeIntegrityDS) IntegrityResult() (string, bool) {
+	f.reads++
+	return f.result, f.latched
+}
+
+// TestCheckSQLiteIntegrity_CachedResult pins which cached store results the
+// check trusts: only an "ok" result that is not latched skips the live scan.
+func TestCheckSQLiteIntegrity_CachedResult(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	tests := []struct {
+		name        string
+		result      string
+		latched     bool
+		withDB      bool
+		wantStatus  string
+		wantMessage string
+	}{
+		{"ok cache skips the scan", sqliteIntegrityOK, false, false, CheckStatusPassed, msgIntegrityCachedOK},
+		{"latched corruption is never passed from the cache", sqliteIntegrityOK, true, false, CheckStatusError, errMsgDBConnectionUnavailable},
+		{"stale error string falls back to the live scan", "database is locked", false, true, CheckStatusPassed, msgIntegrityLiveOK},
+		{"empty cache falls back to the live scan", "", false, true, CheckStatusPassed, msgIntegrityLiveOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds := &fakeIntegrityDS{
+				testDatastoreWrapper: &testDatastoreWrapper{},
+				result:               tt.result,
+				latched:              tt.latched,
+			}
+			if tt.withDB {
+				ds.db = setupMigrationTestDB(t)
+			}
+			controller := &Handler{Core: &apicore.Core{DS: ds}}
+
+			check := controller.checkSQLiteIntegrity()
+
+			assert.Equal(t, tt.wantStatus, check.Status)
+			// Exact match: the cached and live passed messages share a prefix, so a
+			// substring check could not tell the two paths apart.
+			assert.Equal(t, tt.wantMessage, check.Message)
+		})
+	}
+}
+
 // TestCheckSQLiteIntegrity_NilDB tests checkSQLiteIntegrity when database is nil.
 func TestCheckSQLiteIntegrity_NilDB(t *testing.T) {
 	t.Attr("component", "migration")
@@ -242,10 +300,16 @@ func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
 
 	setV2OnlyMode(t, true)
 
-	controller := &Handler{Core: &apicore.Core{DS: nil}}
+	// The v2-only datastore's IntegrityResult can run a scan, so it must never be read.
+	ds := &fakeIntegrityDS{
+		testDatastoreWrapper: &testDatastoreWrapper{},
+		result:               sqliteIntegrityOK,
+	}
+	controller := &Handler{Core: &apicore.Core{DS: ds}}
 
 	check := controller.checkSQLiteIntegrity()
 
+	assert.Zero(t, ds.reads, "IntegrityResult must not be read in v2-only mode")
 	assert.Equal(t, "sqlite_integrity", check.ID)
 	assert.Equal(t, CheckStatusSkipped, check.Status)
 	assert.Equal(t, CheckSeverityCritical, check.Severity)
