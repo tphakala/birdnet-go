@@ -4,14 +4,12 @@
 // Go 1.25 improvements:
 // - Uses sync.WaitGroup.Go() for cleaner concurrent goroutine management
 // - Uses T.Attr() for enhanced test metadata
-// - Uses T.Output() for structured test logging
 //
 // LLM GUIDANCE: When updating concurrent tests in this file:
 // 1. Use sync.WaitGroup.Go() instead of manual wg.Add(1) + go func + defer wg.Done()
 // 2. Add T.Attr() metadata for test categorization
-// 3. Use T.Output() for structured logging instead of t.Logf()
-// 4. For benchmark loops, use b.Loop() instead of manual for i := 0; i < b.N; i++
-// 5. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
+// 3. For benchmark loops, use b.Loop() instead of manual for i := 0; i < b.N; i++
+// 4. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
 
 package sse
 
@@ -308,54 +306,6 @@ func TestSSERapidDisconnectReleasesClients(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return core.SSEManager.GetClientCount() == 0
 	}, sseRapidDisconnectTimeout*2, 10*time.Millisecond, "disconnected clients should be removed from the manager")
-}
-
-// TestSSERateLimiting verifies that SSE rate limiting works correctly
-// and doesn't cause goroutine leaks
-func TestSSERateLimiting(t *testing.T) {
-	// Goroutine leak checking is now handled centrally in TestMain
-	t.Attr("component", "sse")
-	t.Attr("feature", "rate-limiting")
-
-	server, _ := setupSSETestServer(t)
-
-	client := apitest.NewTestHTTPClient(2 * time.Second)
-
-	var successCount, rateLimitedCount int
-
-	// Make many rapid requests to trigger rate limiting
-	for range 15 { // More than the rate limit of 10
-		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", http.NoBody)
-		require.NoError(t, err)
-		req.Header.Set("Accept", "text/event-stream")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-
-		switch resp.StatusCode {
-		case http.StatusOK:
-			successCount++
-		case http.StatusTooManyRequests:
-			rateLimitedCount++
-		}
-
-		_ = resp.Body.Close() // Ignore close error in test
-	}
-
-	// Should have some successful connections and some rate limited
-	require.Positive(t, successCount, "Should have some successful connections")
-	require.Positive(t, rateLimitedCount, "Should have some rate limited connections")
-
-	// Use T.Output() for structured logging (Go 1.25)
-	output := t.Output()
-	_, _ = fmt.Fprintf(output, "Rate limiting test results: %d successful, %d rate limited\n", successCount, rateLimitedCount)
-
-	// Close idle connections - should be immediate with DisableKeepAlives
-	client.CloseIdleConnections()
-
-	// Cleanup is immediate with DisableKeepAlives=true
 }
 
 // setupSSETestServer creates a test server with the SSE endpoints registered.

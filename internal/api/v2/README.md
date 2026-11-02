@@ -955,8 +955,7 @@ All API errors follow this structure:
 
 SSE endpoints are rate limited to prevent abuse:
 
-- Detection streams: 10 requests/minute per IP
-- Sound level streams: 10 requests/minute per IP
+- Detection and sound level streams: 10 requests/minute per IP, burst of 10, shared by both streams
 - Stream health streams: 5 requests/minute per IP (authenticated, settings page)
 - Notification streams: 10 requests/minute per IP, burst of 15 (public, used by dashboard NotificationBell)
 

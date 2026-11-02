@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"golang.org/x/time/rate"
 )
 
 // SSE connection configuration
@@ -35,7 +36,27 @@ const (
 	// Rate limits
 	sseRateLimitRequests = 10              // SSE rate limit requests per window
 	sseRateLimitWindow   = 1 * time.Minute // SSE rate limit time window
+	// sseRateLimitBurst is how many connections one IP may open in quick
+	// succession. It lets page refreshes and quick navigation reconnect without
+	// waiting for a token.
+	sseRateLimitBurst = 10
+	// sseRateLimitRefillTime is how long an exhausted bucket takes to fill again.
+	// Idle visitors are kept at least that long, so forgetting one never grants
+	// more connections than the refill would have.
+	sseRateLimitRefillTime = sseRateLimitWindow * sseRateLimitBurst / sseRateLimitRequests
 )
+
+// streamRateLimiterStoreConfig returns the per-IP limiter settings shared by the
+// stream endpoints: sseRateLimitRequests connections per sseRateLimitWindow with
+// a burst of sseRateLimitBurst. Echo reads Rate as requests per second, so the
+// per-window count is converted.
+func streamRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	return middleware.RateLimiterMemoryStoreConfig{
+		Rate:      rate.Limit(float64(sseRateLimitRequests) / sseRateLimitWindow.Seconds()),
+		Burst:     sseRateLimitBurst,
+		ExpiresIn: sseRateLimitRefillTime,
+	}
+}
 
 // Handler serves the SSE stream endpoints. It embeds *apicore.Core by pointer so
 // the shared SSE hub (SSEManager), write primitives (SendSSEMessage,
@@ -70,14 +91,10 @@ func New(core *apicore.Core, isClientAuthenticated func(ctx echo.Context) bool) 
 // preserving the exact routes, order and per-route middleware (the SSE rate
 // limiter on the two stream endpoints) from the original initSSERoutes.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
-	// Create rate limiter for SSE connections (10 requests per minute per IP)
+	// Rate limiter for SSE connections: 10 per minute per IP with a burst of 10
+	// (see streamRateLimiterStoreConfig)
 	rateLimiterConfig := middleware.RateLimiterConfig{
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      sseRateLimitRequests, // Requests per window
-				ExpiresIn: sseRateLimitWindow,   // Rate limit window
-			},
-		),
+		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(streamRateLimiterStoreConfig()),
 		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{
