@@ -59,6 +59,14 @@
   let isRunning = $derived(prerequisites?.status === 'running');
   let progress = $derived(prerequisites?.progress);
   const RUNNING_ROW_ID = generateId('prerequisites-running');
+  const RERUN_REASON_ID = generateId('prerequisites-rerun-reason');
+
+  /** Re-run is unavailable while a request or a run is in progress. */
+  let rerunBlocked = $derived(isLoading || isRefreshing || isRunning);
+  /** Element that says why Re-run is blocked: the running row, or a hidden line for a bare request. */
+  let rerunReasonId = $derived(
+    isRunning ? RUNNING_ROW_ID : rerunBlocked ? RERUN_REASON_ID : undefined
+  );
 
   /** The run itself did not finish; its checks are partial. */
   let runFailure = $derived(failedRunMessage(prerequisites));
@@ -199,14 +207,17 @@
       </span>
 
       {#if prerequisites}
-        <span
-          class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium badge-status-success"
-        >
-          {t('system.database.migration.prerequisites.passedCount', {
-            passed: passedCount,
-            total: totalCount,
-          })}
-        </span>
+        <!-- The count means something only once the run is done; mid-run it counts finished checks -->
+        {#if prerequisites.status === 'completed'}
+          <span
+            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium badge-status-success"
+          >
+            {t('system.database.migration.prerequisites.passedCount', {
+              passed: passedCount,
+              total: totalCount,
+            })}
+          </span>
+        {/if}
 
         {#if prerequisites.critical_failures > 0}
           <span
@@ -232,15 +243,15 @@
 
     <!-- Right: re-run button + toggle -->
     <div class="flex items-center gap-2">
+      <!-- aria-disabled, not disabled: a natively disabled button drops keyboard focus -->
       <button
         type="button"
-        class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-muted disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+        class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-muted aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
         onclick={() => {
-          if (!isRunning) void handleRefresh();
+          if (!rerunBlocked) void handleRefresh();
         }}
-        disabled={isLoading || isRefreshing}
-        aria-disabled={isRunning ? 'true' : undefined}
-        aria-describedby={isRunning ? RUNNING_ROW_ID : undefined}
+        aria-disabled={rerunBlocked ? 'true' : undefined}
+        aria-describedby={rerunReasonId}
       >
         <RefreshCw class="w-3 h-3 {isRefreshing ? 'animate-spin' : ''}" />
         {t('system.database.migration.prerequisites.rerun')}
@@ -286,6 +297,12 @@
     {/if}
     <span class="sr-only">{announcement}</span>
   </div>
+
+  {#if rerunBlocked && !isRunning}
+    <span id={RERUN_REASON_ID} class="sr-only">
+      {t('system.database.migration.prerequisites.running')}
+    </span>
+  {/if}
 
   <!-- Progress detail sits outside the live region: its text changes on every poll -->
   {#if isRunning}

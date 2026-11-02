@@ -161,6 +161,23 @@ const cases: StartStateCase[] = [
     tone: 'text-muted',
   },
   {
+    name: 'an idle snapshot, nothing has run yet',
+    badge: 'system.database.migration.status.checking',
+    prerequisites: {
+      ...allowedPrerequisites,
+      can_start_migration: false,
+      all_passed: false,
+      checks: [],
+      status: 'idle',
+      run_id: 0,
+    },
+    loading: false,
+    error: null,
+    helper: render('system.database.migration.prerequisites.running'),
+    absent: [notMet],
+    tone: 'text-muted',
+  },
+  {
     name: 'request error',
     badge: 'system.database.migration.status.notReady',
     prerequisites: null,
@@ -250,7 +267,8 @@ describe('DatabaseMigrationProgress start button', () => {
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).toHaveAttribute('aria-disabled', 'true');
     const helper = screen.getByText(c.helper);
-    expect(helper).toHaveAttribute('role', 'status');
+    // The panel is the one live region for the checks; the helper only describes the button
+    expect(helper).not.toHaveAttribute('role');
     expect(helper).toHaveClass(c.tone);
     expect(screen.getByText(c.badge)).toBeInTheDocument();
     expect(start.getAttribute('aria-describedby')).toBe(helper.id);
@@ -273,9 +291,11 @@ describe('DatabaseMigrationProgress start button', () => {
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).not.toHaveAttribute('aria-disabled');
     expect(screen.getByText('Idle')).toBeInTheDocument();
-    // The live region stays mounted, empty and hidden, so the next reason is announced
-    expect(screen.getByRole('status')).toHaveClass('sr-only');
-    expect(screen.getByRole('status').textContent.trim()).toBe('');
+    // The helper stays mounted, empty and hidden, so the button's description id stays valid
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    const helper = document.querySelector('p[id^="migration-start-help"]');
+    expect(helper).toHaveClass('sr-only');
+    expect(helper?.textContent.trim()).toBe('');
     start.click();
     expect(started).toBe(true);
   });

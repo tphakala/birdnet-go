@@ -450,6 +450,55 @@ describe('DatabasePrerequisites', () => {
     });
   });
 
+  describe('count badge', () => {
+    const passedKey = 'system.database.migration.prerequisites.passedCount';
+
+    it.each([
+      { name: 'a running snapshot', status: 'running' as const, shown: false },
+      { name: 'an idle snapshot', status: 'idle' as const, shown: false },
+      { name: 'a failed run', status: 'failed' as const, shown: false },
+      { name: 'a completed snapshot', status: 'completed' as const, shown: true },
+    ])('is shown only for a completed snapshot: $name', c => {
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: { ...response([check('ok', 'passed')], 0, 0), status: c.status },
+          onRefresh: async () => {},
+        },
+      });
+
+      expect(screen.queryByText(new RegExp(passedKey)) !== null).toBe(c.shown);
+    });
+  });
+
+  describe('Re-run keeps keyboard focus', () => {
+    it.each([
+      { name: 'while the first load runs', props: { isLoading: true } },
+      { name: 'while a refresh request runs', props: { isLoading: false } },
+    ])('is soft-disabled, never natively disabled, $name', async c => {
+      let release = () => {};
+      const pending = new Promise<void>(resolve => (release = resolve));
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: response([check('ok', 'passed')], 0, 0),
+          onRefresh: () => pending,
+          ...c.props,
+        },
+      });
+      const rerun = screen.getByRole('button', {
+        name: t('system.database.migration.prerequisites.rerun'),
+      });
+      rerun.focus();
+      if (!c.props.isLoading) await fireEvent.click(rerun);
+
+      expect(rerun).not.toBeDisabled();
+      expect(rerun).toHaveAttribute('aria-disabled', 'true');
+      expect(document.activeElement).toBe(rerun);
+      const reason = document.getElementById(rerun.getAttribute('aria-describedby') ?? '');
+      expect(reason).toHaveTextContent(RUNNING_KEY);
+      release();
+    });
+  });
+
   describe('background run', () => {
     const runningSnapshot: PrerequisitesResponse = {
       ...response([check('state_idle', 'passed'), check('disk_warn', 'warning')], 0, 1),
