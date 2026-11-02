@@ -373,6 +373,10 @@ describe('DatabaseDashboard migration errors', () => {
     await confirmStart(user);
 
     await screen.findByText('The migration start took too long');
+    // The re-run, if any, comes after the status refetch that follows the refusal: let it settle
+    const statusRequests = () => apiGet.mock.calls.filter(([url]) => url === STATUS_URL).length;
+    await waitFor(() => expect(statusRequests()).toBeGreaterThan(1));
+    await new Promise(resolve => setTimeout(resolve, 0));
     const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
     expect(runPosts()).toBe(1);
   });
