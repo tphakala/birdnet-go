@@ -115,7 +115,10 @@
   // --- Fetch functions ---
   async function fetchOverview(): Promise<void> {
     if (!connectionState.isOnline) {
-      if (!overview) overviewLoading = false;
+      if (!overview) {
+        overviewLoading = false;
+        overviewError = t('connectivity.offline');
+      }
       return;
     }
     try {

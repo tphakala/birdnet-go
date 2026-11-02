@@ -1329,6 +1329,21 @@ describe('DatabaseDashboard data errors', () => {
     await confirmDelete();
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
+  it('says the connection is lost when the v2-only overview cannot load because the browser is offline', async () => {
+    connectionState.isOnline = false;
+    try {
+      serve({ [STATUS_URL]: v2OnlyStatus });
+
+      renderTyped(DatabaseDashboard);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+      expect(alert).toHaveTextContent(t('connectivity.offline'));
+    } finally {
+      connectionState.isOnline = true;
+    }
+  });
+
   it('shows why the v2-only overview failed and reloads it with Retry', async () => {
     const user = userEvent.setup();
     serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: apiError('Overview unavailable', 500) });
