@@ -99,6 +99,8 @@ const (
 const (
 	// sqliteIntegrityOK is the single row PRAGMA quick_check returns for a healthy database.
 	sqliteIntegrityOK = "ok"
+	// msgIntegrityLiveOK is the message when the live PRAGMA quick_check passed.
+	msgIntegrityLiveOK = "Database integrity verified"
 	// msgIntegrityCachedOK is the message when the store's cached result was trusted.
 	msgIntegrityCachedOK = "Database integrity verified by the startup or daily integrity check"
 )
@@ -421,7 +423,7 @@ func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 	}
 
 	check.Status = CheckStatusPassed
-	check.Message = "Database integrity verified"
+	check.Message = msgIntegrityLiveOK
 	return check
 }
 

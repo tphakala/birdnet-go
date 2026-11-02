@@ -250,7 +250,8 @@ func TestCheckSQLiteIntegrity_CachedResult(t *testing.T) {
 	}{
 		{"ok cache skips the scan", sqliteIntegrityOK, false, false, CheckStatusPassed, msgIntegrityCachedOK},
 		{"latched corruption is never passed from the cache", sqliteIntegrityOK, true, false, CheckStatusError, errMsgDBConnectionUnavailable},
-		{"stale error string falls back to the live scan", "database is locked", false, true, CheckStatusPassed, "verified"},
+		{"stale error string falls back to the live scan", "database is locked", false, true, CheckStatusPassed, msgIntegrityLiveOK},
+		{"empty cache falls back to the live scan", "", false, true, CheckStatusPassed, msgIntegrityLiveOK},
 	}
 
 	for _, tt := range tests {
@@ -268,7 +269,9 @@ func TestCheckSQLiteIntegrity_CachedResult(t *testing.T) {
 			check := controller.checkSQLiteIntegrity()
 
 			assert.Equal(t, tt.wantStatus, check.Status)
-			assert.Contains(t, check.Message, tt.wantMessage)
+			// Exact match: the cached and live passed messages share a prefix, so a
+			// substring check could not tell the two paths apart.
+			assert.Equal(t, tt.wantMessage, check.Message)
 		})
 	}
 }
