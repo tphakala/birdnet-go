@@ -199,6 +199,20 @@ describe('DatabasePrerequisites', () => {
     expect(retry).toHaveTextContent(t('common.retrying'));
   });
 
+  it('shows the running row above the stale failing checks while a re-run loads', () => {
+    renderTyped(DatabasePrerequisites, {
+      props: {
+        prerequisites: response([check('failed_check', 'failed')], 1, 0),
+        isLoading: true,
+        onRefresh: async () => {},
+      },
+    });
+
+    expect(within(screen.getByRole('status')).getByText(t(RUNNING_KEY))).toBeInTheDocument();
+    // The never-hide rule still holds: the stale failing row stays visible below the running row.
+    expect(screen.getByText('Check failed_check:')).toBeInTheDocument();
+  });
+
   it('keeps keyboard focus in the panel when Retry removes the alert', async () => {
     // Like the dashboard: the request starts loading at once and the data stays null
     const noData = createComponentTestFactory(DatabasePrerequisites, {

@@ -242,7 +242,7 @@
     tabindex="-1"
     class="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
   >
-    {#if !prerequisites && isLoading}
+    {#if isLoading}
       <div class="mt-3 flex items-center gap-2 px-3 py-2 text-sm text-muted">
         <RefreshCw class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
         {t('system.database.migration.prerequisites.running')}
