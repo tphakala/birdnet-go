@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
