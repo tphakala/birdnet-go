@@ -1603,6 +1603,8 @@
           "recordsLabel": "Datensätze",
           "sizeLabel": "Größe",
           "prerequisitesNotMet": "Voraussetzungen nicht erfüllt - beheben Sie die kritischen Probleme unten",
+          "prerequisitesUnavailable": "Die Prüfungen vor der Migration wurden nicht abgeschlossen. Siehe Prüfungen vor der Migration unten.",
+          "prerequisitesFailedList": "Beheben Sie zuerst diese Prüfungen: {checks}",
           "validatingTitle": "Daten werden überprüft",
           "validatingBody": "{count} Legacy-Datensätze werden mit der V2-Datenbank verglichen...",
           "dirtyRecordsCatchup": "{count} schmutzige Datensätze - Nachholabgleich wird versucht",

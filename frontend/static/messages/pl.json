@@ -1603,6 +1603,8 @@
           "recordsLabel": "Rekordy",
           "sizeLabel": "Rozmiar",
           "prerequisitesNotMet": "Wymagania wstępne nie są spełnione - rozwiąż poniższe krytyczne problemy",
+          "prerequisitesUnavailable": "Sprawdzenia przed migracją nie zostały ukończone. Zobacz Sprawdzenia przed migracją poniżej.",
+          "prerequisitesFailedList": "Najpierw rozwiąż te problemy: {checks}",
           "validatingTitle": "Walidacja danych",
           "validatingBody": "Porównywanie {count} starszych rekordów z bazą danych V2...",
           "dirtyRecordsCatchup": "{count} zmienionych rekordów - próba uzgodnienia",

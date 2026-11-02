@@ -662,6 +662,8 @@
               legacyStats={legacyStats.data}
               v2Stats={v2Stats.data}
               prerequisites={prerequisites.data}
+              prerequisitesLoading={prerequisites.loading}
+              prerequisitesError={prerequisites.error}
               isStarting={startLoading}
               onStart={() => (showConfirmDialog = true)}
               onPause={pauseMigration}
@@ -678,6 +680,7 @@
         <DatabasePrerequisites
           prerequisites={prerequisites.data}
           isLoading={prerequisites.loading}
+          error={prerequisites.error}
           onRefresh={fetchPrerequisites}
         />
       {/if}

@@ -1,9 +1,10 @@
 <!--
   DatabasePrerequisites Component
 
-  Collapsible prerequisites panel for database migration.
-  Displays summary badges in the header and an expandable
-  checklist of individual prerequisite check results.
+  Prerequisites panel for database migration. Displays summary badges in the
+  header, always lists every failed, errored or warning check, and keeps only
+  the passed and skipped checks behind the details toggle. Without data it
+  shows a loading row or the request error with a Retry, never an empty body.
 
   @component
 -->
@@ -18,21 +19,41 @@
     Info,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-  import type { PrerequisitesResponse, PrerequisiteCheckStatus } from '$lib/types/migration';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import type {
+    PrerequisitesResponse,
+    PrerequisiteCheck,
+    PrerequisiteCheckStatus,
+  } from '$lib/types/migration';
 
   interface Props {
     prerequisites: PrerequisitesResponse | null;
     isLoading?: boolean;
+    /** Message of the failed prerequisites request, or null. */
+    error?: string | null;
     onRefresh: () => Promise<void>;
   }
 
-  let { prerequisites, isLoading = false, onRefresh }: Props = $props();
+  let { prerequisites, isLoading = false, error = null, onRefresh }: Props = $props();
 
   let showDetails = $state(false);
   let isRefreshing = $state(false);
 
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
+
+  /** Statuses that are always shown; only the others sit behind the details toggle. */
+  const NON_PASSING_STATUSES: readonly PrerequisiteCheckStatus[] = ['failed', 'error', 'warning'];
+
+  /** Failed and errored checks first, then warnings, in the server's order otherwise. */
+  let nonPassingChecks = $derived([
+    ...checks.filter(c => c.status === 'failed' || c.status === 'error'),
+    ...checks.filter(c => c.status === 'warning'),
+  ]);
+
+  /** Passed and skipped checks, shown on request */
+  let quietChecks = $derived(checks.filter(c => !NON_PASSING_STATUSES.includes(c.status)));
 
   /** Number of checks that passed */
   let passedCount = $derived(checks.filter(c => c.status === 'passed').length);
@@ -76,6 +97,7 @@
   }
 
   async function handleRefresh() {
+    if (isLoading || isRefreshing) return;
     isRefreshing = true;
     try {
       await onRefresh();
@@ -138,57 +160,97 @@
         {t('system.database.migration.prerequisites.rerun')}
       </button>
 
-      <button
-        type="button"
-        class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-primary text-muted"
-        onclick={() => (showDetails = !showDetails)}
-        aria-expanded={showDetails}
-        aria-controls="prerequisites-details"
-      >
-        {showDetails
-          ? t('system.database.migration.prerequisites.hideDetails')
-          : t('system.database.migration.prerequisites.showDetails')}
-        {#if showDetails}
-          <ChevronUp class="w-3 h-3" />
-        {:else}
-          <ChevronDown class="w-3 h-3" />
-        {/if}
-      </button>
+      {#if quietChecks.length > 0}
+        <button
+          type="button"
+          class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-primary text-muted"
+          onclick={() => (showDetails = !showDetails)}
+          aria-expanded={showDetails}
+          aria-controls="prerequisites-details"
+        >
+          {showDetails
+            ? t('system.database.migration.prerequisites.hideDetails')
+            : t('system.database.migration.prerequisites.showDetails')}
+          {#if showDetails}
+            <ChevronUp class="w-3 h-3" />
+          {:else}
+            <ChevronDown class="w-3 h-3" />
+          {/if}
+        </button>
+      {/if}
     </div>
   </div>
 
-  <!-- Expandable check list -->
-  {#if showDetails && prerequisites}
+  <!-- Always-rendered live region: only its text changes, so the loading state is announced -->
+  <div role="status" aria-atomic="true">
+    {#if !prerequisites && isLoading}
+      <div class="mt-3 flex items-center gap-2 px-3 py-2 text-sm text-muted">
+        <RefreshCw class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+        {t('system.database.migration.prerequisites.running')}
+      </div>
+    {/if}
+  </div>
+
+  {#if !(isLoading && !prerequisites) && (error || !prerequisites)}
+    <ErrorAlert className="mt-3">
+      <span class="block"
+        >{error || t('system.database.migration.prerequisites.errors.fetchFailed')}</span
+      >
+      <Button
+        className="mt-2"
+        onclick={handleRefresh}
+        aria-disabled={isLoading || isRefreshing ? 'true' : undefined}
+      >
+        {t('common.retry')}
+      </Button>
+    </ErrorAlert>
+  {/if}
+
+  <!-- Failed, errored and warning checks are never hidden -->
+  {#if nonPassingChecks.length > 0}
+    <div class="mt-3 space-y-1.5">
+      {#each nonPassingChecks as check (check.id)}
+        {@render checkRow(check)}
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Passed and skipped checks, on request -->
+  {#if showDetails && quietChecks.length > 0}
     <div id="prerequisites-details" class="mt-3 space-y-1.5">
-      {#each checks as check (check.id)}
-        {@const StatusIcon = statusIconMap[check.status]}
-        <div
-          class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
-        >
-          <StatusIcon class="w-4 h-4 flex-shrink-0 {statusIconColor[check.status]}" />
-
-          <div class="flex-1 min-w-0">
-            <span class="font-medium">{check.name}:</span>
-            <span class="text-muted">{check.message}</span>
-          </div>
-
-          {#if check.severity === 'critical' && (check.status === 'failed' || check.status === 'error')}
-            <span
-              class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
-            >
-              {t('system.database.migration.prerequisites.critical')}
-            </span>
-          {/if}
-
-          <span
-            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium {statusBadgeColor[
-              check.status
-            ]}"
-          >
-            {statusLabel(check.status)}
-          </span>
-        </div>
+      {#each quietChecks as check (check.id)}
+        {@render checkRow(check)}
       {/each}
     </div>
   {/if}
 </div>
+
+{#snippet checkRow(check: PrerequisiteCheck)}
+  {@const StatusIcon = statusIconMap[check.status]}
+  <div
+    class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
+  >
+    <StatusIcon class="w-4 h-4 flex-shrink-0 {statusIconColor[check.status]}" />
+
+    <div class="flex-1 min-w-0">
+      <span class="font-medium">{check.name}:</span>
+      <span class="text-muted">{check.message}</span>
+    </div>
+
+    {#if check.severity === 'critical' && (check.status === 'failed' || check.status === 'error')}
+      <span
+        class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
+      >
+        {t('system.database.migration.prerequisites.critical')}
+      </span>
+    {/if}
+
+    <span
+      class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium {statusBadgeColor[
+        check.status
+      ]}"
+    >
+      {statusLabel(check.status)}
+    </span>
+  </div>
+{/snippet}

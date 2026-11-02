@@ -1603,6 +1603,8 @@
           "recordsLabel": "Rekordok",
           "sizeLabel": "Méret",
           "prerequisitesNotMet": "Előfeltételek nem teljesültek - hárítsa el az alábbi kritikus problémákat",
+          "prerequisitesUnavailable": "A migráció előtti ellenőrzések nem fejeződtek be. Lásd lent: Migráció előtti ellenőrzések.",
+          "prerequisitesFailedList": "Először oldja meg ezeket az ellenőrzéseket: {checks}",
           "validatingTitle": "Adatok validálása",
           "validatingBody": "{count} régi rekord összehasonlítása a V2 adatbázissal...",
           "dirtyRecordsCatchup": "{count} hibás rekord - egyeztetési kísérlet a validálás során",

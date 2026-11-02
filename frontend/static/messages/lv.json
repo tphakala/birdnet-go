@@ -1603,6 +1603,8 @@
           "recordsLabel": "Ieraksti",
           "sizeLabel": "Izmērs",
           "prerequisitesNotMet": "Priekšnosacījumi nav izpildīti - atrisiniet kritiskās problēmas zemāk",
+          "prerequisitesUnavailable": "Pirmmigrācijas pārbaudes netika pabeigtas. Skatiet Pirmmigrācijas pārbaudes zemāk.",
+          "prerequisitesFailedList": "Vispirms novērsiet šīs pārbaudes: {checks}",
           "validatingTitle": "Validē datus",
           "validatingBody": "Salīdzina {count} mantotos ierakstus ar V2 datubāzi...",
           "dirtyRecordsCatchup": "{count} izmainīti ieraksti - tiks mēģināta saskaņošana",

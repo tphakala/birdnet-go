@@ -13,6 +13,7 @@
   } from '@lucide/svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import type { MigrationStatus, DatabaseStats, PrerequisitesResponse } from '$lib/types/migration';
 
   interface Props {
@@ -20,6 +21,10 @@
     legacyStats: DatabaseStats | null;
     v2Stats: DatabaseStats | null;
     prerequisites: PrerequisitesResponse | null;
+    /** True while the prerequisites request is in flight. */
+    prerequisitesLoading: boolean;
+    /** Message of the failed prerequisites request, or null. */
+    prerequisitesError: string | null;
     isStarting?: boolean;
     onStart: () => void;
     onPause: () => Promise<void>;
@@ -33,6 +38,8 @@
     legacyStats,
     v2Stats,
     prerequisites,
+    prerequisitesLoading,
+    prerequisitesError,
     isStarting = false,
     onStart,
     onPause,
@@ -50,6 +57,39 @@
   let isCutover = $derived(migState === 'cutover');
   let isPaused = $derived(status?.worker_paused === true);
   let banner = $derived(bannerMessage(migState));
+
+  const START_HELP_ID = generateId('migration-start-help');
+  const LIST_SEPARATOR = ', ';
+
+  let canStart = $derived(prerequisites?.can_start_migration === true);
+
+  /** Names of the critical checks that block the migration. */
+  let blockingCheckNames = $derived(
+    (prerequisites?.checks ?? [])
+      .filter(c => c.severity === 'critical' && (c.status === 'failed' || c.status === 'error'))
+      .map(c => c.name)
+  );
+
+  /** Why the start button is blocked, or null when it is not. Loading and error win over stale data. */
+  let startBlockedReason = $derived.by((): string | null => {
+    if (canStart) return null;
+    if (prerequisitesLoading) return t('system.database.migration.prerequisites.running');
+    if (prerequisitesError) return t('system.database.migration.progress.prerequisitesUnavailable');
+    if (blockingCheckNames.length > 0) {
+      return t('system.database.migration.progress.prerequisitesFailedList', {
+        checks: blockingCheckNames.join(LIST_SEPARATOR),
+      });
+    }
+    return t('system.database.migration.progress.prerequisitesNotMet');
+  });
+
+  let startHelpClass = $derived(
+    startBlockedReason === null
+      ? 'sr-only'
+      : prerequisitesLoading
+        ? 'text-[10px] text-center mt-1.5 text-muted'
+        : 'text-[10px] text-center mt-1.5 text-[var(--text-error)]'
+  );
 
   /** Average bytes per detection record in v2 database, used to estimate v2 DB size during migration */
   const ESTIMATED_V2_RECORD_SIZE_BYTES = 180;
@@ -268,8 +308,8 @@
       </div>
     </div>
 
-    <!-- Start button -->
-    {#if prerequisites?.can_start_migration}
+    <!-- Start button. Blocked states keep the button focusable and say why. -->
+    {#if startBlockedReason === null}
       <button
         onclick={onStart}
         disabled={isStarting}
@@ -285,16 +325,20 @@
       </button>
     {:else}
       <button
+        type="button"
+        onclick={e => e.preventDefault()}
+        aria-disabled="true"
+        aria-describedby={START_HELP_ID}
         class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-slate-400/50 text-slate-500 cursor-not-allowed"
-        disabled
       >
         <Play class="w-4 h-4" />
         {t('system.database.migration.actions.start')}
       </button>
-      <p class="text-[10px] text-center mt-1.5 text-[var(--color-error)]">
-        {t('system.database.migration.progress.prerequisitesNotMet')}
-      </p>
     {/if}
+    <!-- Always rendered so a change of reason is announced; sr-only when nothing blocks -->
+    <p id={START_HELP_ID} role="status" class={startHelpClass}>
+      {startBlockedReason ?? ''}
+    </p>
 
     <!-- STATE: Validating -->
   {:else if isValidating}

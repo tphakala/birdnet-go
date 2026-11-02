@@ -1603,6 +1603,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Størrelse",
           "prerequisitesNotMet": "Forutsetninger ikke oppfylt - løs kritiske problemer nedenfor",
+          "prerequisitesUnavailable": "Forhåndssjekkene ble ikke fullført. Se Forhåndssjekker nedenfor.",
+          "prerequisitesFailedList": "Løs disse sjekkene først: {checks}",
           "validatingTitle": "Validerer data",
           "validatingBody": "Sammenligner {count} eldre poster mot V2-database...",
           "dirtyRecordsCatchup": "{count} usynkroniserte poster - vil forsøke innhentings-synkronisering",

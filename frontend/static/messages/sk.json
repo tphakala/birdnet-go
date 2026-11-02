@@ -1603,6 +1603,8 @@
           "recordsLabel": "Záznamy",
           "sizeLabel": "Veľkosť",
           "prerequisitesNotMet": "Predpoklady nesplnené - vyriešte kritické problémy nižšie",
+          "prerequisitesUnavailable": "Kontroly pred migráciou sa nedokončili. Pozrite si Kontroly pred migráciou nižšie.",
+          "prerequisitesFailedList": "Najprv vyriešte tieto kontroly: {checks}",
           "validatingTitle": "Validácia dát",
           "validatingBody": "Porovnávanie {count} starých záznamov s databázou V2...",
           "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamov - bude sa pokúšať o dodatočnú rekonciliáciu",
