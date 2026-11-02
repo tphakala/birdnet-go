@@ -5343,7 +5343,6 @@
       "notConfigured": "Migration ist nicht konfiguriert",
       "preFlightFailed": "Vorabprüfungen fehlgeschlagen",
       "invalidBody": "Ungültiger Anfragekörper",
-      "prerequisitesInvalidBody": "Ungültiger Anfragekörper",
       "recordCountFailed": "Gesamtanzahl der Datensätze konnte nicht ermittelt werden",
       "startFailed": "Migration konnte nicht gestartet werden",
       "initFailed": "Migration konnte nicht initialisiert werden",

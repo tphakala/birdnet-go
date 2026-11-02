@@ -228,7 +228,7 @@ type PrerequisitesRunRequest struct {
 func (c *Handler) RunPrerequisites(ctx echo.Context) error {
 	var req PrerequisitesRunRequest
 	if err := ctx.Bind(&req); err != nil {
-		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationPrereqInvalidBody, nil)
+		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
 
 	c.LogInfoIfEnabled("Starting migration prerequisites run",

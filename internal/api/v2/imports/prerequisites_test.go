@@ -186,7 +186,7 @@ func TestRunPrerequisites_InvalidBody(t *testing.T) {
 	require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationPrereqInvalidBody)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationInvalidBody)
 	assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status, "a rejected request starts no run")
 }
 

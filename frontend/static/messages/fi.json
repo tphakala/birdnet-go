@@ -5343,7 +5343,6 @@
       "notConfigured": "Siirtoa ei ole määritetty",
       "preFlightFailed": "Esitarkistukset epäonnistuivat",
       "invalidBody": "Virheellinen pyyntösisältö",
-      "prerequisitesInvalidBody": "Virheellinen pyyntösisältö",
       "recordCountFailed": "Tietueiden kokonaismäärää ei voitu määrittää",
       "startFailed": "Siirron käynnistäminen epäonnistui",
       "initFailed": "Siirron alustaminen epäonnistui",

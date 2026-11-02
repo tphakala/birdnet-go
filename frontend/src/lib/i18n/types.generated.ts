@@ -3914,7 +3914,6 @@ export type TranslationKey =
   | 'errors.migration.notConfigured'
   | 'errors.migration.preFlightFailed'
   | 'errors.migration.invalidBody'
-  | 'errors.migration.prerequisitesInvalidBody'
   | 'errors.migration.recordCountFailed'
   | 'errors.migration.startFailed'
   | 'errors.migration.initFailed'

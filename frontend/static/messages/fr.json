@@ -5343,7 +5343,6 @@
       "notConfigured": "La migration n'est pas configurée",
       "preFlightFailed": "Les vérifications préalables ont échoué",
       "invalidBody": "Corps de requête invalide",
-      "prerequisitesInvalidBody": "Corps de requête invalide",
       "recordCountFailed": "Impossible de déterminer le nombre total d'enregistrements",
       "startFailed": "Impossible de démarrer la migration",
       "initFailed": "Impossible d'initialiser la migration",

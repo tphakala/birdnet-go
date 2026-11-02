@@ -5343,7 +5343,6 @@
       "notConfigured": "Migrering är inte konfigurerad",
       "preFlightFailed": "Förkontroller misslyckades",
       "invalidBody": "Ogiltigt förfrågningsinnehåll",
-      "prerequisitesInvalidBody": "Ogiltigt förfrågningsinnehåll",
       "recordCountFailed": "Kunde inte bestämma totalt antal poster",
       "startFailed": "Kunde inte starta migrering",
       "initFailed": "Kunde inte initiera migrering",

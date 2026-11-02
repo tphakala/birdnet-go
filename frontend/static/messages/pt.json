@@ -5343,7 +5343,6 @@
       "notConfigured": "A migração não está configurada",
       "preFlightFailed": "As verificações prévias falharam",
       "invalidBody": "Corpo do pedido inválido",
-      "prerequisitesInvalidBody": "Corpo do pedido inválido",
       "recordCountFailed": "Não foi possível determinar o número total de registos",
       "startFailed": "Não foi possível iniciar a migração",
       "initFailed": "Não foi possível inicializar a migração",

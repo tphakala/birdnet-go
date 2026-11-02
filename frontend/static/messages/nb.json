@@ -5343,7 +5343,6 @@
       "notConfigured": "Migrering er ikke konfigurert",
       "preFlightFailed": "Forhåndssjekker mislyktes",
       "invalidBody": "Ugyldig forespørselskropp",
-      "prerequisitesInvalidBody": "Ugyldig forespørselskropp",
       "recordCountFailed": "Bestemmelse av totalt posterantall mislyktes",
       "startFailed": "Oppstart av migrering mislyktes",
       "initFailed": "Initialisering av migrering mislyktes",

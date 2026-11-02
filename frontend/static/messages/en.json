@@ -5343,7 +5343,6 @@
       "notConfigured": "Migration is not configured",
       "preFlightFailed": "Pre-flight checks failed",
       "invalidBody": "Invalid request body",
-      "prerequisitesInvalidBody": "Invalid request body",
       "recordCountFailed": "Failed to determine total records",
       "startFailed": "Failed to start migration",
       "initFailed": "Failed to initialize migration",
