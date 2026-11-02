@@ -1325,6 +1325,9 @@ export type TranslationKey =
   | 'system.database.migration.prerequisites.warningsCount' // params: count
   | 'system.database.migration.prerequisites.running'
   | 'system.database.migration.prerequisites.checkingStep' // params: current, total
+  | 'system.database.migration.prerequisites.currentCheck' // params: name, seconds
+  | 'system.database.migration.prerequisites.slowHint'
+  | 'system.database.migration.prerequisites.runFailed' // params: error
   | 'system.database.migration.prerequisites.passedCount' // params: passed, total
   | 'system.database.migration.prerequisites.criticalCount' // params: count
   | 'system.database.migration.prerequisites.warningCount' // params: count
@@ -4658,6 +4661,11 @@ export type TranslationParams = {
     current: string | number;
     total: string | number;
   };
+  'system.database.migration.prerequisites.currentCheck': {
+    name: string | number;
+    seconds: string | number;
+  };
+  'system.database.migration.prerequisites.runFailed': { error: string | number };
   'system.database.migration.prerequisites.passedCount': {
     passed: string | number;
     total: string | number;

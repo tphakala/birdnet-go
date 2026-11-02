@@ -2,6 +2,7 @@
 package importsapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -655,4 +656,181 @@ func getMigrationStatusResponse(t *testing.T, e *echo.Echo, controller *Handler)
 	var response MigrationStatusResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	return response
+}
+
+// seedPassingPrerequisiteResult commits a fresh passing prerequisites result to
+// the handler's runner, as a finished run would, and checks it is reusable.
+func seedPassingPrerequisiteResult(t *testing.T, h *Handler) {
+	t.Helper()
+	r := h.prereqRunner()
+	r.mu.Lock()
+	r.status = PrereqRunStatusCompleted
+	r.result = &PrerequisitesResponse{AllPassed: true, CanStartMigration: true}
+	r.resultFingerprint = h.dbFingerprint()
+	r.finishedAt = r.clock()
+	r.mu.Unlock()
+	require.Equal(t, PrereqRunStatusCompleted, r.snapshot().Status, "the seeded result must be visible")
+}
+
+// TestMigrationStateChange_DropsPrerequisiteResult pins that a start, a cancel
+// and a rollback each drop the stored prerequisites result, so a passing result
+// cannot be reused across a migration state change.
+// Note: Not parallel due to global state modification.
+func TestMigrationStateChange_DropsPrerequisiteResult(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	tests := []struct {
+		name  string
+		setup func(*testing.T, *datastoreV2.StateManager)
+		call  func(*Handler, echo.Context) error
+		body  string
+	}{
+		{name: "start", setup: func(*testing.T, *datastoreV2.StateManager) {}, call: (*Handler).StartMigration, body: `{"total_records": 1000}`},
+		{name: "cancel", setup: toDualWrite, call: (*Handler).CancelMigration},
+		{name: "rollback", setup: toCompleted, call: (*Handler).RollbackMigration},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, sm := setupMigrationTestEnvironment(t)
+			tt.setup(t, sm)
+			seedPassingPrerequisiteResult(t, controller)
+
+			req := httptest.NewRequest(http.MethodPost, migrationActionTestPath, strings.NewReader(tt.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			require.NoError(t, tt.call(controller, e.NewContext(req, rec)))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
+		})
+	}
+}
+
+// TestCancelMigration_KeepsPrerequisiteResultOnFailure pins that a rejected
+// cancel leaves the stored result alone: the state did not change.
+// Note: Not parallel due to global state modification.
+func TestCancelMigration_KeepsPrerequisiteResultOnFailure(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	toCompleted(t, sm) // a completed migration cannot be cancelled
+	seedPassingPrerequisiteResult(t, controller)
+
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.CancelMigration(e.NewContext(httptest.NewRequest(http.MethodPost, migrationActionTestPath, http.NoBody), rec)))
+	require.Equal(t, http.StatusConflict, rec.Code)
+
+	assert.Equal(t, PrereqRunStatusCompleted, controller.prereqRunner().snapshot().Status)
+}
+
+// toCompleted moves the state machine from idle to completed.
+func toCompleted(t *testing.T, sm *datastoreV2.StateManager) {
+	t.Helper()
+	toDualWrite(t, sm)
+	require.NoError(t, sm.TransitionToMigrating())
+	require.NoError(t, sm.TransitionToValidating())
+	require.NoError(t, sm.TransitionToCutover())
+	require.NoError(t, sm.Complete())
+}
+
+// TestStartMigration_ShutdownDuringPreflightDoesNotStart pins that a start whose
+// preflight ended because the server is shutting down never starts a migration.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_ShutdownDuringPreflightDoesNotStart(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	// The server shuts down while the last critical check, the record count,
+	// runs; that check still passes, so only the context says the run is void.
+	lifecycle, cancel := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, cancel)
+	repo := mocks.NewMockDetectionRepository(t)
+	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(context.Context) (int64, error) {
+		cancel()
+		return int64(migrationTestTotalRecords), nil
+	}).Once()
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{"total_records": 1000}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start while the server shuts down")
+}
+
+// failDualWriteTransitionSQL makes the state table refuse the move into dual-write,
+// so the start path fails after sm.StartMigration succeeded.
+const failDualWriteTransitionSQL = `CREATE TRIGGER fail_dual_write BEFORE UPDATE ON migration_states
+WHEN NEW.state = 'dual_write' BEGIN SELECT RAISE(ABORT, 'forced failure'); END`
+
+// TestStartMigration_FailedInitDropsPrerequisiteResult pins that a start whose
+// dual-write transition fails, and is rolled back to idle, still drops the stored
+// prerequisites result: the state moved and came back, so the result is void.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_FailedInitDropsPrerequisiteResult(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	db := controller.DS.(*testDatastoreWrapper).GetDB()
+	require.NoError(t, db.Exec(failDualWriteTransitionSQL).Error)
+	seedPassingPrerequisiteResult(t, controller)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{"total_records": 1000}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State, "the failed start must be rolled back")
+	assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
+}
+
+// TestStartMigration_ShutdownAfterChecksDoesNotStart pins that a shutdown that
+// begins after the pre-flight checks passed, while the record count is
+// fetched for the request, still keeps the migration from starting.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_ShutdownAfterChecksDoesNotStart(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	lifecycle, cancel := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, cancel)
+	// The first count belongs to the record_count check; the second is the
+	// handler's own fallback count, which runs after the checks.
+	var counts int
+	repo := mocks.NewMockDetectionRepository(t)
+	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(context.Context) (int64, error) {
+		counts++
+		if counts == 2 {
+			cancel()
+		}
+		return int64(migrationTestTotalRecords), nil
+	}).Twice()
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start once the server is stopping")
 }

@@ -127,7 +127,7 @@ func TestCheckMySQLCharset_Status(t *testing.T) {
 			controller.charsetReportFn = func(context.Context) (dbserver.CharsetReport, error) {
 				return dbserver.CharsetReport{SchemaCharset: tt.schema, Tables: tt.tables}, tt.queryErr
 			}
-			check := controller.checkMySQLCharset()
+			check := controller.checkMySQLCharset(t.Context())
 			assert.Equal(t, "mysql_charset", check.ID)
 			assert.Equal(t, CheckSeverityCritical, check.Severity)
 			assert.Equal(t, tt.want, check.Status, check.Message)
@@ -142,7 +142,7 @@ func TestCheckMySQLCharset_Status(t *testing.T) {
 }
 
 func TestMySQLServerChecks_TargetUnavailable(t *testing.T) {
-	checks := map[string]func(*Handler) PrerequisiteCheck{
+	checks := map[string]func(*Handler, context.Context) PrerequisiteCheck{
 		"mysql_server_version": (*Handler).checkMySQLServerVersion,
 		"mysql_charset":        (*Handler).checkMySQLCharset,
 	}
@@ -151,7 +151,7 @@ func TestMySQLServerChecks_TargetUnavailable(t *testing.T) {
 			_, controller, _ := setupPrerequisitesTestEnvironment(t)
 			useMySQLSettings(t, controller)
 			controller.V2Manager = nil
-			check := run(controller)
+			check := run(controller, t.Context())
 			assert.Equal(t, id, check.ID)
 			assert.Equal(t, CheckSeverityCritical, check.Severity)
 			assert.Equal(t, CheckStatusError, check.Status, check.Message)
@@ -160,7 +160,7 @@ func TestMySQLServerChecks_TargetUnavailable(t *testing.T) {
 			_, controller, _ := setupPrerequisitesTestEnvironment(t)
 			useMySQLSettings(t, controller)
 			setV2OnlyMode(t, true)
-			check := run(controller)
+			check := run(controller, t.Context())
 			assert.Equal(t, CheckStatusSkipped, check.Status, check.Message)
 			assert.Equal(t, CheckSeverityCritical, check.Severity)
 		})
@@ -176,7 +176,7 @@ func TestMySQLServerChecks_UnusableTarget(t *testing.T) {
 		{name: "MySQL manager without a connection", manager: &fakeV2Manager{tablePrefix: "v2_", isMySQL: true}},
 	}
 	for _, tt := range tests {
-		for id, run := range map[string]func(*Handler) PrerequisiteCheck{
+		for id, run := range map[string]func(*Handler, context.Context) PrerequisiteCheck{
 			"mysql_server_version": (*Handler).checkMySQLServerVersion,
 			"mysql_charset":        (*Handler).checkMySQLCharset,
 		} {
@@ -184,7 +184,7 @@ func TestMySQLServerChecks_UnusableTarget(t *testing.T) {
 				_, controller, _ := setupPrerequisitesTestEnvironment(t)
 				useMySQLSettings(t, controller)
 				controller.V2Manager = tt.manager
-				check := run(controller)
+				check := run(controller, t.Context())
 				assert.Equal(t, CheckStatusError, check.Status, check.Message)
 				assert.Equal(t, errMsgMigrationTargetUnavailable, check.Message)
 			})
@@ -198,7 +198,7 @@ func TestMySQLServerChecks_UnusableTarget(t *testing.T) {
 		controller.charsetReportFn = func(context.Context) (dbserver.CharsetReport, error) {
 			return dbserver.CharsetReport{SchemaCharset: dbserver.CharsetUTF8MB4}, nil
 		}
-		check := controller.checkMySQLCharset()
+		check := controller.checkMySQLCharset(t.Context())
 		assert.Equal(t, CheckStatusError, check.Status, check.Message)
 		assert.Equal(t, errMsgMigrationTargetAmbiguous, check.Message)
 	})
@@ -210,7 +210,7 @@ func TestCheckMySQLServerVersion_ReadFailureBlocks(t *testing.T) {
 	controller.V2Manager = &fakeV2Manager{tablePrefix: "v2_", isMySQL: true}
 	controller.serverVersionFn = func(context.Context) (string, error) { return "", errors.NewStd("connection refused") }
 
-	check := controller.checkMySQLServerVersion()
+	check := controller.checkMySQLServerVersion(t.Context())
 
 	assert.Equal(t, CheckStatusError, check.Status, check.Message)
 	assert.Contains(t, check.Message, "connection refused")
@@ -230,7 +230,7 @@ func TestRunCriticalPrerequisiteChecks_ServerChecks(t *testing.T) {
 	t.Run("mysql runs the version check before the charset check", func(t *testing.T) {
 		_, controller, _ := setupPrerequisitesTestEnvironment(t)
 		useMySQLSettings(t, controller)
-		got := ids(controller.runCriticalPrerequisiteChecks())
+		got := ids(controller.runCriticalPrerequisiteChecks(t.Context()))
 		version, charset := slices.Index(got, "mysql_server_version"), slices.Index(got, "mysql_charset")
 		health := slices.Index(got, "mysql_table_health")
 		require.GreaterOrEqual(t, version, 0, got)
@@ -240,7 +240,7 @@ func TestRunCriticalPrerequisiteChecks_ServerChecks(t *testing.T) {
 
 	t.Run("sqlite runs neither", func(t *testing.T) {
 		_, controller, _ := setupPrerequisitesTestEnvironment(t)
-		got := ids(controller.runCriticalPrerequisiteChecks())
+		got := ids(controller.runCriticalPrerequisiteChecks(t.Context()))
 		assert.NotContains(t, got, "mysql_server_version")
 		assert.NotContains(t, got, "mysql_charset")
 	})

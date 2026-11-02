@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,11 +24,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
+	"github.com/tphakala/birdnet-go/internal/notification"
 
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"gorm.io/gorm"
 )
 
 // prerequisiteCheck names a check by ID, severity and status. An empty status
@@ -51,7 +59,7 @@ var sqlitePrerequisiteChecks = []prerequisiteCheck{
 	{memoryCheckID, CheckSeverityWarning, ""},
 }
 
-// TestGetPrerequisites_SQLite pins the prerequisites response for a healthy
+// TestGetPrerequisites_SQLite pins the prerequisites snapshot after a run for a healthy
 // SQLite setup: every check is reported in order with a valid status, nothing
 // blocks, and v2-only mode withholds the go-ahead without failing a check.
 // Note: Not parallel due to global state modification.
@@ -64,6 +72,11 @@ func TestGetPrerequisites_SQLite(t *testing.T) {
 		t.Run(fmt.Sprintf("v2Only=%t", v2Only), func(t *testing.T) {
 			e, controller, _ := setupPrerequisitesTestEnvironment(t)
 			setV2OnlyMode(t, v2Only)
+
+			// GET only reads the snapshot: start the run, wait for it, then read
+			post := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", http.NoBody)
+			require.NoError(t, controller.RunPrerequisites(e.NewContext(post, httptest.NewRecorder())))
+			controller.Wait()
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/prerequisites", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -101,6 +114,261 @@ func TestGetPrerequisites_SQLite(t *testing.T) {
 			assert.Equal(t, want, got)
 		})
 	}
+}
+
+// TestPrerequisitesEndpoints_RunAndPoll pins the handler wiring: GET alone
+// starts nothing, POST run starts the background run, and GET then returns the
+// completed snapshot with the critical checks.
+// Note: Not parallel due to global state modification.
+func TestPrerequisitesEndpoints_RunAndPoll(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+	e, controller, _ := setupPrerequisitesTestEnvironment(t)
+
+	get := func() PrerequisitesResponse {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/prerequisites", http.NoBody)
+		require.NoError(t, controller.GetPrerequisites(e.NewContext(req, rec)))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var resp PrerequisitesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		return resp
+	}
+
+	idle := get()
+	assert.Equal(t, PrereqRunStatusIdle, idle.Status)
+	assert.Empty(t, idle.Checks)
+	assert.False(t, idle.CanStartMigration)
+	assert.Equal(t, PrereqRunStatusIdle, get().Status, "GET must never start a run")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", http.NoBody)
+	require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var started PrerequisitesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &started))
+	assert.Contains(t, []string{PrereqRunStatusRunning, PrereqRunStatusCompleted}, started.Status)
+	assert.Positive(t, started.RunID)
+
+	// Wait returns once the Core's tracked goroutines, the run included, have ended
+	controller.Wait()
+	done := get()
+	require.Equal(t, PrereqRunStatusCompleted, done.Status)
+
+	assert.Equal(t, started.RunID, done.RunID)
+	assert.True(t, done.AllPassed)
+	assert.True(t, done.CanStartMigration)
+	assert.Equal(t, 0, done.CriticalFailures)
+	assert.False(t, done.CheckedAt.IsZero())
+	assert.Nil(t, done.Progress)
+
+	checkIDs := make(map[string]bool)
+	for _, check := range done.Checks {
+		checkIDs[check.ID] = true
+		assert.NotEmpty(t, check.Name)
+		assert.Contains(t, []string{CheckStatusPassed, CheckStatusFailed, CheckStatusWarning, CheckStatusSkipped, CheckStatusError}, check.Status)
+		assert.Contains(t, []string{CheckSeverityCritical, CheckSeverityWarning}, check.Severity)
+	}
+	for _, id := range []string{"state_idle", "disk_space", "legacy_accessible", "record_count", "existing_v2_data", "memory_available"} {
+		assert.True(t, checkIDs[id], "missing check %s", id)
+	}
+}
+
+// TestRunPrerequisites_ForceStartsANewRun pins that the request body reaches the
+// runner: a plain POST reuses a fresh passing result and {"force": true} does not.
+func TestRunPrerequisites_ForceStartsANewRun(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	e, controller, _ := setupPrerequisitesTestEnvironment(t)
+	post := func(body string) PrerequisitesResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
+		var resp PrerequisitesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		return resp
+	}
+
+	first := post(`{}`)
+	controller.Wait()
+	reused := post(`{"force": false}`)
+	forced := post(`{"force": true}`)
+	controller.Wait()
+
+	assert.Equal(t, first.RunID, reused.RunID, "a plain POST reuses the fresh passing result")
+	assert.Greater(t, forced.RunID, first.RunID, "force starts a new run")
+}
+
+// TestCheckMySQLPermissions_CleanupSurvivesCancellation pins that the test table
+// is dropped even when the context ends after the table was created: the DROP
+// runs on a context detached from the run's.
+func TestCheckMySQLPermissions_CleanupSurvivesCancellation(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	_, controller, _ := setupPrerequisitesTestEnvironment(t)
+	db := controller.getLegacyGormDB()
+	require.NotNil(t, db)
+	db = db.Session(&gorm.Session{NewDB: true})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	// Cancel as soon as the CREATE has run, before the INSERT
+	const callbackName = "test:cancel_after_create"
+	require.NoError(t, db.Callback().Raw().After("gorm:raw").Register(callbackName, func(tx *gorm.DB) {
+		if strings.HasPrefix(tx.Statement.SQL.String(), "CREATE TABLE") {
+			cancel()
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Raw().Remove(callbackName) })
+
+	check := controller.checkMySQLPermissions(ctx)
+
+	assert.Equal(t, CheckStatusFailed, check.Status, "the INSERT after the cancel must fail")
+	var leftover int64
+	require.NoError(t, db.Raw("SELECT count(*) FROM sqlite_master WHERE name LIKE 'v2_permission_test_%'").Scan(&leftover).Error)
+	assert.Zero(t, leftover, "the permission test table must be dropped")
+}
+
+// TestRunPrerequisites_RunContext pins what the run is bound to: the server
+// lifecycle context, not the request that started it.
+func TestRunPrerequisites_RunContext(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	post := func(controller *Handler, e *echo.Echo, reqCtx context.Context) PrerequisitesResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", http.NoBody).WithContext(reqCtx)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
+		var resp PrerequisitesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		return resp
+	}
+
+	t.Run("a cancelled request does not cancel the run", func(t *testing.T) {
+		e, controller, _ := setupPrerequisitesTestEnvironment(t)
+		reqCtx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		post(controller, e, reqCtx)
+		controller.Wait()
+
+		assert.Equal(t, PrereqRunStatusCompleted, controller.prereqRunner().snapshot().Status)
+	})
+
+	t.Run("a cancelled lifecycle context starts no run", func(t *testing.T) {
+		e, controller, _ := setupPrerequisitesTestEnvironment(t)
+		lifecycle, cancel := context.WithCancel(t.Context())
+		controller.SetTestContext(lifecycle, cancel)
+		cancel()
+
+		resp := post(controller, e, t.Context())
+
+		assert.Equal(t, PrereqRunStatusFailed, resp.Status)
+		assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
+	})
+}
+
+// TestDBFingerprint_FollowsSettings pins that every database setting the checks
+// read changes the fingerprint, so a changed setting forces a new run.
+func TestDBFingerprint_FollowsSettings(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	mutations := map[string]func(s *conf.Settings){
+		"mysql enabled":  func(s *conf.Settings) { s.Output.MySQL.Enabled = true },
+		"mysql host":     func(s *conf.Settings) { s.Output.MySQL.Host = "db.example" },
+		"mysql port":     func(s *conf.Settings) { s.Output.MySQL.Port = "3307" },
+		"mysql database": func(s *conf.Settings) { s.Output.MySQL.Database = "other" },
+		"mysql username": func(s *conf.Settings) { s.Output.MySQL.Username = "other_user" },
+		"mysql password": func(s *conf.Settings) { s.Output.MySQL.Password = "other_secret" },
+		"sqlite path":    func(s *conf.Settings) { s.Output.SQLite.Path = filepath.Join(t.TempDir(), "other.db") },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			_, controller, _ := setupPrerequisitesTestEnvironment(t)
+			before := controller.dbFingerprint()
+
+			mutate(controller.Settings.Load())
+
+			assert.NotEqual(t, before, controller.dbFingerprint())
+		})
+	}
+}
+
+// TestDBFingerprint_HidesCredentials pins that the fingerprint, which can end up
+// in logs and failure output, never carries the MySQL password or user name.
+func TestDBFingerprint_HidesCredentials(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	const secret = "hunter2-secret"
+	_, controller, _ := setupPrerequisitesTestEnvironment(t)
+	controller.Settings.Load().Output.MySQL.Password = secret
+	controller.Settings.Load().Output.MySQL.Username = "fingerprint_user"
+
+	rendered := fmt.Sprintf("%v %+v %#v", controller.dbFingerprint(), controller.dbFingerprint(), controller.dbFingerprint())
+
+	assert.NotContains(t, rendered, secret)
+	assert.NotContains(t, rendered, "fingerprint_user")
+}
+
+// TestRunPrerequisites_LogsOnlyRealRuns pins the log trail of the prerequisites
+// run: one line when a run starts and one with its outcome when it ends; a POST
+// that reuses the result logs neither.
+func TestRunPrerequisites_LogsOnlyRealRuns(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	e, controller, _ := setupPrerequisitesTestEnvironment(t)
+	controller.APILogger = logger.Global().Module("api")
+	post := func() {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", http.NoBody)
+		require.NoError(t, controller.RunPrerequisites(e.NewContext(req, httptest.NewRecorder())))
+	}
+
+	post()
+	controller.Wait()
+	post() // reuses the fresh passing result
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, msgPrereqRunStarting), out)
+	require.Equal(t, 1, strings.Count(out, msgPrereqRunFinished), out)
+	for _, field := range []string{"run_id=1", "status=completed", "can_start=true", "critical_failures=0", "warnings=", "duration="} {
+		assert.Contains(t, out, field)
+	}
+}
+
+// TestRunPrerequisites_InvalidBody pins the 400 with its message key for a malformed body.
+func TestRunPrerequisites_InvalidBody(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	e, controller, _ := setupPrerequisitesTestEnvironment(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", strings.NewReader("{not json"))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationInvalidBody)
+	assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status, "a rejected request starts no run")
 }
 
 // TestCheckStateIdle_Idle tests checkStateIdle when migration is in IDLE state.
@@ -151,7 +419,7 @@ func TestCheckLegacyAccessible_Success(t *testing.T) {
 
 	_, controller, _ := setupPrerequisitesTestEnvironment(t)
 
-	check := controller.checkLegacyAccessible()
+	check := controller.checkLegacyAccessible(t.Context())
 
 	assert.Equal(t, "legacy_accessible", check.ID)
 	assert.Equal(t, CheckStatusPassed, check.Status)
@@ -167,7 +435,7 @@ func TestCheckLegacyAccessible_NilDS(t *testing.T) {
 
 	controller := &Handler{Core: &apicore.Core{DS: nil}}
 
-	check := controller.checkLegacyAccessible()
+	check := controller.checkLegacyAccessible(t.Context())
 
 	assert.Equal(t, "legacy_accessible", check.ID)
 	assert.Equal(t, CheckStatusError, check.Status)
@@ -183,7 +451,7 @@ func TestCheckRecordCount_Success(t *testing.T) {
 
 	_, controller, _ := setupPrerequisitesTestEnvironment(t)
 
-	check := controller.checkRecordCount()
+	check := controller.checkRecordCount(t.Context())
 
 	assert.Equal(t, "record_count", check.ID)
 	assert.Equal(t, CheckStatusPassed, check.Status)
@@ -199,7 +467,7 @@ func TestCheckRecordCount_NilRepo(t *testing.T) {
 
 	controller := &Handler{Core: &apicore.Core{Repo: nil}}
 
-	check := controller.checkRecordCount()
+	check := controller.checkRecordCount(t.Context())
 
 	assert.Equal(t, "record_count", check.ID)
 	assert.Equal(t, CheckStatusError, check.Status)
@@ -214,7 +482,7 @@ func TestCheckSQLiteIntegrity_Success(t *testing.T) {
 
 	_, controller, _ := setupPrerequisitesTestEnvironment(t)
 
-	check := controller.checkSQLiteIntegrity()
+	check := controller.checkSQLiteIntegrity(t.Context())
 
 	assert.Equal(t, "sqlite_integrity", check.ID)
 	assert.Equal(t, CheckStatusPassed, check.Status)
@@ -270,7 +538,7 @@ func TestCheckSQLiteIntegrity_CachedResult(t *testing.T) {
 			}
 			controller := &Handler{Core: &apicore.Core{DS: ds}}
 
-			check := controller.checkSQLiteIntegrity()
+			check := controller.checkSQLiteIntegrity(t.Context())
 
 			assert.Equal(t, tt.wantStatus, check.Status)
 			// Exact match: the cached and live passed messages share a prefix, so a
@@ -288,7 +556,7 @@ func TestCheckSQLiteIntegrity_NilDB(t *testing.T) {
 
 	controller := &Handler{Core: &apicore.Core{DS: nil}}
 
-	check := controller.checkSQLiteIntegrity()
+	check := controller.checkSQLiteIntegrity(t.Context())
 
 	assert.Equal(t, "sqlite_integrity", check.ID)
 	assert.Equal(t, CheckStatusError, check.Status)
@@ -307,7 +575,7 @@ func TestLegacyChecks_V2OnlyModeSkipped(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		run    func(*Handler) PrerequisiteCheck
+		run    func(*Handler, context.Context) PrerequisiteCheck
 		wantID string
 	}{
 		{name: "legacy accessible", run: (*Handler).checkLegacyAccessible, wantID: "legacy_accessible"},
@@ -318,7 +586,7 @@ func TestLegacyChecks_V2OnlyModeSkipped(t *testing.T) {
 			setV2OnlyMode(t, true)
 
 			// No datastore and no repository: the legacy database is absent.
-			check := tt.run(&Handler{Core: &apicore.Core{}})
+			check := tt.run(&Handler{Core: &apicore.Core{}}, t.Context())
 
 			assert.Equal(t, tt.wantID, check.ID)
 			assert.Equal(t, CheckStatusSkipped, check.Status)
@@ -344,13 +612,109 @@ func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
 	}
 	controller := &Handler{Core: &apicore.Core{DS: ds}}
 
-	check := controller.checkSQLiteIntegrity()
+	check := controller.checkSQLiteIntegrity(t.Context())
 
 	assert.Zero(t, ds.reads, "IntegrityResult must not be read in v2-only mode")
 	assert.Equal(t, "sqlite_integrity", check.ID)
 	assert.Equal(t, CheckStatusSkipped, check.Status)
 	assert.Equal(t, CheckSeverityCritical, check.Severity)
 	assert.Contains(t, check.Message, "enhanced database mode")
+}
+
+// TestCheckExistingV2Data_CancelledContext pins that a cancelled count is an
+// error, not the "table might not exist" pass: the one check whose error branch
+// otherwise reports success.
+func TestCheckExistingV2Data_CancelledContext(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	controller := &Handler{Core: &apicore.Core{V2Manager: newFakeV2ManagerWithTable(t, "detections", "", 2)}}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	check := controller.checkExistingV2Data(ctx)
+
+	assert.Equal(t, CheckStatusError, check.Status, check.Message)
+}
+
+// blockingDS is a datastore whose GetLastDetections blocks until released.
+type blockingDS struct {
+	*mocks.MockInterface
+	release chan struct{}
+}
+
+func (b *blockingDS) GetLastDetections(int) ([]datastore.Note, error) {
+	<-b.release
+	return nil, nil
+}
+
+// TestCheckLegacyAccessible_ReturnsWhenContextEnds pins that the context-free
+// GetLastDetections cannot hold a run (and so shutdown) past its context.
+func TestCheckLegacyAccessible_ReturnsWhenContextEnds(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	ds := &blockingDS{MockInterface: mocks.NewMockInterface(t), release: make(chan struct{})}
+	t.Cleanup(func() { close(ds.release) })
+	controller := &Handler{Core: &apicore.Core{DS: ds}}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+
+	var check PrerequisiteCheck
+	var wg sync.WaitGroup
+	wg.Go(func() { check = controller.checkLegacyAccessible(ctx) })
+	wg.Wait()
+
+	assert.Equal(t, CheckStatusError, check.Status, check.Message)
+}
+
+// failingDS is a datastore whose GetLastDetections returns an error.
+type failingDS struct {
+	*mocks.MockInterface
+}
+
+func (failingDS) GetLastDetections(int) ([]datastore.Note, error) {
+	return nil, errors.NewStd("read failed")
+}
+
+// TestCheckLegacyAccessible_ReadError pins that a failing legacy read fails the check.
+func TestCheckLegacyAccessible_ReadError(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	controller := &Handler{Core: &apicore.Core{DS: failingDS{MockInterface: mocks.NewMockInterface(t)}}}
+
+	check := controller.checkLegacyAccessible(t.Context())
+
+	assert.Equal(t, CheckStatusFailed, check.Status)
+	assert.Contains(t, check.Message, "read failed")
+}
+
+// panickingDS is a datastore whose GetLastDetections panics.
+type panickingDS struct {
+	*mocks.MockInterface
+}
+
+func (panickingDS) GetLastDetections(int) ([]datastore.Note, error) {
+	panic("legacy read failed")
+}
+
+// TestCheckLegacyAccessible_PanickingRead pins that a panic in the legacy read
+// becomes a failed check; the read runs in its own goroutine, where nothing
+// else would recover it.
+func TestCheckLegacyAccessible_PanickingRead(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	controller := &Handler{Core: &apicore.Core{DS: panickingDS{MockInterface: mocks.NewMockInterface(t)}}}
+
+	check := controller.checkLegacyAccessible(t.Context())
+
+	assert.Equal(t, CheckStatusFailed, check.Status, check.Message)
 }
 
 // TestCheckMemoryAvailable_Threshold pins the memory_available thresholds: at
@@ -439,7 +803,7 @@ func TestCheckExistingV2Data_NilManager(t *testing.T) {
 
 	controller := &Handler{Core: &apicore.Core{V2Manager: nil}}
 
-	check := controller.checkExistingV2Data()
+	check := controller.checkExistingV2Data(t.Context())
 
 	assert.Equal(t, "existing_v2_data", check.ID)
 	assert.Equal(t, CheckStatusSkipped, check.Status)
@@ -493,7 +857,7 @@ func TestCheckExistingV2Data_UsesManagerTablePrefix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := &Handler{Core: &apicore.Core{V2Manager: newFakeV2ManagerWithTable(t, tt.tableName, tt.prefix, tt.count)}}
 
-			check := controller.checkExistingV2Data()
+			check := controller.checkExistingV2Data(t.Context())
 
 			assert.Equal(t, "existing_v2_data", check.ID)
 			assert.Equal(t, tt.wantStatus, check.Status)
@@ -767,12 +1131,14 @@ func (discardTransport) Close()                                {}
 // migration globals, and the test binds a client on the process-wide Sentry hub.
 func TestRunCriticalPrerequisiteChecks_PublishesPrereqTag(t *testing.T) {
 	tests := []struct {
-		name     string
-		freeDisk uint64
-		want     string
+		name      string
+		freeDisk  uint64
+		cancelled bool
+		want      string
 	}{
 		{name: "all critical checks pass", freeDisk: testDiskFreeBytes, want: prerequisiteTagPassed},
 		{name: "disk space check fails", freeDisk: 0, want: "disk_space"},
+		{name: "cancelled context leaves the tag unset", freeDisk: 0, cancelled: true, want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -795,7 +1161,13 @@ func TestRunCriticalPrerequisiteChecks_PublishesPrereqTag(t *testing.T) {
 			hub.PushScope()
 			t.Cleanup(hub.PopScope)
 
-			controller.runCriticalPrerequisiteChecks()
+			ctx := t.Context()
+			if tt.cancelled {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			controller.runCriticalPrerequisiteChecks(ctx)
 
 			event := hub.Scope().ApplyToEvent(&sentry.Event{}, nil, client)
 			require.NotNil(t, event)

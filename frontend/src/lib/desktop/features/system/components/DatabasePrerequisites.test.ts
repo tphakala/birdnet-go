@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import type { ComponentProps } from 'svelte';
@@ -38,6 +38,8 @@ function response(
     critical_failures: criticalFailures,
     warnings,
     checked_at: '2026-10-28T12:00:00Z',
+    status: 'completed',
+    run_id: 1,
     checks,
   };
 }
@@ -445,6 +447,237 @@ describe('DatabasePrerequisites', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(screen.getByRole('status').textContent.trim()).toBe(c.expected);
+    });
+  });
+
+  describe('count badge', () => {
+    const passedKey = 'system.database.migration.prerequisites.passedCount';
+
+    it.each([
+      { name: 'a running snapshot', status: 'running' as const, shown: false },
+      { name: 'an idle snapshot', status: 'idle' as const, shown: false },
+      { name: 'a failed run', status: 'failed' as const, shown: false },
+      { name: 'a completed snapshot', status: 'completed' as const, shown: true },
+    ])('is shown only for a completed snapshot: $name', c => {
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: { ...response([check('ok', 'passed')], 0, 0), status: c.status },
+          onRefresh: async () => {},
+        },
+      });
+
+      expect(screen.queryByText(new RegExp(passedKey)) !== null).toBe(c.shown);
+    });
+  });
+
+  describe('Re-run keeps keyboard focus', () => {
+    it.each([
+      { name: 'while the first load runs', props: { isLoading: true } },
+      { name: 'while a refresh request runs', props: { isLoading: false } },
+    ])('is soft-disabled, never natively disabled, $name', async c => {
+      let release = () => {};
+      const pending = new Promise<void>(resolve => (release = resolve));
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: response([check('ok', 'passed')], 0, 0),
+          onRefresh: () => pending,
+          ...c.props,
+        },
+      });
+      const rerun = screen.getByRole('button', {
+        name: t('system.database.migration.prerequisites.rerun'),
+      });
+      rerun.focus();
+      if (!c.props.isLoading) await fireEvent.click(rerun);
+
+      expect(rerun).not.toBeDisabled();
+      expect(rerun).toHaveAttribute('aria-disabled', 'true');
+      expect(document.activeElement).toBe(rerun);
+      const reason = document.getElementById(rerun.getAttribute('aria-describedby') ?? '');
+      expect(reason).toHaveTextContent(RUNNING_KEY);
+      release();
+    });
+  });
+
+  describe('background run', () => {
+    const runningSnapshot: PrerequisitesResponse = {
+      ...response([check('state_idle', 'passed'), check('disk_warn', 'warning')], 0, 1),
+      all_passed: false,
+      status: 'running',
+      progress: {
+        completed_steps: 2,
+        total_steps: 9,
+        current_check_id: 'sqlite_integrity',
+        current_check_name: 'Database Integrity',
+        current_check_elapsed_ms: 125_000,
+      },
+    };
+
+    it('shows the step counter, the current check and the elapsed seconds while running', () => {
+      renderTyped(DatabasePrerequisites, {
+        props: { prerequisites: runningSnapshot, onRefresh: async () => {} },
+      });
+
+      const checking = t('system.database.migration.prerequisites.checkingStep', {
+        current: 3,
+        total: 9,
+      });
+      const currentCheck = t('system.database.migration.prerequisites.currentCheck', {
+        name: 'Database Integrity',
+        seconds: 125,
+      });
+      expect(screen.getByText(new RegExp(checking))).toBeInTheDocument();
+      expect(screen.getByText(currentCheck)).toBeInTheDocument();
+      expect(
+        screen.getByText(t('system.database.migration.prerequisites.slowHint'))
+      ).toBeInTheDocument();
+      // The live region carries only the stable running text, not the text that changes on every poll
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent(RUNNING_KEY);
+      expect(status).not.toHaveTextContent(currentCheck);
+      expect(status).not.toHaveTextContent(checking);
+      // Finished checks show as they arrive, non-passing ones without expanding
+      expect(screen.getByText('Check disk_warn:')).toBeInTheDocument();
+    });
+
+    it('renders one running indicator while a request loads over a running snapshot', () => {
+      const { container } = renderTyped(DatabasePrerequisites, {
+        props: { prerequisites: runningSnapshot, isLoading: true, onRefresh: async () => {} },
+      });
+
+      expect(container.querySelectorAll('svg.animate-spin')).toHaveLength(1);
+    });
+
+    // The test i18n mock returns the bare key for these texts, so the rendered text shows
+    // whether a line is there and the recorded t() arguments show its numbers.
+    const STEP_KEY = 'system.database.migration.prerequisites.checkingStep';
+    const CHECK_KEY = 'system.database.migration.prerequisites.currentCheck';
+
+    it.each([
+      {
+        name: 'progress absent',
+        progress: undefined,
+        step: null,
+        check: null,
+      },
+      {
+        name: 'zero steps finished and no check named yet',
+        progress: { completed_steps: 0, total_steps: 9 },
+        step: { current: 1, total: 9 },
+        check: null,
+      },
+      {
+        name: 'the last step with no elapsed time',
+        progress: { completed_steps: 8, total_steps: 9, current_check_name: 'Record Count' },
+        step: { current: 9, total: 9 },
+        check: { name: 'Record Count', seconds: 0 },
+      },
+    ])('renders only what the snapshot carries: $name', c => {
+      vi.mocked(t).mockClear();
+      const { container } = renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: { ...runningSnapshot, progress: c.progress },
+          onRefresh: async () => {},
+        },
+      });
+
+      const text = container.textContent;
+      expect(text.includes(STEP_KEY)).toBe(c.step !== null);
+      expect(text.includes(CHECK_KEY)).toBe(c.check !== null);
+      const calls = vi.mocked(t).mock.calls;
+      expect(calls.filter(([key]) => key === STEP_KEY).map(([, params]) => params)).toEqual(
+        c.step ? [c.step] : []
+      );
+      expect(calls.filter(([key]) => key === CHECK_KEY).map(([, params]) => params)).toEqual(
+        c.check ? [c.check] : []
+      );
+    });
+
+    it('never shows a step beyond the total when every step has finished but the run is still running', () => {
+      vi.mocked(t).mockClear();
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: {
+            ...runningSnapshot,
+            progress: { completed_steps: 9, total_steps: 9, current_check_name: 'Record Count' },
+          },
+          onRefresh: async () => {},
+        },
+      });
+
+      const steps = vi
+        .mocked(t)
+        .mock.calls.filter(([key]) => key === STEP_KEY)
+        .map(([, params]) => params);
+      expect(steps).toEqual([{ current: 9, total: 9 }]);
+    });
+
+    it('blocks Re-run with the running text as its reason and ignores clicks', async () => {
+      let calls = 0;
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: runningSnapshot,
+          onRefresh: async () => {
+            calls += 1;
+          },
+        },
+      });
+
+      const rerun = screen.getByRole('button', {
+        name: t('system.database.migration.prerequisites.rerun'),
+      });
+      expect(rerun).toHaveAttribute('aria-disabled', 'true');
+      expect(rerun).toHaveClass('aria-disabled:cursor-not-allowed', 'aria-disabled:opacity-50');
+      const reason = document.getElementById(rerun.getAttribute('aria-describedby') ?? '');
+      expect(reason).toHaveTextContent(RUNNING_KEY);
+
+      await fireEvent.click(rerun);
+      expect(calls).toBe(0);
+    });
+
+    it('announces the result once a polled run completes', async () => {
+      const view = createComponentTestFactory(DatabasePrerequisites, {
+        prerequisites: runningSnapshot,
+      }).render({ props: { onRefresh: async () => {} } });
+
+      await view.rerender({
+        prerequisites: {
+          ...response([check('ok', 'passed')], 0, 0),
+          all_passed: true,
+          can_start_migration: true,
+        },
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent(
+          t('system.database.migration.prerequisites.allPassed')
+        )
+      );
+    });
+
+    it('shows the run failure with its error and a Retry that calls onRefresh', async () => {
+      let calls = 0;
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: {
+            ...response([check('state_idle', 'passed')], 0, 0),
+            status: 'failed',
+            error: 'The checks took longer than the time limit',
+          },
+          onRefresh: async () => {
+            calls += 1;
+          },
+        },
+      });
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(
+        t('system.database.migration.prerequisites.runFailed', {
+          error: 'The checks took longer than the time limit',
+        })
+      );
+      await fireEvent.click(within(alert).getByRole('button', { name: t('common.retry') }));
+      expect(calls).toBe(1);
     });
   });
 });

@@ -66,10 +66,18 @@
     (prerequisites?.checks ?? []).filter(isBlockingCheck).map(c => c.name)
   );
 
-  /** Why the start button is blocked, or null when it is not. Data that allows the start wins; otherwise loading and error win over stale blocked data. */
+  /** Checks are running or about to: a request is loading, or nothing has run yet and no request failed. */
+  let checking = $derived(
+    prerequisitesLoading || (prerequisites?.status === 'idle' && prerequisitesError === null)
+  );
+
+  /** Why the start button is blocked, or null when it is not. A request in flight blocks it, even over an old passing snapshot; otherwise data that allows the start wins, and loading and error win over stale blocked data. */
   let startBlockedReason = $derived.by((): string | null => {
-    if (prerequisites?.can_start_migration === true) return null;
     if (prerequisitesLoading) return t('system.database.migration.prerequisites.running');
+    if (prerequisites?.status === 'completed' && prerequisites.can_start_migration === true) {
+      return null;
+    }
+    if (checking) return t('system.database.migration.prerequisites.running');
     if (prerequisitesError) return t('system.database.migration.progress.prerequisitesUnavailable');
     if (blockingCheckNames.length > 0) {
       return t('system.database.migration.progress.prerequisitesFailedList', {
@@ -84,7 +92,7 @@
   /** The idle badge says Ready only when the checks allow the start. */
   let stateBadgeLabel = $derived.by((): string => {
     if (!isIdle || isPaused || startBlockedReason === null) return stateLabel(migState);
-    return prerequisitesLoading
+    return checking
       ? t('system.database.migration.status.checking')
       : t('system.database.migration.status.notReady');
   });
@@ -92,7 +100,7 @@
   let startHelpClass = $derived(
     startBlockedReason === null
       ? 'sr-only'
-      : prerequisitesLoading
+      : checking
         ? 'text-[10px] text-center mt-1.5 text-muted'
         : 'text-[10px] text-center mt-1.5 text-[var(--text-error)]'
   );
@@ -340,8 +348,9 @@
         {t('system.database.migration.actions.start')}
       </button>
     {/if}
-    <!-- Always rendered so a change of reason is announced; sr-only when nothing blocks -->
-    <p id={START_HELP_ID} role="status" class={startHelpClass}>
+    <!-- Always rendered so aria-describedby stays valid; sr-only when nothing blocks. Not a live
+         region: the prerequisites panel announces the run and its result. -->
+    <p id={START_HELP_ID} class={startHelpClass}>
       {startBlockedReason ?? ''}
     </p>
 

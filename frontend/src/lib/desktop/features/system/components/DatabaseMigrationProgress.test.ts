@@ -50,6 +50,8 @@ const blockedPrerequisites = {
   critical_failures: 1,
   warnings: 0,
   checked_at: '2026-10-24T10:00:00Z',
+  status: 'completed',
+  run_id: 1,
 } satisfies PrerequisitesResponse;
 
 const databaseIntegrity = {
@@ -159,6 +161,40 @@ const cases: StartStateCase[] = [
     tone: 'text-muted',
   },
   {
+    name: 'an idle snapshot, nothing has run yet',
+    badge: 'system.database.migration.status.checking',
+    prerequisites: {
+      ...allowedPrerequisites,
+      can_start_migration: false,
+      all_passed: false,
+      checks: [],
+      status: 'idle',
+      run_id: 0,
+    },
+    loading: false,
+    error: null,
+    helper: render('system.database.migration.prerequisites.running'),
+    absent: [notMet],
+    tone: 'text-muted',
+  },
+  {
+    name: 'an idle snapshot and a failed request to start the run',
+    badge: 'system.database.migration.status.notReady',
+    prerequisites: {
+      ...allowedPrerequisites,
+      can_start_migration: false,
+      all_passed: false,
+      checks: [],
+      status: 'idle',
+      run_id: 0,
+    },
+    loading: false,
+    error: 'Request timeout.',
+    helper: render('system.database.migration.progress.prerequisitesUnavailable'),
+    absent: [notMet],
+    tone: 'text-[var(--text-error)]',
+  },
+  {
     name: 'request error',
     badge: 'system.database.migration.status.notReady',
     prerequisites: null,
@@ -202,6 +238,16 @@ const cases: StartStateCase[] = [
     absent: [notMet, 'Record Count', 'Optional Tweak'],
     tone: 'text-[var(--text-error)]',
   },
+  ...(['running', 'failed'] as const).map((status): StartStateCase => ({
+    name: `a result that allows the start but whose run is ${status}`,
+    badge: 'system.database.migration.status.notReady',
+    prerequisites: { ...allowedPrerequisites, checks: [], status },
+    loading: false,
+    error: null,
+    helper: notMet,
+    absent: [],
+    tone: 'text-[var(--text-error)]',
+  })),
   {
     name: 'blocked with no failing check listed',
     badge: 'system.database.migration.status.notReady',
@@ -238,7 +284,8 @@ describe('DatabaseMigrationProgress start button', () => {
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).toHaveAttribute('aria-disabled', 'true');
     const helper = screen.getByText(c.helper);
-    expect(helper).toHaveAttribute('role', 'status');
+    // The panel is the one live region for the checks; the helper only describes the button
+    expect(helper).not.toHaveAttribute('role');
     expect(helper).toHaveClass(c.tone);
     expect(screen.getByText(c.badge)).toBeInTheDocument();
     expect(start.getAttribute('aria-describedby')).toBe(helper.id);
@@ -261,18 +308,30 @@ describe('DatabaseMigrationProgress start button', () => {
     const start = screen.getByRole('button', { name: t(startKey) });
     expect(start).not.toHaveAttribute('aria-disabled');
     expect(screen.getByText('Idle')).toBeInTheDocument();
-    // The live region stays mounted, empty and hidden, so the next reason is announced
-    expect(screen.getByRole('status')).toHaveClass('sr-only');
-    expect(screen.getByRole('status').textContent.trim()).toBe('');
+    // The helper stays mounted, empty and hidden, so the button's description id stays valid
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    const helper = document.querySelector('p[id^="migration-start-help"]');
+    expect(helper).toHaveClass('sr-only');
+    expect(helper?.textContent.trim()).toBe('');
     start.click();
     expect(started).toBe(true);
   });
 
-  it.each([
-    { name: 'loading', loading: true, error: null },
-    { name: 'a failed refresh', loading: false, error: 'Request timeout.' },
-  ])('stays enabled on a result that allows the start while $name', c => {
-    renderProgress({ prerequisites: allowedPrerequisites, loading: c.loading, error: c.error });
+  it('is blocked on a result that allows the start while a new run is being requested', () => {
+    renderProgress({ prerequisites: allowedPrerequisites, loading: true, error: null });
+
+    expect(screen.getByRole('button', { name: t(startKey) })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+  });
+
+  it('stays enabled on a result that allows the start after a failed refresh', () => {
+    renderProgress({
+      prerequisites: allowedPrerequisites,
+      loading: false,
+      error: 'Request timeout.',
+    });
 
     expect(screen.getByRole('button', { name: t(startKey) })).not.toHaveAttribute('aria-disabled');
   });

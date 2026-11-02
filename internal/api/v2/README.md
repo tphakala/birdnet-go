@@ -821,6 +821,19 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
 | GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport` | ✅   | Retrieve completed report   |
 | GET    | `/system/diagnostics/errors`     | `GetRecentErrors`      | ✅   | Recent error log entries    |
 
+### Database migration (`imports/migration.go`, `imports/prerequisites.go`)
+
+Routes live under `/system/database/migration`. The prerequisite checks run as one background job per process; the client starts it with POST and polls GET.
+
+| Method | Route                | Handler            | Auth | Description                                                                               |
+| ------ | -------------------- | ------------------ | ---- | ----------------------------------------------------------------------------------------- |
+| GET    | `/prerequisites`     | `GetPrerequisites` | ✅   | Snapshot of the prerequisites run (idle, running, completed or failed); never starts work |
+| POST   | `/prerequisites/run` | `RunPrerequisites` | ✅   | Start the run, or join the one in progress; optional body `{"force": bool}`               |
+
+**Prerequisites snapshot** - Both routes return the same JSON object: `status` (`idle`, `running`, `completed`, `failed`), `run_id` (increases with every run in this process), `started_at`, `checked_at` (completion time of a completed run), `checks`, `all_passed`, `can_start_migration`, `critical_failures`, `warnings`, `error` (why a `failed` run did not finish) and, only while `running`, `progress` with `completed_steps`, `total_steps`, `current_check_id`, `current_check_name` and `current_check_elapsed_ms`. While a run is in progress `checks` holds the checks finished so far and `all_passed` and `can_start_migration` are false. `failed` means the run itself did not finish (time limit, shutdown, internal error); failing checks still give `completed`.
+
+**POST /api/v2/system/database/migration/prerequisites/run** - Joins the run in progress whatever `force` says. Without `force`, a completed passing result younger than 30 minutes for the same database settings is returned as is; `force` or a failing, older or differently configured result starts a new run. A malformed body returns 400 with `errors.migration.invalidBody`.
+
 ### Import (`imports/import.go`)
 
 | Method | Route                          | Handler                | Auth | Description                                                             |
