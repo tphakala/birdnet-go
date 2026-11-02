@@ -66,6 +66,9 @@
   // status polling clears that on every successful fetch, which would wipe an action
   // failure before it can be read.
   let actionError = $state<string | null>(null);
+  // Run id of the prerequisites when a start was refused: the refusal message is the one
+  // actionError a later passing run may clear. Null when there is nothing to clear.
+  let refusedAtRunId = $state<number | null>(null);
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let prerequisites = $state<ApiState<PrerequisitesResponse>>({
@@ -272,6 +275,7 @@
     showConfirmDialog = false;
     startLoading = true;
     actionError = null;
+    refusedAtRunId = null;
     try {
       if (legacyStats.data?.total_detections != null) {
         await api.post('/api/v2/system/database/migration/start', {
@@ -284,6 +288,7 @@
     } catch (e) {
       actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed');
+      refusedAtRunId = prerequisites.data?.run_id ?? 0;
       // A migration that started anyway must show, and a missing or stale run is redone.
       // A refused check forces a new run so the panel shows it instead of the old pass.
       await fetchMigrationStatus();
@@ -299,6 +304,7 @@
 
   async function pauseMigration(): Promise<void> {
     actionError = null;
+    refusedAtRunId = null;
     try {
       await api.post('/api/v2/system/database/migration/pause');
       await fetchMigrationStatus();
@@ -310,6 +316,7 @@
 
   async function resumeMigration(): Promise<void> {
     actionError = null;
+    refusedAtRunId = null;
     try {
       await api.post('/api/v2/system/database/migration/resume');
       await fetchMigrationStatus();
@@ -321,6 +328,7 @@
 
   async function retryValidation(): Promise<void> {
     actionError = null;
+    refusedAtRunId = null;
     try {
       await api.post('/api/v2/system/database/migration/retry-validation');
       await fetchMigrationStatus();
@@ -334,6 +342,7 @@
 
   async function cancelMigration(): Promise<void> {
     actionError = null;
+    refusedAtRunId = null;
     try {
       await api.post('/api/v2/system/database/migration/cancel');
       await fetchMigrationStatus();
@@ -548,6 +557,21 @@
     previousMigrationState = state;
   });
 
+  // A start refusal says what was wrong at that time: drop it when a newer run completes and
+  // allows the start. It stays while the forced re-run is still running or still failing.
+  $effect(() => {
+    const data = prerequisites.data;
+    if (refusedAtRunId === null || !actionError) return;
+    if (
+      data?.status === 'completed' &&
+      data.can_start_migration &&
+      data.run_id !== refusedAtRunId
+    ) {
+      actionError = null;
+      refusedAtRunId = null;
+    }
+  });
+
   // Follow a running prerequisites run (recursive setTimeout to prevent pile-up)
   $effect(() => {
     if (!prerequisitesRunning) return;
@@ -661,7 +685,10 @@
     <ErrorAlert
       message={actionError}
       dismissible
-      onDismiss={() => (actionError = null)}
+      onDismiss={() => {
+        actionError = null;
+        refusedAtRunId = null;
+      }}
       className="mb-4"
     />
   {/if}

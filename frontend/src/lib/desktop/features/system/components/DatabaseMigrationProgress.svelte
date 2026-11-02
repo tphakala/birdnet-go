@@ -322,32 +322,28 @@
       </div>
     </div>
 
-    <!-- Start button. Blocked states keep the button focusable and say why. -->
-    {#if startBlockedReason === null}
-      <button
-        onclick={onStart}
-        disabled={isStarting}
-        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {#if isStarting}
-          <Loader2 class="w-4 h-4 animate-spin" />
-          {t('system.database.migration.starting')}
-        {:else}
-          <Play class="w-4 h-4" />
-          {t('system.database.migration.actions.start')}
-        {/if}
-      </button>
-    {:else}
-      <button
-        type="button"
-        aria-disabled="true"
-        aria-describedby={START_HELP_ID}
-        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-slate-400/50 text-slate-500 cursor-not-allowed"
-      >
+    <!-- Start button. One element for every state, soft-disabled with aria-disabled, so keyboard
+         focus survives a request in flight and a refused start; a blocked state says why. -->
+    <button
+      type="button"
+      onclick={() => {
+        if (startBlockedReason === null && !isStarting) onStart();
+      }}
+      aria-disabled={startBlockedReason !== null || isStarting ? 'true' : undefined}
+      aria-describedby={startBlockedReason !== null ? START_HELP_ID : undefined}
+      class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors aria-disabled:cursor-not-allowed {startBlockedReason ===
+      null
+        ? 'cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] aria-disabled:opacity-60'
+        : 'bg-slate-400/50 text-slate-500'}"
+    >
+      {#if isStarting && startBlockedReason === null}
+        <Loader2 class="w-4 h-4 animate-spin" />
+        {t('system.database.migration.starting')}
+      {:else}
         <Play class="w-4 h-4" />
         {t('system.database.migration.actions.start')}
-      </button>
-    {/if}
+      {/if}
+    </button>
     <!-- Always rendered so aria-describedby stays valid; sr-only when nothing blocks. Not a live
          region: the prerequisites panel announces the run and its result. -->
     <p id={START_HELP_ID} class={startHelpClass}>

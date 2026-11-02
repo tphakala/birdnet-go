@@ -259,6 +259,116 @@ describe('DatabaseDashboard migration errors', () => {
     expect(screen.getByText('Pre-migration check failed: Disk Space')).toBeInTheDocument();
   });
 
+  /** Opens the confirm dialog from the card's Start button and confirms it. */
+  async function confirmStart(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+    // The confirm dialog has a Start button of its own; the card's is the full-width one
+    const start = await waitFor(() => {
+      const card = screen
+        .getAllByRole('button', { name: t('system.database.migration.actions.start') })
+        .find(b => b.classList.contains('w-full'));
+      if (!card) throw new Error('card Start button not rendered');
+      return card;
+    });
+    await user.click(start);
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    return start;
+  }
+
+  const diskFailure = {
+    id: 'disk_space',
+    name: 'Disk Space',
+    description: '',
+    status: 'failed',
+    message: 'Only 0.1GB available',
+    severity: 'critical',
+  } satisfies PrerequisiteCheck;
+  const blockedRun = {
+    ...startablePrerequisites,
+    all_passed: false,
+    can_start_migration: false,
+    critical_failures: 1,
+    checks: [diskFailure],
+    run_id: 2,
+  } satisfies PrerequisitesResponse;
+
+  it('keeps the Start button, focused and never natively disabled, through a refused start', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    let refuse: (e: Error) => void = () => {};
+    const pending = new Promise<never>((_, reject) => (refuse = reject));
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return pending;
+      runs += 1;
+      return Promise.resolve(runs === 1 ? startablePrerequisites : blockedRun);
+    });
+
+    renderTyped(DatabaseDashboard);
+    const start = await confirmStart(user);
+
+    // While the request runs the button stays focusable: aria-disabled, not disabled
+    await waitFor(() => expect(start).toHaveAttribute('aria-disabled', 'true'));
+    expect(start).not.toBeDisabled();
+
+    const refused = apiError('Pre-migration check failed: Disk Space', 400);
+    refused.errorKey = 'errors.migration.preFlightFailed';
+    refuse(refused);
+
+    await screen.findByText('Disk Space:');
+    // The same element survives the refusal and keeps keyboard focus; it now says why it is blocked
+    expect(start.isConnected).toBe(true);
+    expect(document.activeElement).toBe(start);
+    expect(start).toHaveAttribute('aria-disabled', 'true');
+    const reason = document.getElementById(start.getAttribute('aria-describedby') ?? '');
+    expect(reason).toHaveTextContent(
+      t('system.database.migration.progress.prerequisitesFailedList', { checks: 'Disk Space' })
+    );
+  });
+
+  it('clears the refusal message once a new run allows the start, and keeps it while it fails', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    const refused = apiError('Pre-migration check failed: Disk Space', 400);
+    refused.errorKey = 'errors.migration.preFlightFailed';
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return Promise.reject(refused);
+      runs += 1;
+      if (runs === 1) return Promise.resolve(startablePrerequisites);
+      // The forced re-run after the refusal still fails; the user's Re-run passes
+      return Promise.resolve(runs === 2 ? blockedRun : { ...startablePrerequisites, run_id: 3 });
+    });
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+
+    const banner = await screen.findByText('Pre-migration check failed: Disk Space');
+    await screen.findByText('Disk Space:');
+    expect(banner).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: t('system.database.migration.prerequisites.rerun') })
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText('Pre-migration check failed: Disk Space')).toBeNull()
+    );
+  });
+
   it('runs the prerequisites again when the migration state returns to idle', async () => {
     const user = userEvent.setup();
     const pausedStatus = {
