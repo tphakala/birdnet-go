@@ -229,31 +229,34 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 		// Check response content
 		assert.Len(t, response.Data, 2)
 
-		// Check first hour data
-		assert.Equal(t, "12:00:00", response.Data[0].Time)
-		assert.InDelta(t, 5.5, response.Data[0].Temperature, 0.01)
-		assert.InDelta(t, 4.0, response.Data[0].FeelsLike, 0.01)
-		assert.InDelta(t, 3.2, response.Data[0].TempMin, 0.01)
-		assert.InDelta(t, 6.8, response.Data[0].TempMax, 0.01)
-		assert.Equal(t, 1013, response.Data[0].Pressure)
-		assert.Equal(t, 75, response.Data[0].Humidity)
-		assert.Equal(t, 10000, response.Data[0].Visibility)
-		assert.InDelta(t, 4.5, response.Data[0].WindSpeed, 0.01)
-		assert.Equal(t, 270, response.Data[0].WindDeg)
-		assert.InDelta(t, 7.2, response.Data[0].WindGust, 0.01)
-		assert.Equal(t, 40, response.Data[0].Clouds)
-		assert.Equal(t, "Clouds", response.Data[0].WeatherMain)
-		assert.Equal(t, "scattered clouds", response.Data[0].WeatherDesc)
-		assert.Equal(t, "03d", response.Data[0].WeatherIcon)
-
-		// Check second hour data
-		assert.Equal(t, "13:00:00", response.Data[1].Time)
-		assert.InDelta(t, 6.0, response.Data[1].Temperature, 0.01)
-		assert.InDelta(t, 4.5, response.Data[1].FeelsLike, 0.01)
-		assert.Equal(t, 70, response.Data[1].Humidity)
-		assert.Equal(t, "Clouds", response.Data[1].WeatherMain)
-		assert.Equal(t, "broken clouds", response.Data[1].WeatherDesc)
-		assert.Equal(t, "04d", response.Data[1].WeatherIcon)
+		// The fixture's fields are mapped from the datastore row, so a dropped or swapped
+		// field changes the whole response entry; the precipitation fields have their own test.
+		assert.Equal(t, hourlyWeatherResponse{
+			Time:        "12:00:00",
+			Temperature: 5.5,
+			FeelsLike:   4.0,
+			TempMin:     3.2,
+			TempMax:     6.8,
+			Pressure:    1013,
+			Humidity:    75,
+			Visibility:  10000,
+			WindSpeed:   4.5,
+			WindDeg:     270,
+			WindGust:    7.2,
+			Clouds:      40,
+			WeatherMain: "Clouds",
+			WeatherDesc: "scattered clouds",
+			WeatherIcon: "03d",
+		}, response.Data[0])
+		assert.Equal(t, hourlyWeatherResponse{
+			Time:        "13:00:00",
+			Temperature: 6.0,
+			FeelsLike:   4.5,
+			Humidity:    70,
+			WeatherMain: "Clouds",
+			WeatherDesc: "broken clouds",
+			WeatherIcon: "04d",
+		}, response.Data[1])
 	}
 
 	// Verify mock expectations

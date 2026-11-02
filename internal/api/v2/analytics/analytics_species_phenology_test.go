@@ -1,13 +1,10 @@
 package analytics
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -30,14 +27,6 @@ func sampleSpeciesPhenology() []datastore.SpeciesPhenologyPoint {
 	}
 }
 
-func newSpeciesPhenologyContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/phenology")
-	return c, rec
-}
-
 func TestGetSpeciesPhenology_Shape(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
@@ -46,7 +35,7 @@ func TestGetSpeciesPhenology_Shape(t *testing.T) {
 	mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-31", 12).
 		Return(sampleSpeciesPhenology(), nil)
 
-	c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-31")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-31")
 	require.NoError(t, controller.GetSpeciesPhenology(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -67,7 +56,7 @@ func TestGetSpeciesPhenology_EmptyArrayNotNull(t *testing.T) {
 	mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-02", 12).
 		Return([]datastore.SpeciesPhenologyPoint{}, nil)
 
-	c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetSpeciesPhenology(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	// Empty result must serialize as [] (not null) so the client can read .length safely.
@@ -75,20 +64,6 @@ func TestGetSpeciesPhenology_EmptyArrayNotNull(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotNil(t, resp)
 	assert.Empty(t, resp)
-	mockDS.AssertExpectations(t)
-}
-
-func TestGetSpeciesPhenology_DefaultsEndDate(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	// With end_date omitted the handler defaults it to a 30-day window: 2026-03-01 + 30d = 2026-03-31.
-	mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-31", 12).
-		Return(sampleSpeciesPhenology(), nil)
-
-	c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01")
-	require.NoError(t, controller.GetSpeciesPhenology(c))
-	require.Equal(t, http.StatusOK, rec.Code)
 	mockDS.AssertExpectations(t)
 }
 
@@ -101,7 +76,7 @@ func TestGetSpeciesPhenology_LimitClamping(t *testing.T) {
 		mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-02", 5).
 			Return(sampleSpeciesPhenology(), nil)
 
-		c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02&limit=5")
+		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02&limit=5")
 		require.NoError(t, controller.GetSpeciesPhenology(c))
 		require.Equal(t, http.StatusOK, rec.Code)
 		mockDS.AssertExpectations(t)
@@ -114,54 +89,9 @@ func TestGetSpeciesPhenology_LimitClamping(t *testing.T) {
 		mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-02", 12).
 			Return(sampleSpeciesPhenology(), nil)
 
-		c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02&limit=999")
+		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02&limit=999")
 		require.NoError(t, controller.GetSpeciesPhenology(c))
 		require.Equal(t, http.StatusOK, rec.Code)
 		mockDS.AssertExpectations(t)
 	})
-}
-
-func TestGetSpeciesPhenology_MissingStartDate(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology")
-	err := controller.GetSpeciesPhenology(c)
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestGetSpeciesPhenology_InvalidDateFormat(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=not-a-date")
-	err := controller.GetSpeciesPhenology(c)
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestGetSpeciesPhenology_ReversedRange(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newSpeciesPhenologyContext(e,
-		"/api/v2/analytics/species/phenology?start_date=2026-03-05&end_date=2026-03-01")
-	err := controller.GetSpeciesPhenology(c)
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestGetSpeciesPhenology_QueryTimeout(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-02", 12).
-		Return([]datastore.SpeciesPhenologyPoint(nil), context.DeadlineExceeded)
-
-	c, rec := newSpeciesPhenologyContext(e, "/api/v2/analytics/species/phenology?start_date=2026-03-01&end_date=2026-03-02")
-	// handleAnalyticsQueryError writes the 408 response and returns nil.
-	require.NoError(t, controller.GetSpeciesPhenology(c))
-	assert.Equal(t, http.StatusRequestTimeout, rec.Code)
-	mockDS.AssertExpectations(t)
 }

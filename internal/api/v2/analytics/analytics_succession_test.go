@@ -3,10 +3,8 @@ package analytics
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -32,14 +30,6 @@ func sampleAcousticSuccession() []datastore.SpeciesHourlyCounts {
 	}
 }
 
-func newSuccessionContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/succession")
-	return c, rec
-}
-
 func TestGetAcousticSuccession_Shape(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
@@ -48,7 +38,7 @@ func TestGetAcousticSuccession_Shape(t *testing.T) {
 	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 6).
 		Return(sampleAcousticSuccession(), nil)
 
-	c, rec := newSuccessionContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetAcousticSuccession(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -71,7 +61,7 @@ func TestGetAcousticSuccession_EmptyArrayNotNull(t *testing.T) {
 	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 6).
 		Return([]datastore.SpeciesHourlyCounts{}, nil)
 
-	c, rec := newSuccessionContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetAcousticSuccession(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	// Empty result must serialize as [] (not null) so the client can read .length safely.
@@ -105,7 +95,7 @@ func TestGetAcousticSuccession_ClampsLimit(t *testing.T) {
 			tc.WantLimit,
 		).Return(sampleAcousticSuccession(), nil)
 
-		c, rec := newSuccessionContext(
+		c, rec := newAnalyticsContext(
 			e,
 			"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
 		)

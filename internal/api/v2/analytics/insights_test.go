@@ -434,85 +434,41 @@ func TestCalculateStreak(t *testing.T) {
 	}
 }
 
+// TestBuildYearRanges pins the exact day span scanned in each previous year for a mid-year
+// anchor, and that a window wider than a year scans each whole year once. The branches that
+// wrap over a year end and the leap-day anchor are pinned by TestBuildYearRangesWrapAndLeapDay.
 func TestBuildYearRanges(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name      string
-		now       time.Time
-		window    int
-		checkFunc func(t *testing.T, ranges []repository.TimeRange)
-	}{
-		{
-			name:   "mid-year date produces one range per year",
-			now:    time.Date(2026, 3, 9, 12, 0, 0, 0, time.Local),
-			window: 3,
-			checkFunc: func(t *testing.T, ranges []repository.TimeRange) {
-				t.Helper()
-				require.NotEmpty(t, ranges)
-				for _, r := range ranges {
-					startTime := time.Unix(r.Start, 0)
-					assert.Less(t, startTime.Year(), 2026, "range should be in a previous year")
-					assert.Less(t, r.Start, r.End, "start should be before end")
-				}
-			},
-		},
-		{
-			name:   "early January wraps around year boundary",
-			now:    time.Date(2026, 1, 2, 12, 0, 0, 0, time.Local),
-			window: 3,
-			checkFunc: func(t *testing.T, ranges []repository.TimeRange) {
-				t.Helper()
-				require.NotEmpty(t, ranges)
-				for _, r := range ranges {
-					assert.Less(t, r.Start, r.End, "start should be before end")
-				}
-			},
-		},
-		{
-			name:   "late December wraps around year boundary",
-			now:    time.Date(2026, 12, 30, 12, 0, 0, 0, time.Local),
-			window: 3,
-			checkFunc: func(t *testing.T, ranges []repository.TimeRange) {
-				t.Helper()
-				require.NotEmpty(t, ranges)
-				for _, r := range ranges {
-					assert.Less(t, r.Start, r.End, "start should be before end")
-				}
-			},
-		},
-		{
-			name:   "window wider than a year covers each whole year",
-			now:    time.Date(2026, 7, 1, 12, 0, 0, 0, time.Local),
-			window: 200,
-			checkFunc: func(t *testing.T, ranges []repository.TimeRange) {
-				t.Helper()
-				require.Len(t, ranges, expectedTodayMaxYears)
-				first, _ := wallclock.DayBounds(wallclock.Date{Year: 2016, Month: time.January, Day: 1}, time.Local)
-				_, afterLast := wallclock.DayBounds(wallclock.Date{Year: 2016, Month: time.December, Day: 31}, time.Local)
-				assert.Equal(t, repository.TimeRange{Start: first.Unix(), End: afterLast.Unix()}, ranges[0])
-			},
-		},
-		{
-			name:   "leap year Feb 29 handled correctly",
-			now:    time.Date(2024, 2, 29, 12, 0, 0, 0, time.Local),
-			window: 3,
-			checkFunc: func(t *testing.T, ranges []repository.TimeRange) {
-				t.Helper()
-				require.NotEmpty(t, ranges)
-				for _, r := range ranges {
-					assert.Less(t, r.Start, r.End, "start should be before end")
-				}
-			},
-		},
+	date := func(y int, m time.Month, d int) wallclock.Date { return wallclock.Date{Year: y, Month: m, Day: d} }
+	dayRange := func(first, last wallclock.Date) repository.TimeRange {
+		start, _ := wallclock.DayBounds(first, time.Local)
+		_, end := wallclock.DayBounds(last, time.Local)
+		return repository.TimeRange{Start: start.Unix(), End: end.Unix()}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			ranges := buildYearRanges(tt.now, tt.window)
-			tt.checkFunc(t, ranges)
-		})
-	}
+	t.Run("mid-year date produces one range per year", func(t *testing.T) {
+		t.Parallel()
+		ranges := buildYearRanges(time.Date(2026, 3, 9, 12, 0, 0, 0, time.Local), 3)
+		require.Len(t, ranges, expectedTodayMaxYears)
+		// March 9 is day 68 of a non-leap year, so the window is days 65 to 71 of each year
+		// (March 6 to March 12, or March 5 to March 11 in a leap year).
+		const firstDayOffset, lastDayOffset = 64, 70
+		for i, got := range ranges {
+			jan1 := date(2016+i, time.January, 1)
+			assert.Equal(t, dayRange(jan1.AddDays(firstDayOffset), jan1.AddDays(lastDayOffset)), got, "year %d", jan1.Year)
+		}
+		assert.Equal(t, dayRange(date(2025, time.March, 6), date(2025, time.March, 12)), ranges[len(ranges)-1])
+	})
+
+	t.Run("window wider than a year covers each whole year", func(t *testing.T) {
+		t.Parallel()
+		ranges := buildYearRanges(time.Date(2026, 7, 1, 12, 0, 0, 0, time.Local), 200)
+		require.Len(t, ranges, expectedTodayMaxYears)
+		for i, got := range ranges {
+			year := 2016 + i
+			assert.Equal(t, dayRange(date(year, time.January, 1), date(year, time.December, 31)), got, "year %d", year)
+		}
+	})
 }
 
 // TestBuildYearRangesDayBounds pins that each range is the half-open span of whole local days,
