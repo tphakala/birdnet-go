@@ -37,6 +37,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"golang.org/x/time/rate"
 )
 
 // apiV2Prefix is the base path prefix for all v2 API routes (the Echo group the
@@ -48,14 +49,30 @@ const apiV2Prefix = "/api/v2"
 
 // Auth constants (file-local)
 const (
-	authExtendedTimeout = 15  // Extended timeout for slower operations
-	maxBasePathLength   = 128 // Maximum length for base path validation
-	authRateLimitRate   = 5   // Login attempts per rate limit window
-	authRateLimitBurst  = 5   // Burst allowance for rate limiting
-	authRateLimitWindow = 15  // Rate limit window in minutes
-	authDelayMinMs      = 50  // Minimum random delay in ms for timing attack mitigation
-	authDelayMaxMs      = 150 // Maximum random delay in ms for timing attack mitigation
+	authExtendedTimeout   = 15               // Extended timeout for slower operations
+	maxBasePathLength     = 128              // Maximum length for base path validation
+	authRateLimitRequests = 5                // Login attempts per rate limit window
+	authRateLimitBurst    = 5                // Attempts allowed in quick succession
+	authRateLimitWindow   = 15 * time.Minute // Rate limit window
+	// authRateLimitRefillTime is how long an exhausted bucket takes to fill
+	// again. Idle visitors are kept at least that long, so forgetting one never
+	// grants more attempts than the refill would have.
+	authRateLimitRefillTime = authRateLimitWindow * authRateLimitBurst / authRateLimitRequests
+	authDelayMinMs          = 50  // Minimum random delay in ms for timing attack mitigation
+	authDelayMaxMs          = 150 // Maximum random delay in ms for timing attack mitigation
 )
+
+// loginRateLimiterStoreConfig returns the per-IP limiter settings for the login
+// endpoint: authRateLimitRequests attempts per authRateLimitWindow with a burst
+// of authRateLimitBurst. Echo reads Rate as requests per second, so the
+// per-window count is converted.
+func loginRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	return middleware.RateLimiterMemoryStoreConfig{
+		Rate:      rate.Limit(float64(authRateLimitRequests) / authRateLimitWindow.Seconds()),
+		Burst:     authRateLimitBurst,
+		ExpiresIn: authRateLimitRefillTime,
+	}
+}
 
 // Compiled regex for path validation (moved outside function for performance)
 var validBasePathRegex = regexp.MustCompile(`^/[a-zA-Z0-9/_-]*/$`)
@@ -129,16 +146,11 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	authGroup := g.Group(AuthGroupPath)
 
 	// Create rate limiter for login endpoint to prevent brute force attacks
-	// Allow 5 login attempts per 15 minutes per IP address
+	// Allow a burst of 5 login attempts per IP address, refilled at 5 per 15
+	// minutes (see loginRateLimiterStoreConfig)
 	loginRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      authRateLimitRate,                 // 5 requests
-				Burst:     authRateLimitBurst,                // Allow burst up to the rate
-				ExpiresIn: authRateLimitWindow * time.Minute, // Per 15 minutes
-			},
-		),
+		Store:   middleware.NewRateLimiterMemoryStoreWithConfig(loginRateLimiterStoreConfig()),
 		IdentifierExtractor: func(ctx echo.Context) (string, error) {
 			// Use IP address as identifier for rate limiting
 			return ctx.RealIP(), nil
