@@ -2,6 +2,8 @@ package apitest
 
 import (
 	"net/http"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -9,6 +11,20 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
+
+const (
+	// parallelNewCoreChildEnv marks the re-executed test binary as the child of
+	// TestNewCoreRefusesParallelTestBeforeAllocating.
+	parallelNewCoreChildEnv = "APITEST_PARALLEL_NEWCORE_CHILD"
+
+	// parallelNewCoreChildValue is the value that turns the marker on.
+	parallelNewCoreChildValue = "1"
+
+	// settingsFuncRanMarker is logged by the child's settings function, which
+	// NewCore only reaches once the early parallel refusal has let the test pass.
+	settingsFuncRanMarker = "settings function reached"
 )
 
 // TestNewCoreWiresDefaults verifies NewCore returns a fully wired core with the
@@ -79,4 +95,29 @@ func TestNewTestHTTPClientDisablesKeepAlives(t *testing.T) {
 	transport, ok := client.Transport.(*http.Transport)
 	require.True(t, ok)
 	assert.True(t, transport.DisableKeepAlives)
+}
+
+// TestNewCoreRefusesParallelTestBeforeAllocating pins that NewCore refuses a
+// parallel test before it builds anything that needs teardown. A refusal ends
+// the test, so a child process runs the parallel NewCore call and this test
+// checks how it ended: it must fail with the guard message and must not have
+// reached the settings function, which runs after the early refusal and before
+// the mocks and the media SecureFS root.
+func TestNewCoreRefusesParallelTestBeforeAllocating(t *testing.T) {
+	if os.Getenv(parallelNewCoreChildEnv) == parallelNewCoreChildValue {
+		t.Parallel() // the condition under test
+		NewCore(t, WithSettingsFunc(func(*conf.Settings) { t.Log(settingsFuncRanMarker) }))
+		return
+	}
+
+	exe, err := os.Executable()
+	require.NoError(t, err, "locating the test binary")
+	cmd := exec.CommandContext(t.Context(), exe, "-test.run=^TestNewCoreRefusesParallelTestBeforeAllocating$")
+	cmd.Env = append(os.Environ(), parallelNewCoreChildEnv+"="+parallelNewCoreChildValue)
+	out, err := cmd.CombinedOutput()
+
+	_, exited := errors.AsType[*exec.ExitError](err)
+	require.True(t, exited, "the child must run and fail: %v\n%s", err, out)
+	assert.Contains(t, string(out), "apitest.WithoutSettingsPublish()")
+	assert.NotContains(t, string(out), settingsFuncRanMarker, "NewCore must refuse before it applies the settings functions")
 }
