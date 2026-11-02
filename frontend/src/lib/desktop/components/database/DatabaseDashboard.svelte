@@ -41,6 +41,8 @@
   const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
   const STATUS_POLL_INTERVAL_MS = 2000;
   const PREREQUISITES_POLL_INTERVAL_MS = 2000;
+  /** Error key of a start refused because no usable prerequisites run exists. */
+  const PREREQUISITES_NOT_READY_KEY = 'errors.migration.prerequisitesNotReady';
 
   // --- Overview state ---
   let overview = $state<DatabaseOverviewResponse | null>(null);
@@ -280,6 +282,11 @@
     } catch (e) {
       actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed');
+      // A migration that started anyway must show, and a missing or stale run is redone
+      await fetchMigrationStatus();
+      if (e instanceof ApiError && e.errorKey === PREREQUISITES_NOT_READY_KEY) {
+        await runPrerequisites(false);
+      }
     } finally {
       startLoading = false;
     }
@@ -518,6 +525,22 @@
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
+  });
+
+  // The stored checks describe the state they ran in: when the migration returns to idle
+  // (cancel from any state, rollback), check again. Not keyed on isActive, which misses
+  // paused, failed and completed.
+  let previousMigrationState: string | undefined;
+  $effect(() => {
+    const state = migrationStatus.data?.state;
+    if (
+      state === 'idle' &&
+      previousMigrationState !== undefined &&
+      previousMigrationState !== 'idle'
+    ) {
+      untrack(() => void runPrerequisites(false));
+    }
+    previousMigrationState = state;
   });
 
   // Follow a running prerequisites run (recursive setTimeout to prevent pile-up)

@@ -167,6 +167,65 @@ describe('DatabaseDashboard migration errors', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith(START_URL));
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Another migration is already running');
+    // A migration that started anyway must show: the status is fetched again after the failure
+    const statusRequests = () => apiGet.mock.calls.filter(([url]) => url === STATUS_URL).length;
+    await waitFor(() => expect(statusRequests()).toBeGreaterThan(1));
+  });
+
+  it('runs the prerequisites again when the start says no run is ready', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
+    const notReady = apiError('Run the pre-migration checks first', 409);
+    notReady.errorKey = 'errors.migration.prerequisitesNotReady';
+    rejectActions(notReady);
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    apiPost.mockClear();
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: false }));
+  });
+
+  it('runs the prerequisites again when the migration state returns to idle', async () => {
+    const user = userEvent.setup();
+    const pausedStatus = {
+      ...idleStatus,
+      state: 'paused',
+      worker_paused: true,
+      can_start: false,
+      can_resume: true,
+      can_cancel: true,
+    } satisfies MigrationStatus;
+    let statusCalls = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url === STATUS_URL) {
+        statusCalls += 1;
+        return Promise.resolve(statusCalls === 1 ? pausedStatus : idleStatus);
+      }
+      if (url === PREREQUISITES_URL) return Promise.resolve(startablePrerequisites);
+      return Promise.reject(apiError(NOT_CONFIGURED, 503));
+    });
+    servePost(startablePrerequisites);
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.cancel') })
+    );
+
+    // One run on mount, one more once the state is idle again
+    const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
+    await waitFor(() => expect(runPosts()).toBe(2));
   });
   it('shows why the migration cannot start when the prerequisites request fails', async () => {
     serve({
