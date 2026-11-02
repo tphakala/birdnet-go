@@ -1079,6 +1079,7 @@ func TestThumbnailsDeferToMediaProxy(t *testing.T) {
 
 				var response map[string]string
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				require.Len(t, response, 2)
 				// The client looks each thumbnail up by the name it asked for.
 				urls := make(map[string]string, 2)
 				for _, name := range []string{sciAmericanCrow, sciRedBelliedWoodpecker} {

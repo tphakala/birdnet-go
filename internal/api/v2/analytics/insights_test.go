@@ -450,7 +450,13 @@ func TestBuildYearRanges(t *testing.T) {
 		t.Parallel()
 		ranges := buildYearRanges(time.Date(2026, 3, 9, 12, 0, 0, 0, time.Local), 3)
 		require.Len(t, ranges, expectedTodayMaxYears)
-		// March 9 is day 68 of a non-leap year, so the window is March 6 to March 12.
+		// March 9 is day 68 of a non-leap year, so the window is days 65 to 71 of each year
+		// (March 6 to March 12, or March 5 to March 11 in a leap year).
+		const firstDayOffset, lastDayOffset = 64, 70
+		for i, got := range ranges {
+			jan1 := date(2016+i, time.January, 1)
+			assert.Equal(t, dayRange(jan1.AddDays(firstDayOffset), jan1.AddDays(lastDayOffset)), got, "year %d", jan1.Year)
+		}
 		assert.Equal(t, dayRange(date(2025, time.March, 6), date(2025, time.March, 12)), ranges[len(ranges)-1])
 	})
 
@@ -458,8 +464,10 @@ func TestBuildYearRanges(t *testing.T) {
 		t.Parallel()
 		ranges := buildYearRanges(time.Date(2026, 7, 1, 12, 0, 0, 0, time.Local), 200)
 		require.Len(t, ranges, expectedTodayMaxYears)
-		assert.Equal(t, dayRange(date(2016, time.January, 1), date(2016, time.December, 31)), ranges[0])
-		assert.Equal(t, dayRange(date(2025, time.January, 1), date(2025, time.December, 31)), ranges[len(ranges)-1])
+		for i, got := range ranges {
+			year := 2016 + i
+			assert.Equal(t, dayRange(date(year, time.January, 1), date(year, time.December, 31)), got, "year %d", year)
+		}
 	})
 }
 
