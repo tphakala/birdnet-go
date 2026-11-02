@@ -170,6 +170,18 @@ func TestEqualizerResponse_PassesCountScaleDB(t *testing.T) {
 const defaultEQFilters = `{"type":"HighPass","frequency":100,"q":0.7,"passes":0},` +
 	`{"type":"LowPass","frequency":15000,"q":0.7,"passes":0}`
 
+// TestEqualizerResponse_RequestedPointCount checks that a valid points value in
+// the request sets the number of sweep points, instead of the default.
+func TestEqualizerResponse_RequestedPointCount(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	for _, points := range []int{minEQResponsePoints, 64, maxEQResponsePoints} {
+		out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, "", fmt.Sprintf(`"points":%d`, points))))
+		assert.Len(t, out.Points, points, "requested points %d", points)
+	}
+}
+
 func TestEqualizerResponse_DefaultConfigIsFlat(t *testing.T) {
 	t.Parallel()
 	_, h := setupSystemTestEnvironment(t)
