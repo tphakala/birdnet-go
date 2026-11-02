@@ -13,6 +13,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -209,6 +210,18 @@ func TestStartMigration_PrerequisiteGate(t *testing.T) {
 			wantState: "idle",
 		},
 		{
+			name: "a re-run check fails at start despite a passing stored run",
+			prepare: func(t *testing.T, c *Handler) {
+				t.Helper()
+				seedPassingResult(t, c)
+				c.diskFreeFn = func(string) (uint64, error) { return 0, nil }
+			},
+			wantCode:  http.StatusBadRequest,
+			wantKey:   notification.MsgErrMigrationPreFlight,
+			wantCheck: blockingCheckName,
+			wantState: "idle",
+		},
+		{
 			name:      "a fresh passing run",
 			prepare:   seedPassingResult,
 			wantCode:  http.StatusOK,
@@ -322,4 +335,28 @@ func TestStartMigration_CountsWhenNoTotalIsKnown(t *testing.T) {
 	state, err := sm.GetState()
 	require.NoError(t, err)
 	assert.Equal(t, int64(100), state.TotalRecords, "the mock repository counts 100 records")
+}
+
+// TestStartMigration_AbandonedDuringCountStartsNothing pins the abandonment check
+// after the fallback count: a client that goes away during the count gets no
+// answer, not a 500, and no migration starts.
+func TestStartMigration_AbandonedDuringCountStartsNothing(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	seedPrerequisiteResult(t, controller, passingReusedChecks(controller), freshResultAge, 0)
+	gone, cancel := context.WithCancel(t.Context())
+	repo := mocks.NewMockDetectionRepository(t)
+	repo.EXPECT().CountAll(mock.Anything).Run(func(context.Context) { cancel() }).Return(int64(0), context.Canceled)
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, startURL, strings.NewReader(`{}`)).WithContext(gone)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	assert.Equal(t, "idle", migrationStateOf(t, sm))
+	assert.Zero(t, rec.Body.Len(), "a client that left during the count is sent nothing, not a 500")
 }
