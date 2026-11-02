@@ -348,4 +348,55 @@ describe('DatabaseMigrationProgress start button', () => {
       )
     ).toBeInTheDocument();
   });
+  describe('failed migration', () => {
+    const failedStatus = {
+      ...idleStatus,
+      state: 'failed',
+      can_start: false,
+      can_retry_validation: true,
+      can_cancel: true,
+      error_message: 'Validation found mismatches',
+      dirty_id_count: 3,
+    } satisfies MigrationStatus;
+
+    function renderFailed(status: MigrationStatus) {
+      return renderTyped(DatabaseMigrationProgress, {
+        props: {
+          status,
+          legacyStats: null,
+          v2Stats: null,
+          prerequisites: null,
+          prerequisitesLoading: false,
+          prerequisitesError: null,
+          onStart: noop,
+          onPause: noop,
+          onResume: noop,
+          onRetryValidation: noop,
+          onCancel: noop,
+        },
+      });
+    }
+
+    it('shows the failure with its server message and the dirty record count in one alert', () => {
+      renderFailed(failedStatus);
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(t('system.database.migration.status.failed'));
+      expect(alert).toHaveTextContent('Validation found mismatches');
+      expect(alert).toHaveTextContent(
+        t('system.database.migration.progress.dirtyIds', { count: 3 })
+      );
+      expect(alert).not.toHaveAttribute('aria-live');
+    });
+
+    it('falls back to a generic message and hides the dirty count when there is none', () => {
+      renderFailed({ ...failedStatus, error_message: undefined, dirty_id_count: 0 });
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(t('system.database.migration.progress.fallbackError'));
+      expect(alert).not.toHaveTextContent(
+        t('system.database.migration.progress.dirtyIds', { count: 0 })
+      );
+    });
+  });
 });
