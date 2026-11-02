@@ -49,6 +49,21 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Notification service not available")
 }
 
+// Values the new species test notification is documented to carry. They are
+// spelled out here, not taken from the handler's constants, so changing the
+// handler's values fails the test.
+const (
+	// configuredTitlePrefix differs from the handler's fallback title, so the
+	// title only matches when the configured template is rendered.
+	configuredTitlePrefix = "Configured new species: "
+
+	// wantSampleConfidence is the confidence of the sample detection, 99%.
+	wantSampleConfidence = 0.99
+
+	// wantNewSpeciesExpiry is how long a new species notification stays valid.
+	wantNewSpeciesExpiry = 24 * time.Hour
+)
+
 func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	// No t.Parallel(): this test publishes to the process-global settings
 	// singleton via apitest.PublishTestSettings (CreateTestNewSpeciesNotification reads
@@ -78,8 +93,9 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	settings.Security.Host = "localhost"
 	settings.WebServer.Port = "8080"
 	settings.Main.TimeAs24h = true
-	// Set default templates from config.yaml
-	settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
+	// The title template differs from the config.yaml default on purpose (see
+	// configuredTitlePrefix); the message template is the default.
+	settings.Notification.Templates.NewSpecies.Title = configuredTitlePrefix + "{{.CommonName}}"
 	settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
 	controller.Settings.Store(settings)
 	// CreateTestNewSpeciesNotification reads the live snapshot via currentSettings();
@@ -112,13 +128,13 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	scientificName, _ := response.Metadata["scientific_name"].(string)
 	require.NotEmpty(t, species)
 	require.NotEmpty(t, scientificName)
-	assert.Equal(t, "New Species: "+species, response.Title, "title must render the configured template")
+	assert.Equal(t, configuredTitlePrefix+species, response.Title, "title must render the configured template")
 	assert.Contains(t, response.Message, "First detection of "+species)
 	assert.Contains(t, response.Message, scientificName)
 	// The percent figure only appears when the configured message template is
 	// rendered, not the handler's fallback message.
 	assert.Contains(t, response.Message, "99% confidence")
-	assert.InDelta(t, testNotificationConfidence, response.Metadata["confidence"], 0.001)
+	assert.InDelta(t, wantSampleConfidence, response.Metadata["confidence"], 0.001)
 	assert.NotEmpty(t, response.Metadata["location"])
 	assert.Equal(t, true, response.Metadata["is_new_species"])
 	assert.InDelta(t, 0, response.Metadata["days_since_first_seen"], 0.001)
@@ -128,8 +144,8 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, response.Title, stored.Title)
 
-	// Verify the notification expires after the configured number of hours
+	// Verify the notification expires after the documented time
 	require.NotNil(t, response.ExpiresAt)
-	expectedExpiry := response.Timestamp.Add(newSpeciesNotificationExpiry * time.Hour)
+	expectedExpiry := response.Timestamp.Add(wantNewSpeciesExpiry)
 	assert.WithinDuration(t, expectedExpiry, *response.ExpiresAt, time.Second)
 }
