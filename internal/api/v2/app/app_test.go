@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
@@ -294,10 +295,10 @@ func TestGetAppConfig_SecurityConfig(t *testing.T) {
 	}{
 		{name: "nothing configured"},
 		{name: "basic auth only", basic: true},
-		{name: "google only", providers: []string{"google"}},
-		{name: "github only", providers: []string{"github"}},
-		{name: "microsoft only", providers: []string{"microsoft"}},
-		{name: "basic auth and every provider", basic: true, providers: []string{"google", "github", "microsoft"}},
+		{name: "google only", providers: []string{security.ConfigGoogle}},
+		{name: "github only", providers: []string{security.ConfigGitHub}},
+		{name: "microsoft only", providers: []string{security.ConfigMicrosoft}},
+		{name: "basic auth and every provider", basic: true, providers: []string{security.ConfigGoogle, security.ConfigGitHub, security.ConfigMicrosoft}},
 	}
 
 	for _, tt := range tests {
@@ -414,10 +415,10 @@ func TestGetAppConfig_ResponseShape(t *testing.T) {
 		"liveSpectrogram", "audioExportEnabled", "freshInstall", "newVersion", "projectLinks",
 	}, keys(raw))
 
-	security := object(raw, "security")
-	assert.ElementsMatch(t, []string{"enabled", "accessAllowed", "authConfig", "publicAccess", "privateMode"}, keys(security))
-	assert.ElementsMatch(t, []string{"basicEnabled", "enabledProviders"}, keys(object(security, "authConfig")))
-	assert.ElementsMatch(t, []string{"liveAudio"}, keys(object(security, "publicAccess")))
+	securityObj := object(raw, "security")
+	assert.ElementsMatch(t, []string{"enabled", "accessAllowed", "authConfig", "publicAccess", "privateMode"}, keys(securityObj))
+	assert.ElementsMatch(t, []string{"basicEnabled", "enabledProviders"}, keys(object(securityObj, "authConfig")))
+	assert.ElementsMatch(t, []string{"liveAudio"}, keys(object(securityObj, "publicAccess")))
 	assert.ElementsMatch(t, []string{
 		"name", "repoUrl", "issuesUrl", "newIssueUrl", "supportUrl", "discussionsUrl", "releasesUrl", "communityUrl",
 	}, keys(object(raw, "projectLinks")))
