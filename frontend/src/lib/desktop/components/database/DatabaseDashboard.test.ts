@@ -27,8 +27,10 @@ import { renderTyped } from '../../../../test/render-helpers';
 
 const STATUS_URL = '/api/v2/system/database/migration/status';
 const PREREQUISITES_URL = '/api/v2/system/database/migration/prerequisites';
+const RUN_URL = '/api/v2/system/database/migration/prerequisites/run';
 const START_URL = '/api/v2/system/database/migration/start';
 const STATUS_POLL_INTERVAL_MS = 2000;
+const PREREQUISITES_POLL_INTERVAL_MS = 2000;
 const NOT_CONFIGURED = 'Migration is not configured';
 
 const idleStatus = {
@@ -63,14 +65,37 @@ const startablePrerequisites = {
   critical_failures: 0,
   warnings: 0,
   checked_at: '2026-10-24T10:00:00Z',
+  status: 'completed',
+  run_id: 1,
 } satisfies PrerequisitesResponse;
 
 function apiError(message: string, status: number): ApiError {
   return new ApiError(message, status, new Response(null, { status }));
 }
 
-/** Answers each GET by URL; anything not listed fails, like an unconfigured install. */
+/** Outcome of every POST except the prerequisites run: a value resolves, an Error rejects. */
+let actionOutcome: unknown = null;
+
+/** Makes every migration action POST (start, pause, ...) fail with error. */
+function rejectActions(error: Error): void {
+  actionOutcome = error;
+}
+
+/** Answers the prerequisites run POST with prerequisites and every other POST with actionOutcome. */
+function servePost(prerequisites: unknown): void {
+  apiPost.mockImplementation((url: string) => {
+    const outcome = url === RUN_URL ? prerequisites : actionOutcome;
+    if (outcome === undefined) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+    return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome);
+  });
+}
+
+/**
+ * Answers each GET by URL; anything not listed fails, like an unconfigured install. The
+ * prerequisites run POST answers with the PREREQUISITES_URL route, like the GET does.
+ */
 function serve(routes: Record<string, unknown>): void {
+  servePost(routes[PREREQUISITES_URL]);
   apiGet.mockImplementation((url: string) => {
     const route = Object.entries(routes).find(([prefix]) => url.startsWith(prefix));
     if (!route) return Promise.reject(apiError(NOT_CONFIGURED, 503));
@@ -83,6 +108,7 @@ describe('DatabaseDashboard migration errors', () => {
   beforeEach(() => {
     apiGet.mockReset();
     apiPost.mockReset();
+    actionOutcome = null;
   });
 
   it('shows the server message when the status request is refused', async () => {
@@ -122,7 +148,7 @@ describe('DatabaseDashboard migration errors', () => {
   it('shows the message when starting the migration is rejected', async () => {
     const user = userEvent.setup();
     serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
-    apiPost.mockRejectedValue(apiError('Another migration is already running', 409));
+    rejectActions(apiError('Another migration is already running', 409));
 
     renderTyped(DatabaseDashboard);
 
@@ -202,7 +228,7 @@ describe('DatabaseDashboard migration errors', () => {
       if (url.startsWith(PREREQUISITES_URL)) return Promise.resolve(startablePrerequisites);
       return Promise.reject(apiError(NOT_CONFIGURED, 503));
     });
-    apiPost.mockResolvedValue(null);
+    servePost(startablePrerequisites);
 
     renderTyped(DatabaseDashboard);
 
@@ -226,7 +252,7 @@ describe('DatabaseDashboard migration errors', () => {
   it('lets the user dismiss a failed action message', async () => {
     const user = userEvent.setup();
     serve({ [STATUS_URL]: migratingStatus });
-    apiPost.mockRejectedValue(apiError('Pause refused', 409));
+    rejectActions(apiError('Pause refused', 409));
 
     renderTyped(DatabaseDashboard);
 
@@ -246,7 +272,7 @@ describe('DatabaseDashboard migration errors', () => {
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       serve({ [STATUS_URL]: migratingStatus });
-      apiPost.mockRejectedValue(apiError('Pause refused', 409));
+      rejectActions(apiError('Pause refused', 409));
 
       renderTyped(DatabaseDashboard);
 
@@ -291,5 +317,109 @@ describe('DatabaseDashboard migration errors', () => {
     finish(idleStatus);
 
     await screen.findByText(t('system.database.backup.history.title'));
+  });
+});
+
+describe('DatabaseDashboard prerequisites run', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+  });
+
+  const runningSnapshot = (completedSteps: number) =>
+    ({
+      all_passed: false,
+      can_start_migration: false,
+      checks: [],
+      critical_failures: 0,
+      warnings: 0,
+      status: 'running',
+      run_id: 1,
+      progress: {
+        completed_steps: completedSteps,
+        total_steps: 9,
+        current_check_name: 'Disk Space',
+      },
+    }) satisfies PrerequisitesResponse;
+
+  /** True while the card's Start button is blocked (the confirm dialog is closed). */
+  const startBlocked = () =>
+    screen
+      .getAllByRole('button', { name: t('system.database.migration.actions.start') })
+      .some(b => b.getAttribute('aria-disabled') === 'true');
+
+  it('starts the run on mount, polls until it completes, enables Start and stops polling', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let polls = 0;
+      apiGet.mockImplementation((url: string) => {
+        if (url === STATUS_URL) return Promise.resolve(idleStatus);
+        if (url === PREREQUISITES_URL) {
+          polls += 1;
+          return Promise.resolve(polls === 1 ? runningSnapshot(3) : startablePrerequisites);
+        }
+        return Promise.reject(apiError(NOT_CONFIGURED, 503));
+      });
+      apiPost.mockImplementation((url: string) =>
+        url === RUN_URL
+          ? Promise.resolve(runningSnapshot(0))
+          : Promise.reject(apiError(NOT_CONFIGURED, 503))
+      );
+
+      renderTyped(DatabaseDashboard);
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: false }));
+      await waitFor(() => expect(startBlocked()).toBe(true));
+      expect(polls).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      expect(polls).toBe(1);
+      expect(startBlocked()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      expect(polls).toBe(2);
+      await waitFor(() => expect(startBlocked()).toBe(false));
+
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      expect(polls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('forces a new run from Re-run', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: t('system.database.migration.prerequisites.rerun'),
+      })
+    );
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: true }));
+  });
+
+  it('keeps Start blocked and says the checks did not finish when the run failed', async () => {
+    serve({
+      [STATUS_URL]: idleStatus,
+      [PREREQUISITES_URL]: {
+        ...startablePrerequisites,
+        can_start_migration: false,
+        status: 'failed',
+        error: 'The checks took longer than the time limit',
+      },
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    const expected = t('system.database.migration.prerequisites.runFailed', {
+      error: 'The checks took longer than the time limit',
+    });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(expected));
+    expect(startBlocked()).toBe(true);
   });
 });

@@ -50,6 +50,8 @@ const blockedPrerequisites = {
   critical_failures: 1,
   warnings: 0,
   checked_at: '2026-10-24T10:00:00Z',
+  status: 'completed',
+  run_id: 1,
 } satisfies PrerequisitesResponse;
 
 const databaseIntegrity = {

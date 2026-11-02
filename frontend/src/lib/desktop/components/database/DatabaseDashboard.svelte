@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -7,6 +7,7 @@
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import type { DatabaseOverviewResponse } from '$lib/types/database';
   import type { MigrationStatus, ApiState, PrerequisitesResponse } from '$lib/types/migration';
+  import { failedRunMessage } from '$lib/utils/migrationPrerequisites';
   import type { LegacyStatus } from '$lib/types/legacy';
 
   // Sub-components
@@ -39,6 +40,7 @@
   const MAX_HISTORY_POINTS = 60;
   const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
   const STATUS_POLL_INTERVAL_MS = 2000;
+  const PREREQUISITES_POLL_INTERVAL_MS = 2000;
 
   // --- Overview state ---
   let overview = $state<DatabaseOverviewResponse | null>(null);
@@ -86,6 +88,11 @@
   let isActive = $derived(ACTIVE_MIGRATION_STATES.includes(migrationStatus.data?.state ?? ''));
   // No status has loaded and the last attempt failed
   let statusUnknown = $derived(migrationStatus.data === null && migrationStatus.error !== null);
+  let prerequisitesRunning = $derived(prerequisites.data?.status === 'running');
+  /** True until the first snapshot arrives and while a run is in progress. */
+  let prerequisitesBusy = $derived(prerequisites.loading || prerequisitesRunning);
+  /** The request error, or the message of a run that did not finish. */
+  let prerequisitesError = $derived(prerequisites.error ?? failedRunMessage(prerequisites.data));
   let isCleanupActive = $derived(migrationStatus.data?.cleanup_state === 'in_progress');
 
   // SSE connection
@@ -183,20 +190,45 @@
     }
   }
 
-  async function fetchPrerequisites(): Promise<void> {
+  /** Fetch errors keep the last snapshot; the message is shown next to it. */
+  function setPrerequisitesError(e: unknown): void {
+    prerequisites.error =
+      e instanceof ApiError
+        ? e.message
+        : t('system.database.migration.prerequisites.errors.fetchFailed');
+  }
+
+  /**
+   * Starts the background prerequisites run, or joins the one in progress, and stores the
+   * snapshot. A forced run replaces a fresh passing result. The checks themselves are
+   * followed by the polling effect below.
+   */
+  async function runPrerequisites(force: boolean): Promise<void> {
     try {
-      prerequisites.loading = true;
+      // Loading covers only the wait for the first snapshot
+      // untrack: the mount effect calls this and must not depend on the snapshot it writes
+      prerequisites.loading = untrack(() => prerequisites.data === null);
+      prerequisites.data = await api.post<PrerequisitesResponse>(
+        '/api/v2/system/database/migration/prerequisites/run',
+        { force }
+      );
+      prerequisites.error = null;
+    } catch (e) {
+      setPrerequisitesError(e);
+    } finally {
+      prerequisites.loading = false;
+    }
+  }
+
+  async function pollPrerequisites(): Promise<void> {
+    try {
       prerequisites.data = await api.get<PrerequisitesResponse>(
         '/api/v2/system/database/migration/prerequisites'
       );
       prerequisites.error = null;
     } catch (e) {
-      prerequisites.error =
-        e instanceof ApiError
-          ? e.message
-          : t('system.database.migration.prerequisites.errors.fetchFailed');
-    } finally {
-      prerequisites.loading = false;
+      // The run goes on server-side, so keep polling
+      setPrerequisitesError(e);
     }
   }
 
@@ -424,7 +456,7 @@
       fetchMigrationStatus(),
       fetchLegacyStats(),
       fetchV2Stats(),
-      fetchPrerequisites(),
+      runPrerequisites(false),
       fetchBackupJobs(),
     ]).then(() => {
       if (active.current) {
@@ -464,6 +496,28 @@
       }
     }
     timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  });
+
+  // Follow a running prerequisites run (recursive setTimeout to prevent pile-up)
+  $effect(() => {
+    if (!prerequisitesRunning) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      if (cancelled) return;
+
+      if (connectionState.isOnline) {
+        await pollPrerequisites();
+      }
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, PREREQUISITES_POLL_INTERVAL_MS);
+      }
+    }
+    timeoutId = setTimeout(poll, PREREQUISITES_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
@@ -662,8 +716,8 @@
               legacyStats={legacyStats.data}
               v2Stats={v2Stats.data}
               prerequisites={prerequisites.data}
-              prerequisitesLoading={prerequisites.loading}
-              prerequisitesError={prerequisites.error}
+              prerequisitesLoading={prerequisitesBusy}
+              {prerequisitesError}
               isStarting={startLoading}
               onStart={() => (showConfirmDialog = true)}
               onPause={pauseMigration}
@@ -681,7 +735,7 @@
           prerequisites={prerequisites.data}
           isLoading={prerequisites.loading}
           error={prerequisites.error}
-          onRefresh={fetchPrerequisites}
+          onRefresh={() => runPrerequisites(true)}
         />
       {/if}
 

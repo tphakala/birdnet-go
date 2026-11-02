@@ -38,6 +38,8 @@ function response(
     critical_failures: criticalFailures,
     warnings,
     checked_at: '2026-10-28T12:00:00Z',
+    status: 'completed',
+    run_id: 1,
     checks,
   };
 }
@@ -445,6 +447,105 @@ describe('DatabasePrerequisites', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(screen.getByRole('status').textContent.trim()).toBe(c.expected);
+    });
+  });
+
+  describe('background run', () => {
+    const runningSnapshot: PrerequisitesResponse = {
+      ...response([check('state_idle', 'passed'), check('disk_warn', 'warning')], 0, 1),
+      all_passed: false,
+      status: 'running',
+      progress: {
+        completed_steps: 2,
+        total_steps: 9,
+        current_check_id: 'sqlite_integrity',
+        current_check_name: 'Database Integrity',
+        current_check_elapsed_ms: 125_000,
+      },
+    };
+
+    it('shows the step counter, the current check and the elapsed seconds while running', () => {
+      renderTyped(DatabasePrerequisites, {
+        props: { prerequisites: runningSnapshot, onRefresh: async () => {} },
+      });
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent(RUNNING_KEY);
+      expect(status).toHaveTextContent(
+        t('system.database.migration.prerequisites.checkingStep', { current: 3, total: 9 })
+      );
+      expect(status).toHaveTextContent(
+        t('system.database.migration.prerequisites.currentCheck', {
+          name: 'Database Integrity',
+          seconds: 125,
+        })
+      );
+      expect(status).toHaveTextContent(t('system.database.migration.prerequisites.slowHint'));
+      // Finished checks show as they arrive, non-passing ones without expanding
+      expect(screen.getByText('Check disk_warn:')).toBeInTheDocument();
+    });
+
+    it('blocks Re-run with the running text as its reason and ignores clicks', async () => {
+      let calls = 0;
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: runningSnapshot,
+          onRefresh: async () => {
+            calls += 1;
+          },
+        },
+      });
+
+      const rerun = screen.getByRole('button', {
+        name: t('system.database.migration.prerequisites.rerun'),
+      });
+      expect(rerun).toHaveAttribute('aria-disabled', 'true');
+      const reason = document.getElementById(rerun.getAttribute('aria-describedby') ?? '');
+      expect(reason).toHaveTextContent(RUNNING_KEY);
+
+      await fireEvent.click(rerun);
+      expect(calls).toBe(0);
+    });
+
+    it('announces the result once a polled run completes', async () => {
+      const view = createComponentTestFactory(DatabasePrerequisites, {
+        prerequisites: runningSnapshot,
+      }).render({ props: { onRefresh: async () => {} } });
+
+      await view.rerender({
+        prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true },
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent(
+          t('system.database.migration.prerequisites.allPassed')
+        )
+      );
+    });
+
+    it('shows the run failure with its error and a Retry that calls onRefresh', async () => {
+      let calls = 0;
+      renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: {
+            ...response([check('state_idle', 'passed')], 0, 0),
+            status: 'failed',
+            error: 'The checks took longer than the time limit',
+          },
+          onRefresh: async () => {
+            calls += 1;
+          },
+        },
+      });
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(
+        t('system.database.migration.prerequisites.runFailed', {
+          error: 'The checks took longer than the time limit',
+        })
+      );
+      await fireEvent.click(within(alert).getByRole('button', { name: t('common.retry') }));
+      expect(calls).toBe(1);
     });
   });
 });

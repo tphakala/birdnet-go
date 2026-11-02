@@ -20,7 +20,12 @@
   } from '@lucide/svelte';
   import { tick } from 'svelte';
   import { t } from '$lib/i18n';
-  import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
+  import {
+    isBlockingCheck,
+    elapsedSeconds,
+    failedRunMessage,
+  } from '$lib/utils/migrationPrerequisites';
+  import { generateId } from '$lib/utils/uuid';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import type {
@@ -50,10 +55,20 @@
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
 
-  /** The alert shows when a request failed or there is nothing else to show, except during the first load. */
-  let showError = $derived(!(isLoading && !prerequisites) && (!!error || !prerequisites));
+  /** A run is in progress on the server: the checks arrive one by one. */
+  let isRunning = $derived(prerequisites?.status === 'running');
+  let progress = $derived(prerequisites?.progress);
+  const RUNNING_ROW_ID = generateId('prerequisites-running');
+
+  /** The run itself did not finish; its checks are partial. */
+  let runFailure = $derived(failedRunMessage(prerequisites));
+
+  /** The alert shows when a request failed, a run failed or there is nothing else to show, except during the first load. */
+  let showError = $derived(
+    !(isLoading && !prerequisites) && (!!error || !!runFailure || !prerequisites)
+  );
   let errorText = $derived(
-    error || t('system.database.migration.prerequisites.errors.fetchFailed')
+    error || runFailure || t('system.database.migration.prerequisites.errors.fetchFailed')
   );
 
   /** Passed and skipped checks, the only ones that sit behind the details toggle. */
@@ -112,7 +127,7 @@
 
   /** One sentence for a screen reader once a check run has produced data. */
   function resultAnnouncement(): string {
-    if (!prerequisites) return '';
+    if (prerequisites?.status !== 'completed') return '';
     if (prerequisites.critical_failures > 0) {
       return t('system.database.migration.prerequisites.criticalIssues', {
         count: prerequisites.critical_failures,
@@ -147,6 +162,14 @@
       (retryButton ?? titleElement)?.focus();
     }
   }
+
+  /** A run that finishes while the panel is open (found by polling) is read out too. */
+  let previousStatus: string | undefined;
+  $effect(() => {
+    const status = prerequisites?.status;
+    if (previousStatus === 'running' && status === 'completed') announcement = resultAnnouncement();
+    previousStatus = status;
+  });
 
   async function handleRefresh() {
     if (isLoading || isRefreshing) return;
@@ -212,8 +235,12 @@
       <button
         type="button"
         class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-muted disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick={handleRefresh}
+        onclick={() => {
+          if (!isRunning) void handleRefresh();
+        }}
         disabled={isLoading || isRefreshing}
+        aria-disabled={isRunning ? 'true' : undefined}
+        aria-describedby={isRunning ? RUNNING_ROW_ID : undefined}
       >
         <RefreshCw class="w-3 h-3 {isRefreshing ? 'animate-spin' : ''}" />
         {t('system.database.migration.prerequisites.rerun')}
@@ -252,6 +279,31 @@
       <div class="mt-3 flex items-center gap-2 px-3 py-2 text-sm text-muted">
         <RefreshCw class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
         {t('system.database.migration.prerequisites.running')}
+      </div>
+    {/if}
+    {#if isRunning}
+      <div id={RUNNING_ROW_ID} class="mt-3 flex items-start gap-2 px-3 py-2 text-sm text-muted">
+        <RefreshCw class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 animate-spin" aria-hidden="true" />
+        <div>
+          <div>
+            {t('system.database.migration.prerequisites.running')}
+            {#if progress}
+              {t('system.database.migration.prerequisites.checkingStep', {
+                current: progress.completed_steps + 1,
+                total: progress.total_steps,
+              })}
+            {/if}
+          </div>
+          {#if progress?.current_check_name}
+            <div>
+              {t('system.database.migration.prerequisites.currentCheck', {
+                name: progress.current_check_name,
+                seconds: elapsedSeconds(progress.current_check_elapsed_ms),
+              })}
+            </div>
+          {/if}
+          <div class="text-xs">{t('system.database.migration.prerequisites.slowHint')}</div>
+        </div>
       </div>
     {/if}
     <span class="sr-only">{announcement}</span>

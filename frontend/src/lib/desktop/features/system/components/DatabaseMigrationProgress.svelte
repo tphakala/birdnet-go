@@ -68,7 +68,9 @@
 
   /** Why the start button is blocked, or null when it is not. Data that allows the start wins; otherwise loading and error win over stale blocked data. */
   let startBlockedReason = $derived.by((): string | null => {
-    if (prerequisites?.can_start_migration === true) return null;
+    if (prerequisites?.status === 'completed' && prerequisites.can_start_migration === true) {
+      return null;
+    }
     if (prerequisitesLoading) return t('system.database.migration.prerequisites.running');
     if (prerequisitesError) return t('system.database.migration.progress.prerequisitesUnavailable');
     if (blockingCheckNames.length > 0) {
