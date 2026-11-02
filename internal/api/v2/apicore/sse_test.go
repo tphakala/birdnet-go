@@ -2,7 +2,6 @@ package apicore
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,9 +33,6 @@ func TestSSEManager_BroadcastDetection_StreamTypeIsolation(t *testing.T) {
 	for i := range maxConsecutiveDrops + 2 {
 		m.BroadcastDetection(&SSEDetectionData{ID: uint(i)})
 	}
-
-	// Wait briefly for potential asynchronous eviction logic (if any existed, though RemoveClient is synchronous here)
-	time.Sleep(10 * time.Millisecond)
 
 	// Sound-level client should STILL be connected because it ignored the detection broadcast
 	assert.Equal(t, 2, m.GetClientCount(), "Sound-level client should not be disconnected by detection broadcast")
