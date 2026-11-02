@@ -91,6 +91,37 @@ function render(key: string, params?: Record<string, unknown>): string {
 const originalT = vi.mocked(t).getMockImplementation();
 const noop = async () => {};
 
+interface ProgressOverrides {
+  prerequisites: PrerequisitesResponse | null;
+  loading: boolean;
+  error: string | null;
+  onStart?: () => void;
+}
+
+function renderProgress({ prerequisites, loading, error, onStart = () => {} }: ProgressOverrides) {
+  return renderTyped(DatabaseMigrationProgress, {
+    props: {
+      status: idleStatus,
+      legacyStats: null,
+      v2Stats: null,
+      prerequisites,
+      prerequisitesLoading: loading,
+      prerequisitesError: error,
+      onStart,
+      onPause: noop,
+      onResume: noop,
+      onRetryValidation: noop,
+      onCancel: noop,
+    },
+  });
+}
+
+const allowedPrerequisites = {
+  ...blockedPrerequisites,
+  can_start_migration: true,
+  all_passed: true,
+} satisfies PrerequisitesResponse;
+
 interface StartStateCase {
   name: string;
   prerequisites: PrerequisitesResponse | null;
@@ -187,20 +218,11 @@ describe('DatabaseMigrationProgress start button', () => {
 
   it.each(cases)('is blocked with a visible reason while $name', c => {
     let started = false;
-    renderTyped(DatabaseMigrationProgress, {
-      props: {
-        status: idleStatus,
-        legacyStats: null,
-        v2Stats: null,
-        prerequisites: c.prerequisites,
-        prerequisitesLoading: c.loading,
-        prerequisitesError: c.error,
-        onStart: () => (started = true),
-        onPause: noop,
-        onResume: noop,
-        onRetryValidation: noop,
-        onCancel: noop,
-      },
+    renderProgress({
+      prerequisites: c.prerequisites,
+      loading: c.loading,
+      error: c.error,
+      onStart: () => (started = true),
     });
 
     const start = screen.getByRole('button', { name: t(startKey) });
@@ -218,20 +240,11 @@ describe('DatabaseMigrationProgress start button', () => {
 
   it('starts when the checks allow it', () => {
     let started = false;
-    renderTyped(DatabaseMigrationProgress, {
-      props: {
-        status: idleStatus,
-        legacyStats: null,
-        v2Stats: null,
-        prerequisites: { ...blockedPrerequisites, can_start_migration: true, all_passed: true },
-        prerequisitesLoading: false,
-        prerequisitesError: null,
-        onStart: () => (started = true),
-        onPause: noop,
-        onResume: noop,
-        onRetryValidation: noop,
-        onCancel: noop,
-      },
+    renderProgress({
+      prerequisites: allowedPrerequisites,
+      loading: false,
+      error: null,
+      onStart: () => (started = true),
     });
 
     const start = screen.getByRole('button', { name: t(startKey) });
@@ -247,21 +260,7 @@ describe('DatabaseMigrationProgress start button', () => {
     { name: 'loading', loading: true, error: null },
     { name: 'a failed refresh', loading: false, error: 'Request timeout.' },
   ])('stays enabled on a result that allows the start while $name', c => {
-    renderTyped(DatabaseMigrationProgress, {
-      props: {
-        status: idleStatus,
-        legacyStats: null,
-        v2Stats: null,
-        prerequisites: { ...blockedPrerequisites, can_start_migration: true, all_passed: true },
-        prerequisitesLoading: c.loading,
-        prerequisitesError: c.error,
-        onStart: () => {},
-        onPause: noop,
-        onResume: noop,
-        onRetryValidation: noop,
-        onCancel: noop,
-      },
-    });
+    renderProgress({ prerequisites: allowedPrerequisites, loading: c.loading, error: c.error });
 
     expect(screen.getByRole('button', { name: t(startKey) })).not.toHaveAttribute('aria-disabled');
   });

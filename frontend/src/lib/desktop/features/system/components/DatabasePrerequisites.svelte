@@ -19,6 +19,7 @@
     Info,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import type {
@@ -44,17 +45,18 @@
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
 
-  /** Statuses that are always shown; only the others sit behind the details toggle. */
-  const NON_PASSING_STATUSES: readonly PrerequisiteCheckStatus[] = ['failed', 'error', 'warning'];
+  /** Passed and skipped checks, the only ones that sit behind the details toggle. */
+  const isQuiet = (c: PrerequisiteCheck): boolean =>
+    c.status === 'passed' || c.status === 'skipped';
 
   /** Failed and errored checks first, then warnings, in the server's order otherwise. */
-  let nonPassingChecks = $derived([
-    ...checks.filter(c => c.status === 'failed' || c.status === 'error'),
-    ...checks.filter(c => c.status === 'warning'),
-  ]);
+  let nonPassingChecks = $derived(
+    checks
+      .filter(c => !isQuiet(c))
+      .sort((a, b) => Number(a.status === 'warning') - Number(b.status === 'warning'))
+  );
 
-  /** Passed and skipped checks, shown on request */
-  let quietChecks = $derived(checks.filter(c => !NON_PASSING_STATUSES.includes(c.status)));
+  let quietChecks = $derived(checks.filter(isQuiet));
 
   /** Number of checks that passed */
   let passedCount = $derived(checks.filter(c => c.status === 'passed').length);
@@ -253,7 +255,7 @@
       <span class="text-muted">{check.message}</span>
     </div>
 
-    {#if check.severity === 'critical' && (check.status === 'failed' || check.status === 'error')}
+    {#if isBlockingCheck(check)}
       <span
         class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
       >

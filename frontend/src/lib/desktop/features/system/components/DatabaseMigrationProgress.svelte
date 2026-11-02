@@ -14,6 +14,7 @@
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
   import { generateId } from '$lib/utils/uuid';
+  import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
   import type { MigrationStatus, DatabaseStats, PrerequisitesResponse } from '$lib/types/migration';
 
   interface Props {
@@ -65,9 +66,7 @@
 
   /** Names of the critical checks that block the migration. */
   let blockingCheckNames = $derived(
-    (prerequisites?.checks ?? [])
-      .filter(c => c.severity === 'critical' && (c.status === 'failed' || c.status === 'error'))
-      .map(c => c.name)
+    (prerequisites?.checks ?? []).filter(isBlockingCheck).map(c => c.name)
   );
 
   /** Why the start button is blocked, or null when it is not. Data that allows the start wins; otherwise loading and error win over stale blocked data. */
@@ -326,7 +325,6 @@
     {:else}
       <button
         type="button"
-        onclick={e => e.preventDefault()}
         aria-disabled="true"
         aria-describedby={START_HELP_ID}
         class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-slate-400/50 text-slate-500 cursor-not-allowed"

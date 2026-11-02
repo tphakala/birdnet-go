@@ -3,7 +3,11 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { renderTyped, createComponentTestFactory } from '../../../../../test/render-helpers';
 import DatabasePrerequisites from './DatabasePrerequisites.svelte';
-import type { PrerequisiteCheck, PrerequisiteCheckStatus } from '$lib/types/migration';
+import type {
+  PrerequisiteCheck,
+  PrerequisiteCheckStatus,
+  PrerequisitesResponse,
+} from '$lib/types/migration';
 
 const CRITICAL_BADGE_KEY = 'system.database.migration.prerequisites.critical';
 const RUNNING_KEY = 'system.database.migration.prerequisites.running';
@@ -21,6 +25,21 @@ function check(id: string, status: PrerequisiteCheckStatus): PrerequisiteCheck {
   };
 }
 
+function response(
+  checks: PrerequisiteCheck[],
+  criticalFailures: number,
+  warnings: number
+): PrerequisitesResponse {
+  return {
+    all_passed: false,
+    can_start_migration: false,
+    critical_failures: criticalFailures,
+    warnings,
+    checked_at: '2026-10-28T12:00:00Z',
+    checks,
+  };
+}
+
 function rowOf(id: string): HTMLElement {
   const row = screen.getByText(`Check ${id}:`).closest<HTMLElement>('div.flex');
   if (!row) throw new Error(`row for ${id} not found`);
@@ -33,20 +52,17 @@ describe('DatabasePrerequisites', () => {
   it('shows every non-passing check without expanding', async () => {
     const { container } = renderTyped(DatabasePrerequisites, {
       props: {
-        prerequisites: {
-          all_passed: false,
-          can_start_migration: false,
-          critical_failures: 2,
-          warnings: 1,
-          checked_at: '2026-10-28T12:00:00Z',
-          checks: [
+        prerequisites: response(
+          [
             check('passed_check', 'passed'),
             check('warning_check', 'warning'),
             check('skipped_check', 'skipped'),
             check('error_check', 'error'),
             check('failed_check', 'failed'),
           ],
-        },
+          2,
+          1
+        ),
         onRefresh: async () => {},
       },
     });
@@ -94,14 +110,7 @@ describe('DatabasePrerequisites', () => {
   it('has no details toggle when every check is non-passing', () => {
     renderTyped(DatabasePrerequisites, {
       props: {
-        prerequisites: {
-          all_passed: false,
-          can_start_migration: false,
-          critical_failures: 1,
-          warnings: 0,
-          checked_at: '2026-10-28T12:00:00Z',
-          checks: [check('failed_check', 'failed')],
-        },
+        prerequisites: response([check('failed_check', 'failed')], 1, 0),
         onRefresh: async () => {},
       },
     });
@@ -176,14 +185,7 @@ describe('DatabasePrerequisites', () => {
   it('labels Retry as busy while a retry with stale data is loading', () => {
     renderTyped(DatabasePrerequisites, {
       props: {
-        prerequisites: {
-          all_passed: false,
-          can_start_migration: false,
-          critical_failures: 1,
-          warnings: 0,
-          checked_at: '2026-10-28T12:00:00Z',
-          checks: [check('failed_check', 'failed')],
-        },
+        prerequisites: response([check('failed_check', 'failed')], 1, 0),
         error: 'Request timeout.',
         isLoading: true,
         onRefresh: async () => {},
@@ -223,14 +225,7 @@ describe('DatabasePrerequisites', () => {
   it('leaves focus on Retry when the alert stays mounted', async () => {
     renderTyped(DatabasePrerequisites, {
       props: {
-        prerequisites: {
-          all_passed: false,
-          can_start_migration: false,
-          critical_failures: 1,
-          warnings: 0,
-          checked_at: '2026-10-28T12:00:00Z',
-          checks: [check('failed_check', 'failed')],
-        },
+        prerequisites: response([check('failed_check', 'failed')], 1, 0),
         error: 'Request timeout.',
         onRefresh: () => new Promise<void>(() => {}),
       },
