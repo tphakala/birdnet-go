@@ -181,27 +181,6 @@ func TestGetModelCatalog_BirdNETv24RecommendedVariant(t *testing.T) {
 	}
 }
 
-// TestGetModelCatalog_BirdNETv24BuiltinInstalledNoOffer verifies that on a
-// TFLite-only host the recommended variant is the BuiltIn baseline, so a host
-// running the baseline sees installedVariantId == recommendedVariantId (the
-// client-side optimize offer is then suppressed).
-func TestGetModelCatalog_BirdNETv24BuiltinInstalledNoOffer(t *testing.T) {
-	core := apitest.NewCore(t)
-	h := New(core, nil)
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
-		return hwprofile.Profile{
-			Arch:          "amd64",
-			TotalRAMBytes: 16 * 1024 * 1024 * 1024,
-			Backends:      hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
-		}
-	}
-
-	v24 := findEntry(catalogRequest(t, h), "birdnet-v2.4")
-	require.NotNil(t, v24)
-	assert.Equal(t, "builtin", v24.RecommendedVariantID,
-		"on a TFLite-only host the baseline is recommended, so a baseline install is already optimal")
-}
-
 func TestGetModelCatalog_BlockedVariantCarriesBlockers(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core, nil)

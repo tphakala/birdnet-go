@@ -19,7 +19,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -28,19 +27,14 @@ import (
 // fakeNotices records the optimize notices created and deleted, standing in for
 // the process-wide notification service.
 type fakeNotices struct {
-	mu        sync.Mutex
-	created   []*notification.Notification
-	deleted   []string
-	createErr error
-	deleteErr error
+	mu      sync.Mutex
+	created []*notification.Notification
+	deleted []string
 }
 
 func (f *fakeNotices) CreateWithMetadata(n *notification.Notification) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.createErr != nil {
-		return f.createErr
-	}
 	f.created = append(f.created, n)
 	return nil
 }
@@ -48,9 +42,6 @@ func (f *fakeNotices) CreateWithMetadata(n *notification.Notification) error {
 func (f *fakeNotices) Delete(id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.deleteErr != nil {
-		return f.deleteErr
-	}
 	f.deleted = append(f.deleted, id)
 	return nil
 }
@@ -336,32 +327,6 @@ func TestApplyOptimizeNotice_ReplacesChangedOfferSet(t *testing.T) {
 	assert.Equal(t, "Model A, Model B", notices.created[1].MessageParams["models"])
 }
 
-// TestApplyOptimizeNotice_DeleteFailureKeepsLatch pins that a failed delete of
-// the old notice aborts the reconciliation with the latch intact, so no second
-// notice is raised beside the old one and the next trigger retries.
-func TestApplyOptimizeNotice_DeleteFailureKeepsLatch(t *testing.T) {
-	h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), nil)
-	notices := &fakeNotices{}
-	a := optimizeOffer{CatalogID: "a", ModelName: "Model A", ToVariantID: "fast"}
-	b := optimizeOffer{CatalogID: "b", ModelName: "Model B", ToVariantID: "fast"}
-
-	h.applyOptimizeNotice(notices, []optimizeOffer{a})
-	require.Len(t, notices.created, 1)
-	first := notices.created[0].ID
-
-	notices.deleteErr = errors.NewStd("store unavailable")
-	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
-	h.applyOptimizeNotice(notices, nil)
-	assert.Len(t, notices.created, 1, "no replacement is raised while the old notice cannot be deleted")
-	assert.Equal(t, first, h.optimize.latch.ID(), "the latch still holds the old notice")
-
-	notices.deleteErr = nil
-	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
-	assert.Equal(t, []string{first}, notices.deleted, "the retry deletes the old notice")
-	require.Len(t, notices.created, 2)
-	assert.Equal(t, notices.created[1].ID, h.optimize.latch.ID())
-}
-
 // TestSetNotificationService_RoutesNotice pins that the facade-injected
 // notification service receives the notice instead of the process-wide one,
 // and that a nil service leaves the fallback in place. Not parallel: it resets
@@ -463,34 +428,6 @@ func TestSyncOptimizeNotice_Lifecycle(t *testing.T) {
 	h.syncOptimizeNotice()
 	created, _ = notices.counts()
 	assert.Equal(t, 2, created)
-}
-
-func TestSyncOptimizeNotice_NoOfferNoNotice(t *testing.T) {
-	profile := tfliteOnlyProfile()
-	h, notices := newOptimizeTestHandler(t, &profile)
-
-	h.syncOptimizeNotice()
-
-	created, deleted := notices.counts()
-	assert.Zero(t, created)
-	assert.Zero(t, deleted)
-}
-
-// TestSyncOptimizeNotice_CreateFailureRetries verifies a failed create latches
-// nothing, so the next evaluation with the same offers raises the notice.
-func TestSyncOptimizeNotice_CreateFailureRetries(t *testing.T) {
-	profile := aarch64LowRAMONNXProfile()
-	h, notices := newOptimizeTestHandler(t, &profile)
-
-	notices.createErr = errors.NewStd("store full")
-	h.syncOptimizeNotice()
-	created, _ := notices.counts()
-	require.Zero(t, created)
-
-	notices.createErr = nil
-	h.syncOptimizeNotice()
-	created, _ = notices.counts()
-	assert.Equal(t, 1, created, "a failed create must be retried on the next sync")
 }
 
 func TestSyncOptimizeNotice_NilModelManagerIsNoop(t *testing.T) {

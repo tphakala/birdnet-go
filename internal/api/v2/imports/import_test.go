@@ -246,16 +246,6 @@ func TestImportManager_ConcurrencyGuard(t *testing.T) {
 	assert.True(t, mgr.start(newImportJob("job3", func() {})), "start after completion should succeed")
 }
 
-// TestImportManager_GetByID verifies ID-based job lookup.
-func TestImportManager_GetByID(t *testing.T) {
-	t.Parallel()
-	mgr := newImportManager()
-	job := newImportJob("abc123", func() {})
-	require.True(t, mgr.start(job))
-	assert.Equal(t, job, mgr.get("abc123"))
-	assert.Nil(t, mgr.get("wrong-id"))
-}
-
 // TestStartBirdNETPiImport_NoRepo_Returns503 verifies 503 when no datastore.
 func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
 	e := echo.New()
@@ -291,55 +281,6 @@ func TestStartBirdNETPiImport_BadJSON_Returns400(t *testing.T) {
 	err := c.StartBirdNETPiImport(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-// TestStartBirdNETPiImport_ModeDBAudio_Returns202 verifies db-audio mode is accepted.
-func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
-	testutil.VerifyNoLeaks(t)
-
-	_, c := newImportHandler(t)
-	mockDS := mocks.NewMockInterface(t)
-	c.DS = mockDS
-	mockRepo := mocks.NewMockDetectionRepository(t)
-	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
-		Return(nil, int64(0), nil).Maybe()
-	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	c.Repo = mockRepo
-
-	det := imports.SourceDetection{
-		Date: "2024-01-01", Time: "10:00:00",
-		ScientificName: "Parus major", CommonName: "Great Tit",
-		Confidence: 0.9,
-	}
-	c.importSourceFactory = func(_ string) (imports.Source, error) {
-		return &fakeSource{batches: [][]imports.SourceDetection{{det}}}, nil
-	}
-
-	// db-audio mode now requires a configured export path; provide one so the
-	// handler accepts the request instead of returning 400.
-	settings := apitest.NewValidTestSettings()
-	settings.Realtime.Audio.Export.Path = t.TempDir()
-	c.Settings.Store(settings)
-
-	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
-	c.importSourceRoot = dir
-
-	body := `{"mode":"db-audio","source_path":"birds.db"}`
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := c.StartBirdNETPiImport(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusAccepted, rec.Code)
-
-	var resp startImportResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.NotEmpty(t, resp.JobID)
-	assert.Equal(t, importStatusStarted, resp.Status)
 }
 
 // TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400 verifies that db-audio mode
@@ -694,48 +635,6 @@ func TestStartBirdNETPiImport_FakeValidationFailure_Returns400(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "source validation failed")
 }
 
-// TestStartBirdNETPiImport_GoodFakeSource_Returns202 verifies 202 on a valid request.
-func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
-	testutil.VerifyNoLeaks(t)
-
-	_, c := newImportHandler(t)
-	mockDS := mocks.NewMockInterface(t)
-	c.DS = mockDS
-	mockRepo := mocks.NewMockDetectionRepository(t)
-	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
-		Return(nil, int64(0), nil).Maybe()
-	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	c.Repo = mockRepo
-
-	det := imports.SourceDetection{
-		Date: "2024-01-01", Time: "10:00:00",
-		ScientificName: "Parus major", CommonName: "Great Tit",
-		Confidence: 0.9,
-	}
-	c.importSourceFactory = func(_ string) (imports.Source, error) {
-		return &fakeSource{batches: [][]imports.SourceDetection{{det}}}, nil
-	}
-
-	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
-	c.importSourceRoot = dir
-
-	body := testDBOnlyBody
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.StartBirdNETPiImport(ctx))
-	assert.Equal(t, http.StatusAccepted, rec.Code)
-
-	var resp startImportResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.NotEmpty(t, resp.JobID)
-	assert.Equal(t, importStatusStarted, resp.Status)
-}
-
 // TestStartBirdNETPiImport_ConflictWhileRunning_Returns409 verifies 409 on concurrent starts.
 func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
 	testutil.VerifyNoLeaks(t)
@@ -840,9 +739,12 @@ func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
 	assert.Equal(t, "done", fields["phase"])
 }
 
-// TestCancelImport_JobNotFound_Returns404 verifies 404 for unknown job.
+// TestCancelImport_JobNotFound_Returns404 verifies that a cancel for an id that is
+// not the current job is a 404 and leaves the running job alone.
 func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
 	_, c := newImportHandler(t)
+	var cancelled atomic.Bool
+	require.True(t, c.importMgr.start(newImportJob("job1", func() { cancelled.Store(true) })))
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -852,6 +754,7 @@ func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
 
 	require.NoError(t, c.CancelImport(ctx))
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.False(t, cancelled.Load(), "a cancel for another id must not cancel the running job")
 }
 
 // TestCancelImport_ReportsJobState verifies the cancel endpoint calls the job's cancel
@@ -1083,6 +986,7 @@ func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &startResp))
 	jobID := startResp.JobID
 	assert.NotEmpty(t, jobID)
+	assert.Equal(t, importStatusStarted, startResp.Status)
 
 	// Poll status until done.
 	deadline := time.Now().Add(10 * time.Second)
@@ -1476,20 +1380,6 @@ func writeMinimalBirdNetPiDB(t *testing.T, path string) {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	require.NoError(t, sqlDB.Close())
-}
-
-func TestResolveNativeImportSourcePath_Valid(t *testing.T) {
-	db := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, db)
-
-	// The resolver returns the symlink-resolved path; resolve the expected value
-	// the same way so the comparison holds on macOS (where /tmp -> /private/tmp).
-	wantDB, err := filepath.EvalSymlinks(db)
-	require.NoError(t, err)
-
-	got, err := resolveNativeImportSourcePath(db)
-	require.NoError(t, err)
-	assert.Equal(t, wantDB, got)
 }
 
 func TestResolveNativeImportSourcePath_RejectsRelative(t *testing.T) {

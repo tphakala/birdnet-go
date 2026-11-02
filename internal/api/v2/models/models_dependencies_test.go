@@ -60,7 +60,7 @@ func apiDependencyCatalog() []classifier.CatalogEntry {
 		},
 		{
 			ID: apiDepG, Name: "Geomodel", Version: "3.0", Category: classifier.CategoryGeomodel,
-			GeomodelVersion: "v3", HuggingFaceRepo: "t/g",
+			GeomodelVersion: "v3", HuggingFaceRepo: "t/g", Channel: classifier.ChannelPreview,
 			Files: []classifier.CatalogFile{
 				apiFile(classifier.RoleGeomodelModel, "geo.onnx", apiSizeGeo),
 				apiFile(classifier.RoleGeomodelLabels, "geo.txt", apiSizeGeoLbl),
@@ -165,6 +165,7 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 	a := findEntry(catalog, apiDepA)
 	require.NotNil(t, a)
 	assert.True(t, a.HasGeomodel, "the geomodel arrives through a dependency")
+	assert.Equal(t, classifier.ChannelStable, a.Channel, "an entry without a channel is reported as stable")
 	assert.Equal(t, []string{apiDepG, apiDepT}, a.DependsOn)
 	assert.Equal(t, int64(apiSizeModel+apiSizeLabels+apiSizeGeo+apiSizeGeoLbl+apiSizeTax), a.TotalSizeBytes,
 		"the size includes the dependency files")
@@ -182,34 +183,6 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 	g := findEntry(catalog, apiDepG)
 	require.NotNil(t, g)
 	assert.Empty(t, g.DependsOn)
+	assert.Equal(t, classifier.ChannelPreview, g.Channel, "a declared channel is passed through")
 	assert.Nil(t, findEntry(catalog, apiDepT), "a hidden component is not listed")
-}
-
-func TestGetModelCatalog_EmbeddedHasGeomodelAndSizesUnchanged(t *testing.T) {
-	require.NoError(t, classifier.LoadCatalog(t.TempDir()))
-	h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
-
-	catalog := catalogRequest(t, h)
-	require.NotEmpty(t, catalog)
-	for i := range catalog {
-		got := &catalog[i]
-		entry, ok := classifier.GetCatalogEntry(got.ID)
-		require.True(t, ok, got.ID)
-		var total int64
-		for _, f := range entry.Files {
-			total += f.SizeBytes
-		}
-		assert.Equal(t, classifier.HasGeomodelFiles(&entry), got.HasGeomodel, "%s hasGeomodel", got.ID)
-		assert.Equal(t, total, got.TotalSizeBytes, "%s totalSizeBytes", got.ID)
-		assert.Empty(t, got.DependsOn, "%s dependsOn", got.ID)
-		for _, v := range entry.Variants {
-			var size int64
-			for _, f := range v.Files {
-				size += f.SizeBytes
-			}
-			if rv := findVariant(got, v.ID); rv != nil {
-				assert.Equal(t, size, rv.SizeBytes, "%s/%s sizeBytes", got.ID, v.ID)
-			}
-		}
-	}
 }

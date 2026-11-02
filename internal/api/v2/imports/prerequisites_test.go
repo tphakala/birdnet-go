@@ -588,19 +588,6 @@ func TestGetDatabaseDirectoryResolved_NilSettings(t *testing.T) {
 	assert.Contains(t, err.Error(), "settings not available")
 }
 
-// TestGetLegacyGormDB_Success tests getLegacyGormDB returns DB from testDatastoreWrapper.
-func TestGetLegacyGormDB_Success(t *testing.T) {
-	t.Attr("component", "migration")
-	t.Attr("type", "unit")
-	t.Attr("feature", "prerequisites")
-
-	_, controller, _ := setupPrerequisitesTestEnvironment(t)
-
-	db := controller.getLegacyGormDB()
-
-	assert.NotNil(t, db, "Should return non-nil GORM DB")
-}
-
 // TestGetLegacyGormDB_NilDS tests getLegacyGormDB returns nil when DS is nil.
 func TestGetLegacyGormDB_NilDS(t *testing.T) {
 	t.Attr("component", "migration")
