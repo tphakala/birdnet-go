@@ -204,6 +204,16 @@ const cases: StartStateCase[] = [
     absent: [notMet, 'Record Count', 'Optional Tweak'],
     tone: 'text-[var(--text-error)]',
   },
+  ...(['running', 'failed'] as const).map((status): StartStateCase => ({
+    name: `a result that allows the start but whose run is ${status}`,
+    badge: 'system.database.migration.status.notReady',
+    prerequisites: { ...allowedPrerequisites, checks: [], status },
+    loading: false,
+    error: null,
+    helper: notMet,
+    absent: [],
+    tone: 'text-[var(--text-error)]',
+  })),
   {
     name: 'blocked with no failing check listed',
     badge: 'system.database.migration.status.notReady',

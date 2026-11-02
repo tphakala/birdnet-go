@@ -22,6 +22,7 @@ vi.mock('$lib/utils/ReconnectingEventSource', () => ({
 }));
 
 import { ApiError } from '$lib/utils/api';
+import { connectionState } from '$lib/stores/connectionState.svelte';
 import DatabaseDashboard from './DatabaseDashboard.svelte';
 import { renderTyped } from '../../../../test/render-helpers';
 
@@ -371,18 +372,104 @@ describe('DatabaseDashboard prerequisites run', () => {
 
       await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: false }));
       await waitFor(() => expect(startBlocked()).toBe(true));
-      expect(polls).toBe(0);
 
       await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
-      expect(polls).toBe(1);
+      expect(polls).toBeGreaterThanOrEqual(1);
       expect(startBlocked()).toBe(true);
 
       await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
-      expect(polls).toBe(2);
       await waitFor(() => expect(startBlocked()).toBe(false));
 
+      // Polling stops once the run is completed
+      const settledPolls = polls;
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS * 2);
+      expect(polls).toBe(settledPolls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * Serves a running run from the POST and each GET from outcomes in turn, the last one
+   * repeating. Returns the number of polls made so far.
+   */
+  function serveRun(outcomes: unknown[]): () => number {
+    let polls = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url === STATUS_URL) return Promise.resolve(idleStatus);
+      if (url !== PREREQUISITES_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+      const outcome = outcomes[Math.min(polls, outcomes.length - 1)];
+      polls += 1;
+      return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome);
+    });
+    apiPost.mockImplementation((url: string) =>
+      url === RUN_URL
+        ? Promise.resolve(runningSnapshot(0))
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    return () => polls;
+  }
+
+  it('keeps polling after a poll fails and recovers when it succeeds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const polls = serveRun([apiError('Status unavailable', 500), startablePrerequisites]);
+
+      renderTyped(DatabaseDashboard);
+      await waitFor(() => expect(startBlocked()).toBe(true));
+
       await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
-      expect(polls).toBe(2);
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent('Status unavailable')
+      );
+      expect(startBlocked()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      await waitFor(() => expect(startBlocked()).toBe(false));
+      expect(polls()).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips polls while offline and resumes when back online', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const polls = serveRun([startablePrerequisites]);
+
+      renderTyped(DatabaseDashboard);
+      await waitFor(() => expect(startBlocked()).toBe(true));
+      connectionState.isOnline = false;
+
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS * 3);
+      expect(polls()).toBe(0);
+
+      connectionState.isOnline = true;
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      await waitFor(() => expect(startBlocked()).toBe(false));
+      expect(polls()).toBeGreaterThanOrEqual(1);
+    } finally {
+      connectionState.isOnline = true;
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling when the dashboard is unmounted', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const polls = serveRun([runningSnapshot(1)]);
+
+      const { unmount } = renderTyped(DatabaseDashboard);
+      await waitFor(() => expect(startBlocked()).toBe(true));
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      expect(polls()).toBeGreaterThanOrEqual(1);
+
+      unmount();
+      const atUnmount = polls();
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS * 3);
+
+      expect(polls()).toBe(atUnmount);
     } finally {
       vi.useRealTimers();
     }
@@ -458,5 +545,9 @@ describe('DatabaseDashboard prerequisites run', () => {
     });
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(expected));
     expect(startBlocked()).toBe(true);
+    // The reason under Start comes from the dashboard, not from the panel's own alert
+    expect(
+      screen.getByText(t('system.database.migration.progress.prerequisitesUnavailable'))
+    ).toBeInTheDocument();
   });
 });
