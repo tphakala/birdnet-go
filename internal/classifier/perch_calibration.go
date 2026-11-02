@@ -44,10 +44,11 @@ type perchCalibrationLookup struct {
 //
 // The key is the SHA-256 of the labels bytes: regional labels are per tile, and
 // the model and labels files of a Perch install always come from one variant
-// (validateLabelCount rejects a mismatch). When the raw bytes miss, the
-// canonical form of the parsed labels (one label per LF-terminated line, the
-// layout of the published regional labels files) is tried, which covers copies
-// that were resaved with CRLF line endings or a trailing blank line.
+// (validateLabelCount rejects a mismatch). Both catalogs are searched with the
+// raw hash and the hash of the canonical form of the parsed labels (one label
+// per LF-terminated line, the layout of the published regional labels files),
+// which covers copies that were resaved with CRLF line endings or a trailing
+// blank line.
 //
 // The built-in catalog is searched before the active one, so a user-edited
 // model-catalog.json can neither override a built-in tile's constant nor attach
@@ -59,12 +60,15 @@ func perchScoreCalibration(labelData []byte, labels []string, modelPath string) 
 	out := perchCalibrationLookup{labelsSHA256: rawHash}
 	hashes := []string{rawHash}
 
-	catalogs := [][]CatalogEntry{EmbeddedCatalog, ActiveCatalog()}
-	if !perchLabelsInCatalogs(catalogs, hashes) && len(labels) > 0 {
+	// The canonical hash is always added, so the built-in catalog is searched with
+	// the same hashes as the active one and cannot lose to it on a resaved file.
+	if len(labels) > 0 {
 		if canonical := labelsSHA256Hex([]byte(strings.Join(labels, "\n") + "\n")); canonical != rawHash {
 			hashes = append(hashes, canonical)
 		}
 	}
+
+	catalogs := [][]CatalogEntry{EmbeddedCatalog, ActiveCatalog()}
 
 	for _, entries := range catalogs {
 		matched := perchLabelMatches(entries, hashes)
@@ -87,14 +91,6 @@ func perchScoreCalibration(labelData []byte, labels []string, modelPath string) 
 		out.status = perchCalibrationFullModel
 	}
 	return out
-}
-
-// perchLabelsInCatalogs reports whether any Perch v2 variant of the catalogs has
-// a labels file with one of the hashes.
-func perchLabelsInCatalogs(catalogs [][]CatalogEntry, hashes []string) bool {
-	return slices.ContainsFunc(catalogs, func(entries []CatalogEntry) bool {
-		return len(perchLabelMatches(entries, hashes)) > 0
-	})
 }
 
 // perchLabelMatches returns the Perch v2 variants of entries whose labels-role
