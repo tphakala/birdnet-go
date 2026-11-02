@@ -208,8 +208,17 @@ func setV2OnlyMode(t *testing.T, on bool) {
 }
 
 // setMigrationWorkerCancel installs the migration worker's cancel function for
-// one test.
+// one test through the production setter, SetMigrationWorkerCancel, and
+// restores the previous function when the test ends. It follows the same rules
+// as setMigrationGlobal.
 func setMigrationWorkerCancel(t *testing.T, cancel context.CancelFunc) {
 	t.Helper()
-	setMigrationGlobal(t, &migrationWorkerCancel, cancel)
+	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)
+
+	migrationMu.RLock()
+	prev := migrationWorkerCancel
+	migrationMu.RUnlock()
+
+	SetMigrationWorkerCancel(cancel)
+	t.Cleanup(func() { SetMigrationWorkerCancel(prev) })
 }
