@@ -69,7 +69,7 @@ type gormDBProvider interface {
 
 // integrityResulter is implemented by the legacy SQLite store, which caches the
 // result of its startup and daily PRAGMA quick_check (the same consumer-side
-// pattern as internal/system/diagnostics.go). It is asserted only outside
+// pattern as internal/api/v2/system/diagnostics.go). It is asserted only outside
 // v2-only mode, where the datastore's IntegrityResult can run a scan.
 type integrityResulter interface {
 	IntegrityResult() (string, bool)
@@ -369,6 +369,8 @@ func (c *Handler) checkLegacyAccessible() PrerequisiteCheck {
 // and corruption is not latched, which avoids re-reading the whole file. Any
 // other state (no cache, an error string from the daily check, latched
 // corruption) runs PRAGMA quick_check live, which also confirms real corruption.
+// The cached result can be up to a day old, so corruption that appeared since the
+// last scan is not detected here.
 // Scans all result rows since quick_check can return multiple errors.
 func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 	check := PrerequisiteCheck{
