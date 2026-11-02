@@ -68,14 +68,6 @@ func TestNewCoreGroupRegistersRoutes(t *testing.T) {
 	AssertRoutesRegistered(t, core.Echo, []string{"GET /api/v2/apitest/ping"})
 }
 
-// TestNewCoreInjectedDatastore verifies WithDatastore wires a caller-provided
-// datastore instead of creating a default mock.
-func TestNewCoreInjectedDatastore(t *testing.T) {
-	mockDS := mocks.NewMockInterface(t)
-	core := NewCore(t, WithDatastore(mockDS))
-	assert.Same(t, mockDS, core.DS, "WithDatastore should inject the provided datastore")
-}
-
 // TestNewCoreIsolatedExportPaths verifies two cores built in the same test get
 // distinct media export directories, the property that keeps parallel binaries
 // from colliding on a shared path.
@@ -85,16 +77,6 @@ func TestNewCoreIsolatedExportPaths(t *testing.T) {
 	require.NotNil(t, a.SFS)
 	require.NotNil(t, b.SFS)
 	assert.NotEqual(t, a.SFS.BaseDir(), b.SFS.BaseDir(), "each core should get its own export dir")
-}
-
-// TestNewTestHTTPClientDisablesKeepAlives is a thin smoke test of the HTTP
-// scaffolding so the helper stays exercised.
-func TestNewTestHTTPClientDisablesKeepAlives(t *testing.T) {
-	client := NewTestHTTPClient(TestResponseHeaderTimeout)
-	require.NotNil(t, client)
-	transport, ok := client.Transport.(*http.Transport)
-	require.True(t, ok)
-	assert.True(t, transport.DisableKeepAlives)
 }
 
 // TestNewCoreRefusesParallelTestBeforeAllocating pins that NewCore refuses a

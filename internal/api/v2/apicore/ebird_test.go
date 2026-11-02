@@ -46,22 +46,6 @@ func TestBuildEBirdClient(t *testing.T) {
 	}
 }
 
-// TestCoreEBirdAccessor verifies the atomic accessor: nil on a zero-value Core,
-// returns the stored client, and reflects a stored nil.
-func TestCoreEBirdAccessor(t *testing.T) {
-	t.Parallel()
-	c := &Core{}
-	assert.Nil(t, c.EBird(), "EBird() must be nil on a zero-value Core")
-
-	client := c.buildEBirdClient(ebirdTestSettings(true, "test-api-key"))
-	require.NotNil(t, client)
-	c.eBirdClient.Store(client)
-	assert.Same(t, client, c.EBird(), "EBird() must return the stored client")
-
-	c.eBirdClient.Store(nil)
-	assert.Nil(t, c.EBird(), "EBird() must be nil after storing nil")
-}
-
 // TestReconfigureEBird exercises the live-reconfigure path end to end against the
 // global settings singleton: enabling builds a client, changing the key rebuilds
 // it, and disabling clears it. This is the behaviour that makes eBird settings

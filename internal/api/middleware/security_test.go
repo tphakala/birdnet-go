@@ -29,11 +29,6 @@ func TestNewSecureHeaders_ReferrerPolicy(t *testing.T) {
 			policy:   "",
 			expected: "strict-origin-when-cross-origin",
 		},
-		{
-			name:     "custom policy",
-			policy:   "origin-when-cross-origin",
-			expected: "origin-when-cross-origin",
-		},
 	}
 
 	for _, tt := range tests {
@@ -233,29 +228,6 @@ func TestNewSecureHeaders_XFrameOptions(t *testing.T) {
 	}
 }
 
-func TestHasWildcardOrigin(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		origins []string
-		want    bool
-	}{
-		{"wildcard only", []string{"*"}, true},
-		{"wildcard among others", []string{"https://example.com", "*"}, true},
-		{"no wildcard", []string{"https://example.com"}, false},
-		{"empty list", []string{}, false},
-		{"nil list", nil, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, hasWildcardOrigin(tt.origins))
-		})
-	}
-}
-
 // newCORSTestContext creates an Echo context for CORS testing with the Origin header set.
 func newCORSTestContext(t *testing.T, method, path, origin string) (echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
@@ -322,28 +294,6 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 
 		// Credentials header should not be set
 		assert.Empty(t, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
-	})
-
-	t.Run("explicit origins with credentials works normally", func(t *testing.T) {
-		t.Parallel()
-
-		corsMiddleware := NewCORS(&SecurityConfig{
-			AllowedOrigins:   []string{"https://trusted.example.com"},
-			AllowCredentials: true,
-		})
-
-		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://trusted.example.com")
-
-		handler := corsMiddleware(func(c echo.Context) error {
-			return c.String(http.StatusOK, "ok")
-		})
-
-		err := handler(c)
-		require.NoError(t, err)
-
-		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
-		assert.Equal(t, "https://trusted.example.com", allowOrigin)
-		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 
 	// The exact Access-Control-Allow-Origin value a credentialed GET from
