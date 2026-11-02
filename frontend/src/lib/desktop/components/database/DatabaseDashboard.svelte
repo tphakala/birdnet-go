@@ -43,6 +43,8 @@
   const PREREQUISITES_POLL_INTERVAL_MS = 2000;
   /** Error key of a start refused because no usable prerequisites run exists. */
   const PREREQUISITES_NOT_READY_KEY = 'errors.migration.prerequisitesNotReady';
+  /** Error key of a start refused because a check failed when it was re-run. */
+  const PREFLIGHT_FAILED_KEY = 'errors.migration.preFlightFailed';
 
   // --- Overview state ---
   let overview = $state<DatabaseOverviewResponse | null>(null);
@@ -282,10 +284,13 @@
     } catch (e) {
       actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed');
-      // A migration that started anyway must show, and a missing or stale run is redone
+      // A migration that started anyway must show, and a missing or stale run is redone.
+      // A refused check forces a new run so the panel shows it instead of the old pass.
       await fetchMigrationStatus();
       if (e instanceof ApiError && e.errorKey === PREREQUISITES_NOT_READY_KEY) {
         await runPrerequisites(false);
+      } else if (e instanceof ApiError && e.errorKey === PREFLIGHT_FAILED_KEY) {
+        await runPrerequisites(true);
       }
     } finally {
       startLoading = false;

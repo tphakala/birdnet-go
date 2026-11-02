@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { t } from '$lib/i18n';
-import type { MigrationStatus, PrerequisitesResponse } from '$lib/types/migration';
+import type {
+  MigrationStatus,
+  PrerequisiteCheck,
+  PrerequisitesResponse,
+} from '$lib/types/migration';
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -194,6 +198,65 @@ describe('DatabaseDashboard migration errors', () => {
     );
 
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: false }));
+  });
+
+  it('forces a new run when the start finds a failed check, and shows it', async () => {
+    const user = userEvent.setup();
+    const failedCheck = {
+      id: 'disk_space',
+      name: 'Disk Space',
+      description: '',
+      status: 'failed',
+      message: 'Only 0.1GB available',
+      severity: 'critical',
+    } satisfies PrerequisiteCheck;
+    const blocked = {
+      ...startablePrerequisites,
+      all_passed: false,
+      can_start_migration: false,
+      critical_failures: 1,
+      checks: [failedCheck],
+      run_id: 2,
+    } satisfies PrerequisitesResponse;
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    const refused = apiError('Pre-migration check failed: Disk Space', 400);
+    refused.errorKey = 'errors.migration.preFlightFailed';
+    apiPost.mockImplementation((url: string) => {
+      if (url !== RUN_URL) return Promise.reject(refused);
+      runs += 1;
+      return Promise.resolve(runs === 1 ? startablePrerequisites : blocked);
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: true }));
+    // The real failing check replaces the stale all-passed run, and Start follows it
+    expect(await screen.findByText('Disk Space:')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('button', { name: t('system.database.migration.actions.start') })
+          .some(b => b.getAttribute('aria-disabled') === 'true')
+      ).toBe(true)
+    );
+    // The refusal stays on screen while and after the re-run
+    expect(screen.getByText('Pre-migration check failed: Disk Space')).toBeInTheDocument();
   });
 
   it('runs the prerequisites again when the migration state returns to idle', async () => {
