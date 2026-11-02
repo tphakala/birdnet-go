@@ -5340,6 +5340,7 @@
       "notConfigured": "Migrering er ikke konfigureret",
       "preFlightFailed": "Forhåndskontrol mislykkedes",
       "invalidBody": "Ugyldig forespørgselsindhold",
+      "prerequisitesInvalidBody": "Ugyldig forespørgselsindhold",
       "recordCountFailed": "Kunne ikke bestemme det samlede antal poster",
       "startFailed": "Kunne ikke starte migrering",
       "initFailed": "Kunne ikke initialisere migrering",

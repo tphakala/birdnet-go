@@ -5340,6 +5340,7 @@
       "notConfigured": "Migracja nie jest skonfigurowana",
       "preFlightFailed": "Wstępne sprawdzenie nie powiodło się",
       "invalidBody": "Nieprawidłowa treść żądania",
+      "prerequisitesInvalidBody": "Nieprawidłowa treść żądania",
       "recordCountFailed": "Nie udało się określić łącznej liczby rekordów",
       "startFailed": "Nie udało się rozpocząć migracji",
       "initFailed": "Nie udało się zainicjalizować migracji",

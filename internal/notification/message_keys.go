@@ -141,10 +141,12 @@ const (
 	MsgErrMigrationNotConfigured = "errors.migration.notConfigured"
 	MsgErrMigrationPreFlight     = "errors.migration.preFlightFailed"
 	MsgErrMigrationInvalidBody   = "errors.migration.invalidBody"
-	MsgErrMigrationRecordCount   = "errors.migration.recordCountFailed"
-	MsgErrMigrationStartFailed   = "errors.migration.startFailed"
-	MsgErrMigrationInitFailed    = "errors.migration.initFailed"
-	MsgErrMigrationResumeFailed  = "errors.migration.resumeFailed"
+	// MsgErrMigrationPrereqInvalidBody is returned for a malformed prerequisites run request body.
+	MsgErrMigrationPrereqInvalidBody = "errors.migration.prerequisitesInvalidBody"
+	MsgErrMigrationRecordCount       = "errors.migration.recordCountFailed"
+	MsgErrMigrationStartFailed       = "errors.migration.startFailed"
+	MsgErrMigrationInitFailed        = "errors.migration.initFailed"
+	MsgErrMigrationResumeFailed      = "errors.migration.resumeFailed"
 
 	// Legacy cleanup errors
 	MsgErrCleanupNoLegacyDB      = "errors.cleanup.noLegacyDB"

@@ -5340,6 +5340,7 @@
       "notConfigured": "Migrācija nav konfigurēta",
       "preFlightFailed": "Pirms-lidojuma pārbaudes neizdevās",
       "invalidBody": "Nederīgs pieprasījuma saturs",
+      "prerequisitesInvalidBody": "Nederīgs pieprasījuma saturs",
       "recordCountFailed": "Neizdevās noteikt kopējo ierakstu skaitu",
       "startFailed": "Neizdevās sākt migrāciju",
       "initFailed": "Neizdevās inicializēt migrāciju",

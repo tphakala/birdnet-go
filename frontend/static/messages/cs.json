@@ -5340,6 +5340,7 @@
       "notConfigured": "Migrace není nakonfigurována",
       "preFlightFailed": "Předběžné kontroly selhaly",
       "invalidBody": "Neplatné tělo požadavku",
+      "prerequisitesInvalidBody": "Neplatné tělo požadavku",
       "recordCountFailed": "Celkový počet záznamů se nepodařilo určit",
       "startFailed": "Migraci se nepodařilo spustit",
       "initFailed": "Migraci se nepodařilo inicializovat",

@@ -227,6 +227,7 @@ func (c *Handler) RegisterMigrationRoutes(g *echo.Group) {
 	// Status and prerequisites have special handling (e.g., v2-only mode) and don't require the state manager
 	protectedGroup.GET("/status", c.GetMigrationStatus)
 	protectedGroup.GET("/prerequisites", c.GetPrerequisites)
+	protectedGroup.POST("/prerequisites/run", c.RunPrerequisites)
 
 	// POST operations require the migration state manager to be available
 	smGroup := protectedGroup.Group("", c.requireMigrationStateManager)
@@ -434,7 +435,7 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	worker := getMigrationWorker()
 
 	// Run pre-flight checks
-	if err := c.runPreflightChecks(); err != nil {
+	if err := c.runPreflightChecks(c.lifecycleContext()); err != nil {
 		c.LogErrorIfEnabled("Pre-flight checks failed",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
@@ -761,10 +762,10 @@ func (c *Handler) RollbackMigration(ctx echo.Context) error {
 }
 
 // runPreflightChecks verifies the system is ready for migration.
-// This runs the same critical checks as GetPrerequisites and fails if any are not passed.
-func (c *Handler) runPreflightChecks() error {
+// This runs the same critical checks as the prerequisites run and fails if any are not passed.
+func (c *Handler) runPreflightChecks(ctx context.Context) error {
 	// Run all critical prerequisite checks
-	checks := c.runCriticalPrerequisiteChecks()
+	checks := c.runCriticalPrerequisiteChecks(ctx)
 
 	// Check for any failures
 	for _, check := range checks {
@@ -776,41 +777,57 @@ func (c *Handler) runPreflightChecks() error {
 	return nil
 }
 
-// runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
-// This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
-// It also records the outcome in the migration_prereq telemetry tag. In the MySQL branch the
-// server version check runs first, so the tag names it when the server is unsupported.
-func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
-	checks := make([]PrerequisiteCheck, 0, 8)
-
-	// Common critical checks
-	checks = append(checks,
-		c.checkStateIdle(),
-		c.checkDiskSpace(),
-		c.checkLegacyAccessible(),
-	)
+// criticalPrerequisiteSteps lists the checks that must pass before migration,
+// in run order. In the MySQL branch the server version check runs first, so the
+// telemetry tag names it when the server is unsupported. sink, which may be
+// nil, receives the legacy record count from the record_count step.
+func (c *Handler) criticalPrerequisiteSteps(sink *recordCountSink) []prereqStep {
+	steps := []prereqStep{
+		singleCheckStep(checkIDStateIdle, "Migration State", false, func(context.Context) PrerequisiteCheck { return c.checkStateIdle() }),
+		singleCheckStep(checkIDDiskSpace, "Disk Space", false, func(context.Context) PrerequisiteCheck { return c.checkDiskSpace() }),
+		singleCheckStep(checkIDLegacyAccessible, "Legacy Database", true, c.checkLegacyAccessible),
+	}
 
 	// Database-specific critical checks
 	if c.isUsingMySQL() {
-		checks = append(checks,
-			c.checkMySQLServerVersion(),
-			c.checkMySQLCharset(),
-			c.checkMySQLTableHealth(),
-			c.checkMySQLPermissions(),
+		steps = append(steps,
+			singleCheckStep(checkIDMySQLServerVersion, "Database Server Version", false, c.checkMySQLServerVersion),
+			singleCheckStep(checkIDMySQLCharset, "Database Character Set", false, c.checkMySQLCharset),
+			singleCheckStep(checkIDMySQLTableHealth, "MySQL Table Health", true, c.checkMySQLTableHealth),
+			singleCheckStep(checkIDMySQLPermissions, "MySQL Permissions", true, c.checkMySQLPermissions),
 		)
 	} else {
-		checks = append(checks,
-			c.checkSQLiteIntegrity(),
-			c.checkWritePermission(),
+		steps = append(steps,
+			singleCheckStep(checkIDSQLiteIntegrity, "Database Integrity", true, c.checkSQLiteIntegrity),
+			singleCheckStep(checkIDWritePermission, "Write Permission", false, func(context.Context) PrerequisiteCheck { return c.checkWritePermission() }),
 		)
 	}
 
 	// Record count is also critical
-	checks = append(checks, c.checkRecordCount())
+	steps = append(steps, singleCheckStep(checkIDRecordCount, "Record Count", true, func(ctx context.Context) PrerequisiteCheck {
+		count, check := c.countLegacyRecords(ctx)
+		if sink != nil && check.Status == CheckStatusPassed {
+			sink.count, sink.known = count, true
+		}
+		return check
+	}))
+	return steps
+}
 
-	// Record the outcome for telemetry; this only runs when a user opens the
-	// prerequisites view or starts a migration.
-	telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
+// runCriticalPrerequisiteChecks runs all critical checks that must pass before
+// migration, in order, and returns their results. It records the outcome in the
+// migration_prereq telemetry tag unless ctx ended, so a cancelled run does not
+// overwrite the tag with a cancellation error.
+func (c *Handler) runCriticalPrerequisiteChecks(ctx context.Context) []PrerequisiteCheck {
+	steps := c.criticalPrerequisiteSteps(nil)
+	checks := make([]PrerequisiteCheck, 0, len(steps))
+	for _, step := range steps {
+		checks = append(checks, step.run(ctx)...)
+	}
+
+	if ctx.Err() == nil {
+		telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
+	}
 
 	return checks
 }

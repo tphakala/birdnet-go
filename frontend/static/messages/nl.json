@@ -5340,6 +5340,7 @@
       "notConfigured": "Migratie is niet geconfigureerd",
       "preFlightFailed": "Voorafgaande controles mislukt",
       "invalidBody": "Ongeldige aanvraagbody",
+      "prerequisitesInvalidBody": "Ongeldige aanvraagbody",
       "recordCountFailed": "Kan het totaal aantal records niet bepalen",
       "startFailed": "Kan migratie niet starten",
       "initFailed": "Kan migratie niet initialiseren",

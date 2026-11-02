@@ -5340,6 +5340,7 @@
       "notConfigured": "A migráció nincs konfigurálva",
       "preFlightFailed": "Az előzetes ellenőrzések sikertelenek",
       "invalidBody": "Érvénytelen kérés törzs",
+      "prerequisitesInvalidBody": "Érvénytelen kérés törzs",
       "recordCountFailed": "Az összes rekord meghatározása sikertelen",
       "startFailed": "A migráció indítása sikertelen",
       "initFailed": "A migráció inicializálása sikertelen",

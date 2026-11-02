@@ -5340,6 +5340,7 @@
       "notConfigured": "Migrácia nie je nakonfigurovaná",
       "preFlightFailed": "Predbežné kontroly zlyhali",
       "invalidBody": "Neplatné telo požiadavky",
+      "prerequisitesInvalidBody": "Neplatné telo požiadavky",
       "recordCountFailed": "Nepodarilo sa zistiť celkový počet záznamov",
       "startFailed": "Nepodarilo sa spustiť migráciu",
       "initFailed": "Nepodarilo sa inicializovať migráciu",

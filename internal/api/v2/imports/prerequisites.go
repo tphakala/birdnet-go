@@ -18,6 +18,8 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/gorm"
 )
 
@@ -35,14 +37,26 @@ type PrerequisiteCheck struct {
 	Severity    string `json:"severity"` // critical, warning
 }
 
-// PrerequisitesResponse represents the response for the prerequisites endpoint.
+// PrerequisitesResponse is the snapshot of the prerequisites run returned by
+// the prerequisites endpoints. While a run is in progress Checks holds the
+// checks finished so far and AllPassed and CanStartMigration are false.
 type PrerequisitesResponse struct {
 	AllPassed         bool                `json:"all_passed"`
 	CanStartMigration bool                `json:"can_start_migration"`
 	Checks            []PrerequisiteCheck `json:"checks"`
 	CriticalFailures  int                 `json:"critical_failures"`
 	Warnings          int                 `json:"warnings"`
-	CheckedAt         time.Time           `json:"checked_at"`
+	// CheckedAt is the completion time of the run; zero (omitted) until a run completes.
+	CheckedAt time.Time `json:"checked_at,omitzero"`
+	// Status is one of the PrereqRunStatus values.
+	Status string `json:"status"`
+	// RunID increases with every run started by this process; 0 before the first.
+	RunID     uint64    `json:"run_id"`
+	StartedAt time.Time `json:"started_at,omitzero"`
+	// Progress is present only while Status is running.
+	Progress *PrerequisitesProgress `json:"progress,omitempty"`
+	// Error says why a run ended with Status failed.
+	Error string `json:"error,omitempty"`
 }
 
 // prerequisiteTagPassed is the migration_prereq telemetry value when no critical check blocks.
@@ -74,6 +88,21 @@ type gormDBProvider interface {
 type integrityResulter interface {
 	IntegrityResult() (string, bool)
 }
+
+// Check IDs used by the run steps.
+const (
+	checkIDStateIdle          = "state_idle"
+	checkIDDiskSpace          = "disk_space"
+	checkIDLegacyAccessible   = "legacy_accessible"
+	checkIDSQLiteIntegrity    = "sqlite_integrity"
+	checkIDWritePermission    = "write_permission"
+	checkIDMySQLTableHealth   = "mysql_table_health"
+	checkIDMySQLPermissions   = "mysql_permissions"
+	checkIDRecordCount        = "record_count"
+	checkIDExistingV2Data     = "existing_v2_data"
+	checkIDMemoryAvailable    = "memory_available"
+	checkIDMySQLConfiguration = "mysql_configuration"
+)
 
 // Check status constants
 const (
@@ -118,35 +147,22 @@ const MinMySQLMaxPacket = 16 * 1024 * 1024 // 16MB
 // MinMySQLWaitTimeout is the minimum recommended wait_timeout (600 seconds).
 const MinMySQLWaitTimeout = 600
 
-// GetPrerequisites handles GET /api/v2/system/database/migration/prerequisites
-// Returns the status of all prerequisite checks before migration can start.
+// GetPrerequisites handles GET /api/v2/system/database/migration/prerequisites.
+// It returns the snapshot of the background prerequisites run and never starts
+// work; POST .../prerequisites/run starts or joins a run.
 func (c *Handler) GetPrerequisites(ctx echo.Context) error {
-	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.LogInfoIfEnabled("Checking migration prerequisites", logger.String("path", path), logger.String("ip", ip))
+	return ctx.JSON(http.StatusOK, c.prereqRunner().snapshot())
+}
 
+// summarizePrerequisites counts failures and warnings in checks and decides
+// whether a migration may start.
+func (c *Handler) summarizePrerequisites(checks []PrerequisiteCheck) PrerequisitesResponse {
 	criticalFailures := 0
 	warnings := 0
-
-	// Run critical checks (shared with runPreflightChecks)
-	checks := c.runCriticalPrerequisiteChecks()
-
-	// Add warning checks (non-blocking)
-	checks = append(checks,
-		c.checkExistingV2Data(),
-		c.checkMemoryAvailable(),
-	)
-
-	// Add MySQL configuration warnings if applicable
-	if c.isUsingMySQL() {
-		checks = append(checks, c.checkMySQLConfiguration()...)
-	}
-
-	// Count failures and warnings
-	for _, check := range checks {
-		if check.Status == CheckStatusFailed || check.Status == CheckStatusError {
-			if check.Severity == CheckSeverityCritical {
-				criticalFailures++
-			}
+	for i := range checks {
+		check := &checks[i]
+		if (check.Status == CheckStatusFailed || check.Status == CheckStatusError) && check.Severity == CheckSeverityCritical {
+			criticalFailures++
 		}
 		if check.Status == CheckStatusWarning {
 			warnings++
@@ -154,25 +170,102 @@ func (c *Handler) GetPrerequisites(ctx echo.Context) error {
 	}
 
 	allPassed := criticalFailures == 0
-	canStart := allPassed && !getIsV2OnlyMode()
-
-	response := PrerequisitesResponse{
+	return PrerequisitesResponse{
 		AllPassed:         allPassed,
-		CanStartMigration: canStart,
+		CanStartMigration: allPassed && !getIsV2OnlyMode(),
 		Checks:            checks,
 		CriticalFailures:  criticalFailures,
 		Warnings:          warnings,
 		CheckedAt:         time.Now(),
 	}
+}
 
-	c.LogInfoIfEnabled("Prerequisites check complete",
-		logger.String("path", path),
-		logger.String("ip", ip),
-		logger.Bool("can_start", canStart),
-		logger.Int("critical_failures", criticalFailures),
-		logger.Int("warnings", warnings))
+// finishPrerequisites summarizes a completed run and records its outcome in the
+// migration_prereq telemetry tag. The run calls it once, only when it was not cancelled.
+func (c *Handler) finishPrerequisites(checks []PrerequisiteCheck) PrerequisitesResponse {
+	telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
+	return c.summarizePrerequisites(checks)
+}
 
-	return ctx.JSON(http.StatusOK, response)
+// prerequisiteSteps lists every step of a full run: the critical steps, then
+// the warning checks. sink receives the legacy record count.
+func (c *Handler) prerequisiteSteps(sink *recordCountSink) []prereqStep {
+	steps := c.criticalPrerequisiteSteps(sink)
+	steps = append(steps,
+		singleCheckStep(checkIDExistingV2Data, "Existing Migration Data", false, c.checkExistingV2Data),
+		singleCheckStep(checkIDMemoryAvailable, "Available Memory", false, func(context.Context) PrerequisiteCheck { return c.checkMemoryAvailable() }),
+	)
+	if c.isUsingMySQL() {
+		steps = append(steps, prereqStep{
+			id:   checkIDMySQLConfiguration,
+			name: "MySQL Configuration",
+			run:  c.checkMySQLConfiguration,
+		})
+	}
+	return steps
+}
+
+// singleCheckStep adapts a one-check function to a prereqStep.
+func singleCheckStep(id, name string, reuseAtStart bool, fn func(context.Context) PrerequisiteCheck) prereqStep {
+	return prereqStep{
+		id:           id,
+		name:         name,
+		reuseAtStart: reuseAtStart,
+		run:          func(ctx context.Context) []PrerequisiteCheck { return []PrerequisiteCheck{fn(ctx)} },
+	}
+}
+
+// PrerequisitesRunRequest is the optional body of POST .../prerequisites/run.
+type PrerequisitesRunRequest struct {
+	// Force starts a new run even when a fresh passing result exists.
+	Force bool `json:"force"`
+}
+
+// RunPrerequisites handles POST /api/v2/system/database/migration/prerequisites/run.
+// It starts the background prerequisites run, or joins the one in progress, and
+// returns the snapshot. The run derives from the server lifecycle context, never
+// from the request, so a closed tab does not cancel a run other tabs watch.
+func (c *Handler) RunPrerequisites(ctx echo.Context) error {
+	var req PrerequisitesRunRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationPrereqInvalidBody, nil)
+	}
+
+	c.LogInfoIfEnabled("Starting migration prerequisites run",
+		logger.String("path", ctx.Request().URL.Path), logger.String("ip", ctx.RealIP()), logger.Bool("force", req.Force))
+
+	snap := c.prereqRunner().start(c.lifecycleContext(), req.Force, c.dbFingerprint(), c.prerequisiteSteps, c.finishPrerequisites)
+	return ctx.JSON(http.StatusOK, snap)
+}
+
+// lifecycleContext returns the server lifecycle context, or Background when
+// none is installed (a Core built directly in tests).
+func (c *Handler) lifecycleContext() context.Context {
+	if ctx := c.Context(); ctx != nil {
+		return ctx
+	}
+	return context.Background()
+}
+
+// dbFingerprint reads the database settings that decide what the checks look
+// at, from the live settings.
+func (c *Handler) dbFingerprint() dbFingerprint {
+	settings := c.CurrentSettings()
+	if settings == nil {
+		return dbFingerprint{}
+	}
+	mysql := &settings.Output.MySQL
+	sqlitePath := settings.Output.SQLite.Path
+	if abs, err := filepath.Abs(sqlitePath); err == nil && sqlitePath != "" {
+		sqlitePath = abs
+	}
+	return dbFingerprint{
+		MySQLEnabled:  mysql.Enabled,
+		SQLitePath:    sqlitePath,
+		MySQLHost:     mysql.Host,
+		MySQLPort:     mysql.Port,
+		MySQLDatabase: mysql.Database,
+	}
 }
 
 // isUsingMySQL returns true if the application is configured to use MySQL.
@@ -333,7 +426,7 @@ func (c *Handler) getDatabaseDirectoryResolved() (string, error) {
 }
 
 // checkLegacyAccessible verifies the legacy database is accessible for reading.
-func (c *Handler) checkLegacyAccessible() PrerequisiteCheck {
+func (c *Handler) checkLegacyAccessible(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "legacy_accessible",
 		Name:        "Legacy Database",
@@ -354,10 +447,23 @@ func (c *Handler) checkLegacyAccessible() PrerequisiteCheck {
 
 	// Try to perform a simple read operation
 	// This uses the existing datastore interface
-	_, err := c.DS.GetLastDetections(1)
-	if err != nil {
-		check.Status = CheckStatusFailed
-		check.Message = fmt.Sprintf("Cannot read from legacy database: %v", err)
+	// GetLastDetections takes no context, so wait for it in a way that ctx can
+	// interrupt. The abandoned call finishes on its own and its result is dropped.
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.DS.GetLastDetections(1)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			check.Status = CheckStatusFailed
+			check.Message = fmt.Sprintf("Cannot read from legacy database: %v", err)
+			return check
+		}
+	case <-ctx.Done():
+		check.Status = CheckStatusError
+		check.Message = fmt.Sprintf("Check interrupted before the legacy database answered: %v", ctx.Err())
 		return check
 	}
 
@@ -374,7 +480,7 @@ func (c *Handler) checkLegacyAccessible() PrerequisiteCheck {
 // The cached result can be up to a day old, so corruption that appeared since the
 // last scan is not detected here.
 // Scans all result rows since quick_check can return multiple errors.
-func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
+func (c *Handler) checkSQLiteIntegrity(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "sqlite_integrity",
 		Name:        "Database Integrity",
@@ -407,7 +513,7 @@ func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 
 	// PRAGMA quick_check can return multiple rows if there are multiple errors
 	var results []string
-	if err := db.Raw("PRAGMA quick_check").Scan(&results).Error; err != nil {
+	if err := db.WithContext(ctx).Raw("PRAGMA quick_check").Scan(&results).Error; err != nil {
 		check.Status = CheckStatusError
 		check.Message = fmt.Sprintf("Failed to run integrity check: %v", err)
 		return check
@@ -466,7 +572,7 @@ func (c *Handler) checkWritePermission() PrerequisiteCheck {
 }
 
 // checkMySQLTableHealth runs CHECK TABLE on legacy MySQL tables.
-func (c *Handler) checkMySQLTableHealth() PrerequisiteCheck {
+func (c *Handler) checkMySQLTableHealth(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "mysql_table_health",
 		Name:        "MySQL Table Health",
@@ -495,7 +601,7 @@ func (c *Handler) checkMySQLTableHealth() PrerequisiteCheck {
 			MsgText string `gorm:"column:Msg_text"`
 		}
 
-		if err := db.Raw("CHECK TABLE " + table).Scan(&results).Error; err != nil {
+		if err := db.WithContext(ctx).Raw("CHECK TABLE " + table).Scan(&results).Error; err != nil {
 			check.Status = CheckStatusError
 			check.Message = fmt.Sprintf("Failed to check table %s: %v", table, err)
 			return check
@@ -517,7 +623,7 @@ func (c *Handler) checkMySQLTableHealth() PrerequisiteCheck {
 
 // checkMySQLPermissions verifies CREATE, INSERT, UPDATE, DELETE, DROP permissions.
 // Uses a unique table name with timestamp to prevent concurrent request collisions.
-func (c *Handler) checkMySQLPermissions() PrerequisiteCheck {
+func (c *Handler) checkMySQLPermissions(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "mysql_permissions",
 		Name:        "MySQL Permissions",
@@ -542,33 +648,37 @@ func (c *Handler) checkMySQLPermissions() PrerequisiteCheck {
 
 	// Ensure cleanup even if function returns early due to error
 	// Cleanup errors are silently ignored - orphan test tables are harmless
+	// The cleanup runs on a context detached from ctx so a cancelled run neither
+	// hangs nor leaks the test table.
 	defer func() {
-		_ = db.Exec("DROP TABLE IF EXISTS " + testTable).Error
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mysqlServerProbeTimeout)
+		defer cancel()
+		_ = db.WithContext(cleanupCtx).Exec("DROP TABLE IF EXISTS " + testTable).Error
 	}()
 
 	// Test CREATE
-	if err := db.Exec("CREATE TABLE " + testTable + " (id INT PRIMARY KEY)").Error; err != nil {
+	if err := db.WithContext(ctx).Exec("CREATE TABLE " + testTable + " (id INT PRIMARY KEY)").Error; err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("CREATE permission denied: %v", err)
 		return check
 	}
 
 	// Test INSERT
-	if err := db.Exec("INSERT INTO " + testTable + " (id) VALUES (1)").Error; err != nil {
+	if err := db.WithContext(ctx).Exec("INSERT INTO " + testTable + " (id) VALUES (1)").Error; err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("INSERT permission denied: %v", err)
 		return check
 	}
 
 	// Test UPDATE
-	if err := db.Exec("UPDATE " + testTable + " SET id = 2 WHERE id = 1").Error; err != nil {
+	if err := db.WithContext(ctx).Exec("UPDATE " + testTable + " SET id = 2 WHERE id = 1").Error; err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("UPDATE permission denied: %v", err)
 		return check
 	}
 
 	// Test DELETE
-	if err := db.Exec("DELETE FROM " + testTable + " WHERE id = 2").Error; err != nil {
+	if err := db.WithContext(ctx).Exec("DELETE FROM " + testTable + " WHERE id = 2").Error; err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("DELETE permission denied: %v", err)
 		return check
@@ -582,7 +692,7 @@ func (c *Handler) checkMySQLPermissions() PrerequisiteCheck {
 }
 
 // checkMySQLConfiguration checks MySQL configuration for potential issues.
-func (c *Handler) checkMySQLConfiguration() []PrerequisiteCheck {
+func (c *Handler) checkMySQLConfiguration(ctx context.Context) []PrerequisiteCheck {
 	checks := make([]PrerequisiteCheck, 0, 2)
 
 	db := c.getLegacyGormDB()
@@ -592,7 +702,7 @@ func (c *Handler) checkMySQLConfiguration() []PrerequisiteCheck {
 
 	// Check max_allowed_packet
 	var maxPacket int64
-	if err := db.Raw("SELECT @@max_allowed_packet").Scan(&maxPacket).Error; err == nil {
+	if err := db.WithContext(ctx).Raw("SELECT @@max_allowed_packet").Scan(&maxPacket).Error; err == nil {
 		check := PrerequisiteCheck{
 			ID:          "mysql_max_packet",
 			Name:        "MySQL max_allowed_packet",
@@ -611,7 +721,7 @@ func (c *Handler) checkMySQLConfiguration() []PrerequisiteCheck {
 
 	// Check wait_timeout
 	var waitTimeout int64
-	if err := db.Raw("SELECT @@wait_timeout").Scan(&waitTimeout).Error; err == nil {
+	if err := db.WithContext(ctx).Raw("SELECT @@wait_timeout").Scan(&waitTimeout).Error; err == nil {
 		check := PrerequisiteCheck{
 			ID:          "mysql_timeout",
 			Name:        "MySQL Wait Timeout",
@@ -632,9 +742,16 @@ func (c *Handler) checkMySQLConfiguration() []PrerequisiteCheck {
 }
 
 // checkRecordCount verifies we can count legacy records.
-func (c *Handler) checkRecordCount() PrerequisiteCheck {
+func (c *Handler) checkRecordCount(ctx context.Context) PrerequisiteCheck {
+	_, check := c.countLegacyRecords(ctx)
+	return check
+}
+
+// countLegacyRecords counts the legacy records and returns the count with the
+// record_count check. The count is meaningful only when the check passed.
+func (c *Handler) countLegacyRecords(ctx context.Context) (int64, PrerequisiteCheck) {
 	check := PrerequisiteCheck{
-		ID:          "record_count",
+		ID:          checkIDRecordCount,
 		Name:        "Record Count",
 		Description: "Count legacy records to migrate",
 		Severity:    CheckSeverityCritical,
@@ -644,33 +761,27 @@ func (c *Handler) checkRecordCount() PrerequisiteCheck {
 		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = v2OnlySkipMessage
-			return check
+			return 0, check
 		}
 		check.Status = CheckStatusError
 		check.Message = "Detection repository not available"
-		return check
-	}
-
-	// Use context.Background() as fallback if ctx is nil (e.g., in tests)
-	ctx := c.Context()
-	if ctx == nil {
-		ctx = context.Background()
+		return 0, check
 	}
 
 	count, err := c.Repo.CountAll(ctx)
 	if err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("Failed to count records: %v", err)
-		return check
+		return 0, check
 	}
 
 	check.Status = CheckStatusPassed
 	check.Message = fmt.Sprintf("%d records to migrate", count)
-	return check
+	return count, check
 }
 
 // checkExistingV2Data warns if migration target tables already have data.
-func (c *Handler) checkExistingV2Data() PrerequisiteCheck {
+func (c *Handler) checkExistingV2Data(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "existing_v2_data",
 		Name:        "Existing Migration Data",
@@ -697,7 +808,13 @@ func (c *Handler) checkExistingV2Data() PrerequisiteCheck {
 	var count int64
 	tableName := c.V2Manager.TablePrefix() + "detections"
 
-	if err := db.Table(tableName).Count(&count).Error; err != nil {
+	if err := db.WithContext(ctx).Table(tableName).Count(&count).Error; err != nil {
+		if ctx.Err() != nil {
+			// A cancelled count says nothing about the table; do not report it as absent.
+			check.Status = CheckStatusError
+			check.Message = fmt.Sprintf("Check interrupted: %v", ctx.Err())
+			return check
+		}
 		// Table might not exist yet, which is fine
 		check.Status = CheckStatusPassed
 		check.Message = "No existing migration data found"
@@ -807,19 +924,16 @@ func (c *Handler) mysqlMigrationTarget() (datastoreV2.Manager, bool) {
 	return c.V2Manager, true
 }
 
-// probeContext returns a bounded context for the server probes.
-func (c *Handler) probeContext() (context.Context, context.CancelFunc) {
-	ctx := c.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithTimeout(ctx, mysqlServerProbeTimeout)
+// probeContext returns a context for the server probes, bounded by
+// mysqlServerProbeTimeout and cancelled with parent.
+func probeContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, mysqlServerProbeTimeout)
 }
 
 // checkMySQLServerVersion blocks the migration on a database server release
 // that BirdNET-Go does not support. It follows dbserver's release table, so a
 // table edit changes the verdict without code changes.
-func (c *Handler) checkMySQLServerVersion() PrerequisiteCheck {
+func (c *Handler) checkMySQLServerVersion(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLServerVersion,
 		Name:        "Database Server Version",
@@ -838,7 +952,7 @@ func (c *Handler) checkMySQLServerVersion() PrerequisiteCheck {
 		return check
 	}
 
-	ctx, cancel := c.probeContext()
+	ctx, cancel := probeContext(ctx)
 	defer cancel()
 	var raw string
 	var err error
@@ -877,7 +991,7 @@ func describeServerVersion(a *dbserver.Assessment) (status, message string) {
 
 // checkMySQLCharset blocks the migration when the v2 target tables cannot
 // store the text of the legacy tables. It only reads information_schema.
-func (c *Handler) checkMySQLCharset() PrerequisiteCheck {
+func (c *Handler) checkMySQLCharset(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLCharset,
 		Name:        "Database Character Set",
@@ -902,7 +1016,7 @@ func (c *Handler) checkMySQLCharset() PrerequisiteCheck {
 		return check
 	}
 
-	ctx, cancel := c.probeContext()
+	ctx, cancel := probeContext(ctx)
 	defer cancel()
 	var report dbserver.CharsetReport
 	var err error
