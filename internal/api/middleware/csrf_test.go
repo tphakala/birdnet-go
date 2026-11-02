@@ -54,12 +54,14 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 		// Logout: skipped (must work even with expired CSRF tokens)
 		{"POST auth logout", http.MethodPost, "/api/v2/auth/logout", true},
 
-		// pprof: always skipped. go tool pprof POSTs to /symbol with no CSRF
-		// token, and the handlers are read-only and separately gated (auth
-		// middleware, or a secret query token a cross-site request cannot supply).
+		// pprof: skipped for safe methods and for the symbol POST. go tool pprof
+		// POSTs to /symbol with no CSRF token, and the handlers are read-only and
+		// separately gated (auth middleware, or a secret query token a cross-site
+		// request cannot supply).
 		{"GET pprof index", http.MethodGet, "/debug/pprof", true},
 		{"GET pprof heap", http.MethodGet, "/debug/pprof/heap", true},
 		{"POST pprof symbol", http.MethodPost, "/debug/pprof/symbol", true},
+		{"POST pprof heap", http.MethodPost, "/debug/pprof/heap", false},
 
 		// A path that merely starts with the same characters is not pprof.
 		{"POST debug lookalike", http.MethodPost, "/debug/pprofiler", false},
