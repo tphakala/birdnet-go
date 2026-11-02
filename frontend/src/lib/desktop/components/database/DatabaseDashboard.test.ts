@@ -188,6 +188,7 @@ describe('DatabaseDashboard migration errors', () => {
     renderTyped(DatabaseDashboard);
 
     const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t('system.database.migration.errors.fetchFailed'));
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
   });
 
@@ -969,6 +970,21 @@ describe('DatabaseDashboard data errors', () => {
     await screen.findByRole('alert');
     actionOutcome = null;
     await confirmDelete();
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+  it('shows why the v2-only overview failed and reloads it with Retry', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: apiError('Overview unavailable', 500) });
+
+    renderTyped(DatabaseDashboard);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+    expect(alert).toHaveTextContent('Overview unavailable');
+
+    serve({ [STATUS_URL]: v2OnlyStatus });
+    await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });

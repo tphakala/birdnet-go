@@ -634,6 +634,7 @@
   {#if !migrationStatus.loading && migrationStatus.error}
     <ErrorAlert
       className="mb-4"
+      title={t('system.database.migration.errors.fetchFailed')}
       message={migrationStatus.error}
       onRetry={fetchMigrationStatus}
       focusFallback={focusView}
@@ -665,11 +666,12 @@
         </div>
       </div>
     {:else if overviewError || !overview}
-      <div
-        class="bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_20%,transparent)] rounded-xl p-4 text-sm text-[var(--color-error)]"
-      >
-        {overviewError ?? t('system.database.dashboard.fetchFailed')}
-      </div>
+      <ErrorAlert
+        title={t('system.database.dashboard.fetchFailed')}
+        message={overviewError ?? t('system.database.dashboard.fetchFailed')}
+        onRetry={fetchOverview}
+        focusFallback={focusView}
+      />
     {:else}
       <div class="space-y-4">
         <!-- Top metric strip -->
