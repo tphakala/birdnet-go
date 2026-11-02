@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import type { ComponentProps } from 'svelte';
@@ -548,34 +548,32 @@ describe('DatabasePrerequisites', () => {
       expect(container.querySelectorAll('svg.animate-spin')).toHaveLength(1);
     });
 
-    const stepText = (current: number) =>
-      t('system.database.migration.prerequisites.checkingStep', { current, total: 9 });
-    const checkText = (seconds: number) =>
-      t('system.database.migration.prerequisites.currentCheck', {
-        name: 'Record Count',
-        seconds,
-      });
+    // The test i18n mock returns the bare key for these texts, so the rendered text shows
+    // whether a line is there and the recorded t() arguments show its numbers.
+    const STEP_KEY = 'system.database.migration.prerequisites.checkingStep';
+    const CHECK_KEY = 'system.database.migration.prerequisites.currentCheck';
 
     it.each([
       {
         name: 'progress absent',
         progress: undefined,
-        present: [] as string[],
-        absent: [stepText(1), checkText(0)],
+        step: null,
+        check: null,
       },
       {
         name: 'zero steps finished and no check named yet',
         progress: { completed_steps: 0, total_steps: 9 },
-        present: [stepText(1)],
-        absent: [checkText(0)],
+        step: { current: 1, total: 9 },
+        check: null,
       },
       {
         name: 'the last step with no elapsed time',
         progress: { completed_steps: 8, total_steps: 9, current_check_name: 'Record Count' },
-        present: [stepText(9), checkText(0)],
-        absent: [] as string[],
+        step: { current: 9, total: 9 },
+        check: { name: 'Record Count', seconds: 0 },
       },
     ])('renders only what the snapshot carries: $name', c => {
+      vi.mocked(t).mockClear();
       const { container } = renderTyped(DatabasePrerequisites, {
         props: {
           prerequisites: { ...runningSnapshot, progress: c.progress },
@@ -584,8 +582,15 @@ describe('DatabasePrerequisites', () => {
       });
 
       const text = container.textContent;
-      for (const wanted of c.present) expect(text).toContain(wanted);
-      for (const unwanted of c.absent) expect(text).not.toContain(unwanted);
+      expect(text.includes(STEP_KEY)).toBe(c.step !== null);
+      expect(text.includes(CHECK_KEY)).toBe(c.check !== null);
+      const calls = vi.mocked(t).mock.calls;
+      expect(calls.filter(([key]) => key === STEP_KEY).map(([, params]) => params)).toEqual(
+        c.step ? [c.step] : []
+      );
+      expect(calls.filter(([key]) => key === CHECK_KEY).map(([, params]) => params)).toEqual(
+        c.check ? [c.check] : []
+      );
     });
 
     it('blocks Re-run with the running text as its reason and ignores clicks', async () => {
