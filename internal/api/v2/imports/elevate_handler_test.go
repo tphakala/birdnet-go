@@ -150,7 +150,7 @@ func TestElevateImport_LadderFallback(t *testing.T) {
 			if tt.stagedSource {
 				assert.Equal(t, 1, freeProbes, "a source that is not a valid database must go through staging")
 			} else {
-				assert.Zero(t, freeProbes, "a valid database is read directly and skips staging")
+				assert.Zero(t, freeProbes, "a valid database skips staging")
 			}
 			if tt.wantMethod == responseMethodPasswordRequired {
 				assert.Empty(t, resp.FallbackCommands, "asking for a password must not also hand out commands")
