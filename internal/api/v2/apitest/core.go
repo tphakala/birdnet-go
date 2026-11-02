@@ -84,8 +84,9 @@ func WithPrivateModeExempt(fn func(method, path string) bool) CoreOption {
 }
 
 // WithoutSettingsPublish skips publishing the settings to the process-global
-// snapshot. Use it for parallel tests that do not read CurrentSettings() from the
-// global, or that manage the global snapshot themselves.
+// snapshot. Parallel tests must use it (see PublishTestSettings). It also suits
+// tests that do not read CurrentSettings() from the global, or that manage the
+// global snapshot themselves.
 func WithoutSettingsPublish() CoreOption { return func(c *coreConfig) { c.publishSettings = false } }
 
 // NewCore builds a fully wired *apicore.Core for tests and registers cleanup. It
@@ -106,8 +107,7 @@ func WithoutSettingsPublish() CoreOption { return func(c *coreConfig) { c.publis
 // handlers reading CurrentSettings() observe them. That snapshot is process-wide,
 // not per-core: building two publishing cores in one test leaves the second core's
 // settings as the global, so the first core's CurrentSettings() would observe the
-// second's. Build the second with WithoutSettingsPublish, and a test that publishes
-// must not call t.Parallel.
+// second's. Build the second with WithoutSettingsPublish.
 //
 // The core starts no cache goroutines, so goleak gates need no cache ignores.
 func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
