@@ -310,7 +310,11 @@ func TestRegisterRoutesGatesEveryRoute(t *testing.T) {
 	})
 }
 
-// TestControlActionsConstants verifies that the action constants are properly defined
+// TestControlActionsConstants pins the action and signal wire strings. The
+// action values are API strings. The reload and rebuild signal values must match
+// the literals internal/analysis/control_monitor.go switches on; that monitor
+// currently has no case for the restart analysis signal and logs it as an
+// unknown signal.
 func TestControlActionsConstants(t *testing.T) {
 	// Verify action constants have expected values
 	assert.Equal(t, "restart_analysis", ActionRestartAnalysis)
@@ -321,15 +325,6 @@ func TestControlActionsConstants(t *testing.T) {
 	assert.Equal(t, "restart_analysis", SignalRestartAnalysis)
 	assert.Equal(t, "reload_birdnet", SignalReloadModel)
 	assert.Equal(t, "rebuild_range_filter", SignalRebuildFilter)
-
-	// Verify constants relationship
-	// The API should send different signals than the action names in some cases
-	assert.Equal(t, ActionRestartAnalysis, SignalRestartAnalysis,
-		"Restart analysis action should match signal")
-	assert.NotEqual(t, ActionReloadModel, SignalReloadModel,
-		"Reload model action should have a different signal name")
-	assert.NotEqual(t, ActionRebuildFilter, SignalRebuildFilter,
-		"Rebuild filter action should have a different signal name")
 }
 
 // testFlushDelay is the flush delay the restart tests expect. It is a literal

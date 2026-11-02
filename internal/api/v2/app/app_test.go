@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -22,11 +21,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
@@ -250,93 +249,86 @@ func TestGetAppConfig_ProjectLinks(t *testing.T) {
 	assert.Equal(t, branding.CommunityURL(), links.CommunityURL)
 }
 
-// TestGetAppConfig_BasicAuthEnabled tests the endpoint with BasicAuth enabled.
-func TestGetAppConfig_BasicAuthEnabled(t *testing.T) {
-	securityConfig := conf.Security{
-		SessionSecret: "test-session-secret-32-chars-long",
-		BasicAuth: conf.BasicAuth{
-			Enabled:        true,
-			Password:       "testpassword",
-			ClientID:       "test-client",
-			AuthCodeExp:    5 * time.Minute,
-			AccessTokenExp: 24 * time.Hour,
-		},
-	}
-
-	e, controller := setupAppConfigTestWithAuth(t, &securityConfig)
+// requestAppConfig sends GET /api/v2/app/config to h and returns the recorder
+// once the status is known to be 200.
+func requestAppConfig(t *testing.T, e *echo.Echo, h *Handler) *httptest.ResponseRecorder {
+	t.Helper()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/app/config")
 
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response AppConfigResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.True(t, response.Security.Enabled, "Security should be enabled")
-	assert.True(t, response.Security.AuthConfig.BasicEnabled, "BasicAuth should be enabled")
-	assert.Empty(t, response.Security.AuthConfig.EnabledProviders, "No OAuth providers should be enabled")
+	require.NoError(t, h.GetAppConfig(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	return rec
 }
 
-// TestGetAppConfig_AllAuthMethods tests with all auth methods enabled.
-func TestGetAppConfig_AllAuthMethods(t *testing.T) {
-	securityConfig := conf.Security{
-		SessionSecret: "test-session-secret-32-chars-long",
-		BasicAuth: conf.BasicAuth{
-			Enabled:        true,
-			Password:       "testpassword",
-			ClientID:       "test-client",
-			AuthCodeExp:    5 * time.Minute,
-			AccessTokenExp: 24 * time.Hour,
-		},
-		// Use new array-based OAuth provider configuration
-		OAuthProviders: []conf.OAuthProviderConfig{
-			{
-				Provider:     "google",
-				Enabled:      true,
-				ClientID:     "google-client-id",
-				ClientSecret: "google-secret",
-			},
-			{
-				Provider:     "github",
-				Enabled:      true,
-				ClientID:     "github-client-id",
-				ClientSecret: "github-secret",
-			},
-			{
-				Provider:     "microsoft",
-				Enabled:      true,
-				ClientID:     "microsoft-client-id",
-				ClientSecret: "microsoft-secret",
-			},
-		},
+// securityTestHost is the configured security host. It must never be served. It
+// is a reserved .invalid name so that no project link, which a deployment may
+// override, can contain it.
+const securityTestHost = "security-host.invalid"
+
+// enabledOAuthProviders builds enabled OAuth provider settings with credentials
+// for the given provider IDs.
+func enabledOAuthProviders(ids ...string) []conf.OAuthProviderConfig {
+	providers := make([]conf.OAuthProviderConfig, 0, len(ids))
+	for _, id := range ids {
+		providers = append(providers, conf.OAuthProviderConfig{
+			Provider:     id,
+			Enabled:      true,
+			ClientID:     id + "-client-id",
+			ClientSecret: id + "-secret",
+		})
+	}
+	return providers
+}
+
+// TestGetAppConfig_SecurityConfig tests that the security block follows the
+// configured authentication methods: security is enabled when any method is
+// configured, basic auth and each OAuth provider are reported on their own, and
+// the configured security host is never served. These values come from the
+// settings alone, so no auth service is wired.
+func TestGetAppConfig_SecurityConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		basic     bool
+		providers []string
+	}{
+		{name: "nothing configured"},
+		{name: "basic auth only", basic: true},
+		{name: "google only", providers: []string{security.ConfigGoogle}},
+		{name: "github only", providers: []string{security.ConfigGitHub}},
+		{name: "microsoft only", providers: []string{security.ConfigMicrosoft}},
+		{name: "basic auth and every provider", basic: true, providers: []string{security.ConfigGoogle, security.ConfigGitHub, security.ConfigMicrosoft}},
 	}
 
-	e, controller := setupAppConfigTestWithAuth(t, &securityConfig)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Not parallel: setupAppConfigTest publishes settings to the
+			// process-global snapshot that GetAppConfig reads.
+			e, controller := setupAppConfigTest(t, &conf.Security{
+				Host:           securityTestHost,
+				BasicAuth:      conf.BasicAuth{Enabled: tt.basic},
+				OAuthProviders: enabledOAuthProviders(tt.providers...),
+			})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
+			rec := requestAppConfig(t, e, controller)
 
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
-	var response AppConfigResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.True(t, response.Security.Enabled)
-	assert.True(t, response.Security.AuthConfig.BasicEnabled)
-	assert.Contains(t, response.Security.AuthConfig.EnabledProviders, "google")
-	assert.Contains(t, response.Security.AuthConfig.EnabledProviders, "github")
-	assert.Contains(t, response.Security.AuthConfig.EnabledProviders, "microsoft")
+			assert.Equal(t, tt.basic || len(tt.providers) > 0, response.Security.Enabled)
+			assert.Equal(t, tt.basic, response.Security.AuthConfig.BasicEnabled)
+			assert.ElementsMatch(t, tt.providers, response.Security.AuthConfig.EnabledProviders)
+			assert.NotContains(t, rec.Body.String(), securityTestHost, "the security host must not be served")
+			if len(tt.providers) == 0 {
+				// A typed decode cannot tell an empty array from null, and the
+				// frontend iterates this field.
+				assert.Contains(t, rec.Body.String(), `"enabledProviders":[]`)
+			}
+		})
+	}
 }
 
 // TestGetAppConfig_CSRFTokenFromContext tests CSRF token extraction from context.
@@ -398,44 +390,45 @@ func TestGetAppConfig_NoCSRFToken(t *testing.T) {
 	assert.Equal(t, response.CSRFToken, csrfCookie.Value, "Cookie and response token should match")
 }
 
-// TestGetAppConfig_ResponseFormat validates the JSON response structure.
-func TestGetAppConfig_ResponseFormat(t *testing.T) {
+// TestGetAppConfig_ResponseShape pins the wire shape of the response: the JSON
+// content type, the exact key set at each level (a renamed or extra key fails)
+// and the species dictionary version. The keys tagged omitempty on
+// AppConfigResponse are not part of the default response.
+func TestGetAppConfig_ResponseShape(t *testing.T) {
 	e, controller := setupAppConfigTest(t, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
+	rec := requestAppConfig(t, e, controller)
 
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
+	assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Response should be JSON")
 
-	// Verify content type
-	contentType := rec.Header().Get("Content-Type")
-	assert.Contains(t, contentType, "application/json", "Response should be JSON")
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw), "Response should be valid JSON")
 
-	// Verify JSON structure using generic map
-	var rawResponse map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &rawResponse)
-	require.NoError(t, err, "Response should be valid JSON")
+	keys := func(m map[string]any) []string { return slices.Collect(maps.Keys(m)) }
+	object := func(m map[string]any, key string) map[string]any {
+		t.Helper()
+		sub, ok := m[key].(map[string]any)
+		require.True(t, ok, "%s should be an object", key)
+		return sub
+	}
 
-	// Check required top-level fields exist
-	assert.Contains(t, rawResponse, "csrfToken", "Response should have csrfToken field")
-	assert.Contains(t, rawResponse, "security", "Response should have security field")
-	assert.Contains(t, rawResponse, "version", "Response should have version field")
+	assert.ElementsMatch(t, []string{
+		"csrfToken", "security", "version", "speciesDictVersion", "basePath",
+		"liveSpectrogram", "audioExportEnabled", "freshInstall", "newVersion", "projectLinks",
+	}, keys(raw))
 
-	// Check security sub-structure
-	securityObj, ok := rawResponse["security"].(map[string]any)
-	require.True(t, ok, "security should be an object")
-	assert.Contains(t, securityObj, "enabled", "security should have enabled field")
-	assert.Contains(t, securityObj, "accessAllowed", "security should have accessAllowed field")
-	assert.Contains(t, securityObj, "authConfig", "security should have authConfig field")
+	securityObj := object(raw, "security")
+	assert.ElementsMatch(t, []string{"enabled", "accessAllowed", "authConfig", "publicAccess", "privateMode"}, keys(securityObj))
+	assert.ElementsMatch(t, []string{"basicEnabled", "enabledProviders"}, keys(object(securityObj, "authConfig")))
+	assert.ElementsMatch(t, []string{"liveAudio"}, keys(object(securityObj, "publicAccess")))
+	assert.ElementsMatch(t, []string{
+		"name", "repoUrl", "issuesUrl", "newIssueUrl", "supportUrl", "discussionsUrl", "releasesUrl", "communityUrl",
+	}, keys(object(raw, "projectLinks")))
 
-	// Check authConfig sub-structure
-	authConfig, ok := securityObj["authConfig"].(map[string]any)
-	require.True(t, ok, "authConfig should be an object")
-	assert.Contains(t, authConfig, "basicEnabled", "authConfig should have basicEnabled field")
-	assert.Contains(t, authConfig, "enabledProviders", "authConfig should have enabledProviders field")
+	var response AppConfigResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.NotEmpty(t, response.SpeciesDictVersion, "speciesDictVersion must not be empty")
+	assert.Equal(t, speciesdict.Version(), response.SpeciesDictVersion, "speciesDictVersion must match speciesdict.Version()")
 }
 
 // =============================================================================
@@ -579,323 +572,41 @@ func TestDetermineAccessAllowed_SecurityEnabledNoAuthService(t *testing.T) {
 	assert.False(t, allowed, "Should deny access when auth service is nil (fail closed)")
 }
 
-// TestGetAppConfig_NoExtraFields tests that no unexpected fields are returned.
-func TestGetAppConfig_NoExtraFields(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
-
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
-
-	var rawResponse map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &rawResponse)
-	require.NoError(t, err)
-
-	// Only these top-level keys should exist
-	expectedKeys := map[string]bool{
-		"csrfToken":          true,
-		"security":           true,
-		"version":            true,
-		"speciesDictVersion": true,
-		"basePath":           true,
-		"colorScheme":        true,
-		"customColors":       true,
-		"logoStyle":          true,
-		"liveSpectrogram":    true,
-		"audioExportEnabled": true,
-		"freshInstall":       true,
-		"newVersion":         true,
-		"projectLinks":       true,
-	}
-
-	for key := range rawResponse {
-		assert.True(t, expectedKeys[key], "Unexpected field in response: %s", key)
-	}
-
-	// Check projectLinks sub-object
-	projectLinksRaw, ok := rawResponse["projectLinks"]
-	require.True(t, ok, "projectLinks field should exist")
-	projectLinks, ok := projectLinksRaw.(map[string]any)
-	require.True(t, ok, "projectLinks should be a map")
-	expectedProjectLinkKeys := map[string]bool{
-		"name":           true,
-		"repoUrl":        true,
-		"issuesUrl":      true,
-		"newIssueUrl":    true,
-		"supportUrl":     true,
-		"discussionsUrl": true,
-		"releasesUrl":    true,
-		"communityUrl":   true,
-	}
-
-	for key := range projectLinks {
-		assert.True(t, expectedProjectLinkKeys[key], "Unexpected field in projectLinks: %s", key)
-	}
-	for key := range expectedProjectLinkKeys {
-		assert.Contains(t, projectLinks, key, "Missing field in projectLinks: %s", key)
-	}
-
-	// Check security sub-object
-	securityRaw, ok := rawResponse["security"]
-	require.True(t, ok, "security field should exist")
-	securityObj, ok := securityRaw.(map[string]any)
-	require.True(t, ok, "security should be a map")
-	expectedSecurityKeys := map[string]bool{
-		"enabled":       true,
-		"accessAllowed": true,
-		"authConfig":    true,
-		"publicAccess":  true,
-		"privateMode":   true,
-	}
-
-	for key := range securityObj {
-		assert.True(t, expectedSecurityKeys[key], "Unexpected field in security: %s", key)
-	}
-
-	// Check authConfig sub-object
-	authConfigRaw, ok := securityObj["authConfig"]
-	require.True(t, ok, "authConfig field should exist")
-	authConfig, ok := authConfigRaw.(map[string]any)
-	require.True(t, ok, "authConfig should be a map")
-	expectedAuthKeys := map[string]bool{
-		"basicEnabled":     true,
-		"enabledProviders": true,
-	}
-
-	for key := range authConfig {
-		assert.True(t, expectedAuthKeys[key], "Unexpected field in authConfig: %s", key)
-	}
-}
-
-// =============================================================================
-// FUZZ TESTS
-// =============================================================================
-
-// fuzzSecurityInput holds the fuzz test input parameters for security config testing.
-type fuzzSecurityInput struct {
-	basicEnabled     bool
-	googleEnabled    bool
-	githubEnabled    bool
-	microsoftEnabled bool
-	host             string
-}
-
-// buildFuzzOAuthProviders constructs an OAuth providers array from fuzz input flags.
-func buildFuzzOAuthProviders(input fuzzSecurityInput) []conf.OAuthProviderConfig {
-	var providers []conf.OAuthProviderConfig
-
-	if input.googleEnabled {
-		providers = append(providers, conf.OAuthProviderConfig{
-			Provider:     "google",
-			Enabled:      true,
-			ClientID:     "fuzz-google-client",
-			ClientSecret: "fuzz-google-secret",
-		})
-	}
-	if input.githubEnabled {
-		providers = append(providers, conf.OAuthProviderConfig{
-			Provider:     "github",
-			Enabled:      true,
-			ClientID:     "fuzz-github-client",
-			ClientSecret: "fuzz-github-secret",
-		})
-	}
-	if input.microsoftEnabled {
-		providers = append(providers, conf.OAuthProviderConfig{
-			Provider:     "microsoft",
-			Enabled:      true,
-			ClientID:     "fuzz-microsoft-client",
-			ClientSecret: "fuzz-microsoft-secret",
-		})
-	}
-
-	return providers
-}
-
-// verifyFuzzSecurityResponse verifies the response matches expected security configuration.
-func verifyFuzzSecurityResponse(t *testing.T, response *AppConfigResponse, input fuzzSecurityInput, bodyStr string) {
-	t.Helper()
-
-	expectedEnabled := input.basicEnabled || input.googleEnabled || input.githubEnabled || input.microsoftEnabled
-	if response.Security.Enabled != expectedEnabled {
-		t.Errorf("Security.Enabled mismatch: expected %v, got %v", expectedEnabled, response.Security.Enabled)
-	}
-
-	if response.Security.AuthConfig.BasicEnabled != input.basicEnabled {
-		t.Errorf("BasicEnabled mismatch: expected %v, got %v", input.basicEnabled, response.Security.AuthConfig.BasicEnabled)
-	}
-
-	verifyFuzzOAuthProviders(t, response, input)
-	verifyFuzzHostNotExposed(t, bodyStr, input.host)
-}
-
-// verifyFuzzOAuthProviders checks that OAuth provider flags in response match input.
-func verifyFuzzOAuthProviders(t *testing.T, response *AppConfigResponse, input fuzzSecurityInput) {
-	t.Helper()
-
-	hasProvider := func(provider string) bool {
-		return slices.Contains(response.Security.AuthConfig.EnabledProviders, provider)
-	}
-
-	if hasProvider("google") != input.googleEnabled {
-		t.Errorf("GoogleEnabled mismatch: expected %v, got %v", input.googleEnabled, hasProvider("google"))
-	}
-	if hasProvider("github") != input.githubEnabled {
-		t.Errorf("GithubEnabled mismatch: expected %v, got %v", input.githubEnabled, hasProvider("github"))
-	}
-	if hasProvider("microsoft") != input.microsoftEnabled {
-		t.Errorf("MicrosoftEnabled mismatch: expected %v, got %v", input.microsoftEnabled, hasProvider("microsoft"))
-	}
-}
-
-// verifyFuzzHostNotExposed checks that the host is not exposed in the response body.
-func verifyFuzzHostNotExposed(t *testing.T, bodyStr, host string) {
-	t.Helper()
-
-	if host != "" && strings.Contains(bodyStr, host) {
-		t.Errorf("Host should not be exposed in response: %s", host)
-	}
-}
-
-// FuzzGetAppConfig_SecurityConfig fuzzes the security configuration.
-// Run with: go test -fuzz=FuzzGetAppConfig_SecurityConfig -fuzztime=30s
-func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
-	// Add seed corpus (basicEnabled, googleEnabled, githubEnabled, microsoftEnabled, host)
-	f.Add(false, false, false, false, "")
-	f.Add(true, false, false, false, "localhost")
-	f.Add(true, true, true, true, "example.com")
-	f.Add(false, true, false, true, "日本語.com")
-	f.Add(true, true, true, true, "<script>evil</script>")
-
-	f.Fuzz(func(t *testing.T, basicEnabled, googleEnabled, githubEnabled, microsoftEnabled bool, host string) {
-		input := fuzzSecurityInput{
-			basicEnabled:     basicEnabled,
-			googleEnabled:    googleEnabled,
-			githubEnabled:    githubEnabled,
-			microsoftEnabled: microsoftEnabled,
-			host:             host,
-		}
-
-		e := echo.New()
-		mockDS := mocks.NewMockInterface(t)
-		mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-
-		settings := &conf.Settings{
-			Version: "1.0.0-fuzz",
-			Security: conf.Security{
-				BasicAuth:      conf.BasicAuth{Enabled: input.basicEnabled},
-				OAuthProviders: buildFuzzOAuthProviders(input),
-				Host:           input.host,
-			},
-		}
-
-		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
-		controller.Settings.Store(settings)
-		apitest.PublishTestSettings(t, settings)
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/app/config")
-
-		if err := controller.GetAppConfig(c); err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-
-		if rec.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", rec.Code)
-		}
-
-		var response AppConfigResponse
-		if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
-			t.Errorf("Response is not valid JSON: %v", jsonErr)
-		}
-
-		verifyFuzzSecurityResponse(t, &response, input, rec.Body.String())
-	})
-}
-
-// TestGetAppConfig_PublicAccessFlags tests that publicAccess flags are included in the response.
-func TestGetAppConfig_PublicAccessFlags(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	tests := []struct {
-		name     string
-		enabled  bool
-		expected bool
-	}{
-		{"LiveAudio disabled by default", false, false},
-		{"LiveAudio enabled", true, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			controller.Settings.Load().Security.PublicAccess.LiveAudio = tt.enabled
-
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-
-			err := controller.GetAppConfig(c)
-			require.NoError(t, err)
-			require.Equal(t, http.StatusOK, rec.Code)
-
-			var response AppConfigResponse
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-
-			assert.Equal(t, tt.expected, response.Security.PublicAccess.LiveAudio)
-		})
-	}
-}
-
-// TestGetAppConfig_LiveSpectrogramField verifies the liveSpectrogram field
-// in the app config response reflects the dashboard setting.
-func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
-	tests := []struct {
-		name     string
-		enabled  bool
-		expected bool
+// TestGetAppConfig_SettingFlags tests that the public live audio and live
+// spectrogram flags follow their settings, in both directions.
+func TestGetAppConfig_SettingFlags(t *testing.T) {
+	flags := []struct {
+		name string
+		set  func(s *conf.Settings, v bool)
+		got  func(r *AppConfigResponse) bool
 	}{
 		{
-			name:     "default false",
-			enabled:  false,
-			expected: false,
+			name: "public live audio",
+			set:  func(s *conf.Settings, v bool) { s.Security.PublicAccess.LiveAudio = v },
+			got:  func(r *AppConfigResponse) bool { return r.Security.PublicAccess.LiveAudio },
 		},
 		{
-			name:     "enabled true",
-			enabled:  true,
-			expected: true,
+			name: "live spectrogram",
+			set:  func(s *conf.Settings, v bool) { s.Realtime.Dashboard.LiveSpectrogram = v },
+			got:  func(r *AppConfigResponse) bool { return r.LiveSpectrogram },
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Not parallel: setupAppConfigTest publishes settings to the
-			// process-global snapshot that GetAppConfig reads via currentSettings.
-			e, controller := setupAppConfigTest(t, nil)
+	for _, flag := range flags {
+		for _, value := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s %t", flag.name, value), func(t *testing.T) {
+				// Not parallel: setupAppConfigTest publishes settings to the
+				// process-global snapshot that GetAppConfig reads via currentSettings.
+				e, controller := setupAppConfigTest(t, nil)
+				flag.set(controller.Settings.Load(), value)
 
-			// Set the LiveSpectrogram value for this test case
-			controller.Settings.Load().Realtime.Dashboard.LiveSpectrogram = tt.enabled
+				rec := requestAppConfig(t, e, controller)
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-
-			err := controller.GetAppConfig(c)
-			require.NoError(t, err)
-			require.Equal(t, http.StatusOK, rec.Code)
-
-			var response AppConfigResponse
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-
-			assert.Equal(t, tt.expected, response.LiveSpectrogram)
-		})
+				var response AppConfigResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				assert.Equal(t, value, flag.got(&response))
+			})
+		}
 	}
 }
 
@@ -985,29 +696,6 @@ func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, response.Sentry, "Sentry config should be nil when disabled")
-}
-
-// TestGetAppConfig_SpeciesDictVersion verifies the response JSON carries
-// speciesDictVersion equal to speciesdict.Version() and that it is non-empty.
-func TestGetAppConfig_SpeciesDictVersion(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/app/config")
-
-	err := controller.GetAppConfig(ctx)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	var response AppConfigResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	expectedVersion := speciesdict.Version()
-	assert.NotEmpty(t, response.SpeciesDictVersion, "speciesDictVersion must not be empty")
-	assert.Equal(t, expectedVersion, response.SpeciesDictVersion, "speciesDictVersion must match speciesdict.Version()")
 }
 
 // allowAllAuth is an auth.Service stub that reports every request as
