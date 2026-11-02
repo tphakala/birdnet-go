@@ -14,7 +14,6 @@
 package analytics
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -76,13 +75,15 @@ func newAnalyticsContext(e *echo.Echo, target string) (echo.Context, *httptest.R
 	return c, rec
 }
 
-// decodeStrictJSON decodes a response body into v and fails on any key v does not declare, so a
-// shape test also catches a field added to the wire payload.
-func decodeStrictJSON(t *testing.T, body []byte, v any) {
+// decodeExactJSON decodes a response body into v and requires that encoding v again reproduces
+// the body, so a shape test fails on trailing data, a key v does not declare, a key spelled with
+// different case, and a key the response omits.
+func decodeExactJSON(t *testing.T, body []byte, v any) {
 	t.Helper()
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	require.NoError(t, dec.Decode(v))
+	require.NoError(t, json.Unmarshal(body, v))
+	again, err := json.Marshal(v)
+	require.NoError(t, err)
+	require.JSONEq(t, string(body), string(again))
 }
 
 // setupAnalyticsTestEnvironment builds an Echo, a mock datastore, and an analytics

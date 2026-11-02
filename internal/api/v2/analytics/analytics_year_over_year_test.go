@@ -52,7 +52,7 @@ func TestGetYearOverYear_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp yearOverYearJSON
-	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
 	assert.Equal(t, yearOverYearJSON{
 		CurrentYear:  2026,
 		PreviousYear: 2025,

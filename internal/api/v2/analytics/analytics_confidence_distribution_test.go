@@ -40,7 +40,7 @@ func TestGetConfidenceDistribution_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []confidenceDistributionJSON
-	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
 	// The bins are decoded from JSON floats, so the literals round-trip exactly.
 	assert.Equal(t, []confidenceDistributionJSON{
 		{ScientificName: "Turdus merula", CommonName: "Eurasian Blackbird", Bins: []float64{0.1, 0.2, 0.3, 0.4}, Total: 40},

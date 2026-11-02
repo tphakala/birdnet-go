@@ -46,7 +46,7 @@ func TestGetAcousticSuccession_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []acousticSuccessionJSON
-	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
 	// Every hour of both species is compared, not only the non-zero hours.
 	var blackbird, robin [24]int
 	blackbird[6] = 30

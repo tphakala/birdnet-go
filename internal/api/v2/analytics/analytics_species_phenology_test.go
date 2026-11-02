@@ -41,7 +41,7 @@ func TestGetSpeciesPhenology_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []speciesPhenologyJSON
-	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
 	assert.Equal(t, []speciesPhenologyJSON{
 		{ScientificName: "Apus apus", CommonName: "Common Swift", FirstSeen: "2026-03-01", LastSeen: "2026-03-20", Count: 40},
 		{ScientificName: "Hirundo rustica", CommonName: "Barn Swallow", FirstSeen: "2026-03-05", LastSeen: "2026-03-28", Count: 25},

@@ -47,7 +47,7 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []speciesDistributionJSON
-	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
 	// The response carries every row of the fixture with all 24 hour buckets, in order.
 	rows := sampleSpeciesDistribution()
 	want := make([]speciesDistributionJSON, 0, len(rows))
