@@ -9,7 +9,7 @@
   - Secure state management
 -->
 <script lang="ts">
-  import { api } from '$lib/utils/api';
+  import { api, ApiError } from '$lib/utils/api';
   import { safeGet, safeElementAccess } from '$lib/utils/security';
   import { buildAppUrl, extractRelativePath, getUiBasePath } from '$lib/utils/urlHelpers';
   import { MAX_LOGIN_REDIRECT_LENGTH } from '$lib/utils/loginRedirect';
@@ -21,6 +21,9 @@
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
+
+  // Status the server answers with once the login attempt limit is used up
+  const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
 
   // Logger for authentication debugging
   const logger = loggers.auth;
@@ -212,8 +215,12 @@
       setTimeout(() => {
         window.location.reload();
       }, 500);
-    } catch {
-      error = t('auth.errors.loginFailed');
+    } catch (err) {
+      // A 429 means the attempt limit is used up, not that the password is wrong.
+      error =
+        err instanceof ApiError && err.status === HTTP_STATUS_TOO_MANY_REQUESTS
+          ? err.userMessage
+          : t('auth.errors.loginFailed');
       // Only re-enable on failure. On success the page navigates away (OAuth
       // callback redirect) or reloads, so keeping the control disabled here
       // prevents a double-submit firing redundant login requests mid-navigation.
