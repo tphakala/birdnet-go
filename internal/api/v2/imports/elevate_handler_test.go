@@ -95,7 +95,7 @@ func TestElevateImport_LadderFallback(t *testing.T) {
 		{name: "staged source with elevation off", stagedSource: true, wantMethod: responseMethodFallback},
 		{name: "staged source, elevation on, no password", stagedSource: true, allowElevation: true, wantMethod: responseMethodPasswordRequired},
 		{name: "valid database, elevation on, no password", allowElevation: true, wantMethod: responseMethodPasswordRequired},
-		{name: "valid database, elevation on, wrong password", allowElevation: true, password: "wrongpass", wantMethod: responseMethodFallback},
+		{name: "valid database, elevation on, password supplied", allowElevation: true, password: "wrongpass", wantMethod: responseMethodFallback},
 		{name: "valid database, elevation off, no password", wantMethod: responseMethodFallback},
 	}
 
