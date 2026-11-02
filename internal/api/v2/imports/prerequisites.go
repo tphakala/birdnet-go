@@ -3,6 +3,8 @@ package importsapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -277,7 +279,7 @@ func (c *Handler) lifecycleContext() context.Context {
 }
 
 // dbFingerprint reads the database settings that decide what the checks look
-// at, from the live settings.
+// at, from the live settings. The MySQL credentials are included only as a hash.
 func (c *Handler) dbFingerprint() dbFingerprint {
 	settings := c.CurrentSettings()
 	if settings == nil {
@@ -289,12 +291,21 @@ func (c *Handler) dbFingerprint() dbFingerprint {
 		sqlitePath = abs
 	}
 	return dbFingerprint{
-		MySQLEnabled:  mysql.Enabled,
-		SQLitePath:    sqlitePath,
-		MySQLHost:     mysql.Host,
-		MySQLPort:     mysql.Port,
-		MySQLDatabase: mysql.Database,
+		MySQLEnabled:         mysql.Enabled,
+		SQLitePath:           sqlitePath,
+		MySQLHost:            mysql.Host,
+		MySQLPort:            mysql.Port,
+		MySQLDatabase:        mysql.Database,
+		MySQLCredentialsHash: mysqlCredentialsHash(mysql.Username, mysql.Password),
 	}
+}
+
+// mysqlCredentialsHash returns a truncated digest of the MySQL user name and
+// password. Each part is length-prefixed so two different pairs cannot hash alike
+// by moving a separator.
+func mysqlCredentialsHash(username, password string) uint32 {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%d:%s%d:%s", len(username), username, len(password), password))
+	return binary.BigEndian.Uint32(sum[:])
 }
 
 // isUsingMySQL returns true if the application is configured to use MySQL.

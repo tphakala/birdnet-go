@@ -290,6 +290,8 @@ func TestDBFingerprint_FollowsSettings(t *testing.T) {
 		"mysql host":     func(s *conf.Settings) { s.Output.MySQL.Host = "db.example" },
 		"mysql port":     func(s *conf.Settings) { s.Output.MySQL.Port = "3307" },
 		"mysql database": func(s *conf.Settings) { s.Output.MySQL.Database = "other" },
+		"mysql username": func(s *conf.Settings) { s.Output.MySQL.Username = "other_user" },
+		"mysql password": func(s *conf.Settings) { s.Output.MySQL.Password = "other_secret" },
 		"sqlite path":    func(s *conf.Settings) { s.Output.SQLite.Path = filepath.Join(t.TempDir(), "other.db") },
 	}
 	for name, mutate := range mutations {
@@ -302,6 +304,24 @@ func TestDBFingerprint_FollowsSettings(t *testing.T) {
 			assert.NotEqual(t, before, controller.dbFingerprint())
 		})
 	}
+}
+
+// TestDBFingerprint_HidesCredentials pins that the fingerprint, which can end up
+// in logs and failure output, never carries the MySQL password or user name.
+func TestDBFingerprint_HidesCredentials(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	const secret = "hunter2-secret"
+	_, controller, _ := setupPrerequisitesTestEnvironment(t)
+	controller.Settings.Load().Output.MySQL.Password = secret
+	controller.Settings.Load().Output.MySQL.Username = "fingerprint_user"
+
+	rendered := fmt.Sprintf("%v %+v %#v", controller.dbFingerprint(), controller.dbFingerprint(), controller.dbFingerprint())
+
+	assert.NotContains(t, rendered, secret)
+	assert.NotContains(t, rendered, "fingerprint_user")
 }
 
 // TestRunPrerequisites_LogsOnlyRealRuns pins the log trail of the prerequisites

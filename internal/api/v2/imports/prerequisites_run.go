@@ -77,13 +77,18 @@ type recordCountSink struct {
 }
 
 // dbFingerprint identifies the database settings a result was produced for. It
-// is comparable, so reuse is a plain equality test.
+// is comparable, so reuse is a plain equality test. The MySQL user name and
+// password enter only through MySQLCredentialsHash, so the struct never holds
+// them in the clear (a truncated digest is enough to see that they changed;
+// the struct stays under gocritic's hugeParam size); the connection string has
+// no other settings (no TLS).
 type dbFingerprint struct {
-	MySQLEnabled  bool
-	SQLitePath    string
-	MySQLHost     string
-	MySQLPort     string
-	MySQLDatabase string
+	MySQLEnabled         bool
+	MySQLCredentialsHash uint32
+	SQLitePath           string
+	MySQLHost            string
+	MySQLPort            string
+	MySQLDatabase        string
 }
 
 // prereqReuseReason says why a stored result cannot be reused. The zero value
