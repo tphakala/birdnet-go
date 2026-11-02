@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -21,102 +22,81 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// loadSharedTaxonomyDB parses the embedded taxonomy database once per test binary.
+// The tests only read it, so every handler can share the one instance.
+var loadSharedTaxonomyDB = sync.OnceValues(classifier.LoadTaxonomyDatabase)
+
+// newTaxonomyHandler builds a species Handler backed by the embedded taxonomy database.
+func newTaxonomyHandler(t *testing.T) *Handler {
+	t.Helper()
+	taxonomyDB, err := loadSharedTaxonomyDB()
+	require.NoError(t, err, "Failed to load taxonomy database")
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
+	c.Settings.Store(apitest.NewValidTestSettings())
+	return c
+}
+
+// serveTaxonomyParam runs a taxonomy handler that reads one path parameter and
+// returns the recorder. The handler is expected to write its own response, so a
+// returned error fails the test.
+func serveTaxonomyParam(t *testing.T, handler func(echo.Context) error, path, param, value string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path+value, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+	ctx.SetParamNames(param)
+	ctx.SetParamValues(value)
+	require.NoError(t, handler(ctx))
+	return rec
+}
+
+// requireStaticJSON asserts a 200 JSON response carrying the static-data cache
+// headers shared by the taxonomy lookups, and returns the decoded body.
+func requireStaticJSON(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+	assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"))
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "Failed to parse JSON response")
+	return resp
+}
+
 // TestGetGenusSpecies tests the GET /api/v2/taxonomy/genus/:genus endpoint
 func TestGetGenusSpecies(t *testing.T) {
 	t.Parallel()
 
-	// Load taxonomy database
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	require.NoError(t, err, "Failed to load taxonomy database")
-
-	// Create a minimal controller with taxonomy DB
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(apitest.NewValidTestSettings())
+	c := newTaxonomyHandler(t)
 
 	tests := []struct {
-		name           string
-		genus          string
-		expectedStatus int
-		checkResponse  func(*testing.T, map[string]any)
+		name        string
+		genus       string
+		wantGenus   string
+		minSpecies  int
+		wantMessage string // set for the not-found row
 	}{
-		{
-			name:           "valid genus - corvus",
-			genus:          "corvus",
-			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp map[string]any) {
-				t.Helper()
-				genus, ok := resp["genus"].(string)
-				assert.True(t, ok, "Expected genus field in response")
-				// Genus is returned in proper case (Corvus), not lowercase
-				assert.Equal(t, "Corvus", genus, "Expected genus 'Corvus'")
-
-				species, ok := resp["species"].([]any)
-				assert.True(t, ok, "Expected species array")
-				assert.GreaterOrEqual(t, len(species), 10, "Expected at least 10 corvus species")
-			},
-		},
-		{
-			name:           "valid genus - turdus",
-			genus:          "turdus",
-			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp map[string]any) {
-				t.Helper()
-				species, ok := resp["species"].([]any)
-				assert.True(t, ok, "Expected species array")
-				assert.GreaterOrEqual(t, len(species), 50, "Expected at least 50 turdus species")
-			},
-		},
-		{
-			name:           "case insensitive - CORVUS",
-			genus:          "CORVUS",
-			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp map[string]any) {
-				t.Helper()
-				genus, ok := resp["genus"].(string)
-				assert.True(t, ok, "Expected genus field in response")
-				// Genus should match regardless of input case
-				assert.Equal(t, "Corvus", genus, "Genus should be 'Corvus'")
-			},
-		},
-		{
-			name:           "nonexistent genus",
-			genus:          "nonexistentgenus",
-			expectedStatus: http.StatusNotFound,
-			checkResponse:  nil,
-		},
+		{name: "valid genus - corvus", genus: "corvus", wantGenus: "Corvus", minSpecies: 10},
+		{name: "valid genus - turdus", genus: "turdus", wantGenus: "Turdus", minSpecies: 50},
+		{name: "case insensitive - CORVUS", genus: "CORVUS", wantGenus: "Corvus", minSpecies: 10},
+		{name: "nonexistent genus", genus: "nonexistentgenus", wantMessage: "Genus not found"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := echo.New()
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/taxonomy/genus/"+tt.genus, http.NoBody)
-			rec := httptest.NewRecorder()
-			echoCtx := e.NewContext(req, rec)
-			echoCtx.SetParamNames("genus")
-			echoCtx.SetParamValues(tt.genus)
+			rec := serveTaxonomyParam(t, c.GetGenusSpecies, "/api/v2/taxonomy/genus/", "genus", tt.genus)
 
-			err := c.GetGenusSpecies(echoCtx)
-
-			if tt.expectedStatus == http.StatusOK {
-				require.NoError(t, err, "Expected no error")
-				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
-				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
-
-				// Verify cache headers
-				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
-				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
-
-				if tt.checkResponse != nil {
-					// Parse JSON response
-					var resp map[string]any
-					err := json.Unmarshal(rec.Body.Bytes(), &resp)
-					require.NoError(t, err, "Failed to parse JSON response")
-					tt.checkResponse(t, resp)
-				}
-			} else {
-				// For error cases, Echo returns an error or non-OK status
-				assert.True(t, err != nil || rec.Code != http.StatusOK, "Expected error or non-OK status")
+			if tt.wantMessage != "" {
+				apitest.AssertControllerError(t, nil, rec, http.StatusNotFound, tt.wantMessage)
+				return
 			}
+
+			resp := requireStaticJSON(t, rec)
+			assert.Equal(t, tt.wantGenus, resp["genus"], "genus is returned in proper case")
+			species, ok := resp["species"].([]any)
+			require.True(t, ok, "Expected species array")
+			assert.GreaterOrEqual(t, len(species), tt.minSpecies, "Expected at least %d species", tt.minSpecies)
 		})
 	}
 }
@@ -125,77 +105,34 @@ func TestGetGenusSpecies(t *testing.T) {
 func TestGetFamilySpecies(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	require.NoError(t, err, "Failed to load taxonomy database")
-
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(apitest.NewValidTestSettings())
+	c := newTaxonomyHandler(t)
 
 	tests := []struct {
-		name           string
-		family         string
-		expectedStatus int
-		minSpecies     int
+		name        string
+		family      string
+		minSpecies  int
+		wantMessage string // set for the not-found row
 	}{
-		{
-			name:           "owls - strigidae",
-			family:         "strigidae",
-			expectedStatus: http.StatusOK,
-			minSpecies:     200,
-		},
-		{
-			name:           "corvids - corvidae",
-			family:         "corvidae",
-			expectedStatus: http.StatusOK,
-			minSpecies:     100,
-		},
-		{
-			name:           "case insensitive",
-			family:         "STRIGIDAE",
-			expectedStatus: http.StatusOK,
-			minSpecies:     200,
-		},
-		{
-			name:           "nonexistent family",
-			family:         "nonexistentfamily",
-			expectedStatus: http.StatusNotFound,
-			minSpecies:     0,
-		},
+		{name: "owls - strigidae", family: "strigidae", minSpecies: 200},
+		{name: "corvids - corvidae", family: "corvidae", minSpecies: 100},
+		{name: "case insensitive", family: "STRIGIDAE", minSpecies: 200},
+		{name: "nonexistent family", family: "nonexistentfamily", wantMessage: "Family not found"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := echo.New()
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/taxonomy/family/"+tt.family, http.NoBody)
-			rec := httptest.NewRecorder()
-			echoCtx := e.NewContext(req, rec)
-			echoCtx.SetParamNames("family")
-			echoCtx.SetParamValues(tt.family)
+			rec := serveTaxonomyParam(t, c.GetFamilySpecies, "/api/v2/taxonomy/family/", "family", tt.family)
 
-			err := c.GetFamilySpecies(echoCtx)
-
-			if tt.expectedStatus == http.StatusOK {
-				require.NoError(t, err, "Expected no error")
-				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
-				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
-
-				// Verify cache headers
-				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
-				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
-
-				var resp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &resp)
-				require.NoError(t, err, "Failed to parse JSON response")
-
-				species, ok := resp["species"].([]any)
-				assert.True(t, ok, "Expected species array in response")
-				assert.GreaterOrEqual(t, len(species), tt.minSpecies,
-					"Expected at least %d species in family %s", tt.minSpecies, tt.family)
-
-				t.Logf("Family %s has %d species", tt.family, len(species))
-			} else {
-				assert.True(t, err != nil || rec.Code != http.StatusOK, "Expected error or non-OK status")
+			if tt.wantMessage != "" {
+				apitest.AssertControllerError(t, nil, rec, http.StatusNotFound, tt.wantMessage)
+				return
 			}
+
+			resp := requireStaticJSON(t, rec)
+			species, ok := resp["species"].([]any)
+			require.True(t, ok, "Expected species array in response")
+			assert.GreaterOrEqual(t, len(species), tt.minSpecies,
+				"Expected at least %d species in family %s", tt.minSpecies, tt.family)
 		})
 	}
 }
@@ -204,101 +141,42 @@ func TestGetFamilySpecies(t *testing.T) {
 func TestGetSpeciesTree(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	require.NoError(t, err, "Failed to load taxonomy database")
-
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(apitest.NewValidTestSettings())
+	c := newTaxonomyHandler(t)
 
 	tests := []struct {
 		name           string
 		scientificName string
-		expectedStatus int
 		wantGenus      string
 		wantFamily     string
 		wantOrder      string
+		wantMessage    string // set for the not-found row
 	}{
-		{
-			name:           "american robin",
-			scientificName: "Turdus migratorius",
-			expectedStatus: http.StatusOK,
-			wantGenus:      "Turdus",
-			wantFamily:     "Turdidae",
-			wantOrder:      "Passeriformes",
-		},
-		{
-			name:           "common raven",
-			scientificName: "Corvus corax",
-			expectedStatus: http.StatusOK,
-			wantGenus:      "Corvus",
-			wantFamily:     "Corvidae",
-			wantOrder:      "Passeriformes",
-		},
-		{
-			name:           "great horned owl",
-			scientificName: "Bubo virginianus",
-			expectedStatus: http.StatusOK,
-			wantGenus:      "Bubo",
-			wantFamily:     "Strigidae",
-			wantOrder:      "Strigiformes",
-		},
-		{
-			name:           "url encoded spaces",
-			scientificName: "Turdus migratorius",
-			expectedStatus: http.StatusOK,
-			wantGenus:      "Turdus",
-			wantFamily:     "Turdidae",
-			wantOrder:      "Passeriformes",
-		},
-		{
-			name:           "nonexistent species",
-			scientificName: "Nonexistent species",
-			expectedStatus: http.StatusNotFound,
-		},
+		{name: "american robin", scientificName: "Turdus migratorius", wantGenus: "Turdus", wantFamily: "Turdidae", wantOrder: "Passeriformes"},
+		{name: "common raven", scientificName: "Corvus corax", wantGenus: "Corvus", wantFamily: "Corvidae", wantOrder: "Passeriformes"},
+		{name: "great horned owl", scientificName: "Bubo virginianus", wantGenus: "Bubo", wantFamily: "Strigidae", wantOrder: "Strigiformes"},
+		{name: "nonexistent species", scientificName: "Nonexistent species", wantMessage: "Species not found"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := echo.New()
-			// URL-encode the scientific name for the request URL
-			encodedName := url.PathEscape(tt.scientificName)
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/taxonomy/tree/"+encodedName, http.NoBody)
-			rec := httptest.NewRecorder()
-			echoCtx := e.NewContext(req, rec)
-			echoCtx.SetParamNames("scientific_name")
-			// Echo would decode the URL param, so pass the encoded value to simulate that
-			echoCtx.SetParamValues(encodedName)
+			// The name travels URL-encoded in the path and as the raw parameter value.
+			rec := serveTaxonomyParam(t, c.GetSpeciesTree, "/api/v2/taxonomy/tree/", "scientific_name", url.PathEscape(tt.scientificName))
 
-			err := c.GetSpeciesTree(echoCtx)
-
-			if tt.expectedStatus == http.StatusOK {
-				require.NoError(t, err, "Expected no error")
-				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
-				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
-
-				// Verify cache headers
-				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
-				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
-
-				var resp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &resp)
-				require.NoError(t, err, "Failed to parse JSON response")
-
-				// Check taxonomy tree structure (JSON field is "taxonomy_tree" with underscore)
-				tree, ok := resp["taxonomy_tree"].(map[string]any)
-				assert.True(t, ok, "Expected taxonomy_tree in response")
-
-				assert.Equal(t, tt.wantGenus, tree["genus"], "Expected genus to match")
-				assert.Equal(t, tt.wantFamily, tree["family"], "Expected family to match")
-				assert.Equal(t, tt.wantOrder, tree["order"], "Expected order to match")
-
-				// Verify basic taxonomy structure
-				assert.Equal(t, "Animalia", tree["kingdom"], "Expected kingdom Animalia")
-				assert.Equal(t, "Chordata", tree["phylum"], "Expected phylum Chordata")
-				assert.Equal(t, "Aves", tree["class"], "Expected class Aves")
-			} else {
-				assert.True(t, err != nil || rec.Code != http.StatusOK, "Expected error or non-OK status")
+			if tt.wantMessage != "" {
+				apitest.AssertControllerError(t, nil, rec, http.StatusNotFound, tt.wantMessage)
+				return
 			}
+
+			resp := requireStaticJSON(t, rec)
+			tree, ok := resp["taxonomy_tree"].(map[string]any)
+			require.True(t, ok, "Expected taxonomy_tree in response")
+
+			assert.Equal(t, tt.wantGenus, tree["genus"])
+			assert.Equal(t, tt.wantFamily, tree["family"])
+			assert.Equal(t, tt.wantOrder, tree["order"])
+			assert.Equal(t, "Animalia", tree["kingdom"])
+			assert.Equal(t, "Chordata", tree["phylum"])
+			assert.Equal(t, "Aves", tree["class"])
 		})
 	}
 }
@@ -307,54 +185,27 @@ func TestGetSpeciesTree(t *testing.T) {
 func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	require.NoError(t, err, "Failed to load taxonomy database")
-
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(apitest.NewValidTestSettings())
+	c := newTaxonomyHandler(t)
 
 	tests := []struct {
 		name           string
 		scientificName string
-		expectedStatus int
 		wantFamily     string
 	}{
-		{
-			name:           "local db lookup - american robin",
-			scientificName: "Turdus migratorius",
-			expectedStatus: http.StatusOK,
-			wantFamily:     "Turdidae",
-		},
-		{
-			name:           "local db lookup - common raven",
-			scientificName: "Corvus corax",
-			expectedStatus: http.StatusOK,
-			wantFamily:     "Corvidae",
-		},
+		{name: "local db lookup - american robin", scientificName: "Turdus migratorius", wantFamily: "Turdidae"},
+		{name: "local db lookup - common raven", scientificName: "Corvus corax", wantFamily: "Corvidae"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the internal method directly since we need context
 			info, err := c.getDetailedTaxonomy(t.Context(), tt.scientificName, "", false, true)
+			require.NoError(t, err)
+			require.NotNil(t, info, "Expected non-nil taxonomy info")
 
-			if tt.expectedStatus == http.StatusOK {
-				require.NoError(t, err, "Expected no error")
-				require.NotNil(t, info, "Expected non-nil taxonomy info")
-				require.NotNil(t, info.Taxonomy, "Expected non-nil taxonomy hierarchy")
-
-				assert.Equal(t, tt.wantFamily, info.Taxonomy.Family, "Expected family to match")
-
-				// Verify metadata indicates local source
-				source, ok := info.Metadata["source"].(string)
-				assert.True(t, ok, "Expected source in metadata")
-				assert.Contains(t, []string{"local", "local+ebird"}, source,
-					"Expected source to be 'local' or 'local+ebird'")
-
-				t.Logf("Successfully retrieved taxonomy from local DB (source: %v)", source)
-			} else {
-				assert.Error(t, err, "Expected error")
-			}
+			assert.Equal(t, tt.wantFamily, info.Taxonomy.Family)
+			assert.Contains(t, []any{"local", "local+ebird"}, info.Metadata["source"],
+				"Expected source to be 'local' or 'local+ebird'")
 		})
 	}
 }
@@ -415,11 +266,7 @@ func TestGetSpeciesTaxonomyNilDBWithEBirdConfigured(t *testing.T) {
 func TestGetSpeciesTaxonomyLocalMissDegradesGracefully(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	require.NoError(t, err, "Failed to load taxonomy database")
-
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(apitest.NewValidTestSettings())
+	c := newTaxonomyHandler(t)
 	require.Nil(t, c.EBird(), "eBird must be off for this test")
 
 	// A validly-formatted binomial (len >= 3, contains a space) guaranteed to be
@@ -453,7 +300,7 @@ func TestGetSpeciesTaxonomyLocalMissDegradesGracefully(t *testing.T) {
 func TestGetSpeciesTaxonomyEBirdFallback(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
+	taxonomyDB, err := loadSharedTaxonomyDB()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	// A binomial absent from the embedded snapshot, so the local lookup misses and
@@ -538,13 +385,9 @@ func TestGetSpeciesTaxonomyEBirdFallback(t *testing.T) {
 func TestGetSpeciesTaxonomyHandlerContract(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	require.NoError(t, err, "Failed to load taxonomy database")
-
 	t.Run("local miss with eBird off returns 200 unresolved", func(t *testing.T) {
 		t.Parallel()
-		c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-		c.Settings.Store(apitest.NewValidTestSettings())
+		c := newTaxonomyHandler(t)
 
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet,
