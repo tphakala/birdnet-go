@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { t } from '$lib/i18n';
 import { elapsedSeconds, failedRunMessage } from './migrationPrerequisites';
 import type { PrerequisitesResponse } from '$lib/types/migration';
@@ -37,21 +37,26 @@ describe('failedRunMessage', () => {
     expect(failedRunMessage(data)).toBeNull();
   });
 
-  it('names the reason of a failed run', () => {
+  // The test i18n mock returns the bare key, so the arguments passed to t() carry the reason
+  const RUN_FAILED_KEY = 'system.database.migration.prerequisites.runFailed';
+
+  it('passes the reason of a failed run to the message', () => {
+    vi.mocked(t).mockClear();
     const failed = {
       ...snapshot,
       status: 'failed',
       error: 'took too long',
     } satisfies PrerequisitesResponse;
-    expect(failedRunMessage(failed)).toBe(
-      t('system.database.migration.prerequisites.runFailed', { error: 'took too long' })
-    );
+
+    expect(failedRunMessage(failed)).toBe(RUN_FAILED_KEY);
+    expect(t).toHaveBeenCalledWith(RUN_FAILED_KEY, { error: 'took too long' });
   });
 
   it('still reports a failed run that carries no reason', () => {
+    vi.mocked(t).mockClear();
     const failed = { ...snapshot, status: 'failed' } satisfies PrerequisitesResponse;
-    expect(failedRunMessage(failed)).toBe(
-      t('system.database.migration.prerequisites.runFailed', { error: '' })
-    );
+
+    expect(failedRunMessage(failed)).toBe(RUN_FAILED_KEY);
+    expect(t).toHaveBeenCalledWith(RUN_FAILED_KEY, { error: '' });
   });
 });
