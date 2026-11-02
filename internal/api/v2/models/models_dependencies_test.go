@@ -24,6 +24,7 @@ const (
 	apiDepP = "api-dep-primary"
 	apiDepG = "api-dep-geo"
 	apiDepT = "api-dep-tax"
+	apiDepN = "api-dep-none"
 
 	apiSizeModel  = 1000
 	apiSizeLabels = 20
@@ -39,7 +40,8 @@ func apiFile(role, name string, size int64) classifier.CatalogFile {
 
 // apiDependencyCatalog is a synthetic catalog: A (flat, depends on G and T), P (a
 // permanent-shaped entry: builtin baseline plus a DFT variant, depends on G), G (the
-// shared geomodel) and T (a hidden taxonomy component).
+// shared geomodel), T (a hidden taxonomy component) and N (flat, no dependency and no
+// geomodel).
 func apiDependencyCatalog() []classifier.CatalogEntry {
 	return []classifier.CatalogEntry{
 		{
@@ -70,6 +72,14 @@ func apiDependencyCatalog() []classifier.CatalogEntry {
 			ID: apiDepT, Name: "Taxonomy", Version: "1.0", Category: classifier.CategoryBird,
 			Hidden: true, Component: true, HuggingFaceRepo: "t/t",
 			Files: []classifier.CatalogFile{apiFile(classifier.RoleTaxonomy, "taxonomy.csv", apiSizeTax)},
+		},
+		{
+			ID: apiDepN, Name: "No geomodel", Version: "1.0", Category: classifier.CategoryBird,
+			HuggingFaceRepo: "t/n",
+			Files: []classifier.CatalogFile{
+				apiFile(classifier.RoleModel, "n.onnx", apiSizeModel),
+				apiFile(classifier.RoleLabels, "n.txt", apiSizeLabels),
+			},
 		},
 	}
 }
@@ -183,6 +193,11 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 	g := findEntry(catalog, apiDepG)
 	require.NotNil(t, g)
 	assert.Empty(t, g.DependsOn)
+	assert.True(t, g.HasGeomodel, "the geomodel entry provides its own geomodel files")
 	assert.Equal(t, classifier.ChannelPreview, g.Channel, "a declared channel is passed through")
 	assert.Nil(t, findEntry(catalog, apiDepT), "a hidden component is not listed")
+
+	n := findEntry(catalog, apiDepN)
+	require.NotNil(t, n)
+	assert.False(t, n.HasGeomodel, "an entry with no geomodel file and no dependency has no geomodel")
 }
