@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { cleanup, screen } from '@testing-library/svelte';
-import { t } from '$lib/i18n';
+import { t, getLocale } from '$lib/i18n';
 import { renderTyped } from '../../../../../test/render-helpers';
 import DatabaseMigrationProgress from './DatabaseMigrationProgress.svelte';
 import type {
@@ -223,6 +223,7 @@ describe('DatabaseMigrationProgress start button', () => {
     cleanup();
     vi.mocked(t).mockReset();
     if (originalT) vi.mocked(t).mockImplementation(originalT);
+    vi.mocked(getLocale).mockReturnValue('en');
   });
 
   it.each(cases)('is blocked with a visible reason while $name', c => {
@@ -274,5 +275,18 @@ describe('DatabaseMigrationProgress start button', () => {
     renderProgress({ prerequisites: allowedPrerequisites, loading: c.loading, error: c.error });
 
     expect(screen.getByRole('button', { name: t(startKey) })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('joins the blocking check names with the active locale', () => {
+    vi.mocked(getLocale).mockReturnValue('fi');
+    renderProgress({ prerequisites: severalBlocked, loading: false, error: null });
+
+    expect(
+      screen.getByText(
+        render('system.database.migration.progress.prerequisitesFailedList', {
+          checks: 'Disk Space ja Database Integrity',
+        })
+      )
+    ).toBeInTheDocument();
   });
 });

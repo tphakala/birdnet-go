@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import type { ComponentProps } from 'svelte';
 import { renderTyped, createComponentTestFactory } from '../../../../../test/render-helpers';
 import DatabasePrerequisites from './DatabasePrerequisites.svelte';
 import type {
@@ -321,5 +322,80 @@ describe('DatabasePrerequisites', () => {
 
     // The alert and the focused Retry button are gone; focus must not fall to the page body
     await waitFor(() => expect(document.activeElement).toBe(screen.getByText(PANEL_TITLE_KEY)));
+  });
+
+  it('keeps the Retry label while a retry with stale data runs without the parent loading flag', async () => {
+    renderTyped(DatabasePrerequisites, {
+      props: {
+        prerequisites: response([check('failed_check', 'failed')], 1, 0),
+        error: 'Request timeout.',
+        onRefresh: () => new Promise<void>(() => {}),
+      },
+    });
+
+    await fireEvent.click(
+      within(screen.getByRole('alert')).getByRole('button', { name: t('common.retry') })
+    );
+
+    // Only the parent's loading flag turns the label into the busy one
+    expect(
+      within(screen.getByRole('alert')).getByRole('button', { name: t('common.retry') })
+    ).not.toHaveAttribute('aria-disabled');
+  });
+
+  describe('result announcement after Re-run', () => {
+    const rerunName = t('system.database.migration.prerequisites.rerun');
+    const staleFailure = response([check('failed_check', 'failed')], 1, 0);
+
+    /** Renders the stale failure; the returned promise settles once the run has ended. */
+    function renderRerun(next: Partial<ComponentProps<typeof DatabasePrerequisites>>) {
+      let finish = () => {};
+      const finished = new Promise<void>(resolve => (finish = resolve));
+      const stale = createComponentTestFactory(DatabasePrerequisites, {
+        prerequisites: staleFailure,
+      });
+      const view = stale.render({
+        props: {
+          onRefresh: async () => {
+            await view.rerender({ isLoading: true });
+            await view.rerender({ isLoading: false, ...next });
+            finish();
+          },
+        },
+      });
+      return finished;
+    }
+
+    it.each([
+      {
+        name: 'all checks passed',
+        next: { prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true } },
+        expected: 'system.database.migration.prerequisites.allPassed',
+      },
+      {
+        name: 'critical failures remain',
+        next: { prerequisites: response([check('failed_check', 'failed')], 2, 0) },
+        expected: 'system.database.migration.prerequisites.criticalIssues',
+      },
+      {
+        name: 'only warnings remain',
+        next: { prerequisites: response([check('warn', 'warning')], 0, 1) },
+        expected: 'system.database.migration.prerequisites.warningsCount',
+      },
+      {
+        name: 'the run failed',
+        next: { error: 'Request timeout.' },
+        expected: '',
+      },
+    ])('announces the result when $name', async c => {
+      const finished = renderRerun(c.next);
+
+      await fireEvent.click(screen.getByRole('button', { name: rerunName }));
+      await finished;
+      // Let the component read the settled props and write the announcement
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(screen.getByRole('status').textContent.trim()).toBe(c.expected);
+    });
   });
 });
