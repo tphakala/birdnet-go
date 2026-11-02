@@ -50,6 +50,12 @@
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
 
+  /** The alert shows when a request failed or there is nothing else to show, except during the first load. */
+  let showError = $derived(!(isLoading && !prerequisites) && (!!error || !prerequisites));
+  let errorText = $derived(
+    error || t('system.database.migration.prerequisites.errors.fetchFailed')
+  );
+
   /** Passed and skipped checks, the only ones that sit behind the details toggle. */
   const isQuiet = (c: PrerequisiteCheck): boolean =>
     c.status === 'passed' || c.status === 'skipped';
@@ -242,11 +248,9 @@
     <span class="sr-only">{announcement}</span>
   </div>
 
-  {#if !(isLoading && !prerequisites) && (error || !prerequisites)}
+  {#if showError}
     <ErrorAlert className="mt-3">
-      <span class="block"
-        >{error || t('system.database.migration.prerequisites.errors.fetchFailed')}</span
-      >
+      <span class="block">{errorText}</span>
       <Button
         bind:ref={retryButton}
         className="mt-2"
