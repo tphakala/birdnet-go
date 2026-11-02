@@ -178,6 +178,7 @@
    * and it does not leave the text of an earlier run standing for it.
    */
   let watchedRunId: number | undefined;
+  let announcedRunId: number | undefined;
   $effect(() => {
     const status = prerequisites?.status;
     const runId = prerequisites?.run_id;
@@ -187,8 +188,9 @@
     } else if (status === 'completed') {
       if (runId === watchedRunId) {
         watchedRunId = undefined;
+        announcedRunId = runId;
         announcement = resultAnnouncement();
-      } else {
+      } else if (runId !== announcedRunId) {
         announcement = '';
       }
     }

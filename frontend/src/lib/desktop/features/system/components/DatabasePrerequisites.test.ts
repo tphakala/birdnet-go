@@ -693,6 +693,10 @@ describe('DatabasePrerequisites', () => {
       await view.rerender({ prerequisites: completed(1) });
       await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(allPassed));
 
+      // The same run handed over again keeps its text
+      await view.rerender({ prerequisites: completed(1) });
+      expect(screen.getByRole('status')).toHaveTextContent(allPassed);
+
       // Another run arrives already completed (a reuse, a run another tab started): its result
       // is not read out here, and the text of the earlier run must not stay for it
       await view.rerender({ prerequisites: completed(2) });
