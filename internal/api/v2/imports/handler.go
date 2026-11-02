@@ -37,6 +37,7 @@ import (
 	"os/user"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
@@ -112,6 +113,10 @@ type Handler struct {
 	// prerequisite. nil means dbserver.QueryCharset on the migration target
 	// connection; tests inject a fixed report.
 	charsetReportFn func(ctx context.Context) (dbserver.CharsetReport, error)
+
+	// startPreflightLimit bounds the checks a migration start re-runs. Zero means
+	// startPreflightTimeout; tests set a tiny value to reach the timeout branch.
+	startPreflightLimit time.Duration
 
 	// cleanupStatus tracks the state of legacy database cleanup. It is initialized
 	// lazily in RegisterLegacyCleanupRoutes; the migration status handler reads it

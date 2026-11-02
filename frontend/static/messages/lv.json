@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "Migrācija nav konfigurēta",
-      "preFlightFailed": "Pirms-lidojuma pārbaudes neizdevās",
+      "preFlightFailed": "Pārbaude pirms migrācijas neizdevās: {check}",
+      "prerequisitesNotReady": "Palaidiet pārbaudes pirms migrācijas un uzgaidiet, līdz tās tiek izturētas, pirms sākat migrāciju.",
       "invalidBody": "Nederīgs pieprasījuma saturs",
       "recordCountFailed": "Neizdevās noteikt kopējo ierakstu skaitu",
       "startFailed": "Neizdevās sākt migrāciju",

@@ -24,6 +24,17 @@ const (
 	// and the frontend request timeout, both 30 s.
 	migrationWorkerStopTimeout = 20 * time.Second
 
+	// startPreflightTimeout bounds the checks a start re-runs. It stays below the
+	// server write timeout and the frontend request timeout, both 30 s: the write
+	// timeout does not cancel the request context, so this bound is what limits the work.
+	startPreflightTimeout = 20 * time.Second
+
+	// preFlightCheckParam is the error parameter that names the blocking check.
+	preFlightCheckParam = "check"
+
+	// msgNoStoredResult is the message of a reused check the stored run did not contain.
+	msgNoStoredResult = "No stored result for this check"
+
 	// migrationWorkerShutdownWait bounds how long shutdown waits for the worker
 	// (including its final tail sync drain) before the databases are closed. It
 	// stays inside the 3 s core shutdown tier budget and leaves time for WAL
@@ -202,6 +213,9 @@ const migrationNotConfiguredMessage = "Migration is not configured"
 
 // errMigrationNotConfigured is the error behind migrationNotConfiguredMessage.
 var errMigrationNotConfigured = errors.NewStd("migration not configured")
+
+// errPrerequisitesNotReady is the error behind a start without a usable prerequisites run.
+var errPrerequisitesNotReady = errors.NewStd("prerequisites run missing, running, stale or for other settings")
 
 // requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
 func (c *Handler) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
@@ -437,14 +451,7 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
-	// Run pre-flight checks
-	if err := c.runPreflightChecks(c.lifecycleContext()); err != nil {
-		c.LogErrorIfEnabled("Pre-flight checks failed",
-			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
-	}
-
-	// Parse request body
+	// Parse request body first, so a slow check can never run into the read timeout
 	var req MigrationStartRequest
 	if err := ctx.Bind(&req); err != nil {
 		c.LogErrorIfEnabled("Failed to parse start request",
@@ -452,15 +459,50 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
 
-	// Count records if not provided
-	// Note: Frontend should pass total_records from the already-fetched stats
-	// to avoid this slower fallback
+	// The expensive checks come from the prerequisites run the page started
+	stored, reason := c.prereqRunner().passingResult(c.dbFingerprint())
+	if reason != prereqReuseOK && reason != prereqReuseFailedCheck {
+		c.LogInfoIfEnabled("Start refused: no usable prerequisites run",
+			logger.String("reason", string(reason)), logger.String("path", path), logger.String("ip", ip))
+		return c.prerequisitesNotReady(ctx)
+	}
+
+	if reason == prereqReuseFailedCheck {
+		return c.storedRunFailed(ctx, stored.Response.Checks, path, ip)
+	}
+
+	// The remaining checks are cheap; bound them below the server write timeout
+	limit := c.startPreflightLimit
+	if limit == 0 {
+		limit = startPreflightTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx.Request().Context(), limit)
+	defer cancel()
+	reused := make(map[string]PrerequisiteCheck, len(stored.Response.Checks))
+	for _, check := range stored.Response.Checks {
+		reused[check.ID] = check
+	}
+	checks := c.runCriticalPrerequisiteChecks(pctx, reused)
+	if c.startAbandoned(pctx, path, ip) {
+		return c.abandonedStartResponse(ctx)
+	}
+	if check := firstBlockingCheck(checks); check != nil {
+		return c.preflightFailed(ctx, check, path, ip)
+	}
+
+	// Count records if not provided by the request or the stored run
 	totalRecords := req.TotalRecords
+	if totalRecords <= 0 && stored.RecordCountKnown {
+		totalRecords = stored.RecordCount
+	}
 	if totalRecords <= 0 {
 		c.LogWarnIfEnabled("Total records not provided, counting from database",
 			logger.String("path", path), logger.String("ip", ip))
 
-		count, err := c.Repo.CountAll(ctx.Request().Context())
+		count, err := c.Repo.CountAll(pctx)
+		if c.startAbandoned(pctx, path, ip) {
+			return c.abandonedStartResponse(ctx)
+		}
 		if err != nil {
 			c.LogErrorIfEnabled("Failed to count legacy records",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -805,27 +847,69 @@ func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	})
 }
 
-// runPreflightChecks verifies the system is ready for migration.
-// This runs the same critical checks as the prerequisites run and fails if any are not passed,
-// or if ctx ended while they ran.
-func (c *Handler) runPreflightChecks(ctx context.Context) error {
-	// Run all critical prerequisite checks
-	checks := c.runCriticalPrerequisiteChecks(ctx)
+// prerequisitesNotReady answers a start that has no usable prerequisites run.
+func (c *Handler) prerequisitesNotReady(ctx echo.Context) error {
+	return c.HandleErrorWithKey(ctx, errPrerequisitesNotReady, "Run the pre-migration checks first",
+		http.StatusConflict, notification.MsgErrMigrationPrereqNotReady, nil)
+}
 
-	// A shutdown during the checks voids them: results gathered after ctx ended
-	// may be partial, and no migration may start on a server that is stopping.
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("%s: %w", msgPreflightInterrupted, err)
-	}
-
-	// Check for any failures
-	for _, check := range checks {
-		if check.Status == CheckStatusFailed || check.Status == CheckStatusError {
-			return fmt.Errorf("prerequisite check '%s' failed: %s", check.Name, check.Message)
+// firstBlockingCheck returns the first failed or errored check, or nil.
+func firstBlockingCheck(checks []PrerequisiteCheck) *PrerequisiteCheck {
+	for i := range checks {
+		if checks[i].Status == CheckStatusFailed || checks[i].Status == CheckStatusError {
+			return &checks[i]
 		}
 	}
-
 	return nil
+}
+
+// storedRunFailed answers a start whose stored prerequisites run has a failed
+// critical check, naming that check.
+func (c *Handler) storedRunFailed(ctx echo.Context, checks []PrerequisiteCheck, path, ip string) error {
+	for i := range checks {
+		if isStoredBlocker(&checks[i]) {
+			return c.preflightFailed(ctx, &checks[i], path, ip)
+		}
+	}
+	return c.prerequisitesNotReady(ctx)
+}
+
+// isStoredBlocker reports whether a stored check blocks the migration.
+func isStoredBlocker(check *PrerequisiteCheck) bool {
+	return check.Severity == CheckSeverityCritical &&
+		(check.Status == CheckStatusFailed || check.Status == CheckStatusError)
+}
+
+// preflightFailed answers a start blocked by check with a 400 that names it.
+func (c *Handler) preflightFailed(ctx echo.Context, check *PrerequisiteCheck, path, ip string) error {
+	err := fmt.Errorf("prerequisite check '%s' failed: %s", check.Name, check.Message)
+	c.LogErrorIfEnabled("Pre-flight checks failed",
+		logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+	return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest,
+		notification.MsgErrMigrationPreFlight, map[string]any{preFlightCheckParam: check.Name})
+}
+
+// startAbandoned reports whether the start request can no longer be answered
+// or acted on: the client went away, or the bounded preflight context ran out.
+func (c *Handler) startAbandoned(pctx context.Context, path, ip string) bool {
+	if pctx.Err() == nil {
+		return false
+	}
+	c.LogInfoIfEnabled("Client went away or the preflight timed out before the migration started",
+		logger.String("path", path), logger.String("ip", ip))
+	return true
+}
+
+// abandonedStartResponse ends a start that was abandoned. A client that is gone
+// gets nothing; one that is still connected after the preflight timed out is told
+// to run the checks again.
+func (c *Handler) abandonedStartResponse(ctx echo.Context) error {
+	select {
+	case <-ctx.Request().Context().Done():
+		return nil
+	default:
+		return c.prerequisitesNotReady(ctx)
+	}
 }
 
 // criticalPrerequisiteSteps lists the checks that must pass before migration,
@@ -865,15 +949,28 @@ func (c *Handler) criticalPrerequisiteSteps(sink *recordCountSink) []prereqStep 
 	return steps
 }
 
-// runCriticalPrerequisiteChecks runs all critical checks that must pass before
-// migration, in order, and returns their results. It records the outcome in the
-// migration_prereq telemetry tag unless ctx ended, so a cancelled run does not
+// runCriticalPrerequisiteChecks runs the critical checks that must pass before
+// migration, in order, and returns their results. A step marked reuseAtStart
+// takes its result from reused (a missing entry is an error check, so the gate
+// fails closed); a nil reused runs every step. It records the outcome in the
+// migration_prereq telemetry tag unless ctx ended, so an abandoned start does not
 // overwrite the tag with a cancellation error.
-func (c *Handler) runCriticalPrerequisiteChecks(ctx context.Context) []PrerequisiteCheck {
+func (c *Handler) runCriticalPrerequisiteChecks(ctx context.Context, reused map[string]PrerequisiteCheck) []PrerequisiteCheck {
 	steps := c.criticalPrerequisiteSteps(nil)
 	checks := make([]PrerequisiteCheck, 0, len(steps))
 	for _, step := range steps {
-		checks = append(checks, step.run(ctx)...)
+		if reused == nil || !step.reuseAtStart {
+			checks = append(checks, step.run(ctx)...)
+			continue
+		}
+		if check, ok := reused[step.id]; ok {
+			checks = append(checks, check)
+			continue
+		}
+		checks = append(checks, PrerequisiteCheck{
+			ID: step.id, Name: step.name, Status: CheckStatusError, Severity: CheckSeverityCritical,
+			Message: msgNoStoredResult,
+		})
 	}
 
 	if ctx.Err() == nil {

@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "La migración no está configurada",
-      "preFlightFailed": "Las comprobaciones previas fallaron",
+      "preFlightFailed": "Falló la comprobación previa a la migración: {check}",
+      "prerequisitesNotReady": "Ejecute las comprobaciones previas a la migración y espere a que se superen antes de iniciar la migración.",
       "invalidBody": "Cuerpo de solicitud no válido",
       "recordCountFailed": "No se pudo determinar el número total de registros",
       "startFailed": "No se pudo iniciar la migración",

@@ -453,16 +453,19 @@ func (r *prereqRunner) reset() {
 }
 
 // passingResult returns the committed result when it is a completed run that
-// passed, matches fp and is fresh; otherwise it reports why not.
+// passed, matches fp and is fresh. For a completed run with a failed critical
+// check the snapshot is returned too, so the caller can name the check; every
+// other reason returns an empty value.
 func (r *prereqRunner) passingResult(fp dbFingerprint) (prereqReusable, prereqReuseReason) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if reason := r.reuseReasonLocked(fp); reason != prereqReuseOK {
+	reason := r.reuseReasonLocked(fp)
+	if reason != prereqReuseOK && reason != prereqReuseFailedCheck {
 		return prereqReusable{}, reason
 	}
 	return prereqReusable{
 		Response:         r.snapshotLocked(),
 		RecordCount:      r.resultRecordCount,
 		RecordCountKnown: r.resultRecordCountKnown,
-	}, prereqReuseOK
+	}, reason
 }
