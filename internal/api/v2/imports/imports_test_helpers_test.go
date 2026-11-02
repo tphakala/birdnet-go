@@ -171,10 +171,10 @@ func testCore(t *testing.T) *apicore.Core {
 
 // setMigrationState installs the migration state manager and worker for one
 // test and restores the previous pair when it ends. With setV2OnlyMode it is
-// the only test writer of the migration globals. It fails a parallel caller,
-// because the globals are process-wide, and it writes under migrationMu, the
-// lock production reads take. Calling it twice in one test is fine: the
-// cleanups run in reverse order.
+// the only test writer of the stateManager, migrationWorker and isV2OnlyMode
+// globals. It fails a parallel caller, because the globals are process-wide,
+// and it writes under migrationMu, the lock production reads take. Calling it
+// twice in one test is fine: the cleanups run in reverse order.
 func setMigrationState(t *testing.T, sm *datastoreV2.StateManager, w *migration.Worker) {
 	t.Helper()
 	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)

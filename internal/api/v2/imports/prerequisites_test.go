@@ -728,8 +728,8 @@ func (discardTransport) Close()                                {}
 // TestRunCriticalPrerequisiteChecks_PublishesPrereqTag pins that running the
 // critical checks publishes the migration_prereq telemetry tag derived from
 // their results: "passed" when none blocks, otherwise the ID of the first
-// failing critical check. Not parallel: the setup helper holds the shared
-// migration state, and the test binds a client on the process-wide Sentry hub.
+// failing critical check. Not parallel: the setup helper writes the process-wide
+// migration globals, and the test binds a client on the process-wide Sentry hub.
 func TestRunCriticalPrerequisiteChecks_PublishesPrereqTag(t *testing.T) {
 	tests := []struct {
 		name     string
