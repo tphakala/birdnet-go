@@ -286,28 +286,35 @@ func TestStartMigration_ReusesExpensiveChecks(t *testing.T) {
 }
 
 // hungCheckAnswerBound is how long the hung-check test waits for the handler to answer. The
-// handler itself answers at the 50 ms limit; the bound only keeps a regression from hanging
-// the suite.
+// handler answers as soon as the start's context ends; the bound only keeps a regression from
+// hanging the suite.
 const hungCheckAnswerBound = 10 * time.Second
 
-// TestStartMigration_HungCheapCheckEndsAtTheLimit pins that a re-run check that takes no
-// context and never returns, a stalled mount, does not hold the start past its limit: the
-// check is abandoned and the start answers 504 with nothing started.
-func TestStartMigration_HungCheapCheckEndsAtTheLimit(t *testing.T) {
+// TestStartMigration_HungCheapCheckEndsWithTheStartContext pins that a re-run check that takes
+// no context and never returns, a stalled mount, does not hold the start once its context
+// ends: the check is abandoned and the start answers, with nothing started. The test ends the
+// context only after the check has begun, so it cannot pass without the abandonment.
+func TestStartMigration_HungCheapCheckEndsWithTheStartContext(t *testing.T) {
 	t.Attr("component", "migration")
 	t.Attr("type", "unit")
 	t.Attr("feature", "start")
 
 	e, controller, sm := setupMigrationTestEnvironment(t)
 	seedPassingResult(t, controller)
+	lifecycle, stop := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, stop)
 	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
 	// Runs before the setup cleanups, so the abandoned check ends before they close the stores
 	t.Cleanup(func() { close(release) })
 	controller.diskFreeFn = func(string) (uint64, error) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
 		<-release
 		return testDiskFreeBytes, nil
 	}
-	controller.startPreflightLimit = 50 * time.Millisecond
 
 	req := httptest.NewRequest(http.MethodPost, startURL, strings.NewReader(startBody))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -316,13 +323,20 @@ func TestStartMigration_HungCheapCheckEndsAtTheLimit(t *testing.T) {
 	go func() { answered <- controller.StartMigration(e.NewContext(req, rec)) }()
 
 	select {
+	case <-entered:
+	case <-time.After(hungCheckAnswerBound):
+		t.Fatal("the disk space check never started")
+	}
+	stop()
+
+	select {
 	case err := <-answered:
 		require.NoError(t, err)
 	case <-time.After(hungCheckAnswerBound):
 		t.Fatal("the start is still waiting for a check that ignores its context")
 	}
 
-	assert.Equal(t, http.StatusGatewayTimeout, rec.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
 	assert.Equal(t, "idle", migrationStateOf(t, sm))
 }
