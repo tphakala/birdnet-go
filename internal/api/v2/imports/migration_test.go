@@ -656,3 +656,82 @@ func getMigrationStatusResponse(t *testing.T, e *echo.Echo, controller *Handler)
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	return response
 }
+
+// seedPassingPrerequisiteResult commits a fresh passing prerequisites result to
+// the handler's runner, as a finished run would, and checks it is reusable.
+func seedPassingPrerequisiteResult(t *testing.T, h *Handler) {
+	t.Helper()
+	r := h.prereqRunner()
+	r.mu.Lock()
+	r.status = PrereqRunStatusCompleted
+	r.result = &PrerequisitesResponse{AllPassed: true, CanStartMigration: true}
+	r.resultFingerprint = h.dbFingerprint()
+	r.finishedAt = r.clock()
+	r.mu.Unlock()
+	require.Equal(t, PrereqRunStatusCompleted, r.snapshot().Status, "the seeded result must be visible")
+}
+
+// TestMigrationStateChange_DropsPrerequisiteResult pins that a start, a cancel
+// and a rollback each drop the stored prerequisites result, so a passing result
+// cannot be reused across a migration state change.
+// Note: Not parallel due to global state modification.
+func TestMigrationStateChange_DropsPrerequisiteResult(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	tests := []struct {
+		name  string
+		setup func(*testing.T, *datastoreV2.StateManager)
+		call  func(*Handler, echo.Context) error
+		body  string
+	}{
+		{name: "start", setup: func(*testing.T, *datastoreV2.StateManager) {}, call: (*Handler).StartMigration, body: `{"total_records": 1000}`},
+		{name: "cancel", setup: toDualWrite, call: (*Handler).CancelMigration},
+		{name: "rollback", setup: toCompleted, call: (*Handler).RollbackMigration},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, sm := setupMigrationTestEnvironment(t)
+			tt.setup(t, sm)
+			seedPassingPrerequisiteResult(t, controller)
+
+			req := httptest.NewRequest(http.MethodPost, migrationActionTestPath, strings.NewReader(tt.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			require.NoError(t, tt.call(controller, e.NewContext(req, rec)))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
+		})
+	}
+}
+
+// TestCancelMigration_KeepsPrerequisiteResultOnFailure pins that a rejected
+// cancel leaves the stored result alone: the state did not change.
+// Note: Not parallel due to global state modification.
+func TestCancelMigration_KeepsPrerequisiteResultOnFailure(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	toCompleted(t, sm) // a completed migration cannot be cancelled
+	seedPassingPrerequisiteResult(t, controller)
+
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.CancelMigration(e.NewContext(httptest.NewRequest(http.MethodPost, migrationActionTestPath, http.NoBody), rec)))
+	require.Equal(t, http.StatusConflict, rec.Code)
+
+	assert.Equal(t, PrereqRunStatusCompleted, controller.prereqRunner().snapshot().Status)
+}
+
+// toCompleted moves the state machine from idle to completed.
+func toCompleted(t *testing.T, sm *datastoreV2.StateManager) {
+	t.Helper()
+	toDualWrite(t, sm)
+	require.NoError(t, sm.TransitionToMigrating())
+	require.NoError(t, sm.TransitionToValidating())
+	require.NoError(t, sm.TransitionToCutover())
+	require.NoError(t, sm.Complete())
+}

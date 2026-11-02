@@ -485,6 +485,9 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, err, "Failed to initialize migration", http.StatusInternalServerError, notification.MsgErrMigrationInitFailed, nil)
 	}
 
+	// The state moved on, so a stored passing result no longer describes it.
+	c.prereqRunner().reset()
+
 	// Start the migration worker if available
 	// Use a cancellable context so shutdown can stop the worker gracefully
 	if worker != nil {
@@ -700,6 +703,9 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to cancel migration", http.StatusConflict)
 	}
 
+	// The state moved on, so a stored passing result no longer describes it.
+	c.prereqRunner().reset()
+
 	// Clear dirty IDs since we're cancelling
 	if err := sm.ClearDirtyIDs(); err != nil {
 		c.LogWarnIfEnabled("Failed to clear dirty IDs",
@@ -743,16 +749,24 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 // Rolls back a completed migration to use the legacy database. A running worker
 // is abandoned (no final drain) and waited for before the state is reset; if it
 // does not exit within migrationWorkerStopTimeout the request fails with 409 and
-// the state is left unchanged. The state reset also clears the dirty-ID set.
+// the state is left unchanged. The state reset also clears the dirty-ID set and
+// drops the stored prerequisites result.
 func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
 	return c.executeMigrationAction(ctx, &migrationActionParams{
-		logStart:        "Rolling back migration",
-		workerAction:    worker.Abandon,
-		stateAction:     func() error { return sm.Rollback() },
+		logStart:     "Rolling back migration",
+		workerAction: worker.Abandon,
+		stateAction: func() error {
+			if err := sm.Rollback(); err != nil {
+				return err
+			}
+			// The state moved on, so a stored passing result no longer describes it.
+			c.prereqRunner().reset()
+			return nil
+		},
 		logFailure:      "Failed to rollback migration",
 		logSuccess:      "Migration rolled back successfully",
 		responseMessage: "Migration rolled back to legacy database",
