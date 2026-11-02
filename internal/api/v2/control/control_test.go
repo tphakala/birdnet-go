@@ -312,9 +312,8 @@ func TestRegisterRoutesGatesEveryRoute(t *testing.T) {
 
 // TestControlActionsConstants pins the action and signal wire strings. The
 // action values are API strings. The reload and rebuild signal values must match
-// the literals internal/analysis/control_monitor.go switches on; that monitor
-// currently has no case for the restart analysis signal and logs it as an
-// unknown signal.
+// the literals internal/analysis/control_monitor.go switches on, and that monitor
+// matches the restart analysis signal through SignalRestartAnalysis.
 func TestControlActionsConstants(t *testing.T) {
 	// Verify action constants have expected values
 	assert.Equal(t, "restart_analysis", ActionRestartAnalysis)

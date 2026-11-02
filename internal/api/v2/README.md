@@ -115,7 +115,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                         | Handler               | Auth | Description                            |
 | ------ | ----------------------------- | --------------------- | ---- | -------------------------------------- |
-| POST   | `/control/restart`            | `RestartAnalysis`     | ✅   | Restart analysis engine                |
+| POST   | `/control/restart`            | `RestartAnalysis`     | ✅   | Restart audio capture and analysis     |
 | POST   | `/control/reload`             | `ReloadModel`         | ✅   | Reload BirdNET model                   |
 | POST   | `/control/rebuild-filter`     | `RebuildFilter`       | ✅   | Rebuild range filter                   |
 | POST   | `/control/restart-server`     | `RestartServer`       | ✅   | Restart the server binary              |
