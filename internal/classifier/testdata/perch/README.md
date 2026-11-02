@@ -24,3 +24,35 @@ Three windows of real full-model Perch v2 logits, 3 x 14795 float32 little-endia
 The labels are synthesized in the test; the golden pins scores, not label parsing.
 The golden was recorded on unchanged code: regenerate it only for a deliberate
 change of the full-model scoring, with `UPDATE_PERCH_GOLDEN=1`.
+
+## {nordic,north-america-east}_windows.{bin,json}
+
+Real slice logits for `TestPerchPredict_SliceScoresTrackFullModel`. Per tile, 30
+windows from the same held-out recordings (see above): `<tile>_windows.bin` holds
+30 x `classes` float32 little-endian values, the full model's logits gathered on the
+tile's kept classes in the tile's own index order (a slice's logits are a bit-exact
+gather of the full model's); `<tile>_windows.json` holds the header and, per window,
+the float64 log-sum-exp of the full model's 14795 logits (`full_lse`) so the test
+can form the full-model score `exp(z - lse)` without the full logits. `windows_src`
+names the source window by clip content hash and window index; the recordings are
+private and not stored.
+
+Selection rule: recordings of the day and night groups whose content hash puts them in
+the evaluation split (not used to fit the calibration constants); windows whose
+full-model top class the tile keeps and with no human-sound class among the five
+highest logits; every k-th of those in clip-hash order so that 30 are taken
+(nordic: 1622 candidates, north-america-east: 480). Each recording is cut into 5 s
+windows at a 1 s hop.
+
+Source model and corpus are those of `full_logits.bin`. The windows were exported
+from the cached full-model logits of the calibration pipeline in the
+acoustic-models repository (`scripts/perch-calibrate`, branch
+`feat/perch-slice-score-calibration`, commit e78f520) with a one-off script that is not
+part of this repository.
+
+## mauritius_labels.txt
+
+The published labels file of the mauritius tile (272 lines), the smallest tile.
+`TestPerchScoreCalibration` uses it as real labels bytes whose SHA-256 is in the
+built-in catalog; `TestPerchScoreCalibration_LabelsFixtureMatchesCatalog` checks it
+still matches.

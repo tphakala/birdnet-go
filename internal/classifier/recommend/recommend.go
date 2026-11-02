@@ -31,7 +31,8 @@ const (
 	scoreBackendSupported = 10
 	// scoreRegionMatched is added when the variant's regional slice matches the
 	// host's resolved region. It is the strongest single term because a regional
-	// slice is numerically identical to the global model on the species it keeps
+	// slice reproduces the global model's logits on the species it keeps (Perch
+	// scores are put back on the global scale by the slice's score calibration)
 	// while cutting peak RSS and latency, so a matching regional variant should
 	// win over any global one.
 	scoreRegionMatched = 100
