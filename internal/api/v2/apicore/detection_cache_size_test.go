@@ -69,7 +69,8 @@ const heapMeasureAttempts = 3
 
 // retainedHeapBytes returns the average live heap bytes retained by one page of
 // the given size, measured as the heap growth while sampleCopies pages are held.
-// It returns 0 when every attempt saw the heap shrink, which callers reject.
+// A result of 0 means no usable measurement (the heap did not grow in any
+// attempt); a caller that relies on the value must reject it.
 func retainedHeapBytes(size int) uint64 {
 	for range heapMeasureAttempts {
 		var before, after runtime.MemStats
