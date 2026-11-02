@@ -55,8 +55,9 @@ type prereqStep struct {
 	id   string
 	name string
 	// reuseAtStart marks the checks that are slow or touch the single legacy
-	// connection; a migration start takes them from a passing run instead of
-	// running them again.
+	// connection. Nothing reads it yet: POST /start still runs every critical
+	// check, and passingResult is the accessor for taking marked checks from a
+	// passing run.
 	reuseAtStart bool
 	run          func(ctx context.Context) []PrerequisiteCheck
 }
