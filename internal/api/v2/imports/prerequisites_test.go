@@ -387,9 +387,10 @@ func TestCheckStateIdle_Idle(t *testing.T) {
 	assert.Contains(t, check.Message, "IDLE")
 }
 
-// checkStateIdleSwapRounds is how many times the state manager is swapped while
-// checkStateIdle runs in TestCheckStateIdle_ConcurrentStateManagerSwap.
-const checkStateIdleSwapRounds = 200
+// checkStateIdleSwapChecks is how many times checkStateIdle runs in
+// TestCheckStateIdle_ConcurrentStateManagerSwap. The writer swaps the state
+// manager for as long as those checks run, so its swap count is not bounded.
+const checkStateIdleSwapChecks = 200
 
 // TestCheckStateIdle_ConcurrentStateManagerSwap pins that checkStateIdle reads
 // the process-wide state manager once, under migrationMu: while another
@@ -404,18 +405,35 @@ func TestCheckStateIdle_ConcurrentStateManagerSwap(t *testing.T) {
 
 	_, controller, sm := setupPrerequisitesTestEnvironment(t)
 
+	swapOnce := func() {
+		SetMigrationDependencies(nil, nil)
+		SetMigrationDependencies(sm, nil)
+	}
+	stop := make(chan struct{})
+	started := make(chan struct{})
 	var swapper sync.WaitGroup
 	swapper.Go(func() {
-		for range checkStateIdleSwapRounds {
-			SetMigrationDependencies(nil, nil)
-			SetMigrationDependencies(sm, nil)
+		swapOnce()
+		close(started)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				swapOnce()
+			}
 		}
 	})
-	for range checkStateIdleSwapRounds {
+	defer func() {
+		close(stop)
+		swapper.Wait()
+	}()
+	<-started
+
+	for range checkStateIdleSwapChecks {
 		check := controller.checkStateIdle()
 		assert.Contains(t, []string{CheckStatusPassed, CheckStatusError}, check.Status)
 	}
-	swapper.Wait()
 }
 
 // TestCheckStateIdle_NotIdle tests checkStateIdle when migration is in a non-IDLE state.
