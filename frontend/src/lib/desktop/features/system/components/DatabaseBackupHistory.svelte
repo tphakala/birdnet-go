@@ -2,9 +2,6 @@
   import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
-  import { useRetryAction } from '$lib/utils/useRetryAction.svelte';
-  import { keepFocusOnRemoval } from '$lib/utils/keepFocusOnRemoval';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
 
   interface BackupJob {
@@ -25,9 +22,10 @@
     onCreateBackup: () => void;
     isCreating?: boolean;
     disabled?: boolean;
-    /** Why the backup list could not be loaded; shown with a Retry that calls onRetryLoad. */
+    /** Why the backup list could not be loaded; shown with a Retry when onRetryLoad is set. */
     loadError?: string | null;
-    onRetryLoad: () => Promise<void>;
+    /** Reloads the backup list from the alert's Retry button. */
+    onRetryLoad?: () => Promise<void>;
     /** Why the last backup could not be started; dismissible through onDismissCreateError. */
     createError?: string | null;
     onDismissCreateError?: () => void;
@@ -46,10 +44,9 @@
 
   let createButton = $state<HTMLButtonElement>();
   let panel = $state<HTMLDivElement>();
-  const loadRetry = useRetryAction(() => onRetryLoad());
   // An alert that goes away while focused hands focus to Create Backup, or to the panel
   // while that button is disabled (a backup or a migration is running)
-  const focusPanel = keepFocusOnRemoval(() => [createButton, panel]);
+  const focusPanel = () => [createButton, panel];
 
   let sortColumn = $state<string>('date');
   let sortDirection = $state<'asc' | 'desc'>('desc');
@@ -164,23 +161,23 @@
   </div>
 
   {#if createError}
-    <ErrorAlert className="mb-3" {@attach focusPanel} dismissible onDismiss={onDismissCreateError}>
-      <span class="block font-medium">{t('system.database.backup.history.createFailed')}</span>
-      <span class="block">{createError}</span>
-    </ErrorAlert>
+    <ErrorAlert
+      className="mb-3"
+      title={t('system.database.backup.history.createFailed')}
+      message={createError}
+      focusFallback={focusPanel}
+      dismissible
+      onDismiss={onDismissCreateError}
+    />
   {/if}
   {#if loadError}
-    <ErrorAlert className="mb-3" {@attach focusPanel}>
-      <span class="block font-medium">{t('system.database.backup.history.loadFailed')}</span>
-      <span class="block">{loadError}</span>
-      <Button
-        className="mt-2"
-        onclick={loadRetry.run}
-        aria-disabled={loadRetry.busy ? 'true' : undefined}
-      >
-        {loadRetry.busy ? t('common.retrying') : t('common.retry')}
-      </Button>
-    </ErrorAlert>
+    <ErrorAlert
+      className="mb-3"
+      title={t('system.database.backup.history.loadFailed')}
+      message={loadError}
+      onRetry={onRetryLoad}
+      focusFallback={focusPanel}
+    />
   {/if}
 
   {#if safeBackups.length === 0 && !loadError}

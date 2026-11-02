@@ -4,8 +4,6 @@
   import { loggers } from '$lib/utils/logger';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { connectionState } from '$lib/stores/connectionState.svelte';
-  import { useRetryAction, type RetryAction } from '$lib/utils/useRetryAction.svelte';
-  import { keepFocusOnRemoval } from '$lib/utils/keepFocusOnRemoval';
   import type { DatabaseOverviewResponse } from '$lib/types/database';
   import type { MigrationStatus, ApiState, PrerequisitesResponse } from '$lib/types/migration';
   import { failedRunMessage } from '$lib/utils/migrationPrerequisites';
@@ -31,7 +29,6 @@
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
   import LegacyCleanupCard from './LegacyCleanupCard.svelte';
   import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
 
   import type { DatabaseStats } from '$lib/types/migration';
@@ -142,16 +139,20 @@
   // Wrapper around the alerts and views; see the template
   let viewAnchor = $state<HTMLDivElement>();
 
-  const statusRetry = useRetryAction(fetchMigrationStatus);
   // Where focus goes when an alert at the top of the page goes away while focused
-  const focusView = keepFocusOnRemoval(() => [viewAnchor]);
+  const focusView = () => [viewAnchor];
+
+  /** The server's reason for a failed request, or a generic one when there is none. */
+  function apiErrorMessage(e: unknown): string {
+    return e instanceof ApiError ? e.message : t('errors.api.unknownError');
+  }
 
   async function fetchLegacyStats(): Promise<void> {
     try {
       legacyStats.data = await api.get<DatabaseStats>('/api/v2/system/database/stats');
       legacyStats.error = null;
     } catch (e) {
-      legacyStats.error = e instanceof ApiError ? e.message : t('errors.api.unknownError');
+      legacyStats.error = apiErrorMessage(e);
     } finally {
       legacyStats.loading = false;
     }
@@ -166,7 +167,7 @@
         v2Stats.data = null;
         v2Stats.error = null;
       } else {
-        v2Stats.error = e instanceof ApiError ? e.message : t('errors.api.unknownError');
+        v2Stats.error = apiErrorMessage(e);
       }
     } finally {
       v2Stats.loading = false;
@@ -240,7 +241,7 @@
       legacyStatus.error = null;
     } catch (e) {
       // The alert names the failure; this is the reason under it
-      legacyStatus.error = e instanceof ApiError ? e.message : t('errors.api.unknownError');
+      legacyStatus.error = apiErrorMessage(e);
     } finally {
       legacyStatus.loading = false;
     }
@@ -254,20 +255,22 @@
         id: 'legacy',
         label: t('system.database.migration.strip.legacy'),
         error: legacyStats.data ? null : legacyStats.error,
+        refetch: fetchLegacyStats,
       },
       {
         id: 'v2',
         label: t('system.database.migration.strip.v2Target'),
         error: v2Stats.data ? null : v2Stats.error,
+        refetch: fetchV2Stats,
       },
     ].filter(failure => failure.error !== null)
   );
-  const statsRetry = useRetryAction(() => Promise.all([fetchLegacyStats(), fetchV2Stats()]));
-  const legacyStatusRetry = useRetryAction(fetchLegacyStatus);
+  // Refetches only the statistics that failed
+  const retryStats = () => Promise.all(statsFailures.map(failure => failure.refetch()));
   // Wrapper of the legacy alerts and the cleanup card at the bottom of the v2-only view
   let legacyAnchor = $state<HTMLDivElement>();
   // Falls back to the page wrapper when a failed overview refresh replaced the whole view
-  const focusLegacy = keepFocusOnRemoval(() => [legacyAnchor, viewAnchor]);
+  const focusLegacy = () => [legacyAnchor, viewAnchor];
 
   // --- Migration actions (same as DatabaseManagement) ---
   async function startMigration(): Promise<void> {
@@ -348,7 +351,7 @@
       await api.post('/api/v2/system/database/legacy/cleanup');
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
     } catch (e) {
-      cleanupRequestError = e instanceof ApiError ? e.message : t('errors.api.unknownError');
+      cleanupRequestError = apiErrorMessage(e);
     } finally {
       cleanupLoading = false;
     }
@@ -379,7 +382,7 @@
       backupJobs = resp.jobs ?? [];
       backupJobsError = null;
     } catch (e) {
-      backupJobsError = e instanceof ApiError ? e.message : t('errors.api.unknownError');
+      backupJobsError = apiErrorMessage(e);
     }
   }
 
@@ -390,7 +393,7 @@
       await api.post('/api/v2/system/database/backup/jobs?type=legacy');
       await fetchBackupJobs();
     } catch (e) {
-      backupCreateError = e instanceof ApiError ? e.message : t('errors.api.unknownError');
+      backupCreateError = apiErrorMessage(e);
     } finally {
       backupCreating = false;
     }
@@ -620,12 +623,6 @@
   });
 </script>
 
-{#snippet retryButton(retry: RetryAction)}
-  <Button className="mt-2" onclick={retry.run} aria-disabled={retry.busy ? 'true' : undefined}>
-    {retry.busy ? t('common.retrying') : t('common.retry')}
-  </Button>
-{/snippet}
-
 <!-- The wrapper stays mounted while alerts and views come and go, so focus has somewhere
      to land when a successful retry removes the button that had it -->
 <div
@@ -635,15 +632,17 @@
 >
   <!-- Failed status fetches and failed migration actions land here, whichever view follows -->
   {#if !migrationStatus.loading && migrationStatus.error}
-    <ErrorAlert className="mb-4" {@attach focusView}>
-      <span class="block">{migrationStatus.error}</span>
-      {@render retryButton(statusRetry)}
-    </ErrorAlert>
+    <ErrorAlert
+      className="mb-4"
+      message={migrationStatus.error}
+      onRetry={fetchMigrationStatus}
+      focusFallback={focusView}
+    />
   {/if}
   {#if actionError}
     <ErrorAlert
       message={actionError}
-      {@attach focusView}
+      focusFallback={focusView}
       dismissible
       onDismiss={() => (actionError = null)}
       className="mb-4"
@@ -716,21 +715,21 @@
           class="space-y-4 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
         >
           {#if legacyStatus.error}
-            <ErrorAlert {@attach focusLegacy}>
-              <span class="block font-medium">{t('system.database.legacy.fetchFailed')}</span>
-              <span class="block">{legacyStatus.error}</span>
-              {@render retryButton(legacyStatusRetry)}
-            </ErrorAlert>
+            <ErrorAlert
+              title={t('system.database.legacy.fetchFailed')}
+              message={legacyStatus.error}
+              onRetry={fetchLegacyStatus}
+              focusFallback={focusLegacy}
+            />
           {/if}
           {#if cleanupRequestError}
             <ErrorAlert
-              {@attach focusLegacy}
+              title={t('system.database.legacy.cleanup.failed')}
+              message={cleanupRequestError}
+              focusFallback={focusLegacy}
               dismissible
               onDismiss={() => (cleanupRequestError = null)}
-            >
-              <span class="block font-medium">{t('system.database.legacy.cleanup.failed')}</span>
-              <span class="block">{cleanupRequestError}</span>
-            </ErrorAlert>
+            />
           {/if}
 
           <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
@@ -762,14 +761,16 @@
       {/if}
 
       {#if statsFailures.length > 0}
-        <ErrorAlert {@attach focusView}>
-          <span class="block font-medium">{t('system.database.stats.fetchFailed')}</span>
+        <ErrorAlert
+          title={t('system.database.stats.fetchFailed')}
+          onRetry={retryStats}
+          focusFallback={focusView}
+        >
           <ul>
             {#each statsFailures as failure (failure.id)}
               <li>{failure.label}: {failure.error}</li>
             {/each}
           </ul>
-          {@render retryButton(statsRetry)}
         </ErrorAlert>
       {/if}
 

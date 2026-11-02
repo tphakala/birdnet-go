@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderTyped, screen, fireEvent, createI18nMock } from '../../../../test/render-helpers';
+import {
+  renderTyped,
+  screen,
+  fireEvent,
+  waitFor,
+  createI18nMock,
+} from '../../../../test/render-helpers';
 import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 import type { ComponentProps } from 'svelte';
@@ -294,6 +300,117 @@ describe('ErrorAlert', () => {
     screen.getByLabelText('Dismiss alert').focus();
 
     expect(onfocusin).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the title above the message', () => {
+    renderErrorAlert({ title: 'Backups could not be loaded', message: 'Disk full' });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/Backups could not be loaded.*Disk full/);
+  });
+
+  describe('Retry', () => {
+    it('calls onRetry and ignores clicks while it runs', async () => {
+      let finish: () => void = () => {};
+      const onRetry = vi.fn(() => new Promise<void>(resolve => (finish = resolve)));
+      renderErrorAlert({ message: 'Offline', onRetry });
+
+      const retry = screen.getByRole('button', { name: 'common.retry' });
+      await fireEvent.click(retry);
+
+      const busy = screen.getByRole('button', { name: 'common.retrying' });
+      expect(busy).toHaveAttribute('aria-disabled', 'true');
+      expect(busy).not.toBeDisabled();
+      await fireEvent.click(busy);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+
+      finish();
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'common.retry' })).not.toHaveAttribute(
+          'aria-disabled'
+        )
+      );
+    });
+
+    it('takes the busy state from retryBusy when the caller owns it', async () => {
+      const onRetry = vi.fn();
+      renderErrorAlert({ message: 'Offline', onRetry, retryBusy: true });
+
+      const busy = screen.getByRole('button', { name: 'common.retrying' });
+      expect(busy).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(busy);
+
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('renders no Retry button without onRetry', () => {
+      renderErrorAlert({ message: 'Offline' });
+
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('focusFallback', () => {
+    it('moves focus to the fallback when the alert is removed while focused', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [null, outside],
+        });
+        screen.getByRole('button', { name: 'common.retry' }).focus();
+
+        unmount();
+
+        await waitFor(() => expect(document.activeElement).toBe(outside));
+      } finally {
+        outside.remove();
+      }
+    });
+
+    it('moves focus to the fallback after a mouse dismiss', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      try {
+        renderErrorAlert({ message: 'Offline', dismissible: true, focusFallback: () => [outside] });
+        const dismissButton = screen.getByLabelText('Dismiss alert');
+        // A pointer press counts as the user's place even where the click does not focus
+        await fireEvent.pointerDown(dismissButton);
+        await fireEvent.click(dismissButton, { detail: MOUSE_CLICK_DETAIL });
+
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        await waitFor(() => expect(document.activeElement).toBe(outside));
+      } finally {
+        outside.remove();
+      }
+    });
+
+    it('leaves focus alone when the alert did not hold it', async () => {
+      const outside = document.createElement('button');
+      const elsewhere = document.createElement('button');
+      document.body.append(outside, elsewhere);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        elsewhere.focus();
+
+        unmount();
+        await Promise.resolve();
+
+        expect(document.activeElement).toBe(elsewhere);
+      } finally {
+        outside.remove();
+        elsewhere.remove();
+      }
+    });
   });
 
   it('renders with custom className', () => {

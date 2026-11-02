@@ -20,16 +20,8 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import {
-    RefreshCw,
-    Play,
-    Pause,
-    Square,
-    CheckCircle2,
-    AlertCircle,
-    Loader2,
-    Info,
-  } from '@lucide/svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import { RefreshCw, Play, Pause, Square, CheckCircle2, Loader2, Info } from '@lucide/svelte';
   import PrerequisitesChecklist from './PrerequisitesChecklist.svelte';
   import type { MigrationStatus, PrerequisitesState } from '$lib/types/migration';
   import { formatNumber } from '$lib/utils/formatters';
@@ -155,14 +147,7 @@
         <div class="h-4 bg-[var(--color-base-200)] rounded animate-pulse w-1/2"></div>
       </div>
     {:else if error}
-      <div
-        class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-center gap-3"
-        role="alert"
-        aria-live="assertive"
-      >
-        <AlertCircle class="size-5 shrink-0" />
-        <span>{error}</span>
-      </div>
+      <ErrorAlert message={error} />
     {:else if status?.state === 'idle'}
       <!-- Idle State -->
       {#if isStarting}
@@ -275,21 +260,10 @@
       <!-- Failed State (validation failure) -->
       <div class="space-y-4">
         <!-- Error indicator -->
-        <div
-          class="p-3 rounded-lg bg-[var(--color-error)]/10 flex items-start gap-3"
-          role="alert"
-          aria-live="assertive"
-        >
-          <AlertCircle class="size-5 shrink-0 text-[var(--color-error)] mt-0.5" />
-          <div class="text-sm text-[var(--color-base-content)]">
-            <p class="font-medium text-[var(--color-error)]">
-              {t('system.database.migration.status.failed')}
-            </p>
-            {#if status.error_message}
-              <p class="mt-1">{status.error_message}</p>
-            {/if}
-          </div>
-        </div>
+        <ErrorAlert
+          title={t('system.database.migration.status.failed')}
+          message={status.error_message ?? ''}
+        />
 
         <!-- Action buttons -->
         <div class="flex gap-2">
@@ -471,13 +445,7 @@
 
         <!-- Error message -->
         {#if status.error_message}
-          <div
-            class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
-            role="alert"
-            aria-live="assertive"
-          >
-            {status.error_message}
-          </div>
+          <ErrorAlert message={status.error_message} />
         {/if}
 
         <!-- Action buttons -->

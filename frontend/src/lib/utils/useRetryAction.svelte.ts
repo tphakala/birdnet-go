@@ -4,7 +4,7 @@
  * Marks the button busy and ignores clicks while the refetch runs, so a slow or
  * still-failing server does not collect stacked requests. A refetch that rejects is
  * logged and leaves the alert as it is; the alert's own error state decides what shows.
- * Where focus goes when the alert disappears is up to `keepFocusOnRemoval`.
+ * ErrorAlert's `onRetry` prop uses this, so an alert with a Retry button needs no more.
  *
  * @example
  * ```svelte

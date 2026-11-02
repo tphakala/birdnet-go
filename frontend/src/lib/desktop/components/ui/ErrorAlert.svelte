@@ -6,7 +6,9 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { createFocusReturn } from '$lib/utils/focusReturn';
+  import { createFocusReturn, type FocusFallback } from '$lib/utils/focusReturn';
+  import { useRetryAction } from '$lib/utils/useRetryAction.svelte';
+  import Button from './Button.svelte';
 
   type AlertIconType = 'error' | 'warning' | 'info' | 'success' | 'check';
 
@@ -14,27 +16,59 @@
 
   type AlertType = AlertIconType;
 
-  interface Props extends HTMLAttributes<HTMLDivElement> {
+  interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
+    /** Bold line above the message or children, naming what failed. */
+    title?: string;
     message?: string;
     type?: AlertType;
     dismissible?: boolean;
     onDismiss?: () => void;
+    /**
+     * Shows a Retry button that calls this. Clicks are ignored while it runs (the button
+     * stays focusable with aria-disabled and reads "Retrying"); a rejection is logged.
+     */
+    onRetry?: () => Promise<unknown> | unknown;
+    /** Overrides the Retry busy state when the caller tracks the request itself. */
+    retryBusy?: boolean;
+    /** Bindable Retry button element, for callers that manage focus after a retry. */
+    retryButton?: HTMLButtonElement;
+    /**
+     * Where focus goes when the alert is removed while it holds focus (after a Retry, a
+     * dismiss or a refresh that cleared it): the first element that can take it.
+     */
+    focusFallback?: FocusFallback;
     className?: string;
     children?: Snippet;
   }
 
   let {
+    title,
     message = '',
     type = 'error',
     dismissible = false,
     onDismiss = () => {},
+    onRetry,
+    retryBusy,
+    retryButton = $bindable(),
+    focusFallback,
     className = '',
     children,
     ...rest
   }: Props = $props();
 
   let isVisible = $state(true);
-  const { track: trackFocus, restore: restoreFocus } = createFocusReturn();
+  const { track: trackFocus, restore: restoreFocus } = createFocusReturn(
+    () => focusFallback?.() ?? []
+  );
+  const retry = useRetryAction(async () => {
+    await onRetry?.();
+  });
+  let retrying = $derived(retryBusy ?? retry.busy);
+
+  function handleRetry() {
+    if (retrying) return;
+    void retry.run();
+  }
 
   // Base alert classes using native Tailwind
   const baseClasses =
@@ -101,10 +135,27 @@
     <!-- A div, not a span, so children may hold block content (lists, buttons
          on their own line). As a flex item it lays out the same either way. -->
     <div class="min-w-0">
+      {#if title}
+        <span class="block font-medium">{title}</span>
+      {/if}
       {#if children}
         {@render children()}
+      {:else if title || onRetry}
+        {#if message}
+          <span class="block">{message}</span>
+        {/if}
       {:else}
         {message}
+      {/if}
+      {#if onRetry}
+        <Button
+          bind:ref={retryButton}
+          className="mt-2"
+          onclick={handleRetry}
+          aria-disabled={retrying ? 'true' : undefined}
+        >
+          {retrying ? t('common.retrying') : t('common.retry')}
+        </Button>
       {/if}
     </div>
 

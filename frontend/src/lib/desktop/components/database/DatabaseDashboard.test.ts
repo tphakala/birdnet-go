@@ -845,6 +845,25 @@ describe('DatabaseDashboard data errors', () => {
     }
   });
 
+  it('refetches only the statistic that failed on Retry', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [V2_STATS_URL]: apiError('V2 stats lost', 500) });
+
+    renderTyped(DatabaseDashboard);
+
+    const alert = await screen.findByRole('alert');
+    const requests = (url: string) => apiGet.mock.calls.filter(([called]) => called === url).length;
+    const legacyBefore = requests(LEGACY_STATS_URL);
+    const v2Before = requests(V2_STATS_URL);
+
+    serve({ [STATUS_URL]: idleStatus });
+    await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(requests(V2_STATS_URL)).toBe(v2Before + 1);
+    expect(requests(LEGACY_STATS_URL)).toBe(legacyBefore);
+  });
+
   it.each([
     {
       situation: 'there is no v2 database',
