@@ -6,7 +6,8 @@
 // hostnames/ports (PR #2775). These tests lock in:
 //   - the placeholder shape (stream-N with N starting at 1) and count,
 //   - stability across calls on the same input,
-//   - the number of suppressed streams, which the dashboard card counts, and
+//   - the number of suppressed streams, which the quiet hours header
+//     indicator counts, and
 //   - that the authenticated path passes URLs through privacy.SanitizeStreamUrl
 //     without leaking credentials.
 
@@ -77,6 +78,13 @@ func TestBuildSuppressedStreamsPayload_GuestPlaceholderShape(t *testing.T) {
 	}
 }
 
+// guestStabilityCalls is how many times the stability test rebuilds the payload.
+// Go randomizes map iteration order, so a payload built without a fixed order
+// can still match the first one by chance in a single call, more so here because
+// only the position of the one false entry matters; many calls make a pass by
+// chance negligible.
+const guestStabilityCalls = 50
+
 // TestBuildSuppressedStreamsPayload_GuestStableWithinResponse asserts that
 // repeated calls on the same input return identical maps. This is the
 // contract the handler's comment promises (raw URL keys live in the
@@ -91,9 +99,10 @@ func TestBuildSuppressedStreamsPayload_GuestStableWithinResponse(t *testing.T) {
 	}
 
 	first := buildSuppressedStreamsPayload(in, true)
-	second := buildSuppressedStreamsPayload(in, true)
-	assert.Equal(t, first, second,
-		"guest payload must be deterministic for a given input")
+	for range guestStabilityCalls {
+		assert.Equal(t, first, buildSuppressedStreamsPayload(in, true),
+			"guest payload must be deterministic for a given input")
+	}
 }
 
 // TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs asserts the
