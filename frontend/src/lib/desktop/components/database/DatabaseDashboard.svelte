@@ -68,7 +68,7 @@
   let actionError = $state<{
     message: string;
     /** Set when a start was refused: the run the refusal was based on, undefined for none. */
-    refusal?: { runId: number | undefined };
+    refusal?: { runId: number | undefined; startedAt: string | undefined };
   } | null>(null);
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
@@ -289,7 +289,10 @@
       actionError = {
         message:
           e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed'),
-        refusal: { runId: prerequisites.data?.run_id },
+        refusal: {
+          runId: prerequisites.data?.run_id,
+          startedAt: prerequisites.data?.started_at,
+        },
       };
       // A migration that started anyway must show, and a missing or stale run is redone.
       // A refused check forces a new run so the panel shows it instead of the old pass.
@@ -569,7 +572,9 @@
     const data = prerequisites.data;
     const refusal = actionError?.refusal;
     if (!refusal) return;
-    if (data?.status === 'completed' && data.can_start_migration && data.run_id !== refusal.runId) {
+    // Run ids restart with the server, so the start time tells a new run from the refused one
+    const isNewRun = data?.run_id !== refusal.runId || data?.started_at !== refusal.startedAt;
+    if (data?.status === 'completed' && data.can_start_migration && isNewRun) {
       actionError = null;
     }
   });

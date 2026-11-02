@@ -261,11 +261,11 @@ describe('DatabaseDashboard migration errors', () => {
 
   /** Opens the confirm dialog from the card's Start button and confirms it. */
   async function confirmStart(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
-    // The confirm dialog has a Start button of its own; the card's is the full-width one
+    // The confirm dialog has a Start button of its own; the card's is the one outside it
     const start = await waitFor(() => {
       const card = screen
         .getAllByRole('button', { name: t('system.database.migration.actions.start') })
-        .find(b => b.classList.contains('w-full'));
+        .find(b => !b.closest('[role="dialog"]'));
       if (!card) throw new Error('card Start button not rendered');
       return card;
     });
@@ -333,6 +333,48 @@ describe('DatabaseDashboard migration errors', () => {
     expect(reason).toHaveTextContent(
       t('system.database.migration.progress.prerequisitesFailedList', { checks: 'Disk Space' })
     );
+  });
+
+  it('clears the refusal when a run with the same id but a new start time allows the start', async () => {
+    // A server restart restarts the run ids, so a run id alone cannot tell runs apart
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    const notReady = apiError('Run the pre-migration checks first', 409);
+    notReady.errorKey = 'errors.migration.prerequisitesNotReady';
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return Promise.reject(notReady);
+      runs += 1;
+      const startedAt = runs === 1 ? '2026-11-02T10:00:00Z' : '2026-11-02T11:00:00Z';
+      return Promise.resolve({ ...startablePrerequisites, run_id: 1, started_at: startedAt });
+    });
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+
+    await waitFor(() => expect(runs).toBe(2));
+    await waitFor(() =>
+      expect(screen.queryByText('Run the pre-migration checks first')).not.toBeInTheDocument()
+    );
+  });
+
+  it('does not run the checks again when a start times out', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
+    const timedOut = apiError('The migration start took too long', 504);
+    timedOut.errorKey = 'errors.migration.startFailed';
+    rejectActions(timedOut);
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+
+    await screen.findByText('The migration start took too long');
+    const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
+    expect(runPosts()).toBe(1);
   });
 
   it('clears the refusal message once a new run allows the start, and keeps it while it fails', async () => {
