@@ -469,6 +469,11 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		totalRecords = count
 	}
 
+	// A shutdown that began after the checks must not start a migration.
+	if err := c.lifecycleContext().Err(); err != nil {
+		return c.rejectInterruptedStart(ctx, err)
+	}
+
 	// Start migration
 	if err := sm.StartMigration(totalRecords); err != nil {
 		c.LogErrorIfEnabled("Failed to start migration",
@@ -493,6 +498,16 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 
 	// The state moved on, so a stored passing result no longer describes it.
 	c.prereqRunner().reset()
+
+	// A shutdown that began since the transition would never stop a worker started
+	// now, so undo the start instead.
+	if err := c.lifecycleContext().Err(); err != nil {
+		if cancelErr := sm.Cancel(); cancelErr != nil {
+			c.LogWarnIfEnabled("Failed to cancel after shutdown during start",
+				logger.Error(cancelErr))
+		}
+		return c.rejectInterruptedStart(ctx, err)
+	}
 
 	// Start the migration worker if available
 	// Use a cancellable context so shutdown can stop the worker gracefully
@@ -539,6 +554,15 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		Message: fmt.Sprintf("Migration started with %d records", totalRecords),
 		State:   string(entities.MigrationStatusDualWrite),
 	})
+}
+
+// rejectInterruptedStart answers a start request that the server shutdown
+// interrupted, with the same response as an interrupted pre-flight.
+func (c *Handler) rejectInterruptedStart(ctx echo.Context, cause error) error {
+	err := fmt.Errorf("%s: %w", msgPreflightInterrupted, cause)
+	c.LogErrorIfEnabled("Migration start interrupted by shutdown",
+		logger.Error(err), logger.String("path", ctx.Request().URL.Path), logger.String("ip", ctx.RealIP()))
+	return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
 }
 
 // PauseMigration handles POST /api/v2/system/database/migration/pause

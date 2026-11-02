@@ -798,3 +798,39 @@ func TestStartMigration_FailedInitDropsPrerequisiteResult(t *testing.T) {
 	assert.Equal(t, entities.MigrationStatusIdle, state.State, "the failed start must be rolled back")
 	assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
 }
+
+// TestStartMigration_ShutdownAfterChecksDoesNotStart pins that a shutdown that
+// begins after the pre-flight checks passed, while the record count is
+// fetched for the request, still keeps the migration from starting.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_ShutdownAfterChecksDoesNotStart(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	lifecycle, cancel := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, cancel)
+	// The first count belongs to the record_count check; the second is the
+	// handler's own fallback count, which runs after the checks.
+	var counts int
+	repo := mocks.NewMockDetectionRepository(t)
+	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(context.Context) (int64, error) {
+		counts++
+		if counts == 2 {
+			cancel()
+		}
+		return int64(migrationTestTotalRecords), nil
+	}).Twice()
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start once the server is stopping")
+}
