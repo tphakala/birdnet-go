@@ -14,6 +14,9 @@
 package analytics
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -57,6 +60,17 @@ func newTestHandlerWithMaps(core *apicore.Core, sciToCommon, commonToSci map[str
 		func() map[string]string { return sciToCommon },
 		func() map[string]string { return commonToSci },
 	)
+}
+
+// newAnalyticsContext builds an Echo context for a GET to target, with the route
+// path set to the target's path so handlers see the same context a routed request has.
+func newAnalyticsContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	path, _, _ := strings.Cut(target, "?")
+	c.SetPath(path)
+	return c, rec
 }
 
 // setupAnalyticsTestEnvironment builds an Echo, a mock datastore, and an analytics

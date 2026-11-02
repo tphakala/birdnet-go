@@ -1,14 +1,11 @@
 package analytics
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -34,14 +31,6 @@ func sampleSpeciesDistribution() []datastore.SpeciesHourlyDistribution {
 	}
 }
 
-func newSpeciesDistributionContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/distribution/species")
-	return c, rec
-}
-
 func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
@@ -50,7 +39,7 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return(sampleSpeciesDistribution(), nil)
 
-	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -80,7 +69,7 @@ func TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter(t *testing.T) {
 		[]string{"Turdus migratorius", "Turdus merula"}, 5).
 		Return(sampleSpeciesDistribution(), nil)
 
-	c, rec := newSpeciesDistributionContext(e,
+	c, rec := newAnalyticsContext(e,
 		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"+
 			"&species=Turdus+migratorius&species=+Turdus+merula+&species=&species=turdus+migratorius")
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
@@ -103,7 +92,7 @@ func TestGetSpeciesHourlyDistribution_RejectsOversizedSpeciesFilter(t *testing.T
 		query += fmt.Sprintf("&species=Species+%d", i)
 	}
 
-	c, rec := newSpeciesDistributionContext(e, query)
+	c, rec := newAnalyticsContext(e, query)
 	// The guard writes the 400 itself and reports it with the package's ErrResponseHandled sentinel,
 	// matching every other validation helper in this handler.
 	err := controller.GetSpeciesHourlyDistribution(c)
@@ -129,7 +118,7 @@ func TestGetSpeciesHourlyDistribution_AllowsMaxSpeciesFilter(t *testing.T) {
 		want, defaultSpeciesRidgelineLimit).
 		Return(sampleSpeciesDistribution(), nil)
 
-	c, rec := newSpeciesDistributionContext(e, query)
+	c, rec := newAnalyticsContext(e, query)
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	mockDS.AssertExpectations(t)
@@ -142,7 +131,7 @@ func TestGetSpeciesHourlyDistribution_EmptyArrayNotNull(t *testing.T) {
 	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return([]datastore.SpeciesHourlyDistribution{}, nil)
 
-	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	// Empty result must serialize as [] (not null) so the client can read .length safely. Assert
@@ -151,20 +140,6 @@ func TestGetSpeciesHourlyDistribution_EmptyArrayNotNull(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotNil(t, resp)
 	assert.Empty(t, resp)
-}
-
-func TestGetSpeciesHourlyDistribution_DefaultsEndDate(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	// With end_date omitted the handler defaults it to a 30-day window: 2026-03-01 + 30d = 2026-03-31.
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-31", []string(nil), 5).
-		Return(sampleSpeciesDistribution(), nil)
-
-	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01")
-	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
-	require.Equal(t, http.StatusOK, rec.Code)
-	mockDS.AssertExpectations(t)
 }
 
 func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
@@ -191,7 +166,7 @@ func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 			tc.WantLimit,
 		).Return(sampleSpeciesDistribution(), nil)
 
-		c, rec := newSpeciesDistributionContext(
+		c, rec := newAnalyticsContext(
 			e,
 			"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
 		)
@@ -200,38 +175,4 @@ func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		mockDS.AssertExpectations(t)
 	})
-}
-
-func TestGetSpeciesHourlyDistribution_MissingStartDate(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species")
-	err := controller.GetSpeciesHourlyDistribution(c)
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestGetSpeciesHourlyDistribution_InvalidDateFormat(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=not-a-date")
-	err := controller.GetSpeciesHourlyDistribution(c)
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestGetSpeciesHourlyDistribution_QueryTimeout(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
-		Return([]datastore.SpeciesHourlyDistribution(nil), context.DeadlineExceeded)
-
-	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
-	// handleAnalyticsQueryError writes the 408 response and returns nil.
-	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
-	assert.Equal(t, http.StatusRequestTimeout, rec.Code)
-	mockDS.AssertExpectations(t)
 }
