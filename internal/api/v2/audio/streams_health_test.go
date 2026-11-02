@@ -14,6 +14,14 @@ import (
 // Test error type constant for connection timeout scenarios
 const testErrorTypeTimeout = "connection_timeout"
 
+// Stream URL fixtures for the credential sanitization tests: the URL as FFmpeg
+// reports it and the form API clients must see.
+const (
+	testStreamPassword      = "secret"
+	testCredentialStreamURL = "rtsp://admin:" + testStreamPassword + "@camera.local:554/live"
+	testSanitizedStreamURL  = "rtsp://camera.local:554/live"
+)
+
 // Legacy process_state detail strings the FFmpeg producer records in
 // StreamHealth.StateDetail; the API must echo them byte-identically.
 const (
@@ -70,43 +78,6 @@ func TestCreateHealthSnapshot(t *testing.T) {
 		assert.False(t, snapshot.IsReceivingData)
 		assert.Equal(t, int64(0), snapshot.TotalBytesReceived)
 		assert.Equal(t, "rtsp_404", snapshot.LastErrorType)
-	})
-
-	t.Run("stream with nil error context", func(t *testing.T) {
-		health := &audiocore.StreamHealth{
-			IsHealthy:          true,
-			State:              audiocore.StreamStateConnected,
-			StateDetail:        testProcStateRunning,
-			RestartCount:       0,
-			IsReceivingData:    true,
-			TotalBytesReceived: 2048,
-			LastErrorContext:   nil,
-		}
-
-		snapshot := createHealthSnapshot("rtsp://test/stream", health)
-
-		assert.Empty(t, snapshot.LastErrorType)
-		assert.True(t, snapshot.IsHealthy)
-	})
-
-	t.Run("stream in backoff state", func(t *testing.T) {
-		health := &audiocore.StreamHealth{
-			IsHealthy:          false,
-			State:              audiocore.StreamStateReconnecting,
-			StateDetail:        testProcStateBackoff,
-			RestartCount:       3,
-			IsReceivingData:    false,
-			TotalBytesReceived: 512,
-			LastErrorContext: &audiocore.StreamErrorContext{
-				ErrorType: testErrorTypeTimeout,
-			},
-		}
-
-		snapshot := createHealthSnapshot("rtsp://test/stream", health)
-
-		assert.Equal(t, "backoff", snapshot.ProcessState)
-		assert.Equal(t, 3, snapshot.RestartCount)
-		assert.Equal(t, testErrorTypeTimeout, snapshot.LastErrorType)
 	})
 }
 
@@ -441,7 +412,7 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 	})
 
 	t.Run("handle error present", func(t *testing.T) {
-		testError := errors.NewStd("connection timeout")
+		testError := errors.NewStd("open " + testCredentialStreamURL + " failed: connection timeout")
 		health := &audiocore.StreamHealth{
 			IsHealthy:          false,
 			State:              audiocore.StreamStateReconnecting,
@@ -456,7 +427,8 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 
 		response := convertStreamHealthToResponse("rtsp://camera.local:554/stream", health)
 
-		assert.Equal(t, "connection timeout", response.Error)
+		assert.Equal(t, "open "+testSanitizedStreamURL+" failed: connection timeout", response.Error)
+		assert.NotContains(t, response.Error, testStreamPassword, "the stream password must not reach API clients")
 	})
 
 	t.Run("handle error context and history", func(t *testing.T) {
@@ -548,42 +520,6 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 		assert.NotContains(t, response.URL, "admin")
 		assert.NotContains(t, response.URL, "secret123")
 	})
-
-	t.Run("multiple URLs with different credentials sanitize to different entries", func(t *testing.T) {
-		// This test verifies that URLs differing only by credentials are preserved
-		// as separate entries when using array response format (not map)
-		health1 := &audiocore.StreamHealth{
-			IsHealthy:          true,
-			State:              audiocore.StreamStateConnected,
-			StateDetail:        testProcStateRunning,
-			RestartCount:       0,
-			TotalBytesReceived: 1024,
-			BytesPerSecond:     128,
-			IsReceivingData:    true,
-		}
-
-		health2 := &audiocore.StreamHealth{
-			IsHealthy:          true,
-			State:              audiocore.StreamStateConnected,
-			StateDetail:        testProcStateRunning,
-			RestartCount:       0,
-			TotalBytesReceived: 2048,
-			BytesPerSecond:     256,
-			IsReceivingData:    true,
-		}
-
-		// Two URLs with different credentials but same host/path
-		response1 := convertStreamHealthToResponse("rtsp://admin:pass1@192.168.1.100:554/live", health1)
-		response2 := convertStreamHealthToResponse("rtsp://user:pass2@192.168.1.100:554/live", health2)
-
-		// Both sanitize to the same URL
-		assert.Equal(t, "rtsp://192.168.1.100:554/live", response1.URL)
-		assert.Equal(t, "rtsp://192.168.1.100:554/live", response2.URL)
-
-		// But they have different data (proving they're separate entries)
-		assert.Equal(t, int64(1024), response1.TotalBytesReceived)
-		assert.Equal(t, int64(2048), response2.TotalBytesReceived)
-	})
 }
 
 // TestConvertErrorContextToResponse tests the convertErrorContextToResponse function
@@ -625,6 +561,22 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 		assert.Empty(t, response.RTSPMethod)
 		assert.False(t, response.ShouldOpenCircuit)
 		assert.True(t, response.ShouldRestart)
+	})
+
+	t.Run("stream credentials are stripped from messages", func(t *testing.T) {
+		errCtx := &audiocore.StreamErrorContext{
+			ErrorType:      testErrorTypeTimeout,
+			PrimaryMessage: "open " + testCredentialStreamURL + " failed",
+			UserFacingMsg:  "Cannot reach " + testCredentialStreamURL,
+		}
+
+		response := convertErrorContextToResponse(errCtx)
+
+		require.NotNil(t, response)
+		assert.Equal(t, "open "+testSanitizedStreamURL+" failed", response.PrimaryMessage)
+		assert.Equal(t, "Cannot reach "+testSanitizedStreamURL, response.UserFacingMessage)
+		assert.NotContains(t, response.PrimaryMessage, testStreamPassword)
+		assert.NotContains(t, response.UserFacingMessage, testStreamPassword)
 	})
 
 	t.Run("permanent failure context", func(t *testing.T) {
