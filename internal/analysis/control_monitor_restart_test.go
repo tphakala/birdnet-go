@@ -13,9 +13,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
-// restartQueueCapacity is the restart channel capacity of the table test. It
-// must exceed the one token a signal is expected to queue: a send to a full
-// channel is dropped, so a handler that queued twice would still show one token.
+// restartQueueCapacity is the restart channel capacity of the table test. With a
+// capacity of one, a second token would be dropped and the length would stay at
+// one. Room for a second token lets a handler that queued the restart twice show
+// a length of two.
 const restartQueueCapacity = 2
 
 // TestHandleControlSignal_RestartCapture pins that both the restart_audio_capture
