@@ -289,6 +289,7 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		{"explicit origin list allows credentials for a listed origin", []string{requestOrigin}, true, requestOrigin, "true"},
 		{"explicit origin list allows credentials for a listed origin among several", []string{"https://trusted.example.com", requestOrigin}, true, requestOrigin, "true"},
 		{"explicit origin list without credentials requested answers without them", []string{requestOrigin}, false, requestOrigin, ""},
+		{"pattern entry before a literal origin answers without credentials", []string{"https://*.example.com", "https://trusted.example.com"}, true, requestOrigin, ""},
 		{"subdomain pattern entry answers without credentials", []string{"https://*.example.com"}, true, requestOrigin, ""},
 		{"scheme-only pattern entry answers without credentials", []string{"https://*"}, true, requestOrigin, ""},
 		{"single-character pattern entry answers without credentials", []string{"https://other.example.co?"}, true, requestOrigin, ""},
