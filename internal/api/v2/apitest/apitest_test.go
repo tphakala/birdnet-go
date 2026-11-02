@@ -23,13 +23,27 @@ func (r *fatalRecorder) Fatalf(format string, args ...any) {
 }
 
 // TestPublishTestSettingsRefusesParallelTest pins the publish guard: a parallel
-// test must fail with a message naming WithoutSettingsPublish, and the refused
-// call must leave the process-global snapshot untouched.
+// test, and a serial subtest of a parallel parent, must fail with a message
+// naming WithoutSettingsPublish, and a refused call must leave the
+// process-global snapshot untouched.
 //
-// t.Parallel is the input under test. Only a publish by this call could install
-// the fresh sentinel pointer, so no other test can break the NotSame assertion.
+// t.Parallel and the parent-child nesting are the inputs under test.
 func TestPublishTestSettingsRefusesParallelTest(t *testing.T) {
 	t.Parallel()
+
+	requirePublishRefused(t)
+
+	t.Run("serial subtest of a parallel parent", func(t *testing.T) {
+		requirePublishRefused(t)
+	})
+}
+
+// requirePublishRefused publishes through a recorder built from t, which must be
+// parallel or have a parallel ancestor, and asserts the refusal. Only a publish
+// by this call could install the fresh sentinel pointer, so no other test can
+// break the NotSame assertion.
+func requirePublishRefused(t *testing.T) {
+	t.Helper()
 
 	rec := &fatalRecorder{TB: t}
 	sentinel := NewValidTestSettings()
