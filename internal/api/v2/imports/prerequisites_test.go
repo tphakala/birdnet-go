@@ -79,6 +79,9 @@ func TestGetPrerequisites_SQLite(t *testing.T) {
 			for _, check := range response.Checks {
 				status := check.Status
 				if check.ID == memoryCheckID {
+					// Host-dependent, but it must still be one of the defined statuses.
+					assert.Contains(t, []string{CheckStatusPassed, CheckStatusWarning, CheckStatusFailed, CheckStatusSkipped, CheckStatusError},
+						status, "memory check status should be valid")
 					status = ""
 				}
 				got = append(got, prerequisiteCheck{check.ID, check.Severity, status})
