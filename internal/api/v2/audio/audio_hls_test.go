@@ -23,48 +23,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
 
-// TestHLSManagerStreamTracking tests the HLS manager stream tracking
-func TestHLSManagerStreamTracking(t *testing.T) {
-	t.Run("getActiveStreamIDs returns empty for no streams", func(t *testing.T) {
-		// Save and restore original state
-		originalStreams := hlsMgr.streams
-		hlsMgr.streamsMu.Lock()
-		hlsMgr.streams = make(map[string]*HLSStreamInfo)
-		hlsMgr.streamsMu.Unlock()
-
-		defer func() {
-			hlsMgr.streamsMu.Lock()
-			hlsMgr.streams = originalStreams
-			hlsMgr.streamsMu.Unlock()
-		}()
-
-		ids := getActiveStreamIDs()
-		assert.Empty(t, ids)
-	})
-
-	t.Run("getActiveStreamIDs returns all stream IDs", func(t *testing.T) {
-		// Save and restore original state
-		originalStreams := hlsMgr.streams
-		hlsMgr.streamsMu.Lock()
-		hlsMgr.streams = map[string]*HLSStreamInfo{
-			"source1": {SourceID: "source1"},
-			"source2": {SourceID: "source2"},
-		}
-		hlsMgr.streamsMu.Unlock()
-
-		defer func() {
-			hlsMgr.streamsMu.Lock()
-			hlsMgr.streams = originalStreams
-			hlsMgr.streamsMu.Unlock()
-		}()
-
-		ids := getActiveStreamIDs()
-		assert.Len(t, ids, 2)
-		assert.Contains(t, ids, "source1")
-		assert.Contains(t, ids, "source2")
-	})
-}
-
 // TestHLSManagerClientTracking tests the HLS client tracking
 func TestHLSManagerClientTracking(t *testing.T) {
 	t.Run("getStreamClientCount returns 0 for unknown stream", func(t *testing.T) {

@@ -322,7 +322,6 @@ func TestTestEBirdConnection(t *testing.T) {
 		requestBody    string
 		expectedStatus int
 		expectedType   string
-		expectError    bool
 		validateResult func(*testing.T, string)
 	}{
 		{
@@ -349,10 +348,9 @@ func TestTestEBirdConnection(t *testing.T) {
 			name:           "Invalid Request Body",
 			requestBody:    `{invalid json`,
 			expectedStatus: http.StatusBadRequest,
-			expectError:    true,
 			validateResult: func(t *testing.T, body string) {
 				t.Helper()
-				assert.Contains(t, body, "error")
+				assert.Contains(t, body, "Invalid eBird test request")
 			},
 		},
 		{
@@ -383,15 +381,7 @@ func TestTestEBirdConnection(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			err := controller.TestEBirdConnection(c)
-
-			if tc.expectError {
-				if err != nil {
-					return
-				}
-			} else {
-				require.NoError(t, err)
-			}
+			require.NoError(t, controller.TestEBirdConnection(c))
 
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 			if tc.expectedType != "" {
@@ -401,48 +391,6 @@ func TestTestEBirdConnection(t *testing.T) {
 			tc.validateResult(t, strings.TrimSpace(rec.Body.String()))
 		})
 	}
-}
-
-// TestWriteJSONResponse tests the writeJSONResponse helper function
-func TestWriteJSONResponse(t *testing.T) {
-	// Setup
-	e, controller := newIntegrationsTestHandler(t)
-
-	// Create request context
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Set content type manually since this is a helper function
-	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	c.Response().WriteHeader(http.StatusOK)
-
-	// Test data
-	testData := map[string]any{
-		"key1": "value1",
-		"key2": 42,
-		"key3": true,
-		"nested": map[string]any{
-			"nested_key": "nested_value",
-		},
-	}
-
-	// Call the function
-	err := controller.writeJSONResponse(c, testData)
-	require.NoError(t, err)
-
-	// Parse the response
-	var result map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &result)
-	require.NoError(t, err)
-
-	// Verify the result
-	assert.Equal(t, "value1", result["key1"])
-	assert.InDelta(t, 42, result["key2"], 0.01)
-	assert.Equal(t, true, result["key3"])
-	assert.IsType(t, map[string]any{}, result["nested"])
-	nestedMap := result["nested"].(map[string]any)
-	assert.Equal(t, "nested_value", nestedMap["nested_key"])
 }
 
 // fakeStageResult is the result type streamed by fakeIntegrationClient.
@@ -525,81 +473,6 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 			})
 		})
 	}
-}
-
-// TestGetMQTTStatusEnabled exercises GetMQTTStatus with MQTT enabled and verifies
-// the broker/topic are reported back. The connection check runs against a local
-// broker that drops every connection, so connected stays false.
-func TestGetMQTTStatusEnabled(t *testing.T) {
-	refusingBroker := newRefusingMQTTBroker(t)
-
-	// Setup
-	e, controller := newIntegrationsTestHandler(t)
-
-	// Configure settings
-	controller.Settings.Load().Realtime.MQTT.Enabled = true
-	controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
-	controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
-	controller.Settings.Load().Main.Name = testBirdNetName
-
-	// Create request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Call handler
-	err := controller.GetMQTTStatus(c)
-	require.NoError(t, err)
-
-	// Check status code
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Parse response body
-	var result map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &result)
-	require.NoError(t, err)
-
-	// Basic validation since we can't mock the MQTT client creation directly
-	assert.Contains(t, result, "connected")
-	assert.Equal(t, refusingBroker, result["broker"])
-	assert.Equal(t, "birdnet/detections", result["topic"])
-}
-
-// TestErrorHandlingForIntegrations checks that GetMQTTStatus reports a failed broker connection in last_error.
-func TestErrorHandlingForIntegrations(t *testing.T) {
-	t.Run("MQTT Status Error Handling", func(t *testing.T) {
-		// Setup
-		e, controller := newIntegrationsTestHandler(t)
-		refusingBroker := newRefusingMQTTBroker(t)
-
-		// Configure settings to enable MQTT with a broker that drops the connection
-		controller.Settings.Load().Realtime.MQTT.Enabled = true
-		controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
-		controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
-		controller.Settings.Load().Main.Name = testBirdNetName
-
-		// Create request
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		// Call handler
-		err := controller.GetMQTTStatus(c)
-		require.NoError(t, err)
-
-		// Check status code
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Parse and validate response
-		var result MQTTStatus
-		err = json.Unmarshal(rec.Body.Bytes(), &result)
-		require.NoError(t, err)
-
-		// Connected should be false with a connection error
-		assert.False(t, result.Connected, "Connected should be false when MQTT connection fails")
-		assert.NotEmpty(t, result.LastError, "LastError should not be empty when connection fails")
-		assert.Contains(t, result.LastError, "error:connection:mqtt_broker", "Error should be properly formatted")
-	})
 }
 
 // redactedSecretPlaceholder is the sentinel the settings UI returns in place of

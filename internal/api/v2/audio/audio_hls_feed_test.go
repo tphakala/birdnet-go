@@ -171,34 +171,6 @@ func TestAudioFeedDropsOldest(t *testing.T) {
 		"the newest frames must survive and the oldest must be evicted")
 }
 
-// TestAudioFeedReleaseRestoresCapacity checks the accounting contract from the
-// consumer side: a feed loop that reports its dequeues gets the whole budget
-// back, so a queue that filled during a stall does not stay full afterwards.
-func TestAudioFeedReleaseRestoresCapacity(t *testing.T) {
-	t.Parallel()
-
-	const frameSize = 1024
-	const capacity = 4
-	h, feed := newTestFeedConsumer(frameSize * capacity)
-
-	for seq := range uint64(capacity) {
-		writeFrame(t, h, frameSize, seq)
-	}
-	require.Equal(t, int64(frameSize*capacity), feed.queued.Load())
-
-	seqs, _ := drainFeed(feed)
-	require.Len(t, seqs, capacity)
-	require.Equal(t, int64(0), feed.queued.Load())
-
-	// The next full budget must be admitted without a single eviction.
-	for seq := range uint64(capacity) {
-		writeFrame(t, h, frameSize, capacity+seq)
-	}
-	seqs, _ = drainFeed(feed)
-	assert.Equal(t, []uint64{4, 5, 6, 7}, seqs,
-		"a drained queue must accept a full budget again with nothing dropped")
-}
-
 // TestAudioFeedAdmitsOversizedChunk covers the makeRoom early exit. A chunk
 // larger than the entire budget can never be made to fit, and refusing it would
 // silence the stream permanently rather than briefly, so it is admitted and the

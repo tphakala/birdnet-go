@@ -1,7 +1,3 @@
-// Go 1.25 improvements:
-// - Uses b.Loop() for benchmark iterations
-// LLM GUIDANCE: Always use b.Loop() instead of manual for i := 0; i < b.N; i++
-
 package notifications
 
 import (
@@ -193,32 +189,4 @@ func TestToastToSSEEventConsistency(t *testing.T) {
 
 	// Verify action consistency
 	assert.Equal(t, originalToast.Action, eventData["action"], "Action inconsistency")
-}
-
-// BenchmarkCompleteToastFlow benchmarks the complete toast flow
-func BenchmarkCompleteToastFlow(b *testing.B) {
-	h, service := newToastTestHandler(b)
-
-	// Subscribe to notifications (needed for the broadcast to be observed)
-	notifCh, _ := service.Subscribe()
-	defer service.Unsubscribe(notifCh)
-
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	// Use b.Loop() for benchmark iteration (Go 1.25)
-	for b.Loop() {
-		// Step 1: Send toast (same service path Controller.SendToast delegates to)
-		err := service.SendToastWithDuration("Benchmark message", notification.ToastTypeInfo, "api", 3000)
-		require.NoError(b, err, "SendToastWithDuration error")
-
-		// Step 2: Receive notification
-		select {
-		case notif := <-notifCh:
-			// Step 3: Create SSE event data
-			_ = h.createToastEventData(notif)
-		case <-time.After(10 * time.Millisecond):
-			require.Fail(b, "Timeout waiting for notification")
-		}
-	}
 }

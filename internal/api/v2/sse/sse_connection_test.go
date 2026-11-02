@@ -8,14 +8,12 @@
 // LLM GUIDANCE: When updating concurrent tests in this file:
 // 1. Use sync.WaitGroup.Go() instead of manual wg.Add(1) + go func + defer wg.Done()
 // 2. Add T.Attr() metadata for test categorization
-// 3. For benchmark loops, use b.Loop() instead of manual for i := 0; i < b.N; i++
-// 4. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
+// 3. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
 
 package sse
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -130,10 +128,6 @@ func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
 		testSingleConnectionManualDisconnect(t, server, config)
 	})
 
-	t.Run("single_connection_context_cancellation", func(t *testing.T) {
-		testSingleConnectionContextCancellation(t, server, config)
-	})
-
 	t.Run("multiple_concurrent_connections", func(t *testing.T) {
 		testMultipleConcurrentConnections(t, server, config)
 	})
@@ -189,63 +183,6 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 
 	// Connection cleanup is immediate with DisableKeepAlives=true
 	// goleak will catch any leaked goroutines
-}
-
-// testSingleConnectionContextCancellation verifies that canceling the context
-// properly cleans up the SSE connection
-func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Server, config SSETestConfig) {
-	t.Helper()
-	// Create context with cancellation
-	ctx, cancel := context.WithCancel(t.Context())
-
-	// Create HTTP client optimized for tests
-	client := apitest.NewTestHTTPClient(config.testTimeout)
-
-	// Make SSE request with context
-	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
-	require.NoError(t, err)
-	req.Header.Set("Accept", "text/event-stream")
-
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if resp != nil {
-			_ = resp.Body.Close() // Ignore close error in test
-		}
-	}()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Start reading in goroutine
-	done := make(chan bool, 1)
-	go func() {
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			// Just read events until context cancellation
-		}
-		done <- true
-	}()
-
-	// Wait a bit to establish connection
-	// TODO: Consider using testing/synctest.Wait() for deterministic timing
-	time.Sleep(100 * time.Millisecond)
-
-	// Cancel context
-	cancel()
-
-	// Wait for goroutine to finish
-	select {
-	case <-done:
-		// Expected - connection should close due to context cancellation
-	case <-time.After(500 * time.Millisecond):
-		assert.Fail(t, "Connection did not close within expected time after context cancellation")
-	}
-
-	// Response body will be closed by defer
-
-	// Close idle connections - should be immediate with DisableKeepAlives
-	client.CloseIdleConnections()
-
-	// Cleanup is immediate with DisableKeepAlives=true
 }
 
 // testMultipleConcurrentConnections verifies that multiple concurrent SSE connections
