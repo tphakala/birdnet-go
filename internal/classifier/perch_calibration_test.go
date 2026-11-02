@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -232,6 +233,43 @@ func TestLogPerchCalibration(t *testing.T) {
 			for _, want := range tt.contains {
 				assert.Contains(t, buf.String(), want)
 			}
+		})
+	}
+}
+
+// TestResolvePerchCalibration covers the step NewPerch runs after parsing the
+// labels: the lookup result must end up as the calibrated flag and rest logit the
+// instance stores, with one log line per build. It swaps the global logger, so it
+// must not run in parallel.
+func TestResolvePerchCalibration(t *testing.T) {
+	mauData, mauLabels := mauritiusLabels(t)
+	want := embeddedScoreCalibration(t, "no-dft-fp32@"+mauritiusTile)
+	unknownData, unknownLabels := syntheticLabelBytes(customLabelCount)
+	fullData, fullLabels := syntheticLabelBytes(perchFullClassCount)
+
+	tests := []struct {
+		name       string
+		data       []byte
+		labels     []string
+		calibrated bool
+		rest       float64
+		logged     string
+	}{
+		{name: "catalog slice", data: mauData, labels: mauLabels, calibrated: true, rest: want.RestLogit, logged: "score calibration applied"},
+		{name: "unknown slice", data: unknownData, labels: unknownLabels, logged: "match no catalog Perch model"},
+		{name: "full model", data: fullData, labels: fullLabels},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := newCaptureLogger(t)
+			calibrated, rest := resolvePerchCalibration(tt.data, tt.labels, "/m/perch_v2_mauritius_no_dft.onnx")
+			assert.Equal(t, tt.calibrated, calibrated)
+			assert.InDelta(t, tt.rest, rest, 0)
+			if tt.logged == "" {
+				assert.Empty(t, buf.String())
+				return
+			}
+			assert.Equal(t, 1, strings.Count(buf.String(), tt.logged), "exactly one log line per build")
 		})
 	}
 }

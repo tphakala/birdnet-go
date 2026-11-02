@@ -142,8 +142,7 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		precision = string(detectQuantization(cfg.ModelPath))
 	}
 
-	calibration := perchScoreCalibration(labelData, labels, cfg.ModelPath)
-	logPerchCalibration(log, calibration, len(labels))
+	calibrated, restLogit := resolvePerchCalibration(labelData, labels, cfg.ModelPath)
 
 	info := ModelInfo{
 		ID:          RegistryIDPerchV2,
@@ -165,9 +164,18 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		backend:    backend,
 		precision:  precision,
 		modelPath:  cfg.ModelPath,
-		calibrated: calibration.status == perchCalibrationApplied,
-		restLogit:  calibration.calibration.RestLogit,
+		calibrated: calibrated,
+		restLogit:  restLogit,
 	}, nil
+}
+
+// resolvePerchCalibration looks up the score calibration for the labels a Perch
+// build parsed, logs the outcome once, and returns what the instance stores: whether
+// Predict applies the rest term, and its rest logit.
+func resolvePerchCalibration(labelData []byte, labels []string, modelPath string) (calibrated bool, restLogit float64) {
+	c := perchScoreCalibration(labelData, labels, modelPath)
+	logPerchCalibration(GetLogger(), c, len(labels))
+	return c.status == perchCalibrationApplied, c.calibration.RestLogit
 }
 
 // logPerchCalibration reports once per build how the loaded labels were scored:
@@ -307,7 +315,8 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 	// BirdNET applies sigmoid in its own Predict path, Perch needs softmax.
 	// A regional slice only sees its own classes, so its plain softmax would score
 	// every class higher than the full model does; the rest term puts the dropped
-	// classes back into the denominator. The full model keeps the plain softmax.
+	// classes back into the denominator. The full model, and a slice the catalog
+	// does not know, keep the plain softmax.
 	var predictions []float32
 	if p.calibrated {
 		predictions = perchSoftmaxWithRest(rawLogits, p.restLogit)
