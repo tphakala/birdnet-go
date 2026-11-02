@@ -13,8 +13,8 @@ import (
 // is what notices another route going missing. The auth-protected
 // mutation/probe group is mounted with the AuthMiddleware promoted from the core;
 // a pass-through is injected so the empty service group and the auth group
-// register the same way production wiring does. Whether the protected routes
-// really sit behind authentication is the enumeration test's job, not this one's.
+// register the same way production wiring does, so this test does not check
+// which routes sit behind authentication.
 func TestRegisterRoutesRegistration(t *testing.T) {
 	e := echo.New()
 	core := apitest.NewCore(t, apitest.WithEcho(e))

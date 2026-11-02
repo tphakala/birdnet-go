@@ -13,8 +13,8 @@ import (
 // notices another route going missing. The auth-protected integrations group and
 // the nested MQTT TLS group are mounted with the AuthMiddleware promoted from the
 // core; a pass-through is injected so the groups register the same way production
-// wiring does. Whether the protected routes really sit behind authentication is
-// the enumeration test's job, not this one's.
+// wiring does, so this test does not check which routes sit behind
+// authentication.
 func TestRegisterRoutesRegistration(t *testing.T) {
 	e, h := newIntegrationsTestHandler(t)
 	h.AuthMiddleware = func(next echo.HandlerFunc) echo.HandlerFunc { return next }
