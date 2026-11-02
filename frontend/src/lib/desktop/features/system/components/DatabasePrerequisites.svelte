@@ -113,15 +113,18 @@
   /** One sentence for a screen reader once a check run has produced data. */
   function resultAnnouncement(): string {
     if (!prerequisites) return '';
-    if (prerequisites.all_passed) return t('system.database.migration.prerequisites.allPassed');
     if (prerequisites.critical_failures > 0) {
       return t('system.database.migration.prerequisites.criticalIssues', {
         count: prerequisites.critical_failures,
       });
     }
-    return t('system.database.migration.prerequisites.warningsCount', {
-      count: prerequisites.warnings,
-    });
+    // all_passed only means no critical check failed, so warnings must be reported before it
+    if (prerequisites.warnings > 0) {
+      return t('system.database.migration.prerequisites.warningsCount', {
+        count: prerequisites.warnings,
+      });
+    }
+    return t('system.database.migration.prerequisites.allPassed');
   }
 
   /**

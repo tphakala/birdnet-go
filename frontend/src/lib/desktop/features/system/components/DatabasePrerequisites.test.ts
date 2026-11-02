@@ -397,6 +397,14 @@ describe('DatabasePrerequisites', () => {
         expected: 'system.database.migration.prerequisites.warningsCount',
       },
       {
+        // The backend sets all_passed whenever no critical check failed, warnings included
+        name: 'warnings remain on a response the backend marks all_passed',
+        next: {
+          prerequisites: { ...response([check('warn', 'warning')], 0, 1), all_passed: true },
+        },
+        expected: 'system.database.migration.prerequisites.warningsCount',
+      },
+      {
         name: 'the run failed',
         next: { error: 'Request timeout.' },
         expected: '',
