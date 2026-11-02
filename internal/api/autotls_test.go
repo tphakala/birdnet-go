@@ -392,6 +392,12 @@ func TestHTTPSRedirectHandler(t *testing.T) {
 		{"no authority appends custom port", "", "8443", "host.example.com:8080", "host.example.com:8443"},
 		{"IPv6 omits port", "", "", "[::1]:8080", "[::1]"},
 		{"IPv6 appends custom port", "", "8443", "[2001:db8::1]:8080", "[2001:db8::1]:8443"},
+		// A request Host with no port, such as http://[::1]/ on port 80, keeps
+		// its brackets until the handler strips and re-adds them.
+		{"IPv6 host without port omits empty port", "", "", "[::1]", "[::1]"},
+		{"IPv6 host without port omits 443", "", "443", "[::1]", "[::1]"},
+		{"IPv6 host without port appends custom port", "", "8443", "[::1]", "[::1]:8443"},
+		{"hostname without port appends custom port", "", "8443", "host.example.com", "host.example.com:8443"},
 	}
 
 	for _, tc := range tests {
