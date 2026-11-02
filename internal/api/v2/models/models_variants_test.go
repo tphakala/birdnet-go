@@ -31,6 +31,44 @@ func TestGetModelCatalog_EmitsVariants(t *testing.T) {
 	assert.Equal(t, map[string]int64{apiVarFP32: apiSizeFP32Model, apiVarInt8ARM: apiSizeInt8Model}, sizes)
 }
 
+// Synthetic ids for the regional variant projection test.
+const (
+	apiRegionalID      = "api-regional"
+	apiRegionalSlug    = "nordic"
+	apiVarGlobal       = "fp32"
+	apiVarRegional     = "fp32@nordic"
+	apiSizeRegionalMdl = 400
+)
+
+// TestGetModelCatalog_EmitsRegionalVariant verifies a regional variant reaches the
+// response with its region and never as the default, next to a global default
+// that carries no region.
+func TestGetModelCatalog_EmitsRegionalVariant(t *testing.T) {
+	useCatalog(t, []classifier.CatalogEntry{{
+		ID: apiRegionalID, Name: "Regional", Version: "1.0", Category: classifier.CategoryBird,
+		HuggingFaceRepo: "t/regional",
+		Variants: []classifier.CatalogVariant{
+			{ID: apiVarGlobal, Precision: "fp32", Default: true, Files: []classifier.CatalogFile{apiFile(classifier.RoleModel, "global.onnx", apiSizeFP32Model)}},
+			{ID: apiVarRegional, Precision: "fp32", Region: apiRegionalSlug, Files: []classifier.CatalogFile{apiFile(classifier.RoleModel, "regional.onnx", apiSizeRegionalMdl)}},
+		},
+	}})
+	h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+	entry := findEntry(catalogRequest(t, h), apiRegionalID)
+	require.NotNil(t, entry)
+
+	global := findVariant(entry, apiVarGlobal)
+	require.NotNil(t, global)
+	assert.Empty(t, global.Region, "the global variant carries no region")
+	assert.True(t, global.Default)
+
+	regional := findVariant(entry, apiVarRegional)
+	require.NotNil(t, regional, "the regional variant must reach the catalog API")
+	assert.Equal(t, apiRegionalSlug, regional.Region)
+	assert.False(t, regional.Default, "a regional variant is never the default")
+	assert.Equal(t, int64(apiSizeRegionalMdl), regional.SizeBytes)
+}
+
 // TestInstallModel_RejectsUnknownVariant verifies the install handler rejects a
 // variant the entry does not offer with 400, synchronously, before any download.
 func TestInstallModel_RejectsUnknownVariant(t *testing.T) {
