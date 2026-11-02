@@ -199,38 +199,52 @@
   }
 
   /**
+   * Counts the run requests. A poll or an older run request that finishes after a newer run
+   * request was sent describes an older state, so it must not overwrite the newer snapshot.
+   */
+  let prerequisitesRequestSeq = 0;
+
+  /**
    * Starts the background prerequisites run, or joins the one in progress, and stores the
    * snapshot. A forced run replaces a fresh passing result. The checks themselves are
-   * followed by the polling effect below.
+   * followed by the polling effect below. Of overlapping requests the latest one wins.
    */
   async function runPrerequisites(force: boolean): Promise<void> {
+    const seq = ++prerequisitesRequestSeq;
     try {
       // Loading covers every wait for the start response, so an older snapshot, even a
       // passing one, cannot enable Start while a new run is being requested
       prerequisites.loading = true;
-      prerequisites.data = await api.post<PrerequisitesResponse>(
+      const snapshot = await api.post<PrerequisitesResponse>(
         '/api/v2/system/database/migration/prerequisites/run',
         { force }
       );
+      if (seq !== prerequisitesRequestSeq) return;
+      prerequisites.data = snapshot;
       prerequisites.error = null;
     } catch (e) {
-      setPrerequisitesError(e);
+      if (seq === prerequisitesRequestSeq) setPrerequisitesError(e);
     } finally {
-      prerequisites.loading = false;
+      // A newer request is still in flight and owns the loading flag
+      if (seq === prerequisitesRequestSeq) prerequisites.loading = false;
     }
   }
 
   async function pollPrerequisites(): Promise<void> {
+    const seq = prerequisitesRequestSeq;
     try {
-      prerequisites.data = await api.get<PrerequisitesResponse>(
+      const snapshot = await api.get<PrerequisitesResponse>(
         '/api/v2/system/database/migration/prerequisites'
       );
+      // A run request was sent while this poll was in flight: its answer is newer
+      if (seq !== prerequisitesRequestSeq) return;
+      prerequisites.data = snapshot;
       prerequisites.error = null;
       // The server lost the run (a restart), so nothing is left to follow: start it again
-      if (prerequisites.data.status === 'idle') await runPrerequisites(false);
+      if (snapshot.status === 'idle') await runPrerequisites(false);
     } catch (e) {
       // The run goes on server-side, so keep polling
-      setPrerequisitesError(e);
+      if (seq === prerequisitesRequestSeq) setPrerequisitesError(e);
     }
   }
 

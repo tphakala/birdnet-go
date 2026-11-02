@@ -433,6 +433,54 @@ describe('DatabaseDashboard prerequisites run', () => {
     }
   });
 
+  it('ignores an older poll that resolves after a newer run request', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // Poll 1 fails so Retry shows; poll 2 is held pending while Retry forces a run
+      let polls = 0;
+      let resolveOldPoll: (value: unknown) => void = () => {};
+      apiGet.mockImplementation((url: string) => {
+        if (url === STATUS_URL) return Promise.resolve(idleStatus);
+        if (url !== PREREQUISITES_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        polls += 1;
+        if (polls === 1) return Promise.reject(apiError('Status unavailable', 500));
+        if (polls === 2) {
+          return new Promise(resolve => {
+            resolveOldPoll = resolve;
+          });
+        }
+        return Promise.resolve(runningSnapshot(2));
+      });
+      apiPost.mockImplementation((url: string) =>
+        url === RUN_URL
+          ? Promise.resolve(runningSnapshot(0))
+          : Promise.reject(apiError(NOT_CONFIGURED, 503))
+      );
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      renderTyped(DatabaseDashboard);
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      const alert = await screen.findByRole('alert');
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      await waitFor(() => expect(polls).toBe(2));
+
+      await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+      await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: true }));
+
+      // The older poll answers last, with a completed snapshot
+      resolveOldPoll(startablePrerequisites);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(startBlocked()).toBe(true);
+
+      // Polling went on: the next poll still gets asked
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      expect(polls).toBeGreaterThanOrEqual(3);
+      expect(startBlocked()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('skips polls while offline and resumes when back online', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
