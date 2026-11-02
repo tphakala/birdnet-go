@@ -784,10 +784,12 @@ func TestStartMigration_ShutdownInterruptsTheRecordCount(t *testing.T) {
 	// limit as the only bound the answer would be a 504 once it ran out.
 	controller.startPreflightLimit = 5 * time.Second
 	repo := mocks.NewMockDetectionRepository(t)
+	var countEnded error
 	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(ctx context.Context) (int64, error) {
 		cancel()
 		<-ctx.Done()
-		return 0, ctx.Err()
+		countEnded = ctx.Err()
+		return 0, countEnded
 	}).Once()
 	controller.Repo = repo
 
@@ -796,6 +798,10 @@ func TestStartMigration_ShutdownInterruptsTheRecordCount(t *testing.T) {
 	rec := httptest.NewRecorder()
 	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
+	// The count's context ended because the lifecycle was cancelled; without the lifecycle
+	// wiring it would end at the limit with DeadlineExceeded, and the answer would be the same 503
+	require.ErrorIs(t, countEnded, context.Canceled)
+	require.NotErrorIs(t, countEnded, context.DeadlineExceeded)
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
 	state, err := sm.GetState()
