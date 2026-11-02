@@ -782,7 +782,9 @@ func TestServeRelativeFile_ETag(t *testing.T) {
 		rec := serveRelative(t, sfs, name, map[string]string{"If-None-Match": etag}, nil)
 		assert.Equal(t, http.StatusOK, rec.Code, "an ETag from a different size must not validate")
 		assert.Equal(t, "second, longer version", rec.Body.String())
-		assert.NotEqual(t, etag, rec.Header().Get("ETag"))
+		newETag := rec.Header().Get("ETag")
+		require.NotEmpty(t, newETag, "the rewritten file needs its own ETag")
+		assert.NotEqual(t, etag, newETag)
 	})
 
 	t.Run("caller supplied ETag is kept", func(t *testing.T) {
