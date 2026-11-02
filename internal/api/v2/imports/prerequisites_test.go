@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -147,11 +148,10 @@ func TestPrerequisitesEndpoints_RunAndPoll(t *testing.T) {
 	assert.Contains(t, []string{PrereqRunStatusRunning, PrereqRunStatusCompleted}, started.Status)
 	assert.Positive(t, started.RunID)
 
-	var done PrerequisitesResponse
-	require.Eventually(t, func() bool {
-		done = get()
-		return done.Status == PrereqRunStatusCompleted
-	}, 5*time.Second, 50*time.Millisecond)
+	// Wait returns once the Core's tracked goroutines, the run included, have ended
+	controller.Wait()
+	done := get()
+	require.Equal(t, PrereqRunStatusCompleted, done.Status)
 
 	assert.Equal(t, started.RunID, done.RunID)
 	assert.True(t, done.AllPassed)
@@ -169,6 +169,73 @@ func TestPrerequisitesEndpoints_RunAndPoll(t *testing.T) {
 	}
 	for _, id := range []string{"state_idle", "disk_space", "legacy_accessible", "record_count", "existing_v2_data", "memory_available"} {
 		assert.True(t, checkIDs[id], "missing check %s", id)
+	}
+}
+
+// TestRunPrerequisites_RunContext pins what the run is bound to: the server
+// lifecycle context, not the request that started it.
+func TestRunPrerequisites_RunContext(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	post := func(controller *Handler, e *echo.Echo, reqCtx context.Context) PrerequisitesResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", http.NoBody).WithContext(reqCtx)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
+		var resp PrerequisitesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		return resp
+	}
+
+	t.Run("a cancelled request does not cancel the run", func(t *testing.T) {
+		e, controller, _ := setupPrerequisitesTestEnvironment(t)
+		reqCtx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		post(controller, e, reqCtx)
+		controller.Wait()
+
+		assert.Equal(t, PrereqRunStatusCompleted, controller.prereqRunner().snapshot().Status)
+	})
+
+	t.Run("a cancelled lifecycle context starts no run", func(t *testing.T) {
+		e, controller, _ := setupPrerequisitesTestEnvironment(t)
+		lifecycle, cancel := context.WithCancel(t.Context())
+		controller.SetTestContext(lifecycle, cancel)
+		cancel()
+
+		resp := post(controller, e, t.Context())
+
+		assert.Equal(t, PrereqRunStatusFailed, resp.Status)
+		assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
+	})
+}
+
+// TestDBFingerprint_FollowsSettings pins that every database setting the checks
+// read changes the fingerprint, so a changed setting forces a new run.
+func TestDBFingerprint_FollowsSettings(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	mutations := map[string]func(s *conf.Settings){
+		"mysql enabled":  func(s *conf.Settings) { s.Output.MySQL.Enabled = true },
+		"mysql host":     func(s *conf.Settings) { s.Output.MySQL.Host = "db.example" },
+		"mysql port":     func(s *conf.Settings) { s.Output.MySQL.Port = "3307" },
+		"mysql database": func(s *conf.Settings) { s.Output.MySQL.Database = "other" },
+		"sqlite path":    func(s *conf.Settings) { s.Output.SQLite.Path = filepath.Join(t.TempDir(), "other.db") },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			_, controller, _ := setupPrerequisitesTestEnvironment(t)
+			before := controller.dbFingerprint()
+
+			mutate(controller.Settings.Load())
+
+			assert.NotEqual(t, before, controller.dbFingerprint())
+		})
 	}
 }
 
@@ -487,6 +554,29 @@ func TestCheckLegacyAccessible_ReturnsWhenContextEnds(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, CheckStatusError, check.Status, check.Message)
+}
+
+// failingDS is a datastore whose GetLastDetections returns an error.
+type failingDS struct {
+	*mocks.MockInterface
+}
+
+func (failingDS) GetLastDetections(int) ([]datastore.Note, error) {
+	return nil, errors.NewStd("read failed")
+}
+
+// TestCheckLegacyAccessible_ReadError pins that a failing legacy read fails the check.
+func TestCheckLegacyAccessible_ReadError(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	controller := &Handler{Core: &apicore.Core{DS: failingDS{MockInterface: mocks.NewMockInterface(t)}}}
+
+	check := controller.checkLegacyAccessible(t.Context())
+
+	assert.Equal(t, CheckStatusFailed, check.Status)
+	assert.Contains(t, check.Message, "read failed")
 }
 
 // panickingDS is a datastore whose GetLastDetections panics.

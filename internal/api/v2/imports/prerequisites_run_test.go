@@ -3,6 +3,7 @@ package importsapi
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -234,14 +235,15 @@ func TestPrereqRunner_ResetDuringRun(t *testing.T) {
 
 func TestPrereqRunner_RunEndsFailed(t *testing.T) {
 	tests := []struct {
-		name string
-		step func(ctx context.Context) []PrerequisiteCheck
+		name      string
+		step      func(ctx context.Context) []PrerequisiteCheck
+		wantError string
 	}{
-		{"panicking step", func(context.Context) []PrerequisiteCheck { panic("boom") }},
+		{"panicking step", func(context.Context) []PrerequisiteCheck { panic("boom") }, msgPrereqRunPanicked},
 		{"step outliving the run timeout", func(context.Context) []PrerequisiteCheck {
 			time.Sleep(prereqRunTimeout + time.Minute)
 			return []PrerequisiteCheck{passCheck(testStepA)}
-		}},
+		}, msgPrereqRunTimedOut},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -254,7 +256,7 @@ func TestPrereqRunner_RunEndsFailed(t *testing.T) {
 
 				snap := r.snapshot()
 				assert.Equal(t, PrereqRunStatusFailed, snap.Status)
-				assert.NotEmpty(t, snap.Error)
+				assert.Contains(t, snap.Error, tt.wantError)
 				assert.Equal(t, started.RunID, snap.RunID)
 
 				again := r.start(t.Context(), false, dbFingerprint{}, stepsOf(step), summarizeForTest)
@@ -277,7 +279,7 @@ func TestPrereqRunner_CancelledParent(t *testing.T) {
 		cancelDead()
 		snap := r.start(dead, false, dbFingerprint{}, stepsOf(fakeStep(testStepA, 0, &runs, passCheck)), summarizeForTest)
 		assert.Equal(t, PrereqRunStatusFailed, snap.Status)
-		assert.NotEmpty(t, snap.Error)
+		assert.Equal(t, msgPrereqRunShutdown, snap.Error)
 		wg.Wait()
 		assert.Equal(t, int32(0), runs.Load())
 
@@ -294,7 +296,7 @@ func TestPrereqRunner_CancelledParent(t *testing.T) {
 
 		final := r.snapshot()
 		assert.Equal(t, PrereqRunStatusFailed, final.Status)
-		assert.NotEmpty(t, final.Error)
+		assert.Equal(t, msgPrereqRunCancelled, final.Error)
 	})
 }
 
@@ -324,5 +326,73 @@ func TestPrereqRunner_StepIgnoringContext(t *testing.T) {
 		close(release)
 		synctest.Wait()
 		assert.Equal(t, PrereqRunStatusFailed, r.snapshot().Status, "a late result must not change the failed run")
+	})
+}
+
+// TestPrereqRunner_SnapshotChecksNeverNull pins that every snapshot serializes
+// its checks as an array, which the frontend reads without a null guard.
+func TestPrereqRunner_SnapshotChecksNeverNull(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := &prereqRunner{}
+		release := make(chan struct{})
+		slow := prereqStep{id: testStepA, name: "A", run: func(context.Context) []PrerequisiteCheck {
+			<-release
+			return []PrerequisiteCheck{passCheck(testStepA)}
+		}}
+		failing := prereqStep{id: testStepA, name: "A", run: func(context.Context) []PrerequisiteCheck { panic("boom") }}
+		const emptyChecks = `"checks":[]`
+
+		idle, err := json.Marshal(r.snapshot())
+		require.NoError(t, err)
+		assert.Contains(t, string(idle), emptyChecks)
+
+		r.start(t.Context(), false, dbFingerprint{}, stepsOf(slow), summarizeForTest)
+		synctest.Wait()
+		running, err := json.Marshal(r.snapshot())
+		require.NoError(t, err)
+		assert.Contains(t, string(running), emptyChecks)
+		close(release)
+		synctest.Wait()
+
+		r.start(t.Context(), true, dbFingerprint{}, stepsOf(failing), summarizeForTest)
+		synctest.Wait()
+		failed, err := json.Marshal(r.snapshot())
+		require.NoError(t, err)
+		assert.Contains(t, string(failed), emptyChecks)
+	})
+}
+
+// TestPrereqRunner_PassingResultCarriesRecordCount pins that the count a run
+// reports through its sink is committed with the result and returned with it,
+// and that passingResult names why a result cannot be reused.
+func TestPrereqRunner_PassingResultCarriesRecordCount(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const wantCount = int64(1234)
+		r := &prereqRunner{}
+		steps := func(sink *recordCountSink) []prereqStep {
+			return []prereqStep{{id: testStepA, name: "A", run: func(context.Context) []PrerequisiteCheck {
+				sink.count, sink.known = wantCount, true
+				return []PrerequisiteCheck{passCheck(testStepA)}
+			}}}
+		}
+		fp := dbFingerprint{}
+
+		_, reason := r.passingResult(fp)
+		assert.Equal(t, prereqReuseNoResult, reason)
+
+		r.start(t.Context(), false, fp, steps, summarizeForTest)
+		synctest.Wait()
+
+		got, reason := r.passingResult(fp)
+		assert.Equal(t, prereqReuseOK, reason)
+		assert.Equal(t, wantCount, got.RecordCount)
+		assert.True(t, got.RecordCountKnown)
+
+		_, reason = r.passingResult(dbFingerprint{MySQLEnabled: true})
+		assert.Equal(t, prereqReuseSettingsChanged, reason)
+
+		time.Sleep(prereqResultMaxAge)
+		_, reason = r.passingResult(fp)
+		assert.Equal(t, prereqReuseStale, reason)
 	})
 }
