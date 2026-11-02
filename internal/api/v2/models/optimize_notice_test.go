@@ -499,6 +499,11 @@ func TestSyncOptimizeNotice_ServiceSelection(t *testing.T) {
 
 	t.Run("injected service receives the notice", func(t *testing.T) {
 		h, _ := newHandler(t)
+		// A process-wide service exists too: the injected one must win.
+		notification.Initialize(notification.DefaultServiceConfig())
+		processWide := notification.GetService()
+		require.NotNil(t, processWide)
+		t.Cleanup(processWide.Stop)
 		injected := notification.NewService(notification.DefaultServiceConfig())
 		t.Cleanup(injected.Stop)
 		h.SetNotificationService(injected)
@@ -508,6 +513,7 @@ func TestSyncOptimizeNotice_ServiceSelection(t *testing.T) {
 		found := findOptimizeNotice(t, injected)
 		require.NotNil(t, found, "the notice lands in the injected service")
 		assert.Equal(t, found.ID, h.optimize.latch.ID(), "the stored notice is the latched one")
+		assert.Nil(t, findOptimizeNotice(t, processWide), "the process-wide service gets nothing when one is injected")
 	})
 
 	t.Run("process-wide service receives the notice", func(t *testing.T) {
