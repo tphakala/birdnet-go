@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
-import { renderTyped } from '../../../../../test/render-helpers';
+import { renderTyped, createComponentTestFactory } from '../../../../../test/render-helpers';
 import DatabasePrerequisites from './DatabasePrerequisites.svelte';
 import type { PrerequisiteCheck, PrerequisiteCheckStatus } from '$lib/types/migration';
 
@@ -166,5 +166,77 @@ describe('DatabasePrerequisites', () => {
     );
 
     expect(refreshed).toBe(1);
+  });
+
+  it('labels Retry as busy while a retry with stale data is loading', () => {
+    renderTyped(DatabasePrerequisites, {
+      props: {
+        prerequisites: {
+          all_passed: false,
+          can_start_migration: false,
+          critical_failures: 1,
+          warnings: 0,
+          checked_at: '2026-10-28T12:00:00Z',
+          checks: [check('failed_check', 'failed')],
+        },
+        error: 'Request timeout.',
+        isLoading: true,
+        onRefresh: async () => {},
+      },
+    });
+
+    const retry = within(screen.getByRole('alert')).getByRole('button');
+    expect(retry).toHaveAttribute('aria-disabled', 'true');
+    expect(retry).toHaveTextContent(t('common.retrying'));
+  });
+
+  it('keeps keyboard focus in the panel when Retry removes the alert', async () => {
+    // Like the dashboard: the request starts loading at once and the data stays null
+    const noData = createComponentTestFactory(DatabasePrerequisites, {
+      prerequisites: null,
+      error: 'Request timeout.',
+    });
+    const view = noData.render({
+      props: {
+        onRefresh: () => {
+          void view.rerender({ isLoading: true });
+          return new Promise<void>(() => {});
+        },
+      },
+    });
+
+    const retry = within(screen.getByRole('alert')).getByRole('button', {
+      name: t('common.retry'),
+    });
+    retry.focus();
+    await fireEvent.click(retry);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveFocus();
+  });
+
+  it('leaves focus on Retry when the alert stays mounted', async () => {
+    renderTyped(DatabasePrerequisites, {
+      props: {
+        prerequisites: {
+          all_passed: false,
+          can_start_migration: false,
+          critical_failures: 1,
+          warnings: 0,
+          checked_at: '2026-10-28T12:00:00Z',
+          checks: [check('failed_check', 'failed')],
+        },
+        error: 'Request timeout.',
+        onRefresh: () => new Promise<void>(() => {}),
+      },
+    });
+
+    const retry = within(screen.getByRole('alert')).getByRole('button', {
+      name: t('common.retry'),
+    });
+    retry.focus();
+    await fireEvent.click(retry);
+
+    expect(retry).toHaveFocus();
   });
 });

@@ -39,6 +39,7 @@
 
   let showDetails = $state(false);
   let isRefreshing = $state(false);
+  let statusRegion = $state<HTMLDivElement>();
 
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
@@ -94,6 +95,15 @@
     return translated === key
       ? status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
       : translated;
+  }
+
+  /**
+   * Retry sits in an alert that unmounts once the request starts and no data is shown;
+   * park focus on the status region first so it does not fall back to the page body.
+   */
+  function handleRetry(): Promise<void> {
+    if (!prerequisites && !isLoading && !isRefreshing) statusRegion?.focus();
+    return handleRefresh();
   }
 
   async function handleRefresh() {
@@ -182,7 +192,13 @@
   </div>
 
   <!-- Always-rendered live region: only its text changes, so the loading state is announced -->
-  <div role="status" aria-atomic="true">
+  <div
+    bind:this={statusRegion}
+    role="status"
+    aria-atomic="true"
+    tabindex="-1"
+    class="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+  >
     {#if !prerequisites && isLoading}
       <div class="mt-3 flex items-center gap-2 px-3 py-2 text-sm text-muted">
         <RefreshCw class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
@@ -198,10 +214,10 @@
       >
       <Button
         className="mt-2"
-        onclick={handleRefresh}
+        onclick={handleRetry}
         aria-disabled={isLoading || isRefreshing ? 'true' : undefined}
       >
-        {t('common.retry')}
+        {isLoading || isRefreshing ? t('common.retrying') : t('common.retry')}
       </Button>
     </ErrorAlert>
   {/if}
