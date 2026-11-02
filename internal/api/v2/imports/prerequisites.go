@@ -67,6 +67,14 @@ type gormDBProvider interface {
 	GetDB() *gorm.DB
 }
 
+// integrityResulter is implemented by the legacy SQLite store, which caches the
+// result of its startup and daily PRAGMA quick_check (the same consumer-side
+// pattern as internal/system/diagnostics.go). It is asserted only outside
+// v2-only mode, where the datastore's IntegrityResult can run a scan.
+type integrityResulter interface {
+	IntegrityResult() (string, bool)
+}
+
 // Check status constants
 const (
 	CheckStatusPassed  = "passed"
@@ -85,6 +93,14 @@ const (
 // Error messages
 const (
 	errMsgDBConnectionUnavailable = "Cannot access database connection"
+)
+
+// Integrity check values.
+const (
+	// sqliteIntegrityOK is the single row PRAGMA quick_check returns for a healthy database.
+	sqliteIntegrityOK = "ok"
+	// msgIntegrityCachedOK is the message when the store's cached result was trusted.
+	msgIntegrityCachedOK = "Database integrity verified by the startup or daily integrity check"
 )
 
 // MinDiskSpaceBytes is the minimum free disk space required (1GB).
@@ -348,7 +364,11 @@ func (c *Handler) checkLegacyAccessible() PrerequisiteCheck {
 	return check
 }
 
-// checkSQLiteIntegrity runs PRAGMA quick_check on the SQLite database.
+// checkSQLiteIntegrity verifies the legacy SQLite database. It trusts the legacy
+// store's cached startup or daily quick_check result when that result is "ok"
+// and corruption is not latched, which avoids re-reading the whole file. Any
+// other state (no cache, an error string from the daily check, latched
+// corruption) runs PRAGMA quick_check live, which also confirms real corruption.
 // Scans all result rows since quick_check can return multiple errors.
 func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 	check := PrerequisiteCheck{
@@ -358,13 +378,24 @@ func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 		Severity:    CheckSeverityCritical,
 	}
 
-	db := c.getLegacyGormDB()
-	if db == nil {
-		if getIsV2OnlyMode() {
-			check.Status = CheckStatusSkipped
-			check.Message = v2OnlySkipMessage
+	// In v2-only mode the datastore's IntegrityResult can itself run a scan, so
+	// this guard must stay ahead of the integrityResulter assertion.
+	if getIsV2OnlyMode() {
+		check.Status = CheckStatusSkipped
+		check.Message = v2OnlySkipMessage
+		return check
+	}
+
+	if r, ok := c.DS.(integrityResulter); ok {
+		if result, latched := r.IntegrityResult(); result == sqliteIntegrityOK && !latched {
+			check.Status = CheckStatusPassed
+			check.Message = msgIntegrityCachedOK
 			return check
 		}
+	}
+
+	db := c.getLegacyGormDB()
+	if db == nil {
 		check.Status = CheckStatusError
 		check.Message = errMsgDBConnectionUnavailable
 		return check
@@ -380,7 +411,7 @@ func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 
 	// Check all results - any non-"ok" result indicates a problem
 	for _, result := range results {
-		if result != "ok" {
+		if result != sqliteIntegrityOK {
 			check.Status = CheckStatusFailed
 			check.Message = fmt.Sprintf("Integrity check failed: %s", result)
 			return check
