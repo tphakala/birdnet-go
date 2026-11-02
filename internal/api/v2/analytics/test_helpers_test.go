@@ -14,6 +14,7 @@
 package analytics
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -71,6 +73,17 @@ func newAnalyticsContext(e *echo.Echo, target string) (echo.Context, *httptest.R
 	path, _, _ := strings.Cut(target, "?")
 	c.SetPath(path)
 	return c, rec
+}
+
+// decodeExactJSON decodes a response body into v and requires that encoding v again reproduces
+// the body, so a shape test fails on trailing data, a key v does not declare, a key spelled with
+// different case, and a key the response omits.
+func decodeExactJSON(t *testing.T, body []byte, v any) {
+	t.Helper()
+	require.NoError(t, json.Unmarshal(body, v))
+	again, err := json.Marshal(v)
+	require.NoError(t, err)
+	require.JSONEq(t, string(body), string(again))
 }
 
 // setupAnalyticsTestEnvironment builds an Echo, a mock datastore, and an analytics

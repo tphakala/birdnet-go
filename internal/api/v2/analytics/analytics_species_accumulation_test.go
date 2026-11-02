@@ -39,14 +39,14 @@ func TestGetSpeciesAccumulation_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []speciesAccumulationJSON
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp, 3)
-	assert.Equal(t, "2026-03-01", resp[0].Date)
-	assert.Equal(t, 1, resp[0].CumulativeSpecies)
-	assert.Equal(t, 1, resp[0].NewSpecies)
-	// Cumulative is monotonic non-decreasing; the last point carries the total.
-	assert.Equal(t, 3, resp[2].CumulativeSpecies)
-	assert.Equal(t, 2, resp[2].NewSpecies)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
+	// Cumulative is monotonic non-decreasing, the middle day adds no species, and the last
+	// point carries the total.
+	assert.Equal(t, []speciesAccumulationJSON{
+		{Date: "2026-03-01", CumulativeSpecies: 1, NewSpecies: 1},
+		{Date: "2026-03-02", CumulativeSpecies: 1, NewSpecies: 0},
+		{Date: "2026-03-03", CumulativeSpecies: 3, NewSpecies: 2},
+	}, resp)
 	mockDS.AssertExpectations(t)
 }
 

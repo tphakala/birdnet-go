@@ -52,16 +52,15 @@ func TestGetYearOverYear_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp yearOverYearJSON
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, 2026, resp.CurrentYear)
-	assert.Equal(t, 2025, resp.PreviousYear)
-	require.Len(t, resp.Points, 2)
-	assert.Equal(t, "2026-01-01", resp.Points[0].Date)
-	assert.Equal(t, "01-01", resp.Points[0].MonthDay)
-	assert.Equal(t, 2, resp.Points[0].ThisYear)
-	assert.Equal(t, 1, resp.Points[0].LastYear)
-	assert.Equal(t, 1, resp.Points[0].Delta)
-	assert.Equal(t, -2, resp.Points[1].Delta)
+	decodeExactJSON(t, rec.Body.Bytes(), &resp)
+	assert.Equal(t, yearOverYearJSON{
+		CurrentYear:  2026,
+		PreviousYear: 2025,
+		Points: []yearOverYearPointJSON{
+			{Date: "2026-01-01", MonthDay: "01-01", ThisYear: 2, LastYear: 1, Delta: 1},
+			{Date: "2026-01-02", MonthDay: "01-02", ThisYear: 3, LastYear: 5, Delta: -2},
+		},
+	}, resp)
 	mockDS.AssertExpectations(t)
 }
 

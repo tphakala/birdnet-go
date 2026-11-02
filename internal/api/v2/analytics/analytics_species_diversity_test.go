@@ -2,7 +2,6 @@ package analytics
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,10 +25,7 @@ func TestGetSpeciesDiversity_ResponseShape(t *testing.T) {
 			{Date: "2024-01-17", Count: 2},
 		}, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/diversity?start_date=2024-01-15&end_date=2024-01-17", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/diversity")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/diversity?start_date=2024-01-15&end_date=2024-01-17")
 
 	require.NoError(t, controller.GetSpeciesDiversity(c))
 	require.Equal(t, http.StatusOK, rec.Code)
