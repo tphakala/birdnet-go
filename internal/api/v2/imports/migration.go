@@ -853,31 +853,30 @@ func (c *Handler) prerequisitesNotReady(ctx echo.Context) error {
 		http.StatusConflict, notification.MsgErrMigrationPrereqNotReady, nil)
 }
 
-// firstBlockingCheck returns the first failed or errored check, or nil.
+// firstBlockingCheck returns the first critical check that failed or errored, or nil.
 func firstBlockingCheck(checks []PrerequisiteCheck) *PrerequisiteCheck {
 	for i := range checks {
-		if checks[i].Status == CheckStatusFailed || checks[i].Status == CheckStatusError {
+		if isBlockingCheck(&checks[i]) {
 			return &checks[i]
 		}
 	}
 	return nil
 }
 
+// isBlockingCheck reports whether a check blocks the migration: a critical check
+// that failed or errored.
+func isBlockingCheck(check *PrerequisiteCheck) bool {
+	return check.Severity == CheckSeverityCritical &&
+		(check.Status == CheckStatusFailed || check.Status == CheckStatusError)
+}
+
 // storedRunFailed answers a start whose stored prerequisites run has a failed
 // critical check, naming that check.
 func (c *Handler) storedRunFailed(ctx echo.Context, checks []PrerequisiteCheck, path, ip string) error {
-	for i := range checks {
-		if isStoredBlocker(&checks[i]) {
-			return c.preflightFailed(ctx, &checks[i], path, ip)
-		}
+	if check := firstBlockingCheck(checks); check != nil {
+		return c.preflightFailed(ctx, check, path, ip)
 	}
 	return c.prerequisitesNotReady(ctx)
-}
-
-// isStoredBlocker reports whether a stored check blocks the migration.
-func isStoredBlocker(check *PrerequisiteCheck) bool {
-	return check.Severity == CheckSeverityCritical &&
-		(check.Status == CheckStatusFailed || check.Status == CheckStatusError)
 }
 
 // preflightFailed answers a start blocked by check with a 400 that names it.

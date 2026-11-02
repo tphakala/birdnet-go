@@ -371,12 +371,12 @@ func (r *prereqRunner) reuseReasonLocked(fp dbFingerprint) prereqReuseReason {
 		return prereqReuseRunning
 	case r.status != PrereqRunStatusCompleted || r.result == nil:
 		return prereqReuseNoResult
-	case !r.result.AllPassed:
-		return prereqReuseFailedCheck
 	case r.resultFingerprint != fp:
 		return prereqReuseSettingsChanged
 	case r.clock().Sub(r.finishedAt) >= prereqResultMaxAge:
 		return prereqReuseStale
+	case !r.result.AllPassed:
+		return prereqReuseFailedCheck
 	}
 	return prereqReuseOK
 }
