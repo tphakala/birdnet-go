@@ -2,20 +2,17 @@
 // GET /api/v2/species.
 //
 // The fixtures are deterministic and self-contained: the species-name snapshot is
-// built from the real vendored v2.4 label corpus plus the Perch- and bat-like testdata
+// built from the embedded v2.4 label corpus plus the inline Perch- and bat-like fixtures
 // (so the openfauna alias memo maps are the real ones, exercising the Streptopelia/
 // Spilopelia alias pair and the Dicrurus colliding pair), and a stub backend injects
 // fixed rarity contexts so no native model is loaded and no network is touched.
 package species
 
 import (
-	"bufio"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -79,7 +76,7 @@ const (
 	sciLegacyDove   = "Streptopelia senegalensis" // legacy; the form the corpus ships
 	sciDrongoA      = "Dicrurus adsimilis"        // colliding pair member A
 	sciDrongoB      = "Dicrurus divaricatus"      // colliding pair member B (alias of A)
-	sciBat          = "Myotis daubentonii"        // secondary-model only (bat testdata)
+	sciBat          = "Myotis daubentonii"        // secondary-model only (bat-like fixture)
 	sciPerchOnly    = "Tachyspiza badia"          // scientific-only Perch label (localized via backend)
 	sciGeomodelOnly = "Zzz Geomodelonly"          // in the geomodel vocabulary, not the classifier
 )
@@ -115,33 +112,49 @@ func locatedSettings() *conf.Settings {
 	return s
 }
 
-// loadLabelLines reads a newline-delimited label file, trimming blanks.
-func loadLabelLines(tb testing.TB, path string) []string {
-	tb.Helper()
-	f, err := os.Open(path) //nolint:gosec // test-only read of a repo-vendored label file
-	require.NoError(tb, err, "open label file %s", path)
-	tb.Cleanup(func() { assert.NoError(tb, f.Close()) })
-
-	var out []string
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if line := strings.TrimSpace(sc.Text()); line != "" {
-			out = append(out, line)
-		}
+// Secondary-model label fixtures, kept in step with internal/speciesindex/testdata/perch_like_labels.txt
+// and bat_like_labels.txt. Perch labels carry only a scientific name; bat labels carry an
+// embedded common name, so the two exercise both localization branches.
+var (
+	perchLikeLabels = []string{
+		"Turdus merula",
+		"Passer domesticus",
+		"Accipiter badius",
+		"Tachyspiza badia",
+		"Corvus corone",
+		"Turdus merula",
+		"Fringilla coelebs",
 	}
-	require.NoError(tb, sc.Err())
-	return out
-}
+	batLikeLabels = []string{
+		"Myotis daubentonii_Water Bat",
+		"Pipistrellus pipistrellus_Common Pipistrelle",
+		"Nyctalus noctula_Noctule",
+		"Eptesicus serotinus_Serotine",
+		"Myotis nattereri_Natterer's Bat",
+		"Barbastella barbastellus_Barbastelle",
+		"Plecotus auritus_Long-eared Bat",
+		"Plecotus austriacus_Long-eared Bat",
+	}
+)
 
-// labelCorpus loads the vendored v2.4 corpus plus the Perch- and bat-like
-// testdata, concatenated. The union exercises embedded-common (v2.4/bat) and
-// scientific-only (Perch) labels and the real alias pairs.
+// labelCorpus returns the embedded v2.4 corpus plus the Perch- and bat-like fixtures,
+// concatenated. The union exercises embedded-common (v2.4/bat) and scientific-only
+// (Perch) labels and the real alias pairs.
 func labelCorpus(tb testing.TB) []string {
 	tb.Helper()
-	corpus := loadLabelLines(tb, filepath.Join("..", "..", "..", "classifier", "data", "labels", "V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_en_uk.txt"))
-	perch := loadLabelLines(tb, filepath.Join("..", "..", "..", "speciesindex", "testdata", "perch_like_labels.txt"))
-	bat := loadLabelLines(tb, filepath.Join("..", "..", "..", "speciesindex", "testdata", "bat_like_labels.txt"))
-	return slices.Concat(corpus, perch, bat)
+	// The English (UK) label file of the embedded v2.4 corpus.
+	const corpusLocale = "en-uk"
+	res := classifier.GetLabelFileDataWithResult(classifier.BirdNET_V2_4, corpusLocale, nil)
+	require.NoError(tb, res.Error)
+	require.False(tb, res.FallbackOccurred, "the %s label file must load without a fallback", corpusLocale)
+
+	var corpus []string
+	for line := range strings.Lines(string(res.Data)) {
+		if line = strings.TrimSpace(line); line != "" {
+			corpus = append(corpus, line)
+		}
+	}
+	return slices.Concat(corpus, perchLikeLabels, batLikeLabels)
 }
 
 // rarityContexts returns the fixed rarity contexts. Each name selects a distinct

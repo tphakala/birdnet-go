@@ -165,10 +165,24 @@ func TestFindNativeSpeciesScore(t *testing.T) {
 	keyOf := speciesindex.CanonicalKey
 	score, found := findNativeSpeciesScore("amazona VIRIDIGENALIS", speciesindex.CanonicalKey("amazona VIRIDIGENALIS"), scores, keyOf)
 	require.True(t, found)
-	assert.InDelta(t, 0.95, score, 1e-9)
+	assert.InDelta(t, 0.95, score, scoreTolerance)
 
 	_, found = findNativeSpeciesScore("Amazona viridigenalis", speciesindex.CanonicalKey("Amazona viridigenalis"), scores[:1], keyOf)
 	assert.False(t, found, "synthetic override scores must not drive rarity")
+
+	// The alias pass skips synthetic rows too: the request uses the current spelling, the
+	// score rows the legacy one, and the synthetic row comes first. A skip missing from this
+	// second pass would return its 1.0 sentinel.
+	aliasScores := []classifier.SpeciesScore{
+		{Label: testAliasName + "_" + testCanonCommon, Score: 1, IsSyntheticOverride: true},
+		{Label: testAliasName + "_" + testCanonCommon, Score: 0.1},
+	}
+	score, found = findNativeSpeciesScore(testCanonName, speciesindex.CanonicalKey(testCanonName), aliasScores, keyOf)
+	require.True(t, found)
+	assert.InDelta(t, 0.1, score, scoreTolerance)
+
+	_, found = findNativeSpeciesScore(testCanonName, speciesindex.CanonicalKey(testCanonName), aliasScores[:1], keyOf)
+	assert.False(t, found, "a synthetic override row must not match through the alias pass either")
 }
 
 // TestSpeciesAPIValidation tests validation for all species endpoints in a single table-driven test.
