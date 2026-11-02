@@ -300,6 +300,7 @@ func TestStartMigration_ClientGoneDoesNotStart(t *testing.T) {
 	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
 	assert.Equal(t, "idle", migrationStateOf(t, sm))
+	assert.Zero(t, rec.Body.Len(), "a gone client is sent nothing")
 	event := hub.Scope().ApplyToEvent(&sentry.Event{}, nil, client)
 	require.NotNil(t, event)
 	assert.Empty(t, event.Tags[prereqTagKey])

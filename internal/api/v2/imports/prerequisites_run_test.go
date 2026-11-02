@@ -457,3 +457,30 @@ func TestPrereqRunner_ReportsOnlyTheCurrentRun(t *testing.T) {
 		assert.Equal(t, []uint64{2}, ended, "the run abandoned by reset reports no outcome")
 	})
 }
+
+// TestPrereqRunner_StoredFailureIsJudgedLast pins the order of the reasons: a
+// failed run is reported as failed only while it is fresh and for the current
+// settings; for other settings or an old run the reason is the settings or age,
+// and no failed snapshot is handed out.
+func TestPrereqRunner_StoredFailureIsJudgedLast(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := &prereqRunner{}
+		var runs atomic.Int32
+		fp := dbFingerprint{}
+		r.start(t.Context(), false, fp, stepsOf(fakeStep(testStepA, 0, &runs, failCheck)), summarizeForTest)
+		synctest.Wait()
+
+		stored, reason := r.passingResult(fp)
+		assert.Equal(t, prereqReuseFailedCheck, reason)
+		require.Len(t, stored.Response.Checks, 1, "a fresh failed run hands out its snapshot")
+
+		stored, reason = r.passingResult(dbFingerprint{MySQLEnabled: true})
+		assert.Equal(t, prereqReuseSettingsChanged, reason)
+		assert.Empty(t, stored.Response.Checks)
+
+		time.Sleep(prereqResultMaxAge)
+		stored, reason = r.passingResult(fp)
+		assert.Equal(t, prereqReuseStale, reason)
+		assert.Empty(t, stored.Response.Checks)
+	})
+}
