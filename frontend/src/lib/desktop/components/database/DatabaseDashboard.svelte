@@ -286,20 +286,24 @@
       }
       await fetchMigrationStatus();
     } catch (e) {
+      const errorKey = e instanceof ApiError ? e.errorKey : undefined;
+      const noRunReady = errorKey === PREREQUISITES_NOT_READY_KEY;
+      const checkRefused = errorKey === PREFLIGHT_FAILED_KEY;
       actionError = {
         message:
           e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed'),
-        refusal: {
-          runId: prerequisites.data?.run_id,
-          startedAt: prerequisites.data?.started_at,
-        },
+        // Only a refusal that rests on the checks goes away when a newer run passes
+        refusal:
+          noRunReady || checkRefused
+            ? { runId: prerequisites.data?.run_id, startedAt: prerequisites.data?.started_at }
+            : undefined,
       };
       // A migration that started anyway must show, and a missing or stale run is redone.
       // A refused check forces a new run so the panel shows it instead of the old pass.
       await fetchMigrationStatus();
-      if (e instanceof ApiError && e.errorKey === PREREQUISITES_NOT_READY_KEY) {
+      if (noRunReady) {
         await runPrerequisites(false);
-      } else if (e instanceof ApiError && e.errorKey === PREFLIGHT_FAILED_KEY) {
+      } else if (checkRefused) {
         await runPrerequisites(true);
       }
     } finally {

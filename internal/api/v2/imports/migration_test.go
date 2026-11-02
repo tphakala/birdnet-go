@@ -757,10 +757,50 @@ func TestStartMigration_ShutdownDuringPreflightDoesNotStart(t *testing.T) {
 	rec := httptest.NewRecorder()
 	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	// A shutdown is not a failed check: the answer must not carry the preFlightFailed key,
+	// whose text names a check, and the page must not take it for a refused check
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
+	assert.NotContains(t, rec.Body.String(), notification.MsgErrMigrationPreFlight)
 	state, err := sm.GetState()
 	require.NoError(t, err)
 	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start while the server shuts down")
+}
+
+// TestStartMigration_ShutdownInterruptsTheRecordCount pins that a shutdown that begins while
+// the start waits for the record count ends the wait at once and answers the shutdown, not a
+// timeout: the start's own context follows the server lifecycle, not only the request.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_ShutdownInterruptsTheRecordCount(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	seedPrerequisiteResult(t, controller, passingReusedChecks(controller), freshResultAge, 0)
+	lifecycle, cancel := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, cancel)
+	// The limit is long enough that only the lifecycle can end the count in time; with the
+	// limit as the only bound the answer would be a 504 once it ran out.
+	controller.startPreflightLimit = 5 * time.Second
+	repo := mocks.NewMockDetectionRepository(t)
+	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(ctx context.Context) (int64, error) {
+		cancel()
+		<-ctx.Done()
+		return 0, ctx.Err()
+	}).Once()
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State)
 }
 
 // failDualWriteTransitionSQL makes the state table refuse the move into dual-write,
@@ -820,7 +860,8 @@ func TestStartMigration_ShutdownAfterChecksDoesNotStart(t *testing.T) {
 	rec := httptest.NewRecorder()
 	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
 	state, err := sm.GetState()
 	require.NoError(t, err)
 	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start once the server is stopping")

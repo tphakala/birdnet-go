@@ -415,6 +415,37 @@ describe('DatabaseDashboard migration errors', () => {
     );
   });
 
+  it('keeps a start failure that is not a refused check when a later run passes', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    const failed = apiError('Failed to initialize migration', 500);
+    failed.errorKey = 'errors.migration.initFailed';
+    let runs = 0;
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return Promise.reject(failed);
+      runs += 1;
+      return Promise.resolve(
+        runs === 1 ? startablePrerequisites : { ...startablePrerequisites, run_id: 3 }
+      );
+    });
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+    await screen.findByText('Failed to initialize migration');
+
+    // The checks were fine, so a later passing run says nothing about this failure
+    await user.click(
+      screen.getByRole('button', { name: t('system.database.migration.prerequisites.rerun') })
+    );
+    await waitFor(() => expect(runs).toBe(2));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.getByText('Failed to initialize migration')).toBeInTheDocument();
+  });
+
   it('runs the prerequisites again when the migration state returns to idle', async () => {
     const user = userEvent.setup();
     const pausedStatus = {

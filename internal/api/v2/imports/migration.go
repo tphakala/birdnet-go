@@ -478,6 +478,8 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	}
 	pctx, cancel := context.WithTimeout(ctx.Request().Context(), limit)
 	defer cancel()
+	// A request context does not end when the server stops, so follow the lifecycle too
+	defer context.AfterFunc(c.lifecycleContext(), cancel)()
 	reused := make(map[string]PrerequisiteCheck, len(stored.Response.Checks))
 	for _, check := range stored.Response.Checks {
 		reused[check.ID] = check
@@ -599,12 +601,13 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 }
 
 // rejectInterruptedStart answers a start request that the server shutdown
-// interrupted, with the same response as an interrupted pre-flight.
+// interrupted. It is not a failed check, so it does not use the preFlightFailed
+// key, which names a check and makes the page run the checks again.
 func (c *Handler) rejectInterruptedStart(ctx echo.Context, cause error) error {
 	err := fmt.Errorf("%s: %w", msgPreflightInterrupted, cause)
 	c.LogErrorIfEnabled("Migration start interrupted by shutdown",
 		logger.Error(err), logger.String("path", ctx.Request().URL.Path), logger.String("ip", ctx.RealIP()))
-	return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
+	return c.HandleErrorWithKey(ctx, err, "The server is stopping", http.StatusServiceUnavailable, notification.MsgErrMigrationStartFailed, nil)
 }
 
 // PauseMigration handles POST /api/v2/system/database/migration/pause
@@ -900,15 +903,19 @@ func (c *Handler) startAbandoned(pctx context.Context, path, ip string) bool {
 }
 
 // abandonedStartResponse ends a start that was abandoned. A client that is gone
-// gets nothing; one that is still connected after the start's own work outlasted
-// the preflight limit gets a 504. The stored prerequisites are still valid, so the
-// answer is not "run the checks again", and it wraps the deadline error, which the
-// error handler does not report to telemetry.
+// gets nothing; one whose server is stopping gets the shutdown answer; one that is
+// still connected after the start's own work outlasted the preflight limit gets a
+// 504. The stored prerequisites are still valid, so the answer is not "run the
+// checks again", and it wraps the deadline error, which the error handler does not
+// report to telemetry.
 func (c *Handler) abandonedStartResponse(ctx echo.Context) error {
 	select {
 	case <-ctx.Request().Context().Done():
 		return nil
 	default:
+		if err := c.lifecycleContext().Err(); err != nil {
+			return c.rejectInterruptedStart(ctx, err)
+		}
 		return c.HandleErrorWithKey(ctx, fmt.Errorf("start preflight: %w", context.DeadlineExceeded),
 			"The migration start took too long", http.StatusGatewayTimeout,
 			notification.MsgErrMigrationStartFailed, nil)
