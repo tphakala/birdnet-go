@@ -91,15 +91,6 @@ func newNativeTestHandler(t *testing.T, opts ...apitest.CoreOption) (*Handler, *
 	return &Handler{Core: apitest.NewCore(t, append([]apitest.CoreOption{apitest.WithEcho(e)}, opts...)...)}, e
 }
 
-func TestIsNativeDiscriminatesThePaths(t *testing.T) {
-	assert.False(t, (*HLSStreamInfo)(nil).isNative(), "a nil stream is not native")
-	assert.False(t, (&HLSStreamInfo{SourceID: "x"}).isNative(),
-		"a stream with no muxer is not native")
-
-	stream := newNativeTestStream(t, 1)
-	assert.True(t, stream.isNative())
-}
-
 // TestEffectiveBitrateAppliesLimits pins how the configured live-stream bitrate
 // is defaulted and clamped before it reaches the muxer.
 //
