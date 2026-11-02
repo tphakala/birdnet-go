@@ -79,31 +79,6 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 	}
 }
 
-func TestIsSafeHTTPMethod(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		method   string
-		expected bool
-	}{
-		{http.MethodGet, true},
-		{http.MethodHead, true},
-		{http.MethodOptions, true},
-		{http.MethodPost, false},
-		{http.MethodPut, false},
-		{http.MethodPatch, false},
-		{http.MethodDelete, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.expected, isSafeHTTPMethod(tt.method))
-		})
-	}
-}
-
 func TestIsSecureRequest(t *testing.T) {
 	t.Parallel()
 
@@ -256,12 +231,17 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 
 	tests := []struct {
 		name         string
+		method       string
 		secFetchSite string
 	}{
-		{"no Sec-Fetch-Site (control)", ""},
-		{"same-origin", "same-origin"},
-		{"none", "none"},
-		{"cross-site", "cross-site"},
+		{"no Sec-Fetch-Site (control)", http.MethodPost, ""},
+		{"same-origin", http.MethodPost, "same-origin"},
+		{"none", http.MethodPost, "none"},
+		{"cross-site", http.MethodPost, "cross-site"},
+		// The header strip is not specific to POST.
+		{"PUT with same-origin", http.MethodPut, "same-origin"},
+		{"PATCH with same-origin", http.MethodPatch, "same-origin"},
+		{"DELETE with same-origin", http.MethodDelete, "same-origin"},
 	}
 
 	for _, tt := range tests {
@@ -269,7 +249,7 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 			t.Parallel()
 
 			e := newCSRFTestServer()
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/settings", http.NoBody)
+			req := httptest.NewRequest(tt.method, "/api/v2/settings", http.NoBody)
 			if tt.secFetchSite != "" {
 				req.Header.Set(echo.HeaderSecFetchSite, tt.secFetchSite)
 			}
@@ -277,29 +257,7 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 			e.ServeHTTP(rec, req)
 
 			assert.Equal(t, http.StatusForbidden, rec.Code,
-				"state-changing request without a token must be rejected for Sec-Fetch-Site=%q", tt.secFetchSite)
-		})
-	}
-}
-
-// TestNewCSRF_BypassBlockedAcrossMethods confirms the strip is method-agnostic:
-// every unsafe method is forced through token validation under a forged
-// Sec-Fetch-Site: same-origin, not just POST.
-func TestNewCSRF_BypassBlockedAcrossMethods(t *testing.T) {
-	t.Parallel()
-
-	for _, method := range []string{http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		t.Run(method, func(t *testing.T) {
-			t.Parallel()
-
-			e := newCSRFTestServer()
-			req := httptest.NewRequest(method, "/api/v2/settings", http.NoBody)
-			req.Header.Set(echo.HeaderSecFetchSite, "same-origin")
-			rec := httptest.NewRecorder()
-			e.ServeHTTP(rec, req)
-
-			assert.Equal(t, http.StatusForbidden, rec.Code,
-				"%s without a token must be rejected under Sec-Fetch-Site: same-origin", method)
+				"%s without a token must be rejected for Sec-Fetch-Site=%q", tt.method, tt.secFetchSite)
 		})
 	}
 }

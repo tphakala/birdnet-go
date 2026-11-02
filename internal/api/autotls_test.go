@@ -144,36 +144,41 @@ func TestConfig_SessionCookiesSecure(t *testing.T) {
 	})
 }
 
-// TestConfigFromSettings_AutoTLS_CustomTLSPort verifies that a user-configured
-// TLS port is respected in AutoTLS mode.
-func TestConfigFromSettings_AutoTLS_CustomTLSPort(t *testing.T) {
+// TestConfigFromSettings_AutoTLS_TLSPort pins the TLS listener port AutoTLS
+// resolves: the default when unset, a user-configured port as is, and a
+// replacement port when the configured one collides with the HTTP port.
+func TestConfigFromSettings_AutoTLS_TLSPort(t *testing.T) {
 	t.Parallel()
 
-	settings := conftest.NewTestSettings().WithWebServer("8080", true).Build()
-	settings.Security.TLSMode = conf.TLSModeAutoTLS
-	settings.Security.Host = testHost
-	settings.Security.TLSPort = "9443"
+	tests := []struct {
+		name        string
+		httpPort    string
+		tlsPort     string
+		wantTLSPort string
+	}{
+		{"unset uses the default", "8080", "", defaultTLSPort},
+		{"custom port is respected", "8080", "9443", "9443"},
+		{"conflict with the HTTP port moves to the default", "8080", "8080", defaultTLSPort},
+		{"conflict on the default port moves to the fallback", defaultTLSPort, defaultTLSPort, fallbackTLSPort},
+	}
 
-	cfg := ConfigFromSettings(settings)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.Equal(t, "9443", cfg.TLSPort)
-	assert.Equal(t, ":9443", cfg.TLSAddress())
-}
+			settings := conftest.NewTestSettings().WithWebServer(tc.httpPort, true).Build()
+			settings.Security.TLSMode = conf.TLSModeAutoTLS
+			settings.Security.Host = testHost
+			settings.Security.TLSPort = tc.tlsPort
 
-// TestConfigFromSettings_AutoTLS_PortConflict verifies that when TLSPort equals
-// the HTTP port, the conflict is resolved.
-func TestConfigFromSettings_AutoTLS_PortConflict(t *testing.T) {
-	t.Parallel()
+			cfg := ConfigFromSettings(settings)
 
-	settings := conftest.NewTestSettings().WithWebServer("8443", true).Build()
-	settings.Security.TLSMode = conf.TLSModeAutoTLS
-	settings.Security.Host = testHost
-	settings.Security.TLSPort = "8443"
-
-	cfg := ConfigFromSettings(settings)
-
-	assert.NotEqual(t, cfg.Port, cfg.TLSPort,
-		"TLS port must differ from HTTP port when there's a conflict")
+			assert.Equal(t, tc.httpPort, cfg.Port, "the HTTP port is never changed")
+			assert.Equal(t, tc.wantTLSPort, cfg.TLSPort)
+			assert.NotEqual(t, cfg.Port, cfg.TLSPort, "the two listeners must not share a port")
+			assert.Equal(t, ":"+tc.wantTLSPort, cfg.TLSAddress())
+		})
+	}
 }
 
 // TestAutoTLS_DualListeners verifies that AutoTLS starts both an HTTP listener
@@ -281,59 +286,32 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	_ = conn.Close()
 }
 
-// TestAutoTLS_RedirectIPv6 verifies that the redirect handler produces valid
-// Location URLs when the Host header contains an IPv6 address.
-func TestAutoTLS_RedirectIPv6(t *testing.T) {
+// TestNewHTTPRedirectServer pins how newHTTPRedirectServer wires the redirect
+// handler: the TLS port it is given (or the default when empty) reaches the
+// Location authority, a configured external authority overrides it, and the
+// health probe is answered instead of redirected. The Location building itself
+// is covered row by row in TestHTTPSRedirectHandler.
+func TestNewHTTPRedirectServer(t *testing.T) {
 	t.Parallel()
 
+	const (
+		requestHostname = "birdnet.example.com"
+		requestHost     = requestHostname + ":8080"
+		externalHost    = "public.example.com:9443"
+		customTLSPort   = "9443"
+		readTimeout     = 5 * time.Second
+		writeTimeout    = 7 * time.Second
+	)
+
 	tests := []struct {
-		name     string
-		host     string
-		tlsPort  string
-		wantHost string
+		name              string
+		tlsPort           string
+		redirectAuthority string
+		wantHost          string
 	}{
-		{
-			name:     "IPv6 loopback with port",
-			host:     "[::1]:8080",
-			tlsPort:  "8443",
-			wantHost: "[::1]:8443",
-		},
-		{
-			name:     "IPv6 loopback without port",
-			host:     "[::1]",
-			tlsPort:  "8443",
-			wantHost: "[::1]:8443",
-		},
-		{
-			name:     "IPv6 full address",
-			host:     "[2001:db8::1]:8080",
-			tlsPort:  "8443",
-			wantHost: "[2001:db8::1]:8443",
-		},
-		{
-			name:     "IPv4 still works",
-			host:     "192.168.1.1:8080",
-			tlsPort:  "8443",
-			wantHost: "192.168.1.1:8443",
-		},
-		{
-			name:     "hostname still works",
-			host:     "birdnet.example.com:8080",
-			tlsPort:  "9443",
-			wantHost: "birdnet.example.com:9443",
-		},
-		{
-			name:     "IPv6 with port 443 omits port",
-			host:     "[::1]:80",
-			tlsPort:  "443",
-			wantHost: "[::1]",
-		},
-		{
-			name:     "hostname with port 443 omits port",
-			host:     "birdnet.example.com:80",
-			tlsPort:  "443",
-			wantHost: "birdnet.example.com",
-		},
+		{"custom TLS port is used", customTLSPort, "", requestHostname + ":" + customTLSPort},
+		{"empty TLS port falls back to the default", "", "", requestHostname + ":" + defaultTLSPort},
+		{"external authority wins over the TLS port", customTLSPort, externalHost, externalHost},
 	}
 
 	for _, tc := range tests {
@@ -342,137 +320,57 @@ func TestAutoTLS_RedirectIPv6(t *testing.T) {
 
 			s := &Server{
 				config: &Config{
-					TLSPort:         tc.tlsPort,
-					RedirectToHTTPS: true,
-					ReadTimeout:     5 * time.Second,
-					WriteTimeout:    5 * time.Second,
+					RedirectAuthority: tc.redirectAuthority,
+					ReadTimeout:       readTimeout,
+					WriteTimeout:      writeTimeout,
 				},
 				slogger: GetLogger(),
 			}
 
 			srv := s.newHTTPRedirectServer(":0", tc.tlsPort)
-			req := httptest.NewRequest(http.MethodGet, "/some/path?q=1", http.NoBody)
-			req.Host = tc.host
-			rec := httptest.NewRecorder()
 
+			req := httptest.NewRequest(http.MethodPost, "/some/path?q=1", http.NoBody)
+			req.Host = requestHost
+			rec := httptest.NewRecorder()
 			srv.Handler.ServeHTTP(rec, req)
 
 			resp := rec.Result()
 			_ = resp.Body.Close()
-
-			loc := resp.Header.Get("Location")
-			require.NotEmpty(t, loc, "Location header must be set")
-
-			parsed, err := url.Parse(loc)
-			require.NoError(t, err, "Location must be a valid URL, got: %s", loc)
+			assert.Equal(t, http.StatusPermanentRedirect, resp.StatusCode)
+			parsed, err := url.Parse(resp.Header.Get("Location"))
+			require.NoError(t, err)
 			assert.Equal(t, "https", parsed.Scheme)
-			assert.Equal(t, tc.wantHost, parsed.Host,
-				"Host portion of redirect URL should be well-formed")
+			assert.Equal(t, tc.wantHost, parsed.Host)
 			assert.Equal(t, "/some/path?q=1", parsed.RequestURI())
 		})
 	}
-}
 
-// TestAutoTLS_RedirectUsesStatusPermanentRedirect verifies that HTTP->HTTPS
-// redirects use 308 (Permanent Redirect) to preserve request methods, not 301
-// which converts POST to GET.
-func TestAutoTLS_RedirectUsesStatusPermanentRedirect(t *testing.T) {
-	t.Parallel()
+	t.Run("health probe is served, not redirected", func(t *testing.T) {
+		t.Parallel()
 
-	s := &Server{
-		config: &Config{
-			TLSPort:         "8443",
-			RedirectToHTTPS: true,
-			ReadTimeout:     5 * time.Second,
-			WriteTimeout:    5 * time.Second,
-		},
-		slogger: GetLogger(),
-	}
-
-	srv := s.newHTTPRedirectServer(":0", "8443")
-
-	methods := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}
-	for _, method := range methods {
-		t.Run(method, func(t *testing.T) {
-			t.Parallel()
-			req := httptest.NewRequest(method, "/api/v2/data", http.NoBody)
-			req.Host = "birdnet.example.com:8080"
-			rec := httptest.NewRecorder()
-
-			srv.Handler.ServeHTTP(rec, req)
-
-			resp := rec.Result()
-			_ = resp.Body.Close()
-			assert.Equal(t, http.StatusPermanentRedirect, resp.StatusCode,
-				"redirect should use 308 to preserve %s method", method)
-		})
-	}
-}
-
-// TestAutoTLS_DualListeners_RedirectStatus verifies the AutoTLS inline redirect
-// handler also uses 308 and produces valid IPv6 URLs.
-func TestAutoTLS_DualListeners_RedirectStatus(t *testing.T) {
-	t.Parallel()
-
-	httpPort := mustGetFreePort(t)
-	tlsPort := mustGetFreePort(t)
-
-	settings := conftest.NewTestSettings().WithWebServer(httpPort, true).Build()
-	settings.Security.TLSMode = conf.TLSModeAutoTLS
-	settings.Security.Host = testHost
-	settings.Security.TLSPort = tlsPort
-
-	cfg := ConfigFromSettings(settings)
-
-	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
-
-	s := &Server{
-		config:   cfg,
-		settings: settings,
-		echo:     e,
-		slogger:  GetLogger(),
-	}
-
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
-		defer cancel()
-		_ = s.echo.Shutdown(ctx)
-		if srv := s.httpRedirectServer.Load(); srv != nil {
-			_ = srv.Shutdown(ctx)
+		e := echo.New()
+		e.HideBanner = true
+		s := &Server{
+			config:    &Config{ReadTimeout: readTimeout, WriteTimeout: writeTimeout},
+			echo:      e,
+			settings:  conftest.NewTestSettings().Build(),
+			slogger:   GetLogger(),
+			startTime: time.Now(),
 		}
+		e.GET(healthCheckPath, s.healthCheck)
+
+		srv := s.newHTTPRedirectServer(":0", customTLSPort)
+		assert.Equal(t, readTimeout, srv.ReadTimeout)
+		assert.Equal(t, writeTimeout, srv.WriteTimeout)
+
+		req := httptest.NewRequest(http.MethodGet, healthCheckPath, http.NoBody)
+		req.Host = requestHost
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), `"status":"healthy"`)
 	})
-
-	go func() {
-		_ = s.startBlocking()
-	}()
-
-	requirePortOpen(t, httpPort)
-
-	client := &http.Client{
-		Timeout: testutil.ShortTestTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	// POST should get a 308, not 301 (which would convert POST to GET)
-	httpBase := fmt.Sprintf("http://127.0.0.1:%s", httpPort)
-	req, err := http.NewRequest(http.MethodPost, httpBase+"/api/v2/data", http.NoBody)
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
-	assert.Equal(t, http.StatusPermanentRedirect, resp.StatusCode,
-		"AutoTLS redirect should use 308 to preserve POST method")
-
-	loc := resp.Header.Get("Location")
-	parsed, err := url.Parse(loc)
-	require.NoError(t, err, "Location must be a valid URL")
-	assert.Equal(t, "https", parsed.Scheme)
-	assert.Equal(t, testHost, parsed.Host,
-		"redirect should target the advertised host, not the internal TLS port")
 }
 
 // TestHTTPSRedirectHandler verifies redirect target construction: an explicit
@@ -496,6 +394,12 @@ func TestHTTPSRedirectHandler(t *testing.T) {
 		{"no authority appends custom port", "", "8443", "host.example.com:8080", "host.example.com:8443"},
 		{"IPv6 omits port", "", "", "[::1]:8080", "[::1]"},
 		{"IPv6 appends custom port", "", "8443", "[2001:db8::1]:8080", "[2001:db8::1]:8443"},
+		// A request Host with no port, such as http://[::1]/ on port 80, keeps
+		// its brackets until the handler strips and re-adds them.
+		{"IPv6 host without port omits empty port", "", "", "[::1]", "[::1]"},
+		{"IPv6 host without port omits 443", "", "443", "[::1]", "[::1]"},
+		{"IPv6 host without port appends custom port", "", "8443", "[::1]", "[::1]:8443"},
+		{"hostname without port appends custom port", "", "8443", "host.example.com", "host.example.com:8443"},
 	}
 
 	for _, tc := range tests {

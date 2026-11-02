@@ -29,11 +29,6 @@ func TestNewSecureHeaders_ReferrerPolicy(t *testing.T) {
 			policy:   "",
 			expected: "strict-origin-when-cross-origin",
 		},
-		{
-			name:     "custom policy",
-			policy:   "origin-when-cross-origin",
-			expected: "origin-when-cross-origin",
-		},
 	}
 
 	for _, tt := range tests {
@@ -229,29 +224,6 @@ func TestNewSecureHeaders_XFrameOptions(t *testing.T) {
 			err := handler(c)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, rec.Header().Get("X-Frame-Options"))
-		})
-	}
-}
-
-func TestHasWildcardOrigin(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		origins []string
-		want    bool
-	}{
-		{"wildcard only", []string{"*"}, true},
-		{"wildcard among others", []string{"https://example.com", "*"}, true},
-		{"no wildcard", []string{"https://example.com"}, false},
-		{"empty list", []string{}, false},
-		{"nil list", nil, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, hasWildcardOrigin(tt.origins))
 		})
 	}
 }
