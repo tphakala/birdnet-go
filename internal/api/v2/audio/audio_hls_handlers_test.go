@@ -31,8 +31,19 @@ const (
 	hlsTestSessionA = "session-aaaaaaaaaaaa"
 	hlsTestSessionB = "session-bbbbbbbbbbbb"
 
-	// hlsHeartbeatPath is the route of the heartbeat endpoint.
-	hlsHeartbeatPath = "/api/v2/streams/hls/heartbeat"
+	// hlsTestTarget is the request target of every test request. The handlers are
+	// called directly, so routing never reads it.
+	hlsTestTarget = "/"
+
+	// hlsTestUnknownToken is a stream token no test registers.
+	hlsTestUnknownToken = "not-a-known-token"
+
+	// hlsTestReadySeconds of audio satisfy the two segment readiness gate at the
+	// default segment length.
+	hlsTestReadySeconds = 6
+
+	// hlsPDTLayout is the layout of the program date time in a rendered playlist.
+	hlsPDTLayout = "2006-01-02T15:04:05.000Z"
 
 	// hlsStatusOKBody is the heartbeat acknowledgement and hlsStatusStoppedBody
 	// the stop acknowledgement.
@@ -153,7 +164,7 @@ func ageHLSClientActivity(sourceID string) {
 // postHeartbeat sends body to the heartbeat handler and returns the response.
 func postHeartbeat(t *testing.T, h *Handler, e *echo.Echo, query, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, hlsHeartbeatPath+query, strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, hlsTestTarget+query, strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	require.NoError(t, h.HLSHeartbeat(e.NewContext(req, rec)))
@@ -169,7 +180,7 @@ func heartbeatBody(token, session string) string {
 // the response.
 func postStop(t *testing.T, h *Handler, e *echo.Echo, sourceID, session string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/hls/x/stop",
+	req := httptest.NewRequest(http.MethodPost, hlsTestTarget,
 		strings.NewReader(`{"session_id":"`+session+`"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -195,7 +206,7 @@ func TestHLSHeartbeat(t *testing.T) {
 	t.Run("unknown token is acknowledged without side effects", func(t *testing.T) {
 		isolateHLSManager(t)
 
-		rec := postHeartbeat(t, h, e, "", heartbeatBody("not-a-known-token", hlsTestSessionA))
+		rec := postHeartbeat(t, h, e, "", heartbeatBody(hlsTestUnknownToken, hlsTestSessionA))
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.JSONEq(t, hlsStatusOKBody, rec.Body.String())
@@ -317,7 +328,7 @@ func TestGetHLSStatus(t *testing.T) {
 
 	get := func(t *testing.T) *httptest.ResponseRecorder {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/hls/status", http.NoBody)
+		req := httptest.NewRequest(http.MethodGet, hlsTestTarget, http.NoBody)
 		rec := httptest.NewRecorder()
 		require.NoError(t, h.GetHLSStatus(e.NewContext(req, rec)))
 		return rec
@@ -348,7 +359,7 @@ func TestGetHLSStatus(t *testing.T) {
 
 	t.Run("a stream with enough audio is reported ready", func(t *testing.T) {
 		isolateHLSManager(t)
-		registerHLSStream(hlsTestSourceID, newNativeTestStream(t, 6))
+		registerHLSStream(hlsTestSourceID, newNativeTestStream(t, hlsTestReadySeconds))
 
 		rec := get(t)
 
@@ -358,7 +369,7 @@ func TestGetHLSStatus(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 		require.Len(t, body.Streams, 1)
 		assert.Equal(t, true, body.Streams[0]["playlist_ready"],
-			"six seconds of audio satisfy the readiness gate at the default segment length")
+			"enough audio to satisfy the readiness gate")
 	})
 
 	t.Run("a stream is reported with its fields and without its token", func(t *testing.T) {
@@ -392,7 +403,7 @@ func TestServeHLSPlaylist(t *testing.T) {
 
 	get := func(t *testing.T, token string) *httptest.ResponseRecorder {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/hls/t/"+token+"/playlist.m3u8", http.NoBody)
+		req := httptest.NewRequest(http.MethodGet, hlsTestTarget, http.NoBody)
 		rec := httptest.NewRecorder()
 		ctx := e.NewContext(req, rec)
 		ctx.SetParamNames("streamToken")
@@ -404,7 +415,7 @@ func TestServeHLSPlaylist(t *testing.T) {
 	t.Run("unknown token is not found", func(t *testing.T) {
 		isolateHLSManager(t)
 
-		assert.Equal(t, http.StatusNotFound, get(t, "not-a-known-token").Code)
+		assert.Equal(t, http.StatusNotFound, get(t, hlsTestUnknownToken).Code)
 	})
 
 	t.Run("known token without a stream is not found", func(t *testing.T) {
@@ -418,12 +429,13 @@ func TestServeHLSPlaylist(t *testing.T) {
 	t.Run("a live stream serves its playlist and refreshes stream activity", func(t *testing.T) {
 		isolateHLSManager(t)
 		t.Cleanup(func() { lastFreshnessCheck.Delete(hlsTestSourceID) })
-		token := registerHLSStream(hlsTestSourceID, newNativeTestStream(t, 5))
+		stream := newNativeTestStream(t, hlsTestReadySeconds)
+		token := registerHLSStream(hlsTestSourceID, stream)
 
 		rec := get(t, token)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Contains(t, rec.Body.String(), "#EXT-X-PROGRAM-DATE-TIME:2026-07-23T09:00:00.000Z",
+		assert.Contains(t, rec.Body.String(), "#EXT-X-PROGRAM-DATE-TIME:"+stream.streamEpoch.UTC().Format(hlsPDTLayout),
 			"the playlist comes from the stream's own muxer")
 		assert.True(t, hlsHasActivity(hlsTestSourceID), "serving the playlist keeps the stream alive")
 		assert.Empty(t, hlsClientIDs(hlsTestSourceID), "the playlist handler must not register a client")
