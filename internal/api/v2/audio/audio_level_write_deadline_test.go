@@ -18,6 +18,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
+const (
+	// deadlineTestUpdates is how many audio level updates the update test sends.
+	deadlineTestUpdates = 3
+	// deadlineTestClockStep is how far the fake clock moves between updates:
+	// non-zero and shorter than the deadline, so a stale deadline cannot match.
+	deadlineTestClockStep = audioLevelWriteDeadline / 2
+)
+
 // deadlineRecordingWriter records the last write deadline set through
 // http.NewResponseController, and whether anything was written before one was.
 // The tests call the senders synchronously, so it needs no locking.
@@ -81,12 +89,15 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 			},
 		}
 
-		// Send repeatedly with the clock moving between updates: each update must
-		// move the deadline forward, not leave the one set for the first.
-		for range 3 {
+		// Send repeatedly with the clock moving between updates. The recorded state
+		// is cleared first so every update has to set its own deadline before it
+		// writes, instead of relying on the one set for an earlier update.
+		for range deadlineTestUpdates {
+			writer.deadline = time.Time{}
+			writer.wroteBeforeDeadline = false
 			require.NoError(t, controller.sendAudioLevelUpdate(ctx, levels))
 			assertDeadlineSetBeforeWrite(t, writer)
-			time.Sleep(audioLevelWriteDeadline / 2)
+			time.Sleep(deadlineTestClockStep)
 		}
 	})
 }
