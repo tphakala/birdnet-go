@@ -306,51 +306,20 @@ func TestOptimizeOffersSignature_OrderIndependent(t *testing.T) {
 		optimizeOffersSignature([]optimizeOffer{{CatalogID: "a", ToVariantID: "fast-int8"}}))
 }
 
-// TestApplyOptimizeNotice_ReplacesChangedOfferSet pins the replace path: when
-// one non-empty offer set changes to another, the old notice is deleted and a
-// single new one raised, so the bell never shows two optimize notices.
-func TestApplyOptimizeNotice_ReplacesChangedOfferSet(t *testing.T) {
-	h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), nil)
-	notices := &fakeNotices{}
+// TestNewOptimizeNotification_Plural pins the plural title and the joined model
+// names for a multi-offer set; the singular title is pinned by
+// TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost.
+func TestNewOptimizeNotification_Plural(t *testing.T) {
+	t.Parallel()
 	a := optimizeOffer{CatalogID: "a", ModelName: "Model A", ToVariantID: "fast"}
 	b := optimizeOffer{CatalogID: "b", ModelName: "Model B", ToVariantID: "fast"}
 
-	h.applyOptimizeNotice(notices, []optimizeOffer{a})
-	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
+	n := newOptimizeNotification([]optimizeOffer{a, b})
 
-	require.Len(t, notices.created, 2)
-	assert.Equal(t, []string{notices.created[0].ID}, notices.deleted, "the old notice is deleted exactly once")
-	assert.Equal(t, notices.created[1].ID, h.optimize.latch.ID(), "the latch holds the new notice")
-	assert.Equal(t, 2, notices.created[1].TitleParams["count"])
-	assert.Equal(t, "2 models have better builds for this system", notices.created[1].Title,
+	assert.Equal(t, 2, n.TitleParams["count"])
+	assert.Equal(t, "2 models have better builds for this system", n.Title,
 		"the plural English fallback matches en.json")
-	assert.Equal(t, "Model A, Model B", notices.created[1].MessageParams["models"])
-}
-
-// TestSetNotificationService_RoutesNotice pins that the facade-injected
-// notification service receives the notice instead of the process-wide one,
-// and that a nil service leaves the fallback in place. Not parallel: it resets
-// the process-wide notification service.
-func TestSetNotificationService_RoutesNotice(t *testing.T) {
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-
-	profile := aarch64LowRAMONNXProfile()
-	h, _ := newOptimizeTestHandler(t, &profile)
-	h.notices = nil
-
-	h.SetNotificationService(nil)
-	assert.Nil(t, h.noticeSvc(), "a nil service keeps the (uninitialized) process-wide fallback")
-
-	injected := notification.NewService(notification.DefaultServiceConfig())
-	t.Cleanup(injected.Stop)
-	h.SetNotificationService(injected)
-	h.syncOptimizeNotice()
-
-	stored, err := injected.List(&notification.FilterOptions{Types: []notification.Type{notification.TypeInfo}})
-	require.NoError(t, err)
-	require.Len(t, stored, 1, "the notice lands in the injected service")
-	assert.Equal(t, notification.MsgModelOptimizeTitle, stored[0].TitleKey)
+	assert.Equal(t, "Model A, Model B", n.MessageParams["models"])
 }
 
 // TestSyncOptimizeNotice_Concurrent runs overlapping evaluations under -race:
@@ -500,50 +469,83 @@ func TestScheduleOptimizeNoticeSync_DebouncesAndStops(t *testing.T) {
 	assert.Nil(t, pendingOptimizeTimer(h), "no schedule is armed after StopOptimizeNoticeSync")
 }
 
-// TestSyncOptimizeNotice_ProcessWideService runs the notice through the real
-// notification service (no test seam): the notice lands in the store with its
-// translation keys. Not parallel: it uses the process-wide notification service.
-func TestSyncOptimizeNotice_ProcessWideService(t *testing.T) {
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
-
-	profile := aarch64LowRAMONNXProfile()
-	h, _ := newOptimizeTestHandler(t, &profile)
-	h.notices = nil // use the process-wide service
-
-	h.syncOptimizeNotice()
-
-	stored, err := svc.List(&notification.FilterOptions{Types: []notification.Type{notification.TypeInfo}})
-	require.NoError(t, err)
-	var found *notification.Notification
-	for _, n := range stored {
-		if n.TitleKey == notification.MsgModelOptimizeTitle {
-			found = n
+// TestSyncOptimizeNotice_ServiceSelection pins which notification service a sync
+// uses: the injected one, else the process-wide one, else none (a safe no-op that
+// runs no evaluation and latches nothing). Not parallel: it resets the
+// process-wide notification service.
+func TestSyncOptimizeNotice_ServiceSelection(t *testing.T) {
+	findOptimizeNotice := func(t *testing.T, svc *notification.Service) *notification.Notification {
+		t.Helper()
+		stored, err := svc.List(&notification.FilterOptions{Types: []notification.Type{notification.TypeInfo}})
+		require.NoError(t, err)
+		var found *notification.Notification
+		for _, n := range stored {
+			if n.TitleKey == notification.MsgModelOptimizeTitle {
+				found = n
+			}
 		}
+		return found
 	}
-	require.NotNil(t, found, "the optimize notice must reach the notification store")
-	assert.Equal(t, found.ID, h.optimize.latch.ID(), "the stored notice is the latched one")
+
+	newHandler := func(t *testing.T) (*Handler, *atomic.Int32) {
+		t.Helper()
+		notification.ResetForTest()
+		t.Cleanup(notification.ResetForTest)
+		profile := aarch64LowRAMONNXProfile()
+		h, _, evaluations := newCountingOptimizeTestHandler(t, &profile)
+		h.notices = nil
+		return h, evaluations
+	}
+
+	t.Run("injected service receives the notice", func(t *testing.T) {
+		h, _ := newHandler(t)
+		// A process-wide service exists too: the injected one must win.
+		notification.Initialize(notification.DefaultServiceConfig())
+		processWide := notification.GetService()
+		require.NotNil(t, processWide)
+		t.Cleanup(processWide.Stop)
+		injected := notification.NewService(notification.DefaultServiceConfig())
+		t.Cleanup(injected.Stop)
+		h.SetNotificationService(injected)
+
+		h.syncOptimizeNotice()
+
+		found := findOptimizeNotice(t, injected)
+		require.NotNil(t, found, "the notice lands in the injected service")
+		assert.Equal(t, found.ID, h.optimize.latch.ID(), "the stored notice is the latched one")
+		assert.Nil(t, findOptimizeNotice(t, processWide), "the process-wide service gets nothing when one is injected")
+	})
+
+	t.Run("process-wide service receives the notice", func(t *testing.T) {
+		h, _ := newHandler(t)
+		notification.Initialize(notification.DefaultServiceConfig())
+		svc := notification.GetService()
+		require.NotNil(t, svc)
+		t.Cleanup(svc.Stop)
+
+		h.syncOptimizeNotice()
+
+		found := findOptimizeNotice(t, svc)
+		require.NotNil(t, found, "the optimize notice must reach the notification store")
+		assert.Equal(t, found.ID, h.optimize.latch.ID(), "the stored notice is the latched one")
+	})
+
+	t.Run("no service is a no-op", func(t *testing.T) {
+		h, evaluations := newHandler(t)
+		h.SetNotificationService(nil)
+		require.Nil(t, h.noticeSvc(), "a nil service keeps the (uninitialized) process-wide fallback")
+
+		h.syncOptimizeNotice()
+
+		assert.Empty(t, h.optimize.latch.ID())
+		assert.Zero(t, evaluations.Load(), "no evaluation runs without a notification service")
+	})
 }
 
-// TestSyncOptimizeNotice_ServiceNotInitialized pins that a sync before the
-// notification service exists is a safe no-op that runs no evaluation and
-// latches nothing. Not parallel: it resets the process-wide notification service.
-func TestSyncOptimizeNotice_ServiceNotInitialized(t *testing.T) {
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-
-	profile := aarch64LowRAMONNXProfile()
-	h, _, evaluations := newCountingOptimizeTestHandler(t, &profile)
-	h.notices = nil
-
-	assert.NotPanics(t, h.syncOptimizeNotice)
-	assert.Empty(t, h.optimize.latch.ID())
-	assert.Zero(t, evaluations.Load(), "no evaluation runs without a notification service")
-
+// TestOptimizeNoticeSync_NilHandlerIsSafe pins that the lifecycle entry points
+// tolerate a nil handler.
+func TestOptimizeNoticeSync_NilHandlerIsSafe(t *testing.T) {
+	t.Parallel()
 	var nilHandler *Handler
 	assert.NotPanics(t, nilHandler.StopOptimizeNoticeSync)
 	assert.NotPanics(t, nilHandler.ScheduleOptimizeNoticeSync)
