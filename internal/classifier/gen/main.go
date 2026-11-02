@@ -139,7 +139,8 @@ type manifestModel struct {
 	SupersededBy *string                    `json:"superseded_by"`
 	Requirements *manifestRequirements      `json:"requirements"`
 	// LabelsSHA256 is the checksum of the entry's labels file; when set it must
-	// equal the sidecar checksum.
+	// equal the sidecar checksum, and a family that requires a score calibration
+	// needs it set.
 	LabelsSHA256     string                    `json:"labels_sha256"`
 	ScoreCalibration *manifestScoreCalibration `json:"score_calibration"`
 }
@@ -388,6 +389,9 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		return genVariant{}, fmt.Errorf("variant %s@%s: labels line count %d != species count %d", e.Variant, e.Region, lc.Lines, species)
 	}
 
+	if e.LabelsSHA256 == "" && f.requireScoreCalibration {
+		return genVariant{}, fmt.Errorf("variant %s@%s: manifest labels_sha256 is missing, so its score_calibration cannot be tied to a labels file", e.Variant, e.Region)
+	}
 	if e.LabelsSHA256 != "" && e.LabelsSHA256 != lc.SHA256 {
 		return genVariant{}, fmt.Errorf("variant %s@%s: manifest labels_sha256 %s != labels checksum sidecar %s for %q", e.Variant, e.Region, e.LabelsSHA256, lc.SHA256, labelKey)
 	}
