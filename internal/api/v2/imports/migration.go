@@ -953,15 +953,22 @@ func (c *Handler) criticalPrerequisiteSteps(sink *recordCountSink) []prereqStep 
 // runCriticalPrerequisiteChecks runs the critical checks that must pass before
 // migration, in order, and returns their results. A step marked reuseAtStart
 // takes its result from reused (a missing entry is an error check, so the gate
-// fails closed); a nil reused runs every step. It records the outcome in the
-// migration_prereq telemetry tag unless ctx ended, so an abandoned start does not
-// overwrite the tag with a cancellation error.
+// fails closed); a nil reused runs every step. A step that ignores ctx is
+// abandoned when ctx ends and no later step starts, so the result is then short
+// and the caller must check ctx. It records the outcome in the migration_prereq
+// telemetry tag unless ctx ended, so an abandoned start does not overwrite the
+// tag with a cancellation error.
 func (c *Handler) runCriticalPrerequisiteChecks(ctx context.Context, reused map[string]PrerequisiteCheck) []PrerequisiteCheck {
 	steps := c.criticalPrerequisiteSteps(nil)
 	checks := make([]PrerequisiteCheck, 0, len(steps))
-	for _, step := range steps {
+	for i := range steps {
+		step := &steps[i]
+		if ctx.Err() != nil {
+			break
+		}
 		if reused == nil || !step.reuseAtStart {
-			checks = append(checks, step.run(ctx)...)
+			// runStep abandons a check that ignores ctx, so a stalled mount cannot hold the start
+			checks = append(checks, runStep(ctx, step)...)
 			continue
 		}
 		if check, ok := reused[step.id]; ok {

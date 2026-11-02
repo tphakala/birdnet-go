@@ -285,6 +285,48 @@ func TestStartMigration_ReusesExpensiveChecks(t *testing.T) {
 	}
 }
 
+// hungCheckAnswerBound is how long the hung-check test waits for the handler to answer. The
+// handler itself answers at the 50 ms limit; the bound only keeps a regression from hanging
+// the suite.
+const hungCheckAnswerBound = 10 * time.Second
+
+// TestStartMigration_HungCheapCheckEndsAtTheLimit pins that a re-run check that takes no
+// context and never returns, a stalled mount, does not hold the start past its limit: the
+// check is abandoned and the start answers 504 with nothing started.
+func TestStartMigration_HungCheapCheckEndsAtTheLimit(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	seedPassingResult(t, controller)
+	release := make(chan struct{})
+	// Runs before the setup cleanups, so the abandoned check ends before they close the stores
+	t.Cleanup(func() { close(release) })
+	controller.diskFreeFn = func(string) (uint64, error) {
+		<-release
+		return testDiskFreeBytes, nil
+	}
+	controller.startPreflightLimit = 50 * time.Millisecond
+
+	req := httptest.NewRequest(http.MethodPost, startURL, strings.NewReader(startBody))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	answered := make(chan error, 1)
+	go func() { answered <- controller.StartMigration(e.NewContext(req, rec)) }()
+
+	select {
+	case err := <-answered:
+		require.NoError(t, err)
+	case <-time.After(hungCheckAnswerBound):
+		t.Fatal("the start is still waiting for a check that ignores its context")
+	}
+
+	assert.Equal(t, http.StatusGatewayTimeout, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
+	assert.Equal(t, "idle", migrationStateOf(t, sm))
+}
+
 // TestStartMigration_ClientGoneDoesNotStart pins that a request whose client has
 // gone starts nothing and leaves the telemetry tag alone.
 func TestStartMigration_ClientGoneDoesNotStart(t *testing.T) {
