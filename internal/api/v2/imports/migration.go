@@ -32,6 +32,9 @@ const (
 
 	// msgMigrationWorkerStopping is shown when the worker did not stop in time.
 	msgMigrationWorkerStopping = "Migration worker is still stopping, try again shortly"
+
+	// msgPreflightInterrupted prefixes the error when the server stopped during the pre-flight checks.
+	msgPreflightInterrupted = "pre-flight checks interrupted"
 )
 
 // MigrationStatusResponse represents the migration status for the API.
@@ -776,10 +779,17 @@ func (c *Handler) RollbackMigration(ctx echo.Context) error {
 }
 
 // runPreflightChecks verifies the system is ready for migration.
-// This runs the same critical checks as the prerequisites run and fails if any are not passed.
+// This runs the same critical checks as the prerequisites run and fails if any are not passed,
+// or if ctx ended while they ran.
 func (c *Handler) runPreflightChecks(ctx context.Context) error {
 	// Run all critical prerequisite checks
 	checks := c.runCriticalPrerequisiteChecks(ctx)
+
+	// A shutdown during the checks voids them: results gathered after ctx ended
+	// may be partial, and no migration may start on a server that is stopping.
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%s: %w", msgPreflightInterrupted, err)
+	}
 
 	// Check for any failures
 	for _, check := range checks {

@@ -2,6 +2,7 @@
 package importsapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -734,4 +735,35 @@ func toCompleted(t *testing.T, sm *datastoreV2.StateManager) {
 	require.NoError(t, sm.TransitionToValidating())
 	require.NoError(t, sm.TransitionToCutover())
 	require.NoError(t, sm.Complete())
+}
+
+// TestStartMigration_ShutdownDuringPreflightDoesNotStart pins that a start whose
+// preflight ended because the server is shutting down never starts a migration.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_ShutdownDuringPreflightDoesNotStart(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	// The server shuts down while the last critical check, the record count,
+	// runs; that check still passes, so only the context says the run is void.
+	lifecycle, cancel := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, cancel)
+	repo := mocks.NewMockDetectionRepository(t)
+	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(context.Context) (int64, error) {
+		cancel()
+		return int64(migrationTestTotalRecords), nil
+	}).Once()
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{"total_records": 1000}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start while the server shuts down")
 }
