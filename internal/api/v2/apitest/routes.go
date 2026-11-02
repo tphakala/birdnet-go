@@ -43,13 +43,13 @@ func AssertRoutesRegistered(t *testing.T, e *echo.Echo, expectedRoutes []string)
 	}
 }
 
-// AssertRoutesRequireAuth verifies that the routes register adds are exactly the
-// expected routes and that each sits behind the handler's auth middleware. Each
-// expected entry is a "METHOD PATH" string with the full path (for example
-// "POST /api/v2/control/restart"); ":name" parameters are filled in for the
-// probe request. A route register adds that is not listed fails, so a new route
-// has to be listed here and gated. Routes the Echo instance already held before
-// register ran are ignored.
+// AssertRoutesRequireAuth verifies that the routes registered by the register
+// func are exactly the expected routes and that each sits behind the handler's
+// auth middleware. Each expected entry is a "METHOD PATH" string with the full
+// path (for example "POST /api/v2/control/restart"); ":name" parameters are
+// filled in for the probe request. A route added by register that is not listed
+// fails, so a new route has to be listed here and gated. Routes the Echo
+// instance already held before register ran are ignored.
 //
 // It installs a rejecting middleware as core.AuthMiddleware before calling
 // register, so the group is built with it, then sends a request to each route
