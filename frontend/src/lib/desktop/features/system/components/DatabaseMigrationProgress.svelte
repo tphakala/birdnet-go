@@ -66,8 +66,10 @@
     (prerequisites?.checks ?? []).filter(isBlockingCheck).map(c => c.name)
   );
 
-  /** Checks are running or about to: a request is loading, or the snapshot says nothing has run yet. */
-  let checking = $derived(prerequisitesLoading || prerequisites?.status === 'idle');
+  /** Checks are running or about to: a request is loading, or nothing has run yet and no request failed. */
+  let checking = $derived(
+    prerequisitesLoading || (prerequisites?.status === 'idle' && prerequisitesError === null)
+  );
 
   /** Why the start button is blocked, or null when it is not. Data that allows the start wins; otherwise loading and error win over stale blocked data. */
   let startBlockedReason = $derived.by((): string | null => {

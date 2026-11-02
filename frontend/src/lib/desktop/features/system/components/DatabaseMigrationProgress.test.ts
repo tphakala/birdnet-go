@@ -178,6 +178,23 @@ const cases: StartStateCase[] = [
     tone: 'text-muted',
   },
   {
+    name: 'an idle snapshot and a failed request to start the run',
+    badge: 'system.database.migration.status.notReady',
+    prerequisites: {
+      ...allowedPrerequisites,
+      can_start_migration: false,
+      all_passed: false,
+      checks: [],
+      status: 'idle',
+      run_id: 0,
+    },
+    loading: false,
+    error: 'Request timeout.',
+    helper: render('system.database.migration.progress.prerequisitesUnavailable'),
+    absent: [notMet],
+    tone: 'text-[var(--text-error)]',
+  },
+  {
     name: 'request error',
     badge: 'system.database.migration.status.notReady',
     prerequisites: null,
