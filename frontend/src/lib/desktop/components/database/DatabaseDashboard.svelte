@@ -122,8 +122,7 @@
       overview = await api.get<DatabaseOverviewResponse>('/api/v2/system/database/overview');
       overviewError = null;
     } catch (e) {
-      overviewError =
-        e instanceof ApiError ? e.message : t('system.database.dashboard.fetchFailed');
+      overviewError = apiErrorMessage(e);
       logger.debug('Failed to fetch database overview', {
         error: e instanceof Error ? e.message : 'Unknown',
       });
@@ -147,8 +146,7 @@
       migrationStatus.error = null;
     } catch (e) {
       if (seq !== migrationStatusSeq) return;
-      migrationStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.fetchFailed');
+      migrationStatus.error = apiErrorMessage(e);
     } finally {
       // A newer request is still in flight and owns the loading flag
       if (seq === migrationStatusSeq) migrationStatus.loading = false;
@@ -730,7 +728,7 @@
     {:else if overviewError || !overview}
       <ErrorAlert
         title={t('system.database.dashboard.fetchFailed')}
-        message={overviewError ?? t('system.database.dashboard.fetchFailed')}
+        message={overviewError ?? ''}
         onRetry={fetchOverview}
         focusFallback={focusView}
       />

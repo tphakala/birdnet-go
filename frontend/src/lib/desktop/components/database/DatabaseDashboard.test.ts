@@ -207,6 +207,7 @@ describe('DatabaseDashboard migration errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(t('system.database.migration.errors.fetchFailed'));
+    expect(alert).toHaveTextContent(t('errors.api.unknownError'));
     expect(alert).not.toHaveTextContent('socket closed');
   });
 
