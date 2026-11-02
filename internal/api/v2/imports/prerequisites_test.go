@@ -33,6 +33,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"gorm.io/gorm"
 )
 
 // prerequisiteCheck names a check by ID, severity and status. An empty status
@@ -173,6 +174,67 @@ func TestPrerequisitesEndpoints_RunAndPoll(t *testing.T) {
 	for _, id := range []string{"state_idle", "disk_space", "legacy_accessible", "record_count", "existing_v2_data", "memory_available"} {
 		assert.True(t, checkIDs[id], "missing check %s", id)
 	}
+}
+
+// TestRunPrerequisites_ForceStartsANewRun pins that the request body reaches the
+// runner: a plain POST reuses a fresh passing result and {"force": true} does not.
+func TestRunPrerequisites_ForceStartsANewRun(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	e, controller, _ := setupPrerequisitesTestEnvironment(t)
+	post := func(body string) PrerequisitesResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.RunPrerequisites(e.NewContext(req, rec)))
+		var resp PrerequisitesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		return resp
+	}
+
+	first := post(`{}`)
+	controller.Wait()
+	reused := post(`{"force": false}`)
+	forced := post(`{"force": true}`)
+	controller.Wait()
+
+	assert.Equal(t, first.RunID, reused.RunID, "a plain POST reuses the fresh passing result")
+	assert.Greater(t, forced.RunID, first.RunID, "force starts a new run")
+}
+
+// TestCheckMySQLPermissions_CleanupSurvivesCancellation pins that the test table
+// is dropped even when the context ends after the table was created: the DROP
+// runs on a context detached from the run's.
+func TestCheckMySQLPermissions_CleanupSurvivesCancellation(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	_, controller, _ := setupPrerequisitesTestEnvironment(t)
+	db := controller.getLegacyGormDB()
+	require.NotNil(t, db)
+	db = db.Session(&gorm.Session{NewDB: true})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	// Cancel as soon as the CREATE has run, before the INSERT
+	const callbackName = "test:cancel_after_create"
+	require.NoError(t, db.Callback().Raw().After("gorm:raw").Register(callbackName, func(tx *gorm.DB) {
+		if strings.HasPrefix(tx.Statement.SQL.String(), "CREATE TABLE") {
+			cancel()
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Raw().Remove(callbackName) })
+
+	check := controller.checkMySQLPermissions(ctx)
+
+	assert.Equal(t, CheckStatusFailed, check.Status, "the INSERT after the cancel must fail")
+	var leftover int64
+	require.NoError(t, db.Raw("SELECT count(*) FROM sqlite_master WHERE name LIKE 'v2_permission_test_%'").Scan(&leftover).Error)
+	assert.Zero(t, leftover, "the permission test table must be dropped")
 }
 
 // TestRunPrerequisites_RunContext pins what the run is bound to: the server
