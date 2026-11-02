@@ -62,24 +62,34 @@ func TestBuildAnalysisCadence_UsesEffectiveOverlap(t *testing.T) {
 	assert.InDelta(t, 5.0, m.WindowsInReference, 1e-9)
 }
 
-func TestBuildAnalysisCadence_UnknownLatencyMarshalsAsEmptyArray(t *testing.T) {
+// TestBuildAnalysisCadence_UnknownLatencyModelsJSON pins the wire form: no
+// unknown models marshals as an empty array, never null, a listed model is kept,
+// and the empty model list and filter level 0 are sent, not omitted.
+func TestBuildAnalysisCadence_UnknownLatencyModelsJSON(t *testing.T) {
 	t.Parallel()
-	plan := &cadence.Plan{Status: cadence.StatusOK}
-	got := buildAnalysisCadence(plan, nil, &conf.Settings{})
-	require.NotNil(t, got)
-	b, err := json.Marshal(got)
-	require.NoError(t, err)
-	assert.Contains(t, string(b), `"unknownLatencyModels":[]`)
-	assert.Contains(t, string(b), `"models":[]`)
-	assert.Contains(t, string(b), `"filterLevel":0`, "level 0 is sent, not omitted")
-}
 
-func TestBuildAnalysisCadence_ListsUnknownLatencyModels(t *testing.T) {
-	t.Parallel()
-	plan := &cadence.Plan{Status: cadence.StatusOK, UnknownLatencyModels: []string{"Perch_V2"}}
-	got := buildAnalysisCadence(plan, nil, &conf.Settings{})
-	require.NotNil(t, got)
-	assert.Equal(t, []string{"Perch_V2"}, got.UnknownLatencyModels)
+	tests := []struct {
+		name    string
+		unknown []string
+		want    string
+	}{
+		{name: "none marshals as an empty array", unknown: nil, want: `"unknownLatencyModels":[]`},
+		{name: "a listed model is kept", unknown: []string{"Perch_V2"}, want: `"unknownLatencyModels":["Perch_V2"]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			plan := &cadence.Plan{Status: cadence.StatusOK, UnknownLatencyModels: tt.unknown}
+			got := buildAnalysisCadence(plan, nil, &conf.Settings{})
+			require.NotNil(t, got)
+			b, err := json.Marshal(got)
+			require.NoError(t, err)
+			assert.Contains(t, string(b), tt.want)
+			assert.Contains(t, string(b), `"models":[]`)
+			assert.Contains(t, string(b), `"filterLevel":0`, "level 0 is sent, not omitted")
+		})
+	}
 }
 
 // TestBuildAnalysisCadence_PerModelCadence pins the per-model rows for a mixed
