@@ -203,7 +203,7 @@ Source: ISC
 
 ### github.com/klauspost/cpuid/v2
 
-License: https://github.com/klauspost/cpuid/blob/v2.4.1/LICENSE
+License: https://github.com/klauspost/cpuid/blob/v2.4.2/LICENSE
 Source: MIT
 
 ### github.com/kr/fs
@@ -213,7 +213,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.16.2/LICENSE
+License: https://github.com/labstack/echo/blob/v4.16.3/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -558,7 +558,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.61.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.62.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -593,7 +593,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.308.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.310.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
