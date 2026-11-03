@@ -260,7 +260,7 @@ func TestProcessData_QueuedResultCarriesInferenceTiming(t *testing.T) {
 	case res := <-classifier.ResultsQueue:
 		assert.Equal(t, want, res.Inference, "the summary reads inference timing from the queued result")
 	default:
-		t.Fatal("ProcessData queued no result")
+		require.FailNow(t, "ProcessData queued no result")
 	}
 }
 

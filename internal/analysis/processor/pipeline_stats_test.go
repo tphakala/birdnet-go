@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
@@ -183,4 +184,26 @@ func TestPipelineStats_InferenceTimingSummary(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessDetections_RecordsQueuedInferenceTiming verifies the consumer hands
+// the timing carried by a queued result to the pipeline statistics, so the
+// periodic summary does not report zeros.
+func TestProcessDetections_RecordsQueuedInferenceTiming(t *testing.T) {
+	p := mergeTestProcessor(t)
+	p.pipelineStats = NewPipelineStats(nil)
+
+	p.processDetections(classifier.Results{
+		Source:    datastore.AudioSource{ID: mergeTestSource},
+		ModelID:   "BirdNET_v2.4",
+		StartTime: time.Now(),
+		Inference: classifier.PredictTiming{Predict: 40 * time.Millisecond, LockWait: 7 * time.Millisecond},
+	})
+
+	p.pipelineStats.mu.Lock()
+	defer p.pipelineStats.mu.Unlock()
+	s := p.pipelineStats.stats[sourceModelKey{sourceID: mergeTestSource, modelID: "BirdNET_v2.4"}]
+	require.NotNil(t, s)
+	assert.Equal(t, 40*time.Millisecond, s.predict.max)
+	assert.Equal(t, 7*time.Millisecond, s.lockWait.max)
 }
