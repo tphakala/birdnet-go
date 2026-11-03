@@ -61,13 +61,11 @@ type DatastoreMetrics struct {
 
 	// Database size and growth metrics
 	dbSizeBytesGauge      prometheus.Gauge
-	dbTableRowCountGauge  *prometheus.GaugeVec
 	dbIndexSizeBytesGauge *prometheus.GaugeVec
 
 	// Lock contention metrics
 	lockContentionTotal       *prometheus.CounterVec
 	lockWaitTimeHistogram     *prometheus.HistogramVec
-	activeLockCountGauge      prometheus.Gauge
 	lockRetriesExhaustedTotal *prometheus.CounterVec
 
 	// Backup and maintenance metrics
@@ -342,11 +340,6 @@ func (m *DatastoreMetrics) initMetrics() error {
 		Help: "Total database size in bytes",
 	})
 
-	m.dbTableRowCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "datastore_db_table_row_count",
-		Help: "Number of rows in database tables",
-	}, []string{"table"})
-
 	m.dbIndexSizeBytesGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "datastore_db_index_size_bytes",
 		Help: "Size of database indexes in bytes",
@@ -369,11 +362,6 @@ func (m *DatastoreMetrics) initMetrics() error {
 		},
 		[]string{"lock_type"},
 	)
-
-	m.activeLockCountGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "datastore_active_locks_count",
-		Help: "Current number of active locks",
-	})
 
 	m.lockRetriesExhaustedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -442,11 +430,9 @@ func (m *DatastoreMetrics) initMetrics() error {
 		m.imageCacheDuration,
 		m.imageCacheSizeGauge,
 		m.dbSizeBytesGauge,
-		m.dbTableRowCountGauge,
 		m.dbIndexSizeBytesGauge,
 		m.lockContentionTotal,
 		m.lockWaitTimeHistogram,
-		m.activeLockCountGauge,
 		m.lockRetriesExhaustedTotal,
 		m.backupOperationsTotal,
 		m.backupDuration,
@@ -633,11 +619,6 @@ func (m *DatastoreMetrics) UpdateDatabaseSize(sizeBytes int64) {
 	m.dbSizeBytesGauge.Set(float64(sizeBytes))
 }
 
-// UpdateTableRowCount updates table row count metrics
-func (m *DatastoreMetrics) UpdateTableRowCount(table string, rowCount int64) {
-	m.dbTableRowCountGauge.WithLabelValues(table).Set(float64(rowCount))
-}
-
 // UpdateIndexSize updates index size metrics
 func (m *DatastoreMetrics) UpdateIndexSize(table, index string, sizeBytes int64) {
 	m.dbIndexSizeBytesGauge.WithLabelValues(table, index).Set(float64(sizeBytes))
@@ -653,11 +634,6 @@ func (m *DatastoreMetrics) RecordLockContention(lockType, contentionReason strin
 // RecordLockWaitTime records time spent waiting for locks
 func (m *DatastoreMetrics) RecordLockWaitTime(lockType string, waitTime float64) {
 	m.lockWaitTimeHistogram.WithLabelValues(lockType).Observe(waitTime)
-}
-
-// UpdateActiveLockCount updates the number of active locks
-func (m *DatastoreMetrics) UpdateActiveLockCount(count int) {
-	m.activeLockCountGauge.Set(float64(count))
 }
 
 // RecordLockRetriesExhausted records when an operation exhausts all lock retries.
