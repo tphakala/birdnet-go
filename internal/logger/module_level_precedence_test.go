@@ -36,14 +36,16 @@ func TestCentralLogger_ModuleLevelsBeatModuleOutputLevel(t *testing.T) {
 			t.Parallel()
 
 			path := filepath.Join(t.TempDir(), "probe.log")
+			// Start from the disabled built-in outputs so the logger does not seed
+			// and open the default log files relative to the working directory.
+			outputs := DisabledModuleOutputs()
+			outputs["probe"] = ModuleOutput{Enabled: true, FilePath: path, Level: tc.outputLevel}
 			cl, err := NewCentralLogger(&LoggingConfig{
-				Console:      &ConsoleOutput{Enabled: false},
-				FileOutput:   &FileOutput{Enabled: false},
-				DefaultLevel: "error",
-				ModuleLevels: tc.moduleLevels,
-				ModuleOutputs: map[string]ModuleOutput{
-					"probe": {Enabled: true, FilePath: path, Level: tc.outputLevel},
-				},
+				Console:       &ConsoleOutput{Enabled: false},
+				FileOutput:    &FileOutput{Enabled: false},
+				DefaultLevel:  "error",
+				ModuleLevels:  tc.moduleLevels,
+				ModuleOutputs: outputs,
 			})
 			require.NoError(t, err)
 
