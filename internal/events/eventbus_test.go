@@ -502,7 +502,7 @@ func TestProcessDetectionEvent_DispatchReceiptIsNotDebug(t *testing.T) {
 	buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
 
 	eb := createTestEventBus(t, 10, 1)
-	consumer := &mockDetectionConsumer{mockConsumer: mockConsumer{name: "detection-test"}}
+	consumer := &mockDetectionConsumer{mockConsumer{name: "detection-test"}}
 	eb.detectionConsumers = append(eb.detectionConsumers, consumer)
 
 	event, err := NewDetectionEvent("American Robin", "Turdus migratorius", 0.9, "backyard", true, 0)
