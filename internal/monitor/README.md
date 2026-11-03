@@ -25,8 +25,8 @@ The system monitor is a pure metric collector. It periodically samples resource 
 ```yaml
 realtime:
   monitoring:
-    enabled: true         # Enable/disable monitoring
-    checkinterval: 60     # Check interval in seconds
+    enabled: true # Enable/disable monitoring
+    checkinterval: 60 # Check interval in seconds
 
     cpu:
       enabled: true
@@ -36,7 +36,7 @@ realtime:
 
     disk:
       enabled: true
-      paths:              # Disk paths to monitor
+      paths: # Disk paths to monitor
         - "/"
         - "/home"
 ```
@@ -93,4 +93,5 @@ The monitor logs at several levels:
 - **Info**: Startup, configuration, path detection
 - **Warn**: Monitoring disabled
 - **Error**: Failed metric collection
-- **Debug**: Individual check results, mount point grouping
+- **Debug**: Disk paths skipped because they do not exist, and paths skipped because they cannot be stat'ed during mount grouping
+- **Trace**: Per-tick resource checks, individual check results, mount point grouping
