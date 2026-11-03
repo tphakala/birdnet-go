@@ -1,6 +1,6 @@
 # System Monitor Package
 
-The `monitor` package collects system resource metrics (CPU, memory, disk) and publishes them to the alerting engine via `alerting.TryPublish()`. It does **not** evaluate thresholds or generate notifications directly — that responsibility belongs to user-configurable alert rules in the `alerting` package.
+The `monitor` package collects system resource metrics (CPU, memory, disk) and publishes them to the alerting engine via `alerting.TryPublish()`. It does **not** evaluate thresholds or generate notifications directly; that responsibility belongs to user-configurable alert rules in the `alerting` package.
 
 ## Overview
 
