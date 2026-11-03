@@ -112,3 +112,17 @@ func TestTextHandler_TraceLevelName(t *testing.T) {
 	assert.NotContains(t, lines[0], "DEBUG-4")
 	assert.Contains(t, lines[1], "DEBUG")
 }
+
+func TestReplaceAttrFunc_IgnoresGroupedAndNonLevelValues(t *testing.T) {
+	t.Parallel()
+
+	replace := replaceAttrFunc(nil)
+
+	// A level attribute inside a group is user data, not the record level.
+	grouped := slog.Any(slog.LevelKey, traceLevelValue)
+	assert.Equal(t, grouped, replace([]string{"g"}, grouped))
+
+	// A user field named "level" that is not a slog.Level is untouched.
+	userField := slog.Int(slog.LevelKey, -8)
+	assert.Equal(t, userField, replace(nil, userField))
+}
