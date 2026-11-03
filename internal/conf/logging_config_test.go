@@ -250,3 +250,25 @@ func TestLoggingModuleLevelInfoFiltersDebug(t *testing.T) {
 	assert.NotContains(t, string(content), "should not appear", "Debug messages should be filtered at info level")
 	assert.Contains(t, string(content), "should appear")
 }
+
+// TestLoad_ModuleLogLevelDefaultsToInfo pins the module level default through Load: a
+// module entry without a level and a module with no entry at all log at info, matching the
+// embedded config.yaml, while a level set in the file wins over the default.
+func TestLoad_ModuleLogLevelDefaultsToInfo(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    imageprovider:
+      enabled: true
+    audio:
+      level: debug
+`
+	settings, _ := loadConfigFromYAML(t, cfg)
+	out := settings.Logging.ModuleOutputs
+
+	assert.Equal(t, "info", out["imageprovider"].Level, "an entry without a level must default to info")
+	assert.Equal(t, "info", out["diskmanager"].Level, "a module with no entry must default to info")
+	assert.Equal(t, "debug", out["audio"].Level, "a level set in the file must win over the default")
+}
