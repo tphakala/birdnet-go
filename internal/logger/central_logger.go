@@ -1163,7 +1163,7 @@ func levelName(l slog.Level) string {
 }
 
 // replaceAttrFunc returns the ReplaceAttr function shared by every JSON
-// handler. It renders the top-level level attribute through levelName and, when
+// handler. It renders the top-level Trace level as traceLevelName and, when
 // tz is neither nil nor UTC, converts the top-level time attribute to tz.
 func replaceAttrFunc(tz *time.Location) func(groups []string, a slog.Attr) slog.Attr {
 	convertTime := tz != nil && tz != time.UTC
@@ -1173,8 +1173,8 @@ func replaceAttrFunc(tz *time.Location) func(groups []string, a slog.Attr) slog.
 		}
 		switch a.Key {
 		case slog.LevelKey:
-			if l, ok := a.Value.Any().(slog.Level); ok {
-				return slog.String(a.Key, levelName(l))
+			if l, ok := a.Value.Any().(slog.Level); ok && l == traceLevelValue {
+				return slog.String(a.Key, traceLevelName)
 			}
 		case slog.TimeKey:
 			if convertTime {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,21 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// decodeJSONLines decodes every non-empty line of data as a JSON object.
-func decodeJSONLines(t *testing.T, data []byte) []map[string]any {
-	t.Helper()
-	var out []map[string]any
-	for line := range strings.Lines(string(data)) {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		var rec map[string]any
-		require.NoError(t, json.Unmarshal([]byte(line), &rec))
-		out = append(out, rec)
-	}
-	return out
-}
 
 func TestSlogLogger_TraceLevelName(t *testing.T) {
 	t.Parallel()
@@ -51,8 +35,12 @@ func TestSlogLogger_TraceLevelName(t *testing.T) {
 			l.Trace("trace line")
 			l.Debug("debug line")
 
-			recs := decodeJSONLines(t, buf.Bytes())
-			require.Len(t, recs, 2)
+			lines := splitLines(buf.String())
+			require.Len(t, lines, 2)
+			recs := make([]map[string]any, len(lines))
+			for i, line := range lines {
+				require.NoError(t, json.Unmarshal([]byte(line), &recs[i]))
+			}
 			assert.Equal(t, "TRACE", recs[0]["level"])
 			assert.Equal(t, "DEBUG", recs[1]["level"])
 
@@ -93,10 +81,9 @@ func TestCentralLogger_TraceLevelNameInFiles(t *testing.T) {
 	require.NoError(t, cl.Close())
 
 	for _, path := range []string{ownPath, mainPath} {
-		data, err := os.ReadFile(path) //nolint:gosec // test-controlled path in t.TempDir
-		require.NoError(t, err)
-		assert.Contains(t, string(data), `"level":"TRACE"`, path)
-		assert.NotContains(t, string(data), "DEBUG-4", path)
+		data := strings.Join(readLogLines(t, path), "\n")
+		assert.Contains(t, data, `"level":"TRACE"`, path)
+		assert.NotContains(t, data, "DEBUG-4", path)
 	}
 }
 
@@ -108,7 +95,7 @@ func TestTextHandler_TraceLevelName(t *testing.T) {
 	log.Log(t.Context(), traceLevelValue, "m")
 	log.Log(t.Context(), slog.LevelDebug, "d")
 
-	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	lines := splitLines(buf.String())
 	require.Len(t, lines, 2)
 	assert.Contains(t, lines[0], "TRACE")
 	assert.NotContains(t, lines[0], "DEBUG-4")
