@@ -20,29 +20,29 @@ func TestLogDetectionResults_DedupDisabledIsTrace(t *testing.T) {
 	tests := []struct {
 		name         string
 		dedupEnabled bool
-		healthCheck  time.Duration
+		heartbeatDue bool   // age the first window past the default health check interval before the second call
 		secondCall   [2]int // raw and filtered counts of the second call, if any
 		wantReason   string // log_reason expected in the output, empty when nothing is logged
 	}{
 		{name: "dedup disabled is not logged at debug", dedupEnabled: false},
 		{name: "first log stays at debug", dedupEnabled: true, wantReason: logReasonFirstLog},
 		{name: "changed values stay at debug", dedupEnabled: true, secondCall: [2]int{4, 2}, wantReason: logReasonValuesChanged},
-		{name: "health check stays at debug", dedupEnabled: true, healthCheck: time.Nanosecond, secondCall: [2]int{3, 1}, wantReason: logReasonHealthCheck},
+		{name: "health check stays at debug", dedupEnabled: true, heartbeatDue: true, secondCall: [2]int{3, 1}, wantReason: logReasonHealthCheck},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
 			p := &Processor{
-				logDedup: NewLogDeduplicator(DeduplicationConfig{Enabled: tt.dedupEnabled, HealthCheckInterval: tt.healthCheck}),
+				logDedup: NewLogDeduplicator(DeduplicationConfig{Enabled: tt.dedupEnabled}),
 			}
 
 			p.logDetectionResults("source-a", 3, 1)
 			if tt.secondCall != [2]int{} {
 				// Discard the first line so only the second call is judged.
 				buf.Reset()
-				if tt.healthCheck > 0 {
-					time.Sleep(tt.healthCheck)
+				if tt.heartbeatDue {
+					p.logDedup.states["source-a"].LastLogTime = time.Now().Add(-time.Hour)
 				}
 				p.logDetectionResults("source-a", tt.secondCall[0], tt.secondCall[1])
 			}
