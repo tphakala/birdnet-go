@@ -14,7 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
-// yalueAPIBaseTooOldText is the literal text yalue/onnxruntime_go v1.36.0
+// yalueAPIBaseTooOldText is the literal text yalue/onnxruntime_go v1.38.0
 // returns when the loaded library cannot serve its C API level. It is spelled
 // out here so a wrong production marker cannot pass.
 const yalueAPIBaseTooOldText = "Error setting ORT API base: 2"
@@ -38,7 +38,7 @@ func TestDescribeORTInitError_TranslatesAPIBaseFailure(t *testing.T) {
 		msg := got.Error()
 		assert.Contains(t, msg, "/opt/ort/libonnxruntime.so")
 		assert.Contains(t, msg, "older than the supported minimum")
-		assert.Contains(t, msg, "1.29 or newer")
+		assert.Contains(t, msg, ORTRequiredVersion())
 		assert.Contains(t, msg, ORTInstallGuideURL)
 		assert.NotContains(t, msg, "suggests version")
 		require.ErrorIs(t, got, cause)
@@ -74,7 +74,7 @@ func TestDescribeORTInitError_PassesOtherFailuresThrough(t *testing.T) {
 			got := describeORTInitError("/x/libonnxruntime.so", fmt.Errorf("Platform-specific initialization failed: %w", errors.NewStd(msg)))
 			require.Error(t, got)
 			assert.Contains(t, got.Error(), "failed to initialize ONNX Runtime")
-			assert.NotContains(t, got.Error(), "1.29")
+			assert.NotContains(t, got.Error(), ORTMinimumVersion())
 		})
 	}
 }

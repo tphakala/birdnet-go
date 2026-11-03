@@ -11,14 +11,14 @@ import (
 )
 
 // minORTMajor and minORTMinor are the oldest native ONNX Runtime release the
-// binding can load. yalue/onnxruntime_go v1.36.x calls GetApi(29) (header
-// ORT_API_VERSION 29). ONNX Runtime 1.N serves API N and all older tables, so
-// a library below 1.29 returns NULL and init fails with "Error setting ORT API
+// binding can load. yalue/onnxruntime_go v1.38.x calls GetApi(31) (header
+// ORT_API_VERSION 31). ONNX Runtime 1.N serves API N and all older tables, so
+// a library below 1.31 returns NULL and init fails with "Error setting ORT API
 // base: 2". Keep these in step with the Dependabot ignore rule and
 // ort_pins_test.go.
 const (
 	minORTMajor = 1
-	minORTMinor = 29
+	minORTMinor = 31
 
 	// ortOrNewerSuffix turns the minimum version into the user-facing
 	// requirement text.
@@ -96,13 +96,13 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 }
 
 // ORTMinimumVersion returns the oldest supported ONNX Runtime release as
-// "major.minor" (e.g. "1.29"), for use as a localized message parameter.
+// "major.minor" (e.g. "1.31"), for use as a localized message parameter.
 func ORTMinimumVersion() string {
 	return fmt.Sprintf("%d.%d", minORTMajor, minORTMinor)
 }
 
 // ORTRequiredVersion returns a human-readable requirement for English text
-// (e.g. "1.29 or newer").
+// (e.g. "1.31 or newer").
 func ORTRequiredVersion() string {
 	return ORTMinimumVersion() + ortOrNewerSuffix
 }

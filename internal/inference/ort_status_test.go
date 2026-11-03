@@ -19,15 +19,14 @@ func TestORTVersionMeetsMinimum(t *testing.T) {
 		wantMeets bool
 		wantKnown bool
 	}{
-		{name: "exact minimum", version: "1.29.0", wantMeets: true, wantKnown: true},
-		{name: "minimum without patch", version: "1.29", wantMeets: true, wantKnown: true},
-		{name: "current pin", version: "1.31.0", wantMeets: true, wantKnown: true},
-		{name: "release candidate", version: "1.29.0-rc1", wantMeets: true, wantKnown: true},
-		{name: "rc without patch", version: "1.29rc1", wantMeets: true, wantKnown: true},
+		{name: "exact minimum", version: "1.31.0", wantMeets: true, wantKnown: true},
+		{name: "minimum without patch", version: "1.31", wantMeets: true, wantKnown: true},
+		{name: "release candidate", version: "1.31.0-rc1", wantMeets: true, wantKnown: true},
+		{name: "rc without patch", version: "1.31rc1", wantMeets: true, wantKnown: true},
 		{name: "three digit minor", version: "1.100.0", wantMeets: true, wantKnown: true},
 		{name: "major bump", version: "2.0.0", wantMeets: true, wantKnown: true},
 		{name: "surrounding spaces", version: " 1.31.0 ", wantMeets: true, wantKnown: true},
-		{name: "previous minor", version: "1.28.2", wantMeets: false, wantKnown: true},
+		{name: "previous minor", version: "1.30.2", wantMeets: false, wantKnown: true},
 		{name: "old pin", version: "1.25.1", wantMeets: false, wantKnown: true},
 		{name: "major zero", version: "0.99", wantMeets: false, wantKnown: true},
 		{name: "numeric compare, not string compare", version: "1.3.0", wantMeets: false, wantKnown: true},
@@ -80,16 +79,16 @@ func TestCheckORTAvailability_GatesOnFileNameVersion(t *testing.T) {
 		assert.False(t, status.Available)
 		assert.Equal(t, "1.25.1", status.Version)
 		assert.Contains(t, status.Error, "1.25.1")
-		assert.Contains(t, status.Error, "1.29 or newer")
+		assert.Contains(t, status.Error, ORTRequiredVersion())
 	})
 
 	t.Run("previous minor is rejected", func(t *testing.T) {
-		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.28.2")
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.30.2")
 		assert.False(t, CheckORTAvailability(path).Available)
 	})
 
 	t.Run("minimum is accepted", func(t *testing.T) {
-		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.29.0")
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.31.0")
 		status := CheckORTAvailability(path)
 		assert.True(t, status.Available)
 		assert.Empty(t, status.Error)
@@ -271,14 +270,14 @@ func TestVersionError(t *testing.T) {
 		msg := versionError("1.24.4")
 		assert.Contains(t, msg, "1.24.4")
 		assert.Contains(t, msg, "older than")
-		assert.Contains(t, msg, "1.29 or newer")
+		assert.Contains(t, msg, ORTRequiredVersion())
 	})
 
 	t.Run("empty version mentions unknown", func(t *testing.T) {
 		t.Parallel()
 		msg := versionError("")
 		assert.Contains(t, msg, "unable to determine")
-		assert.Contains(t, msg, "1.29 or newer")
+		assert.Contains(t, msg, ORTRequiredVersion())
 	})
 }
 
@@ -316,10 +315,10 @@ func TestLibraryFileExists(t *testing.T) {
 
 func TestORTRequiredVersion(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "1.29 or newer", ORTRequiredVersion())
+	assert.Equal(t, "1.31 or newer", ORTRequiredVersion())
 }
 
 func TestORTMinimumVersion(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "1.29", ORTMinimumVersion())
+	assert.Equal(t, "1.31", ORTMinimumVersion())
 }

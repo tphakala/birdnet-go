@@ -14,7 +14,7 @@ ONNX Runtime is a shared library required by BirdNET-Go for neural network infer
 
 ## Required Version
 
-BirdNET-Go requires **ONNX Runtime 1.29 or newer**; release builds and the Docker image ship 1.31.1. The Go bindings request ONNX Runtime C API version 29, which 1.29 and later provide; older versions fail to load. Releases up to and including 20261014 need ONNX Runtime 1.25.x.
+BirdNET-Go requires **ONNX Runtime 1.31 or newer**; release builds and the Docker image ship 1.31.1. The Go bindings request ONNX Runtime C API version 31, which 1.31 and later provide; older versions fail to load. Releases up to and including 20261014 need ONNX Runtime 1.25.x.
 
 ## Installing from Release Tarballs
 
@@ -289,7 +289,7 @@ Move `onnxruntime.dll` to the same folder as the executable.
 
 ### Wrong ONNX Runtime version
 
-If BirdNET-Go reports version incompatibility errors, install ONNX Runtime 1.29 or newer (releases ship 1.31.1), as described at the top of this guide.
+If BirdNET-Go reports version incompatibility errors, install ONNX Runtime 1.31 or newer (releases ship 1.31.1), as described at the top of this guide.
 
 ### Permission denied errors
 
