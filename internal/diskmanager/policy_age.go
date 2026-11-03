@@ -389,7 +389,6 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 	// Logic: If file timestamp is NOT before the cutoff, it's too new to delete
 	fileUnix := file.Timestamp.Unix()
 	if fileUnix >= retentionCutoffUnix {
-		// Debug logging handled by log level
 		fileFormatted, fileAge := formatTimeForHumans(fileUnix)
 		cutoffFormatted, cutoffAge := formatTimeForHumans(retentionCutoffUnix)
 
