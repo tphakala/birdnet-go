@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -15,6 +16,39 @@ const pipelineStatsInterval = 5 * time.Minute
 type sourceModelKey struct {
 	sourceID string
 	modelID  string
+}
+
+// durationStats accumulates count, total, minimum and maximum of a series of
+// durations for one reporting window.
+type durationStats struct {
+	count    int
+	total    time.Duration
+	min, max time.Duration
+}
+
+// add records one sample. The first sample sets both extremes.
+func (d *durationStats) add(sample time.Duration) {
+	if d.count == 0 || sample < d.min {
+		d.min = sample
+	}
+	if d.count == 0 || sample > d.max {
+		d.max = sample
+	}
+	d.count++
+	d.total += sample
+}
+
+// avg returns the mean sample, or 0 when no sample was recorded.
+func (d *durationStats) avg() time.Duration {
+	if d.count == 0 {
+		return 0
+	}
+	return d.total / time.Duration(d.count)
+}
+
+// durationMs converts a duration to fractional milliseconds, rounded to two decimals.
+func durationMs(d time.Duration) float64 {
+	return roundTo2(float64(d) / float64(time.Millisecond))
 }
 
 // inferenceStats holds accumulated inference statistics for one source-model pair.
@@ -29,10 +63,13 @@ type inferenceStats struct {
 	// aggregate signal that a filter is discarding them, instead of only a
 	// per-detection Debug line they have to know to grep for.
 	daylightDiscards int
+	// predict and lockWait aggregate the model time and the inference lock wait
+	// of each inference in the window.
+	predict, lockWait durationStats
 }
 
-// PipelineStats accumulates per-source, per-model inference statistics
-// and logs a periodic summary at info level.
+// PipelineStats accumulates per-source, per-model inference statistics,
+// including inference time and lock wait as min/avg/max, and logs a periodic summary at info level.
 type PipelineStats struct {
 	mu    sync.Mutex
 	stats map[sourceModelKey]*inferenceStats
@@ -52,8 +89,9 @@ func NewPipelineStats(displayNameFn func(string) string) *PipelineStats {
 	}
 }
 
-// RecordInference records one inference cycle with its result counts.
-func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, passedFilter int, maxConfidence, threshold float32) {
+// RecordInference records one inference cycle with its result counts. The
+// timing is aggregated as min/avg/max per reporting window.
+func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, passedFilter int, maxConfidence, threshold float32, timing classifier.PredictTiming) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
@@ -71,6 +109,8 @@ func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, p
 		s.maxConfidence = maxConfidence
 	}
 	s.threshold = threshold
+	s.predict.add(timing.Predict)
+	s.lockWait.add(timing.LockWait)
 }
 
 // RecordDaylightDiscard records one detection dropped by the daylight filter for
@@ -158,6 +198,12 @@ func (ps *PipelineStats) logAndReset(log logger.Logger) {
 			logger.Int("inferences", s.inferences),
 			logger.Int("raw_results", s.rawResults),
 			logger.Int("passed_filter", s.passedFilter),
+			logger.Float64("inference_ms_min", durationMs(s.predict.min)),
+			logger.Float64("inference_ms_avg", durationMs(s.predict.avg())),
+			logger.Float64("inference_ms_max", durationMs(s.predict.max)),
+			logger.Float64("lock_wait_ms_min", durationMs(s.lockWait.min)),
+			logger.Float64("lock_wait_ms_avg", durationMs(s.lockWait.avg())),
+			logger.Float64("lock_wait_ms_max", durationMs(s.lockWait.max)),
 			logger.Int("daylight_discards", s.daylightDiscards),
 			logger.Float64("max_confidence", roundTo2(float64(s.maxConfidence))),
 			logger.Float64("threshold", roundTo2(float64(s.threshold))),

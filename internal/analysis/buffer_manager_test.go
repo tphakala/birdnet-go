@@ -101,6 +101,7 @@ func (s *scriptedModelState) IsModelActive(string) bool { return s.active }
 // the model loaded again must log the resume line exactly once and clear the
 // warn-once latch. IsModelActive is false so the tick returns before ProcessData,
 // exercising the resume block without driving the full inference pipeline.
+// A dispatch would panic, because scriptedModelState has a nil classifierBackend.
 func TestProcessMonitorTick_ResumesWhenModelReloads(t *testing.T) {
 	t.Parallel()
 
@@ -142,8 +143,6 @@ func TestProcessMonitorTick_ResumesWhenModelReloads(t *testing.T) {
 	assert.Contains(t, logBuf.String(), "model loaded again, resuming inference",
 		"the resume log fires when the model reloads")
 	assert.False(t, tickState.notLoadedWarned, "the warn-once latch resets on resume")
-	assert.NotContains(t, logBuf.String(), "buffer monitor dispatching to ProcessData",
-		"an inactive model must not dispatch to ProcessData")
 
 	// Tick 3: still loaded and inactive, latch already clear -> no repeated resume log.
 	logBuf.Reset()

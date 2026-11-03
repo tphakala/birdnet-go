@@ -46,7 +46,7 @@ func (b *DetectionAlertBridge) SupportsBatching() bool {
 // Every detection emits detection.occurred; new species additionally emit
 // detection.new_species so rules on either event work as users expect.
 func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent) error {
-	b.log.Debug("Detection event received at alert bridge",
+	b.log.Trace("Detection event received at alert bridge",
 		logger.String("component", "alerting.detection_bridge"),
 		logger.String("species", event.GetSpeciesName()),
 		logger.String("scientific_name", event.GetScientificName()),
