@@ -1334,7 +1334,7 @@
         },
         "autoenablemigrated": {
           "type": "boolean",
-          "description": "AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy\nmodel auto-enable has run for this config file, so it never re-runs. Do not edit by hand;\na managed read-only config may set it true (with configversion: 2) to keep an explicit\nmodels.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the\ncompanion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go."
+          "description": "AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy\nmodel auto-enable has run for this config file, so it never re-runs. Do not edit by hand;\na managed read-only config may set it true (with configversion: 3) to keep an explicit\nmodels.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the\ncompanion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go."
         }
       },
       "additionalProperties": false,

@@ -301,13 +301,10 @@ func (cl *CentralLogger) Module(name string) Logger {
 
 	// Get module-specific configuration
 	moduleConfig, hasModuleConfig := cl.config.ModuleOutputs[name]
+	// getModuleLevelLocked applies the precedence module_levels, then the module's
+	// output level, then the parent module, then default_level. The handler and the
+	// moduleLogger share this one level.
 	moduleLevel := cl.getModuleLevelLocked(name)
-
-	// Override module level if explicitly configured in ModuleOutputs
-	// This ensures both the handler and the moduleLogger use the same level
-	if hasModuleConfig && moduleConfig.Level != "" {
-		moduleLevel = parseLogLevel(moduleConfig.Level)
-	}
 
 	// Build handlers for this module
 	var handlers []slog.Handler
