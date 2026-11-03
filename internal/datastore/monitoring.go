@@ -91,17 +91,13 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 // It must not scan tables, because on SQLite it would hold the only pooled
 // connection and stall saves.
 func (ds *DataStore) collectDatabaseStats(ctx context.Context) {
-	ds.metricsMu.RLock()
-	metrics := ds.metrics
-	ds.metricsMu.RUnlock()
-
 	dbSize, err := ds.getDatabaseSize(ctx)
 	if err != nil {
 		GetLogger().Error("Failed to get database size",
 			logger.Error(err))
 		return
 	}
-	if metrics != nil {
+	if metrics := ds.getMetrics(); metrics != nil {
 		metrics.UpdateDatabaseSize(dbSize)
 	}
 }
