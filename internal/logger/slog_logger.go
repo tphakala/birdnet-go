@@ -46,7 +46,7 @@ func NewSlogLogger(writer io.Writer, level LogLevel, timezone *time.Location) *S
 
 	opts := &slog.HandlerOptions{
 		Level:       parseSlogLevel(level),
-		ReplaceAttr: timeZoneReplaceAttr(timezone),
+		ReplaceAttr: replaceAttrFunc(timezone),
 	}
 
 	handler := slog.NewJSONHandler(writer, opts)
@@ -95,7 +95,7 @@ func NewSlogLoggerWithFile(filePath string, level LogLevel, timezone *time.Locat
 	// Create handler with buffered writer
 	opts := &slog.HandlerOptions{
 		Level:       parseSlogLevel(level),
-		ReplaceAttr: timeZoneReplaceAttr(timezone),
+		ReplaceAttr: replaceAttrFunc(timezone),
 	}
 	handler := slog.NewJSONHandler(writer, opts)
 
@@ -139,7 +139,7 @@ func (l *SlogLogger) ReopenLogFile() error {
 	// Recreate handler with new writer
 	opts := &slog.HandlerOptions{
 		Level:       l.level,
-		ReplaceAttr: timeZoneReplaceAttr(l.timezone),
+		ReplaceAttr: replaceAttrFunc(l.timezone),
 	}
 	l.handler = slog.NewJSONHandler(writer, opts)
 	l.slogLogger = slog.New(l.handler) // update cached logger

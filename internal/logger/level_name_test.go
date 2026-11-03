@@ -1,0 +1,116 @@
+package logger
+
+import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// decodeJSONLines decodes every non-empty line of data as a JSON object.
+func decodeJSONLines(t *testing.T, data []byte) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for line := range strings.Lines(string(data)) {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &rec))
+		out = append(out, rec)
+	}
+	return out
+}
+
+func TestSlogLogger_TraceLevelName(t *testing.T) {
+	t.Parallel()
+
+	const oddOffsetSeconds = 5*3600 + 1800
+	tests := []struct {
+		name string
+		tz   *time.Location
+		// checkOffset is false for UTC, which is left unconverted (host-local time).
+		checkOffset bool
+	}{
+		{"utc", time.UTC, false},
+		{"fixed zone", time.FixedZone("plus0530", oddOffsetSeconds), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			buf := &bytes.Buffer{}
+			l := NewSlogLogger(buf, LogLevelTrace, tt.tz)
+			l.Trace("trace line")
+			l.Debug("debug line")
+
+			recs := decodeJSONLines(t, buf.Bytes())
+			require.Len(t, recs, 2)
+			assert.Equal(t, "TRACE", recs[0]["level"])
+			assert.Equal(t, "DEBUG", recs[1]["level"])
+
+			for _, rec := range recs {
+				ts, ok := rec["time"].(string)
+				require.True(t, ok)
+				parsed, err := time.Parse(time.RFC3339Nano, ts)
+				require.NoError(t, err)
+				if tt.checkOffset {
+					_, offset := parsed.Zone()
+					assert.Equal(t, oddOffsetSeconds, offset)
+				}
+			}
+		})
+	}
+}
+
+func TestCentralLogger_TraceLevelNameInFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "main.log")
+	ownPath := filepath.Join(dir, "own.log")
+	modules := DisabledModuleOutputs()
+	modules["ownfile"] = ModuleOutput{Enabled: true, FilePath: ownPath, Level: "trace"}
+
+	cl, err := NewCentralLogger(&LoggingConfig{
+		DefaultLevel:  "trace",
+		Console:       &ConsoleOutput{Enabled: false},
+		FileOutput:    &FileOutput{Enabled: true, Path: mainPath, Level: "trace"},
+		ModuleOutputs: modules,
+	})
+	require.NoError(t, err)
+
+	cl.Module("ownfile").Trace("own trace")
+	cl.Module("shared").Trace("shared trace")
+	require.NoError(t, cl.Flush())
+	require.NoError(t, cl.Close())
+
+	for _, path := range []string{ownPath, mainPath} {
+		data, err := os.ReadFile(path) //nolint:gosec // test-controlled path in t.TempDir
+		require.NoError(t, err)
+		assert.Contains(t, string(data), `"level":"TRACE"`, path)
+		assert.NotContains(t, string(data), "DEBUG-4", path)
+	}
+}
+
+func TestTextHandler_TraceLevelName(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	log := slog.New(newTextHandler(&buf, traceLevelValue, nil))
+	log.Log(t.Context(), traceLevelValue, "m")
+	log.Log(t.Context(), slog.LevelDebug, "d")
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 2)
+	assert.Contains(t, lines[0], "TRACE")
+	assert.NotContains(t, lines[0], "DEBUG-4")
+	assert.Contains(t, lines[1], "DEBUG")
+}
