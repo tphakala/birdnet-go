@@ -418,7 +418,7 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 
 	isDetection := isDetectionEvent(event.EventName)
 	if isDetection {
-		e.log.Debug("Alert engine received detection event",
+		e.log.Trace("Alert engine received detection event",
 			logger.String("component", "alerting.engine"),
 			logger.String("event_name", event.EventName),
 			logger.String("object_type", event.ObjectType),

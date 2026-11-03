@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -246,4 +248,33 @@ func TestProcessData_StoredElapsedTimeIncludesLockWait(t *testing.T) {
 	default:
 		t.Fatal("ProcessData queued no result")
 	}
+}
+
+func TestProcessData_QueuedResultCarriesInferenceTiming(t *testing.T) {
+	const source = "overrun-carry-src"
+	want := classifier.PredictTiming{LockWait: overrunTestSlow, Predict: overrunTestFast}
+	_, err := runProcessData(t, source, timedBackend{timing: want})
+	require.NoError(t, err)
+
+	select {
+	case res := <-classifier.ResultsQueue:
+		assert.Equal(t, want, res.Inference, "the summary reads inference timing from the queued result")
+	default:
+		require.FailNow(t, "ProcessData queued no result")
+	}
+}
+
+// TestProcessData_SuccessPathLogsNothingAtDebug pins the log volume of the
+// per-window path: a successful inference must not write a Debug line. Not
+// parallel: logtest swaps the process-global logger.
+func TestProcessData_SuccessPathLogsNothingAtDebug(t *testing.T) {
+	buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
+
+	_, err := runProcessData(t, "overrun-quiet-src", timedBackend{
+		timing: classifier.PredictTiming{Predict: overrunTestFast},
+	})
+	require.NoError(t, err)
+	<-classifier.ResultsQueue
+
+	assert.Empty(t, buf.String(), "the per-window success path must stay silent at Debug")
 }

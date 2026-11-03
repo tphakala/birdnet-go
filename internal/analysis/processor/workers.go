@@ -208,7 +208,7 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 	log := GetLogger()
 	startTime := time.Now()
 	defer func() {
-		log.Debug("Task enqueue operation completed",
+		log.Trace("Task enqueue operation completed",
 			logger.Int64("duration_ms", time.Since(startTime).Milliseconds()),
 			logger.String("component", "analysis.processor"),
 			logger.String("operation", "enqueue_task"))

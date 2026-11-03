@@ -786,15 +786,6 @@ func (p *Processor) startDetectionProcessor() {
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) processDetections(item classifier.Results) {
-	// Add structured logging for detection pipeline entry
-	GetLogger().Debug("Processing detections from queue",
-		logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-		logger.String("model_id", item.ModelID),
-		logger.Time("start_time", item.StartTime),
-		logger.Int("results_count", len(item.Results)),
-		logger.Int64("elapsed_time_ms", item.ElapsedTime.Milliseconds()),
-		logger.String("operation", "process_detections_entry"))
-
 	// Capture a settings snapshot once so every decision in this cycle
 	// uses a consistent, hot-reloadable view of the configuration.
 	settings := p.currentSettings()
@@ -842,7 +833,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 			}
 		}
 		threshold := modelGlobalConfidenceThreshold(settings, item.ModelID)
-		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
+		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold, item.Inference)
 	}
 
 	// Every result of this chunk shares one window, so one hit stamp serves them all.
@@ -2229,7 +2220,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 				pendingCount, flushedCount := p.flushPendingDetections()
 
 				if pendingCount > 0 || flushedCount > 0 {
-					GetLogger().Debug("Pending detections flusher cycle",
+					GetLogger().Trace("Pending detections flusher cycle",
 						logger.Int("pending_count", pendingCount),
 						logger.Int("flushable_count", flushedCount),
 						logger.String("operation", "pending_flusher_cycle"))

@@ -795,15 +795,6 @@ func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sa
 			Build()
 	}
 
-	chunkLen := 0
-	if len(sample) > 0 {
-		chunkLen = len(sample[0])
-	}
-	log.Debug("PredictModel dispatching",
-		logger.String("model_id", modelID),
-		logger.Int("sample_chunks", len(sample)),
-		logger.Int("chunk_len", chunkLen))
-
 	start := time.Now()
 	results, err := entry.instance.Predict(ctx, sample)
 	end := time.Now()
@@ -842,7 +833,7 @@ func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sa
 			o.kickInferenceHealthSync()
 		}
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
-		log.Debug("PredictModel complete",
+		log.Trace("PredictModel complete",
 			logger.String("model_id", modelID),
 			logger.Int("result_count", len(results)),
 			logger.Duration("duration", duration),
