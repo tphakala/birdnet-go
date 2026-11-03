@@ -69,6 +69,7 @@ func TestCentralLogger_TraceLevelNameInFiles(t *testing.T) {
 
 	cl, err := NewCentralLogger(&LoggingConfig{
 		DefaultLevel:  "trace",
+		Timezone:      "Asia/Kolkata",
 		Console:       &ConsoleOutput{Enabled: false},
 		FileOutput:    &FileOutput{Enabled: true, Path: mainPath, Level: "trace"},
 		ModuleOutputs: modules,
@@ -79,6 +80,16 @@ func TestCentralLogger_TraceLevelNameInFiles(t *testing.T) {
 	cl.Module("shared").Trace("shared trace")
 	require.NoError(t, cl.Flush())
 	require.NoError(t, cl.Close())
+
+	// The main file converts timestamps to the configured zone (UTC+05:30).
+	var mainRec map[string]any
+	require.NoError(t, json.Unmarshal([]byte(readLogLines(t, mainPath)[0]), &mainRec))
+	mainTimeStr, ok := mainRec["time"].(string)
+	require.True(t, ok)
+	mainTime, err := time.Parse(time.RFC3339Nano, mainTimeStr)
+	require.NoError(t, err)
+	_, mainOffset := mainTime.Zone()
+	assert.Equal(t, 5*3600+1800, mainOffset)
 
 	for _, path := range []string{ownPath, mainPath} {
 		data := strings.Join(readLogLines(t, path), "\n")
