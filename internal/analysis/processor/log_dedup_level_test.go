@@ -3,6 +3,7 @@ package processor
 import (
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -11,7 +12,7 @@ import (
 
 // With deduplication disabled every analysis window writes a line, so those
 // lines are Trace and absent at Debug. With deduplication enabled the lines mark
-// a change or heartbeat and stay at Debug.
+// a first sighting, a change or a heartbeat and stay at Debug.
 func TestLogDetectionResults_DedupDisabledIsTrace(t *testing.T) {
 	// Not parallel: logtest.CaptureBufferAt swaps the process-global logger.
 	const message = "Detection processing results"
@@ -19,26 +20,39 @@ func TestLogDetectionResults_DedupDisabledIsTrace(t *testing.T) {
 	tests := []struct {
 		name         string
 		dedupEnabled bool
-		wantLogged   bool
+		healthCheck  time.Duration
+		secondCall   [2]int // raw and filtered counts of the second call, if any
+		wantReason   string // log_reason expected in the output, empty when nothing is logged
 	}{
-		{name: "dedup disabled is not logged at debug", dedupEnabled: false, wantLogged: false},
-		{name: "dedup enabled first log is logged at debug", dedupEnabled: true, wantLogged: true},
+		{name: "dedup disabled is not logged at debug", dedupEnabled: false},
+		{name: "first log stays at debug", dedupEnabled: true, wantReason: logReasonFirstLog},
+		{name: "changed values stay at debug", dedupEnabled: true, secondCall: [2]int{4, 2}, wantReason: logReasonValuesChanged},
+		{name: "health check stays at debug", dedupEnabled: true, healthCheck: time.Nanosecond, secondCall: [2]int{3, 1}, wantReason: logReasonHealthCheck},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
 			p := &Processor{
-				logDedup: NewLogDeduplicator(DeduplicationConfig{Enabled: tt.dedupEnabled}),
+				logDedup: NewLogDeduplicator(DeduplicationConfig{Enabled: tt.dedupEnabled, HealthCheckInterval: tt.healthCheck}),
 			}
 
 			p.logDetectionResults("source-a", 3, 1)
-
-			if tt.wantLogged {
-				assert.Contains(t, buf.String(), message)
-			} else {
-				assert.NotContains(t, buf.String(), message)
+			if tt.secondCall != [2]int{} {
+				// Discard the first line so only the second call is judged.
+				buf.Reset()
+				if tt.healthCheck > 0 {
+					time.Sleep(tt.healthCheck)
+				}
+				p.logDetectionResults("source-a", tt.secondCall[0], tt.secondCall[1])
 			}
+
+			if tt.wantReason == "" {
+				assert.NotContains(t, buf.String(), message)
+				return
+			}
+			assert.Contains(t, buf.String(), "level=DEBUG msg=\""+message+"\"")
+			assert.Contains(t, buf.String(), "log_reason="+tt.wantReason)
 		})
 	}
 }
