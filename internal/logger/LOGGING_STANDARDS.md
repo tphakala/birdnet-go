@@ -338,12 +338,20 @@ log.Info("detection processed",
 
 | Level | Use Case | Visible By Default |
 |-------|----------|-------------------|
+| **Trace** | Per-window, per-tick or per-event receipt lines | No (set `level: trace` on a module and restart) |
 | **Debug** | Verbose operation tracking, diagnostics | No |
 | **Info** | Normal operations, state changes | Yes |
 | **Warn** | Non-critical issues, degraded operation | Yes |
 | **Error** | Failures requiring attention | Yes |
 
 ### Level Guidelines
+
+**Trace**
+- A line that runs once per analysis window, per flush tick or per event receipt belongs here, not at Debug
+- Its useful numbers (counts, durations) go to a periodic Info summary such as `pipeline stats`
+- A line that only repeats another line should be deleted, not demoted
+- A line that reports a decision or an exception stays at Debug or above
+- Trace renders as `"level":"DEBUG-4"` in JSON output
 
 **Debug**
 - Function entry/exit for complex operations
