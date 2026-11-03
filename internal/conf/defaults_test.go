@@ -237,3 +237,40 @@ func TestModelConsensusYAMLKeys(t *testing.T) {
 		[]string{"allspecies", "listedspecies", "species", "minmodels", "alleligible", "debug"},
 		slices.Collect(maps.Keys(keys)))
 }
+
+// TestModuleLogLevelTemplateMatchesCodeDefaults pins the module log levels of the
+// embedded config.yaml (what new installs receive) to the viper defaults (what a
+// module entry without a level receives), so the two cannot drift apart again. Not
+// parallel: it resets the global viper instance.
+func TestModuleLogLevelTemplateMatchesCodeDefaults(t *testing.T) {
+	t.Cleanup(viper.Reset)
+
+	// Pointer field so a deleted template level fails instead of reading as empty.
+	var probe struct {
+		Logging struct {
+			Modules map[string]struct {
+				Level *string `yaml:"level"`
+			} `yaml:"modules"`
+		} `yaml:"logging"`
+	}
+	template, err := configFiles.ReadFile("config.yaml")
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(template, &probe))
+
+	viper.Reset()
+	setDefaultConfig()
+
+	require.Equal(t,
+		slices.Sorted(maps.Keys(probe.Logging.Modules)),
+		slices.Sorted(maps.Keys(viper.GetStringMap("logging.modules"))),
+		"config.yaml and setDefaultConfig must declare the same log modules")
+
+	for module, tmpl := range probe.Logging.Modules {
+		t.Run(module, func(t *testing.T) {
+			require.NotNil(t, tmpl.Level, "config.yaml must set the level of module %s", module)
+			got := viper.GetString("logging.modules." + module + ".level")
+			require.Equal(t, *tmpl.Level, got, "config.yaml level must equal the default in defaults.go")
+			require.Equal(t, "info", got, "modules log at info by default")
+		})
+	}
+}

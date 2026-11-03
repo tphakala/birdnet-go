@@ -144,7 +144,7 @@ ModelsConfig holds global model enablement and management settings.
 |---------|------|-------------|
 | `models.enabled` | string[] | list of model IDs to load (e.g., "birdnet", "perch_v2") |
 | `models.directory` | string | base directory for downloaded model files |
-| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 2) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
+| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 3) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
 
 ## lowmemory
 

@@ -85,7 +85,7 @@ logging:
 	assert.Equal(t, 5, cfg.FileOutput.MaxRotatedFiles, "MaxRotatedFiles should be unmarshaled from max_rotated_files")
 	assert.True(t, cfg.FileOutput.Compress)
 
-	// Verify module outputs (the critical fix — "modules" maps to ModuleOutputs)
+	// Verify module outputs (the critical fix: "modules" maps to ModuleOutputs)
 	require.NotNil(t, cfg.ModuleOutputs, "ModuleOutputs should not be nil (mapped from modules)")
 	require.Contains(t, cfg.ModuleOutputs, "imageprovider")
 	require.Contains(t, cfg.ModuleOutputs, "audio")
@@ -93,7 +93,7 @@ logging:
 	imgMod := cfg.ModuleOutputs["imageprovider"]
 	assert.True(t, imgMod.Enabled)
 	assert.Equal(t, "logs/imageprovider.log", imgMod.FilePath, "FilePath should be unmarshaled from file_path")
-	assert.Equal(t, "debug", imgMod.Level, "Module level should be 'debug' — this was the root cause of missing debug logs")
+	assert.Equal(t, "debug", imgMod.Level, "Module level should be 'debug': this was the root cause of missing debug logs")
 	assert.True(t, imgMod.ConsoleAlso, "ConsoleAlso should be unmarshaled from console_also")
 	assert.Equal(t, 25, imgMod.MaxSize)
 	assert.Equal(t, 14, imgMod.MaxAge)
@@ -192,7 +192,7 @@ func TestLoggingModuleLevelAppliedToLogger(t *testing.T) {
 	log := cl.Module("testmod")
 	require.NotNil(t, log)
 
-	// Debug should not be filtered — the module is set to debug level
+	// Debug should not be filtered: the module is set to debug level
 	log.Debug("test debug message", logger.String("key", "value"))
 	log.Info("test info message")
 
@@ -249,19 +249,4 @@ func TestLoggingModuleLevelInfoFiltersDebug(t *testing.T) {
 
 	assert.NotContains(t, string(content), "should not appear", "Debug messages should be filtered at info level")
 	assert.Contains(t, string(content), "should appear")
-}
-
-// TestDiskmanagerModuleDefaultLogLevelIsInfo verifies that the diskmanager module
-// defaults to "info" log level, not "debug". The diskmanager runs frequently and
-// logs one DEBUG line per candidate clip per cycle, so a "debug" default causes
-// log files to balloon to 100+ MB/day with no user-visible control.
-func TestDiskmanagerModuleDefaultLogLevelIsInfo(t *testing.T) {
-	// Not parallel: reads/writes global viper defaults set by setDefaultConfig.
-	viper.Reset()
-	t.Cleanup(viper.Reset)
-	setDefaultConfig()
-
-	level := viper.GetString("logging.modules.diskmanager.level")
-	assert.Equal(t, "info", level,
-		"diskmanager module must default to info level; debug default floods the log file with per-clip entries")
 }

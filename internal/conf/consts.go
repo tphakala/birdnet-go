@@ -85,6 +85,10 @@ const (
 	DefaultRetentionMaxUsage            = "80%"
 	DefaultRetryBackoffMultiplier       = 2.0
 
+	// DefaultLogDeduplicationHealthCheckSeconds is the default log deduplication health check
+	// interval in seconds.
+	DefaultLogDeduplicationHealthCheckSeconds = 60
+
 	// The bat ultrasonic filter's STFT defaults. normalizeUltrasonicFilter resets an
 	// invalid or unwritten value to them on load.
 	DefaultUltrasonicFFTSize = 8192
