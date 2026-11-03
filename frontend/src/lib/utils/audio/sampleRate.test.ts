@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { coerceSupportedRate, DEFAULT_SAMPLE_RATE, type SampleRateOption } from './sampleRate';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
+import {
+  coerceSupportedRate,
+  DEFAULT_SAMPLE_RATE,
+  fetchDeviceCapabilities,
+  type SampleRateOption,
+} from './sampleRate';
 
 const opt = (rate: number): SampleRateOption => ({
   value: String(rate),
@@ -25,5 +31,26 @@ describe('coerceSupportedRate', () => {
 
   it('returns the default when the option list is empty', () => {
     expect(coerceSupportedRate([], 192000)).toBe(DEFAULT_SAMPLE_RATE);
+  });
+});
+
+describe('fetchDeviceCapabilities', () => {
+  afterEach(() => {
+    resetBasePath();
+    vi.unstubAllGlobals();
+  });
+
+  it('requests the capabilities under the reverse proxy prefix', async () => {
+    // BirdNET-Go served by a proxy at /birdnet, which does not rewrite response bodies.
+    setBasePath('/birdnet');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchDeviceCapabilities('hw:1,0');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/birdnet/api/v2/system/audio/devices/capabilities?deviceId=hw%3A1%2C0',
+      undefined
+    );
   });
 });
