@@ -57,7 +57,7 @@ func TestORTPinsAgreeAndMeetMinimum(t *testing.T) {
 func TestORTMinimumMatchesBindingAPIVersion(t *testing.T) {
 	t.Parallel()
 
-	out, err := exec.CommandContext(t.Context(), "go", "list", "-m", "-f", "{{.Dir}}", bindingModulePath).Output()
+	out, err := exec.CommandContext(t.Context(), "go", "list", "-f", "{{.Dir}}", bindingModulePath).Output()
 	require.NoError(t, err, "locate %s", bindingModulePath)
 	header := filepath.Join(strings.TrimSpace(string(out)), "onnxruntime_c_api.h")
 
