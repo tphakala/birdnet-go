@@ -130,7 +130,7 @@ func TestViperUnmarshalLoggingDefaults(t *testing.T) {
 	v.SetDefault("logging.file_output.compress", false)
 	v.SetDefault("logging.modules.imageprovider.enabled", true)
 	v.SetDefault("logging.modules.imageprovider.file_path", "logs/imageprovider.log")
-	v.SetDefault("logging.modules.imageprovider.level", "debug")
+	v.SetDefault("logging.modules.imageprovider.level", "info")
 	v.SetDefault("logging.module_levels.analysis", "warn")
 
 	var settings Settings
@@ -150,8 +150,8 @@ func TestViperUnmarshalLoggingDefaults(t *testing.T) {
 
 	require.NotNil(t, cfg.ModuleOutputs, "ModuleOutputs must be populated from logging.modules.* defaults")
 	require.Contains(t, cfg.ModuleOutputs, "imageprovider")
-	assert.Equal(t, "debug", cfg.ModuleOutputs["imageprovider"].Level,
-		"Module level from defaults should be 'debug'")
+	assert.Equal(t, "info", cfg.ModuleOutputs["imageprovider"].Level,
+		"Module level from defaults should be 'info'")
 	assert.Equal(t, "logs/imageprovider.log", cfg.ModuleOutputs["imageprovider"].FilePath)
 
 	require.NotNil(t, cfg.ModuleLevels, "ModuleLevels must be populated from logging.module_levels.* defaults")
