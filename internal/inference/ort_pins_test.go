@@ -52,7 +52,7 @@ func TestORTPinsAgreeAndMeetMinimum(t *testing.T) {
 }
 
 // TestORTMinimumMatchesBindingAPIVersion ties the minimum version gate to the C
-// API level the vendored binding requests: ONNX Runtime 1.N serves API N and
+// API level the onnxruntime_go binding requests: ONNX Runtime 1.N serves API N and
 // older, so minORTMinor must equal ORT_API_VERSION in the binding's header.
 func TestORTMinimumMatchesBindingAPIVersion(t *testing.T) {
 	t.Parallel()
