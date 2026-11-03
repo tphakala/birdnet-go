@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/events"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"go.uber.org/goleak"
 )
 
@@ -654,4 +656,40 @@ func TestDetectionNotificationConsumer_DisabledFiltering(t *testing.T) {
 	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, notifications, 2, "Same species should pass when cooldown is 0")
+}
+
+// The per-event receipt and the two skip lines of ProcessDetectionEvent are
+// Trace lines, so a Debug capture must not see them for an event that is
+// skipped either because the alert engine is active or because the species is
+// not new.
+func TestDetectionNotificationConsumer_SkippedEventLinesAreNotDebug(t *testing.T) {
+	// Not parallel: logtest.CaptureBufferAt swaps the process-global logger and
+	// the alert engine flag is process-global.
+	tests := []struct {
+		name        string
+		alertActive bool
+		isNew       bool
+		skipLine    string
+	}{
+		{name: "alert engine active", alertActive: true, isNew: true, skipLine: "skipping detection: alert engine is active"},
+		{name: "not a new species", alertActive: false, isNew: false, skipLine: "skipping detection: not a new species"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetAlertEngineActive(tt.alertActive)
+			t.Cleanup(func() { SetAlertEngineActive(false) })
+
+			buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
+			_, consumer, cleanup := setupTestServiceAndConsumer(t)
+			defer cleanup()
+
+			event, err := events.NewDetectionEvent("American Robin", "Turdus migratorius", 0.9, "backyard-camera", tt.isNew, 3)
+			require.NoError(t, err)
+			require.NoError(t, consumer.ProcessDetectionEvent(event))
+
+			assert.NotContains(t, buf.String(), "processing detection event")
+			assert.NotContains(t, buf.String(), tt.skipLine)
+		})
+	}
 }

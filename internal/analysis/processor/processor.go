@@ -3073,12 +3073,10 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 // logDetectionResults logs detection processing results using the LogDeduplicator
 // to prevent repetitive logging while maintaining observability.
 //
-// Strategy (BG-18):
-//   - INFO level: Only when filtered_detections_count > 0 (actual detections)
-//   - DEBUG level: Zero-detection cycles (for troubleshooting without log spam)
-//
-// This prevents ~40,000+ identical "filtered_detections_count:0" logs per day
-// while still allowing debug-mode visibility into the detection pipeline.
+// With deduplication enabled, only changes and periodic heartbeats are logged,
+// at DEBUG level. With deduplication disabled every analysis window is logged,
+// at TRACE level, so it stays out of debug logs; the raw and filtered sums per
+// reporting interval are in the "pipeline stats" INFO line.
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
 	p.logDedupMu.RLock()
 	dedup := p.logDedup
@@ -3088,18 +3086,24 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 	}
 
 	shouldLog, reason := dedup.ShouldLog(source, rawCount, filteredCount)
-
-	if shouldLog {
-		// Log all processing results at DEBUG level to avoid flooding console.
-		// Actual detections are logged at INFO when they become pending/confirmed
-		// detections (see "Created new pending detection" log message).
-		GetLogger().Debug("Detection processing results",
-			logger.String("source", p.getDisplayNameForSource(source)),
-			logger.Int("raw_results_count", rawCount),
-			logger.Int("filtered_detections_count", filteredCount),
-			logger.String("log_reason", reason),
-			logger.String("operation", "process_detections_summary"))
+	if !shouldLog {
+		return
 	}
+
+	// Actual detections are logged at INFO when they become pending/confirmed
+	// detections (see "Created new pending detection" log message).
+	fields := []logger.Field{
+		logger.String("source", p.getDisplayNameForSource(source)),
+		logger.Int("raw_results_count", rawCount),
+		logger.Int("filtered_detections_count", filteredCount),
+		logger.String("log_reason", reason),
+		logger.String("operation", "process_detections_summary"),
+	}
+	if reason == logReasonDedupDisabled {
+		GetLogger().Trace("Detection processing results", fields...)
+		return
+	}
+	GetLogger().Debug("Detection processing results", fields...)
 }
 
 // generateCorrelationID creates a unique, human-readable identifier for detection tracking
