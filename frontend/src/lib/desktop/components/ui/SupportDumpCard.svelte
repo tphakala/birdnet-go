@@ -1,5 +1,6 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { Check, Globe, ShieldCheck, Info, Download, XCircle, CircleCheck } from '@lucide/svelte';
   import { onMount } from 'svelte';
@@ -214,7 +215,7 @@
             'success',
             100
           );
-          const downloadUrl = data.download_url;
+          const downloadUrl = buildAppUrl(data.download_url);
           safeTimeout(() => {
             downloadFromUrl(downloadUrl);
           }, 500);
