@@ -325,9 +325,9 @@ func InitONNXRuntime(libraryPath string) (err error) {
 	return nil
 }
 
-// ortAPIBaseTooOldMarker is the text yalue/onnxruntime_go v1.36.0 returns when
+// ortAPIBaseTooOldMarker is the text yalue/onnxruntime_go v1.38.0 returns when
 // the loaded library cannot serve the C API level it requests: code 2 means
-// GetApi(29) returned NULL (setup_env.go:87, setup_env_windows.go:56).
+// GetApi(31) returned NULL (setup_env.go:87, setup_env_windows.go:56).
 const ortAPIBaseTooOldMarker = "Error setting ORT API base: 2"
 
 // describeORTInitError turns an InitORT failure into a user-facing error. The
