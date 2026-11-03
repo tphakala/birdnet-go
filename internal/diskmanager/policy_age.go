@@ -243,13 +243,6 @@ func processSingleAgeFile(file *FileInfo, retentionCutoffUnix int64, speciesTota
 	// Check eligibility
 	eligible, reason := isEligibleForAgeDeletion(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies)
 	if !eligible {
-		log := GetLogger()
-		if reason != ageReasonLocked && reason != ageReasonNotOldEnough {
-			log.Debug("Skipping file",
-				logger.String("policy", "age"),
-				logger.String("path", file.Path),
-				logger.String("reason", reason))
-		}
 		return false, reason, 0, nil
 	}
 
@@ -400,7 +393,7 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 		fileFormatted, fileAge := formatTimeForHumans(fileUnix)
 		cutoffFormatted, cutoffAge := formatTimeForHumans(retentionCutoffUnix)
 
-		log.Debug("Skipping file (not old enough)",
+		log.Trace("Skipping file (not old enough)",
 			logger.String("policy", "age"),
 			logger.String("path", file.Path),
 			logger.String("file_created", fileFormatted),
@@ -415,7 +408,7 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 	// If current count is at or below minimum, we can't delete more
 	if count, exists := speciesTotalCount[file.Species]; exists && count <= minClipsPerSpecies {
 		fileFormatted, fileAge := formatTimeForHumans(fileUnix)
-		log.Debug("Total clip count at minimum threshold",
+		log.Trace("Total clip count at minimum threshold",
 			logger.String("policy", "age"),
 			logger.String("species", file.Species),
 			logger.Int("min_threshold", minClipsPerSpecies),
@@ -427,7 +420,7 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 
 	// If all checks pass, the file is eligible
 	fileFormatted, fileAge := formatTimeForHumans(fileUnix)
-	log.Debug("File eligible for deletion",
+	log.Trace("File eligible for deletion",
 		logger.String("policy", "age"),
 		logger.String("path", file.Path),
 		logger.String("file_created", fileFormatted),
