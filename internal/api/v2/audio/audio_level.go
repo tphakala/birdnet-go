@@ -31,8 +31,8 @@ const (
 	// Buffer sizes
 	audioLevelChannelBuffer = 100 // Buffer size for internal processing
 
-	// Maximum connections per IP (allows multiple browser tabs)
-	audioLevelMaxConnectionsPerIP = 5
+	// Maximum connections per client (one IPv4 address or one IPv6 /64; allows multiple browser tabs)
+	audioLevelMaxConnectionsPerClient = 5
 
 	// Endpoints
 	audioLevelStreamEndpoint = "/api/v2/streams/audio-level"
@@ -53,7 +53,7 @@ type AudioLevelSSEData struct {
 
 // audioLevelManager manages audio level SSE connections and broadcasts
 type audioLevelManager struct {
-	// Active connections tracked per client IP (stores connection count as *int32)
+	// Active connections tracked per client key: IPv4 address or IPv6 /64 (stores connection count as *int32)
 	activeConnections sync.Map
 	// Mutex for connection count operations
 	connectionMu sync.Mutex
@@ -219,7 +219,7 @@ func cacheStreamAnonymName(sourceID, displayName string) {
 // RegisterAudioLevelRoutes registers audio level SSE endpoints
 func (c *Handler) RegisterAudioLevelRoutes(g *echo.Group) {
 	// Audio level SSE endpoint - public, no rate limiting
-	// The per-IP connection limit (audioLevelMaxConnectionsPerIP) still applies
+	// The per-client connection limit (audioLevelMaxConnectionsPerClient) still applies
 	// Authentication is checked within the handler to control data anonymization
 	g.GET("/streams/audio-level", c.StreamAudioLevel)
 
@@ -236,29 +236,31 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Audio level stream is not available", http.StatusServiceUnavailable)
 	}
 
-	// Use RemoteAddr for connection tracking to prevent IP spoofing
-	// via proxy headers for rate limiting purposes
-	clientIP := c.extractRemoteAddr(ctx)
+	// Key the cap on the connection peer, never on a forwarded header a client
+	// can set. The key is the IPv4 address or the IPv6 /64, so a client cannot
+	// multiply its budget by rotating addresses inside its prefix. The key
+	// extractor never returns an error.
+	clientKey, _ := apicore.PeerRateLimitKey(ctx)
 
-	// Check connection count per IP (allow multiple browser tabs up to limit)
+	// Check connection count per client (allow multiple browser tabs up to limit)
 	audioLevelMgr.connectionMu.Lock()
-	countPtr, loaded := audioLevelMgr.activeConnections.Load(clientIP)
+	countPtr, loaded := audioLevelMgr.activeConnections.Load(clientKey)
 	var count int32
 	if loaded {
 		count = atomic.LoadInt32(countPtr.(*int32))
 	}
-	if count >= audioLevelMaxConnectionsPerIP {
+	if count >= audioLevelMaxConnectionsPerClient {
 		audioLevelMgr.connectionMu.Unlock()
-		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected audio level SSE connection - max per IP reached",
-			logger.String("reason", "max_connections_per_ip"),
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected audio level SSE connection - max per client reached",
+			logger.String("reason", "max_connections_per_client"),
 			logger.Int("current_count", int(count)),
-			logger.Int("max_allowed", audioLevelMaxConnectionsPerIP))
-		return c.HandleError(ctx, nil, fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerIP), http.StatusTooManyRequests)
+			logger.Int("max_allowed", audioLevelMaxConnectionsPerClient))
+		return c.HandleError(ctx, nil, fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerClient), http.StatusTooManyRequests)
 	}
 	// Increment connection count
 	if !loaded {
 		var newCount int32 = 1
-		audioLevelMgr.activeConnections.Store(clientIP, &newCount)
+		audioLevelMgr.activeConnections.Store(clientKey, &newCount)
 	} else {
 		atomic.AddInt32(countPtr.(*int32), 1)
 	}
@@ -271,12 +273,12 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 	// Cleanup connection on exit
 	defer func() {
 		unsubscribeFromAudioLevels(subscriberChan)
-		// Decrement connection count for this IP
+		// Decrement connection count for this client
 		audioLevelMgr.connectionMu.Lock()
-		if countPtr, ok := audioLevelMgr.activeConnections.Load(clientIP); ok {
+		if countPtr, ok := audioLevelMgr.activeConnections.Load(clientKey); ok {
 			newCount := atomic.AddInt32(countPtr.(*int32), -1)
 			if newCount <= 0 {
-				audioLevelMgr.activeConnections.Delete(clientIP)
+				audioLevelMgr.activeConnections.Delete(clientKey)
 			}
 		}
 		audioLevelMgr.connectionMu.Unlock()
@@ -641,8 +643,8 @@ func (c *Handler) checkSourceActivity(
 }
 
 // extractRemoteAddr extracts the IP address from RemoteAddr, stripping port if present.
-// This is used for rate limiting and duplicate connection detection where we want
-// the actual connection address rather than proxy-provided headers which can be spoofed.
+// This is used to build HLS client identifiers, where we want the actual
+// connection address rather than proxy-provided headers which can be spoofed.
 func (c *Handler) extractRemoteAddr(ctx echo.Context) string {
 	remoteAddr := ctx.Request().RemoteAddr
 	// RemoteAddr is typically "IP:port", extract just the IP
