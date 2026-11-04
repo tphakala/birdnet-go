@@ -51,6 +51,8 @@ const (
 	// rateTestClientIP and rateTestOtherIP are documentation-range addresses.
 	rateTestClientIP = "192.0.2.10"
 	rateTestOtherIP  = "192.0.2.20"
+	// rateTestStreamPath is the registered detection stream route.
+	rateTestStreamPath = "/api/v2/detections/stream"
 	// rateTestProxyIP is a private address a reverse proxy connects from.
 	// rateTestProxiedClient is the public address that proxy appends to
 	// X-Forwarded-For, and rateTestForgedFormat formats the documentation-range
@@ -225,7 +227,7 @@ func TestStreamRoutesRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
 			port++
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/stream", http.NoBody).WithContext(ctx)
+			req := httptest.NewRequest(http.MethodGet, rateTestStreamPath, http.NoBody).WithContext(ctx)
 			req.Header.Set(echo.HeaderXForwardedFor, rateTestProxiedClient)
 			if forged != "" {
 				req.Header.Set(proxytrust.HeaderCFConnectingIP, forged)
