@@ -1806,7 +1806,7 @@
       "sectionHardware": "Hårdvara",
       "sectionBackends": "Inferens-backends",
       "sectionModels": "Modeller",
-      "noModels": "No models are currently loaded",
+      "noModels": "Inga modeller är för närvarande inlästa",
       "architecture": "Arkitektur",
       "cpu": "CPU",
       "environment": "Miljö",
@@ -2223,7 +2223,7 @@
           "title": "När arterna sjunger",
           "description": "Aktivitet under dygnet för de arter som registrerats flest gånger, med uppdelning mellan fåglar som sjunger i gryningen, fåglar som är aktiva hela dagen och nattaktiva fåglar",
           "noData": "Ingen aktivitetsdata tillgänglig för arter",
-          "noDataHint": "Select a wider date range to compare species activity patterns",
+          "noDataHint": "Välj ett bredare datumintervall för att jämföra arters aktivitetsmönster",
           "ariaLabel": "Aktivitetsdiagram: aktivitetsfördelning per timme och art",
           "axisTime": "Tid på dygnet",
           "note": "Visar de {count} mest upptäckta arterna",
@@ -3850,7 +3850,7 @@
         "normalizationHelp": "Justera automatiskt ljudnivåer till EBU R128 sändningsstandard för konsekvent uppspelningsvolym i alla klipp.",
         "normalizationDisabled": "Ljudnormalisering är inaktiverad",
         "targetLUFSLabel": "Målhöghet (LUFS)",
-        "targetLUFSHelp": "Integrerad höghetsm mål i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128 sändningsstandard. Intervall: -40 till -10 LUFS.",
+        "targetLUFSHelp": "Målvärde för integrerad ljudstyrka i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128-standarden för sändningar. Område: -40 till -10 LUFS.",
         "truePeakLabel": "Sann toppnivå (dBTP)",
         "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
         "normalizationNote": "EBU R128-standard",
@@ -5848,7 +5848,7 @@
     },
     "birdnetv3": {
       "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "description": "Ange ett särskilt konfidenströskelvärde för detekteringar i BirdNET v3.0 oberoende av det huvudsakliga tröskelvärdet för BirdNET."
     }
   },
   "restart": {
