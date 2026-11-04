@@ -32,7 +32,7 @@ const (
 	audioLevelChannelBuffer = 100 // Buffer size for internal processing
 
 	// Maximum connections per client (one IPv4 address or one IPv6 /64; allows multiple browser tabs)
-	audioLevelMaxConnectionsPerIP = 5
+	audioLevelMaxConnectionsPerClient = 5
 
 	// Endpoints
 	audioLevelStreamEndpoint = "/api/v2/streams/audio-level"
@@ -219,7 +219,7 @@ func cacheStreamAnonymName(sourceID, displayName string) {
 // RegisterAudioLevelRoutes registers audio level SSE endpoints
 func (c *Handler) RegisterAudioLevelRoutes(g *echo.Group) {
 	// Audio level SSE endpoint - public, no rate limiting
-	// The per-client connection limit (audioLevelMaxConnectionsPerIP) still applies
+	// The per-client connection limit (audioLevelMaxConnectionsPerClient) still applies
 	// Authentication is checked within the handler to control data anonymization
 	g.GET("/streams/audio-level", c.StreamAudioLevel)
 
@@ -249,13 +249,13 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 	if loaded {
 		count = atomic.LoadInt32(countPtr.(*int32))
 	}
-	if count >= audioLevelMaxConnectionsPerIP {
+	if count >= audioLevelMaxConnectionsPerClient {
 		audioLevelMgr.connectionMu.Unlock()
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected audio level SSE connection - max per client reached",
-			logger.String("reason", "max_connections_per_ip"),
+			logger.String("reason", "max_connections_per_client"),
 			logger.Int("current_count", int(count)),
-			logger.Int("max_allowed", audioLevelMaxConnectionsPerIP))
-		return c.HandleError(ctx, nil, fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerIP), http.StatusTooManyRequests)
+			logger.Int("max_allowed", audioLevelMaxConnectionsPerClient))
+		return c.HandleError(ctx, nil, fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerClient), http.StatusTooManyRequests)
 	}
 	// Increment connection count
 	if !loaded {
