@@ -19,6 +19,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 const (
@@ -64,7 +66,7 @@ const (
 )
 
 // allowN calls Allow n times and returns how many calls were allowed.
-func allowN(t *testing.T, store *middleware.RateLimiterMemoryStore, identifier string, n int) int {
+func allowN(t *testing.T, store middleware.RateLimiterStore, identifier string, n int) int {
 	t.Helper()
 	allowed := 0
 	for range n {
@@ -93,14 +95,14 @@ func TestLoginRateLimiterStoreConfig(t *testing.T) {
 
 // TestLoginRateLimiterIdleVisitorExpiry verifies that an idle visitor is kept
 // for the time it has been idle. One token short of a full refill, another
-// visitor's request reaches Echo's cleanup check; an expiry shorter than that
+// visitor's request reaches the store's cleanup check; an expiry shorter than that
 // idle time would let the request drop the idle visitor and hand it a full burst
 // instead of the tokens it has earned. TestLoginRateLimiterStoreConfig pins the
 // full refill time as the lower bound of the expiry.
 func TestLoginRateLimiterIdleVisitorExpiry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := loginRateLimiterStoreConfig()
-		store := middleware.NewRateLimiterMemoryStoreWithConfig(cfg)
+		store := apicore.NewRateLimiterStore(cfg)
 
 		require.Equal(t, loginRateTestBurst, allowN(t, store, loginRateTestStoreIdentifier, loginRateTestBurst+loginRateTestOverBurst))
 

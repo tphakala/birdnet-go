@@ -235,7 +235,7 @@ func (c *Handler) RegisterMetricsHistoryRoutes(g *echo.Group) {
 	// Rate limiter for metrics SSE connections: 10 per minute per client (per /64
 	// for IPv6) with a burst of 10 (see metricsStreamRateLimiterStoreConfig)
 	rateLimiterConfig := middleware.RateLimiterConfig{
-		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(metricsStreamRateLimiterStoreConfig()),
+		Store:               apicore.NewRateLimiterStore(metricsStreamRateLimiterStoreConfig()),
 		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{

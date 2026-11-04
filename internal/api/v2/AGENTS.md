@@ -158,7 +158,9 @@ original per-route registration order across the split.
   from the parent server via the `WithAuthMiddleware` functional option.
 - Rate-limited streams: `middleware.RateLimiterWithConfig(config)` with
   `IdentifierExtractor: apicore.RateLimitKey`, so a client is one bucket (per /64
-  for IPv6) instead of one bucket per address.
+  for IPv6) instead of one bucket per address. Build the store with
+  `apicore.NewRateLimiterStore`, not Echo's memory store: Echo's has no entry cap,
+  so a client that mints keys grows it without bound.
 - PrivateMode: all endpoints are gated by `apicore.PrivateModeAuth` group
   middleware; the bootstrap/login/live-audio carve-outs are listed in the facade's
   `isPrivateModeExempt` allow-list (keyed on method + path, fail-closed).

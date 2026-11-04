@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -68,7 +69,7 @@ const (
 )
 
 // metricsAllowN calls Allow n times and returns how many calls were allowed.
-func metricsAllowN(t *testing.T, store *middleware.RateLimiterMemoryStore, identifier string, n int) int {
+func metricsAllowN(t *testing.T, store middleware.RateLimiterStore, identifier string, n int) int {
 	t.Helper()
 	allowed := 0
 	for range n {
@@ -99,7 +100,7 @@ func TestMetricsStreamRateLimiterStoreConfig(t *testing.T) {
 // config through a burst and the return of single tokens.
 func TestMetricsStreamRateLimiterStoreRefill(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		store := middleware.NewRateLimiterMemoryStoreWithConfig(metricsStreamRateLimiterStoreConfig())
+		store := apicore.NewRateLimiterStore(metricsStreamRateLimiterStoreConfig())
 
 		assert.Equal(t, metricsRateTestBurst,
 			metricsAllowN(t, store, metricsRateTestVisitor, metricsRateTestBurst+metricsRateTestOverBurst),
@@ -117,13 +118,13 @@ func TestMetricsStreamRateLimiterStoreRefill(t *testing.T) {
 // TestMetricsStreamRateLimiterIdleVisitorExpiry verifies that an idle visitor is
 // kept until its bucket has refilled, and that a forgotten visitor starts with a
 // full burst and no more. One token short of a full refill, another visitor's
-// request reaches Echo's cleanup check; an expiry shorter than the refill would
+// request reaches the store's cleanup check; an expiry shorter than the refill would
 // let that request drop the idle visitor and hand it a full burst instead of the
 // tokens it has earned.
 func TestMetricsStreamRateLimiterIdleVisitorExpiry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := metricsStreamRateLimiterStoreConfig()
-		store := middleware.NewRateLimiterMemoryStoreWithConfig(cfg)
+		store := apicore.NewRateLimiterStore(cfg)
 
 		require.Equal(t, metricsRateTestBurst,
 			metricsAllowN(t, store, metricsRateTestVisitor, metricsRateTestBurst+metricsRateTestOverBurst))

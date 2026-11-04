@@ -266,7 +266,7 @@ func elevatePeerRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig
 func (c *Handler) elevateLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor) echo.MiddlewareFunc {
 	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Skipper:             middleware.DefaultSkipper,
-		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(storeConfig),
+		Store:               apicore.NewRateLimiterStore(storeConfig),
 		IdentifierExtractor: identifier,
 		ErrorHandler: func(ctx echo.Context, err error) error {
 			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
