@@ -469,7 +469,7 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 
 - Real-time audio level data for UI audio indicators (0-100 with clipping detection)
 - Automatic source anonymization for unauthenticated clients
-- Connection limiting: up to 5 concurrent connections per client IP (allows multiple browser tabs)
+- Connection limiting: up to 5 concurrent connections per client (one IPv4 address or one IPv6 /64; allows multiple browser tabs)
 - Maximum connection duration: 30 minutes
 - Heartbeat interval: 10 seconds
 
