@@ -25,11 +25,14 @@ func TestTunnelDetectionMiddleware(t *testing.T) {
 		remoteAddr   string
 		header       string
 		value        string
+		extraHeader  string
+		extraValue   string
 		wantTunneled bool
 		wantProvider string
 	}{
 		{name: "trusted peer with CF-Connecting-IP", remoteAddr: "127.0.0.1:40000", header: proxytrust.HeaderCFConnectingIP, value: "198.51.100.9", wantTunneled: true, wantProvider: "cloudflare"},
 		{name: "trusted peer with XFF", remoteAddr: "192.168.1.10:40000", header: echo.HeaderXForwardedFor, value: "198.51.100.9", wantTunneled: true, wantProvider: "generic"},
+		{name: "trusted peer with disagreeing CF-Connecting-IP and XFF", remoteAddr: "127.0.0.1:40000", header: proxytrust.HeaderCFConnectingIP, value: "203.0.113.99", extraHeader: echo.HeaderXForwardedFor, extraValue: "198.51.100.9", wantTunneled: false},
 		{name: "untrusted peer with XFF", remoteAddr: testPublicPeerAddr, header: echo.HeaderXForwardedFor, value: "198.51.100.9", wantTunneled: false},
 		{name: "direct client", remoteAddr: "192.168.1.10:40000", wantTunneled: false},
 	}
@@ -38,11 +41,14 @@ func TestTunnelDetectionMiddleware(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := echo.New()
-			e.IPExtractor = newTrustedProxyIPExtractor(nil)
+			e.IPExtractor = attributionExtractorFor(nil)
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.RemoteAddr = tt.remoteAddr
 			if tt.header != "" {
 				req.Header.Set(tt.header, tt.value)
+			}
+			if tt.extraHeader != "" {
+				req.Header.Set(tt.extraHeader, tt.extraValue)
 			}
 			ctx := e.NewContext(req, httptest.NewRecorder())
 

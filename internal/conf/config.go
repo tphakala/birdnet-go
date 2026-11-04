@@ -1686,7 +1686,12 @@ type Security struct {
 	// under its own address. An unlisted proxy on a public or 100.64.0.0/10
 	// (CGNAT, Tailscale IPv4) address is treated as the client and its headers
 	// are ignored, so list it.
-	// Hot-reloadable.
+	// The client address that logs and the tunnel label record comes from the same
+	// resolution as the rate limiters. Forwarded headers that disagree, or that a
+	// listed proxy cannot verify, are not recorded: the peer's own address is
+	// logged instead. A client that an unlisted loopback, link-local or private
+	// host names consistently is recorded as named, so such a host can choose the
+	// address that appears in logs. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 
