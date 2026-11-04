@@ -419,7 +419,7 @@
         "updatingIntervals": "Uppdaterar detektionsintervall...",
         "reconfiguringMqtt": "Uppdaterar MQTT-anslutning...",
         "reconfiguringBirdweather": "Uppdaterar BirdWeather-integration...",
-        "reconfiguringEbird": "Updating eBird integration...",
+        "reconfiguringEbird": "Updaterar eBird-integration...",
         "reconfiguringStreams": "Uppdaterar ljudströmmar...",
         "reconfiguringTelemetry": "Uppdaterar telemetriinställningar...",
         "reconfiguringPushNotifications": "Omkonfigurerar push-aviseringsleverantörer...",
@@ -5843,11 +5843,11 @@
       "birdOnlyNote": "Dynamiskt tröskelvärde gäller endast fågelklassificerare."
     },
     "perch": {
-      "title": "Perch v2 Detection",
+      "title": "Perch v2-detektering",
       "description": "Ange ett särskilt konfidenströskelvärde för detekteringar i Google Perch v2, oberoende av tröskelvärdet för BirdNET.."
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
+      "title": "BirdNET v3.0-detektering",
       "description": "Ange ett särskilt konfidenströskelvärde för detekteringar i BirdNET v3.0 oberoende av det huvudsakliga tröskelvärdet för BirdNET."
     }
   },
