@@ -129,7 +129,7 @@ func (s *rateLimiterStore) Allow(identifier string) (bool, error) {
 	s.mu.Unlock()
 
 	if warn {
-		GetLogger().Warn("Rate limiter store is at capacity, charging new clients to a shared overflow bucket",
+		GetLogger().Warn("Rate limiter store or one of its namespaces is full, charging new clients to a shared overflow bucket",
 			logger.Int("store_cap", s.storeCap), logger.Int("namespace_cap", s.namespaceCap))
 	}
 	return allow, nil
