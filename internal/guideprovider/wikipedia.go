@@ -145,11 +145,17 @@ type wikiQueryResponse struct {
 	} `json:"error"`
 	Query struct {
 		Pages map[string]struct {
-			PageID  int       `json:"pageid"`
-			Title   string    `json:"title"`
-			Extract string    `json:"extract"`
-			FullURL string    `json:"fullurl"`
-			Missing *struct{} `json:"missing"`
+			PageID  int    `json:"pageid"`
+			Title   string `json:"title"`
+			Extract string `json:"extract"`
+			FullURL string `json:"fullurl"`
+			// MediaWiki marks an absent page by the presence of this key. With the
+			// default formatversion=1 that buildURL requests, its value is the empty
+			// string, which fails to decode into a struct type; a decode failure is
+			// classified transient, so a missing page would never be cached as a
+			// negative entry and every request would refetch it. Only presence is
+			// meaningful, so RawMessage accepts whatever value is sent.
+			Missing json.RawMessage `json:"missing"`
 		} `json:"pages"`
 	} `json:"query"`
 }
@@ -261,7 +267,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 	}
 
 	for _, page := range parsed.Query.Pages {
-		if page.Missing != nil || page.PageID <= 0 || strings.TrimSpace(page.Extract) == "" {
+		if len(page.Missing) > 0 || page.PageID <= 0 || strings.TrimSpace(page.Extract) == "" {
 			return nil, ErrGuideNotFound
 		}
 		return &SpeciesGuide{

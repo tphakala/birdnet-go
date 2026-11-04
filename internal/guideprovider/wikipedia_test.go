@@ -267,3 +267,21 @@ func TestConvertWikiSections(t *testing.T) {
 	parts := strings.Split(out, "## ")
 	assert.GreaterOrEqual(t, len(parts), 3)
 }
+
+// TestWikipediaProvider_MissingPageLegacyFormat feeds the shape MediaWiki actually
+// returns for the request buildURL makes. Without formatversion=2 the API answers a
+// missing page with "missing": "" — an empty string, not an empty object — and a
+// response that fails to decode is classified transient, so the species is never
+// cached as a negative entry and every later request refetches it.
+func TestWikipediaProvider_MissingPageLegacyFormat(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"batchcomplete":"","query":{"pages":{"-1":{"ns":0,"title":"X","missing":""}}}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	p := newWikipediaTestProvider(t, srv)
+	_, err := p.Fetch(t.Context(), "Nope", FetchOptions{Locale: "en"})
+	require.ErrorIs(t, err, ErrGuideNotFound, "a missing page is a definitive not-found")
+	assert.False(t, IsTransient(err), "a missing page must not be transient: a transient error is never cached, so every request would refetch it")
+}
