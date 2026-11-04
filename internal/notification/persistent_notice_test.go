@@ -2,7 +2,9 @@ package notification
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -142,6 +144,38 @@ func TestPersistentNotice_BoundedRetry(t *testing.T) {
 	assert.Equal(t, persistentNoticeMaxRetries, retries, "retries are bounded")
 	mu.Unlock()
 	assert.Empty(t, p.ID())
+}
+
+// TestPersistentNotice_NonPositiveRetryDelayKeepsDefault pins that a zero or
+// negative retry delay (the zero value, or SetRetryDelay restoring it) waits the
+// default base delay: the retry stays silent just before it and fires at it.
+func TestPersistentNotice_NonPositiveRetryDelayKeepsDefault(t *testing.T) {
+	t.Parallel()
+	for name, delay := range map[string]time.Duration{
+		"zero":     0,
+		"negative": -time.Second,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) { //nolint:thelper // synctest callback, not a test helper
+				svc := &fakeNoticeService{createErr: errors.NewStd("rate limit exceeded")}
+				p := &PersistentNotice{}
+				p.SetRetryDelay(delay)
+				var fired atomic.Bool
+				p.SetRetry(func() { fired.Store(true) })
+
+				require.Error(t, p.Reconcile(svc, want("a")))
+
+				time.Sleep(persistentNoticeRetryBaseDelay - time.Nanosecond)
+				synctest.Wait()
+				assert.False(t, fired.Load(), "the retry must not fire before the default base delay")
+				time.Sleep(time.Nanosecond)
+				synctest.Wait()
+				assert.True(t, fired.Load(), "the retry must fire at the default base delay")
+				p.Stop()
+			})
+		})
+	}
 }
 
 func TestPersistentNotice_RetryRaisesOnceServiceRecovers(t *testing.T) {

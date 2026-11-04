@@ -89,6 +89,16 @@ func (p *PersistentNotice) SetRetry(fn func()) {
 	p.retry = fn
 }
 
+// SetRetryDelay sets the base delay before the first retry; later retries
+// double it. A zero or negative d restores the default of one minute. Production
+// code keeps the default; it exists so tests outside this package can shorten
+// the wait.
+func (p *PersistentNotice) SetRetryDelay(d time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.retryDelay = d
+}
+
 // Reconcile computes the desired signature and applies it. compute runs under
 // the latch lock, so concurrent reconciles cannot act on a condition that
 // disagrees with the latch; it returns the signature ("" when no notice is due)

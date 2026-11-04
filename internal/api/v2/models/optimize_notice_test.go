@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -30,11 +31,18 @@ type fakeNotices struct {
 	mu      sync.Mutex
 	created []*notification.Notification
 	deleted []string
+
+	// createErr, when set, makes CreateWithMetadata fail without recording the
+	// notice, so the latch treats the create as failed.
+	createErr error
 }
 
 func (f *fakeNotices) CreateWithMetadata(n *notification.Notification) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.createErr != nil {
+		return f.createErr
+	}
 	f.created = append(f.created, n)
 	return nil
 }
@@ -467,6 +475,38 @@ func TestScheduleOptimizeNoticeSync_DebouncesAndStops(t *testing.T) {
 	assert.False(t, pending.Stop(), "StopOptimizeNoticeSync must cancel the pending evaluation")
 	h.ScheduleOptimizeNoticeSync()
 	assert.Nil(t, pendingOptimizeTimer(h), "no schedule is armed after StopOptimizeNoticeSync")
+}
+
+// optimizeRetryTestDelay is the latch retry delay the retry wiring test sets, short
+// enough that the retry callback fires well inside the test's patience window.
+const optimizeRetryTestDelay = time.Millisecond
+
+// TestSyncOptimizeNotice_FailedCreateRearmsEvaluation verifies the latch is wired
+// to ScheduleOptimizeNoticeSync: a failed create arms the latch retry, and the
+// retry callback re-arms the debounced evaluation. The debounce timer is
+// observed rather than waited out, for the reason given on
+// TestScheduleOptimizeNoticeSync_DebouncesAndStops.
+func TestSyncOptimizeNotice_FailedCreateRearmsEvaluation(t *testing.T) {
+	profile := aarch64LowRAMONNXProfile()
+	h, notices := newOptimizeTestHandler(t, &profile)
+	t.Cleanup(h.StopOptimizeNoticeSync)
+	notices.createErr = errors.NewStd("create failed")
+	h.optimize.latch.SetRetryDelay(optimizeRetryTestDelay)
+
+	// Start arms the startup evaluation; stop it so any timer seen afterwards
+	// was armed by the latch retry.
+	h.StartOptimizeNoticeSync()
+	startup := pendingOptimizeTimer(h)
+	require.NotNil(t, startup)
+	require.True(t, startup.Stop(), "the startup evaluation must still be pending")
+
+	h.syncOptimizeNotice()
+
+	assert.Eventually(t, func() bool {
+		return pendingOptimizeTimer(h) != startup
+	}, time.Second, time.Millisecond, "a failed create must re-arm the debounced evaluation through the latch retry")
+	created, _ := notices.counts()
+	assert.Zero(t, created, "the failing service records no notice")
 }
 
 // TestSyncOptimizeNotice_ServiceSelection pins which notification service a sync
