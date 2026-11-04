@@ -166,6 +166,67 @@ describe('settingsCoercion realtime rtsp streams', () => {
   });
 });
 
+describe('settingsCoercion species guide show flags', () => {
+  // An absent FIELD must stay absent, for the same reason an absent section does
+  // (see the comment below): coerceSettings runs over formData on the way OUT, so
+  // materializing a flag the caller never supplied turns a partial update into a
+  // full overwrite. A PATCH carrying only `enabled` used to rewrite showNotes back
+  // to true for a user who had deliberately turned it off, and reset warmTopN to 50.
+  //
+  // Consumers apply the backend's *bool "unset means on" semantics themselves when
+  // reading (toSpeciesGuideUIConfig), so nothing depends on them being filled here.
+  it('leaves an absent showTaxonomy flag absent rather than synthesizing a default', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { speciesGuide: { enabled: true } },
+    }) as { dashboard: { speciesGuide: Record<string, unknown> } };
+
+    expect(result.dashboard.speciesGuide).not.toHaveProperty('showTaxonomy');
+    expect(result.dashboard.speciesGuide.enabled).toBe(true);
+  });
+
+  it('does not resurrect other flags when only one field is supplied', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { speciesGuide: { enableWikipedia: true } },
+    }) as { dashboard: { speciesGuide: Record<string, unknown> } };
+
+    expect(result.dashboard.speciesGuide).toEqual({ enableWikipedia: true });
+  });
+
+  it('preserves an explicit showTaxonomy opt-out', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { speciesGuide: { enabled: true, showTaxonomy: false } },
+    }) as { dashboard: { speciesGuide: Record<string, unknown> } };
+
+    expect(result.dashboard.speciesGuide.showTaxonomy).toBe(false);
+  });
+
+  // An absent speciesGuide key must stay absent — do NOT materialize defaults here.
+  //
+  // coerceSettings also runs over formData on the way OUT (settingsActions.saveSettings),
+  // so synthesizing a section the caller never supplied would push client-side defaults
+  // into the save payload and overwrite whatever the backend actually holds. That is why
+  // every sibling section (audio, mqtt, species, rtsp, dashboard, falsePositiveFilter)
+  // is guarded by the same hasOwnProperty check.
+  //
+  // Materializing defaults is also unnecessary: SpeciesGuideConfig is a non-pointer,
+  // non-omitempty Go field and setDefaultConfig seeds all nine viper keys, so the
+  // settings API always emits speciesGuide even for a config.yaml predating the feature.
+  // Consumers additionally default it themselves (`?? false` / `?? true`).
+  it('leaves an absent speciesGuide absent rather than synthesizing defaults', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { locale: 'en' },
+    }) as { dashboard: Record<string, unknown> };
+
+    expect('speciesGuide' in result.dashboard).toBe(false);
+  });
+
+  it('leaves an absent dashboard absent', () => {
+    const result = coerceSettings('realtime', { audio: {} }) as Record<string, unknown>;
+
+    expect('dashboard' in result).toBe(false);
+  });
+});
+
 describe('settingsCoercion realtime privacyFilter and VAD', () => {
   it('coerces privacyFilter with default vad settings when vad is absent', () => {
     const result = coerceSettings('realtime', {

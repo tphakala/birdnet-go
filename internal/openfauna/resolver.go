@@ -44,9 +44,10 @@ func mapLocale(bngLocale string) string {
 		return localeFallback
 	}
 
-	// mapLocale runs only on Rebuild (rare), so a few linear scans of the small,
-	// sorted locale slice are cheaper than building a throwaway set.
-	available := Locales()
+	// A few linear scans of the small, sorted locale slice are cheaper than building
+	// a throwaway set. localesShared, not Locales(): this runs on every
+	// LookupCommonName (memo hits included), and nothing here mutates the slice.
+	available := localesShared()
 
 	// 1. Exact match after normalizing the separator (en-uk -> en_uk).
 	cand := strings.ReplaceAll(in, "-", "_")
