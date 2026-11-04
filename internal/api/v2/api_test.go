@@ -4,6 +4,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // healthResponse mirrors the fields HealthCheck emits. CPUUsage is a pointer so
@@ -46,7 +48,12 @@ func TestHealthCheck(t *testing.T) {
 		// leakHost is the sort of host and port a driver error carries; it must
 		// never reach the unauthenticated response body.
 		leakHost = "db.internal.example:3306"
-		leakErr  = "dial tcp " + leakHost + ": connect: connection refused"
+		// leakPath is a file path, which privacy.ScrubMessage redacts; it must
+		// not reach the log either.
+		leakPath = "/home/birder/birdnet.db"
+		leakErr  = "open " + leakPath + ": dial tcp " + leakHost + ": connect: connection refused"
+		// probeFailedLog is the Warn message logged when the database probe fails.
+		probeFailedLog = "Health check database probe failed"
 	)
 
 	tests := []struct {
@@ -56,6 +63,7 @@ func TestHealthCheck(t *testing.T) {
 		wantEnvironment string
 		wantDBStatus    string
 		forbiddenText   string
+		wantProbeLog    bool
 	}{
 		{
 			name: "database connected",
@@ -73,6 +81,7 @@ func TestHealthCheck(t *testing.T) {
 			wantEnvironment: "production",
 			wantDBStatus:    "disconnected",
 			forbiddenText:   leakHost,
+			wantProbeLog:    true,
 		},
 		{
 			name: "database disconnected with debug enabled",
@@ -83,6 +92,7 @@ func TestHealthCheck(t *testing.T) {
 			wantEnvironment: "development",
 			wantDBStatus:    "disconnected",
 			forbiddenText:   leakHost,
+			wantProbeLog:    true,
 		},
 		{
 			name: "datastore disabled",
@@ -98,6 +108,7 @@ func TestHealthCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e, mockDS, controller := setupTestEnvironment(t)
 			tt.setup(controller, mockDS)
+			logBuf := logtest.CaptureBufferAt(t, slog.LevelWarn)
 
 			settings := controller.Settings.Load()
 			settings.Version = testVersion
@@ -132,6 +143,15 @@ func TestHealthCheck(t *testing.T) {
 			assert.NotContains(t, raw, "database_error")
 			if tt.forbiddenText != "" {
 				assert.NotContains(t, rec.Body.String(), tt.forbiddenText)
+			}
+
+			// A failed probe is logged server side with the error scrubbed.
+			assert.NotContains(t, rec.Body.String(), leakPath)
+			if tt.wantProbeLog {
+				assert.Contains(t, logBuf.String(), probeFailedLog)
+				assert.NotContains(t, logBuf.String(), leakPath)
+			} else {
+				assert.NotContains(t, logBuf.String(), probeFailedLog)
 			}
 			_, err := time.Parse(time.RFC3339, resp.Timestamp)
 			require.NoError(t, err, "timestamp should be RFC3339")
