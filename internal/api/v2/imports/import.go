@@ -220,6 +220,65 @@ func isContained(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// Elevation endpoint rate limit: POST /import/elevate feeds a submitted sudo
+// password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
+// (clearing the timestamp cache), so without an app-level limit an authenticated
+// LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
+// it to a small burst per client with slow refill, and to a multiple of that per
+// connection peer; legitimate use needs only a couple of attempts.
+const (
+	elevateRateLimitBurst  = 10
+	elevateRateLimitWindow = 5 * time.Minute
+)
+
+// elevatePeerRateLimitMultiplier is how many clients' elevation budgets the
+// connection peer as a whole may spend. A forwarded client address is only as
+// trustworthy as the peer that sends it, so the peer's own budget bounds the
+// attempts a caller can make by naming a new client in every request. Ten leaves
+// a household behind one proxy each its own attempts. The budget is shared by
+// every client behind the peer, so once it is spent the peer refuses all of them
+// until it refills.
+const elevatePeerRateLimitMultiplier = 10
+
+// elevateRateLimiterStoreConfig returns the per-client limiter settings for the
+// elevation endpoint.
+func elevateRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	return middleware.RateLimiterMemoryStoreConfig{
+		Rate:      rate.Limit(float64(elevateRateLimitBurst) / elevateRateLimitWindow.Seconds()),
+		Burst:     elevateRateLimitBurst,
+		ExpiresIn: elevateRateLimitWindow,
+	}
+}
+
+// elevatePeerRateLimiterStoreConfig returns the limiter settings for the
+// elevation endpoint keyed on the connection peer: the per-client attempts and
+// burst multiplied by elevatePeerRateLimitMultiplier, over the same window.
+func elevatePeerRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	cfg := elevateRateLimiterStoreConfig()
+	cfg.Rate *= elevatePeerRateLimitMultiplier
+	cfg.Burst *= elevatePeerRateLimitMultiplier
+	return cfg
+}
+
+// elevateLimiter returns the rate limiting middleware for the elevation route,
+// with one bucket per identifier. A refused attempt is answered and logged the
+// same way whichever limiter refuses it.
+func (c *Handler) elevateLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor) echo.MiddlewareFunc {
+	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper:             middleware.DefaultSkipper,
+		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(storeConfig),
+		IdentifierExtractor: identifier,
+		ErrorHandler: func(ctx echo.Context, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+		DenyHandler: func(ctx echo.Context, _ string, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation attempt denied by rate limit", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+	})
+}
+
 // RegisterImportRoutes registers all import-related API routes on the supplied
 // v2 group.
 //
@@ -230,17 +289,6 @@ func isContained(root, target string) bool {
 // in unit tests or a misconfiguration; in that case install a middleware that
 // denies access with 401 rather than registering the routes unprotected (Echo's
 // applyMiddleware would also panic on a literal nil entry).
-// Elevation endpoint rate limit: POST /import/elevate feeds a submitted sudo
-// password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
-// (clearing the timestamp cache), so without an app-level limit an authenticated
-// LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
-// it to a small burst per client with slow refill; legitimate use needs only a
-// couple of attempts.
-const (
-	elevateRateLimitBurst  = 10
-	elevateRateLimitWindow = 5 * time.Minute
-)
-
 func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 	authMiddleware := c.AuthMiddleware
 	if authMiddleware == nil {
@@ -251,31 +299,15 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 		}
 	}
 
-	// Per-client rate limiter applied only to the elevation endpoint.
-	elevateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Skipper: middleware.DefaultSkipper,
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      rate.Limit(float64(elevateRateLimitBurst) / elevateRateLimitWindow.Seconds()),
-				Burst:     elevateRateLimitBurst,
-				ExpiresIn: elevateRateLimitWindow,
-			},
-		),
-		IdentifierExtractor: apicore.RateLimitKey,
-		ErrorHandler: func(ctx echo.Context, err error) error {
-			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
-			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
-		},
-		DenyHandler: func(ctx echo.Context, _ string, err error) error {
-			c.LogSecurityWarnIfEnabled("import: elevation attempt denied by rate limit", logger.String("ip", ctx.RealIP()))
-			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
-		},
-	})
+	// The client limiter runs first, so a client that is out of its own attempts
+	// is refused without spending the peer budget.
+	elevateClientLimiter := c.elevateLimiter(elevateRateLimiterStoreConfig(), apicore.RateLimitKey)
+	elevatePeerLimiter := c.elevateLimiter(elevatePeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey)
 
 	importGroup := g.Group("/import", authMiddleware)
 	importGroup.GET("/sources", c.GetImportSources)
 	importGroup.POST("/validate", c.ValidateImportSource)
-	importGroup.POST("/elevate", c.ElevateImport, elevateLimiter)
+	importGroup.POST("/elevate", c.ElevateImport, elevateClientLimiter, elevatePeerLimiter)
 	importGroup.POST("/birdnet-pi", c.StartBirdNETPiImport)
 	importGroup.GET("/jobs/:jobId/progress", c.StreamImportProgress)
 	importGroup.POST("/jobs/:jobId/cancel", c.CancelImport)
