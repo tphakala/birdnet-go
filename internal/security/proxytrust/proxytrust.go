@@ -1,15 +1,18 @@
 // Package proxytrust decides which reverse proxies may vouch for the client
 // address of an HTTP request, and resolves that address.
 //
-// It serves three callers. The attribution extractor in internal/api/v2/apicore
-// (logs, rate limiting, tunnel detection) composes TrustsPeer, ClientIPFromXFF
+// It serves four callers. The attribution extractor in internal/api/v2/apicore
+// (logs, tunnel detection) composes TrustsPeer, ClientIPFromXFF
 // and ParseHeaderIP, which honor forwarded client-IP headers from any loopback,
 // link-local or private peer, and from configured proxies, so home-LAN proxies
 // work without configuration. Authentication decisions such as the subnet bypass
 // use AuthClientIP, which honors forwarded headers only from operator-configured
 // proxies and returns no address when it cannot verify them. Classify describes
 // a connection for the settings UI and the authentication log notices, using
-// AuthClientIP so they cannot disagree with the authentication decision.
+// AuthClientIP so they cannot disagree with the authentication decision. The
+// API rate limiters use RateLimitClient, which additionally accepts a client
+// claim from an unconfigured local proxy when its headers agree, and reports how
+// the client was obtained so the limiter can key the claim under the proxy.
 package proxytrust
 
 import (
@@ -180,10 +183,19 @@ func (tc *Checker) TrustsPeer(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() {
-		return true
-	}
-	return tc.IsConfiguredProxy(ip)
+	return isLocalAddr(ip) || tc.IsConfiguredProxy(ip)
+}
+
+// isLocalAddr reports whether ip is a loopback, link-local or private (RFC1918
+// or ULA) address, the peers that are trusted without configuration.
+func isLocalAddr(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
+}
+
+// isCloudflareEdge reports whether ip lies inside Cloudflare's published edge
+// ranges, whether or not the preset is configured.
+func isCloudflareEdge(ip net.IP) bool {
+	return containsIP(cloudflareEdgeNets, ip)
 }
 
 // IsConfiguredProxy reports whether ip is inside an operator-configured trusted
@@ -268,46 +280,54 @@ func (tc *Checker) AuthClientIP(req *http.Request) net.IP {
 		return nil
 	}
 	peerIP, _ := PeerAddr(req)
+	return tc.authClientIP(req, peerIP, HasClientIPHeader(req.Header))
+}
+
+// authClientIP is AuthClientIP for a request whose peer address and header
+// presence the caller already resolved.
+func (tc *Checker) authClientIP(req *http.Request, peerIP net.IP, hasHeaders bool) net.IP {
 	if peerIP == nil {
 		return nil
 	}
-	if !HasClientIPHeader(req.Header) {
+	if !hasHeaders {
 		return peerIP
 	}
 	if !tc.IsConfiguredProxy(peerIP) {
 		return nil
 	}
 
-	ip := tc.forwardedClientIP(req.Header)
+	ip := tc.forwardedClientIP(req.Header, hopPolicy{})
 	if ip == nil || ip.IsLoopback() {
 		return nil
 	}
 	return ip
 }
 
-// forwardedClientIP returns the client address a configured proxy reported, or
-// nil when it cannot be verified. A proxy writes some client-IP headers and
-// passes the client's copies of the others through untouched, and which ones it
-// writes is not known here. So the headers present must agree on one client: a
-// forged copy that differs from what the proxy wrote makes the result nil.
+// forwardedClientIP returns the client address a proxy reported, or nil when
+// it cannot be verified. A proxy writes some client-IP headers and passes the
+// client's copies of the others through untouched, and which ones it writes is
+// not known here. So the headers present must agree on one client: a forged
+// copy that differs from what the proxy wrote makes the result nil.
 //
-// Two exceptions. X-Real-IP naming a configured proxy is taken to describe the
-// hop in front of a local proxy (for example the Cloudflare edge seen by
-// nginx), not the client, and is skipped. That holds only while the configured
-// ranges contain proxies and no clients, which security.trustedproxies
-// documents. CF-Connecting-IP and True-Client-IP are never
-// skipped, even when they name a configured range: Cloudflare sets them to an
-// address inside its own ranges for Worker subrequests, and skipping them would
-// let the X-Forwarded-For walk, which skips configured hops, reach a forged
-// entry unopposed. A repeated single-value header, a malformed value, or a
-// Forwarded header (not parsed) makes the result nil; several X-Forwarded-For
-// lines are joined into one chain.
-func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
-	if len(h[canonicalForwarded]) > 0 {
+// With the zero hopPolicy (the authentication path) two exceptions apply.
+// X-Real-IP naming a configured proxy is taken to describe the hop in front of
+// a local proxy (for example the Cloudflare edge seen by nginx), not the client,
+// and is skipped. That holds only while the configured ranges contain proxies
+// and no clients, which security.trustedproxies documents. CF-Connecting-IP and
+// True-Client-IP are never skipped, even when they name a configured range:
+// Cloudflare sets them to an address inside its own ranges for Worker
+// subrequests, and skipping them would let the X-Forwarded-For walk, which
+// skips configured hops, reach a forged entry unopposed. A repeated single-value
+// header, a malformed value, or a Forwarded header (not parsed) makes the result
+// nil; several X-Forwarded-For lines are joined into one chain. A non-zero
+// policy changes which hops are skipped and how the optional headers count; see
+// hopPolicy.
+func (tc *Checker) forwardedClientIP(h http.Header, policy hopPolicy) net.IP {
+	if !policy.ignoreForwarded && len(h[canonicalForwarded]) > 0 {
 		return nil
 	}
 
-	var client net.IP
+	var client, trueClient net.IP
 	for _, key := range singleValueClientIPHeaders {
 		values := h[key]
 		if len(values) == 0 {
@@ -317,7 +337,11 @@ func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
 		if ip == nil {
 			return nil
 		}
-		if key == canonicalXRealIP && tc.IsConfiguredProxy(ip) {
+		switch {
+		case key == canonicalXRealIP && policy.skips(tc, ip):
+			continue
+		case key == canonicalTrueClientIP && policy.trueClientIPVetoOnly:
+			trueClient = ip
 			continue
 		}
 		if client != nil && !client.Equal(ip) {
@@ -327,31 +351,47 @@ func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
 	}
 
 	if xff := h[canonicalXForwardedFor]; len(xff) > 0 {
-		ip := tc.strictClientFromXFF(strings.Join(xff, ","))
-		if ip == nil || (client != nil && !client.Equal(ip)) {
-			return nil
+		chain := strings.Join(xff, ",")
+		if !policy.singleEdgeHopXFFAbstains || !isSingleEdgeHop(chain) {
+			ip := tc.strictClientFromXFF(chain, policy)
+			if ip == nil || (client != nil && !client.Equal(ip)) {
+				return nil
+			}
+			client = ip
 		}
-		client = ip
+	}
+	if trueClient != nil && (client == nil || !client.Equal(trueClient)) {
+		return nil
 	}
 	return client
 }
 
 // strictClientFromXFF walks an X-Forwarded-For chain from the right, skipping
-// configured proxies, and returns the first other hop. Unlike ClientIPFromXFF it
-// returns nil for any malformed hop and when every hop is a configured proxy,
-// because the leftmost entry is client-supplied and nothing vouches for it.
-func (tc *Checker) strictClientFromXFF(xff string) net.IP {
+// the hops policy skips, and returns the first other hop. Unlike ClientIPFromXFF
+// it returns nil for any malformed hop and when every hop is skipped, because
+// the leftmost entry is client-supplied and nothing vouches for it.
+func (tc *Checker) strictClientFromXFF(xff string, policy hopPolicy) net.IP {
 	parts := strings.Split(xff, ",")
 	for _, part := range slices.Backward(parts) {
 		ip := parseStrictIP(strings.TrimSpace(part))
 		if ip == nil {
 			return nil
 		}
-		if !tc.IsConfiguredProxy(ip) {
+		if !policy.skips(tc, ip) {
 			return ip
 		}
 	}
 	return nil
+}
+
+// isSingleEdgeHop reports whether an X-Forwarded-For chain is exactly one
+// well-formed hop that lies inside Cloudflare's edge ranges.
+func isSingleEdgeHop(xff string) bool {
+	if strings.Contains(xff, ",") {
+		return false
+	}
+	ip := parseStrictIP(strings.TrimSpace(xff))
+	return ip != nil && isCloudflareEdge(ip)
 }
 
 // singleHeaderIP parses the values of a single-value header as one strict
@@ -559,7 +599,7 @@ func (tc *Checker) Classify(req *http.Request) Connection {
 	}
 	if peer != nil {
 		conn.PeerIsConfiguredProxy = tc.IsConfiguredProxy(peer)
-		conn.PeerIsCloudflareEdge = containsIP(cloudflareEdgeNets, peer)
+		conn.PeerIsCloudflareEdge = isCloudflareEdge(peer)
 	}
 
 	switch {

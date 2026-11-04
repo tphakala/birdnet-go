@@ -232,12 +232,13 @@ const (
 )
 
 // elevatePeerRateLimitMultiplier is how many clients' elevation budgets the
-// connection peer as a whole may spend. A forwarded client address is only as
-// trustworthy as the peer that sends it, so the peer's own budget bounds the
-// attempts a caller can make by naming a new client in every request. Ten leaves
-// a household behind one proxy each its own attempts. The budget is shared by
-// every client behind the peer, so once it is spent the peer refuses all of them
-// until it refills.
+// connection peer as a whole may spend. The client limiter keys a client an
+// unlisted proxy names under that proxy and shares one bucket among the requests
+// it cannot verify, but a proxy can still name many such clients, so the peer's
+// own budget bounds the attempts a caller can make by naming a new client in
+// every request. Ten leaves a household behind one proxy each its own attempts.
+// The budget is shared by every client behind the peer, so once it is spent the
+// peer refuses all of them until it refills.
 const elevatePeerRateLimitMultiplier = 10
 
 // elevateRateLimiterStoreConfig returns the per-client limiter settings for the
@@ -299,9 +300,9 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 		}
 	}
 
-	// The client limiter runs first, so a client that is out of its own attempts
-	// is refused without spending the peer budget.
-	elevateClientLimiter := c.elevateLimiter(elevateRateLimiterStoreConfig(), apicore.RateLimitKey)
+	// The client limiter (keyed by Core.RateLimitKey) runs first, so a client that
+	// is out of its own attempts is refused without spending the peer budget.
+	elevateClientLimiter := c.elevateLimiter(elevateRateLimiterStoreConfig(), c.RateLimitKey)
 	elevatePeerLimiter := c.elevateLimiter(elevatePeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey)
 
 	importGroup := g.Group("/import", authMiddleware)

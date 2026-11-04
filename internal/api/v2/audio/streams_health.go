@@ -161,7 +161,7 @@ func (c *Handler) RegisterStreamHealthRoutes(g *echo.Group) {
 				ExpiresIn: streamHealthRateLimitWindow,
 			},
 		),
-		IdentifierExtractor: apicore.RateLimitKey,
+		IdentifierExtractor: c.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded for stream health SSE connections",

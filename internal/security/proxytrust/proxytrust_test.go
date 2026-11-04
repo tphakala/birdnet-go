@@ -171,19 +171,19 @@ const (
 	cloudflareWorkerEgress = "2a06:98c0:3600::103"
 )
 
-// TestChecker_AuthClientIP pins the strict client address used for
-// authentication decisions. Every forged-header case must resolve to nil (no
-// address-based access) or to the real peer, never to the forged value.
-func TestChecker_AuthClientIP(t *testing.T) {
-	t.Parallel()
+// authClientIPCase is one request shape for the AuthClientIP tests.
+type authClientIPCase struct {
+	name           string
+	trustedProxies []string
+	remoteAddr     string
+	headers        map[string][]string
+	want           string // "" means nil
+}
 
-	tests := []struct {
-		name           string
-		trustedProxies []string
-		remoteAddr     string
-		headers        map[string][]string
-		want           string // "" means nil
-	}{
+// authClientIPCases lists the request shapes TestChecker_AuthClientIP pins. The
+// rate limit resolver tests run over the same table.
+func authClientIPCases() []authClientIPCase {
+	return []authClientIPCase{
 		{name: "direct LAN client without headers is the peer", remoteAddr: "192.168.1.20:5000", want: "192.168.1.20"},
 		{name: "direct loopback client without headers is the peer", remoteAddr: "127.0.0.1:5000", want: "127.0.0.1"},
 		{name: "direct IPv6 link-local client with zone", remoteAddr: "[fe80::1%eth0]:5000", want: "fe80::1"},
@@ -251,6 +251,15 @@ func TestChecker_AuthClientIP(t *testing.T) {
 		{name: "configured proxy with repeated X-Real-IP and XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"198.51.100.9", "198.51.100.9"}, "X-Forwarded-For": {"198.51.100.9"}}, want: ""},
 		{name: "Cloudflare edge without preset is unconfigured", remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20"}}, want: ""},
 	}
+}
+
+// TestChecker_AuthClientIP pins the strict client address used for
+// authentication decisions. Every forged-header case must resolve to nil (no
+// address-based access) or to the real peer, never to the forged value.
+func TestChecker_AuthClientIP(t *testing.T) {
+	t.Parallel()
+
+	tests := authClientIPCases()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

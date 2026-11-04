@@ -33,7 +33,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
             middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 5},
         ),
         // One bucket per client (per /64 for IPv6)
-        IdentifierExtractor: apicore.RateLimitKey,
+        IdentifierExtractor: c.RateLimitKey,
     }
     g.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
@@ -980,7 +980,7 @@ SSE endpoints are rate limited to prevent abuse:
 - Metrics stream: 10 requests/minute per client, burst of 10 (authenticated)
 - Notification streams: 10 requests/minute per client, burst of 15 (public, used by dashboard NotificationBell)
 
-A client is identified by its address, and IPv6 clients are counted per /64.
+A client is identified by its address, and IPv6 clients are counted per /64. Behind a reverse proxy the address is the one the proxy reported, and only when it can be believed. A proxy listed in `security.trustedproxies` is believed when its forwarded headers agree on one client. A proxy that is not listed (a loopback, link-local or private peer) is believed only for the visitors it names in headers that agree. Each such visitor gets its own count, kept under that proxy's address, so a header cannot name a count that belongs to a direct client or to another proxy's visitor. A host that can reach the proxy directly can still name any visitor of that proxy, and an unlisted local host can name any visitor under its own address; those counts are bounded by the store caps and, for login and import elevation, by the per-peer limit. Listing the proxy in `security.trustedproxies` (and the `cloudflare` preset when Cloudflare edge addresses sit in front of it) gives counts that a header cannot choose, provided the proxy's headers verify; the Reverse proxy card on the Security settings page shows whether they do. Requests whose headers do not agree (for example a forged `CF-Connecting-IP` next to the address the proxy appended to `X-Forwarded-For`) all share one count per proxy. A peer that is neither listed nor local is the client, and its forwarded headers are ignored.
 
 ## Server-Sent Events (SSE)
 

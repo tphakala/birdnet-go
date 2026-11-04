@@ -3,7 +3,7 @@
 // The extractor only honors proxy-supplied client-IP headers (CF-Connecting-IP,
 // X-Forwarded-For, X-Real-IP) when the immediate connection peer is a trusted
 // reverse proxy. On a directly-exposed instance this prevents a client from
-// spoofing its source IP, which feeds rate limiting and logs. The trust
+// spoofing its source IP, which feeds logs. The trust
 // primitives live in internal/security/proxytrust; authentication decisions use
 // its stricter AuthClientIP rather than this extractor.
 package apicore

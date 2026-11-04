@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 const (
@@ -62,6 +63,13 @@ const (
 	// would. metricsRateTestOtherIPv6 is an address in a different /64.
 	metricsRateTestIPv6Block = "2001:db8:1:2::%x"
 	metricsRateTestOtherIPv6 = "2001:db8:1:3::1"
+	// metricsRateTestProxyIP is a private address a reverse proxy connects from.
+	// metricsRateTestProxiedClient is the public address that proxy appends to
+	// X-Forwarded-For, and metricsRateTestForgedFormat formats the
+	// documentation-range addresses a client forges in CF-Connecting-IP.
+	metricsRateTestProxyIP       = "10.0.0.5"
+	metricsRateTestProxiedClient = "198.51.100.9"
+	metricsRateTestForgedFormat  = "203.0.113.%d"
 	// metricsRateTestVisitor and metricsRateTestOtherVisitor name two visitors when
 	// the store is used directly; the second one triggers store cleanup.
 	metricsRateTestVisitor      = "visitor-a"
@@ -230,5 +238,50 @@ func TestMetricsStreamRouteRateLimitIPv6Prefix(t *testing.T) {
 		assert.Equal(t, http.StatusTooManyRequests, request(rotated(metricsRateTestBurst+1)).Code,
 			"a new address in the same /64 shares the exhausted bucket")
 		assert.Equal(t, http.StatusOK, request(metricsRateTestOtherIPv6).Code, "another /64 has its own bucket")
+	})
+}
+
+// TestMetricsStreamRouteRateLimitForgedClientHeaderBehindProxy verifies that a
+// client behind a proxy that appends the real client to X-Forwarded-For cannot
+// buy a fresh bucket per connection by forging CF-Connecting-IP: the two headers
+// disagree, so every forged request is charged to the proxy's shared unverified
+// bucket, while a request that names only the real client has its own. The core
+// is built inside the synctest bubble for the same reason as in
+// TestMetricsStreamRouteRateLimit.
+func TestMetricsStreamRouteRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := echo.New()
+		core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
+		core.MetricsStore = observability.NewMemoryStore(MetricsHistoryMaxPoints)
+		core.AuthMiddleware = func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+		h := New(core, nil, nil, nil)
+		h.RegisterMetricsHistoryRoutes(core.Group)
+
+		port := metricsRateTestFirstPort
+		// request sends one request through the proxy. XFF names the real client;
+		// a non-empty forged value is sent as CF-Connecting-IP.
+		request := func(forged string) *httptest.ResponseRecorder {
+			port++
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			req := httptest.NewRequest(http.MethodGet, metricsRateTestStreamPath, http.NoBody).WithContext(ctx)
+			req.Header.Set(echo.HeaderXForwardedFor, metricsRateTestProxiedClient)
+			if forged != "" {
+				req.Header.Set(proxytrust.HeaderCFConnectingIP, forged)
+			}
+			req.RemoteAddr = net.JoinHostPort(metricsRateTestProxyIP, strconv.Itoa(port))
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			return rec
+		}
+
+		for i := range metricsRateTestBurst {
+			require.Equal(t, http.StatusOK, request(fmt.Sprintf(metricsRateTestForgedFormat, i+1)).Code,
+				"request %d is within the shared bucket's burst", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, request(fmt.Sprintf(metricsRateTestForgedFormat, metricsRateTestBurst+1)).Code,
+			"a new forged client address does not buy a fresh bucket")
+		assert.Equal(t, http.StatusOK, request("").Code,
+			"the real client behind the proxy is not charged to the forged bucket")
 	})
 }

@@ -31,8 +31,8 @@ const (
 	// succession, whoever the forwarded client is.
 	loginPeerTestBurst = loginRateTestBurst * loginPeerTestMultiplier
 	// loginPeerTestProxy and loginPeerTestOtherProxy are private addresses a
-	// reverse proxy or tunnel connects from; the extractor trusts them without
-	// configuration.
+	// reverse proxy or tunnel connects from; without configuration the limiter key
+	// believes the client addresses they forward while their headers agree.
 	loginPeerTestProxy      = "10.0.0.5"
 	loginPeerTestOtherProxy = "10.0.0.6"
 	// loginPeerTestClientFormat formats the documentation-range client address a
@@ -41,6 +41,9 @@ const (
 	// loginPeerTestClients is the number of distinct clients one proxy serves in
 	// the shared-proxy test.
 	loginPeerTestClients = 3
+	// loginPeerTestRealClient is the public address a header-appending proxy
+	// records as the connecting client, whatever the request claims.
+	loginPeerTestRealClient = "198.51.100.9"
 )
 
 // TestLoginPeerRateLimiterStoreConfig asserts the configured rate, burst and
@@ -157,5 +160,53 @@ func TestLoginRouteRateLimitClientsBehindProxy(t *testing.T) {
 		assert.Equal(t, http.StatusTooManyRequests, attempt(1).Code, "the first client is out of attempts")
 		assert.Equal(t, http.StatusUnauthorized, attempt(loginPeerTestClients+1).Code,
 			"another client behind the same proxy still has its own attempts")
+	})
+}
+
+// TestLoginRouteRateLimitForgedClientHeaderBehindProxy verifies that a client
+// cannot mint a fresh bucket per attempt by forging CF-Connecting-IP behind an
+// unlisted proxy that appends the real client to X-Forwarded-For: the forged
+// address disagrees with the appended one, so every attempt is charged to the
+// proxy's shared unverified bucket and the sixth is refused.
+func TestLoginRouteRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
+	e, h, _ := setupAuthIntegrationTest(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		h.RegisterRoutes(h.Group)
+
+		port := loginRateTestFirstPort
+		// attempt sends one request through the proxy whose X-Forwarded-For names
+		// the real client and whose CF-Connecting-IP names the n-th forged one.
+		attempt := func(n int) *httptest.ResponseRecorder {
+			port++
+			req := httptest.NewRequest(http.MethodPost, loginRateTestLoginPath, strings.NewReader(loginRateTestWrongPayload))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			req.Header.Set(echo.HeaderXForwardedFor, loginPeerTestRealClient)
+			req.Header.Set(proxytrust.HeaderCFConnectingIP, fmt.Sprintf(loginPeerTestClientFormat, n))
+			req.RemoteAddr = net.JoinHostPort(loginPeerTestProxy, strconv.Itoa(port))
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			return rec
+		}
+
+		for i := range loginRateTestBurst {
+			require.Equal(t, http.StatusUnauthorized, attempt(i+1).Code,
+				"attempt %d is within the shared bucket's burst", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, attempt(loginRateTestBurst+1).Code,
+			"a new forged client address does not buy a fresh bucket")
+
+		// The forged bucket is the proxy's shared one: a request that names only
+		// the real client, with nothing forged, has its own bucket.
+		port++
+		req := httptest.NewRequest(http.MethodPost, loginRateTestLoginPath, strings.NewReader(loginRateTestWrongPayload))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set(echo.HeaderXForwardedFor, loginPeerTestRealClient)
+		req.RemoteAddr = net.JoinHostPort(loginPeerTestProxy, strconv.Itoa(port))
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code,
+			"the real client behind the proxy is not charged to the forged bucket")
 	})
 }

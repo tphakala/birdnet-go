@@ -39,7 +39,8 @@ const (
 	// succession, whoever the forwarded client is.
 	elevatePeerTestBurst = elevateRateLimitBurst * elevatePeerTestMultiplier
 	// elevatePeerTestProxy and elevatePeerTestOtherProxy are private addresses a
-	// reverse proxy connects from; the extractor trusts them without configuration.
+	// reverse proxy connects from; without configuration the limiter key believes
+	// the client addresses they forward while their headers agree.
 	elevatePeerTestProxy      = "10.0.0.5"
 	elevatePeerTestOtherProxy = "10.0.0.6"
 	// elevatePeerTestClientFormat formats the documentation-range client address a
@@ -47,13 +48,15 @@ const (
 	elevatePeerTestClientFormat = "203.0.113.%d"
 	// elevatePeerTestSecondClient is the neighbour client in the shared-proxy test.
 	elevatePeerTestSecondClient = 2
+	// elevatePeerTestRealClient is the public address a header-appending proxy
+	// records as the connecting client, whatever the request claims.
+	elevatePeerTestRealClient = "198.51.100.9"
 )
 
-// newProxiedElevateHandler creates a Handler whose server honors forwarded client
-// addresses from trusted peers. newImportHandler builds a bare echo whose RealIP
-// ignores forwarded headers; this one has the server's trusted-proxy extractor, so
-// a forwarded client address reaches the per-client key as in production. With no
-// repository an allowed elevation request ends at 503 before any side effect.
+// newProxiedElevateHandler creates a Handler on a full apitest core, so the
+// per-client key resolves forwarded client addresses from the core's trusted-proxy
+// settings as in production. With no repository an allowed elevation request ends
+// at 503 before any side effect.
 func newProxiedElevateHandler(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()
@@ -167,5 +170,51 @@ func TestElevateRouteRateLimitIPv6Prefix(t *testing.T) {
 			"a new address in the same /64 shares the exhausted bucket")
 		assert.NotEqual(t, http.StatusTooManyRequests, request(elevateRateTestOtherIPv6).Code,
 			"another /64 has its own bucket")
+	})
+}
+
+// TestElevateRouteRateLimitForgedClientHeaderBehindProxy verifies that a client
+// cannot mint a fresh bucket per attempt by forging CF-Connecting-IP behind an
+// unlisted proxy that appends the real client to X-Forwarded-For: the forged
+// address disagrees with the appended one, so every attempt is charged to the
+// proxy's shared unverified bucket and the attempt after its burst is refused.
+func TestElevateRouteRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
+	e, c := newProxiedElevateHandler(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		c.RegisterImportRoutes(c.Group)
+
+		port := elevateRateTestFirstPort
+		// attempt sends one request through the proxy whose X-Forwarded-For names
+		// the real client and whose CF-Connecting-IP names the n-th forged one.
+		attempt := func(n int) *httptest.ResponseRecorder {
+			port++
+			req := httptest.NewRequest(http.MethodPost, apiV2Prefix+"/import/elevate", http.NoBody)
+			req.Header.Set(echo.HeaderXForwardedFor, elevatePeerTestRealClient)
+			req.Header.Set(proxytrust.HeaderCFConnectingIP, fmt.Sprintf(elevatePeerTestClientFormat, n))
+			req.RemoteAddr = net.JoinHostPort(elevatePeerTestProxy, strconv.Itoa(port))
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			return rec
+		}
+
+		for i := range elevateRateLimitBurst {
+			require.NotEqual(t, http.StatusTooManyRequests, attempt(i+1).Code,
+				"attempt %d is within the shared bucket's burst", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, attempt(elevateRateLimitBurst+1).Code,
+			"a new forged client address does not buy a fresh bucket")
+
+		// The forged bucket is the proxy's shared one: a request that names only
+		// the real client, with nothing forged, has its own bucket.
+		port++
+		req := httptest.NewRequest(http.MethodPost, apiV2Prefix+"/import/elevate", http.NoBody)
+		req.Header.Set(echo.HeaderXForwardedFor, elevatePeerTestRealClient)
+		req.RemoteAddr = net.JoinHostPort(elevatePeerTestProxy, strconv.Itoa(port))
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.NotEqual(t, http.StatusTooManyRequests, rec.Code,
+			"the real client behind the proxy is not charged to the forged bucket")
 	})
 }
