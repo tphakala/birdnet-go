@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -523,10 +524,22 @@ func TestBuildYearRangesDayBounds(t *testing.T) {
 // TestBuildYearRangesWrapAndLeapDay pins the exact ranges of the branches that wrap over a year
 // end and of a window centred on a leap day, in UTC so the expected instants are literal. tail
 // is the literal end of the result; want derives the ranges of every scanned year (leap years
-// shift the day of the year by one) and the whole result is compared against it.
+// shift the day of the year by one) and the whole result is compared against it. The early
+// January rows take the days before January 1 from the previous year, and every row is checked
+// against the scanned-years horizon.
 func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 	t.Parallel()
 	at := func(y int, m time.Month, d int) int64 { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() }
+	// earlyJanuaryWant: the days before January 1 are the end of the previous year's December. at
+	// normalises a day of zero or less to that December, so no year length is involved. The oldest
+	// scanned year has no scanned year before it and starts on January 1.
+	earlyJanuaryWant := func(y, nowYear, anchor, window int) []repository.TimeRange {
+		var got []repository.TimeRange
+		if y > nowYear-expectedTodayMaxYears {
+			got = append(got, repository.TimeRange{Start: at(y, time.January, anchor-window), End: at(y, time.January, 1)})
+		}
+		return append(got, repository.TimeRange{Start: at(y, time.January, 1), End: at(y, time.January, anchor+window+1)})
+	}
 	tests := []struct {
 		name   string
 		now    time.Time
@@ -538,20 +551,35 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 		want func(year, nowYear, anchor, window int) []repository.TimeRange
 	}{
 		{
-			name:   "early January splits a year into its tail and its head",
+			name:   "early January takes the days before January 1 from the previous year's December",
 			now:    time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC),
 			window: 3,
+			// 2024 is a leap year: the December slice is counted back from its own December 31.
 			tail: []repository.TimeRange{
-				{Start: at(2025, time.December, 30), End: at(2026, time.January, 1)},
+				{Start: at(2024, time.December, 30), End: at(2025, time.January, 1)},
 				{Start: at(2025, time.January, 1), End: at(2025, time.January, 6)},
 			},
-			// The tail is the last two days of the year (December 30 and 31) and the head is days 1 to 5.
-			want: func(y, _, _, _ int) []repository.TimeRange {
-				return []repository.TimeRange{
-					{Start: at(y, time.December, 30), End: at(y+1, time.January, 1)},
-					{Start: at(y, time.January, 1), End: at(y, time.January, 6)},
-				}
+			want: earlyJanuaryWant,
+		},
+		{
+			name:   "January 1 reaches three days back into the previous December",
+			now:    time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2024, time.December, 29), End: at(2025, time.January, 1)},
+				{Start: at(2025, time.January, 1), End: at(2025, time.January, 5)},
 			},
+			want: earlyJanuaryWant,
+		},
+		{
+			name:   "January 3 reaches only the previous December 31",
+			now:    time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2024, time.December, 31), End: at(2025, time.January, 1)},
+				{Start: at(2025, time.January, 1), End: at(2025, time.January, 7)},
+			},
+			want: earlyJanuaryWant,
 		},
 		{
 			name:   "late December continues into the next year, not past the current one",
@@ -603,6 +631,48 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 				want = append(want, tt.want(y, tt.now.Year(), tt.now.YearDay(), tt.window)...)
 			}
 			assert.Equal(t, want, ranges, "every scanned year")
+
+			lo := at(tt.now.Year()-expectedTodayMaxYears, time.January, 1)
+			hi := at(tt.now.Year(), time.January, 1)
+			for _, r := range ranges {
+				assert.GreaterOrEqual(t, r.Start, lo, "range starts before the oldest scanned year")
+				assert.LessOrEqual(t, r.End, hi, "range reaches into the current year")
+			}
+		})
+	}
+}
+
+// TestBuildYearRangesEarlyJanuaryZones pins the early January pairing in every zone of the
+// toolchain database and in a zone resolved from its POSIX rule: on January 2 with a three day
+// window each scanned year takes December 30 and 31 of the previous year and January 1 to 5 of
+// its own year, as whole local days in the station zone.
+func TestBuildYearRangesEarlyJanuaryZones(t *testing.T) {
+	t.Parallel()
+	const nowYear = 2026
+	const window = 3
+	date := func(y int, m time.Month, d int) wallclock.Date { return wallclock.Date{Year: y, Month: m, Day: d} }
+	dayRange := func(first, last wallclock.Date, loc *time.Location) repository.TimeRange {
+		start, _ := wallclock.DayBounds(first, loc)
+		_, end := wallclock.DayBounds(last, loc)
+		return repository.TimeRange{Start: start.Unix(), End: end.Unix()}
+	}
+
+	zones := make(map[string]*time.Location)
+	maps.Copy(zones, testutil.ToolchainZones(t))
+	zones["rule-only"] = testutil.RuleOnlyLocation(t)
+
+	for name, loc := range zones {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var want []repository.TimeRange
+			for y := nowYear - expectedTodayMaxYears; y < nowYear; y++ {
+				if y > nowYear-expectedTodayMaxYears {
+					want = append(want, dayRange(date(y-1, time.December, 30), date(y-1, time.December, 31), loc))
+				}
+				want = append(want, dayRange(date(y, time.January, 1), date(y, time.January, 1+window+1), loc))
+			}
+			got := buildYearRanges(time.Date(nowYear, time.January, 2, 12, 0, 0, 0, loc), window)
+			assert.Equal(t, want, got)
 		})
 	}
 }
