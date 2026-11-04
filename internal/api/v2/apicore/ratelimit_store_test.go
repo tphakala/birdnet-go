@@ -207,7 +207,7 @@ func TestRateLimiterStoreNamespaceTailIsLeastRecentlyUsed(t *testing.T) {
 // TestRateLimiterStoreReplacesRefilledTailOfItsOwnNamespace verifies that when
 // the entry made room for is in the newcomer's own namespace and was the last one
 // there, the newcomer still lands in a registered namespace: the namespace
-// holds it and the next newcomer is counted against the cap.
+// holds it.
 func TestRateLimiterStoreReplacesRefilledTailOfItsOwnNamespace(t *testing.T) {
 	tests := []struct {
 		name                   string
