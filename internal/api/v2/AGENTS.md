@@ -159,7 +159,7 @@ original per-route registration order across the split.
 - Rate-limited streams: `middleware.RateLimiterWithConfig(config)` with
   `IdentifierExtractor: c.RateLimitKey`, so a client is one bucket (per /64
   for IPv6) instead of one bucket per address. The key comes from the verified
-  client (`proxytrust.Checker.RateLimitClient`), never from `ctx.RealIP()`, and
+  client (`proxytrust.Checker.RateLimitClient`), not from `ctx.RealIP()` (which logs the same resolved client, so a client an unlisted local host names consistently appears there as named), and
   the trusted-proxy list is read on every request, so a settings change applies
   at once. A client claimed by an unconfigured local proxy is keyed under that
   proxy, and a request that cannot be verified shares one bucket per proxy. Build the store with

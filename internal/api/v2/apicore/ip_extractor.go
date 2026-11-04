@@ -1,11 +1,14 @@
-// ip_extractor.go provides a trusted-proxy-gated client IP extractor for Echo.
+// ip_extractor.go provides the client IP extractor for Echo.
 //
-// The extractor only honors proxy-supplied client-IP headers (CF-Connecting-IP,
-// X-Forwarded-For, X-Real-IP) when the immediate connection peer is a trusted
-// reverse proxy. On a directly-exposed instance this prevents a client from
-// spoofing its source IP, which feeds logs. The trust
-// primitives live in internal/security/proxytrust; authentication decisions use
-// its stricter AuthClientIP rather than this extractor.
+// The extractor reports the client the rate limiters resolve (see
+// proxytrust.Checker.RateLimitClient). Forwarded headers that disagree with each
+// other, or that a configured proxy cannot verify, are not recorded, and an
+// untrusted peer's headers are ignored. A client that an unlisted loopback,
+// link-local or private peer names consistently (a lone CF-Connecting-IP,
+// X-Forwarded-For or X-Real-IP with a usable address included) is recorded as
+// named, so such a host can still choose the address that appears in logs. The trust primitives live in
+// internal/security/proxytrust; authentication decisions use its stricter
+// AuthClientIP rather than this extractor.
 package apicore
 
 import (
@@ -39,42 +42,37 @@ func resolveTrustedProxyChecker(cache *proxytrust.Cache, getSettings func() *con
 	return cache.ResolveSettings(settings)
 }
 
-// newTrustedProxyIPExtractor returns an Echo IPExtractor that honors proxy
-// client-IP headers (CF-Connecting-IP, then X-Forwarded-For, then X-Real-IP)
-// only when the immediate peer is a trusted proxy, otherwise falling back to the
-// real connection address. The trusted set is read from Security.TrustedProxies
-// via getSettings on each request so changes take effect without a restart.
-func newTrustedProxyIPExtractor(getSettings func() *conf.Settings) echo.IPExtractor {
-	var cache proxytrust.Cache
-	return func(req *http.Request) string {
-		peerIP, peerHost := proxytrust.PeerAddr(req)
-
-		// Only honor forwarded client-IP headers from a trusted proxy peer.
-		if checker := resolveTrustedProxyChecker(&cache, getSettings); checker.TrustsPeer(peerIP) {
-			if ip := proxytrust.ParseHeaderIP(req.Header.Get(proxytrust.HeaderCFConnectingIP)); ip != "" {
-				return ip
-			}
-			if ip := checker.ClientIPFromXFF(req.Header.Get(echo.HeaderXForwardedFor)); ip != "" {
-				return ip
-			}
-			if ip := proxytrust.ParseHeaderIP(req.Header.Get(echo.HeaderXRealIP)); ip != "" {
-				return ip
-			}
-		} else {
-			// Untrusted peer: forwarded headers are ignored. Leave a DEBUG
-			// breadcrumb naming the peer so a misconfigured trusted proxy is
-			// self-diagnosing, without flooding logs (a public instance gets
-			// constant scanner header noise, so this stays at DEBUG).
-			logIgnoredForwardedHeader(req, peerHost)
-		}
-
-		// Untrusted peer, or trusted peer with no forwarded headers: use the
-		// real peer address.
-		if peerIP != nil {
-			return peerIP.String()
-		}
-		return peerHost
+// attributionIP is the Echo IPExtractor behind echo.Context.RealIP: the client
+// address that logs and the tunnel label record. It resolves the request the way
+// the rate limiters do (see proxytrust.Checker.RateLimitClient), so forwarded
+// headers that disagree or that a configured proxy cannot verify are not
+// recorded:
+//
+//   - A direct request, one a configured proxy verified, and one an unconfigured
+//     local proxy made consistent claims for (a lone CF-Connecting-IP, X-Forwarded-For or
+//     X-Real-IP with a usable address included), yield the resolved client.
+//   - A request whose forwarded headers do not verify yields the peer address.
+//   - An untrusted peer yields its own address, and its forwarded headers are
+//     ignored, leaving a DEBUG breadcrumb naming the peer.
+//
+// The address is for attribution only, never authentication or authorization
+// (authentication uses proxytrust.Checker.AuthClientIP). The trusted-proxy list
+// is read from the live settings on every call, so a settings save takes effect
+// on the next request.
+func (c *Core) attributionIP(req *http.Request) string {
+	checker := c.ProxyChecker()
+	res := checker.RateLimitClient(req)
+	if res.Source == proxytrust.SourceDirect && !checker.TrustsPeer(res.Peer) {
+		// Untrusted peer: forwarded headers are ignored. Leave a DEBUG
+		// breadcrumb naming the peer so a misconfigured trusted proxy is
+		// self-diagnosing, without flooding logs (a public instance gets
+		// constant scanner header noise, so this stays at DEBUG).
+		logIgnoredForwardedHeader(req, res.PeerHost)
 	}
+	if res.Client != nil {
+		return res.Client.String()
+	}
+	return res.PeerHost
 }
 
 // logIgnoredForwardedHeader emits a DEBUG breadcrumb when forwarded client-IP

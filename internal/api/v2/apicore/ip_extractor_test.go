@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -23,6 +24,17 @@ func settingsGetterWithProxies(trustedProxies ...string) func() *conf.Settings {
 	settings := &conf.Settings{}
 	settings.Security.TrustedProxies = trustedProxies
 	return func() *conf.Settings { return settings }
+}
+
+// attributionExtractorFor returns Core.attributionIP for a Core whose live
+// settings are the snapshot getSettings returns (none when it is nil). A test
+// that changes the snapshot in place changes what the next request sees.
+func attributionExtractorFor(getSettings func() *conf.Settings) echo.IPExtractor {
+	core := &Core{}
+	if getSettings != nil {
+		core.Settings.Store(getSettings())
+	}
+	return core.attributionIP
 }
 
 func TestTrustedProxyIPExtractor(t *testing.T) {
@@ -82,13 +94,13 @@ func TestTrustedProxyIPExtractor(t *testing.T) {
 			want:           "203.0.113.7",
 		},
 		{
-			// Every hop is a configured proxy (internal chain): the leftmost entry
-			// is the original client.
-			name:           "trusted peer all configured-proxy hops returns leftmost client",
+			// Every hop is a configured proxy (internal chain): no client can be
+			// verified, so the peer is recorded.
+			name:           "trusted peer all configured-proxy hops returns peer",
 			trustedProxies: []string{"10.0.0.0/8"},
 			remoteAddr:     "10.0.0.5:40000",
 			headers:        map[string]string{xffHeader: "10.0.0.50, 10.0.0.6"},
-			want:           "10.0.0.50",
+			want:           "10.0.0.5",
 		},
 		{
 			name:       "private peer honors X-Real-IP",
@@ -97,10 +109,32 @@ func TestTrustedProxyIPExtractor(t *testing.T) {
 			want:       "203.0.113.9",
 		},
 		{
-			name:       "CF-Connecting-IP takes precedence over XFF for trusted peer",
+			// A forged CF-Connecting-IP behind a proxy that appends the real client
+			// to X-Forwarded-For disagrees with it, so it is never recorded.
+			name:       "forged CF-Connecting-IP through an unlisted local proxy is not recorded",
 			remoteAddr: "127.0.0.1:40000",
-			headers:    map[string]string{cfHeader: "203.0.113.5", xffHeader: "198.51.100.9"},
+			headers:    map[string]string{cfHeader: "203.0.113.99", xffHeader: "198.51.100.9"},
+			want:       "127.0.0.1",
+		},
+		{
+			name:       "agreeing CF-Connecting-IP and XFF through an unlisted local proxy record the client",
+			remoteAddr: "127.0.0.1:40000",
+			headers:    map[string]string{cfHeader: "203.0.113.5", xffHeader: "203.0.113.5"},
 			want:       "203.0.113.5",
+		},
+		{
+			name:           "forged CF-Connecting-IP through a configured proxy is not recorded",
+			trustedProxies: []string{"198.51.100.7"},
+			remoteAddr:     "198.51.100.7:40000",
+			headers:        map[string]string{cfHeader: "203.0.113.99", xffHeader: "192.0.2.44"},
+			want:           "198.51.100.7",
+		},
+		{
+			name:           "configured proxy records the client its headers verify",
+			trustedProxies: []string{"198.51.100.7"},
+			remoteAddr:     "198.51.100.7:40000",
+			headers:        map[string]string{cfHeader: "203.0.113.5", xffHeader: "203.0.113.5"},
+			want:           "203.0.113.5",
 		},
 		{
 			// The security fix: a directly-exposed instance must not trust a
@@ -210,7 +244,7 @@ func TestTrustedProxyIPExtractor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			extractor := newTrustedProxyIPExtractor(settingsGetterWithProxies(tt.trustedProxies...))
+			extractor := attributionExtractorFor(settingsGetterWithProxies(tt.trustedProxies...))
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.RemoteAddr = tt.remoteAddr
@@ -230,7 +264,7 @@ func TestTrustedProxyIPExtractor_HotReload(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{}
-	extractor := newTrustedProxyIPExtractor(func() *conf.Settings { return settings })
+	extractor := attributionExtractorFor(func() *conf.Settings { return settings })
 
 	newReq := func() *http.Request {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -267,7 +301,7 @@ func TestTrustedProxyIPExtractor_NilSettings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			extractor := newTrustedProxyIPExtractor(getter)
+			extractor := attributionExtractorFor(getter)
 
 			// Loopback is always trusted, so the header is honored.
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -318,7 +352,7 @@ func TestTrustedProxyIPExtractor_LogsIgnoredForwardedHeaders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := logtest.CaptureBuffer(t)
-			extractor := newTrustedProxyIPExtractor(func() *conf.Settings { return &conf.Settings{} })
+			extractor := attributionExtractorFor(func() *conf.Settings { return &conf.Settings{} })
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.RemoteAddr = tt.remoteAddr

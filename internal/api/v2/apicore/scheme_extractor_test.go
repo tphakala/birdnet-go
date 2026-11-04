@@ -162,7 +162,7 @@ func TestTrustedProxySchemeExtractor_AgreesWithIPExtractor(t *testing.T) {
 	for _, proxies := range schemeTestTrustedProxyLists {
 		getter := settingsGetterWithProxies(proxies...)
 		schemeExtractor := newTrustedProxySchemeExtractor(getter)
-		ipExtractor := newTrustedProxyIPExtractor(getter)
+		ipExtractor := attributionExtractorFor(getter)
 		for _, peer := range schemeTestPeers {
 			if isUnixSocketPeer(peer) {
 				continue // scheme trusts unix sockets like Echo; the IP extractor is TCP-only

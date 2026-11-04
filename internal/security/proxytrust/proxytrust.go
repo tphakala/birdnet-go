@@ -2,10 +2,9 @@
 // address of an HTTP request, and resolves that address.
 //
 // It serves four callers. The attribution extractor in internal/api/v2/apicore
-// (logs, tunnel detection) composes TrustsPeer, ClientIPFromXFF
-// and ParseHeaderIP, which honor forwarded client-IP headers from any loopback,
-// link-local or private peer, and from configured proxies, so home-LAN proxies
-// work without configuration. Authentication decisions such as the subnet bypass
+// (logs, tunnel detection) uses RateLimitClient, so it records the same client
+// the rate limiters charge; forwarded headers that disagree are not recorded.
+// Authentication decisions such as the subnet bypass
 // use AuthClientIP, which honors forwarded headers only from operator-configured
 // proxies and returns no address when it cannot verify them. Classify describes
 // a connection for the settings UI and the authentication log notices, using
@@ -237,42 +236,6 @@ func (tc *Checker) IsSingleHostProxy(ip net.IP) bool {
 	return single
 }
 
-// ClientIPFromXFF resolves the real client IP from an X-Forwarded-For header,
-// assuming the immediate peer is already known to be a trusted proxy. It walks
-// the hop chain from the rightmost (closest to this server) entry leftward,
-// skipping hops that are explicitly configured proxies (IsConfiguredProxy), and
-// returns the first non-proxy address: the real external client. If every hop
-// is a configured proxy, the leftmost entry is returned as the original client.
-//
-// Walking from the right, and skipping only configured proxies, defeats
-// spoofing: a client cannot forge a leftmost entry, because proxies append the
-// address they actually saw, so the attacker's real address sits to the right
-// of any value they injected and is never skipped. Multi-hop chains with
-// internal proxies therefore require those proxies' CIDRs in
-// security.trustedproxies for correct attribution. Returns "" for an empty or
-// malformed header, letting the caller fall back to the next source.
-func (tc *Checker) ClientIPFromXFF(xff string) string {
-	if xff == "" {
-		return ""
-	}
-	parts := strings.Split(xff, ",")
-	for i, part := range slices.Backward(parts) {
-		ip := net.ParseIP(stripZone(strings.TrimSpace(part)))
-		if ip == nil {
-			// Malformed hop: nothing further left can be trusted; fall back.
-			return ""
-		}
-		if !tc.IsConfiguredProxy(ip) {
-			return ip.String() // nearest non-proxy hop = real client
-		}
-		if i == 0 {
-			// All hops are configured proxies; the leftmost is the original client.
-			return ip.String()
-		}
-	}
-	return ""
-}
-
 // AuthClientIP resolves the client address to use for authentication
 // decisions, such as the allowed-subnet bypass. It returns nil when the address
 // cannot be verified, and callers must then grant no address-based access.
@@ -390,8 +353,7 @@ func (tc *Checker) forwardedClientIP(h http.Header, policy hopPolicy) net.IP {
 }
 
 // strictClientFromXFF walks an X-Forwarded-For chain from the right, skipping
-// the hops policy skips, and returns the first other hop. Unlike ClientIPFromXFF
-// it returns nil for any malformed hop and when every hop is skipped, because
+// the hops policy skips, and returns the first other hop. It returns nil for any malformed hop and when every hop is skipped, because
 // the leftmost entry is client-supplied and nothing vouches for it.
 func (tc *Checker) strictClientFromXFF(xff string, policy hopPolicy) net.IP {
 	parts := strings.Split(xff, ",")
@@ -494,21 +456,6 @@ func PeerAddr(req *http.Request) (peerIP net.IP, host string) {
 	host = stripZone(host)
 	peerIP = net.ParseIP(host)
 	return peerIP, host
-}
-
-// ParseHeaderIP attempts to parse a valid IP from a header value. Returns the
-// IP string if valid, empty string otherwise.
-func ParseHeaderIP(headerValue string) string {
-	if headerValue == "" {
-		return ""
-	}
-	// net.ParseIP does not handle zone identifiers, and iOS Safari commonly
-	// connects via IPv6 link-local addresses with zone IDs.
-	ip := net.ParseIP(stripZone(headerValue))
-	if ip != nil {
-		return ip.String()
-	}
-	return ""
 }
 
 // stripZone removes an IPv6 zone identifier (e.g. "%wlan0") from s.

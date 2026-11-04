@@ -7,6 +7,7 @@ package authapi
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
@@ -210,6 +212,44 @@ func TestLoginRouteRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, rec.Code,
 			"the real client behind the proxy is not charged to the forged bucket")
 	})
+}
+
+// TestLoginRouteLogsPeerNotForgedClientHeader verifies that the login security
+// log does not record a client address forged through CF-Connecting-IP behind an
+// unlisted proxy that appends the real client to X-Forwarded-For: the forged
+// address disagrees with the appended one, so the denied attempt is logged under
+// the proxy's own address. Anyone banning on these log lines would otherwise ban
+// the address an attacker names.
+func TestLoginRouteLogsPeerNotForgedClientHeader(t *testing.T) {
+	// Not parallel: logtest swaps the process-global logger. Capture before the
+	// core is built so its loggers derive from the capture logger.
+	buf := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	e, h, _ := setupAuthIntegrationTest(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		h.RegisterRoutes(h.Group)
+
+		port := loginRateTestFirstPort
+		var last *httptest.ResponseRecorder
+		for n := 1; n <= loginRateTestBurst+1; n++ {
+			port++
+			req := httptest.NewRequest(http.MethodPost, loginRateTestLoginPath, strings.NewReader(loginRateTestWrongPayload))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			req.Header.Set(echo.HeaderXForwardedFor, loginPeerTestRealClient)
+			req.Header.Set(proxytrust.HeaderCFConnectingIP, fmt.Sprintf(loginPeerTestClientFormat, n))
+			req.RemoteAddr = net.JoinHostPort(loginPeerTestProxy, strconv.Itoa(port))
+			last = httptest.NewRecorder()
+			e.ServeHTTP(last, req)
+		}
+		require.Equal(t, http.StatusTooManyRequests, last.Code, "the sixth attempt is denied")
+	})
+
+	out := buf.String()
+	require.Contains(t, out, "Login attempt denied due to rate limit")
+	assert.Contains(t, out, "ip="+loginPeerTestProxy, "the denied attempt is logged under the proxy address")
+	assert.NotContains(t, out, "203.0.113.", "a forged CF-Connecting-IP must not be logged as the client")
+	assert.NotContains(t, out, loginPeerTestRealClient, "an address the proxy did not verify is not logged as the client")
 }
 
 // setLoginTrustedProxies publishes a settings snapshot that lists trusted, as a

@@ -132,37 +132,6 @@ func mustParseIP(t *testing.T, s string) net.IP {
 	return ip
 }
 
-// TestParseHeaderIP tests IP parsing with zone ID stripping.
-func TestParseHeaderIP(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{name: "empty string", input: "", expected: ""},
-		{name: "valid IPv4", input: "192.168.1.1", expected: "192.168.1.1"},
-		{name: "valid IPv6", input: "2001:db8::1", expected: "2001:db8::1"},
-		{name: "IPv6 link-local with zone ID", input: "fe80::1%eth0", expected: "fe80::1"},
-		{name: "IPv6 link-local with wlan zone", input: "fe80::1cb6:63bc:5462:71c5%wlan0", expected: "fe80::1cb6:63bc:5462:71c5"},
-		{name: "IPv4 with spurious percent", input: "192.168.1.1%zone", expected: "192.168.1.1"},
-		{name: "just a percent sign", input: "%", expected: ""},
-		{name: "garbage with percent", input: "not_an_ip%zone", expected: ""},
-		{name: "multiple percent signs", input: "fe80::1%wlan0%extra", expected: "fe80::1"},
-		{name: "invalid IP", input: "999.999.999.999", expected: ""},
-		{name: "IPv6 loopback", input: "::1", expected: "::1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := ParseHeaderIP(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 const (
 	// cloudflareEdgePeer is an address inside Cloudflare's published edge ranges.
 	cloudflareEdgePeer = "173.245.48.10:443"
@@ -279,34 +248,6 @@ func TestChecker_AuthClientIP(t *testing.T) {
 			}
 			require.NotNil(t, got)
 			assert.Equal(t, tt.want, got.String())
-		})
-	}
-}
-
-// TestChecker_ClientIPFromXFF pins the attribution walk: rightmost first,
-// skipping configured proxies, falling back to the leftmost when every hop is
-// configured, and returning "" for an empty or malformed chain.
-func TestChecker_ClientIPFromXFF(t *testing.T) {
-	t.Parallel()
-
-	checker := NewChecker([]string{"10.0.0.0/24"})
-	tests := []struct {
-		name string
-		xff  string
-		want string
-	}{
-		{name: "empty", xff: "", want: ""},
-		{name: "single hop", xff: "198.51.100.9", want: "198.51.100.9"},
-		{name: "rightmost unconfigured hop wins", xff: "192.0.2.1, 198.51.100.9", want: "198.51.100.9"},
-		{name: "configured hops are skipped", xff: "198.51.100.9, 10.0.0.3", want: "198.51.100.9"},
-		{name: "all configured falls back to leftmost", xff: "10.0.0.7, 10.0.0.3", want: "10.0.0.7"},
-		{name: "zone is stripped", xff: "fe80::1%eth0", want: "fe80::1"},
-		{name: "malformed hop", xff: "198.51.100.9, nonsense", want: ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, checker.ClientIPFromXFF(tt.xff))
 		})
 	}
 }
