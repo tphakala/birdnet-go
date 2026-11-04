@@ -63,8 +63,11 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 		{"POST pprof symbol", http.MethodPost, "/debug/pprof/symbol", true},
 		{"POST pprof heap", http.MethodPost, "/debug/pprof/heap", false},
 
-		// A path that merely starts with the same characters is not pprof.
-		{"POST debug lookalike", http.MethodPost, "/debug/pprofiler", false},
+		// A path that merely starts with the same characters is not pprof. The row
+		// uses a safe method on purpose: a wrongly matched pprof path is skipped for
+		// GET, while a POST falls through to false either way and cannot tell the
+		// two apart.
+		{"GET debug lookalike", http.MethodGet, "/debug/pprofiler", false},
 
 		// A traversal out of an exempt prefix resolves to a protected route and
 		// must not inherit the exemption.
