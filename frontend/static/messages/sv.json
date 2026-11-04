@@ -5709,7 +5709,7 @@
         "filterNoMatch": "Inga regioner matchar \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "Om precision och varianter",
-        "precisionHelp": Precision (FP32, FP16, INT8) innebär en avvägning mellan noggrannhet å ena sidan och storlek samt hastighet å den andra: FP32 ger högst noggrannhet medan INT8 är minst och snabbast. Alternativet ”Rekommenderad” är det som passar bäst för den hårdvara som har identifierats; ”Standard” motsvarar modellens ursprungliga utformning.."
+        "precisionHelp": "Precision (FP32, FP16, INT8) innebär en avvägning mellan noggrannhet å ena sidan och storlek samt hastighet å den andra: FP32 ger högst noggrannhet medan INT8 är minst och snabbast. Alternativet ”Rekommenderad” är det som passar bäst för den hårdvara som har identifierats; ”Standard” motsvarar modellens ursprungliga utformning.."
       },
       "actionInProgress": "Vänta tills den pågående installationen, ominstallationen eller borttagningen av modellen är klar",
       "removeSuccess": "Borttagen {name}",
