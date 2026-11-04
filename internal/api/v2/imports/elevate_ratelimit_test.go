@@ -39,7 +39,8 @@ const (
 	// succession, whoever the forwarded client is.
 	elevatePeerTestBurst = elevateRateLimitBurst * elevatePeerTestMultiplier
 	// elevatePeerTestProxy and elevatePeerTestOtherProxy are private addresses a
-	// reverse proxy connects from; the extractor trusts them without configuration.
+	// reverse proxy connects from; without configuration the limiter key believes
+	// the client addresses they forward while their headers agree.
 	elevatePeerTestProxy      = "10.0.0.5"
 	elevatePeerTestOtherProxy = "10.0.0.6"
 	// elevatePeerTestClientFormat formats the documentation-range client address a
@@ -52,11 +53,10 @@ const (
 	elevatePeerTestRealClient = "198.51.100.9"
 )
 
-// newProxiedElevateHandler creates a Handler whose server honors forwarded client
-// addresses from trusted peers. newImportHandler builds a bare echo whose RealIP
-// ignores forwarded headers; this one has the server's trusted-proxy extractor, so
-// a forwarded client address reaches the per-client key as in production. With no
-// repository an allowed elevation request ends at 503 before any side effect.
+// newProxiedElevateHandler creates a Handler on a full apitest core, so the
+// per-client key resolves forwarded client addresses from the core's trusted-proxy
+// settings as in production. With no repository an allowed elevation request ends
+// at 503 before any side effect.
 func newProxiedElevateHandler(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()

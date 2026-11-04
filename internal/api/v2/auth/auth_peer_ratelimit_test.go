@@ -31,8 +31,8 @@ const (
 	// succession, whoever the forwarded client is.
 	loginPeerTestBurst = loginRateTestBurst * loginPeerTestMultiplier
 	// loginPeerTestProxy and loginPeerTestOtherProxy are private addresses a
-	// reverse proxy or tunnel connects from; the extractor trusts them without
-	// configuration.
+	// reverse proxy or tunnel connects from; without configuration the limiter key
+	// believes the client addresses they forward while their headers agree.
 	loginPeerTestProxy      = "10.0.0.5"
 	loginPeerTestOtherProxy = "10.0.0.6"
 	// loginPeerTestClientFormat formats the documentation-range client address a
