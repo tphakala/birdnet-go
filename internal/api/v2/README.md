@@ -167,6 +167,8 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/integrations/weather/test`                 | `TestWeatherConnection`         | ✅   | Test weather provider connection               |
 | POST   | `/integrations/ebird/test`                   | `TestEBirdConnection`           | ✅   | Test eBird API connectivity and authentication |
 
+The MQTT and BirdWeather test endpoints stream one JSON object per line: the stage results in the order they occur, then a final `{"state":"completed","elapsed_time_ms":N}` line when the test finishes before its timeout and the client is still connected. No completed line is written after a timeout or a client disconnect.
+
 ### Media (`media/media.go`)
 
 | Method | Route                                | Handler                    | Auth | Description                             |

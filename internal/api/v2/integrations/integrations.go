@@ -169,6 +169,10 @@ func (a *birdweatherTestAdapter) Cleanup() {
 // - Running test in goroutine with cleanup
 // - Streaming results to HTTP client
 // - Handling client disconnection
+//
+// Stage results are written in the order the client sends them, followed by one
+// "completed" line when the test finishes before the timeout and the HTTP client
+// is still connected. Every write happens on the calling goroutine.
 func runStreamingIntegrationTest[T any](
 	c *Handler,
 	ctx echo.Context,
@@ -177,26 +181,18 @@ func runStreamingIntegrationTest[T any](
 	timeout time.Duration,
 	integrationName string,
 ) error {
-	// Create a done channel to signal when the client disconnects
-	doneChan := make(chan struct{})
-
-	// Use sync.Once to ensure doneChan is closed exactly once
-	var closeOnce sync.Once
-	safeDoneClose := func() {
-		closeOnce.Do(func() {
-			close(doneChan)
-		})
-	}
-
-	// Mutex for safe writing to response
-	var writeMu sync.Mutex
-
 	// Create context with timeout that also gets cancelled if HTTP client disconnects
 	httpCtx := ctx.Request().Context()
 	testCtx, cancel := context.WithTimeout(httpCtx, timeout)
 	defer cancel()
 
-	// Run the test in a goroutine
+	// elapsedMs is written by the worker before it closes resultChan and read
+	// below only after the range loop has observed the close.
+	var elapsedMs int64
+
+	// Run the test in a goroutine. The worker must not touch ctx: Echo recycles
+	// it once the handler returns, so a late write would race with the next
+	// request that reuses it (issue #4292). All writes stay on this goroutine.
 	go func() {
 		defer close(resultChan)
 		startTime := time.Now()
@@ -204,51 +200,11 @@ func runStreamingIntegrationTest[T any](
 		// Start the test
 		client.TestConnection(testCtx, resultChan)
 
-		// Calculate elapsed time
-		elapsedTime := time.Since(startTime).Milliseconds()
+		// Elapsed time excludes client cleanup
+		elapsedMs = time.Since(startTime).Milliseconds()
 
 		// Clean up client resources
 		client.Cleanup()
-
-		// Send final result with elapsed time if the client is still connected
-		select {
-		case <-doneChan:
-			c.Debug("HTTP client disconnected, skipping final result")
-		case <-testCtx.Done():
-			c.Debug("Test context cancelled: %v", testCtx.Err())
-		default:
-			writeMu.Lock()
-			defer writeMu.Unlock()
-
-			// Re-check under the lock before touching ctx. The handler may have
-			// returned (encode error or client disconnect) while we were blocked
-			// acquiring writeMu; on those paths it closes doneChan / cancels
-			// testCtx before releasing the lock, so observing either here means
-			// the handler has gone. Writing to ctx after the handler returns
-			// touches a recycled echo.Context/Response and races with the next
-			// request that reuses it (issue #4292 bug class).
-			select {
-			case <-doneChan:
-				c.Debug("HTTP client disconnected, skipping final result")
-				return
-			case <-testCtx.Done():
-				c.Debug("Test context cancelled: %v", testCtx.Err())
-				return
-			default:
-			}
-
-			finalResult := map[string]any{
-				"elapsed_time_ms": elapsedTime,
-				"state":           "completed",
-			}
-
-			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
-				apicore.GetLogger().Error("Error writing final test result",
-					logger.String("integration", integrationName),
-					logger.Error(err),
-				)
-			}
-		}
 	}()
 
 	// Feed streaming results to client
@@ -266,49 +222,49 @@ func runStreamingIntegrationTest[T any](
 
 	// Stream results to client until done
 	for result := range resultChan {
-		writeMu.Lock()
 		apicore.SetStreamWriteDeadline(ctx)
 		if err := encoder.Encode(result); err != nil {
 			apicore.GetLogger().Error("Error encoding test result",
 				logger.String("integration", integrationName),
 				logger.Error(err),
 			)
-			// Signal shutdown BEFORE releasing writeMu so a worker goroutine
-			// blocked on writeMu.Lock() observes the closed doneChan (and the
-			// cancelled testCtx) once it acquires the lock, and skips its final
-			// write instead of touching the recycled ctx after this handler
-			// returns (issue #4292 bug class).
-			safeDoneClose()
 			cancel()
-			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		}
 		ctx.Response().Flush()
-		writeMu.Unlock()
 
 		// Check if HTTP context is done (client disconnected)
 		select {
 		case <-httpCtx.Done():
 			c.Debug("HTTP client disconnected during %s test", integrationName)
-			// Signal shutdown under writeMu, mirroring the encode-error path
-			// above. Acquiring the lock blocks until any in-progress worker
-			// final write finishes (so ctx is not recycled mid-write), and it
-			// establishes the happens-before that makes a worker later blocked
-			// on writeMu.Lock() observe the closed doneChan and skip its write.
-			// Signalling after the unlock instead would leave a window where the
-			// worker touches the recycled ctx after this handler returns, since
-			// testCtx cancellation propagates from httpCtx only after httpCtx's
-			// own Done channel is already closed (issue #4292 bug class).
-			writeMu.Lock()
-			safeDoneClose()
 			cancel()
-			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		default:
 			// Continue processing
 		}
+	}
+
+	// The channel is closed, so the worker has recorded elapsedMs. Skip the
+	// final line when the test timed out or the client disconnected.
+	if err := testCtx.Err(); err != nil {
+		c.Debug("Test context ended, skipping final result: %v", err)
+		return nil
+	}
+
+	apicore.SetStreamWriteDeadline(ctx)
+	finalResult := map[string]any{
+		"elapsed_time_ms": elapsedMs,
+		"state":           streamStateCompleted,
+	}
+	if err := encoder.Encode(finalResult); err != nil {
+		apicore.GetLogger().Error("Error writing final test result",
+			logger.String("integration", integrationName),
+			logger.Error(err),
+		)
+	} else {
+		ctx.Response().Flush()
 	}
 
 	return nil
@@ -960,6 +916,9 @@ func formatClientError(prefix string, err error, settings *conf.Settings) string
 // mimeNDJSON is the content type for newline-delimited JSON streaming responses.
 const mimeNDJSON = "application/x-ndjson"
 
+// streamStateCompleted is the state of the final line of a streamed integration test.
+const streamStateCompleted = "completed"
+
 // setStreamingHeaders configures the response for a streamed JSON/NDJSON body and
 // commits the 200 status. It disables proxy buffering (X-Accel-Buffering: no) via
 // the shared apicore helper so nginx and compatible reverse proxies deliver each
@@ -972,15 +931,6 @@ func setStreamingHeaders(ctx echo.Context, contentType string) {
 	h.Set(echo.HeaderConnection, "keep-alive")
 	apicore.DisableProxyBuffering(ctx)
 	ctx.Response().WriteHeader(http.StatusOK)
-}
-
-// writeJSONResponse writes a JSON response to the client
-// NOTE: For most cases, consider using Echo's built-in ctx.JSON(httpStatus, data) instead
-// This function is primarily useful for streaming or special encoding scenarios
-func (c *Handler) writeJSONResponse(ctx echo.Context, data any) error {
-	apicore.SetStreamWriteDeadline(ctx)
-	encoder := json.NewEncoder(ctx.Response())
-	return encoder.Encode(data)
 }
 
 // TestEBirdConnection handles POST /api/v2/integrations/ebird/test
