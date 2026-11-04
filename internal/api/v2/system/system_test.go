@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -377,6 +378,21 @@ func TestIsReadOnlyMount(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestIsFileMount covers the single-file bind mounts that container runtimes
+// add (Docker's /etc/hosts, the NVIDIA toolkit's driver files), which must not
+// be listed as disks.
+func TestIsFileMount(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "hosts")
+	require.NoError(t, os.WriteFile(file, []byte("127.0.0.1 localhost\n"), 0o600))
+
+	assert.True(t, isFileMount(file), "a regular file mount point is a file mount")
+	assert.False(t, isFileMount(dir), "a directory mount point is a disk")
+	assert.False(t, isFileMount(filepath.Join(dir, "missing")), "a mount point that cannot be inspected is kept")
 }
 
 // TestSkipFilesystem tests the skipFilesystem helper function
