@@ -71,10 +71,14 @@ const (
 	storeTestFlood = 8
 	// storeTestIPv6Block formats the i-th /64 key of one /48.
 	storeTestIPv6Block = "2001:db8:1:%x::"
-	// storeTestRefillRate and storeTestRefillStep: with a burst of storeTestBurst a
-	// bucket spent by one request refills after storeTestRefillStep.
+	// storeTestRefillRate is one token per minute. With a burst of storeTestBurst,
+	// a bucket spent by one request is full again after two storeTestRefillStep,
+	// and a bucket spent by storeTestBurst requests after four.
 	storeTestRefillRate rate.Limit = 1.0 / 60
 	storeTestRefillStep            = time.Minute / 2
+	// storeTestRefillWait is the sleep after which a bucket spent by one request
+	// is full again, with a margin so the comparison with the burst is not exact.
+	storeTestRefillWait = 2*storeTestRefillStep + storeTestRefillStep/3
 	// storeTestIdleMargin is how far past ExpiresIn the idle test sleeps.
 	storeTestIdleMargin = time.Minute
 )
@@ -190,13 +194,47 @@ func TestRateLimiterStoreNamespaceTailIsLeastRecentlyUsed(t *testing.T) {
 		require.True(t, allowed(t, store, used))
 		require.False(t, allowed(t, store, spent), "this hit makes the older entry the most recently used")
 
-		time.Sleep(storeTestRefillStep * 2)
+		time.Sleep(storeTestRefillWait)
 		require.True(t, allowed(t, store, newcomer))
 
 		assert.False(t, store.tracked(used), "the least recently used entry was full again and made room")
 		assert.True(t, store.tracked(spent))
+		assert.Equal(t, storeTestNamespaceCap, store.namespaceEntries(storeTestPeer), "the namespace kept both live entries")
 		assert.False(t, store.hasOverflow(storeTestPeer), "no overflow bucket was needed")
 	})
+}
+
+// TestRateLimiterStoreReplacesRefilledTailOfItsOwnNamespace verifies that when
+// the entry made room for is in the newcomer's own namespace and was the last one
+// there, the newcomer still lands in a registered namespace: the namespace
+// holds it and the next newcomer is counted against the cap.
+func TestRateLimiterStoreReplacesRefilledTailOfItsOwnNamespace(t *testing.T) {
+	tests := []struct {
+		name                   string
+		storeCap, namespaceCap int
+	}{
+		{"namespace cap", storeTestRoomyCap, storeTestTinyCap},
+		{"store cap", storeTestTinyCap, storeTestRoomyCap},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				store := newRateLimiterStore(middleware.RateLimiterMemoryStoreConfig{
+					Rate: storeTestRefillRate, Burst: storeTestBurst, ExpiresIn: storeTestExpiresIn,
+				}, tt.storeCap, tt.namespaceCap)
+				older := storeTestPeer + keyNamespaceSep + "older"
+				newer := storeTestPeer + keyNamespaceSep + "newer"
+				require.True(t, allowed(t, store, older))
+
+				time.Sleep(storeTestRefillWait)
+				require.True(t, allowed(t, store, newer))
+
+				assert.False(t, store.tracked(older))
+				assert.Equal(t, 1, store.namespaceCount(), "the newcomer's namespace is registered")
+				assert.Equal(t, 1, store.namespaceEntries(storeTestPeer))
+			})
+		})
+	}
 }
 
 // TestRateLimiterStoreOverflowOutlivesEntries verifies that a namespace keeps
@@ -240,7 +278,7 @@ func TestRateLimiterStoreBoundsNamespaceOverflowBuckets(t *testing.T) {
 			require.True(t, allowed(t, store, key(peer, "member")))
 			require.True(t, allowed(t, store, key(peer, "overflow")), "the namespace is full, so it opens an overflow bucket")
 		}
-		time.Sleep(storeTestRefillStep * 2)
+		time.Sleep(storeTestRefillWait)
 		last := peers[storeTestOverflowCap]
 		require.True(t, allowed(t, store, key(last, "member")), "a refilled tail makes room in the store")
 
@@ -285,6 +323,7 @@ func TestRateLimiterStoreExpiresFromTail(t *testing.T) {
 		time.Sleep(storeTestExpiresIn + storeTestIdleMargin)
 		require.True(t, allowed(t, store, "e"))
 		assert.Equal(t, 1, store.len())
+		assert.Equal(t, 1, store.namespaceCount(), "the namespaces of the expired identifiers are gone")
 	})
 }
 
@@ -306,24 +345,6 @@ func TestRateLimiterStoreOverflowExpires(t *testing.T) {
 		require.True(t, allowed(t, store, storeTestPlainKey))
 		assert.Equal(t, 1, store.namespaceCount(), "the namespace and its overflow bucket expired")
 		assert.True(t, allowed(t, store, overflow), "a new entry starts with a full burst")
-	})
-}
-
-// TestRateLimiterStoreIdleCleanupReleasesEntries verifies that identifiers idle
-// longer than ExpiresIn are dropped together with their namespaces.
-func TestRateLimiterStoreIdleCleanupReleasesEntries(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		store := newTestStore(storeTestRoomyCap, storeTestRoomyCap)
-		for i := range storeTestStoreCap {
-			require.True(t, allowed(t, store, fmt.Sprintf("peer%d%sclient", i, keyNamespaceSep)))
-		}
-		require.Equal(t, storeTestStoreCap, store.len())
-
-		time.Sleep(storeTestExpiresIn + storeTestIdleMargin)
-		require.True(t, allowed(t, store, storeTestPlainKey))
-
-		assert.Equal(t, 1, store.len(), "idle identifiers are dropped")
-		assert.Equal(t, 1, store.namespaceCount(), "empty namespaces are dropped")
 	})
 }
 
@@ -469,4 +490,15 @@ func (s *rateLimiterStore) hasGlobalOverflow() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.globalOverflow != nil
+}
+
+// namespaceEntries returns the number of entries the namespace holds.
+func (s *rateLimiterStore) namespaceEntries(namespace string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ns := s.namespaces[namespace]
+	if ns == nil {
+		return 0
+	}
+	return ns.entries.Len()
 }
