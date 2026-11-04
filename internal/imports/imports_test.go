@@ -431,10 +431,9 @@ func TestImport_Idempotent_TimezoneMismatch(t *testing.T) {
 }
 
 // TestImport_ReimportV2_SkipsStoredRows verifies that a re-import on a v2
-// database skips the rows it already stored and inserts only the new one. v2
-// keeps no node name for imported rows, so the stored rows must be found without
-// a source node filter, and the key of a stored row depends on how its instant
-// was written.
+// database preserves the source provenance, skips the row it already stored,
+// and inserts only the new one. The key of a stored row depends on how its
+// instant was written.
 func TestImport_ReimportV2_SkipsStoredRows(t *testing.T) {
 	stationZone := time.FixedZone("station", 3*3600)
 	importZone := time.FixedZone("import", -4*3600)
@@ -469,13 +468,29 @@ func TestImport_ReimportV2_SkipsStoredRows(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo, db := newV2DetectionRepo(t, stationZone)
-			opts := imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: importZone}
+			opts := imports.ImportOptions{Location: importZone}
 
 			src1, err := newBirdNetPiSource(t, newFixtureDB(t, []birdnetPiRow{stored}))
 			require.NoError(t, err)
 			stats1, err := imports.NewEngine(repo).Run(t.Context(), src1, &opts, nil)
 			require.NoError(t, err)
 			require.Equal(t, 1, stats1.Inserted, "first run must insert the row")
+
+			var source struct {
+				ID          uint
+				SourceURI   string
+				NodeName    string
+				DisplayName *string
+			}
+			require.NoError(t, db.Table("audio_sources").First(&source).Error)
+			assert.Equal(t, imports.DefaultSourceNode, source.SourceURI)
+			assert.Equal(t, imports.DefaultSourceNode, source.NodeName)
+			require.NotNil(t, source.DisplayName)
+			assert.Equal(t, imports.DefaultSourceNode, *source.DisplayName)
+
+			var linked int64
+			require.NoError(t, db.Table("detections").Where("source_id = ?", source.ID).Count(&linked).Error)
+			assert.Equal(t, int64(1), linked, "the imported detection must reference its audio source")
 
 			if tt.storeAsStationWallTime {
 				wall, err := time.ParseInLocation(time.DateTime, storedDate+" "+storedTime, stationZone)
