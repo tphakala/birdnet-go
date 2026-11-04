@@ -1035,6 +1035,51 @@ func TestDropOldestJob(t *testing.T) {
 	assert.Equal(t, 3, stats.SuccessfulJobs, "Successful jobs should be 3")
 }
 
+// TestJobQueueConcurrencyBurst verifies a burst of due jobs does not exceed the
+// queue's execution capacity. Excess jobs stay pending and consume no attempts.
+func TestJobQueueConcurrencyBurst(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		action := &MockAction{ExecuteFunc: func(any) error {
+			<-release
+			return nil
+		}}
+
+		queue := NewJobQueue()
+		queue.StartWithContext(t.Context())
+
+		// One more than the default of two concurrent attempts. Without a bound,
+		// this single dispatch starts every due job.
+		const jobCount = 3
+		jobs := make([]*Job, jobCount)
+		for i := range jobs {
+			job, err := queue.Enqueue(t.Context(), action, &TestData{ID: fmt.Sprintf("burst-%d", i)}, RetryConfig{Enabled: false})
+			require.NoError(t, err, "enqueue burst job")
+			jobs[i] = job
+		}
+
+		queue.ProcessImmediately(t.Context())
+		synctest.Wait()
+
+		assert.Equal(t, 2, action.GetExecuteCount(), "Execute calls must stay within capacity")
+		queue.mu.Lock()
+		pending := 0
+		for _, job := range jobs {
+			if job.Status != JobStatusPending {
+				continue
+			}
+			pending++
+			assert.Zero(t, job.Attempts, "a job waiting for capacity must not consume an attempt")
+		}
+		queue.mu.Unlock()
+		assert.Equal(t, jobCount-2, pending, "excess jobs stay pending")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, queue.Stop())
+	})
+}
+
 // overrunAction ignores its context, like BirdWeatherAction. Its first start
 // runs firstAttempt; every later start returns nil at once. It records the
 // virtual time of each start.

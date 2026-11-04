@@ -17,6 +17,10 @@ import (
 
 // Configuration constants
 const (
+	// defaultExecutionCapacity bounds concurrent actions, including timed-out
+	// attempts that have not returned. It applies across stop/start cycles.
+	defaultExecutionCapacity = 2
+
 	// DefaultJobExecutionTimeout is the default timeout for job execution
 	DefaultJobExecutionTimeout = 30 * time.Second
 
@@ -51,6 +55,7 @@ type JobQueue struct {
 	stats              JobStats
 	stopCh             chan struct{}
 	runningJobs        sync.WaitGroup // Track running jobs for graceful shutdown
+	executionSlots     chan struct{}  // Reservations stay occupied until the action returns
 	isRunning          bool
 	maxJobs            int  // Maximum number of pending jobs in the queue
 	droppedJobs        int  // Counter for jobs dropped due to queue full
@@ -76,6 +81,7 @@ func NewJobQueueWithOptions(maxJobs int, logAllSuccesses bool) *JobQueue {
 	return &JobQueue{
 		jobs:               make([]*Job, 0),
 		stopCh:             make(chan struct{}),
+		executionSlots:     make(chan struct{}, defaultExecutionCapacity),
 		maxJobs:            maxJobs,
 		logAllSuccesses:    logAllSuccesses,
 		allowJobDropping:   true,            // Default to allowing job dropping when queue is full
@@ -436,12 +442,14 @@ func calculateBackoffDelay(config RetryConfig, failedAttempt int, clock Clock) t
 	return time.Duration(backoff)
 }
 
-// revertRunningJobsToPending reverts all running jobs back to pending/retrying status.
-// Called when context is cancelled during job processing.
+// revertRunningJobsToPending restores unspawned jobs and releases their reservations.
+// Called when context is cancelled during job processing, before slot ownership
+// has transferred to the action goroutines.
 func (q *JobQueue) revertRunningJobsToPending(jobs []*Job) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for _, j := range jobs {
+		<-q.executionSlots
 		if j.Status == JobStatusRunning {
 			if j.Attempts > 0 {
 				j.Status = JobStatusRetrying
@@ -472,8 +480,13 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 			continue
 		}
 		if !job.NextRetryAt.After(now) {
-			dueJobs = append(dueJobs, job)
-			job.Status = JobStatusRunning
+			select {
+			case q.executionSlots <- struct{}{}:
+				dueJobs = append(dueJobs, job)
+				job.Status = JobStatusRunning
+			default:
+				// Leave excess work untouched until a later processing tick.
+			}
 		}
 	}
 
@@ -735,6 +748,9 @@ func (q *JobQueue) executeJobWithTimeout(ctx context.Context, job *Job) (abandon
 	resultChan := make(chan attemptResult, 1)
 
 	go func() {
+		// The action owns the dispatch reservation, even after the outer
+		// timeout handler returns. Panic recovery also releases it exactly once.
+		defer func() { <-q.executionSlots }()
 		defer func() {
 			if r := recover(); r != nil {
 				panicErr := errors.Newf("job execution panicked: %v", r).
