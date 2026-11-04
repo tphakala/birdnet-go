@@ -54,7 +54,8 @@ type RateLimitClient struct {
 // Forwarded makes the result nil.
 type hopPolicy struct {
 	// skipCloudflareEdge skips Cloudflare edge hops even when the preset is not
-	// configured.
+	// configured. implicitHopPolicy sets it only for a request that carries
+	// CF-Connecting-IP.
 	skipCloudflareEdge bool
 	// skipLocalHops skips loopback, link-local and private hops, which a chain
 	// such as cloudflared to a proxy in docker adds in front of the client.
@@ -71,9 +72,11 @@ type hopPolicy struct {
 	ignoreForwarded bool
 }
 
-// implicitHopPolicy is the policy for an unconfigured local proxy. Local hops
-// and a single-edge-hop X-Forwarded-For count only when the request carries
-// CF-Connecting-IP, which is what puts such hops in front of the client.
+// implicitHopPolicy is the policy for an unconfigured local proxy. Cloudflare
+// edge hops, local hops and a single-edge-hop X-Forwarded-For are looked past
+// only when the request carries CF-Connecting-IP, which is what puts such hops
+// in front of the client. Without it an address inside Cloudflare's ranges is a
+// caller (a Cloudflare-hosted client, for example), not an edge.
 func implicitHopPolicy(h http.Header) hopPolicy {
 	cfPresent := false
 	for _, v := range h[canonicalCFConnectingIP] {
@@ -83,7 +86,7 @@ func implicitHopPolicy(h http.Header) hopPolicy {
 		}
 	}
 	return hopPolicy{
-		skipCloudflareEdge:       true,
+		skipCloudflareEdge:       cfPresent,
 		skipLocalHops:            cfPresent,
 		trueClientIPVetoOnly:     true,
 		singleEdgeHopXFFAbstains: cfPresent,

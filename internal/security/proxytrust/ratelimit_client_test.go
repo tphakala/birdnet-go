@@ -23,6 +23,9 @@ const (
 	rlDockerHop = "172.18.0.2"
 	// rlSecondEdge is a second Cloudflare edge address.
 	rlSecondEdge = "173.245.48.11"
+	// rlCloudflareCaller is an address inside Cloudflare's ranges that reaches an
+	// origin without Cloudflare proxying it (for example a Cloudflare-hosted client).
+	rlCloudflareCaller = "104.18.1.1"
 )
 
 // rateLimitClientCase is one request shape for TestCheckerRateLimitClient.
@@ -56,6 +59,9 @@ func rateLimitClientCases() []rateLimitClientCase {
 		{name: "unlisted public peer naming an edge hop is not flagged", remoteAddr: "203.0.113.50:5000", headers: xff(testCloudflareEdgeIP), wantSource: SourceDirect, wantClient: "203.0.113.50"},
 		{name: "edge address only in X-Real-IP sets the flag", remoteAddr: "127.0.0.1:5000", headers: merge(cf(testClientAddress), realIP(testCloudflareEdgeIP)), wantSource: SourceImplicitProxy, wantClient: testClientAddress, wantEdge: true},
 		{name: "edge hop in XFF without CF-Connecting-IP does not abstain", remoteAddr: "127.0.0.1:5000", headers: merge(realIP(rlForgedClient), xff(testCloudflareEdgeIP)), wantSource: SourceUnverified, wantClient: "127.0.0.1", wantEdge: true},
+		{name: "caller in Cloudflare space without CF-Connecting-IP is the client, not an edge", remoteAddr: "127.0.0.1:5000", headers: merge(xff(testClientAddress+", "+rlCloudflareCaller), realIP(rlCloudflareCaller)), wantSource: SourceImplicitProxy, wantClient: rlCloudflareCaller, wantEdge: true},
+		{name: "caller in Cloudflare space without CF-Connecting-IP, XFF only", remoteAddr: "127.0.0.1:5000", headers: xff(testClientAddress + ", " + rlCloudflareCaller), wantSource: SourceImplicitProxy, wantClient: rlCloudflareCaller, wantEdge: true},
+		{name: "caller in Cloudflare space sending CF-Connecting-IP itself is still believed", remoteAddr: "127.0.0.1:5000", headers: merge(cf(testClientAddress), xff(testClientAddress+", "+rlCloudflareCaller)), wantSource: SourceImplicitProxy, wantClient: testClientAddress, wantEdge: true},
 		{name: "unlisted CGNAT peer, with headers", remoteAddr: "100.64.1.2:5000", headers: cf(rlForgedClient), wantSource: SourceDirect, wantClient: "100.64.1.2"},
 		{name: "configured peer, no headers", trustedProxies: []string{"127.0.0.1"}, remoteAddr: "127.0.0.1:5000", wantSource: SourceDirect, wantClient: "127.0.0.1"},
 		{name: "cloudflared listed, CF plus a client XFF chain", trustedProxies: []string{"127.0.0.1"}, remoteAddr: "127.0.0.1:5000", headers: merge(cf(testClientAddress), xff(testClientAddress)), wantSource: SourceConfiguredProxy, wantClient: testClientAddress},
