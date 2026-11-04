@@ -3,6 +3,21 @@ import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import Species from './Species.svelte';
+import { t } from '$lib/i18n';
+import { tick } from 'svelte';
+import { deferred } from '../../../../../test/async-helpers';
+
+// The shared logger mock omits analytics; error-path tests need that category.
+vi.mock('$lib/utils/logger', async importOriginal => {
+  const actual = await importOriginal<typeof import('$lib/utils/logger')>();
+  return {
+    ...actual,
+    loggers: {
+      ...actual.loggers,
+      analytics: { ...actual.loggers.analytics, error: vi.fn() },
+    },
+  };
+});
 
 /* eslint-disable security/detect-object-injection -- bracket access in this file is constant numeric indexing into NodeLists (querySelectorAll(...)[CONSTANT]) in assertions, not user-controlled keys. */
 
@@ -213,5 +228,113 @@ describe('Species (analytics page) — sortable column headers', () => {
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
+  });
+});
+
+describe('Species (analytics page) — loading errors', () => {
+  const originalFetch = globalThis.fetch;
+  const summary: SpeciesSummary[] = [
+    {
+      common_name: 'Blue Jay',
+      scientific_name: 'Cyanocitta cristata',
+      count: 5,
+      avg_confidence: 0.8,
+      max_confidence: 0.9,
+      first_heard: '2026-04-01',
+      last_heard: '2026-04-20',
+    },
+  ];
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.fetch = originalFetch;
+    window.localStorage.clear();
+  });
+
+  it.each([
+    ['HTTP error', () => Promise.resolve(new Response('', { status: 500 }))],
+    ['network error', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['invalid JSON', () => Promise.resolve(new Response('not JSON'))],
+  ])(
+    'shows an accessible error and retry instead of empty results for %s',
+    async (_name, response) => {
+      globalThis.fetch = vi.fn(response);
+      const view = speciesTest.render({});
+
+      expect(await view.findByRole('alert')).toHaveTextContent(t('analytics.errors.loadFailed'));
+      expect(view.getByRole('button', { name: t('common.retry') })).toBeEnabled();
+      expect(view.queryByText(t('analytics.species.noSpeciesFound'))).not.toBeInTheDocument();
+
+      await fireEvent.click(
+        view.getByRole('button', { name: t('analytics.species.switchToList') })
+      );
+      expect(view.queryByRole('table')).not.toBeInTheDocument();
+      expect(view.queryByText(t('analytics.species.noSpeciesFound'))).not.toBeInTheDocument();
+    }
+  );
+
+  it.each([
+    ['species', summary, 'Blue Jay'],
+    ['an empty result', [], t('analytics.species.noSpeciesFound')],
+  ])(
+    'clears the error while retrying and can recover with %s',
+    async (_name, result, expectedText) => {
+      const retry = deferred<Response>();
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response('', { status: 500 }))
+        .mockReturnValueOnce(retry.promise);
+      globalThis.fetch = fetchMock;
+      const view = speciesTest.render({});
+      await view.findByRole('alert');
+
+      await fireEvent.click(view.getByRole('button', { name: t('common.retry') }));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]).toEqual(fetchMock.mock.calls[0]);
+      expect(view.queryByRole('alert')).not.toBeInTheDocument();
+      expect(view.queryByRole('button', { name: t('common.retry') })).not.toBeInTheDocument();
+      expect(view.queryByText(t('analytics.species.noSpeciesFound'))).not.toBeInTheDocument();
+      expect(view.getByRole('status')).toHaveTextContent(t('common.loading'));
+
+      retry.resolve(Response.json(result));
+      await waitFor(() => expect(view.queryByText(t('common.loading'))).not.toBeInTheDocument());
+      expect(view.queryByRole('alert')).not.toBeInTheDocument();
+      expect(view.getAllByText(expectedText).length).toBeGreaterThan(0);
+    }
+  );
+
+  it('shows the normal empty state for a successful empty response', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValue(Response.json([]));
+    const view = speciesTest.render({});
+    expect(await view.findByText(t('analytics.species.noSpeciesFound'))).toBeInTheDocument();
+    expect(view.queryByRole('alert')).not.toBeInTheDocument();
+    expect(view.queryByRole('button', { name: t('common.retry') })).not.toBeInTheDocument();
+  });
+
+  it('ignores an older request failing after a newer request succeeds', async () => {
+    const older = deferred<Response>();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(older.promise)
+      .mockResolvedValueOnce(Response.json(summary));
+    globalThis.fetch = fetchMock;
+    const view = speciesTest.render({});
+    const form = view.container.querySelector('form');
+    if (!form) throw new Error('Species filter form not found');
+
+    // Submitting the form models a filter update while the first request is pending.
+    await fireEvent.submit(form);
+    await view.findAllByText('Blue Jay');
+    older.reject(new TypeError('Failed to fetch'));
+    await tick();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(view.queryByRole('alert')).not.toBeInTheDocument();
+    expect(view.queryByText(t('analytics.species.noSpeciesFound'))).not.toBeInTheDocument();
+    expect(view.getAllByText('Blue Jay').length).toBeGreaterThan(0);
   });
 });

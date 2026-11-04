@@ -9,6 +9,9 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { onMount, onDestroy } from 'svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
@@ -121,6 +124,7 @@
   }
 
   let isLoading = $state<boolean>(true);
+  let hasLoadError = $state(false);
   let speciesData = $state<SpeciesData[]>([]);
   // Debounced copy of filters.searchTerm that actually drives filtering; the raw
   // filters.searchTerm stays live for the input box and the "filtered" badge.
@@ -211,6 +215,7 @@
   async function fetchData() {
     const currentSeq = ++fetchSeq;
     isLoading = true;
+    hasLoadError = false;
     // Apply Filters (and mount/reset) commit the pending dropdown selection.
     appliedSortOrder = filters.sortOrder;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
@@ -284,6 +289,7 @@
     } catch (error) {
       // Ignore a stale request's failure so it cannot blank out fresher results.
       if (currentSeq !== fetchSeq) return;
+      hasLoadError = true;
       logger.error('Error fetching species data:', error);
       speciesData = [];
     } finally {
@@ -604,15 +610,26 @@
         </div>
       </div>
 
+      <!-- Keep the status region mounted so loading changes are announced. -->
+      <div role="status" class="sr-only">{isLoading ? t('common.loading') : ''}</div>
+
       <!-- Loading State -->
       {#if isLoading}
-        <div class="flex justify-center items-center p-8">
-          <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
+        <div class="flex justify-center items-center gap-3 p-8" aria-hidden="true">
+          <LoadingSpinner aria-hidden="true" />
+          <span>{t('common.loading')}</span>
         </div>
       {/if}
 
+      {#if !isLoading && hasLoadError}
+        <ErrorAlert>
+          <p>{t('analytics.errors.loadFailed')}</p>
+          <Button className="mt-3" onclick={fetchData}>{t('common.retry')}</Button>
+        </ErrorAlert>
+      {/if}
+
       <!-- Mobile View - Compact List -->
-      {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
+      {#if !isLoading && !hasLoadError && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="sm:hidden space-y-2">
           {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
             <SpeciesCardMobile {species} variant="compact" onClick={handleSpeciesClick} />
@@ -621,7 +638,7 @@
       {/if}
 
       <!-- Desktop Grid View -->
-      {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
+      {#if !isLoading && !hasLoadError && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="species-grid hidden sm:grid">
           {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
             <SpeciesCard {species} />
@@ -630,7 +647,7 @@
       {/if}
 
       <!-- List View -->
-      {#if !isLoading && viewMode === 'list'}
+      {#if !isLoading && !hasLoadError && viewMode === 'list'}
         <div class="overflow-x-auto">
           <table class="table w-full hidden sm:table">
             <thead>
@@ -711,7 +728,7 @@
       {/if}
 
       <!-- Empty State -->
-      {#if !isLoading && filteredSpecies.length === 0}
+      {#if !isLoading && !hasLoadError && filteredSpecies.length === 0}
         <div class="text-center py-8 text-[var(--color-base-content)] opacity-50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
