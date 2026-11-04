@@ -1,5 +1,6 @@
 // elevate_ratelimit_test.go pins how the import elevation route limits attempts:
-// per client, with IPv6 clients counted per /64.
+// per client, with IPv6 clients counted per /64, and per connection peer, so a
+// peer cannot get fresh attempts by naming a new client in every request.
 package importsapi
 
 import (
@@ -10,9 +11,14 @@ import (
 	"strconv"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 const (
@@ -24,7 +30,112 @@ const (
 	// would. elevateRateTestOtherIPv6 is an address in a different /64.
 	elevateRateTestIPv6Block = "2001:db8:1:2::%x"
 	elevateRateTestOtherIPv6 = "2001:db8:1:3::1"
+
+	// elevatePeerTestMultiplier is how many clients' budgets one connection peer
+	// may spend. It is a literal, not the production constant, so the test pins
+	// the policy independently.
+	elevatePeerTestMultiplier = 10
+	// elevatePeerTestBurst is the number of attempts one peer may pass in quick
+	// succession, whoever the forwarded client is.
+	elevatePeerTestBurst = elevateRateLimitBurst * elevatePeerTestMultiplier
+	// elevatePeerTestProxy and elevatePeerTestOtherProxy are private addresses a
+	// reverse proxy connects from; the extractor trusts them without configuration.
+	elevatePeerTestProxy      = "10.0.0.5"
+	elevatePeerTestOtherProxy = "10.0.0.6"
+	// elevatePeerTestClientFormat formats the documentation-range client address a
+	// proxy reports in the forwarded header (at most 254 distinct clients).
+	elevatePeerTestClientFormat = "203.0.113.%d"
+	// elevatePeerTestSecondClient is the neighbour client in the shared-proxy test.
+	elevatePeerTestSecondClient = 2
 )
+
+// newProxiedElevateHandler creates a Handler whose server honors forwarded client
+// addresses from trusted peers. newImportHandler builds a bare echo whose RealIP
+// ignores forwarded headers; this one has the server's trusted-proxy extractor, so
+// a forwarded client address reaches the per-client key as in production. With no
+// repository an allowed elevation request ends at 503 before any side effect.
+func newProxiedElevateHandler(t *testing.T) (*echo.Echo, *Handler) {
+	t.Helper()
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
+	core.AuthMiddleware = func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	return e, &Handler{Core: core, importMgr: newImportManager()}
+}
+
+// proxiedElevateRequest posts an elevation attempt that arrives from the proxy at
+// peer and names client in the forwarded client address header.
+func proxiedElevateRequest(e *echo.Echo, peer string, port int, client string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, apiV2Prefix+"/import/elevate", http.NoBody)
+	req.Header.Set(proxytrust.HeaderCFConnectingIP, client)
+	req.RemoteAddr = net.JoinHostPort(peer, strconv.Itoa(port))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestElevateRouteRateLimitPeerBudget verifies that a peer which names a new
+// client in every request still runs out of attempts: a forwarded client address
+// is only as trustworthy as the peer that sends it, so the peer's own address
+// bounds the attempts it can pass. Another peer is unaffected, and the budget
+// comes back after the window.
+func TestElevateRouteRateLimitPeerBudget(t *testing.T) {
+	e, c := newProxiedElevateHandler(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		c.RegisterImportRoutes(c.Group)
+
+		port := elevateRateTestFirstPort
+		// attempt sends one request from the peer, naming the n-th client.
+		attempt := func(peer string, n int) *httptest.ResponseRecorder {
+			port++
+			return proxiedElevateRequest(e, peer, port, fmt.Sprintf(elevatePeerTestClientFormat, n))
+		}
+
+		for i := range elevatePeerTestBurst {
+			require.NotEqual(t, http.StatusTooManyRequests, attempt(elevatePeerTestProxy, i+1).Code,
+				"attempt %d names a new client and is within the peer budget", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, attempt(elevatePeerTestProxy, elevatePeerTestBurst+1).Code,
+			"the attempt after the peer budget is refused although its client is new")
+		assert.NotEqual(t, http.StatusTooManyRequests, attempt(elevatePeerTestOtherProxy, 1).Code,
+			"another peer has its own budget")
+
+		time.Sleep(elevateRateLimitWindow)
+		for i := range elevatePeerTestBurst {
+			require.NotEqual(t, http.StatusTooManyRequests, attempt(elevatePeerTestProxy, i+1).Code,
+				"attempt %d after the window is within the refilled peer budget", i+1)
+		}
+	})
+}
+
+// TestElevateRouteRateLimitRefusedClientSparesPeerBudget verifies that attempts
+// the per-client limiter refuses do not use up the peer budget: one client behind
+// a proxy keeps retrying past the peer budget, and another client behind the same
+// proxy still has its own attempts. The per-client limiter must run first for that
+// to hold.
+func TestElevateRouteRateLimitRefusedClientSparesPeerBudget(t *testing.T) {
+	e, c := newProxiedElevateHandler(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		c.RegisterImportRoutes(c.Group)
+
+		port := elevateRateTestFirstPort
+		// attempt sends one request through the proxy for the n-th client.
+		attempt := func(n int) *httptest.ResponseRecorder {
+			port++
+			return proxiedElevateRequest(e, elevatePeerTestProxy, port, fmt.Sprintf(elevatePeerTestClientFormat, n))
+		}
+
+		for range elevatePeerTestBurst + 1 {
+			attempt(1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, attempt(1).Code, "the retrying client is out of attempts")
+		assert.NotEqual(t, http.StatusTooManyRequests, attempt(elevatePeerTestSecondClient).Code,
+			"another client behind the same proxy still has its own attempts")
+	})
+}
 
 // TestElevateRouteRateLimitIPv6Prefix verifies that the elevation route counts an
 // IPv6 client per /64: a new address in the same /64 shares the exhausted bucket,
