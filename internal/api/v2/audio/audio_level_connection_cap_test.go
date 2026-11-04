@@ -105,8 +105,9 @@ func TestStreamAudioLevelCapsConnectionsPerClient(t *testing.T) {
 
 	// Fill the budget with distinct addresses from one /64.
 	releases := make([]func(), 0, audioLevelMaxConnectionsPerClient)
-	for i := 1; i <= audioLevelMaxConnectionsPerClient; i++ {
-		releases = append(releases, holdAudioLevelConnection(t, h, e, fmt.Sprintf(prefixAddrFmt, i, i)))
+	for i := range audioLevelMaxConnectionsPerClient {
+		host := i + 1
+		releases = append(releases, holdAudioLevelConnection(t, h, e, fmt.Sprintf(prefixAddrFmt, host, host)))
 	}
 
 	assert.Equal(t, http.StatusTooManyRequests, audioLevelConnectStatus(t, h, e, sixthInPrefix),
