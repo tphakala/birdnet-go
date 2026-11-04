@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
@@ -51,6 +52,12 @@ const (
 	// elevatePeerTestRealClient is the public address a header-appending proxy
 	// records as the connecting client, whatever the request claims.
 	elevatePeerTestRealClient = "198.51.100.9"
+	// elevatePeerTestEdge is a Cloudflare edge address a Cloudflare-fronted request
+	// carries as the last X-Forwarded-For hop.
+	elevatePeerTestEdge = "173.245.48.10"
+	// elevatePeerTestRange is a listed range that holds elevatePeerTestProxy and
+	// could hold clients as well.
+	elevatePeerTestRange = "10.0.0.0/24"
 )
 
 // newProxiedElevateHandler creates a Handler on a full apitest core, so the
@@ -68,12 +75,7 @@ func newProxiedElevateHandler(t *testing.T) (*echo.Echo, *Handler) {
 // proxiedElevateRequest posts an elevation attempt that arrives from the proxy at
 // peer and names client in the forwarded client address header.
 func proxiedElevateRequest(e *echo.Echo, peer string, port int, client string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, apiV2Prefix+"/import/elevate", http.NoBody)
-	req.Header.Set(proxytrust.HeaderCFConnectingIP, client)
-	req.RemoteAddr = net.JoinHostPort(peer, strconv.Itoa(port))
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	return rec
+	return elevateRequestWithHeaders(e, peer, port, map[string]string{proxytrust.HeaderCFConnectingIP: client})
 }
 
 // TestElevateRouteRateLimitPeerBudget verifies that a peer which names a new
@@ -216,5 +218,142 @@ func TestElevateRouteRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
 		e.ServeHTTP(rec, req)
 		assert.NotEqual(t, http.StatusTooManyRequests, rec.Code,
 			"the real client behind the proxy is not charged to the forged bucket")
+	})
+}
+
+// setElevateTrustedProxies publishes a settings snapshot that lists trusted, as a
+// hot reload of the trusted-proxy list does.
+func setElevateTrustedProxies(c *Handler, trusted ...string) {
+	c.Settings.Store(&conf.Settings{Security: conf.Security{TrustedProxies: trusted}})
+}
+
+// elevateRequestWithHeaders posts an elevation attempt that arrives from peer
+// with the given headers.
+func elevateRequestWithHeaders(e *echo.Echo, peer string, port int, headers map[string]string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, apiV2Prefix+"/import/elevate", http.NoBody)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	req.RemoteAddr = net.JoinHostPort(peer, strconv.Itoa(port))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestElevateRouteRateLimitPeerBudgetByTrustedProxies verifies which proxies
+// share the peer budget between their clients. A proxy listed by its own address
+// vouches for each client it names, so the peer budget does not apply to it; an
+// unlisted proxy, a listed range that may hold clients and a request that passed
+// a Cloudflare edge keep the budget. Every client is new, so only the peer
+// budget can refuse an attempt after the client limiter lets it through.
+func TestElevateRouteRateLimitPeerBudgetByTrustedProxies(t *testing.T) {
+	cfHeader := func(n int) map[string]string {
+		return map[string]string{proxytrust.HeaderCFConnectingIP: fmt.Sprintf(elevatePeerTestClientFormat, n)}
+	}
+	edgeHeaders := func(n int) map[string]string {
+		client := fmt.Sprintf(elevatePeerTestClientFormat, n)
+		return map[string]string{
+			proxytrust.HeaderCFConnectingIP: client,
+			echo.HeaderXForwardedFor:        client + ", " + elevatePeerTestEdge,
+		}
+	}
+	tests := []struct {
+		name         string
+		trusted      []string
+		headers      func(n int) map[string]string
+		wantBackstop bool
+	}{
+		{name: "unlisted proxy", headers: cfHeader, wantBackstop: true},
+		{name: "proxy listed by its own address", trusted: []string{elevatePeerTestProxy}, headers: cfHeader},
+		{name: "proxy listed as a /32", trusted: []string{elevatePeerTestProxy + "/32"}, headers: cfHeader},
+		{name: "proxy inside a listed range", trusted: []string{elevatePeerTestRange}, headers: cfHeader, wantBackstop: true},
+		{name: "proxy listed alone and inside a range", trusted: []string{elevatePeerTestRange, elevatePeerTestProxy}, headers: cfHeader, wantBackstop: true},
+		{name: "listed proxy behind a Cloudflare edge", trusted: []string{conf.TrustedProxyCloudflarePreset, elevatePeerTestProxy}, headers: edgeHeaders, wantBackstop: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, c := newProxiedElevateHandler(t)
+			setElevateTrustedProxies(c, tt.trusted...)
+
+			synctest.Test(t, func(t *testing.T) {
+				// Register inside the bubble so the limiter's clock is virtual.
+				c.RegisterImportRoutes(c.Group)
+
+				port := elevateRateTestFirstPort
+				attempt := func(n int) *httptest.ResponseRecorder {
+					port++
+					return elevateRequestWithHeaders(e, elevatePeerTestProxy, port, tt.headers(n))
+				}
+
+				for i := range elevatePeerTestBurst {
+					require.NotEqual(t, http.StatusTooManyRequests, attempt(i+1).Code,
+						"attempt %d names a new verified or agreeing client and is within the peer budget", i+1)
+				}
+				got := attempt(elevatePeerTestBurst + 1).Code
+				if tt.wantBackstop {
+					assert.Equal(t, http.StatusTooManyRequests, got, "the attempt after the peer budget names a new client")
+				} else {
+					assert.NotEqual(t, http.StatusTooManyRequests, got, "the peer budget does not apply to this proxy")
+				}
+			})
+		})
+	}
+}
+
+// TestElevateRouteRateLimitPeerBudgetHotReload verifies that listing a spent
+// proxy applies to the next request without a restart.
+func TestElevateRouteRateLimitPeerBudgetHotReload(t *testing.T) {
+	e, c := newProxiedElevateHandler(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		c.RegisterImportRoutes(c.Group)
+
+		port := elevateRateTestFirstPort
+		attempt := func(n int) *httptest.ResponseRecorder {
+			port++
+			return proxiedElevateRequest(e, elevatePeerTestProxy, port, fmt.Sprintf(elevatePeerTestClientFormat, n))
+		}
+
+		for i := range elevatePeerTestBurst {
+			require.NotEqual(t, http.StatusTooManyRequests, attempt(i+1).Code, "attempt %d is within the peer budget", i+1)
+		}
+		require.Equal(t, http.StatusTooManyRequests, attempt(elevatePeerTestBurst+1).Code, "the unlisted proxy has spent its budget")
+
+		setElevateTrustedProxies(c, elevatePeerTestProxy)
+		assert.NotEqual(t, http.StatusTooManyRequests, attempt(elevatePeerTestBurst+2).Code,
+			"a new client of the proxy just listed is no longer charged to the peer budget")
+	})
+}
+
+// TestElevateRouteRateLimitDirectRequestSkipsPeerBudget verifies that a request
+// that names no client is not refused for the traffic of the proxy at its
+// address: the client limiter already keys it on the peer.
+func TestElevateRouteRateLimitDirectRequestSkipsPeerBudget(t *testing.T) {
+	e, c := newProxiedElevateHandler(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		c.RegisterImportRoutes(c.Group)
+
+		port := elevateRateTestFirstPort
+		for i := range elevatePeerTestBurst {
+			port++
+			require.NotEqual(t, http.StatusTooManyRequests,
+				proxiedElevateRequest(e, elevatePeerTestProxy, port, fmt.Sprintf(elevatePeerTestClientFormat, i+1)).Code)
+		}
+		port++
+		require.Equal(t, http.StatusTooManyRequests,
+			proxiedElevateRequest(e, elevatePeerTestProxy, port, fmt.Sprintf(elevatePeerTestClientFormat, elevatePeerTestBurst+1)).Code,
+			"the proxy has spent the peer budget")
+
+		for i := range elevateRateLimitBurst {
+			port++
+			require.NotEqual(t, http.StatusTooManyRequests, elevateRequestWithHeaders(e, elevatePeerTestProxy, port, nil).Code,
+				"direct attempt %d is within the client's own burst", i+1)
+		}
+		port++
+		assert.Equal(t, http.StatusTooManyRequests, elevateRequestWithHeaders(e, elevatePeerTestProxy, port, nil).Code,
+			"the direct client is still bounded by its own limiter")
 	})
 }

@@ -238,7 +238,10 @@ const (
 // own budget bounds the attempts a caller can make by naming a new client in
 // every request. Ten leaves a household behind one proxy each its own attempts.
 // The budget is shared by every client behind the peer, so once it is spent the
-// peer refuses all of them until it refills.
+// peer refuses all of them until it refills. It is skipped for the requests
+// Core.SkipPeerRateLimit names: a direct request, whose client limiter already
+// keys on the peer, and a client a proxy listed by its own address verified
+// without a Cloudflare edge in the chain.
 const elevatePeerRateLimitMultiplier = 10
 
 // elevateRateLimiterStoreConfig returns the per-client limiter settings for the
@@ -262,11 +265,12 @@ func elevatePeerRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig
 }
 
 // elevateLimiter returns the rate limiting middleware for the elevation route,
-// with one bucket per identifier. A refused attempt is answered and logged the
-// same way whichever limiter refuses it.
-func (c *Handler) elevateLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor) echo.MiddlewareFunc {
+// with one bucket per identifier, for the requests skipper does not skip. A
+// refused attempt is answered and logged the same way whichever limiter refuses
+// it.
+func (c *Handler) elevateLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor, skipper middleware.Skipper) echo.MiddlewareFunc {
 	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Skipper:             middleware.DefaultSkipper,
+		Skipper:             skipper,
 		Store:               apicore.NewRateLimiterStore(storeConfig),
 		IdentifierExtractor: identifier,
 		ErrorHandler: func(ctx echo.Context, err error) error {
@@ -281,7 +285,8 @@ func (c *Handler) elevateLimiter(storeConfig middleware.RateLimiterMemoryStoreCo
 }
 
 // RegisterImportRoutes registers all import-related API routes on the supplied
-// v2 group.
+// v2 group. The elevation route is rate limited per client and per connection
+// peer; the peer limit is skipped for the requests Core.SkipPeerRateLimit names.
 //
 // These endpoints start, cancel, and inspect a database import, so the group
 // must fail closed. c.AuthMiddleware is non-nil in every real deployment: the
@@ -301,9 +306,10 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 	}
 
 	// The client limiter (keyed by Core.RateLimitKey) runs first, so a client that
-	// is out of its own attempts is refused without spending the peer budget.
-	elevateClientLimiter := c.elevateLimiter(elevateRateLimiterStoreConfig(), c.RateLimitKey)
-	elevatePeerLimiter := c.elevateLimiter(elevatePeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey)
+	// is out of its own attempts is refused without spending the peer budget. The
+	// peer limiter skips the requests Core.SkipPeerRateLimit names.
+	elevateClientLimiter := c.elevateLimiter(elevateRateLimiterStoreConfig(), c.RateLimitKey, middleware.DefaultSkipper)
+	elevatePeerLimiter := c.elevateLimiter(elevatePeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey, c.SkipPeerRateLimit)
 
 	importGroup := g.Group("/import", authMiddleware)
 	importGroup.GET("/sources", c.GetImportSources)
