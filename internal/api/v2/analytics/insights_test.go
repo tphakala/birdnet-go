@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -637,6 +638,41 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 				assert.GreaterOrEqual(t, r.Start, lo, "range starts before the oldest scanned year")
 				assert.LessOrEqual(t, r.End, hi, "range reaches into the current year")
 			}
+		})
+	}
+}
+
+// TestBuildYearRangesEarlyJanuaryZones pins the early January pairing in every zone of the
+// toolchain database and in a zone resolved from its POSIX rule: on January 2 with a three day
+// window each scanned year takes December 30 and 31 of the previous year and January 1 to 5 of
+// its own year, as whole local days in the station zone.
+func TestBuildYearRangesEarlyJanuaryZones(t *testing.T) {
+	t.Parallel()
+	const nowYear = 2026
+	const window = 3
+	date := func(y int, m time.Month, d int) wallclock.Date { return wallclock.Date{Year: y, Month: m, Day: d} }
+	dayRange := func(first, last wallclock.Date, loc *time.Location) repository.TimeRange {
+		start, _ := wallclock.DayBounds(first, loc)
+		_, end := wallclock.DayBounds(last, loc)
+		return repository.TimeRange{Start: start.Unix(), End: end.Unix()}
+	}
+
+	zones := make(map[string]*time.Location)
+	maps.Copy(zones, testutil.ToolchainZones(t))
+	zones["rule-only"] = testutil.RuleOnlyLocation(t)
+
+	for name, loc := range zones {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var want []repository.TimeRange
+			for y := nowYear - expectedTodayMaxYears; y < nowYear; y++ {
+				if y > nowYear-expectedTodayMaxYears {
+					want = append(want, dayRange(date(y-1, time.December, 30), date(y-1, time.December, 31), loc))
+				}
+				want = append(want, dayRange(date(y, time.January, 1), date(y, time.January, 1+window+1), loc))
+			}
+			got := buildYearRanges(time.Date(nowYear, time.January, 2, 12, 0, 0, 0, loc), window)
+			assert.Equal(t, want, got)
 		})
 	}
 }
