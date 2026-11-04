@@ -17,6 +17,14 @@ const (
 	ipv6RateLimitPrefixBits = 64
 	// ipv6AddressBits is the width of an IPv6 address in bits.
 	ipv6AddressBits = 128
+	// rateLimiterNamespaceIPv6PrefixBits is the IPv6 prefix length that shares one
+	// limiter store namespace: the /64 keys of one /48 are one holder's subnets, so
+	// they count against one per-namespace cap.
+	rateLimiterNamespaceIPv6PrefixBits = 48
+	// keyNamespaceSep separates the namespace of a limiter key from the rest of
+	// it. IP address text never contains it. rateLimitNamespace groups keys by the
+	// text before it, so a namespace's entries are capped together.
+	keyNamespaceSep = "|"
 )
 
 // RateLimitKey is an echo rate limiter IdentifierExtractor. It keys a client by
@@ -52,4 +60,19 @@ func rateLimitKeyFor(addr string) string {
 		return v4.String()
 	}
 	return ip.Mask(net.CIDRMask(ipv6RateLimitPrefixBits, ipv6AddressBits)).String()
+}
+
+// rateLimitNamespace maps a limiter key to the namespace the limiter stores cap
+// together. A composite key is grouped by the text before keyNamespaceSep, a
+// plain IPv6 key by its /48, and any other key (IPv4 or a raw host) is its own
+// namespace.
+func rateLimitNamespace(key string) string {
+	if name, _, composite := strings.Cut(key, keyNamespaceSep); composite {
+		return name
+	}
+	ip := net.ParseIP(key)
+	if ip == nil || ip.To4() != nil {
+		return key
+	}
+	return ip.Mask(net.CIDRMask(rateLimiterNamespaceIPv6PrefixBits, ipv6AddressBits)).String()
 }

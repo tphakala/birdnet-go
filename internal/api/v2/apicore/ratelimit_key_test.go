@@ -92,3 +92,30 @@ func TestPeerRateLimitKey(t *testing.T) {
 	assert.Equal(t, "2001:db8:1:2::", keyFor("[2001:db8:1:2::5]:40000", "203.0.113.7"), "an IPv6 peer is keyed per /64")
 	assert.Equal(t, "fe80::", keyFor("[fe80::1%eth0]:40000", "203.0.113.7"), "a zone is not part of the key")
 }
+
+// TestRateLimitNamespace verifies how a limiter key maps to its store
+// namespace: composite keys by their peer part, plain IPv6 keys by their /48,
+// everything else by itself.
+func TestRateLimitNamespace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		key  string
+		want string
+	}{
+		{"composite key is grouped by its peer", "192.0.2.1" + keyNamespaceSep + "203.0.113.5", "192.0.2.1"},
+		{"composite key with an IPv6 peer", "2001:db8:1:2::" + keyNamespaceSep + "x", "2001:db8:1:2::"},
+		{"plain IPv6 key is grouped by its /48", "2001:db8:1:2::", "2001:db8:1::"},
+		{"another /64 of the /48 shares the namespace", "2001:db8:1:ffff::", "2001:db8:1::"},
+		{"a different /48 is another namespace", "2001:db8:2:2::", "2001:db8:2::"},
+		{"ipv4 is its own namespace", "192.0.2.10", "192.0.2.10"},
+		{"a raw host is its own namespace", "proxy.example", "proxy.example"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, rateLimitNamespace(tt.key))
+		})
+	}
+}

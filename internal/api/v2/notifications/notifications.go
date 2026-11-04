@@ -230,7 +230,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// (Sentry flagged this on PR #2775).
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+		Store: apicore.NewRateLimiterStore(
 			middleware.RateLimiterMemoryStoreConfig{
 				Rate:      rate.Limit(float64(rateLimitRequestsPerWindow) / rateLimitWindow.Seconds()),
 				Burst:     rateLimitBurst,  // Rate limit burst

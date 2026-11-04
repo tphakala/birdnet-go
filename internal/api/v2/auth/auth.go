@@ -191,7 +191,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 func (c *Handler) loginLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor) echo.MiddlewareFunc {
 	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Skipper:             middleware.DefaultSkipper,
-		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(storeConfig),
+		Store:               apicore.NewRateLimiterStore(storeConfig),
 		IdentifierExtractor: identifier,
 		ErrorHandler: func(ctx echo.Context, err error) error {
 			// Return a user-friendly error message when rate limit is exceeded

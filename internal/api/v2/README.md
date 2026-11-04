@@ -29,7 +29,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
     // Rate-limited endpoints (typically for streams)
     rateLimiterConfig := middleware.RateLimiterConfig{
         Skipper: middleware.DefaultSkipper,
-        Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+        Store: apicore.NewRateLimiterStore(
             middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 5},
         ),
         // One bucket per client (per /64 for IPv6)

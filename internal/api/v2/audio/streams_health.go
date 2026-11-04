@@ -154,7 +154,7 @@ func (c *Handler) RegisterStreamHealthRoutes(g *echo.Group) {
 	// rate-limited to 5 connections per minute per client (per /64 for IPv6)
 	// with burst of 5 to tolerate page-refresh reconnects.
 	rateLimiterConfig := middleware.RateLimiterConfig{
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+		Store: apicore.NewRateLimiterStore(
 			middleware.RateLimiterMemoryStoreConfig{
 				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / float64(secondsPerMinute)), // 5 per 60 seconds
 				Burst:     streamHealthRateLimitRequests,                                                  // Allow 5 immediate connections
