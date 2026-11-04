@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
@@ -44,6 +45,12 @@ const (
 	// loginPeerTestRealClient is the public address a header-appending proxy
 	// records as the connecting client, whatever the request claims.
 	loginPeerTestRealClient = "198.51.100.9"
+	// loginPeerTestEdge is a Cloudflare edge address a Cloudflare-fronted request
+	// carries as the last X-Forwarded-For hop.
+	loginPeerTestEdge = "173.245.48.10"
+	// loginPeerTestRange is a listed range that holds loginPeerTestProxy and could
+	// hold clients as well.
+	loginPeerTestRange = "10.0.0.0/24"
 )
 
 // TestLoginPeerRateLimiterStoreConfig asserts the configured rate, burst and
@@ -63,13 +70,7 @@ func TestLoginPeerRateLimiterStoreConfig(t *testing.T) {
 // proxiedLoginResult posts a rejected login that arrives from the proxy at
 // peer and names client in the forwarded client address header.
 func proxiedLoginResult(e *echo.Echo, peer string, port int, client string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, loginRateTestLoginPath, strings.NewReader(loginRateTestWrongPayload))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	req.Header.Set(proxytrust.HeaderCFConnectingIP, client)
-	req.RemoteAddr = net.JoinHostPort(peer, strconv.Itoa(port))
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	return rec
+	return loginResultWithHeaders(e, peer, port, map[string]string{proxytrust.HeaderCFConnectingIP: client})
 }
 
 // TestLoginRouteRateLimitPeerBudget verifies that a peer which names a new client
@@ -208,5 +209,146 @@ func TestLoginRouteRateLimitForgedClientHeaderBehindProxy(t *testing.T) {
 		e.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusUnauthorized, rec.Code,
 			"the real client behind the proxy is not charged to the forged bucket")
+	})
+}
+
+// setLoginTrustedProxies publishes a settings snapshot that lists trusted, as a
+// hot reload of the trusted-proxy list does.
+func setLoginTrustedProxies(h *Handler, trusted ...string) {
+	h.Settings.Store(&conf.Settings{Security: conf.Security{TrustedProxies: trusted}})
+}
+
+// TestLoginRouteRateLimitPeerBudgetByTrustedProxies verifies which proxies share
+// the peer budget between their clients. A proxy listed by its own address
+// vouches for each client it names, so the peer budget does not apply to it; an
+// unlisted proxy, a listed range that may hold clients and a request that passed
+// a Cloudflare edge keep the budget. Every client is new, so only the peer
+// budget can refuse an attempt after the client limiter lets it through.
+func TestLoginRouteRateLimitPeerBudgetByTrustedProxies(t *testing.T) {
+	cfHeader := func(n int) map[string]string {
+		return map[string]string{proxytrust.HeaderCFConnectingIP: fmt.Sprintf(loginPeerTestClientFormat, n)}
+	}
+	edgeHeaders := func(n int) map[string]string {
+		client := fmt.Sprintf(loginPeerTestClientFormat, n)
+		return map[string]string{
+			proxytrust.HeaderCFConnectingIP: client,
+			echo.HeaderXForwardedFor:        client + ", " + loginPeerTestEdge,
+		}
+	}
+	tests := []struct {
+		name         string
+		trusted      []string
+		headers      func(n int) map[string]string
+		wantBackstop bool
+	}{
+		{name: "unlisted proxy", headers: cfHeader, wantBackstop: true},
+		{name: "proxy listed by its own address", trusted: []string{loginPeerTestProxy}, headers: cfHeader},
+		{name: "proxy listed as a /32", trusted: []string{loginPeerTestProxy + "/32"}, headers: cfHeader},
+		{name: "proxy inside a listed range", trusted: []string{loginPeerTestRange}, headers: cfHeader, wantBackstop: true},
+		{name: "proxy listed alone and inside a range", trusted: []string{loginPeerTestRange, loginPeerTestProxy}, headers: cfHeader, wantBackstop: true},
+		{name: "listed proxy behind a Cloudflare edge", trusted: []string{conf.TrustedProxyCloudflarePreset, loginPeerTestProxy}, headers: edgeHeaders, wantBackstop: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h, _ := setupAuthIntegrationTest(t)
+			setLoginTrustedProxies(h, tt.trusted...)
+
+			synctest.Test(t, func(t *testing.T) {
+				// Register inside the bubble so the limiter's clock is virtual.
+				h.RegisterRoutes(h.Group)
+
+				port := loginRateTestFirstPort
+				attempt := func(n int) *httptest.ResponseRecorder {
+					port++
+					return loginResultWithHeaders(e, loginPeerTestProxy, port, tt.headers(n))
+				}
+
+				for i := range loginPeerTestBurst {
+					require.Equal(t, http.StatusUnauthorized, attempt(i+1).Code,
+						"attempt %d names a new verified or agreeing client and is within the peer budget", i+1)
+				}
+				want := http.StatusUnauthorized
+				if tt.wantBackstop {
+					want = http.StatusTooManyRequests
+				}
+				assert.Equal(t, want, attempt(loginPeerTestBurst+1).Code,
+					"the attempt after the peer budget names a new client")
+			})
+		})
+	}
+}
+
+// loginResultWithHeaders posts a rejected login that arrives from peer with the
+// given headers.
+func loginResultWithHeaders(e *echo.Echo, peer string, port int, headers map[string]string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, loginRateTestLoginPath, strings.NewReader(loginRateTestWrongPayload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	req.RemoteAddr = net.JoinHostPort(peer, strconv.Itoa(port))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestLoginRouteRateLimitPeerBudgetHotReload verifies that listing a spent
+// proxy applies to the next request without a restart: the budget that refused
+// the unlisted proxy's clients no longer applies once the proxy is listed by its
+// own address.
+func TestLoginRouteRateLimitPeerBudgetHotReload(t *testing.T) {
+	e, h, _ := setupAuthIntegrationTest(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		h.RegisterRoutes(h.Group)
+
+		port := loginRateTestFirstPort
+		attempt := func(n int) *httptest.ResponseRecorder {
+			port++
+			return proxiedLoginResult(e, loginPeerTestProxy, port, fmt.Sprintf(loginPeerTestClientFormat, n))
+		}
+
+		for i := range loginPeerTestBurst {
+			require.Equal(t, http.StatusUnauthorized, attempt(i+1).Code, "attempt %d is within the peer budget", i+1)
+		}
+		require.Equal(t, http.StatusTooManyRequests, attempt(loginPeerTestBurst+1).Code, "the unlisted proxy has spent its budget")
+
+		setLoginTrustedProxies(h, loginPeerTestProxy)
+		assert.Equal(t, http.StatusUnauthorized, attempt(loginPeerTestBurst+2).Code,
+			"a new client of the proxy just listed is no longer charged to the peer budget")
+	})
+}
+
+// TestLoginRouteRateLimitDirectRequestSkipsPeerBudget verifies that a request
+// that names no client is not refused for the traffic of the proxy at its
+// address: the client limiter already keys it on the peer, so a browser on the
+// proxy host keeps its own attempts after the proxy spends the peer budget.
+func TestLoginRouteRateLimitDirectRequestSkipsPeerBudget(t *testing.T) {
+	e, h, _ := setupAuthIntegrationTest(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		h.RegisterRoutes(h.Group)
+
+		port := loginRateTestFirstPort
+		for i := range loginPeerTestBurst {
+			port++
+			require.Equal(t, http.StatusUnauthorized,
+				proxiedLoginResult(e, loginPeerTestProxy, port, fmt.Sprintf(loginPeerTestClientFormat, i+1)).Code)
+		}
+		port++
+		require.Equal(t, http.StatusTooManyRequests,
+			proxiedLoginResult(e, loginPeerTestProxy, port, fmt.Sprintf(loginPeerTestClientFormat, loginPeerTestBurst+1)).Code,
+			"the proxy has spent the peer budget")
+
+		for i := range loginRateTestBurst {
+			port++
+			require.Equal(t, http.StatusUnauthorized, loginResultWithHeaders(e, loginPeerTestProxy, port, nil).Code,
+				"direct attempt %d is within the client's own burst", i+1)
+		}
+		port++
+		assert.Equal(t, http.StatusTooManyRequests, loginResultWithHeaders(e, loginPeerTestProxy, port, nil).Code,
+			"the direct client is still bounded by its own limiter")
 	})
 }

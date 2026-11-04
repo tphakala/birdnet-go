@@ -80,6 +80,35 @@ func (c *Core) RateLimitKey(ctx echo.Context) (string, error) {
 	}
 }
 
+// SkipPeerRateLimit reports whether the peer limiter of a route that pairs it
+// with RateLimitKey should skip this request. The peer limiter bounds how many
+// clients a peer can name; it adds nothing, and is skipped, when:
+//
+//   - the request is direct: it names no client the limiter may believe, so the
+//     client limiter already keys it on the peer, and a peer limiter shared with
+//     the clients the same address proxies would only let that traffic lock the
+//     peer's own direct requests out; or
+//   - a proxy listed by its own address (a single host, not a range that may
+//     hold clients) verified the client and no Cloudflare edge is involved, so
+//     the operator vouches for each client it names.
+//
+// A client an unlisted proxy named, a request that could not be verified, a
+// client a listed range verified, and a client a listed proxy verified behind a
+// Cloudflare edge hop keep the peer limiter. A direct request skips it whatever
+// its peer address is and keeps its own client bucket.
+// The decision is made per request from the live trusted-proxy list.
+func (c *Core) SkipPeerRateLimit(ctx echo.Context) bool {
+	res := c.rateLimitClient(ctx)
+	switch res.Source {
+	case proxytrust.SourceDirect:
+		return true
+	case proxytrust.SourceConfiguredProxy:
+		return !res.ViaCloudflareEdge && c.ProxyChecker().IsSingleHostProxy(res.Peer)
+	default:
+		return false
+	}
+}
+
 // ipv6LoopbackBlock is the /64 that holds ::1. Folding any address in it to its
 // /64 gives the key of the direct loopback client.
 var ipv6LoopbackBlock = netip.MustParsePrefix("::/64")
@@ -93,7 +122,8 @@ func inIPv6LoopbackBlock(ip net.IP) bool {
 // PeerRateLimitKey is an echo rate limiter IdentifierExtractor that keys on the
 // address the request arrived from, never on a forwarded header. It lets a
 // limiter bound what a peer can do however many clients it names; the login and
-// import elevation routes pair it with Core.RateLimitKey.
+// import elevation routes pair it with Core.RateLimitKey and skip it for the
+// requests Core.SkipPeerRateLimit names.
 func PeerRateLimitKey(ctx echo.Context) (string, error) {
 	_, host := proxytrust.PeerAddr(ctx.Request())
 	return rateLimitKeyFor(host), nil

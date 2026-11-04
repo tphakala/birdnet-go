@@ -82,7 +82,11 @@ func loginRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
 // attempts a caller can make by naming a new client in every request. Ten leaves
 // a household or a small office behind one proxy each its own attempts. The
 // budget is shared by every client behind the peer, so once it is spent the peer
-// refuses all of them until it refills.
+// refuses all of them until it refills. It is skipped for the requests
+// Core.SkipPeerRateLimit names: a direct request, whose client limiter already
+// keys on the peer, and a client a proxy listed by its own address verified
+// without a Cloudflare edge in the chain, where the operator vouches for each
+// client and the clients must not lock one another out.
 const authPeerRateLimitMultiplier = 10
 
 // loginPeerRateLimiterStoreConfig returns the limiter settings for the login
@@ -161,7 +165,8 @@ func New(core *apicore.Core, authService auth.Service) *Handler {
 
 // RegisterRoutes registers all authentication-related API endpoints on the
 // supplied v2 API group. The login route is rate limited per client and per
-// connection peer.
+// connection peer; the peer limit is skipped for the requests
+// Core.SkipPeerRateLimit names.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Create auth API group
 	authGroup := g.Group(AuthGroupPath)
@@ -170,9 +175,11 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// of 5 login attempts per client (per /64 for IPv6; the client is the one a
 	// verified or agreeing proxy reported, see Core.RateLimitKey), refilled at 5
 	// per 15 minutes (see loginRateLimiterStoreConfig), and a multiple of that for
-	// the connection peer as a whole (see loginPeerRateLimiterStoreConfig).
-	loginRateLimiter := c.loginLimiter(loginRateLimiterStoreConfig(), c.RateLimitKey)
-	loginPeerRateLimiter := c.loginLimiter(loginPeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey)
+	// the connection peer as a whole (see loginPeerRateLimiterStoreConfig), which
+	// Core.SkipPeerRateLimit lifts for direct requests and for clients a proxy
+	// listed by its own address verified.
+	loginRateLimiter := c.loginLimiter(loginRateLimiterStoreConfig(), c.RateLimitKey, middleware.DefaultSkipper)
+	loginPeerRateLimiter := c.loginLimiter(loginPeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey, c.SkipPeerRateLimit)
 
 	// Routes that don't require authentication (but are rate limited)
 	authGroup.POST(AuthLoginPath, c.Login, loginRateLimiter, loginPeerRateLimiter)
@@ -188,11 +195,12 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 }
 
 // loginLimiter returns the rate limiting middleware for the login route: one
-// bucket per identifier, with the store settings storeConfig. A refused attempt
-// is answered and logged the same way whichever limiter refuses it.
-func (c *Handler) loginLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor) echo.MiddlewareFunc {
+// bucket per identifier, with the store settings storeConfig, for the requests
+// skipper does not skip. A refused attempt is answered and logged the same way
+// whichever limiter refuses it.
+func (c *Handler) loginLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor, skipper middleware.Skipper) echo.MiddlewareFunc {
 	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Skipper:             middleware.DefaultSkipper,
+		Skipper:             skipper,
 		Store:               apicore.NewRateLimiterStore(storeConfig),
 		IdentifierExtractor: identifier,
 		ErrorHandler: func(ctx echo.Context, err error) error {

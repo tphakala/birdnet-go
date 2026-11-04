@@ -214,6 +214,29 @@ func (tc *Checker) IsConfiguredProxy(ip net.IP) bool {
 	return containsIP(tc.ranges, ip)
 }
 
+// IsSingleHostProxy reports whether ip is configured as a proxy by its own
+// address only: every configured entry that holds it is a bare IP, a /32 or a
+// /128. An address that also lies inside a wider entry (a listed range or the
+// cloudflare preset) does not qualify, because such a range may hold clients as
+// well as proxies. It is for rate limiting only, never authentication.
+func (tc *Checker) IsSingleHostProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	single := false
+	for _, network := range tc.ranges {
+		if !network.Contains(ip) {
+			continue
+		}
+		ones, bits := network.Mask.Size()
+		if ones != bits {
+			return false
+		}
+		single = true
+	}
+	return single
+}
+
 // ClientIPFromXFF resolves the real client IP from an X-Forwarded-For header,
 // assuming the immediate peer is already known to be a trusted proxy. It walks
 // the hop chain from the rightmost (closest to this server) entry leftward,

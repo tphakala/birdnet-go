@@ -4,6 +4,7 @@ package proxytrust
 
 import (
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -187,4 +188,40 @@ func TestRateLimitClientAgreesWithAuthClientIP(t *testing.T) {
 		})
 	}
 	assert.NotZero(t, directConfigured, "the tables must cover a configured peer without headers")
+}
+
+// TestCheckerIsSingleHostProxy verifies that a peer counts as a single-host
+// proxy only when every configured entry that holds it names exactly that one
+// address, so a range that could also hold clients never qualifies.
+func TestCheckerIsSingleHostProxy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		trusted []string
+		ip      string
+		want    bool
+	}{
+		{"bare IPv4 entry", []string{"10.0.0.5"}, "10.0.0.5", true},
+		{"IPv4 /32 entry", []string{"10.0.0.5/32"}, "10.0.0.5", true},
+		{"bare IPv6 entry", []string{"2001:db8::5"}, "2001:db8::5", true},
+		{"IPv6 /128 entry", []string{"2001:db8::5/128"}, "2001:db8::5", true},
+		{"unlisted address", []string{"10.0.0.6"}, "10.0.0.5", false},
+		{"empty list", nil, "10.0.0.5", false},
+		{"range holding the address", []string{"10.0.0.0/24"}, "10.0.0.5", false},
+		{"single host inside a listed range", []string{"10.0.0.0/24", "10.0.0.5"}, "10.0.0.5", false},
+		{"cloudflare preset edge", []string{"cloudflare"}, "173.245.48.10", false},
+		{"edge address listed by itself as well as by the preset", []string{"cloudflare", "173.245.48.10"}, "173.245.48.10", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, NewChecker(tt.trusted).IsSingleHostProxy(net.ParseIP(tt.ip)))
+		})
+	}
+
+	t.Run("nil address", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, NewChecker([]string{"10.0.0.5"}).IsSingleHostProxy(nil))
+	})
 }

@@ -186,3 +186,51 @@ func TestRateLimitNamespace(t *testing.T) {
 		})
 	}
 }
+
+// TestCoreSkipPeerRateLimit verifies which requests skip the peer limiter of the
+// login and elevation routes: a direct request, whose client limiter already
+// keys on the peer, and a request a single-host listed proxy verified with no
+// Cloudflare edge involved. Everything a caller can name freely keeps it.
+func TestCoreSkipPeerRateLimit(t *testing.T) {
+	t.Parallel()
+
+	const visitor = "198.51.100.9"
+	const edge = "173.245.48.10"
+	tests := []struct {
+		name       string
+		trusted    []string
+		remoteAddr string
+		headers    map[string]string
+		want       bool
+	}{
+		{name: "direct request without headers", remoteAddr: "192.0.2.10:40000", want: true},
+		{name: "unparseable peer", remoteAddr: "@", want: true},
+		{name: "public peer sending headers is direct", remoteAddr: "203.0.113.50:40000", headers: map[string]string{proxytrust.HeaderCFConnectingIP: visitor}, want: true},
+		{name: "unlisted local proxy header-less request", remoteAddr: "10.0.0.5:40000", want: true},
+		{name: "unlisted local proxy naming a client keeps the backstop", remoteAddr: "10.0.0.5:40000", headers: map[string]string{proxytrust.HeaderCFConnectingIP: visitor}},
+		{name: "unverifiable request keeps the backstop", remoteAddr: "10.0.0.5:40000", headers: map[string]string{proxytrust.HeaderCFConnectingIP: "203.0.113.99", echo.HeaderXForwardedFor: visitor}},
+		{name: "single-host listed proxy verifying a client", trusted: []string{"10.0.0.5"}, remoteAddr: "10.0.0.5:40000", headers: map[string]string{echo.HeaderXForwardedFor: visitor}, want: true},
+		{name: "single-host listed proxy with unverifiable headers keeps the backstop", trusted: []string{"10.0.0.5"}, remoteAddr: "10.0.0.5:40000", headers: map[string]string{proxytrust.HeaderCFConnectingIP: "203.0.113.99", echo.HeaderXForwardedFor: visitor}},
+		{name: "listed range keeps the backstop", trusted: []string{"10.0.0.0/24"}, remoteAddr: "10.0.0.5:40000", headers: map[string]string{echo.HeaderXForwardedFor: visitor}},
+		{name: "single host inside a listed range keeps the backstop", trusted: []string{"10.0.0.0/24", "10.0.0.5"}, remoteAddr: "10.0.0.5:40000", headers: map[string]string{echo.HeaderXForwardedFor: visitor}},
+		{name: "cloudflare edge hop keeps the backstop", trusted: []string{"cloudflare", "10.0.0.5"}, remoteAddr: "10.0.0.5:40000", headers: map[string]string{proxytrust.HeaderCFConnectingIP: visitor, echo.HeaderXForwardedFor: visitor + ", " + edge}},
+		{name: "cloudflare edge peer keeps the backstop", trusted: []string{"cloudflare"}, remoteAddr: edge + ":443", headers: map[string]string{proxytrust.HeaderCFConnectingIP: visitor, echo.HeaderXForwardedFor: visitor}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := newRateLimitKeyContext(tt.remoteAddr, tt.headers)
+			assert.Equal(t, tt.want, coreWithTrustedProxies(tt.trusted...).SkipPeerRateLimit(ctx))
+		})
+	}
+
+	t.Run("listing the peer lifts the backstop for the next request", func(t *testing.T) {
+		t.Parallel()
+		core := coreWithTrustedProxies()
+		headers := map[string]string{echo.HeaderXForwardedFor: visitor}
+		assert.False(t, core.SkipPeerRateLimit(newRateLimitKeyContext("10.0.0.5:40000", headers)))
+
+		core.Settings.Store(&conf.Settings{Security: conf.Security{TrustedProxies: []string{"10.0.0.5"}}})
+		assert.True(t, core.SkipPeerRateLimit(newRateLimitKeyContext("10.0.0.5:40000", headers)))
+	})
+}
