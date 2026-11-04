@@ -202,9 +202,9 @@ func TestReadStdout_EmitsWholeFrames(t *testing.T) {
 // asserted afterwards: recycling is the premise of the test, so a run where it
 // never happened must fail rather than pass vacuously.
 //
-// The hit count is not asserted under the race detector: there sync.Pool.Put
-// randomly discards one buffer in four, so every Put in this short script can
-// be dropped and a hit count of zero is legitimate. A dropped buffer is only a
+// The hit count is not asserted under the race detector: with it enabled,
+// sync.Pool.Put randomly discards one buffer in four, so every Put in this
+// short script can be dropped and a hit count of zero is legitimate. A dropped buffer is only a
 // pool miss; the byte-content assertion above holds either way.
 func TestReadStdout_PooledCarrySurvivesBufferRecycling(t *testing.T) {
 	t.Parallel()
