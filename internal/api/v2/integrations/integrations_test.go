@@ -474,6 +474,7 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 	tests := []struct {
 		name          string
 		results       []fakeStageResult
+		instant       bool
 		clientGone    bool
 		timesOut      bool
 		failWrites    bool
@@ -483,6 +484,16 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 		{
 			name:          "completes",
 			results:       stages("connect", "publish", "disconnect"),
+			wantStages:    []string{"connect", "publish", "disconnect"},
+			wantCompleted: true,
+		},
+		{
+			// The worker finishes before the handler has written anything, as
+			// when the client reads slowly: the completed line must still wait
+			// for every stage line.
+			name:          "worker finishes first",
+			results:       stages("connect", "publish", "disconnect"),
+			instant:       true,
 			wantStages:    []string{"connect", "publish", "disconnect"},
 			wantCompleted: true,
 		},
@@ -521,10 +532,11 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 				}
 
 				client := &fakeIntegrationClient{results: tt.results, holdUntilDone: tt.timesOut || tt.clientGone}
-				if tt.wantCompleted {
-					// Only the row that reaches the completed line needs time to
-					// pass; a goroutine still sleeping when the handler has gone
-					// would be a deadlock in the bubble.
+				if tt.wantCompleted && !tt.instant {
+					// Only a row that reaches the completed line and does not
+					// finish instantly needs time to pass; a goroutine still
+					// sleeping when the handler has gone would be a deadlock in
+					// the bubble.
 					client.testDuration = testDuration
 					client.cleanupDuration = cleanupDuration
 				}
@@ -533,7 +545,7 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 				}
 
 				err := runStreamingIntegrationTest(controller, e.NewContext(req, w),
-					make(chan fakeStageResult), client, streamTimeout, "fake")
+					make(chan fakeStageResult, len(tt.results)), client, streamTimeout, "fake")
 				require.NoError(t, err)
 				synctest.Wait()
 
@@ -560,7 +572,7 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 				assert.Equal(t, tt.wantStages, gotStages, "stage lines in order")
 				if tt.wantCompleted {
 					require.Len(t, completed, 1, "one completed line in %q", rec.Body.String())
-					assert.InDelta(t, testDuration.Milliseconds(), completed[0]["elapsed_time_ms"], 0,
+					assert.InDelta(t, client.testDuration.Milliseconds(), completed[0]["elapsed_time_ms"], 0,
 						"elapsed time covers the test and not its cleanup")
 				} else {
 					assert.Empty(t, completed, "no completed line in %q", rec.Body.String())
