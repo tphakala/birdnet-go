@@ -201,6 +201,11 @@ func TestReadStdout_EmitsWholeFrames(t *testing.T) {
 // this collector has taken the previous frame, and the pool's hit count is
 // asserted afterwards: recycling is the premise of the test, so a run where it
 // never happened must fail rather than pass vacuously.
+//
+// The hit count is not asserted under the race detector: with it enabled,
+// sync.Pool.Put randomly discards one buffer in four, so every Put in this
+// short script can be dropped and a hit count of zero is legitimate. A dropped buffer is only a
+// pool miss; the byte-content assertion above holds either way.
 func TestReadStdout_PooledCarrySurvivesBufferRecycling(t *testing.T) {
 	t.Parallel()
 
@@ -220,8 +225,10 @@ func TestReadStdout_PooledCarrySurvivesBufferRecycling(t *testing.T) {
 	assert.Equal(t, signal, got,
 		"the reassembled stream must survive the read buffer being recycled between reads")
 	assert.Positive(t, s.partialFrameCarries.Load(), "this script must exercise the carry")
-	assert.Positive(t, mgr.BytePoolFor(ffmpegBufferSize).GetStats().Hits,
-		"the pool must actually have recycled a buffer, otherwise this test proves nothing about recycling")
+	if !raceEnabled {
+		assert.Positive(t, mgr.BytePoolFor(ffmpegBufferSize).GetStats().Hits,
+			"the pool must actually have recycled a buffer, otherwise this test proves nothing about recycling")
+	}
 }
 
 // TestReadStdout_DropsOnlyTheFinalPartialFrame verifies the one case where bytes
