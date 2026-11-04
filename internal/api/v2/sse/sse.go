@@ -95,7 +95,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// IPv6) with a burst of 10 (see streamRateLimiterStoreConfig)
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store:               apicore.NewRateLimiterStore(streamRateLimiterStoreConfig()),
-		IdentifierExtractor: apicore.RateLimitKey,
+		IdentifierExtractor: c.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded for SSE connections",

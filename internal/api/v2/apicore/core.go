@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -98,6 +99,10 @@ type Core struct {
 	// SSEManager manages Server-Sent Events connections.
 	SSEManager *SSEManager
 
+	// proxyTrust caches the checker built from Security.TrustedProxies, rebuilt
+	// only when the list changes. Read it through ProxyChecker.
+	proxyTrust proxytrust.Cache
+
 	// V2Manager provides access to the v2 normalized database for stats and backup.
 	V2Manager datastoreV2.Manager
 
@@ -129,6 +134,15 @@ type Core struct {
 	// PrivateMode auth gate. Injected by the facade so the exempt allow-list stays
 	// colocated with the domain route-path constants and registrations.
 	privateModeExempt func(method, path string) bool
+}
+
+// ProxyChecker returns the trusted-proxy checker for this controller's current
+// Security.TrustedProxies list. The list is read from the live settings on every
+// call and the checker is rebuilt only when it changes, so a settings save takes
+// effect on the next request. The rate limiters and the connection check share
+// this one cache.
+func (c *Core) ProxyChecker() *proxytrust.Checker {
+	return c.proxyTrust.ResolveSettings(c.ControllerSettings())
 }
 
 // NewCore builds the shared API v2 substrate. It resolves the media export root,

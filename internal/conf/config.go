@@ -1667,7 +1667,14 @@ type Security struct {
 	// holds clients: a client inside a listed range is trusted as a proxy, so its
 	// own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite
 	// X-Real-IP; the client-IP headers it forwards must all name the same client,
-	// and a Forwarded header is not accepted. Hot-reloadable.
+	// and a Forwarded header is not accepted. The API rate limiters follow the
+	// same rule: listing a proxy by its own address gives each verified client its
+	// own limits, while all requests of a listed proxy whose headers do not verify
+	// share one bucket. An unlisted proxy on a loopback, link-local or private
+	// address gets per-client limits only while the headers it forwards agree on
+	// one client; an unlisted proxy on a public or 100.64.0.0/10 (CGNAT,
+	// Tailscale IPv4) address is treated as the client and its headers are
+	// ignored, so list it. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 

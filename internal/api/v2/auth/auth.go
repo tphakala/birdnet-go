@@ -76,12 +76,13 @@ func loginRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
 
 // authPeerRateLimitMultiplier is how many clients' login budgets the connection
 // peer as a whole may spend. A reverse proxy or tunnel serves many clients from
-// one address, and a forwarded client address is only as trustworthy as the peer
-// that sends it, so the peer's own budget bounds the attempts a caller can make
-// by naming a new client in every request. Ten leaves a household or a small
-// office behind one proxy each its own attempts. The budget is shared by every
-// client behind the peer, so once it is spent the peer refuses all of them until
-// it refills.
+// one address. The client limiter keys a client an unlisted proxy names under
+// that proxy and shares one bucket among the requests it cannot verify, but a
+// proxy can still name many such clients, so the peer's own budget bounds the
+// attempts a caller can make by naming a new client in every request. Ten leaves
+// a household or a small office behind one proxy each its own attempts. The
+// budget is shared by every client behind the peer, so once it is spent the peer
+// refuses all of them until it refills.
 const authPeerRateLimitMultiplier = 10
 
 // loginPeerRateLimiterStoreConfig returns the limiter settings for the login
@@ -166,10 +167,11 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	authGroup := g.Group(AuthGroupPath)
 
 	// Rate limit the login endpoint to prevent brute force attacks. Allow a burst
-	// of 5 login attempts per client (per /64 for IPv6), refilled at 5 per 15
-	// minutes (see loginRateLimiterStoreConfig), and a multiple of that for the
-	// connection peer as a whole (see loginPeerRateLimiterStoreConfig).
-	loginRateLimiter := c.loginLimiter(loginRateLimiterStoreConfig(), apicore.RateLimitKey)
+	// of 5 login attempts per client (per /64 for IPv6; the client is the one a
+	// verified or agreeing proxy reported, see Core.RateLimitKey), refilled at 5
+	// per 15 minutes (see loginRateLimiterStoreConfig), and a multiple of that for
+	// the connection peer as a whole (see loginPeerRateLimiterStoreConfig).
+	loginRateLimiter := c.loginLimiter(loginRateLimiterStoreConfig(), c.RateLimitKey)
 	loginPeerRateLimiter := c.loginLimiter(loginPeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey)
 
 	// Routes that don't require authentication (but are rate limited)
