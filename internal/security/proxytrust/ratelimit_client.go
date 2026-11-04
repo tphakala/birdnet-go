@@ -76,7 +76,8 @@ type hopPolicy struct {
 // edge hops, local hops and a single-edge-hop X-Forwarded-For are looked past
 // only when the request carries CF-Connecting-IP, which is what puts such hops
 // in front of the client. Without it an address inside Cloudflare's ranges is a
-// caller (a Cloudflare-hosted client, for example), not an edge.
+// caller (a Cloudflare-hosted client, for example), not an edge, unless the
+// operator listed those ranges, which are then always skipped.
 func implicitHopPolicy(h http.Header) hopPolicy {
 	cfPresent := false
 	for _, v := range h[canonicalCFConnectingIP] {
