@@ -1048,9 +1048,9 @@ func TestJobQueueConcurrencyBurst(t *testing.T) {
 		queue := NewJobQueue()
 		queue.StartWithContext(t.Context())
 
-		// One more than the default of two concurrent attempts. Without a bound,
-		// this single dispatch starts every due job.
-		const jobCount = 3
+		// One more than the execution capacity. Without a bound, this single
+		// dispatch starts every due job.
+		const jobCount = defaultExecutionCapacity + 1
 		jobs := make([]*Job, jobCount)
 		for i := range jobs {
 			job, err := queue.Enqueue(t.Context(), action, &TestData{ID: fmt.Sprintf("burst-%d", i)}, RetryConfig{Enabled: false})
@@ -1061,7 +1061,7 @@ func TestJobQueueConcurrencyBurst(t *testing.T) {
 		queue.ProcessImmediately(t.Context())
 		synctest.Wait()
 
-		assert.Equal(t, 2, action.GetExecuteCount(), "Execute calls must stay within capacity")
+		assert.Equal(t, defaultExecutionCapacity, action.GetExecuteCount(), "Execute calls must stay within capacity")
 		queue.mu.Lock()
 		pending := 0
 		for _, job := range jobs {
@@ -1072,7 +1072,7 @@ func TestJobQueueConcurrencyBurst(t *testing.T) {
 			assert.Zero(t, job.Attempts, "a job waiting for capacity must not consume an attempt")
 		}
 		queue.mu.Unlock()
-		assert.Equal(t, jobCount-2, pending, "excess jobs stay pending")
+		assert.Equal(t, jobCount-defaultExecutionCapacity, pending, "excess jobs stay pending")
 
 		close(release)
 		synctest.Wait()
