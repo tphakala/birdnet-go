@@ -728,7 +728,7 @@ export interface Thumbnails {
 }
 
 // Spectrogram size options
-export type SpectrogramSize = 'md' | 'lg' | 'xl';
+export type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
 
 // Spectrogram generation mode options
 export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
@@ -748,7 +748,7 @@ export type SpectrogramDynamicRange = '80' | '100' | '120';
 export interface SpectrogramPreRender {
   mode?: SpectrogramMode; // Generation mode (default: 'auto')
   enabled?: boolean; // DEPRECATED: Use mode instead (kept for backward compatibility)
-  size: SpectrogramSize; // Default size for all modes (md=514px, lg=1026px, xl=2050px)
+  size: SpectrogramSize; // Default size for all modes (sm=258px, md=514px, lg=1026px, xl=2050px)
   raw: boolean; // Generate raw spectrogram without axes/legend (default: true)
   style?: SpectrogramStyle; // Visual style preset (default: 'default')
   dynamicRange?: SpectrogramDynamicRange; // Dynamic range in dB: 80 (high contrast), 100 (standard), 120 (extended)
@@ -1111,7 +1111,10 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
           fallbackPolicy: 'none',
         },
         summaryLimit: 30,
-        spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
+        spectrogram: {
+          ...DEFAULT_SPECTROGRAM_SETTINGS,
+          size: 'sm',
+        },
         temperatureUnit: 'celsius',
         layout: {
           elements: [
