@@ -1080,6 +1080,86 @@ func TestJobQueueConcurrencyBurst(t *testing.T) {
 	})
 }
 
+// TestJobQueueSlotReleaseDispatchesBeforeTick verifies a job waiting for
+// capacity starts as soon as a running action frees its slot, without waiting
+// for the next processing tick. Concurrency stays within capacity and each job
+// starts exactly once.
+func TestJobQueueSlotReleaseDispatchesBeforeTick(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const jobCount = defaultExecutionCapacity + 1
+		releases := make(map[string]chan struct{}, jobCount)
+		for i := range jobCount {
+			releases[fmt.Sprintf("wake-%d", i)] = make(chan struct{})
+		}
+
+		var running, maxRunning atomic.Int32
+		var startsMu sync.Mutex
+		starts := make(map[string]int, jobCount)
+		action := &MockAction{ExecuteFunc: func(data any) error {
+			id := data.(*TestData).ID
+			startsMu.Lock()
+			starts[id]++
+			startsMu.Unlock()
+			n := running.Add(1)
+			for {
+				m := maxRunning.Load()
+				if n <= m || maxRunning.CompareAndSwap(m, n) {
+					break
+				}
+			}
+			<-releases[id]
+			running.Add(-1)
+			return nil
+		}}
+
+		queue := NewJobQueue()
+		queue.StartWithContext(t.Context())
+
+		for i := range jobCount {
+			_, err := queue.Enqueue(t.Context(), action, &TestData{ID: fmt.Sprintf("wake-%d", i)}, RetryConfig{Enabled: false})
+			require.NoError(t, err, "enqueue job")
+		}
+
+		queue.ProcessImmediately(t.Context())
+		synctest.Wait()
+		require.Equal(t, defaultExecutionCapacity, action.GetExecuteCount(), "first dispatch fills capacity")
+
+		// Free one slot. Virtual time cannot advance while this goroutine
+		// runs, so no tick fires: only the slot release can start the job.
+		before := time.Now()
+		startsMu.Lock()
+		var first string
+		for id, n := range starts {
+			if n > 0 {
+				first = id
+				break
+			}
+		}
+		startsMu.Unlock()
+		close(releases[first])
+		synctest.Wait()
+
+		assert.Equal(t, before, time.Now(), "no processing tick should have fired")
+		assert.Equal(t, jobCount, action.GetExecuteCount(), "waiting job starts once a slot frees")
+		assert.LessOrEqual(t, maxRunning.Load(), int32(defaultExecutionCapacity), "concurrency stays within capacity")
+
+		for id, ch := range releases {
+			if id != first {
+				close(ch)
+			}
+		}
+		synctest.Wait()
+
+		startsMu.Lock()
+		for id, n := range starts {
+			assert.Equal(t, 1, n, "job %s must start exactly once", id)
+		}
+		assert.Len(t, starts, jobCount, "every job starts")
+		startsMu.Unlock()
+		require.NoError(t, queue.Stop())
+	})
+}
+
 // overrunAction ignores its context, like BirdWeatherAction. Its first start
 // runs firstAttempt; every later start returns nil at once. It records the
 // virtual time of each start.
