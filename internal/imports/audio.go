@@ -22,6 +22,12 @@ import (
 // audioWorkerLimit is the maximum number of concurrent clip-copy goroutines per batch.
 const audioWorkerLimit = 4
 
+// audioTreeRoots lists the supported BirdNET-Pi audio tree layouts.
+var audioTreeRoots = []string{
+	filepath.Join("Extracted", "By_Date"),
+	"By_Date",
+}
+
 // sanitizePathComponent validates that s is a single safe path component.
 // Returns the component and true if safe, or ("", false) if s contains a path separator,
 // is ".", is "..", or is empty. A crafted DB value containing ".." is treated as "not found".
@@ -79,12 +85,14 @@ func resolveSourceClipRel(root *os.Root, date, comName, fileName string) (string
 		return "", false
 	}
 
-	// Try exact common name first. root.Stat enforces containment within the audio source
-	// directory; an escaping path (or escaping symlink) yields an error and is treated as
-	// not found.
-	exact := filepath.Join("Extracted", "By_Date", safeDate, safeComName, safeFileName)
-	if _, err := root.Stat(exact); err == nil {
-		return exact, true
+	// Try the exact common name in each supported layout. root.Stat enforces containment
+	// within the audio source directory; an escaping path (or escaping symlink) yields
+	// an error and is treated as not found.
+	for _, rootDir := range audioTreeRoots {
+		exact := filepath.Join(rootDir, safeDate, safeComName, safeFileName)
+		if _, err := root.Stat(exact); err == nil {
+			return exact, true
+		}
 	}
 
 	// Fallback: replace spaces with underscores, strip apostrophes.
@@ -98,9 +106,11 @@ func resolveSourceClipRel(root *os.Root, date, comName, fileName string) (string
 	if !ok {
 		return "", false
 	}
-	fallbackPath := filepath.Join("Extracted", "By_Date", safeDate, safeFallback, safeFileName)
-	if _, err := root.Stat(fallbackPath); err == nil {
-		return fallbackPath, true
+	for _, rootDir := range audioTreeRoots {
+		fallbackPath := filepath.Join(rootDir, safeDate, safeFallback, safeFileName)
+		if _, err := root.Stat(fallbackPath); err == nil {
+			return fallbackPath, true
+		}
 	}
 
 	return "", false
