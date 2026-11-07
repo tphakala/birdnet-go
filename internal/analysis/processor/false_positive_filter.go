@@ -101,16 +101,16 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 // MinDetectionsForModel returns the confirmation count the false positive filter
 // requires for a model at the given effective base overlap, routing to the
 // correct minDetections calculation based on the model ID. The flush path and the
-// API readouts both use it, so the readouts match the filter. Bat models use a fixed 50% overlap (1.5s step) instead
-// of the user-configurable BirdNET overlap, and read from a separate filter
-// config. For the 3s BirdNET model the bird path's step (3.0 - overlap) matches
+// API readouts both use it, so the readouts match the filter. Bat-group models
+// read from a separate filter config, and the Bat model uses a fixed 50% overlap
+// (1.5s step) instead of the user-configurable BirdNET overlap. For the 3s BirdNET model the bird path's step (3.0 - overlap) matches
 // the buffer's cadence, which follows the effective base overlap (issue #4096).
 //
 // baseOverlap is the effective base overlap (the published cadence plan's, else
 // the configured birdnet.overlap); see Processor.effectiveBaseOverlap.
 func MinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap time.Duration) int {
-	if modelID == classifier.RegistryIDBat {
-		return calculateBatMinDetections(settings)
+	if isBatGroupModel(modelID) {
+		return batGroupMinDetections(settings, modelID, classifier.ModelRegistry[modelID].Spec, baseOverlap)
 	}
 	if info, ok := classifier.ModelRegistry[modelID]; ok {
 		return minDetectionsForSpec(settings, modelID, info.Spec, baseOverlap)
@@ -142,12 +142,6 @@ const (
 	fpMinSegmentLength = 0.1
 	// fpEpsilon absorbs floating-point rounding before Ceil (e.g. 5.0000000003).
 	fpEpsilon = 1e-9
-	// batClipSeconds is the bat model's analysis clip length (3s). batOverlapSeconds
-	// is its fixed 50% overlap, giving a 1.5s analysis step. The bat model's fixed
-	// overlap is applied by classifier.ResolveModelOverlap (RegistryIDBat ->
-	// ClipLength/2); these constants keep the FP confirmation math in step with it.
-	batClipSeconds    = 3.0
-	batOverlapSeconds = 1.5
 )
 
 // minDetectionsForSegment computes the minimum number of confirming detections
@@ -174,13 +168,29 @@ func minDetectionsForSegment(segmentSeconds float64, level int) int {
 	return int(math.Max(1, math.Ceil(required)))
 }
 
-// calculateBatMinDetections computes the minimum detection count for bat models.
-// The bat model's buffer overlap is fixed at 50% (by classifier.ResolveModelOverlap,
+// isBatGroupModel reports whether the registry entry with the given ID belongs to
+// the bat taxon group. Bat-group models share the bat false positive filter
+// config and the ultrasonic validation filter.
+func isBatGroupModel(modelID string) bool {
+	return classifier.TaxonGroupFor(modelID) == classifier.TaxonGroupBat
+}
+
+// batGroupMinDetections computes the minimum detection count for a bat-group
+// model from the bat filter level and the model's own analysis step, which is
+// spec.BufferInterval at the overlap classifier.ResolveModelOverlap resolves for
+// it. For the Bat model that is a 1.5s step (3s clip, fixed 50% overlap).
+func batGroupMinDetections(settings *conf.Settings, modelID string, spec classifier.ModelSpec, baseOverlap time.Duration) int {
+	step := spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, baseOverlap)).Seconds()
+	return minDetectionsForSegment(step, settings.Bat.FalsePositiveFilter.Level)
+}
+
+// calculateBatMinDetections computes the minimum detection count for the Bat
+// model. Its buffer overlap is fixed at 50% (by classifier.ResolveModelOverlap,
 // which returns ClipLength/2 for RegistryIDBat), giving a 1.5-second step for a
 // 3-second clip. Within a 6-second reference window, this yields 4 possible
-// detections.
+// detections. The base overlap does not affect it.
 func calculateBatMinDetections(settings *conf.Settings) int {
-	return minDetectionsForSegment(batClipSeconds-batOverlapSeconds, settings.Bat.FalsePositiveFilter.Level)
+	return batGroupMinDetections(settings, classifier.RegistryIDBat, classifier.ModelRegistry[classifier.RegistryIDBat].Spec, 0)
 }
 
 // visibilityThresholds holds precomputed per-model visibility thresholds.
@@ -188,15 +198,20 @@ func calculateBatMinDetections(settings *conf.Settings) int {
 type visibilityThresholds map[string]int
 
 // precomputeVisibilityThresholds calculates visibility thresholds for bird and
-// bat models once per settings snapshot so callers can look up by model ID
+// bat-group models once per settings snapshot so callers can look up by model ID
 // without recomputing inside a loop or under a lock.
 func precomputeVisibilityThresholds(settings *conf.Settings, baseOverlap time.Duration) visibilityThresholds {
 	birdVis := CalculateVisibilityThreshold(calculateMinDetectionsFromSettings(settings, baseOverlap))
-	batVis := CalculateVisibilityThreshold(calculateBatMinDetections(settings))
-	return visibilityThresholds{
-		"":                       birdVis, // default for unknown model IDs
-		classifier.RegistryIDBat: batVis,
+	vt := visibilityThresholds{
+		"": birdVis, // default for unknown model IDs
 	}
+	for id := range classifier.ModelRegistry {
+		if isBatGroupModel(id) {
+			spec := classifier.ModelRegistry[id].Spec
+			vt[id] = CalculateVisibilityThreshold(batGroupMinDetections(settings, id, spec, baseOverlap))
+		}
+	}
+	return vt
 }
 
 // getThreshold returns the visibility threshold for a model ID, falling back

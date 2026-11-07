@@ -1013,9 +1013,9 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		detections = append(detections, det)
 	}
 
-	// Run ultrasonic validation filter on bat detections. Computed once per chunk
-	// since all detections share the same source audio.
-	if len(detections) > 0 && item.ModelID == classifier.RegistryIDBat {
+	// Run ultrasonic validation filter on bat-group detections. Computed once per
+	// chunk since all detections share the same source audio.
+	if len(detections) > 0 && isBatGroupModel(item.ModelID) {
 		p.applyUltrasonicFilter(settings, item, detections)
 	}
 

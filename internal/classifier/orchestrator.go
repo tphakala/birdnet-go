@@ -543,7 +543,7 @@ func (o *Orchestrator) setV24LabelResolver(labels []string) {
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
-// the bat nighttime scheduler if the bat model is loaded. Called during
+// the nighttime scheduler if a schedule-gated model (today the bat model) is loaded. Called during
 // pipeline startup after the suncalc instance is available.
 func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	o.mu.Lock()
@@ -556,10 +556,22 @@ func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	s := newNighttimeScheduler(sc)
 	o.scheduler.Store(s)
 
-	// Only start the scheduler if the bat model is actually loaded.
-	if _, hasBat := o.models[RegistryIDBat]; hasBat {
+	// Only start the scheduler if a schedule-gated model is actually loaded.
+	if o.hasScheduleGatedModelLocked("") {
 		o.startBatScheduler(s)
 	}
+}
+
+// hasScheduleGatedModelLocked reports whether a schedule-gated model other than
+// excludeID is loaded; pass "" to consider every loaded model. The caller must
+// hold o.mu (it reads o.models).
+func (o *Orchestrator) hasScheduleGatedModelLocked(excludeID string) bool {
+	for id := range o.models {
+		if id != excludeID && isScheduleGated(id) {
+			return true
+		}
+	}
+	return false
 }
 
 // scheduleReasonNight is the human-readable reason ModelScheduleStatus returns
@@ -1170,15 +1182,27 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
 	scores = append(scores, rfs.uncoveredParticipantSpecies(rfState, settings, geo, excluder, seenSci)...)
 
-	// The bat model is intentionally skipped by the range-filter loop above: it
-	// has no geomodel, so its species can never be location-filtered. Include
-	// them all here as always-active (score 1.0), deduped by scientific name and
-	// honoring the exclude list, so multi-model (BattyBirdNET) setups see their
-	// bat species in the active/probable list instead of a bird-only view.
+	// Bat-group models are intentionally not location-filtered: the Bat entry
+	// reports rangeFilterCompatNone, so the range-filter loop
+	// above skips it. Include every loaded bat-group model here as always-active
+	// (score 1.0), deduped by scientific name and honoring the exclude list, so
+	// multi-model (BattyBirdNET) setups see their bat species in the active/probable
+	// list instead of a bird-only view.
+	// Entries are walked in sorted-by-ID order so the append order is deterministic.
 	o.mu.RLock()
-	batEntry, hasBat := o.models[RegistryIDBat]
+	batIDs := make([]string, 0, len(o.models))
+	for id := range o.models {
+		if TaxonGroupFor(id) == TaxonGroupBat {
+			batIDs = append(batIDs, id)
+		}
+	}
+	slices.Sort(batIDs)
+	batEntries := make([]*modelEntry, len(batIDs))
+	for i, id := range batIDs {
+		batEntries[i] = o.models[id]
+	}
 	o.mu.RUnlock()
-	if hasBat {
+	for _, batEntry := range batEntries {
 		batEntry.mu.Lock()
 		var batLabels []string
 		if batEntry.instance != nil {
@@ -2053,10 +2077,11 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		log.Info("Model loaded dynamically",
 			logger.String("registry_id", registryID))
 
-		// Start nighttime scheduler if bat model was just loaded and suncalc is available.
-		// Create a fresh scheduler to handle the unload/reload case where the
-		// previous scheduler's stopChan was closed.
-		if registryID == RegistryIDBat {
+		// Start the nighttime scheduler when the first schedule-gated model was just
+		// loaded and suncalc is available. Create a fresh scheduler to handle the
+		// unload/reload case where the previous scheduler's stopChan was closed. A
+		// scheduler already running for another loaded gated model is kept.
+		if isScheduleGated(registryID) && !o.hasScheduleGatedModelLocked(registryID) {
 			if old := o.scheduler.Load(); old != nil && old.sunCalc != nil {
 				old.stop()
 				s := newNighttimeScheduler(old.sunCalc)
@@ -2355,7 +2380,8 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	// teardown (the topology-reconfigure debounce window) is diagnosed as
 	// "unloaded" rather than a bare unknown model. Cleared on the next load.
 	o.modelUnloaded.Store(registryID, struct{}{})
-	if registryID == RegistryIDBat {
+	// Stop the nighttime scheduler only when the last schedule-gated model unloads.
+	if isScheduleGated(registryID) && !o.hasScheduleGatedModelLocked(registryID) {
 		if s := o.scheduler.Load(); s != nil {
 			s.stop()
 		}
