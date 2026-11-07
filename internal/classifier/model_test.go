@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
@@ -265,4 +266,68 @@ func TestModelSpec_EffectiveSampleRate(t *testing.T) {
 		spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000}
 		assert.Equal(t, 256000, spec.EffectiveSampleRate())
 	})
+}
+
+// TestModelSpec_AnalysisRingCapacity checks the ring rule itself: a spec that
+// requires a contiguous window gets a ring of two windows (room for a whole
+// window plus a fresh step), any other spec keeps one window, and BSG-BAT is the only registry entry
+// that requires one. The per-entry values are pinned in
+// TestModelSpec_RegistryBufferGeometry.
+func TestModelSpec_AnalysisRingCapacity(t *testing.T) {
+	t.Parallel()
+
+	flagged := 0
+	for id := range ModelRegistry {
+		if ModelRegistry[id].Spec.RequireContiguousWindow {
+			flagged++
+			assert.Equal(t, RegistryIDBSGBat, id)
+		}
+	}
+	assert.Equal(t, 1, flagged, "BSG-BAT is the only contiguous-window model")
+
+	plain := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+	contiguous := plain
+	contiguous.RequireContiguousWindow = true
+	assert.Equal(t, plain.ClipSizeBytes(), plain.AnalysisRingCapacity())
+	assert.Equal(t, 2*contiguous.ClipSizeBytes(), contiguous.AnalysisRingCapacity())
+
+	bsgBat := ModelRegistry[RegistryIDBSGBat].Spec
+	_, _, readSize := bsgBat.BufferDimensions(0)
+	assert.GreaterOrEqual(t, bsgBat.AnalysisRingCapacity(), bsgBat.ClipSizeBytes()+readSize,
+		"the ring holds a readable window plus a whole fresh step")
+}
+
+// TestModelSpec_RegistryBufferGeometry pins, as literals, the analysis buffer
+// geometry of every registry entry: the window, the ring capacity, the overlap
+// and read size at overlap 0 and 1.5 s, and the step at overlap 0. Only BSG-BAT
+// has a ring larger than one window.
+func TestModelSpec_RegistryBufferGeometry(t *testing.T) {
+	t.Parallel()
+
+	want := []struct {
+		id                                   string
+		clipBytes, ringBytes                 int
+		overlap0, read0, overlapMid, readMid int
+		stepAtOverlap0                       time.Duration
+	}{
+		{"BSG", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
+		{"BSG_BAT", 786944, 1573888, 402944, 384000, 402944, 384000, 500 * time.Millisecond},
+		{"Bat", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
+		{"BirdNET_V2.4", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
+		{"BirdNET_V3.0", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
+		{"Perch_V2", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
+	}
+	require.Len(t, ModelRegistry, len(want), "a registry entry was added or removed: add its geometry here")
+	for _, w := range want {
+		spec := ModelRegistry[w.id].Spec
+		clipBytes, overlap0, read0 := spec.BufferDimensions(0)
+		_, overlapMid, readMid := spec.BufferDimensions(1500 * time.Millisecond)
+		assert.Equal(t, w.clipBytes, clipBytes, "%s clip bytes", w.id)
+		assert.Equal(t, w.ringBytes, spec.AnalysisRingCapacity(), "%s ring capacity", w.id)
+		assert.Equal(t, w.overlap0, overlap0, "%s overlap at 0", w.id)
+		assert.Equal(t, w.read0, read0, "%s read size at 0", w.id)
+		assert.Equal(t, w.overlapMid, overlapMid, "%s overlap at 1.5s", w.id)
+		assert.Equal(t, w.readMid, readMid, "%s read size at 1.5s", w.id)
+		assert.Equal(t, w.stepAtOverlap0, spec.BufferInterval(0), "%s step at overlap 0", w.id)
+	}
 }

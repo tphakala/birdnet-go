@@ -46,7 +46,8 @@ type ModelSpec struct {
 	// RequireContiguousWindow marks a model that must not score a window whose
 	// genuine tail (the audio actually received, as opposed to a zero-filled or
 	// spliced head) is shorter than the window. The analysis buffer monitor skips
-	// such windows for this model.
+	// such windows for this model. Any lost byte costs such a model a whole
+	// window, so its analysis ring is sized with headroom (AnalysisRingCapacity).
 	RequireContiguousWindow bool `json:",omitempty"`
 }
 
@@ -64,6 +65,23 @@ func (s ModelSpec) ClipSampleCount() int {
 // layer determines the window size regardless of the source capture rate.
 func (s ModelSpec) ClipSizeBytes() int {
 	return s.ClipSampleCount() * conf.NumChannels * conf.BytesPerSample
+}
+
+// contiguousWindowRingWindows is the analysis ring size, in windows, of a model
+// that requires a contiguous window. After a readable window the ring must still
+// absorb a monitor tick plus one inference without overwriting unread audio, and
+// any byte lost costs such a model a whole window.
+const contiguousWindowRingWindows = 2
+
+// AnalysisRingCapacity returns the analysis ring capacity in bytes: one window
+// (ClipSizeBytes) for every model, except a RequireContiguousWindow model, which
+// gets contiguousWindowRingWindows windows so a step close to the window does not
+// overwrite unread audio.
+func (s ModelSpec) AnalysisRingCapacity() int {
+	if s.RequireContiguousWindow {
+		return contiguousWindowRingWindows * s.ClipSizeBytes()
+	}
+	return s.ClipSizeBytes()
 }
 
 // BufferDimensions returns the analysis buffer dimensions for this model given
