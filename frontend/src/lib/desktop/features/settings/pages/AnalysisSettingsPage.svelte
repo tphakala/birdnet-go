@@ -1936,7 +1936,15 @@
         originalData={batChange.original}
         currentData={batChange.current}
       >
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Side by side, a label that wraps to two lines (longer translations) must not push its input below the neighbour: both labels reserve two lines (2 x 1.25rem text plus 0.5rem padding, see .label in custom.css). -->
+        <div
+          class={cn(
+            'grid grid-cols-1 md:grid-cols-2 gap-6',
+            hasBattyBirdNetModel &&
+              hasBsgBatModel &&
+              'md:[&_.label]:min-h-12 md:[&_.label]:items-start'
+          )}
+        >
           {#if hasBattyBirdNetModel}
             <NumberField
               label={t('analysis.detection.batThreshold.label')}
