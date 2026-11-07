@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
+	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -186,6 +187,37 @@ func TestSaveAudioAction_DenoisesPCMBeforeEncoding(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A bird capture above 48 kHz is resampled to 48 kHz for export. The denoise
+// runs after that conversion: it receives the resampled PCM at the export rate,
+// and the encoder and the pre-render job receive exactly what it returned.
+func TestSaveAudioAction_DenoisesAtTheExportRate(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	raw := noisyPCM(rateTest192k, 1.5)
+	a, rec := newDenoiseAction(t, dir, "clip.wav", raw, rateTest192k, false, true)
+	var gotRate int
+	var gotPCM, denoised []byte
+	a.denoise = func(ctx context.Context, pcm []byte, rate, ch int, preset string) ([]byte, error) {
+		gotRate, gotPCM = rate, bytes.Clone(pcm)
+		out, err := transcode.DenoisePCM16(ctx, pcm, rate, ch, preset)
+		denoised = bytes.Clone(out)
+		return out, err
+	}
+
+	require.NoError(t, a.Execute(t.Context(), nil))
+
+	resampled, err := resample.ResampleBytes(raw, rateTest192k, conf.SampleRate)
+	require.NoError(t, err)
+	assert.Equal(t, conf.SampleRate, gotRate, "the denoiser runs at the export rate")
+	assert.Equal(t, resampled, gotPCM, "the denoiser receives the resampled PCM")
+	require.NotEqual(t, resampled, denoised, "the fixture must be changed by the denoiser")
+	require.Len(t, rec.encoded, 1)
+	assert.Equal(t, denoised, rec.encoded[0], "the encoder receives the denoised PCM")
+	require.Len(t, rec.prerender, 1)
+	assert.Equal(t, denoised, rec.prerender[0], "the pre-render job reads the stored PCM")
+	assert.Equal(t, []string{"clip.wav"}, dirEntries(t, dir))
 }
 
 // A deferred export retries Execute on the same action after a failed attempt.
