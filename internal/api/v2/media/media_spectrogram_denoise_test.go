@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
 
 const (
@@ -210,29 +211,44 @@ func TestServeSpectrogramByID_DenoiseFollowsStyleSettings(t *testing.T) {
 }
 
 func TestServeSpectrogramByID_DenoiseUserRequestedMode(t *testing.T) {
-	env := newSpecDenoiseEnv(t, specModelBird, processTestRate, fixtureToneHz,
-		apitest.WithSettingsFunc(func(s *conf.Settings) {
-			s.Realtime.Dashboard.Spectrogram.Mode = conf.SpectrogramModeUserRequested
-		}))
+	tests := []struct {
+		name      string
+		model     string
+		rate      int
+		freq      float64
+		freqToken string
+	}{
+		{name: "bird", model: specModelBird, rate: processTestRate, freq: fixtureToneHz},
+		{name: "bat", model: specModelBat, rate: batTestRate, freq: fixtureBatToneHz, freqToken: spectrogram.ProfileSuffix(spectrogram.BatProfile())},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSpecDenoiseEnv(t, tc.model, tc.rate, tc.freq,
+				apitest.WithSettingsFunc(func(s *conf.Settings) {
+					s.Realtime.Dashboard.Spectrogram.Mode = conf.SpectrogramModeUserRequested
+				}))
 
-	plain := getURL(env.e, "/api/v2/spectrogram/"+specDenoiseID)
-	require.Equal(t, http.StatusNotFound, plain.Code)
+			plain := getURL(env.e, "/api/v2/spectrogram/"+specDenoiseID)
+			require.Equal(t, http.StatusNotFound, plain.Code)
 
-	rec := getURL(env.e, specDenoiseURL(denoiseTestPreset))
-	assert.Equal(t, http.StatusNotFound, rec.Code, "a page load must not render in this mode")
-	assert.Contains(t, rec.Body.String(), conf.SpectrogramModeUserRequested, "the not-generated response is today's")
-	assert.Zero(t, env.wavJobs.Load(), "no denoise runs")
-	assert.Empty(t, cachedPNGs(t, env.dir))
+			rec := getURL(env.e, specDenoiseURL(denoiseTestPreset))
+			assert.Equal(t, http.StatusNotFound, rec.Code, "a page load must not render in this mode")
+			assert.Contains(t, rec.Body.String(), conf.SpectrogramModeUserRequested, "the not-generated response is today's")
+			assert.Zero(t, env.wavJobs.Load(), "no denoise runs")
+			assert.Empty(t, cachedPNGs(t, env.dir))
 
-	// The user has generated the stored spectrogram: the denoised one then renders.
-	spec := env.controller.CurrentSettings().Realtime.Dashboard.Spectrogram
-	_, _, _, rel := buildSpectrogramPaths(specDenoiseClip, SpectrogramSizeLg, true, spec.Style, spec.DynamicRange, "")
-	require.NoError(t, os.WriteFile(fixturePath(env.dir, rel), []byte(nativeGateMarker), 0o600))
+			// The user has generated the stored spectrogram, named with the
+			// clip's frequency profile token: the denoised one then renders.
+			spec := env.controller.CurrentSettings().Realtime.Dashboard.Spectrogram
+			_, _, _, rel := buildSpectrogramPaths(specDenoiseClip, SpectrogramSizeLg, true, spec.Style, spec.DynamicRange, tc.freqToken)
+			require.NoError(t, os.WriteFile(fixturePath(env.dir, rel), []byte(nativeGateMarker), 0o600))
 
-	rec = getURL(env.e, specDenoiseURL(denoiseTestPreset))
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.Equal(t, "image/png", rec.Header().Get(echo.HeaderContentType))
-	assert.Equal(t, int32(1), env.wavJobs.Load())
+			rec = getURL(env.e, specDenoiseURL(denoiseTestPreset))
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			assert.Equal(t, "image/png", rec.Header().Get(echo.HeaderContentType))
+			assert.Equal(t, int32(1), env.wavJobs.Load())
+		})
+	}
 }
 
 func TestServeSpectrogramByID_DenoiseIgnoredWithoutAudio(t *testing.T) {

@@ -487,6 +487,18 @@ describe('AudioPlayer playback denoise default', () => {
       expect(postedUrls().filter(url => url.includes('/spectrogram/'))).toHaveLength(1);
     });
 
+    it('shows the denoised spectrogram again when normalize is switched off on a non-default strength', async () => {
+      followingPlayer();
+      ctl.completeLoad();
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      await toggleNormalize();
+      expect(screen.getByAltText(SPECTROGRAM_ALT).getAttribute('src')).toBe(PROCESSED_BLOB_URL);
+
+      await toggleNormalize();
+
+      expect(spectrogramSrc().searchParams.get('denoise')).toBe('heavy');
+    });
+
     it('returns to the stored spectrogram when the denoised clip fails', async () => {
       restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
       followingPlayer();
