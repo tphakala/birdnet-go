@@ -1137,3 +1137,59 @@ func TestMinDetections_ParityFixture(t *testing.T) {
 			"%s overlap %.1f level %d", row.ModelID, row.OverlapSec, row.Level)
 	}
 }
+
+// TestBatGroupMinDetections pins that a bat-group model's confirmation count uses
+// the bat filter level and the step of its own spec and resolved overlap: Bat keeps
+// the count calculateBatMinDetections gives, and a model with a shorter step gets
+// minDetectionsForSegment for that step.
+func TestBatGroupMinDetections(t *testing.T) {
+	t.Parallel()
+
+	batSpec := classifier.ModelRegistry[classifier.RegistryIDBat].Spec
+	const (
+		batStepSecs     = 1.5 // 3 s clip, fixed 50% overlap
+		customID        = "custom-bat-group"
+		customStepSecs  = 0.5
+		customClip      = 3 * time.Second
+		customOverlapBy = 2500 * time.Millisecond // 3 s clip - 2.5 s overlap = 0.5 s step
+	)
+	customSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: customClip}
+
+	for level := 0; level <= 5; level++ {
+		s := &conf.Settings{}
+		s.Bat.FalsePositiveFilter.Level = level
+		s.Realtime.FalsePositiveFilter.Level = 0 // the bird level must not leak in
+
+		assert.Equal(t, minDetectionsForSegment(batStepSecs, level),
+			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, classifier.ConfiguredBaseOverlap(s)),
+			"Bat count must be unchanged at level %d", level)
+		assert.Equal(t, calculateBatMinDetections(s),
+			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, 0),
+			"Bat count must ignore the base overlap at level %d", level)
+		assert.Equal(t, minDetectionsForSegment(customStepSecs, level),
+			batGroupMinDetections(s, customID, customSpec, customOverlapBy),
+			"bat-group model with a %.1f s step at level %d", customStepSecs, level)
+	}
+}
+
+// TestPrecomputeVisibilityThresholds_BatEntry pins that the Bat model keeps its
+// visibility threshold, derived from the bat filter level.
+func TestPrecomputeVisibilityThresholds_BatEntry(t *testing.T) {
+	t.Parallel()
+
+	s := &conf.Settings{}
+	s.Bat.FalsePositiveFilter.Level = 4
+	vt := precomputeVisibilityThresholds(s, 0)
+	assert.Equal(t, CalculateVisibilityThreshold(calculateBatMinDetections(s)),
+		vt.getThreshold(classifier.RegistryIDBat))
+}
+
+// TestIsBatGroupModel pins the taxon-group predicate behind the ultrasonic filter
+// and the FP routing.
+func TestIsBatGroupModel(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isBatGroupModel(classifier.RegistryIDBat))
+	assert.False(t, isBatGroupModel(classifier.RegistryIDBirdNETV24))
+	assert.False(t, isBatGroupModel("not-a-model"))
+}
