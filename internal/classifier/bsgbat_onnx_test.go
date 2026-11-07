@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,7 +65,7 @@ type fakeTensorModel struct {
 }
 
 func (f *fakeTensorModel) Run(input []float32) ([][]float32, error) {
-	f.inputs = append(f.inputs, append([]float32(nil), input...))
+	f.inputs = append(f.inputs, slices.Clone(input))
 	return f.outputs, nil
 }
 func (f *fakeTensorModel) InputShape() []int64 {
