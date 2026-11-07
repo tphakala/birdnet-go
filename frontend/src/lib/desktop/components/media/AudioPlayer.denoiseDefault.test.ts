@@ -584,6 +584,29 @@ describe('AudioPlayer playback denoise default', () => {
       expect(spectrogramSrc().searchParams.get('denoise')).toBe('heavy');
     });
 
+    it('keeps the denoised spectrogram on screen while the normalized one is made', async () => {
+      let finishProcessing: (() => void) | undefined;
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('/spectrogram/') && url.includes('/process') && init?.method === 'POST') {
+          await new Promise<void>(resolve => {
+            finishProcessing = resolve;
+          });
+        }
+        return { ok: true, status: 200, blob: async () => new Blob(['p']), headers: new Headers() };
+      });
+      followingPlayer();
+      ctl.completeLoad();
+      await settle();
+
+      await toggleNormalize();
+      expect(spectrogramSrc().searchParams.get('denoise')).toBe(PRESET);
+
+      finishProcessing?.();
+      await settle();
+      expect(screen.getByAltText(SPECTROGRAM_ALT).getAttribute('src')).toBe(PROCESSED_BLOB_URL);
+    });
+
     it('does not poll the stored render status for the denoised variant', async () => {
       followingPlayer();
       await settle();

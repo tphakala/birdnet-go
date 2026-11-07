@@ -432,10 +432,13 @@
   // spectrogram. Normalize keeps the processed-spectrogram POST, and a denoised clip
   // that failed returns the spectrogram to the stored one with the audio.
   const spectrogramDenoise = $derived(
-    spectrogramFollowsDenoise && !processingNormalize && !denoiseFailed && !spectrogramFellBack
-      ? processingDenoise
-      : ''
+    spectrogramFollowsDenoise && !denoiseFailed && !spectrogramFellBack ? processingDenoise : ''
   );
+  // The denoised spectrogram is loaded by URL. With normalize on the processed
+  // spectrogram replaces it once made, and the denoised one stays up until then.
+  const spectrogramByUrl = $derived(spectrogramDenoise !== '' && !processingNormalize);
+  // The image on screen is the denoised URL, not a processed blob.
+  const showingDenoisedUrl = $derived(spectrogramDenoise !== '' && !processedSpectrogramUrl);
 
   // Base URL without cache-busting parameters. It stays null while a bat rate
   // is being resolved, so an image cached under a URL without the rate is never
@@ -978,6 +981,13 @@
       return;
     }
 
+    // A denoise-only state on a player that follows denoise shows the denoised URL:
+    // drop a processed spectrogram left from normalize.
+    if (spectrogramByUrl && processedSpectrogramUrl) {
+      URL.revokeObjectURL(processedSpectrogramUrl);
+      processedSpectrogramUrl = null;
+    }
+
     isProcessing = true;
     // Pause playback while backend applies filters
     if (isPlaying && audioElement) {
@@ -1026,7 +1036,7 @@
 
       // Update spectrogram to reflect processed audio. A denoise-only state on a
       // player that follows denoise loads the denoised spectrogram by URL instead.
-      if (enableClipExtraction && spectrogramDenoise === '') {
+      if (enableClipExtraction && !spectrogramByUrl) {
         updateProcessedSpectrogram(controller.signal);
       }
     } catch (err) {
@@ -1894,7 +1904,7 @@
     // stored render, not the denoised variant, which answers 200 or 503 directly.
     if (spectrogramRetryCount === 0 && !spectrogramStatusFailed) {
       debugLog('handleSpectrogramError: first error, starting status polling');
-      if (spectrogramDenoise === '') {
+      if (!showingDenoisedUrl) {
         statusPollStartTime = Date.now();
         pollSpectrogramStatus();
       } else if (spectrogramUrl) {
@@ -1905,7 +1915,7 @@
         overlayRate !== undefined &&
         !processedSpectrogramUrl &&
         spectrogramUrl &&
-        spectrogramDenoise === ''
+        !showingDenoisedUrl
       ) {
         void probeExactRateRender(spectrogramUrl);
       }
@@ -1946,7 +1956,7 @@
 
     // Max retries exceeded: a denoised spectrogram that never came is replaced by
     // the stored one rather than ending on the unavailable state.
-    if (spectrogramDenoise !== '') {
+    if (showingDenoisedUrl) {
       fallBackToStoredSpectrogram();
       return;
     }
