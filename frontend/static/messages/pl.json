@@ -3731,7 +3731,7 @@
           "batIncompatible": "Niekompatybilny z nietoperzami",
           "minRateWarning": "Wybrane modele wymagają częstotliwości nagrywania co najmniej {rate} kHz. Ten strumień jest poniżej."
         },
-        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
+        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. BSG-BAT wymaga co najmniej 192 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
         "codecWarning": {
           "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
         },

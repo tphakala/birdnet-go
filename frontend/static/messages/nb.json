@@ -3731,7 +3731,7 @@
           "batIncompatible": "Ikke flaggermus-kompatibel",
           "minRateWarning": "De valgte modellene trenger en opptaksfrekvens på minst {rate} kHz. Denne strømmen ligger under."
         },
-        "batWarning": "Flaggermusmodeller krever strømmer med tapsfri kodek (PCM) og en samplingshastighet på minst 96 kHz. Bruk Test strøm-knappen ovenfor for å verifisere kompatibilitet.",
+        "batWarning": "Flaggermusmodeller krever strømmer med tapsfri kodek (PCM) og en samplingshastighet på minst 96 kHz. BSG-BAT krever minst 192 kHz. Bruk Test strøm-knappen ovenfor for å verifisere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tapsbringende kodeker (AAC, Opus, MP3) ødelegger ultrasoniske frekvenser over ~20 kHz, noe som gjør strømmen uegnet for flaggermusdeteksjon."
         },

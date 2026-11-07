@@ -3731,7 +3731,7 @@
           "batIncompatible": "Nicht fledermaus-kompatibel",
           "minRateWarning": "Die gewählten Modelle benötigen eine Aufnahmerate von mindestens {rate} kHz. Dieser Stream liegt darunter."
         },
-        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
+        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. BSG-BAT erfordert mindestens 192 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
         "codecWarning": {
           "lossy": "Verlustbehaftete Codecs (AAC, Opus, MP3) zerstören Ultraschallfrequenzen über ~20 kHz und machen den Stream für die Fledermauserkennung ungeeignet."
         },

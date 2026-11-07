@@ -3731,7 +3731,7 @@
           "batIncompatible": "No compatible con murciélagos",
           "minRateWarning": "Los modelos seleccionados necesitan una frecuencia de captura de al menos {rate} kHz. Esta transmisión está por debajo."
         },
-        "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
+        "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. BSG-BAT requiere al menos 192 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
         "codecWarning": {
           "lossy": "Los códecs con pérdida (AAC, Opus, MP3) destruyen las frecuencias ultrasónicas por encima de ~20 kHz, haciendo el stream inadecuado para la detección de murciélagos."
         },

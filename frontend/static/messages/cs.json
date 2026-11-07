@@ -3731,7 +3731,7 @@
           "batIncompatible": "Nekompatibilní s netopýry",
           "minRateWarning": "Vybrané modely vyžadují vzorkovací frekvenci záznamu alespoň {rate} kHz. Tento stream je pod touto hodnotou."
         },
-        "batWarning": "Modely netopýrů vyžadují streamy s bezeztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz. Pomocí tlačítka Testovat stream výše ověřte kompatibilitu.",
+        "batWarning": "Modely netopýrů vyžadují streamy s bezeztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz. BSG-BAT vyžaduje alespoň 192 kHz. Pomocí tlačítka Testovat stream výše ověřte kompatibilitu.",
         "codecWarning": {
           "lossy": "Ztrátové kodeky (AAC, Opus, MP3) ničí ultrazvukové frekvence nad ~20 kHz, čímž se stream stává nevhodným pro detekci netopýrů."
         },

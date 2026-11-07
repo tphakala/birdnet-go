@@ -3731,7 +3731,7 @@
           "batIncompatible": "Nav saderīgs ar sikspārņiem",
           "minRateWarning": "Atlasītajiem modeļiem nepieciešama ierakstīšanas frekvence vismaz {rate} kHz. Šī straume ir zemāka."
         },
-        "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
+        "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. BSG-BAT nepieciešams vismaz 192 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
         "codecWarning": {
           "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
         },

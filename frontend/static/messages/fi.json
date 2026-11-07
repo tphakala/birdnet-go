@@ -3731,7 +3731,7 @@
           "batIncompatible": "Ei yhteensopiva lepakoiden kanssa",
           "minRateWarning": "Valitut mallit vaativat vähintään {rate} kHz:n tallennustaajuuden. Tämä virta jää sen alle."
         },
-        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
+        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. BSG-BAT vaatii vähintään 192 kHz. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
         "codecWarning": {
           "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         },

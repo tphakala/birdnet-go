@@ -3731,7 +3731,7 @@
           "batIncompatible": "Não compatível com morcegos",
           "minRateWarning": "Os modelos selecionados precisam de uma taxa de captura de pelo menos {rate} kHz. Este stream está abaixo."
         },
-        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. O BSG-BAT requer pelo menos 192 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
         "codecWarning": {
           "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
         },

@@ -3731,7 +3731,7 @@
           "batIncompatible": "Non compatible chauves-souris",
           "minRateWarning": "Les modèles sélectionnés nécessitent une fréquence de capture d'au moins {rate} kHz. Ce flux est en dessous."
         },
-        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
+        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. BSG-BAT nécessite au moins 192 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
         "codecWarning": {
           "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         },

@@ -3731,7 +3731,7 @@
           "batIncompatible": "Nem denevér-kompatibilis",
           "minRateWarning": "A kiválasztott modellekhez legalább {rate} kHz-es felvételi frekvencia szükséges. Ez az adatfolyam ez alatt van."
         },
-        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
+        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. A BSG-BAT legalább 192 kHz-et igényel. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
         "codecWarning": {
           "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
         },

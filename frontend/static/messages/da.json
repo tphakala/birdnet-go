@@ -3731,7 +3731,7 @@
           "batIncompatible": "Ikke kompatibel med flagermus",
           "minRateWarning": "De valgte modeller kræver en optagelsesfrekvens på mindst {rate} kHz. Denne stream ligger under."
         },
-        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. BSG-BAT kræver mindst 192 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         },
