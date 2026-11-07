@@ -1027,11 +1027,17 @@ const bytesPerPCM16Sample = 2
 
 // applyUltrasonicFilter runs the ultrasonic validation filter on a batch of bat detections.
 // It computes the US frame CV once from the shared PCM audio and tags all detections
-// as unlikely when the CV falls below the configured threshold. The PCM data is at
-// the source sample rate (e.g., 256kHz), not the model's internal 48kHz rate.
-// It does nothing when the filter is disabled, when the source rate leaves no
-// band above the split, when the STFT settings are invalid, or when the PCM
-// cannot be decoded (a half sample) or holds too few frames.
+// as unlikely when the CV falls below the configured threshold. The PCM data is the
+// model's analysis window, at the model's effective sample rate (Bat 256 kHz,
+// BSG-BAT 384 kHz), whatever the source rate is: the source audio is resampled to
+// that rate for the model.
+// It does nothing when the filter is disabled, when the model is unknown (its
+// window rate cannot be known), when the model rate or the source rate leaves no
+// band above the split, when the STFT settings are invalid, or when the PCM cannot
+// be decoded (a half sample) or holds too few frames. Both rates gate the band:
+// resampling adds no content above the source's Nyquist, so a band the source
+// cannot carry holds only resampler residue, and an unknown source rate counts
+// as no band.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional for item
 func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
@@ -1040,9 +1046,19 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
+	spec, found := classifier.GetModelSpec(item.ModelID)
+	if !found {
+		GetLogger().Debug("ultrasonic filter: unknown model, window rate unknown, skipping",
+			logger.String("model", item.ModelID))
+		return
+	}
+	windowRate := spec.EffectiveSampleRate()
+	if !ultrasonic.HasUltrasonicBand(windowRate, filterCfg.FrequencySplitHz) {
+		return
+	}
+
 	resolved := p.resolveAudioSource(item.Source)
-	sourceRate := resolved.SampleRate
-	if !ultrasonic.HasUltrasonicBand(sourceRate, filterCfg.FrequencySplitHz) {
+	if !ultrasonic.HasUltrasonicBand(resolved.SampleRate, filterCfg.FrequencySplitHz) {
 		return
 	}
 
@@ -1065,16 +1081,16 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		GetLogger().Debug("ultrasonic filter: PCM data cannot be decoded",
 			logger.String("source", sourceName),
 			logger.Int("sample_count", len(samples)),
-			logger.Int("sample_rate", sourceRate),
+			logger.Int("sample_rate", windowRate),
 			logger.Error(err))
 		return
 	}
-	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
+	cv, ok := ultrasonic.ComputeUSFrameCV(samples, windowRate, filterCfg)
 	if !ok {
 		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
 			logger.String("source", sourceName),
 			logger.Int("sample_count", len(samples)),
-			logger.Int("sample_rate", sourceRate))
+			logger.Int("sample_rate", windowRate))
 		return
 	}
 
