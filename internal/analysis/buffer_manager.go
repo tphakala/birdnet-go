@@ -42,7 +42,7 @@ type monitorConfig struct {
 	sourceID    string
 	modelID     string
 	spec        classifier.ModelSpec
-	readSize    int // bytes = ClipLength * SampleRate * bytesPerSample
+	readSize    int // bytes = spec.ClipSizeBytes(), the whole analysis window
 	overlapSize int // bytes, scaled from user config, PCM-aligned
 }
 

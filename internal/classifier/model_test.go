@@ -136,6 +136,16 @@ func TestModelSpec_BufferInterval(t *testing.T) {
 		assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(0))
 		assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(time.Second))
 	})
+
+	t.Run("step longer than the clip is read as the clip", func(t *testing.T) {
+		t.Parallel()
+		spec := sampleWindowSpec()
+		spec.StepSamples = spec.ClipSamples + sampleWindowStep
+		// BufferDimensions reads a whole clip per window for such a spec.
+		_, _, read := spec.BufferDimensions(0)
+		assert.Equal(t, spec.ClipSizeBytes(), read)
+		assert.Equal(t, time.Duration(sampleWindowClip)*time.Second/sampleWindowRate, spec.BufferInterval(0))
+	})
 }
 
 // Sample-count spec used by the fixed-step tests: 384 kHz, a 393472 sample

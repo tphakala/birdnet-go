@@ -22,7 +22,8 @@ const (
 // Overlap is NOT a field here: it comes from user configuration and is resolved
 // per model by ResolveModelOverlap (bat is fixed at 50%; other models use the
 // effective base overlap from the published cadence plan, ratio-scaled), then
-// passed to BufferDimensions/BufferInterval.
+// passed to BufferDimensions/BufferInterval. A spec that sets StepSamples fixes
+// its own step instead, and both methods ignore the overlap for it.
 type ModelSpec struct {
 	SampleRate            int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, Perch)
 	ClipLength            time.Duration // 3s (BirdNET v2.4), 5s (v3.0, Perch)
@@ -100,10 +101,12 @@ func (s ModelSpec) BufferDimensions(overlap time.Duration) (clipBytes, overlapBy
 // inference exceeds this interval the pipeline falls behind real-time input.
 // overlap is the per-model overlap resolved by ResolveModelOverlap. A spec with
 // StepSamples set returns that step as a duration at EffectiveSampleRate() and
-// ignores overlap.
+// ignores overlap. A step longer than the clip counts as the clip, which is how
+// BufferDimensions reads it.
 func (s ModelSpec) BufferInterval(overlap time.Duration) time.Duration {
 	if rate := s.EffectiveSampleRate(); s.StepSamples > 0 && rate > 0 {
-		return time.Duration(s.StepSamples) * time.Second / time.Duration(rate)
+		step := min(s.StepSamples, s.ClipSampleCount())
+		return time.Duration(step) * time.Second / time.Duration(rate)
 	}
 	return max(s.ClipLength-overlap, minAnalysisStep)
 }

@@ -208,12 +208,15 @@ func TestProcessMonitorTick_ContiguousWindowRequirement(t *testing.T) {
 			}
 			cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, spec: tt.spec, readSize: windowSize}
 			quit := make(chan struct{})
-			state := &monitorTickState{}
+			// The previous window was analyzed: a skip must still clear the latch so
+			// the next window reports the gap.
+			state := &monitorTickState{lastWindowAnalyzed: true}
 
 			// First window: the overlap head is zero filled, so only stepSize bytes are genuine.
 			require.NoError(t, ab.Write(make([]byte, stepSize)))
 			require.True(t, bm.processMonitorTick(quit, cfg, windowSize, 0, state, 1))
 			assert.Equal(t, tt.wantFirstCalls, backend.predictCalls)
+			assert.False(t, state.lastWindowAnalyzed, "an unanalyzed window makes the next one report a gap")
 
 			// Second window: the head is the previous window's tail, fully genuine.
 			require.NoError(t, ab.Write(make([]byte, stepSize)))
