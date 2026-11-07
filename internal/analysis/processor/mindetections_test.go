@@ -1197,3 +1197,39 @@ func TestIsBatGroupModel(t *testing.T) {
 	assert.False(t, isBatGroupModel(classifier.RegistryIDBirdNETV24))
 	assert.False(t, isBatGroupModel("not-a-model"))
 }
+
+// TestMinDetectionsForModel_RegisteredBatGroupModel pins that the public routing
+// in MinDetectionsForModel and precomputeVisibilityThresholds covers every
+// registered bat-group model, not only the Bat ID: such a model uses the bat
+// filter level and the step of its own resolved overlap.
+func TestMinDetectionsForModel_RegisteredBatGroupModel(t *testing.T) {
+	// Not parallel: mutates the package-global classifier.ModelRegistry.
+	const (
+		otherBatID    = "test-other-bat-group"
+		otherOverlap  = 2800 * time.Millisecond // 3 s clip - 2.8 s overlap = 0.2 s step
+		otherStepSecs = 0.2
+		batLevel      = 4
+	)
+	// A copy of the Bat entry under another ID keeps its bat taxon group.
+	info := classifier.ModelRegistry[classifier.RegistryIDBat]
+	info.ID = otherBatID
+	classifier.ModelRegistry[otherBatID] = info
+	t.Cleanup(func() { delete(classifier.ModelRegistry, otherBatID) })
+
+	s := &conf.Settings{}
+	s.Bat.FalsePositiveFilter.Level = batLevel
+	s.Realtime.FalsePositiveFilter.Level = 0 // a bird path fallback would return 1
+
+	want := minDetectionsForSegment(otherStepSecs, batLevel)
+	require.NotEqual(t, want, calculateBatMinDetections(s),
+		"the custom step must give a count the Bat step does not")
+	assert.Equal(t, want, MinDetectionsForModel(s, otherBatID, otherOverlap),
+		"a registered bat-group model must route to the bat filter")
+
+	vt := precomputeVisibilityThresholds(s, otherOverlap)
+	batVisibility := CalculateVisibilityThreshold(calculateBatMinDetections(s))
+	require.NotContains(t, []int{vt.getThreshold(""), batVisibility}, CalculateVisibilityThreshold(want),
+		"the bat-group threshold must differ from the bird default and the Bat step's threshold")
+	assert.Equal(t, CalculateVisibilityThreshold(want), vt.getThreshold(otherBatID),
+		"a registered bat-group model must get its own visibility threshold")
+}
