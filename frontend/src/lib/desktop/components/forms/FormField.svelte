@@ -32,7 +32,10 @@
     value?: string | number | boolean | string[];
     placeholder?: string;
     helpText?: string;
-    /** Extra element IDs appended to aria-describedby (for example a note rendered beside the field). */
+    /**
+     * Extra element IDs appended to aria-describedby (for example a note rendered beside the field).
+     * Ignored when a `children` snippet is rendered, like `helpText`: the snippet owns its own input.
+     */
     describedByExtra?: string;
     required?: boolean;
     disabled?: boolean;
