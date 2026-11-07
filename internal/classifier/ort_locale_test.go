@@ -15,7 +15,7 @@ import (
 
 // TestORTUnavailableMessage_LocalesUseBareMinimumParam pins the contract between
 // the notification parameter and the locale text: the Go side passes the bare
-// minimum ("1.29"), so the English string must supply the "or newer" wording
+// minimum ("1.31"), so the English string must supply the "or newer" wording
 // itself and every locale must keep the {requiredVersion} placeholder.
 func TestORTUnavailableMessage_LocalesUseBareMinimumParam(t *testing.T) {
 	t.Parallel()
@@ -43,7 +43,7 @@ func TestORTUnavailableMessage_LocalesUseBareMinimumParam(t *testing.T) {
 
 			msg := doc.Notifications.Content.ORT.UnavailableMessage
 			assert.Contains(t, msg, "{requiredVersion}")
-			assert.NotContains(t, msg, "1.29", "the version comes from the parameter")
+			assert.NotContains(t, msg, inference.ORTMinimumVersion(), "the version comes from the parameter")
 			if filepath.Base(file) == "en.json" {
 				assert.Contains(t, msg, "{requiredVersion} or newer")
 			}
@@ -53,7 +53,7 @@ func TestORTUnavailableMessage_LocalesUseBareMinimumParam(t *testing.T) {
 
 // TestEmitORTUnavailableNotification_SendsBareMinimumVersion pins the Go half
 // of the contract the locale test checks: the notification carries the bare
-// minimum ("1.29"), never the "1.29 or newer" sentence the English log uses,
+// minimum ("1.31"), never the "1.31 or newer" sentence the English log uses,
 // because every locale string adds its own "or newer" wording.
 func TestEmitORTUnavailableNotification_SendsBareMinimumVersion(t *testing.T) {
 	// Not parallel: setupTestNotification swaps the process-global service.

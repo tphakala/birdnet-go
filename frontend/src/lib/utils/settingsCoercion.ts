@@ -36,6 +36,7 @@ import type {
   PrivacyFilterSettings,
   PrivacyFilterVadSettings,
 } from '$lib/stores/settings';
+import { DEFAULT_DENOISE_PRESET, isDenoisePresetId } from '$lib/utils/denoisePresets';
 import { AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
@@ -427,6 +428,16 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
       coercedExport.normalization = normalizationSettings;
     }
+
+    // Denoise: backfill the object for a response from an older server and keep
+    // both fields complete, so the strength dropdown always has a valid value
+    // and an Off state is a real value rather than a missing key.
+    const denoise = isPlainObject(exp.denoise) ? exp.denoise : {};
+    coercedExport.denoise = {
+      ...denoise,
+      enabled: coerceBoolean(denoise.enabled, false),
+      strength: isDenoisePresetId(denoise.strength) ? denoise.strength : DEFAULT_DENOISE_PRESET,
+    };
 
     // Cast back to appropriate type for assignment
     coerced.export = coercedExport as unknown as typeof settings.export;

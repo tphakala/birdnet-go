@@ -57,6 +57,7 @@ import {
   rebaseSettingsKeepingEdits,
 } from '$lib/utils/settingsMerge';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
+import { DEFAULT_DENOISE_PRESET } from '$lib/utils/denoisePresets';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
 import { toastActions } from './toast.js';
@@ -146,6 +147,15 @@ export interface BatSettings {
   ultrasonicFilter?: {
     enabled: boolean;
   };
+}
+
+// BSG-BAT bat classifier. It has its own confidence threshold; the schedule, false positive
+// filter and ultrasonic filter come from the bat section. modelPath and labelPath are managed by
+// the model gallery, not the detection-settings form.
+export interface BSGBatSettings {
+  modelPath?: string | null;
+  labelPath?: string | null;
+  threshold: number;
 }
 
 // Secondary acoustic classifiers (Perch v2, BirdNET v3.0). Their detections
@@ -337,6 +347,12 @@ export interface ExportSettings {
   preCapture: number; // pre-capture in seconds
   gain: number; // gain in dB for audio capture
   normalization: NormalizationSettings; // audio normalization settings (EBU R128)
+  denoise: DenoiseSettings; // denoise the captured audio before it is saved
+}
+
+export interface DenoiseSettings {
+  enabled: boolean; // true to denoise
+  strength: string; // preset id, see $lib/utils/denoisePresets
 }
 
 export interface NormalizationSettings {
@@ -893,6 +909,7 @@ export interface SettingsFormData {
   main: MainSettings;
   birdnet: BirdNetSettings;
   bat?: BatSettings;
+  bsgbat?: BSGBatSettings;
   perch?: PerchSettings;
   birdnetv3?: BirdNetV3Settings;
   input?: unknown; // Not exposed via JSON
@@ -978,6 +995,9 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         enabled: true,
       },
     },
+    bsgbat: {
+      threshold: 0.5,
+    },
     perch: {
       overrideThreshold: false,
       threshold: 0.5,
@@ -1026,6 +1046,10 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
             targetLUFS: -23.0, // EBU R128 broadcast standard
             loudnessRange: 7.0, // Typical range for broadcast
             truePeak: -2.0, // Headroom to prevent clipping
+          },
+          denoise: {
+            enabled: false, // Off by default
+            strength: DEFAULT_DENOISE_PRESET,
           },
         },
         soundLevel: {
@@ -1264,6 +1288,8 @@ export const mainSettings = derived(settingsStore, $store => $store.formData.mai
 export const birdnetSettings = derived(settingsStore, $store => $store.formData.birdnet);
 
 export const batSettings = derived(settingsStore, $store => $store.formData.bat);
+
+export const bsgBatSettings = derived(settingsStore, $store => $store.formData.bsgbat);
 
 export const perchSettings = derived(settingsStore, $store => $store.formData.perch);
 

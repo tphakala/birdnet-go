@@ -85,7 +85,7 @@ logging:
 	assert.Equal(t, 5, cfg.FileOutput.MaxRotatedFiles, "MaxRotatedFiles should be unmarshaled from max_rotated_files")
 	assert.True(t, cfg.FileOutput.Compress)
 
-	// Verify module outputs (the critical fix — "modules" maps to ModuleOutputs)
+	// Verify module outputs (the critical fix: "modules" maps to ModuleOutputs)
 	require.NotNil(t, cfg.ModuleOutputs, "ModuleOutputs should not be nil (mapped from modules)")
 	require.Contains(t, cfg.ModuleOutputs, "imageprovider")
 	require.Contains(t, cfg.ModuleOutputs, "audio")
@@ -93,7 +93,7 @@ logging:
 	imgMod := cfg.ModuleOutputs["imageprovider"]
 	assert.True(t, imgMod.Enabled)
 	assert.Equal(t, "logs/imageprovider.log", imgMod.FilePath, "FilePath should be unmarshaled from file_path")
-	assert.Equal(t, "debug", imgMod.Level, "Module level should be 'debug' — this was the root cause of missing debug logs")
+	assert.Equal(t, "debug", imgMod.Level, "Module level should be 'debug': this was the root cause of missing debug logs")
 	assert.True(t, imgMod.ConsoleAlso, "ConsoleAlso should be unmarshaled from console_also")
 	assert.Equal(t, 25, imgMod.MaxSize)
 	assert.Equal(t, 14, imgMod.MaxAge)
@@ -130,7 +130,7 @@ func TestViperUnmarshalLoggingDefaults(t *testing.T) {
 	v.SetDefault("logging.file_output.compress", false)
 	v.SetDefault("logging.modules.imageprovider.enabled", true)
 	v.SetDefault("logging.modules.imageprovider.file_path", "logs/imageprovider.log")
-	v.SetDefault("logging.modules.imageprovider.level", "debug")
+	v.SetDefault("logging.modules.imageprovider.level", "info")
 	v.SetDefault("logging.module_levels.analysis", "warn")
 
 	var settings Settings
@@ -150,8 +150,8 @@ func TestViperUnmarshalLoggingDefaults(t *testing.T) {
 
 	require.NotNil(t, cfg.ModuleOutputs, "ModuleOutputs must be populated from logging.modules.* defaults")
 	require.Contains(t, cfg.ModuleOutputs, "imageprovider")
-	assert.Equal(t, "debug", cfg.ModuleOutputs["imageprovider"].Level,
-		"Module level from defaults should be 'debug'")
+	assert.Equal(t, "info", cfg.ModuleOutputs["imageprovider"].Level,
+		"Module level from defaults should be 'info'")
 	assert.Equal(t, "logs/imageprovider.log", cfg.ModuleOutputs["imageprovider"].FilePath)
 
 	require.NotNil(t, cfg.ModuleLevels, "ModuleLevels must be populated from logging.module_levels.* defaults")
@@ -192,7 +192,7 @@ func TestLoggingModuleLevelAppliedToLogger(t *testing.T) {
 	log := cl.Module("testmod")
 	require.NotNil(t, log)
 
-	// Debug should not be filtered — the module is set to debug level
+	// Debug should not be filtered: the module is set to debug level
 	log.Debug("test debug message", logger.String("key", "value"))
 	log.Info("test info message")
 
@@ -251,17 +251,24 @@ func TestLoggingModuleLevelInfoFiltersDebug(t *testing.T) {
 	assert.Contains(t, string(content), "should appear")
 }
 
-// TestDiskmanagerModuleDefaultLogLevelIsInfo verifies that the diskmanager module
-// defaults to "info" log level, not "debug". The diskmanager runs frequently and
-// logs one DEBUG line per candidate clip per cycle, so a "debug" default causes
-// log files to balloon to 100+ MB/day with no user-visible control.
-func TestDiskmanagerModuleDefaultLogLevelIsInfo(t *testing.T) {
-	// Not parallel: reads/writes global viper defaults set by setDefaultConfig.
-	viper.Reset()
-	t.Cleanup(viper.Reset)
-	setDefaultConfig()
+// TestLoad_ModuleLogLevelDefaultsToInfo pins the module level default through Load: a
+// module entry without a level and a module with no entry at all log at info, matching the
+// embedded config.yaml, while a level set in the file wins over the default.
+func TestLoad_ModuleLogLevelDefaultsToInfo(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    imageprovider:
+      enabled: true
+    audio:
+      level: debug
+`
+	settings, _ := loadConfigFromYAML(t, cfg)
+	out := settings.Logging.ModuleOutputs
 
-	level := viper.GetString("logging.modules.diskmanager.level")
-	assert.Equal(t, "info", level,
-		"diskmanager module must default to info level; debug default floods the log file with per-clip entries")
+	assert.Equal(t, "info", out["imageprovider"].Level, "an entry without a level must default to info")
+	assert.Equal(t, "info", out["diskmanager"].Level, "a module with no entry must default to info")
+	assert.Equal(t, "debug", out["audio"].Level, "a level set in the file must win over the default")
 }

@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestResolveStreamSampleRates covers the probe-failure fallback logic that
@@ -151,4 +154,39 @@ func TestStreamFallbackKnown(t *testing.T) {
 	assert.True(t, streamFallback{sampleRate: 48000}.known(), "sample rate makes it known")
 	assert.True(t, streamFallback{channels: 2}.known(), "channel count makes it known")
 	assert.True(t, streamFallback{sampleRate: 48000, channels: 2}.known(), "both set is known")
+}
+
+// TestMinSourceSampleRate verifies that a stream's minimum capture rate is the
+// strictest minimum among its models, so the probe warning for a BSG-BAT stream
+// uses BSG-BAT's own minimum rather than the Bat model's lower one.
+func TestMinSourceSampleRate(t *testing.T) {
+	t.Parallel()
+
+	batMin := classifier.ModelRegistry[classifier.RegistryIDBat].Spec.MinRawSampleRate
+	bsgBatMin := classifier.ModelRegistry[classifier.RegistryIDBSGBat].Spec.MinRawSampleRate
+	require.Positive(t, batMin)
+	require.Greater(t, bsgBatMin, batMin, "BSG-BAT needs a higher capture rate than Bat")
+
+	tests := []struct {
+		name   string
+		models []string
+		want   int
+	}{
+		{name: "no models", models: nil, want: 0},
+		{name: "bird model only", models: []string{conf.ModelIDBirdNET}, want: 0},
+		{name: "unknown model", models: []string{"no-such-model"}, want: 0},
+		{name: "bat", models: []string{conf.ModelIDBat}, want: batMin},
+		{name: "bsg-bat", models: []string{conf.ModelIDBSGBat}, want: bsgBatMin},
+		{name: "bsg-bat catalog alias", models: []string{conf.ModelIDBSGBatCatalog}, want: bsgBatMin},
+		{name: "bird and bat", models: []string{conf.ModelIDBirdNET, conf.ModelIDBat}, want: batMin},
+		{name: "both bat models", models: []string{conf.ModelIDBat, conf.ModelIDBSGBat}, want: bsgBatMin},
+		{name: "both bat models reversed", models: []string{conf.ModelIDBSGBat, conf.ModelIDBat}, want: bsgBatMin},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, minSourceSampleRate(tc.models))
+		})
+	}
 }

@@ -108,6 +108,17 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// so a change takes effect at the next detection with no recalc action.
 	"Bat.Threshold": {categories: []hotReloadCategory{hotReloadFresh}},
 
+	// --- BSG-BAT ---
+	// Parent is restart like Perch: model and label path changes reload the model.
+	// The threshold is read live by the processor per detection
+	// (modelGlobalConfidenceThreshold), so it hot-reloads with no action.
+	"BSGBat":           {categories: []hotReloadCategory{hotReloadRestart}},
+	"BSGBat.Threshold": {categories: []hotReloadCategory{hotReloadFresh}},
+	// The analysis step sizes every BSG-BAT analysis buffer, so a change reallocates
+	// them via a full audio-capture restart (restart_audio_capture; bsgBatStepChanged
+	// in the detector table). It never reloads the model.
+	"BSGBat.StepFrames": {categories: []hotReloadCategory{hotReloadFresh}, action: "restart_audio_capture"},
+
 	// --- BSG ---
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},
 

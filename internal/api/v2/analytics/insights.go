@@ -192,6 +192,8 @@ func goneQuietDates(now time.Time, lastDetected int64) (date string, daysSince i
 // buildYearRanges computes index-friendly Unix timestamp ranges for the
 // +/- windowDays around today's day-of-year in each previous year. Each range is the half-open
 // span [start of its first local day, start of the day after its last), in now's location.
+// A window that crosses a year end continues into the adjacent year, but no range reaches
+// before the oldest scanned year or into the current year.
 func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
 	loc := now.Location()
 	currentYear := now.Year()
@@ -222,9 +224,14 @@ func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
 
 		switch {
 		case startDOY < 1:
-			ranges = append(ranges,
-				days(dateOfDOY(daysInYear+startDOY), dec31),
-				days(jan1, dateOfDOY(endDOY)))
+			// The days before January 1 are the end of the previous year's December.
+			// The oldest scanned year has no scanned year before it, so its window
+			// starts on January 1 and no range reaches past the scanned years.
+			if year > firstYear {
+				prevDec31 := wallclock.Date{Year: year - 1, Month: time.December, Day: 31}
+				ranges = append(ranges, days(prevDec31.AddDays(startDOY), prevDec31))
+			}
+			ranges = append(ranges, days(jan1, dateOfDOY(endDOY)))
 		case endDOY > daysInYear:
 			ranges = append(ranges, days(dateOfDOY(startDOY), dec31))
 			if year+1 < currentYear {

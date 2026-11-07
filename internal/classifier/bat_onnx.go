@@ -168,8 +168,8 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.EmbeddingExtractor, device, precision string, ok bool) {
 	log := GetLogger()
 
-	// openVINOPlanFor gates on the build tag, backend preference, and device
-	// availability without needing the output port, so run it first; only read the
+	// openVINOPlanFor gates on the build tag, backend preference, device
+	// availability and, on arm64 auto, ONNX Runtime preference without needing the output port, so run it first; only read the
 	// model metadata to resolve the embedding port once OpenVINO is actually in play.
 	// This avoids a wasted metadata read (and a misleading warning) on the common
 	// non-OpenVINO build. The output index passed here is a placeholder, overwritten

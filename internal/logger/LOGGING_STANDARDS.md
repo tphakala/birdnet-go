@@ -360,7 +360,7 @@ log.Info("detection processed",
 - Its useful numbers (counts, durations) go to a periodic Info summary such as `pipeline stats`
 - A line that only repeats another line should be deleted, not demoted
 - A line that reports a decision or an exception stays at Debug or above
-- Trace renders as `"level":"DEBUG-4"` in JSON output
+- Trace renders as `"level":"TRACE"` in JSON output and `TRACE` on the console
 
 **Debug**
 

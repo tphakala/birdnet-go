@@ -372,7 +372,7 @@ func (s *Settings) MigrateSourceModels() bool {
 // build's one-shot migrations never rewrite a file it just created.
 //
 // A migration step that runs OUTSIDE conf.Load() must NEVER gate on ConfigVersion: Part A
-// of the models-enabled-authoritative migration stamps ConfigVersion=2 inside Load(), so a
+// of the models-enabled-authoritative migration raises ConfigVersion to at least 2 inside Load(), so a
 // later step (e.g. the classifier's one-shot auto-enable capture in ScanInstalled) that
 // gated on ConfigVersion<2 would be silently disabled by that stamp. Such steps use an
 // independent companion marker instead (see ModelsConfig.AutoEnableMigrated).
@@ -390,8 +390,14 @@ const (
 	// install keeps loading the same models in the same order.
 	configVersionModelsEnabledAuthoritative = 2
 
+	// configVersionLogDeduplicationDefaults: builds from 2025-08-15 to 2026-02-19 had no viper
+	// default for realtime.logdeduplication, so a save wrote the Go zero value (enabled false,
+	// interval 0) to disk, where it beats the defaults that exist now;
+	// MigrateLogDeduplicationDefaults restores the defaults once.
+	configVersionLogDeduplicationDefaults = 3
+
 	// currentConfigVersion is the newest config version this build applies.
-	currentConfigVersion = configVersionModelsEnabledAuthoritative
+	currentConfigVersion = configVersionLogDeduplicationDefaults
 )
 
 // MigrateSourceTargetDefaults writes ["birdnet"] into every source and stream whose
@@ -455,6 +461,28 @@ func (s *Settings) MigrateModelsEnabledAuthoritative() bool {
 	return true
 }
 
+// MigrateLogDeduplicationDefaults restores the log deduplication defaults over the
+// exact zero pair (enabled false, health check interval 0) that builds without viper
+// defaults for the section wrote to disk, exactly once per config file, then stamps
+// ConfigVersion. Any other combination is a user choice and is kept: a disabled
+// section keeps a nonzero interval, and an enabled one with interval 0 already uses
+// the runtime fallback. Returns true when the section or the stamp changed, so
+// persistMigration writes the file.
+func (s *Settings) MigrateLogDeduplicationDefaults() bool {
+	if s.ConfigVersion >= configVersionLogDeduplicationDefaults {
+		return false
+	}
+	if dedup := &s.Realtime.LogDeduplication; !dedup.Enabled && dedup.HealthCheckIntervalSeconds == 0 {
+		dedup.Enabled = true
+		dedup.HealthCheckIntervalSeconds = DefaultLogDeduplicationHealthCheckSeconds
+		GetLogger().Info("Restored log deduplication defaults over a zeroed config section",
+			logger.Bool("enabled", dedup.Enabled),
+			logger.Int("health_check_interval_seconds", dedup.HealthCheckIntervalSeconds))
+	}
+	s.ConfigVersion = configVersionLogDeduplicationDefaults
+	return true
+}
+
 // isBirdNETV24ConfigID reports whether a models.enabled entry names the BirdNET v2.4 family
 // under either config spelling, case-insensitively. MigrateModelIDAliases runs later in
 // Load, so the catalog spelling ("birdnet-v2.4") can still be present here; matching it
@@ -513,6 +541,7 @@ var catalogModelIDAliases = map[string]string{
 	ModelIDBirdNETV3Catalog: ModelIDBirdNETV3,
 	ModelIDPerchV2Catalog:   ModelIDPerchV2,
 	ModelIDBSGCatalog:       ModelIDBSG,
+	ModelIDBSGBatCatalog:    ModelIDBSGBat,
 }
 
 // canonicalizeModelID returns the canonical config ID for a catalog-style

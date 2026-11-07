@@ -391,7 +391,8 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 
 	// Derive the analysis buffer interval from the model's spec and the
 	// effective overlap, so the overrun threshold matches the real cadence
-	// (which follows the effective base overlap; the bat model stays fixed at 50%).
+	// (which follows the effective base overlap; the bat model stays fixed at 50%,
+	// and a spec with StepSamples keeps its own fixed step).
 	// If this window's own work exceeds this interval, the model cannot keep up on
 	// its own. Waiting for the shared inference lock is excluded: that is
 	// contention for the shared lock, which the keep-up monitor judges by lost audio.
@@ -558,7 +559,8 @@ func bufferIntervalFor(bn classifierBackend, modelID string) time.Duration {
 	spec, ok := bn.ModelSpecFor(modelID)
 	if !ok {
 		// Defensive fallback for an unregistered model: assume the BirdNET base
-		// clip. BufferInterval depends only on ClipLength and the overlap.
+		// clip. Without StepSamples, BufferInterval depends only on ClipLength
+		// and the overlap.
 		spec = classifier.ModelSpec{ClipLength: classifier.AnalysisBaseClipLength}
 	}
 	return spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, bn.EffectiveBaseOverlap()))

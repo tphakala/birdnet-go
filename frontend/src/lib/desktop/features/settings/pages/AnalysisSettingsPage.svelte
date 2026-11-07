@@ -11,7 +11,8 @@
     dynamic threshold, and advanced options
   - Models tab: Model gallery with Installed and Available tabs
   - Confidence threshold slider for bird detection
-  - Bat detection threshold slider (visible when a bat model is installed)
+  - Bat detection threshold slider (visible when a BattyBirdNET model is installed)
+  - BSG-BAT detection threshold slider (visible when the BSG-BAT model is installed)
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
@@ -53,10 +54,10 @@
     watchAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
   import {
-    BAT_MODEL_ID,
     FILTER_ACTIVE_MIN_LEVEL,
     REFERENCE_WINDOW_SECONDS,
     baseClipMinDetections,
+    hasBirdCadenceModels,
     minDetectionsForStep,
     planLagsSettings,
     previewReadout,
@@ -88,6 +89,7 @@
     dynamicThresholdSettings,
     realtimeSettings,
     batSettings,
+    bsgBatSettings,
     perchSettings,
     birdNetV3Settings,
   } from '$lib/stores/settings';
@@ -143,6 +145,24 @@
   // by hand; nothing enforces it, but it is only placeholder text, so drift
   // would be cosmetic.
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
+  /** Catalog ID of the BSG-BAT model (the other bat catalog entries are BattyBirdNET models). */
+  const BSG_BAT_CATALOG_ID = 'bsg-bat';
+  /** Backend default of bsgbat.threshold, used until the section is loaded. */
+  const BSG_BAT_DEFAULT_THRESHOLD = 0.5;
+  /** Bounds and step of the bat model threshold fields. */
+  const BAT_THRESHOLD_MIN = 0.01;
+  const BAT_THRESHOLD_MAX = 0.99;
+  const BAT_THRESHOLD_STEP = 0.01;
+  /**
+   * Subgrid rows for two threshold fields side by side: each field spans four rows (the three
+   * of its form control plus the message row below it) and its form control spans the first
+   * three, so labels, inputs and help texts line up across the fields at their natural heights.
+   */
+  const BAT_THRESHOLD_SHARED_ROWS = [
+    'md:gap-y-1',
+    'md:[&>*]:row-span-4 md:[&>*]:grid md:[&>*]:grid-rows-subgrid',
+    'md:[&>*>.form-control]:row-span-3 md:[&>*>.form-control]:grid md:[&>*>.form-control]:grid-rows-subgrid',
+  ].join(' ');
 
   const MODEL_LOGOS: Record<string, string> = {
     birdnet: logoBirdnet,
@@ -262,6 +282,7 @@
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
+  const BSG_BAT_WARNING_ID = generateId('bsg-bat-warning');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -343,8 +364,15 @@
     }
   );
 
-  // Check if a bat model is installed
+  let bsgBat = $derived($bsgBatSettings ?? { threshold: BSG_BAT_DEFAULT_THRESHOLD });
+
+  // The bat card (schedule, ultrasonic and false positive filters) is shared by every bat model.
+  // Each bat model has its own threshold, shown only while that model is installed.
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
+  const hasBsgBatModel = $derived(catalog.some(e => e.installed && e.id === BSG_BAT_CATALOG_ID));
+  const hasBattyBirdNetModel = $derived(
+    catalog.some(e => e.installed && e.category === 'bat' && e.id !== BSG_BAT_CATALOG_ID)
+  );
   const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
   // Secondary acoustic classifiers with a per-model threshold override. These are
@@ -397,12 +425,16 @@
       batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
       batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
+      bsgBatThreshold: hasBsgBatModel
+        ? (store.originalData.bsgbat?.threshold ?? BSG_BAT_DEFAULT_THRESHOLD)
+        : undefined,
     },
     current: {
       batThreshold: bat.threshold,
       batNighttimeOnly: bat.nighttimeOnly,
       batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
       batFPFilter: batFPLevel,
+      bsgBatThreshold: hasBsgBatModel ? bsgBat.threshold : undefined,
     },
   });
   const rangeFilterChange: ChangePair = $derived({
@@ -737,7 +769,7 @@
   // server or before the audio pipeline has published a plan; the control's
   // description then falls back to the count from the configured overlap.
   const cadence = $derived(analysisCadence());
-  const cadenceHasBirdModels = $derived(cadence?.models.some(m => m.id !== BAT_MODEL_ID) ?? false);
+  const cadenceHasBirdModels = $derived(cadence ? hasBirdCadenceModels(cadence) : false);
   const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
   const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
   const formOverlap = $derived(birdnet?.overlap ?? 0);
@@ -1167,6 +1199,10 @@
 
   function updateBatThreshold(value: number) {
     settingsActions.updateSection('bat', { threshold: value });
+  }
+
+  function updateBsgBatThreshold(value: number) {
+    settingsActions.updateSection('bsgbat', { threshold: value });
   }
 
   function updateBatNighttimeOnly(value: boolean) {
@@ -1910,19 +1946,52 @@
         originalData={batChange.original}
         currentData={batChange.current}
       >
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <NumberField
-            label={t('analysis.detection.batThreshold.label')}
-            value={bat.threshold}
-            onUpdate={updateBatThreshold}
-            min={0.01}
-            max={0.99}
-            step={0.01}
-            disabled={store.isLoading || store.isSaving}
-            helpText={t('analysis.detection.batThreshold.helpText')}
-          />
-          <div></div>
+        <!-- Side by side at md and up, the two fields share the rows of one grid (label, input, help text, message) through subgrid, so a label that wraps in a longer translation keeps both inputs level without reserving height for labels that do not wrap. -->
+        <div
+          class={cn(
+            'grid grid-cols-1 md:grid-cols-2 gap-6',
+            hasBattyBirdNetModel && hasBsgBatModel && BAT_THRESHOLD_SHARED_ROWS
+          )}
+        >
+          {#if hasBattyBirdNetModel}
+            <NumberField
+              label={t('analysis.detection.batThreshold.label')}
+              value={bat.threshold}
+              onUpdate={updateBatThreshold}
+              min={BAT_THRESHOLD_MIN}
+              max={BAT_THRESHOLD_MAX}
+              step={BAT_THRESHOLD_STEP}
+              disabled={store.isLoading || store.isSaving}
+              helpText={t('analysis.detection.batThreshold.helpText')}
+            />
+          {/if}
+          {#if hasBsgBatModel}
+            <NumberField
+              label={t('analysis.detection.bsgBatThreshold.label')}
+              value={bsgBat.threshold}
+              onUpdate={updateBsgBatThreshold}
+              min={BAT_THRESHOLD_MIN}
+              max={BAT_THRESHOLD_MAX}
+              step={BAT_THRESHOLD_STEP}
+              disabled={store.isLoading || store.isSaving}
+              helpText={t('analysis.detection.bsgBatThreshold.helpText')}
+              describedByExtra={BSG_BAT_WARNING_ID}
+            />
+          {/if}
+        </div>
 
+        {#if hasBsgBatModel}
+          <div class="mt-4">
+            <SettingsNote id={BSG_BAT_WARNING_ID}>
+              {#snippet icon()}<AlertTriangle
+                  class="size-4 text-[var(--color-warning)]"
+                />{/snippet}
+              <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
+            </SettingsNote>
+          </div>
+        {/if}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
           <Checkbox
             checked={bat.nighttimeOnly ?? true}
             label={t('analysis.detection.batNighttimeOnly.label')}

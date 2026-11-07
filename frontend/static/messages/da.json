@@ -3728,9 +3728,10 @@
           "result": "Testresultat",
           "error": "Test mislykkedes",
           "batCompatible": "Kompatibel med flagermus",
-          "batIncompatible": "Ikke kompatibel med flagermus"
+          "batIncompatible": "Ikke kompatibel med flagermus",
+          "minRateWarning": "De valgte modeller kræver en optagelsesfrekvens på mindst {rate} kHz. Denne stream ligger under."
         },
-        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. BSG-BAT kræver mindst 192 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         },
@@ -3906,6 +3907,21 @@
         "truePeakHelp": "Maksimal ægte spidsværdi for at forhindre digital klipning (-10 til 0 dBTP). -2 dBTP giver sikker hovedrum for de fleste afspilningssystemer.",
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Lydnormalisering følger EBU R128-udsendelsesstandarden, hvilket sikrer ensartede afspilningsniveauer på tværs af forskellige enheder og forhindrer klipning."
+      },
+      "exportDenoise": {
+        "title": "Støjreduktion af gemte klip",
+        "description": "Reducerer baggrundsstøj i klip, når de gemmes.",
+        "enable": "Fjern støj fra klip ved lagring",
+        "enableHelp": "Den optagede lyd får fjernet støj i hukommelsen, før klipfilen skrives. Detektion kører altid på den originale lyd.",
+        "requiresRecording": "Aktiver klipoptagelse under fanen Optagelse for at bruge støjreduktion af klip.",
+        "strengthLabel": "Støjreduktionsstyrke",
+        "strengthHelp": "Let bevarer mest af den originale lyd, og kraftig fjerner mest støj. Let-mellem passer til de fleste optagelser.",
+        "strengthDisabledHelp": "Slå støjreduktion af klip til ovenfor for at vælge en styrke.",
+        "warningTitle": "Gemte klip kan ikke gendannes",
+        "warningPermanent": "Den originale lyd gemmes ikke. Klip får permanent fjernet støj, når de gemmes, også flagermusoptagelser.",
+        "warningBats": "Støjreduktion kan gøre svage flagermuskald svagere; kraftige kald påvirkes ikke.",
+        "warningImported": "Importerede optagelser er ikke påvirket.",
+        "lossyNote": "Støjreduktion virker bedst på FLAC- eller WAV-klip. Under {minBitrate} kbps begrænser kodekartefakter, hvor rent resultatet bliver."
       },
       "audioClipRetention": {
         "title": "Opbevaring af lydklip",
@@ -5219,6 +5235,7 @@
         "denoise": "Støjreduktion",
         "denoiseOff": "Fra",
         "denoiseLight": "Let",
+        "denoiseLightMedium": "Let-mellem",
         "denoiseMedium": "Mellem",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normalisér lyd",
@@ -5574,8 +5591,13 @@
         "helpText": "Minimum konfidensværdi (0,0 - 1,0) der kræves for at en detektion registreres."
       },
       "batThreshold": {
-        "label": "Flagermus-detekteringsgrænse",
-        "helpText": "Minimum konfidensscore for flagermusartsdetektioner. Gælder kun for flagermusklassificeringsmodeller."
+        "label": "Flagermus-detekteringsgrænse (BattyBirdNET)",
+        "helpText": "Minimum konfidensscore for BattyBirdNET-flagermusartsdetektioner. BSG-BAT har sin egen grænseværdi."
+      },
+      "bsgBatThreshold": {
+        "label": "Flagermus-detekteringsgrænse (BSG-BAT)",
+        "helpText": "Minimum konfidensscore for BSG-BAT-flagermusartsdetektioner.",
+        "sampleRateWarning": "Optagelser ved 192 kHz fungerer, men arter, der kalder over 96 kHz, kan ikke identificeres, og scorerne er mindre pålidelige. En optagelsesfrekvens på 384 kHz anbefales."
       },
       "batFilter": {
         "label": "Flagermus-audio-højpasfilter",

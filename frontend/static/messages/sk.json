@@ -3728,9 +3728,10 @@
           "result": "Výsledok testu",
           "error": "Test zlyhal",
           "batCompatible": "Kompatibilný s netopiermi",
-          "batIncompatible": "Nekompatibilný s netopiermi"
+          "batIncompatible": "Nekompatibilný s netopiermi",
+          "minRateWarning": "Vybrané modely vyžadujú vzorkovaciu frekvenciu záznamu aspoň {rate} kHz. Tento stream je pod ňou."
         },
-        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
+        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. BSG-BAT vyžaduje aspoň 192 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
         "codecWarning": {
           "lossy": "Stratové kodeky (AAC, Opus, MP3) ničia ultrazvukové frekvencie nad ~20 kHz, čím sa stream stáva nevhodným na detekciu netopierov."
         },
@@ -3906,6 +3907,21 @@
         "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
         "noteTitle": "Štandard EBU R128",
         "noteDescription": "Normalizácia zvuku sa riadi vysielacím štandardom EBU R128, čo zabezpečuje konzistentné úrovne prehrávania na rôznych zariadeniach a zabraňuje orezaniu."
+      },
+      "exportDenoise": {
+        "title": "Odšumenie uložených klipov",
+        "description": "Potláča šum na pozadí v klipoch pri ich ukladaní.",
+        "enable": "Odšumiť klipy pri ukladaní",
+        "enableHelp": "Zachytený zvuk sa odšumí v pamäti skôr, než sa zapíše súbor klipu. Detekcia vždy pracuje s pôvodným zvukom.",
+        "requiresRecording": "Pre použitie odšumenia klipov povoľte nahrávanie klipov na karte Nahrávanie.",
+        "strengthLabel": "Sila odšumenia",
+        "strengthHelp": "Ľahké zachová najviac pôvodného zvuku, silné odstráni najviac šumu. Ľahký-stredný vyhovuje väčšine nahrávok.",
+        "strengthDisabledHelp": "Na výber sily zapnite vyššie odšumenie klipov.",
+        "warningTitle": "Uložené klipy nie je možné obnoviť",
+        "warningPermanent": "Pôvodný zvuk sa neuchováva. Klipy sa pri uložení odšumia natrvalo, vrátane nahrávok netopierov.",
+        "warningBats": "Odšumenie môže zoslabiť slabé volania netopierov; silné volania zostanú bez zmeny.",
+        "warningImported": "Importované nahrávky nie sú dotknuté.",
+        "lossyNote": "Odšumenie funguje najlepšie pri klipoch FLAC alebo WAV. Pod {minBitrate} kb/s obmedzujú čistotu výsledku artefakty kodeku."
       },
       "audioClipRetention": {
         "title": "Uchovávanie zvukových klipov",
@@ -5219,6 +5235,7 @@
         "denoise": "Odšumenie",
         "denoiseOff": "Vypnuté",
         "denoiseLight": "Ľahký",
+        "denoiseLightMedium": "Ľahký-stredný",
         "denoiseMedium": "Stredný",
         "denoiseHeavy": "Ťažký",
         "normalize": "Normalizovať zvuk",
@@ -5574,8 +5591,13 @@
         "helpText": "Minimálne skóre spoľahlivosti (0.0 - 1.0) potrebné pre zaznamenanie detekcie."
       },
       "batThreshold": {
-        "label": "Prah detekcie netopierov",
-        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov. Platí len pre klasifikačné modely netopierov."
+        "label": "Prah detekcie netopierov (BattyBirdNET)",
+        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov modelom BattyBirdNET. BSG-BAT má vlastný prah."
+      },
+      "bsgBatThreshold": {
+        "label": "Prah detekcie netopierov (BSG-BAT)",
+        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov modelom BSG-BAT.",
+        "sampleRateWarning": "Záznamy pri 192 kHz fungujú, ale druhy, ktoré sa ozývajú nad 96 kHz, nemožno identifikovať a skóre sú menej spoľahlivé. Odporúča sa vzorkovacia frekvencia záznamu 384 kHz."
       },
       "batFilter": {
         "label": "Horný priepustný filter pre netopiere",

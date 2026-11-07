@@ -16,13 +16,14 @@ const (
 
 	// keepUpLostFractionThreshold is the share of written audio a window may lose
 	// before it counts as lossy. It sits above the loss a healthy pipeline has at
-	// overlap 0: the ring holds exactly one clip and the monitor polls every 100
-	// ms, so writes between a full ring and the next poll overwrite the oldest
-	// bytes. With small write chunks that is under 2 percent; BufferConsumer.Write
+	// overlap 0: the ring holds exactly one clip (every model except a
+	// contiguous-window one, see ModelSpec.AnalysisRingCapacity) and the monitor
+	// polls every 100 ms, so writes between a full ring and the next poll
+	// overwrite the oldest bytes. With small write chunks that is under 2 percent; BufferConsumer.Write
 	// passes whole source frames (up to one 32 KiB ffmpeg read), and a write that
 	// crosses a full ring overwrites up to one frame, which reaches just under 10
 	// percent on a 3 s clip (6 percent on a 5 s clip). That loss comes from the
-	// ring holding only one clip, not from analysis falling behind. Real
+	// one-clip ring, not from analysis falling behind. Real
 	// saturation loses far more: a pipeline that achieves two thirds of its
 	// planned rate loses about a third. A one-off 3 s stall costs at most about 5
 	// percent of a minute, so the keepUpLossyToWarn rule, not this threshold

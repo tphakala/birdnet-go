@@ -3728,9 +3728,10 @@
           "result": "Testitulos",
           "error": "Testi epäonnistui",
           "batCompatible": "Yhteensopiva lepakoiden kanssa",
-          "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"
+          "batIncompatible": "Ei yhteensopiva lepakoiden kanssa",
+          "minRateWarning": "Valitut mallit vaativat vähintään {rate} kHz:n tallennustaajuuden. Tämä striimi jää sen alle."
         },
-        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
+        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. BSG-BAT vaatii vähintään 192 kHz. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
         "codecWarning": {
           "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         },
@@ -3906,6 +3907,21 @@
         "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
         "noteTitle": "EBU R128 -standardi",
         "noteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen."
+      },
+      "exportDenoise": {
+        "title": "Tallennettujen leikkeiden kohinanpoisto",
+        "description": "Vähentää taustakohinaa leikkeissä, kun ne tallennetaan.",
+        "enable": "Poista kohinaa leikkeistä tallennettaessa",
+        "enableHelp": "Tallennettu ääni puhdistetaan kohinasta muistissa ennen leiketiedoston kirjoittamista. Tunnistus käyttää aina alkuperäistä ääntä.",
+        "requiresRecording": "Ota käyttöön leikkeiden tallennus Tallennus-välilehdellä käyttääksesi leikkeiden kohinanpoistoa.",
+        "strengthLabel": "Kohinanpoiston voimakkuus",
+        "strengthHelp": "Kevyt säilyttää eniten alkuperäistä ääntä ja voimakas poistaa eniten kohinaa. Kevyt-keskitaso sopii useimmille äänitteille.",
+        "strengthDisabledHelp": "Ota leikkeiden kohinanpoisto käyttöön yllä valitaksesi voimakkuuden.",
+        "warningTitle": "Tallennettuja leikkeitä ei voi palauttaa",
+        "warningPermanent": "Alkuperäistä ääntä ei säilytetä. Leikkeiden kohina poistetaan pysyvästi tallennettaessa, myös lepakkoäänitteistä.",
+        "warningBats": "Kohinanpoisto voi vaimentaa heikkoja lepakoiden ääniä; voimakkaat äänet eivät muutu.",
+        "warningImported": "Tuotuihin äänitteisiin tämä ei vaikuta.",
+        "lossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta."
       },
       "audioClipRetention": {
         "title": "Äänileikkeiden säilytys",
@@ -5219,6 +5235,7 @@
         "denoise": "Kohinanpoisto",
         "denoiseOff": "Pois",
         "denoiseLight": "Kevyt",
+        "denoiseLightMedium": "Kevyt-keskitaso",
         "denoiseMedium": "Keskitaso",
         "denoiseHeavy": "Voimakas",
         "normalize": "Normalisoi ääni",
@@ -5574,8 +5591,13 @@
         "helpText": "Vähimmäisluotettavuuspisteet (0.0 - 1.0), joka vaaditaan tunnistuksen tallentamiseen."
       },
       "batThreshold": {
-        "label": "Lepakkotunnistuksen kynnysarvo",
-        "helpText": "Vähimmäisluottamusarvo lepakkolajien tunnistuksille. Koskee vain lepakkoluokittelumalleja."
+        "label": "Lepakkotunnistuksen kynnysarvo (BattyBirdNET)",
+        "helpText": "Vähimmäisluottamusarvo BattyBirdNETin lepakkolajitunnistuksille. BSG-BATilla on oma kynnysarvonsa."
+      },
+      "bsgBatThreshold": {
+        "label": "Lepakkotunnistuksen kynnysarvo (BSG-BAT)",
+        "helpText": "Vähimmäisluottamusarvo BSG-BATin lepakkolajitunnistuksille.",
+        "sampleRateWarning": "192 kHz:n tallenteet toimivat, mutta yli 96 kHz:n taajuudella kutsuvia lajeja ei voida tunnistaa ja pisteet ovat epäluotettavampia. Suositeltu tallennustaajuus on 384 kHz."
       },
       "batFilter": {
         "label": "Lepakkoäänen ylipäästösuodatin",

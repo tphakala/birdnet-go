@@ -39,7 +39,7 @@ func newRetainedTestHandler(t *testing.T, mode string) (*Handler, *echo.Echo, st
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithSettingsFunc(func(s *conf.Settings) {
 		s.Realtime.Dashboard.Spectrogram.Mode = mode
 	}))
-	return New(core), e, core.SFS.BaseDir()
+	return New(core, nil), e, core.SFS.BaseDir()
 }
 
 // writeRetainedFile writes content to root/rel, creating parent directories.

@@ -16,13 +16,19 @@ import (
 
 const bufferMonitorDebugEveryTicks = 300
 
+// bufferMonitorPollInterval is how often an analysis buffer monitor polls its
+// buffer. The monitor reads at most one window per poll, so an analysis step
+// shorter than two polls cannot be consumed without loss (see
+// conf.MinBSGBatStepFrames).
+const bufferMonitorPollInterval = 100 * time.Millisecond
+
 // bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
 // buffer before it is (re)allocated. The buffer is transiently absent on every
 // source (re)start (the stream-reset callback starts the monitor before
 // registerConsumersForSources allocates the buffer) and across a kept-source
 // reconfigure (ReconfigureSource deallocates the buffer before
 // registerConsumersForSources reallocates it). Polling through this grace
-// (pollInterval each) keeps the monitor alive across that window instead of
+// (bufferMonitorPollInterval each) keeps the monitor alive across that window instead of
 // dropping it, while a model that is not a target for the source (no buffer ever
 // appears) still stops once the grace elapses. Genuine (source, model) removal is
 // handled separately by closing the monitor's quit channel, so the grace never
@@ -42,7 +48,7 @@ type monitorConfig struct {
 	sourceID    string
 	modelID     string
 	spec        classifier.ModelSpec
-	readSize    int // bytes = ClipLength * SampleRate * bytesPerSample
+	readSize    int // bytes = spec.ClipSizeBytes(), the whole analysis window
 	overlapSize int // bytes, scaled from user config, PCM-aligned
 }
 
@@ -501,13 +507,12 @@ func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) 
 // audio chunks to the BirdNET analysis pipeline.
 func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monitorConfig) {
 	detectionOffset := cfg.spec.ClipLength
-	const pollInterval = 100 * time.Millisecond
 
 	analysisWindowBytes := cfg.readSize
 	var state monitorTickState
 	var tickCount int64
 
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(bufferMonitorPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -542,7 +547,9 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // and buffer.WindowInfo), which ProcessData passes on to the results consumer; a
 // window read but not analyzed, including one whose result the full results
 // queue dropped (ProcessData returns ErrResultsDropped, logged where it happens),
-// makes the next one report a gap.
+// makes the next one report a gap. A window whose genuine tail is shorter than the
+// window is not dispatched at all when the model's spec sets
+// RequireContiguousWindow.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
@@ -628,6 +635,14 @@ func (m *BufferManager) processMonitorTick(
 
 	audio := state.windowAudio(info,
 		cfg.spec.EffectiveSampleRate()*conf.BytesPerSample*conf.NumChannels)
+
+	// A model that requires a contiguous window is not scored on one whose genuine
+	// tail is shorter than the window (a zero-filled head after a start, reset or
+	// overwrite loss). The window is released by the defer above; lastWindowAnalyzed
+	// stays false, so the next window reports the gap.
+	if cfg.spec.RequireContiguousWindow && audio.ContiguousBytes < analysisWindowBytes {
+		return true
+	}
 
 	// Skip inference when the model is not loaded in the orchestrator. A monitor
 	// can briefly outlive its model's registration: UnloadModel (uninstall,

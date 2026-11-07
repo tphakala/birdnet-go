@@ -2,6 +2,10 @@ module github.com/tphakala/birdnet-go
 
 go 1.27.2
 
+// Default net listeners and dialers to plain TCP. Since Go 1.24 listeners use
+// Multipath TCP on Linux by default, and BirdNET-Go does not use it.
+godebug multipathtcp=0
+
 require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/creack/pty v1.1.24
@@ -16,8 +20,8 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jarcoal/httpmock v1.4.2
 	github.com/jlaffaye/ftp v0.2.4
-	github.com/klauspost/cpuid/v2 v2.4.1
-	github.com/labstack/echo/v4 v4.16.2
+	github.com/klauspost/cpuid/v2 v2.4.2
+	github.com/labstack/echo/v4 v4.16.3
 	github.com/labstack/gommon v0.5.0
 	github.com/markbates/goth v1.82.0
 	github.com/mattn/go-sqlite3 v1.14.52
@@ -38,7 +42,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0
 	github.com/tphakala/go-aac v0.7.1
-	github.com/tphakala/go-audio-dsp v0.10.1
+	github.com/tphakala/go-audio-dsp v0.12.0
 	github.com/tphakala/go-audio-resampler v1.9.0
 	github.com/tphakala/go-audio-stream v0.6.0
 	github.com/tphakala/go-flac v1.4.0
@@ -48,17 +52,17 @@ require (
 	github.com/tphakala/go-opus v1.3.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
 	github.com/tphakala/go-wav v1.1.1
-	github.com/yalue/onnxruntime_go v1.36.0
+	github.com/yalue/onnxruntime_go v1.38.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 	golang.org/x/time v0.16.0
-	google.golang.org/api v0.308.0
+	google.golang.org/api v0.310.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -148,7 +152,7 @@ require (
 	github.com/tidwall/rtree v1.11.1 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
-	github.com/tphakala/simd v1.14.0 // indirect
+	github.com/tphakala/simd v1.15.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

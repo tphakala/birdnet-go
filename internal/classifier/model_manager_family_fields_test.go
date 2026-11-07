@@ -102,6 +102,14 @@ func TestFamilyFields(t *testing.T) {
 			wantOK:        true,
 		},
 		{
+			name:          "bsg-bat has model, labels, threshold; no override, embeddings or locale",
+			registryID:    RegistryIDBSGBat,
+			wantModel:     &s.BSGBat.ModelPath,
+			wantLabels:    &s.BSGBat.LabelPath,
+			wantThreshold: &s.BSGBat.Threshold,
+			wantOK:        true,
+		},
+		{
 			name:       "unknown registry yields no fields",
 			registryID: "NoSuchModel",
 			wantOK:     false,

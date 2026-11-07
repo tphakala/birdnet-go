@@ -359,14 +359,16 @@ func TestCatalogByCategory(t *testing.T) {
 	assert.Len(t, grouped[CategoryWildlife], 2, "expected 2 visible wildlife catalog entries (perch-v2, birdnet-v3.0)")
 	assert.Len(t, grouped[CategoryBird], 1, "expected 1 visible bird catalog entry (birdnet-v2.4)")
 	assert.Len(t, grouped[CategoryGeomodel], 1, "expected 1 visible geomodel catalog entry")
-	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
+	assert.Len(t, grouped[CategoryBat], 12, "expected 12 bat catalog entries (11 BattyBirdNET regions and BSG-BAT)")
 }
 
 func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range EmbeddedCatalog {
-		if entry.Category != CategoryBat {
+		// BSG-BAT takes a spectrogram, not BirdNET embeddings, so it has no
+		// embeddings file.
+		if entry.Category != CategoryBat || entry.RegistryID != RegistryIDBat {
 			continue
 		}
 
@@ -401,9 +403,10 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 	t.Parallel()
 
-	// 2 wildlife + 2 bird + 1 geomodel + 11 bat = 16 total
-	// (bird: bsg-finland + the collapsed hidden BirdNET v2.4 foundation entry)
-	assert.Len(t, EmbeddedCatalog, 16, "expected 16 total catalog entries")
+	// 2 wildlife + 2 bird + 1 geomodel + 12 bat = 17 total
+	// (bird: bsg-finland + the collapsed hidden BirdNET v2.4 foundation entry;
+	// bat: 11 BattyBirdNET regions + BSG-BAT)
+	assert.Len(t, EmbeddedCatalog, 17, "expected 17 total catalog entries")
 }
 
 func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
@@ -875,4 +878,31 @@ func TestEmbeddedCatalog_VariantEntriesHaveNoTopLevelFiles(t *testing.T) {
 		assert.Emptyf(t, entry.Files,
 			"catalog entry %q declares variants, so its top-level Files must be empty (resolved at load time; the loader rejects an entry that sets both)", entry.ID)
 	}
+}
+
+// TestEmbeddedCatalog_BSGBat pins the BSG-BAT entry: its identity, the files with
+// the checksums and sizes of the published r1 checkpoint and labels (literals, so a
+// model swap must update the test too), and a species count that agrees with the
+// registry.
+func TestEmbeddedCatalog_BSGBat(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("bsg-bat")
+	require.True(t, ok)
+	assert.Equal(t, RegistryIDBSGBat, entry.RegistryID)
+	assert.Equal(t, CategoryBat, entry.Category)
+	assert.Equal(t, "CC-BY-4.0", entry.License)
+	assert.Equal(t, ModelRegistry[RegistryIDBSGBat].NumSpecies, entry.SpeciesCount)
+
+	files := map[string]CatalogFile{}
+	for _, f := range entry.Files {
+		files[f.Role] = f
+	}
+	require.Len(t, entry.Files, 2, "a model file and a labels file, no embeddings")
+	assert.Equal(t, "bsgbat_v0.21_r1.onnx", files[RoleModel].RemotePath)
+	assert.Equal(t, "42f209d0e023785df31c12a4af3ff9fb4470fde5e25d42cd8d2ecc0f2505e0e6", files[RoleModel].SHA256)
+	assert.Equal(t, int64(83101506), files[RoleModel].SizeBytes)
+	assert.Equal(t, "bsgbat_labels.txt", files[RoleLabels].RemotePath)
+	assert.Equal(t, "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517", files[RoleLabels].SHA256)
+	assert.Equal(t, int64(438), files[RoleLabels].SizeBytes)
 }

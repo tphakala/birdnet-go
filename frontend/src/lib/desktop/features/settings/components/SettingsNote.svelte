@@ -13,6 +13,7 @@
   - Semantic HTML structure
   
   Props:
+  - id: Element ID, so a field can reference the note in aria-describedby (optional)
   - className: Additional CSS classes (optional)
   - icon: Optional SVG icon snippet
   - children: Main content snippet (required)
@@ -25,15 +26,16 @@
 -->
 <script lang="ts">
   interface Props {
+    id?: string;
     className?: string;
     icon?: import('svelte').Snippet;
     children: import('svelte').Snippet;
   }
 
-  let { className = '', icon, children }: Props = $props();
+  let { id, className = '', icon, children }: Props = $props();
 </script>
 
-<div class="mt-4 p-4 bg-[var(--color-base-200)] text-sm rounded-lg {className}">
+<div {id} class="mt-4 p-4 bg-[var(--color-base-200)] text-sm rounded-lg {className}">
   {#if icon}
     <div class="flex gap-3">
       <div class="shrink-0">

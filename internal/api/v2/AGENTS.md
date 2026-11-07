@@ -157,8 +157,14 @@ original per-route registration order across the split.
   the same value for callers that prefer an accessor.) The middleware is injected
   from the parent server via the `WithAuthMiddleware` functional option.
 - Rate-limited streams: `middleware.RateLimiterWithConfig(config)` with
-  `IdentifierExtractor: apicore.RateLimitKey`, so a client is one bucket (per /64
-  for IPv6) instead of one bucket per address.
+  `IdentifierExtractor: c.RateLimitKey`, so a client is one bucket (per /64
+  for IPv6) instead of one bucket per address. The key comes from the verified
+  client (`proxytrust.Checker.RateLimitClient`), not from `ctx.RealIP()` (which logs the same resolved client, so a client an unlisted local host names consistently appears there as named), and
+  the trusted-proxy list is read on every request, so a settings change applies
+  at once. A client claimed by an unconfigured local proxy is keyed under that
+  proxy, and a request that cannot be verified shares one bucket per proxy. Build the store with
+  `apicore.NewRateLimiterStore`, not Echo's memory store: Echo's has no entry cap,
+  so a client that mints keys grows it without bound.
 - PrivateMode: all endpoints are gated by `apicore.PrivateModeAuth` group
   middleware; the bootstrap/login/live-audio carve-outs are listed in the facade's
   `isPrivateModeExempt` allow-list (keyed on method + path, fail-closed).

@@ -32,6 +32,11 @@
     value?: string | number | boolean | string[];
     placeholder?: string;
     helpText?: string;
+    /**
+     * Extra element IDs appended to aria-describedby (for example a note rendered beside the field).
+     * Ignored when a `children` snippet is rendered, like `helpText`: the snippet owns its own input.
+     */
+    describedByExtra?: string;
     required?: boolean;
     disabled?: boolean;
     readonly?: boolean;
@@ -72,6 +77,7 @@
     value = $bindable(''),
     placeholder = '',
     helpText = '',
+    describedByExtra,
     required = false,
     disabled = false,
     readonly = false,
@@ -116,7 +122,12 @@
 
   // Compute aria-describedby based on what's visible
   let describedBy = $derived(
-    error && (touched || externalError) ? errorId : helpText ? helpTextId : undefined
+    [
+      error && (touched || externalError) ? errorId : helpText ? helpTextId : undefined,
+      describedByExtra,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
   );
 
   // Update error when external error changes

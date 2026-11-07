@@ -19,6 +19,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/labstack/echo/v4"
+	"golang.org/x/sync/singleflight"
+
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -46,6 +49,21 @@ type Handler struct {
 	// processing work. Both are owned by this handler and built in New.
 	processingCache     *processingCache
 	processingSemaphore chan struct{}
+
+	// processingFlight deduplicates processing jobs by cache key: the denoised
+	// audio GET and POST /process for the same key share one job, so a seek during
+	// processing never starts a second one.
+	processingFlight singleflight.Group
+
+	// isClientAuthenticated reports whether the request comes from a signed-in
+	// client (true as well when authentication is not required). Nil means every
+	// client is unauthenticated. Guests never trigger a denoise job.
+	isClientAuthenticated func(echo.Context) bool
+
+	// processingStartedHook, when set, runs inside a processing job after it holds
+	// a semaphore slot and before the transcode starts. Tests use it to hold a job
+	// in flight. Production leaves it nil.
+	processingStartedHook func()
 
 	// spectrogramGenerator renders spectrogram images from audio clips via the
 	// media SecureFS sandbox. Built in New from the shared SecureFS.
@@ -75,13 +93,15 @@ type Handler struct {
 // wait group; the facade's Shutdown (Cancel + Wait) tears it down, so no
 // separate shutdown hook is needed (the audio-domain precedent). The
 // external-media probe seams default to nil (real sysinfo at request time).
-func New(core *apicore.Core) *Handler {
-	h := &Handler{Core: core}
+// isClientAuthenticated is the facade's auth check; nil treats every client as
+// unauthenticated.
+func New(core *apicore.Core, isClientAuthenticated func(echo.Context) bool) *Handler {
+	h := &Handler{Core: core, isClientAuthenticated: isClientAuthenticated}
 
 	// Initialize the audio processing cache and concurrency limiter under the
 	// media SecureFS export root.
 	cacheDir := filepath.Join(core.SFS.BaseDir(), processingCacheDirName)
-	h.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles)
+	h.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles, processingCacheMaxBytes)
 	h.processingSemaphore = make(chan struct{}, processingSemaphoreSize)
 
 	// Start the cache cleanup goroutine (tracked by the core wait group, stopped

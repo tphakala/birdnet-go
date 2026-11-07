@@ -1,5 +1,5 @@
 // Package ultrasonic provides a post-detection validation filter for bat detections.
-// It measures temporal variability of ultrasonic energy (US frame CV) in source audio
+// It measures temporal variability of ultrasonic energy (US frame CV) in audio at a given sample rate
 // to distinguish real bat echolocation (high CV) from false positives (low CV).
 package ultrasonic
 
@@ -11,7 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// HasUltrasonicBand reports whether a source at sampleRate Hz has any band above
+// HasUltrasonicBand reports whether audio at sampleRate Hz has any band above
 // splitHz: the rate must be positive and the split strictly below Nyquist
 // (sampleRate/2). The comparison is exact, so an odd rate keeps a split just
 // under its half.

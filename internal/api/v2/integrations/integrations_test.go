@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test constants for integration tests
@@ -403,39 +404,115 @@ type fakeStageResult struct {
 	Stage string `json:"stage"`
 }
 
-// fakeIntegrationClient is an IntegrationTestClient that sends one result. When
-// cancelRequest is set it then cancels the HTTP request context, as a departing
-// client would, and waits for the test context to end before returning.
+// fakeIntegrationClient is an IntegrationTestClient that sends its results in
+// order. When cancelRequest is set it then cancels the HTTP request context, as
+// a departing client would; when holdUntilDone is set it does not return until
+// the test context ends (a test that runs into its timeout, or whose client has
+// gone). testDuration and cleanupDuration are
+// how long, on the synctest clock, the test and the cleanup take.
 type fakeIntegrationClient struct {
-	result        fakeStageResult
-	cancelRequest context.CancelFunc
-	cleanups      atomic.Int32
+	results         []fakeStageResult
+	cancelRequest   context.CancelFunc
+	holdUntilDone   bool
+	testDuration    time.Duration
+	cleanupDuration time.Duration
+	cleanups        atomic.Int32
+}
+
+// failingResponseWriter is a response writer whose body writes always fail, as
+// when the client connection has broken. It counts the attempts so a test can
+// tell a failed write from no write.
+type failingResponseWriter struct {
+	*httptest.ResponseRecorder
+	attempts *atomic.Int32
+}
+
+func (w failingResponseWriter) Write([]byte) (int, error) {
+	w.attempts.Add(1)
+	return 0, errors.NewStd("write failed")
 }
 
 func (f *fakeIntegrationClient) TestConnection(ctx context.Context, resultChan chan<- fakeStageResult) {
-	resultChan <- f.result
+	for _, r := range f.results {
+		resultChan <- r
+	}
 	if f.cancelRequest != nil {
 		f.cancelRequest()
+	}
+	if f.holdUntilDone {
 		<-ctx.Done()
 	}
+	time.Sleep(f.testDuration)
 }
 
-func (f *fakeIntegrationClient) Cleanup() { f.cleanups.Add(1) }
+func (f *fakeIntegrationClient) Cleanup() {
+	time.Sleep(f.cleanupDuration)
+	f.cleanups.Add(1)
+}
 
 // TestRunStreamingIntegrationTest verifies the shared streaming runner: it
-// streams client results, writes one final "completed" line when the test
-// finishes, writes nothing more once the HTTP client has gone, and cleans the
-// client up exactly once. Lines are checked without relying on their order.
+// streams client results in the order they are sent, then writes one final
+// "completed" line carrying the elapsed time of the test without its cleanup,
+// writes no completed line once the HTTP client has gone or the test has timed
+// out, returns no error when the completed line cannot be written, and cleans
+// the client up exactly once.
 func TestRunStreamingIntegrationTest(t *testing.T) {
-	const streamTimeout = 20 * time.Second
+	const (
+		streamTimeout   = 20 * time.Second
+		testDuration    = 3 * time.Second
+		cleanupDuration = 5 * time.Second
+	)
+
+	stages := func(names ...string) []fakeStageResult {
+		out := make([]fakeStageResult, 0, len(names))
+		for _, n := range names {
+			out = append(out, fakeStageResult{Stage: n})
+		}
+		return out
+	}
 
 	tests := []struct {
 		name          string
+		results       []fakeStageResult
+		instant       bool
 		clientGone    bool
-		wantCompleted int
+		timesOut      bool
+		failWrites    bool
+		wantStages    []string
+		wantCompleted bool
 	}{
-		{name: "completes", wantCompleted: 1},
-		{name: "client gone", clientGone: true, wantCompleted: 0},
+		{
+			name:          "completes",
+			results:       stages("connect", "publish", "disconnect"),
+			wantStages:    []string{"connect", "publish", "disconnect"},
+			wantCompleted: true,
+		},
+		{
+			// The worker finishes before the handler has written anything, as
+			// when the client reads slowly: the completed line must still wait
+			// for every stage line.
+			name:          "worker finishes first",
+			results:       stages("connect", "publish", "disconnect"),
+			instant:       true,
+			wantStages:    []string{"connect", "publish", "disconnect"},
+			wantCompleted: true,
+		},
+		{
+			name:       "completed line write fails",
+			failWrites: true,
+		},
+		{
+			name:       "client gone",
+			results:    stages("connect"),
+			clientGone: true,
+			wantStages: []string{"connect"},
+		},
+		{
+			name:       "timed out",
+			results:    stages("connect"),
+			timesOut:   true,
+			wantStages: []string{"connect"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -448,33 +525,62 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 				defer cancel()
 				req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/fake/test", http.NoBody).WithContext(reqCtx)
 				rec := httptest.NewRecorder()
+				var w http.ResponseWriter = rec
+				var writeAttempts atomic.Int32
+				if tt.failWrites {
+					w = failingResponseWriter{ResponseRecorder: rec, attempts: &writeAttempts}
+				}
 
-				client := &fakeIntegrationClient{result: fakeStageResult{Stage: "connect"}}
+				client := &fakeIntegrationClient{results: tt.results, holdUntilDone: tt.timesOut || tt.clientGone}
+				if tt.wantCompleted && !tt.instant {
+					// Only a row that reaches the completed line and does not
+					// finish instantly needs time to pass; a goroutine still
+					// sleeping when the handler has gone would be a deadlock in
+					// the bubble.
+					client.testDuration = testDuration
+					client.cleanupDuration = cleanupDuration
+				}
 				if tt.clientGone {
 					client.cancelRequest = cancel
 				}
 
-				err := runStreamingIntegrationTest(controller, e.NewContext(req, rec),
-					make(chan fakeStageResult), client, streamTimeout, "fake")
+				err := runStreamingIntegrationTest(controller, e.NewContext(req, w),
+					make(chan fakeStageResult, len(tt.results)), client, streamTimeout, "fake")
 				require.NoError(t, err)
 				synctest.Wait()
 
-				var results, completed int
+				var gotStages []string
+				var completed []map[string]any
 				for line := range strings.SplitSeq(strings.TrimSpace(rec.Body.String()), "\n") {
+					if line == "" {
+						continue
+					}
 					var decoded map[string]any
 					require.NoError(t, json.Unmarshal([]byte(line), &decoded), "line: %q", line)
 					switch {
-					case decoded["stage"] == "connect":
-						results++
-					case decoded["state"] == "completed":
-						completed++
+					case decoded["state"] == streamStateCompleted:
+						completed = append(completed, decoded)
+					case decoded["stage"] != nil:
+						assert.Empty(t, completed, "stage line after the completed line: %q", line)
+						stage, ok := decoded["stage"].(string)
+						require.True(t, ok, "stage is a string in %q", line)
+						gotStages = append(gotStages, stage)
 					default:
 						assert.Fail(t, "unexpected line", "line: %q", line)
 					}
 				}
-				assert.Equal(t, 1, results, "the client result is streamed once")
-				assert.Equal(t, tt.wantCompleted, completed, "completed lines in %q", rec.Body.String())
+				assert.Equal(t, tt.wantStages, gotStages, "stage lines in order")
+				if tt.wantCompleted {
+					require.Len(t, completed, 1, "one completed line in %q", rec.Body.String())
+					assert.InDelta(t, client.testDuration.Milliseconds(), completed[0]["elapsed_time_ms"], 0,
+						"elapsed time covers the test and not its cleanup")
+				} else {
+					assert.Empty(t, completed, "no completed line in %q", rec.Body.String())
+				}
 				assert.Equal(t, int32(1), client.cleanups.Load(), "client is cleaned up once")
+				if tt.failWrites {
+					assert.Positive(t, writeAttempts.Load(), "the completed line write is attempted")
+				}
 			})
 		})
 	}

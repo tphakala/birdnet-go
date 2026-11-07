@@ -3728,9 +3728,10 @@
           "result": "Testresultaat",
           "error": "Test mislukt",
           "batCompatible": "Vleermuis-compatibel",
-          "batIncompatible": "Niet vleermuis-compatibel"
+          "batIncompatible": "Niet vleermuis-compatibel",
+          "minRateWarning": "De geselecteerde modellen hebben een opnamefrequentie van minimaal {rate} kHz nodig. Deze stream ligt eronder."
         },
-        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
+        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. BSG-BAT vereist minimaal 192 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
         "codecWarning": {
           "lossy": "Codecs met verlies (AAC, Opus, MP3) vernietigen ultrasone frequenties boven ~20 kHz, waardoor de stream ongeschikt wordt voor vleermuisdetectie."
         },
@@ -3906,6 +3907,21 @@
         "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
         "noteTitle": "EBU R128 Standaard",
         "noteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping."
+      },
+      "exportDenoise": {
+        "title": "Ruisonderdrukking voor opgeslagen clips",
+        "description": "Vermindert achtergrondruis in clips wanneer ze worden opgeslagen.",
+        "enable": "Ruis uit clips verwijderen bij opslaan",
+        "enableHelp": "De opgenomen audio wordt in het geheugen ontdaan van ruis voordat het clipbestand wordt geschreven. Detectie gebruikt altijd de originele audio.",
+        "requiresRecording": "Schakel clip opname in op het Opname tabblad om ruisonderdrukking voor clips te gebruiken.",
+        "strengthLabel": "Sterkte van de ruisonderdrukking",
+        "strengthHelp": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
+        "strengthDisabledHelp": "Schakel hierboven ruisonderdrukking voor clips in om een sterkte te kiezen.",
+        "warningTitle": "Opgeslagen clips kunnen niet worden hersteld",
+        "warningPermanent": "De originele audio wordt niet bewaard. Clips worden bij het opslaan definitief ontdaan van ruis, ook vleermuisopnames.",
+        "warningBats": "Ruisonderdrukking kan zwakke vleermuisroepen zachter maken; sterke roepen worden niet beïnvloed.",
+        "warningImported": "Geïmporteerde opnames worden niet beïnvloed.",
+        "lossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt."
       },
       "audioClipRetention": {
         "title": "Audio Clip Bewaring",
@@ -5219,6 +5235,7 @@
         "denoise": "Ruisonderdrukking",
         "denoiseOff": "Uit",
         "denoiseLight": "Licht",
+        "denoiseLightMedium": "Licht-gemiddeld",
         "denoiseMedium": "Gemiddeld",
         "denoiseHeavy": "Zwaar",
         "normalize": "Audio normaliseren",
@@ -5574,8 +5591,13 @@
         "helpText": "Minimale betrouwbaarheidsscore (0.0 - 1.0) vereist om een detectie vast te leggen."
       },
       "batThreshold": {
-        "label": "Vleermuis-detectiedrempel",
-        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties. Geldt alleen voor vleermuisclassificatiemodellen."
+        "label": "Vleermuis-detectiedrempel (BattyBirdNET)",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BattyBirdNET. BSG-BAT heeft een eigen drempel."
+      },
+      "bsgBatThreshold": {
+        "label": "Vleermuis-detectiedrempel (BSG-BAT)",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BSG-BAT.",
+        "sampleRateWarning": "Opnamen op 192 kHz werken, maar soorten die boven 96 kHz roepen kunnen niet worden herkend en de scores zijn minder betrouwbaar. Een opnamefrequentie van 384 kHz wordt aanbevolen."
       },
       "batFilter": {
         "label": "Vleermuis audio hoogdoorlaatfilter",

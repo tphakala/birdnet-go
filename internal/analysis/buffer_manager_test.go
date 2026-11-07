@@ -152,6 +152,80 @@ func TestProcessMonitorTick_ResumesWhenModelReloads(t *testing.T) {
 		"the resume log fires once, not on every subsequent tick")
 }
 
+// predictCountingBackend is a classifierBackend fake that counts dispatches. Its
+// PredictModelTimed fails so ProcessData returns early; the count is what the
+// contiguous-window test reads.
+type predictCountingBackend struct {
+	classifierBackend
+	predictCalls int
+}
+
+func (*predictCountingBackend) IsModelLoaded(string) bool { return true }
+func (*predictCountingBackend) IsModelActive(string) bool { return true }
+
+func (p *predictCountingBackend) PredictModelTimed(context.Context, string, [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
+	p.predictCalls++
+	return nil, classifier.PredictTiming{}, errors.NewStd("scripted predict failure")
+}
+
+// TestProcessMonitorTick_ContiguousWindowRequirement pins that a model whose spec
+// sets RequireContiguousWindow is not handed a window whose genuine tail is
+// shorter than the window (the zero-filled head of the first window), while the
+// first fully contiguous window is dispatched, and that a spec without the flag
+// still scores the zero-headed first window.
+func TestProcessMonitorTick_ContiguousWindowRequirement(t *testing.T) {
+	const (
+		sourceID   = "src"
+		modelID    = "Perch_V2"
+		windowSize = 480
+		stepSize   = 240
+	)
+
+	tests := []struct {
+		name            string
+		spec            classifier.ModelSpec
+		wantFirstCalls  int
+		wantSecondCalls int
+	}{
+		{"flagged spec skips the zero-headed window", classifier.ModelSpec{RequireContiguousWindow: true}, 0, 1},
+		{"unflagged spec still scores the zero-headed window", classifier.ModelSpec{}, 1, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conftest.SetTestSettings(conftest.GetTestSettings())
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+			require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, windowSize*2, windowSize-stepSize, stepSize))
+			ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+			require.NoError(t, err)
+
+			backend := &predictCountingBackend{}
+			bm := &BufferManager{
+				bn:        backend,
+				bufferMgr: mgr,
+				logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+			}
+			cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, spec: tt.spec, readSize: windowSize}
+			quit := make(chan struct{})
+			// The previous window was analyzed: a skip must still clear the latch so
+			// the next window reports the gap.
+			state := &monitorTickState{lastWindowAnalyzed: true}
+
+			// First window: the overlap head is zero filled, so only stepSize bytes are genuine.
+			require.NoError(t, ab.Write(make([]byte, stepSize)))
+			require.True(t, bm.processMonitorTick(quit, cfg, windowSize, 0, state, 1))
+			assert.Equal(t, tt.wantFirstCalls, backend.predictCalls)
+			assert.False(t, state.lastWindowAnalyzed, "an unanalyzed window makes the next one report a gap")
+
+			// Second window: the head is the previous window's tail, fully genuine.
+			require.NoError(t, ab.Write(make([]byte, stepSize)))
+			require.True(t, bm.processMonitorTick(quit, cfg, windowSize, 0, state, 2))
+			assert.Equal(t, tt.wantSecondCalls, backend.predictCalls)
+		})
+	}
+}
+
 // TestProcessMonitorTick_ToleratesBufferAllocationRace verifies the startup grace
 // that keeps a monitor alive while its analysis buffer is still being allocated. The
 // stream-reset callback starts a monitor the moment StartStream fires, before

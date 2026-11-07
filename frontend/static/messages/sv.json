@@ -3728,9 +3728,10 @@
           "result": "Testresultat",
           "error": "Test misslyckades",
           "batCompatible": "Fladdermus-kompatibel",
-          "batIncompatible": "Inte fladdermus-kompatibel"
+          "batIncompatible": "Inte fladdermus-kompatibel",
+          "minRateWarning": "De valda modellerna kräver en inspelningsfrekvens på minst {rate} kHz. Den här strömmen ligger under."
         },
-        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. BSG-BAT kräver minst 192 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
         "codecWarning": {
           "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
         },
@@ -3906,6 +3907,21 @@
         "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Ljudnormalisering följer EBU R128 sändningsstandard, vilket säkerställer konsekventa uppspelningsnivåer på olika enheter och förhindrar klippning."
+      },
+      "exportDenoise": {
+        "title": "Brusreducering av sparade klipp",
+        "description": "Minskar bakgrundsbrus i klipp när de sparas.",
+        "enable": "Brusreducera klipp vid sparande",
+        "enableHelp": "Det inspelade ljudet brusreduceras i minnet innan klippfilen skrivs. Detektionen körs alltid på originalljudet.",
+        "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda brusreducering av klipp.",
+        "strengthLabel": "Brusreduceringens styrka",
+        "strengthHelp": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "strengthDisabledHelp": "Slå på brusreducering av klipp ovan för att välja en styrka.",
+        "warningTitle": "Sparade klipp kan inte återställas",
+        "warningPermanent": "Originalljudet sparas inte. Klipp brusreduceras permanent när de sparas, även fladdermusinspelningar.",
+        "warningBats": "Brusreducering kan göra svaga fladdermusläten svagare; kraftiga läten påverkas inte.",
+        "warningImported": "Importerade inspelningar påverkas inte.",
+        "lossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir."
       },
       "audioClipRetention": {
         "title": "Lagring av ljudklipp",
@@ -5219,6 +5235,7 @@
         "denoise": "Brusreducering",
         "denoiseOff": "Av",
         "denoiseLight": "Lätt",
+        "denoiseLightMedium": "Lätt-medel",
         "denoiseMedium": "Medel",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normalisera ljud",
@@ -5574,8 +5591,13 @@
         "helpText": "Lägsta konfidensvärde (0,0 - 1,0) som krävs för att en detektering ska registreras."
       },
       "batThreshold": {
-        "label": "Tröskel för fladdermöss-detektion",
-        "helpText": "Minsta konfidenspoäng för detektering av fladdermusarter. Gäller endast för klassificeringsmodeller för fladdermöss."
+        "label": "Tröskel för fladdermöss-detektion (BattyBirdNET)",
+        "helpText": "Minsta konfidenspoäng för BattyBirdNET:s detektering av fladdermusarter. BSG-BAT har en egen tröskel."
+      },
+      "bsgBatThreshold": {
+        "label": "Tröskel för fladdermöss-detektion (BSG-BAT)",
+        "helpText": "Minsta konfidenspoäng för BSG-BAT:s detektering av fladdermusarter.",
+        "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
       },
       "batFilter": {
         "label": "Högpassfilter för fladdermöss-ljud",

@@ -3728,9 +3728,10 @@
           "result": "Résultat du test",
           "error": "Test échoué",
           "batCompatible": "Compatible chauves-souris",
-          "batIncompatible": "Non compatible chauves-souris"
+          "batIncompatible": "Non compatible chauves-souris",
+          "minRateWarning": "Les modèles sélectionnés nécessitent une fréquence de capture d'au moins {rate} kHz. Ce flux est en dessous."
         },
-        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
+        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. BSG-BAT nécessite au moins 192 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
         "codecWarning": {
           "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         },
@@ -3906,6 +3907,21 @@
         "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
         "noteTitle": "Norme EBU R128",
         "noteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage."
+      },
+      "exportDenoise": {
+        "title": "Réduction de bruit des clips enregistrés",
+        "description": "Réduit le bruit de fond des clips lors de leur enregistrement.",
+        "enable": "Réduire le bruit des clips à l'enregistrement",
+        "enableHelp": "L'audio capturé est débruité en mémoire avant l'écriture du fichier du clip. La détection s'effectue toujours sur l'audio d'origine.",
+        "requiresRecording": "Activez l'enregistrement des clips dans l'onglet Enregistrement pour utiliser la réduction de bruit des clips.",
+        "strengthLabel": "Intensité de la réduction de bruit",
+        "strengthHelp": "Léger conserve le plus du son d'origine et fort supprime le plus de bruit. Léger-moyen convient à la plupart des enregistrements.",
+        "strengthDisabledHelp": "Activez la réduction de bruit des clips ci-dessus pour choisir une intensité.",
+        "warningTitle": "Les clips enregistrés ne peuvent pas être restaurés",
+        "warningPermanent": "L'audio d'origine n'est pas conservé. Les clips sont débruités définitivement à l'enregistrement, y compris les enregistrements de chauves-souris.",
+        "warningBats": "La réduction de bruit peut atténuer les cris faibles de chauves-souris ; les cris forts ne sont pas affectés.",
+        "warningImported": "Les enregistrements importés ne sont pas concernés.",
+        "lossyNote": "La réduction de bruit donne les meilleurs résultats sur les clips FLAC ou WAV. En dessous de {minBitrate} kbps, les artefacts du codec limitent la propreté du résultat."
       },
       "audioClipRetention": {
         "title": "Rétention des clips audio",
@@ -5219,6 +5235,7 @@
         "denoise": "Réduction du bruit",
         "denoiseOff": "Désactivé",
         "denoiseLight": "Léger",
+        "denoiseLightMedium": "Léger-moyen",
         "denoiseMedium": "Moyen",
         "denoiseHeavy": "Fort",
         "normalize": "Normaliser l'audio",
@@ -5574,8 +5591,13 @@
         "helpText": "Score de confiance minimum (0.0 - 1.0) requis pour qu'une détection soit enregistrée."
       },
       "batThreshold": {
-        "label": "Seuil de détection des chauves-souris",
-        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris. S'applique uniquement aux modèles classificateurs de chauves-souris."
+        "label": "Seuil de détection des chauves-souris (BattyBirdNET)",
+        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris de BattyBirdNET. BSG-BAT a son propre seuil."
+      },
+      "bsgBatThreshold": {
+        "label": "Seuil de détection des chauves-souris (BSG-BAT)",
+        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris de BSG-BAT.",
+        "sampleRateWarning": "Les captures à 192 kHz fonctionnent, mais les espèces qui émettent au-dessus de 96 kHz ne peuvent pas être identifiées et les scores sont moins fiables. Une fréquence de capture de 384 kHz est recommandée."
       },
       "batFilter": {
         "label": "Filtre passe-haut pour chauves-souris",

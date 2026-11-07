@@ -73,12 +73,14 @@ var ValidAudioModels = map[string]bool{
 	ModelIDPerchV2:   true,
 	ModelIDBat:       true,
 	ModelIDBSG:       true,
+	ModelIDBSGBat:    true,
 	// Catalog-style aliases (see consts.go) so a source model set to the
 	// hyphenated catalog ID validates rather than failing startup.
 	ModelIDBirdNETCatalog:   true,
 	ModelIDBirdNETV3Catalog: true,
 	ModelIDPerchV2Catalog:   true,
 	ModelIDBSGCatalog:       true,
+	ModelIDBSGBatCatalog:    true,
 }
 
 // ValidationError is the set of fatal validation findings produced by
@@ -302,6 +304,10 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	if err := validateBSGBatStep(settings); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// Validate the bat ultrasonic filter's STFT settings while the filter is on.
 	if err := validateUltrasonicFilter(settings); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
@@ -368,6 +374,32 @@ func validateProfilingSettings(p *ProfilingConfig) error {
 	return nil
 }
 
+// ValidBSGBatStepFrames reports whether frames is within
+// [MinBSGBatStepFrames, MaxBSGBatStepFrames]. Zero (unset) is not in range; the
+// callers that accept it test for it themselves.
+func ValidBSGBatStepFrames(frames int) bool {
+	return frames >= MinBSGBatStepFrames && frames <= MaxBSGBatStepFrames
+}
+
+// validateBSGBatStep checks bsgbat.stepframes: 0 (unset, resolves to
+// DefaultBSGBatStepFrames) or a value within [MinBSGBatStepFrames,
+// MaxBSGBatStepFrames]. Zero must pass because settings built without a BSG-BAT
+// section carry it. On the Load path normalizeBSGBatStep has already repaired an
+// out-of-range value; on the API path this rejects it.
+func validateBSGBatStep(settings *Settings) error {
+	frames := settings.BSGBat.StepFrames
+	if frames == 0 || ValidBSGBatStepFrames(frames) {
+		return nil
+	}
+	return errors.Newf("bsgbat.stepframes must be 0 (default) or between %d and %d, got %d",
+		MinBSGBatStepFrames, MaxBSGBatStepFrames, frames).
+		Component("config").
+		Category(errors.CategoryValidation).
+		Context("operation", "validate_bsgbat_step").
+		Context("validation_type", "bsgbat-step").
+		Build()
+}
+
 // validateModelThresholds checks the per-model confidence thresholds are within
 // the inclusive 0..1 range. Validated unconditionally, even when a model's
 // OverrideThreshold is false, so an out-of-range value cannot lie dormant in
@@ -385,6 +417,7 @@ func validateModelThresholds(settings *Settings) error {
 		{"bat.threshold", settings.Bat.Threshold},
 		{"perch.threshold", settings.Perch.Threshold},
 		{"birdnetv3.threshold", settings.BirdNETV3.Threshold},
+		{"bsgbat.threshold", settings.BSGBat.Threshold},
 	}
 	for _, c := range checks {
 		if math.IsNaN(c.value) || math.IsInf(c.value, 0) || c.value < minModelThreshold || c.value > maxModelThreshold {

@@ -162,7 +162,7 @@ function isFiniteNumber(value: unknown): value is number {
 /** Validates one cadence model entry; null when a field the readout needs is malformed. */
 function cadenceModelOf(value: unknown): AnalysisCadenceModel | null {
   if (!isPlainObject(value)) return null;
-  const { id, name, clipMs, stepMs, confirmations, windowsInReference } = value;
+  const { id, name, taxonGroup, clipMs, stepMs, confirmations, windowsInReference } = value;
   if (
     typeof id !== 'string' ||
     !isFiniteNumber(clipMs) ||
@@ -175,6 +175,8 @@ function cadenceModelOf(value: unknown): AnalysisCadenceModel | null {
   return {
     id,
     name: typeof name === 'string' && name !== '' ? name : id,
+    // Absent from an older server; the readout then treats the model as a bird model.
+    ...(typeof taxonGroup === 'string' && taxonGroup !== '' ? { taxonGroup } : {}),
     clipMs,
     stepMs,
     confirmations,

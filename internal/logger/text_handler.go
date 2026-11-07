@@ -67,7 +67,7 @@ func (h *textHandler) Enabled(_ context.Context, level slog.Level) bool {
 //
 //nolint:gocritic // slog.Handler interface requires record by value, not pointer
 func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
-	level := record.Level.String()
+	level := levelName(record.Level)
 
 	// Get attribute slice from pool (reduces allocations in hot path)
 	ptr, ok := textAttrPool.Get().(*[]slog.Attr)

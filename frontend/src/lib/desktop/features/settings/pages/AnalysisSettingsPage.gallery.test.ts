@@ -63,6 +63,7 @@ vi.mock('$lib/stores/settings', async () => {
     dynamicThresholdSettings: writable({ enabled: false }),
     realtimeSettings: writable({}),
     batSettings: writable({}),
+    bsgBatSettings: writable({}),
     perchSettings: writable({}),
     birdNetV3Settings: writable({}),
   };
