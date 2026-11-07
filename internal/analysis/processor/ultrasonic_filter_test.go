@@ -89,8 +89,9 @@ func TestApplyUltrasonicFilter_InvalidSTFTSettingsAreNotFiltered(t *testing.T) {
 	assert.False(t, runUltrasonicFilter(p, settings, pcm), "a 0 Hz split must not filter")
 }
 
-// TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered verifies that a source
-// whose rate leaves no band above the split is skipped.
+// TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered verifies that a model
+// whose analysis window leaves no band above the split (Bat, 256 kHz, split at
+// 128 kHz) is skipped.
 func TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered(t *testing.T) {
 	p, settings := newUltrasonicFilterFixture(t)
 	pcm := flatUltrasonicToneS16LE()

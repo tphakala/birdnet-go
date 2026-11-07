@@ -1446,7 +1446,7 @@ type BatConfig struct {
 }
 
 // UltrasonicFilterConfig controls the post-detection ultrasonic validation filter for bat detections.
-// The filter measures temporal variability of ultrasonic energy (US frame CV) in the source audio.
+// The filter measures temporal variability of ultrasonic energy (US frame CV) in the audio window it is given, at the model's analysis rate.
 // Real bat echolocation produces bursts of ultrasonic energy (high CV), while false positives
 // from audible-range sounds show flat ultrasonic energy at the noise floor (low CV).
 type UltrasonicFilterConfig struct {
