@@ -388,8 +388,9 @@ func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
 
 // TestProcessEndpoints_DeletedClipIs404 pins that a clip deleted after it was
 // processed answers 404, not the processed audio still in the cache. The first
-// request of each endpoint fills both the processing cache and the SecureFS stat
-// cache, so a handler that trusted a cached stat would still answer 200.
+// request of each endpoint fills the processing cache. A handler that took the
+// clip's stat from the SecureFS stat cache (StatRel) would also cache it on that
+// request, keep the old tag after the delete and answer 200 from the cache.
 func TestProcessEndpoints_DeletedClipIs404(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
