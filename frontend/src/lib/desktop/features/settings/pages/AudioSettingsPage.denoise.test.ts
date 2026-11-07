@@ -99,10 +99,14 @@ async function renderProcessingTab(exportOverrides: ExportOverrides) {
 describe('AudioSettingsPage clip denoise', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
+    );
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     localStorage.removeItem(TAB_STORAGE_KEY);
   });
 

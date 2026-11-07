@@ -3914,7 +3914,7 @@
         "enableHelp": "The captured audio is denoised in memory before the clip file is written. Detection always runs on the original audio.",
         "requiresRecording": "Enable clip recording in the Recording tab to use clip denoising.",
         "strengthLabel": "Denoise Strength",
-        "strengthHelp": "Light keeps the most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
+        "strengthHelp": "Light keeps most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
         "strengthDisabledHelp": "Turn on clip denoising above to choose a strength.",
         "warningTitle": "Saved clips cannot be restored",
         "warningPermanent": "The original audio is not kept. Clips are denoised permanently when they are saved, including bat recordings.",

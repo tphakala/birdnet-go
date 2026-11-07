@@ -240,6 +240,10 @@ func TestSaveAudioAction_RetryAfterDenoiseTimeoutWritesRaw(t *testing.T) {
 
 // Export denoise never costs the clip: a timeout, an error or a clip over the
 // frame budget saves the captured PCM, returns no error and logs the reason.
+//
+// It stays serial, subtests included: it resets the package-level
+// denoiseSkipLogged guard and logtest.CaptureBuffer swaps the process-global
+// logger, so it must not run in parallel with other tests.
 func TestSaveAudioAction_DenoiseFallsBackToRawPCM(t *testing.T) {
 	denoiseSkipLogged.seen.Clear()
 	tests := []struct {
