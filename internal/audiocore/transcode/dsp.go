@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/go-audio-dsp/loudnorm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -21,20 +22,21 @@ const pcm16Scale = 32768.0
 // denoiseStrengths maps the request presets to denoiser strengths. The mapping is
 // explicit and never defaults: the denoiser's Strength zero value is Medium, so
 // an unknown preset must be rejected here rather than reach it (see Config in
-// the denoiser package). The maximum
-// reductions of Light, Medium and Heavy (6, 12 and 20 dB) equal the afftdn "nr"
-// values the presets used to select.
+// the denoiser package). The maximum reductions of Light, Medium and Heavy (6, 12
+// and 20 dB) equal the afftdn "nr" values the presets used to select; LightMedium
+// (9 dB) sits between Light and Medium.
 var denoiseStrengths = map[string]denoiser.Strength{
-	"light":  denoiser.Light,
-	"medium": denoiser.Medium,
-	"heavy":  denoiser.Heavy,
+	conf.DenoisePresetLight:       denoiser.Light,
+	conf.DenoisePresetLightMedium: denoiser.LightMedium,
+	conf.DenoisePresetMedium:      denoiser.Medium,
+	conf.DenoisePresetHeavy:       denoiser.Heavy,
 }
 
 // Filters selects the optional processing steps. They run in a fixed order:
 // denoise, then loudness normalization measured on the denoised samples, then
 // the user gain.
 type Filters struct {
-	// Denoise is a preset name: "", "light", "medium" or "heavy". "" runs no
+	// Denoise is a preset name: "", "light", "light-medium", "medium" or "heavy". "" runs no
 	// denoiser.
 	Denoise string
 	// Normalize enables loudness normalization to the package target.

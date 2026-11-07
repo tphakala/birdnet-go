@@ -20,6 +20,7 @@
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { playButtonLabelKey } from '$lib/utils/audio';
+  import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
 
   interface Props {
     // Playback state
@@ -94,16 +95,9 @@
   let showExportMenu = $state(false);
   let showDenoiseMenu = $state(false);
 
-  const denoiseOptions = [
-    { id: '', labelKey: 'components.audioPlayer.processing.denoiseOff' },
-    { id: 'light', labelKey: 'components.audioPlayer.processing.denoiseLight' },
-    { id: 'medium', labelKey: 'components.audioPlayer.processing.denoiseMedium' },
-    { id: 'heavy', labelKey: 'components.audioPlayer.processing.denoiseHeavy' },
-  ];
-
   let denoiseLabel = $derived(
     t(
-      denoiseOptions.find(o => o.id === denoise)?.labelKey ??
+      DENOISE_OPTIONS.find(o => o.id === denoise)?.labelKey ??
         'components.audioPlayer.processing.denoiseOff'
     )
   );
@@ -290,7 +284,7 @@
           in:dropdown={{ y: -4, duration: 120 }}
           out:dropdown={{ y: -4, duration: 80 }}
         >
-          {#each denoiseOptions as opt (opt.id)}
+          {#each DENOISE_OPTIONS as opt (opt.id)}
             <button
               class="denoise-option"
               class:selected={denoise === opt.id}

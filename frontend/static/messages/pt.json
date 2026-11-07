@@ -5219,6 +5219,7 @@
         "denoise": "Remover ruído",
         "denoiseOff": "Desligado",
         "denoiseLight": "Ligeiro",
+        "denoiseLightMedium": "Ligeiro-médio",
         "denoiseMedium": "Médio",
         "denoiseHeavy": "Intenso",
         "normalize": "Normalizar áudio",

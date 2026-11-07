@@ -5219,6 +5219,7 @@
         "denoise": "Kohinanpoisto",
         "denoiseOff": "Pois",
         "denoiseLight": "Kevyt",
+        "denoiseLightMedium": "Kevyt-keskitaso",
         "denoiseMedium": "Keskitaso",
         "denoiseHeavy": "Voimakas",
         "normalize": "Normalisoi ääni",

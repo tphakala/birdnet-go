@@ -15,7 +15,14 @@ import (
 	"github.com/tphakala/go-audio-dsp/loudnorm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// denoisePresetsGentlestFirst lists every denoise preset from the gentlest to
+// the strongest.
+var denoisePresetsGentlestFirst = []string{
+	conf.DenoisePresetLight, conf.DenoisePresetLightMedium, conf.DenoisePresetMedium, conf.DenoisePresetHeavy,
+}
 
 const (
 	// noiseOnlySeconds leads the denoise fixtures so the denoiser can learn the
@@ -116,15 +123,15 @@ func TestApplyFilters_UnknownDenoisePresetIsRejected(t *testing.T) {
 	}
 }
 
-// The chunked, in-place denoise must equal denoiser.Denoise on the whole clip, and
-// the preset names must select the matching strengths.
+// The chunked, in-place denoise must equal denoiser.Denoise on the whole clip for
+// every preset. TestDenoiseStrengthsMatchConfPresets pins the strength each preset
+// name selects.
 func TestApplyFilters_ChunkedDenoiseMatchesOneShot(t *testing.T) {
 	t.Parallel()
 
-	presets := map[string]denoiser.Strength{"light": denoiser.Light, "medium": denoiser.Medium, "heavy": denoiser.Heavy}
 	const oddExtraFrames = 777 // not a multiple of the hop
 	for _, rate := range []int{48000, 44100} {
-		for preset, strength := range presets {
+		for preset, strength := range denoiseStrengths {
 			t.Run(preset+"_"+map[int]string{48000: "48k", 44100: "44k"}[rate], func(t *testing.T) {
 				t.Parallel()
 				src := noisyTone(rate)
@@ -194,7 +201,7 @@ func TestApplyFilters_DenoiseReducesNoiseMonotonically(t *testing.T) {
 	origAmp, origResidual := measure(src)
 
 	residuals := map[string]float64{}
-	for _, preset := range []string{"light", "medium", "heavy"} {
+	for _, preset := range denoisePresetsGentlestFirst {
 		p := newPCM(src, testRate, 1)
 		require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: preset}))
 		amp, residual := measure(bytesInt16(p.Data))
@@ -203,15 +210,17 @@ func TestApplyFilters_DenoiseReducesNoiseMonotonically(t *testing.T) {
 		assert.LessOrEqualf(t, drop, toneLevelToleranceDB, "%s keeps the tone within %v dB", preset, toneLevelToleranceDB)
 		assert.Lessf(t, residual, origResidual, "%s removes noise", preset)
 	}
-	assert.Greater(t, residuals["light"], residuals["medium"], "medium removes more noise than light")
-	assert.Greater(t, residuals["medium"], residuals["heavy"], "heavy removes more noise than medium")
+	for i := 1; i < len(denoisePresetsGentlestFirst); i++ {
+		gentler, stronger := denoisePresetsGentlestFirst[i-1], denoisePresetsGentlestFirst[i]
+		assert.Greaterf(t, residuals[gentler], residuals[stronger], "%s removes more noise than %s", stronger, gentler)
+	}
 }
 
 func TestApplyFilters_DenoiseShorterThanOneFrame(t *testing.T) {
 	t.Parallel()
 
 	const tinyFrames = 100
-	for _, preset := range []string{"light", "medium", "heavy"} {
+	for _, preset := range denoisePresetsGentlestFirst {
 		src := tone(testRate, 1, float64(tinyFrames)/testRate, testToneHz, testAmp)
 		require.Len(t, src, tinyFrames)
 		p := newPCM(src, testRate, 1)

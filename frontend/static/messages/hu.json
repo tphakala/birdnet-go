@@ -5219,6 +5219,7 @@
         "denoise": "Zajcsökkentés",
         "denoiseOff": "Ki",
         "denoiseLight": "Enyhe",
+        "denoiseLightMedium": "Enyhe-közepes",
         "denoiseMedium": "Közepes",
         "denoiseHeavy": "Erős",
         "normalize": "Hang normalizálása",
