@@ -126,6 +126,8 @@ func TestBuildAnalysisCadence_PerModelCadence(t *testing.T) {
 	for _, m := range got.Models {
 		byID[m.ID] = m
 	}
+	assert.Equal(t, "bat", byID["Bat"].TaxonGroup, "the frontend identifies bat-group rows by group, not by ID")
+	assert.Equal(t, "bird", byID["BirdNET_V2.4"].TaxonGroup)
 	assert.Equal(t, int64(1500), byID["Bat"].StepMs, "bat stays at half its 3 s clip")
 	assert.Equal(t, int64(40), byID["Bat"].ProbeLatencyMs)
 	assert.Equal(t, 1, byID["Bat"].Confirmations, "bat filter level 0")

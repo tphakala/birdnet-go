@@ -541,6 +541,7 @@ var catalogModelIDAliases = map[string]string{
 	ModelIDBirdNETV3Catalog: ModelIDBirdNETV3,
 	ModelIDPerchV2Catalog:   ModelIDPerchV2,
 	ModelIDBSGCatalog:       ModelIDBSG,
+	ModelIDBSGBatCatalog:    ModelIDBSGBat,
 }
 
 // canonicalizeModelID returns the canonical config ID for a catalog-style

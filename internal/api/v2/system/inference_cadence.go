@@ -57,6 +57,10 @@ type CadenceModelInfo struct {
 	ID string `json:"id"`
 	// Name is the model display name.
 	Name string `json:"name"`
+	// TaxonGroup is the broad group the model detects ("bird" or "bat"); empty for
+	// a model outside every group. Bat-group models run on a fixed cadence, so the
+	// consumer can read this instead of matching a model ID.
+	TaxonGroup string `json:"taxonGroup,omitempty"`
 	// ClipMs is the model clip length in milliseconds.
 	ClipMs int64 `json:"clipMs"`
 	// StepMs is how often a new analysis window is produced, in milliseconds.
@@ -111,6 +115,7 @@ func buildAnalysisCadence(plan *cadence.Plan, infos []classifier.ModelInfo, sett
 		out.Models = append(out.Models, CadenceModelInfo{
 			ID:                 mi.ID,
 			Name:               mi.Name,
+			TaxonGroup:         string(classifier.TaxonGroupFor(mi.ID)),
 			ClipMs:             mi.Spec.ClipLength.Milliseconds(),
 			StepMs:             step.Milliseconds(),
 			ProbeLatencyMs:     latency[mi.ID].Milliseconds(),

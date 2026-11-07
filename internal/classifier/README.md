@@ -13,23 +13,24 @@ The `classifier` package loads the acoustic models, runs inference on audio wind
 | Range filter              | `range_filter*.go`, `mapped_range_filter.go`                                    | Location and week based species filtering.                                                                                                 |
 | Labels and names          | `label_files.go`, `label_vocabulary.go`, `names.go`, `taxonomy*.go`, `genus.go` | Label loading and species name and taxonomy lookup.                                                                                        |
 | Results queue and overlap | `queue.go`, `overlap.go`, `cadence/`                                            | Hand-off of results and the analysis window cadence.                                                                                       |
-| Bat scheduler             | `nighttime_scheduler.go`                                                        | Runs the bat model only at night.                                                                                                          |
+| Bat scheduler             | `nighttime_scheduler.go`                                                        | Runs the bat models only at night.                                                                                                         |
 
 ## Models
 
 `ModelRegistry` in `model_registry.go` defines these models (registry ID, backend, input):
 
-| Registry ID    | Name            | Backend                                                              | Input                                                         |
-| -------------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `BirdNET_V2.4` | BirdNET v2.4    | TFLite (ONNX INT8-ARM variant on arm64 and on builds without TFLite) | 48 kHz, 3 s                                                   |
-| `BirdNET_V3.0` | BirdNET v3.0    | ONNX                                                                 | 32 kHz, 5 s                                                   |
-| `Perch_V2`     | Google Perch v2 | ONNX                                                                 | 32 kHz, 5 s                                                   |
-| `Bat`          | Bat classifier  | ONNX classifier head on BirdNET v2.4 embeddings                      | 3 s windows of raw ultrasonic audio (at least 96 kHz capture) |
-| `BSG`          | BSG Finland     | ONNX                                                                 | 48 kHz, 3 s                                                   |
+| Registry ID    | Name            | Backend                                                              | Input                                                                                    |
+| -------------- | --------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `BirdNET_V2.4` | BirdNET v2.4    | TFLite (ONNX INT8-ARM variant on arm64 and on builds without TFLite) | 48 kHz, 3 s                                                                              |
+| `BirdNET_V3.0` | BirdNET v3.0    | ONNX                                                                 | 32 kHz, 5 s                                                                              |
+| `Perch_V2`     | Google Perch v2 | ONNX                                                                 | 32 kHz, 5 s                                                                              |
+| `Bat`          | Bat classifier  | ONNX classifier head on BirdNET v2.4 embeddings                      | 3 s windows of raw ultrasonic audio (at least 96 kHz capture)                            |
+| `BSG_BAT`      | BSG-BAT         | ONNX spectrogram CNN                                                 | 384 kHz mel spectrogram windows of 393472 samples, 0.5 s step (at least 192 kHz capture) |
+| `BSG`          | BSG Finland     | ONNX                                                                 | 48 kHz, 3 s                                                                              |
 
 BirdNET v2.4 is the stock default and ships embedded in the binary (builds with the `noembed` tag expect external files). The other models are downloaded through the gallery. `models.enabled` in the configuration selects which models load. BSG is registered and has a catalog entry, but it is hidden in the gallery and has no loader in `modelLoaders` yet, so it cannot be loaded.
 
-Every loaded model implements `ModelInstance` (`model.go`): `Predict`, `Spec`, `ModelID`, `Labels`, `RuntimeInfo` (device, live backend and precision) and `Close`. `BirdNET` (`birdnet.go`) is the TFLite and ONNX v2.4 implementation; `BirdNETV3`, `Perch` and `Bat` are the others. `ModelSpec` carries the sample rate and clip length, and `BufferDimensions` and `BufferInterval` derive buffer sizes from it.
+Every loaded model implements `ModelInstance` (`model.go`): `Predict`, `Spec`, `ModelID`, `Labels`, `RuntimeInfo` (device, live backend and precision) and `Close`. `BirdNET` (`birdnet.go`) is the TFLite and ONNX v2.4 implementation; `BirdNETV3`, `Perch`, `Bat` and `BSGBat` are the others. `BSGBat` (`bsgbat_onnx.go`) computes its own mel spectrogram and normalization (`internal/inference/bsgbat`) and runs the generic tensor runner on it, so the orchestrator still hands it plain PCM. It is a bat-group, schedule gated model whose spec sets `ClipSamples`, `StepSamples` and `RequireContiguousWindow`, and it applies no threshold inside `Predict`. `ModelSpec` carries the sample rate and clip length, and `BufferDimensions` and `BufferInterval` derive buffer sizes from it.
 
 ## Orchestrator
 
@@ -74,7 +75,7 @@ The range filter (`rangeFilterService`) keeps species that are probable at the s
 - a strict ONNX filter whose output must match the classifier labels one to one;
 - the mapped geomodel, an ONNX model with its own label set whose scores are matched onto each classifier's labels by scientific name (`mappedRangeFilter`).
 
-Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0 and Perch use the geomodel, and Bat and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
+Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0 and Perch use the geomodel, and Bat, BSG-BAT and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
 
 ## Labels and species identity
 
@@ -90,7 +91,7 @@ Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 use
 
 ## Nighttime scheduler
 
-The bat model is schedule gated. `nighttimeScheduler` computes from civil dusk and dawn whether it should be active and refreshes that state every 60 seconds, so the hot path reads one atomic value. It is controlled by `bat.nighttimeonly`, needs a configured location and a `suncalc` instance (`SetSunCalc`), and fails open (the bat model stays active) when either is missing. `IsModelActive` and `ModelScheduleStatus` report the state.
+The bat models (Bat and BSG-BAT) are schedule gated and share the `bat.nighttimeonly` setting. `nighttimeScheduler` computes from civil dusk and dawn whether it should be active and refreshes that state every 60 seconds, so the hot path reads one atomic value. It is controlled by `bat.nighttimeonly`, needs a configured location and a `suncalc` instance (`SetSunCalc`), and fails open (the bat models stay active) when either is missing. `IsModelActive` and `ModelScheduleStatus` report the state.
 
 ## Testing
 

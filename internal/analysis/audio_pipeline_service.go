@@ -1955,7 +1955,8 @@ func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]str
 	// RTSP streams.
 	for _, stream := range enabledStreams {
 		probe := probeResults[stream.URL]
-		isBat := hasBatModel(stream.Models)
+		minSourceRate := minSourceSampleRate(stream.Models)
+		isBat := minSourceRate > 0
 
 		// On a failed or partial probe fall back to this connection's last known
 		// parameters so a transient reconnect-time probe failure does not silently
@@ -2009,11 +2010,11 @@ func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]str
 				logger.Bool("channels_retained", channelsRetained),
 				logger.String("operation", "probe_stream"))
 		}
-		if probeStreams && isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
+		if probeStreams && isBat && sourceSampleRate > 0 && sourceSampleRate < minSourceRate {
 			GetLogger().Warn("stream sample rate below bat model minimum",
 				logger.String("stream", stream.Name),
 				logger.Int("sample_rate", sourceSampleRate),
-				logger.Int("minimum", ffmpeg.MinBatSampleRate),
+				logger.Int("minimum", minSourceRate),
 				logger.String("operation", "probe_stream"))
 		}
 
@@ -2101,21 +2102,22 @@ func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]str
 	return result
 }
 
-// hasBatModel returns true if any of the given config-level model IDs
-// resolves to a registry entry that requires high sample rate audio
-// (MinRawSampleRate > 0).
-func hasBatModel(modelIDs []string) bool {
+// minSourceSampleRate returns the highest minimum source capture rate
+// (Spec.MinRawSampleRate) among the registry entries the given config-level
+// model IDs resolve to, or 0 when none of them requires high sample rate audio.
+// A stream that feeds several such models must meet the strictest minimum.
+func minSourceSampleRate(modelIDs []string) int {
+	minRate := 0
 	for _, configID := range modelIDs {
 		registryID, ok := classifier.ResolveConfigModelID(configID)
 		if !ok {
 			continue
 		}
-		info, exists := classifier.ModelRegistry[registryID]
-		if exists && info.Spec.MinRawSampleRate > 0 {
-			return true
+		if info, exists := classifier.ModelRegistry[registryID]; exists {
+			minRate = max(minRate, info.Spec.MinRawSampleRate)
 		}
 	}
-	return false
+	return minRate
 }
 
 // resolveStreamSampleRates decides the source and output sample rates for a

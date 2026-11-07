@@ -524,7 +524,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		Files:           geomodelFiles(),
 	},
 
-	// Bat models (BattyBirdNET family by rdz-oss)
+	// Bat models (BSG-BAT, then the BattyBirdNET family by rdz-oss)
+	bsgBatCatalogEntry(),
 	batCatalogEntry("battybirdnet-bavaria", "BattyBirdNET Bavaria", "Bavaria", 32, "Bavaria", false,
 		batFileChecksums{"7ee3936621d180b9fe42f3732703339662b154135ce205f711797bca7daa44ea", 131827, "ff4a3f9a351f202c8712c807c6bb8b29df0b1c75ddab48e543ec76a88a42715c", 966}),
 	batCatalogEntry("battybirdnet-bavaria-high", "BattyBirdNET Bavaria (High)", "Bavaria", 24, "Bavaria", true,
@@ -735,6 +736,69 @@ type batFileChecksums struct {
 	modelSize    int64
 	labelsSHA256 string
 	labelsSize   int64
+}
+
+// BSG-BAT release files in the tphakala/BSG-BAT HuggingFace repo, pinned from the
+// acoustic-models BSG-BAT manifest. The repo holds six independently trained
+// checkpoints with identical graphs; the catalog ships the first (r1) and keeps its
+// files in a variant so a multi-checkpoint variant can be added beside it.
+const (
+	bsgBatModelFile       = "bsgbat_v0.21_r1.onnx"
+	bsgBatModelSHA256     = "42f209d0e023785df31c12a4af3ff9fb4470fde5e25d42cd8d2ecc0f2505e0e6"
+	bsgBatModelSizeBytes  = 83101506
+	bsgBatLabelsFile      = "bsgbat_labels.txt"
+	bsgBatLabelsSHA256    = "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517"
+	bsgBatLabelsSizeBytes = 438
+	// bsgBatMinRAMMB is the manifest's RAM floor for one session (measured peak
+	// RSS 203 to 242 MB).
+	bsgBatMinRAMMB = 300
+)
+
+// bsgBatCatalogEntry constructs the CatalogEntry for the BSG-BAT bat classifier.
+func bsgBatCatalogEntry() CatalogEntry {
+	files := []CatalogFile{
+		{RemotePath: bsgBatModelFile, LocalName: bsgBatModelFile, Role: RoleModel, SHA256: bsgBatModelSHA256, SizeBytes: bsgBatModelSizeBytes},
+		{RemotePath: bsgBatLabelsFile, LocalName: bsgBatLabelsFile, Role: RoleLabels, SHA256: bsgBatLabelsSHA256, SizeBytes: bsgBatLabelsSizeBytes},
+	}
+	return CatalogEntry{
+		ID:   "bsg-bat",
+		Name: "BSG-BAT",
+		Description: "European bat species classifier for ultrasonic recordings (21 species), by the bsg-bat team " +
+			"(https://doi.org/10.5281/zenodo.15495676). It needs a capture rate of at least 192 kHz, and 384 kHz is " +
+			"recommended: 192 kHz captures work, but species calling above 96 kHz cannot be identified and scores are " +
+			"less reliable. It runs in real time on a Raspberry Pi 5 or an x86 host; " +
+			"a Raspberry Pi 4 needs 4 inference threads.",
+		Author:          "bsg-bat team",
+		License:         "CC-BY-4.0",
+		CommercialUse:   true,
+		Category:        CategoryBat,
+		Region:          "Europe",
+		SpeciesCount:    bsgBatNumSpecies,
+		Version:         DetectionVersionBSGBat,
+		RegistryID:      RegistryIDBSGBat,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://doi.org/10.5281/zenodo.15495676",
+		HuggingFaceRepo: "tphakala/BSG-BAT",
+		// Files stays empty: the catalog layer resolves it from the default variant.
+		Variants: []CatalogVariant{
+			{
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: bsgBatNumSpecies,
+				Default:      true,
+				Requirements: VariantRequirements{MinRAMMB: bsgBatMinRAMMB},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 111, RSSMB: 203},
+					{Device: "rpi4b-a72", Backend: "onnxruntime-cpu", LatencyMs: 372, RSSMB: 203},
+					{Device: "x86-i5-7260u", Backend: "onnxruntime-cpu", LatencyMs: 37, RSSMB: 242},
+				},
+				Files: files,
+			},
+		},
+	}
 }
 
 // batCatalogEntry constructs a CatalogEntry for a BattyBirdNET regional model.

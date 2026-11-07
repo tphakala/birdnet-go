@@ -1492,6 +1492,15 @@ func (c UltrasonicFilterConfig) validateSplit() error {
 	return nil
 }
 
+// BSGBatConfig holds configuration for the BSG-BAT bat classifier. The schedule,
+// false positive filter and ultrasonic filter are shared with the bat section
+// (BatConfig); only the model files and the confidence threshold are its own.
+type BSGBatConfig struct {
+	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG-BAT ONNX model file
+	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BSG-BAT label file
+	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for BSG-BAT detections
+}
+
 // BSGConfig holds configuration for BSG regional bird models.
 type BSGConfig struct {
 	ModelPath string `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG ONNX model file
@@ -2018,6 +2027,7 @@ type Settings struct {
 	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
 	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdnetv3"` // BirdNET v3.0 acoustic classifier configuration
 	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
+	BSGBat    BSGBatConfig    `yaml:"bsgbat" json:"bsgbat"`       // BSG-BAT bat classifier configuration
 	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
 	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
 

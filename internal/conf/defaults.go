@@ -111,6 +111,10 @@ func setDefaultConfig() {
 	viper.SetDefault("bat.ultrasonicfilter.hopsize", DefaultUltrasonicHopSize)
 	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", DefaultUltrasonicSplitHz)
 
+	// BSG-BAT model configuration. Its schedule, false positive filter and
+	// ultrasonic filter come from the bat section above.
+	viper.SetDefault("bsgbat.threshold", 0.5)
+
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
 

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
@@ -305,6 +306,7 @@ func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
 		RegistryIDPerchV2:    TaxonGroupBird,
 		RegistryIDBSG:        TaxonGroupBird,
 		RegistryIDBat:        TaxonGroupBat,
+		RegistryIDBSGBat:     TaxonGroupBat,
 	}
 	for id := range ModelRegistry {
 		assert.Contains(t, want, id, "registry entry %q needs a taxon group in this table", id)
@@ -313,6 +315,34 @@ func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
 		assert.Equal(t, group, TaxonGroupFor(id), "taxon group of %q", id)
 	}
 	assert.Equal(t, TaxonGroup(""), TaxonGroupFor("no-such-model"), "unknown ID is ungrouped")
+}
+
+// TestModelRegistry_BSGBatEntry pins the BSG-BAT spec: a 384 kHz window of 393472
+// samples stepped by 192000 samples (0.5 s), no zero-headed windows, a source rate
+// floor of bsgBatMinRawSampleRate, and a detection identity of the bat type.
+func TestModelRegistry_BSGBatEntry(t *testing.T) {
+	t.Parallel()
+
+	info, ok := ModelRegistry[RegistryIDBSGBat]
+	require.True(t, ok, "ModelRegistry should contain BSG-BAT")
+	assert.Equal(t, BackendONNX, info.Backend)
+	assert.Equal(t, 21, info.NumSpecies)
+	assert.True(t, info.scheduleGated, "BSG-BAT runs inside the bat schedule")
+	assert.Equal(t, rangeFilterCompatNone, info.rangeFilterCompat)
+
+	spec := info.Spec
+	assert.Equal(t, 384000, spec.SampleRate)
+	assert.Equal(t, 384000, spec.EffectiveSampleRate())
+	assert.Equal(t, 393472, spec.ClipSampleCount())
+	assert.Equal(t, 192000, spec.StepSamples)
+	assert.Equal(t, bsgBatMinRawSampleRate, spec.MinRawSampleRate)
+	assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(0), "the step is fixed at 0.5 s whatever the overlap")
+	assert.True(t, spec.RequireContiguousWindow)
+
+	clipBytes, overlapBytes, readSize := spec.BufferDimensions(0)
+	assert.Equal(t, 393472*2, clipBytes)
+	assert.Equal(t, (393472-192000)*2, overlapBytes)
+	assert.Equal(t, 192000*2, readSize)
 }
 
 func TestModelRegistry_BSGEntry(t *testing.T) {
@@ -336,6 +366,7 @@ func TestRegistryIDConstants_MatchRegistryKeys(t *testing.T) {
 	constants := map[string]string{
 		"RegistryIDBirdNETV3": RegistryIDBirdNETV3,
 		"RegistryIDBSG":       RegistryIDBSG,
+		"RegistryIDBSGBat":    RegistryIDBSGBat,
 		"RegistryIDBat":       RegistryIDBat,
 		"RegistryIDPerchV2":   RegistryIDPerchV2,
 	}
@@ -354,6 +385,7 @@ func TestKnownConfigIDs_AllModels(t *testing.T) {
 	assert.True(t, ids["perch_v2"], "perch_v2 config ID should be known")
 	assert.True(t, ids["bat"], "bat config ID should be known")
 	assert.True(t, ids["bsg"], "bsg config ID should be known")
+	assert.True(t, ids["bsg_bat"], "bsg_bat config ID should be known")
 	assert.False(t, ids["unknown"], "unknown config ID should not be known")
 
 	// Hyphenated catalog-style IDs are accepted as secondary aliases so a config
@@ -362,6 +394,7 @@ func TestKnownConfigIDs_AllModels(t *testing.T) {
 	assert.True(t, ids["birdnet-v3.0"], "birdnet-v3.0 catalog-style ID should be known")
 	assert.True(t, ids["birdnet-v2.4"], "birdnet-v2.4 catalog-style ID should be known")
 	assert.True(t, ids["bsg-finland"], "bsg-finland catalog-style ID should be known")
+	assert.True(t, ids["bsg-bat"], "bsg-bat catalog-style ID should be known")
 }
 
 // TestKnownConfigIDs_MatchesConfValidAudioModels is a drift guard. conf.ValidAudioModels
@@ -397,6 +430,7 @@ func TestConfigAliasForRegistry_ReturnsCanonicalPrimary(t *testing.T) {
 	assert.Equal(t, "birdnet_v3.0", ConfigAliasForRegistry(RegistryIDBirdNETV3))
 	assert.Equal(t, "birdnet", ConfigAliasForRegistry("BirdNET_V2.4"))
 	assert.Equal(t, "bsg", ConfigAliasForRegistry(RegistryIDBSG))
+	assert.Equal(t, "bsg_bat", ConfigAliasForRegistry(RegistryIDBSGBat))
 }
 
 func TestResolveConfigModelID_AllModels(t *testing.T) {
@@ -413,6 +447,8 @@ func TestResolveConfigModelID_AllModels(t *testing.T) {
 		{"perch_v2 resolves", "perch_v2", RegistryIDPerchV2, true},
 		{"bat resolves", "bat", RegistryIDBat, true},
 		{"bsg resolves", "bsg", RegistryIDBSG, true},
+		{"bsg_bat resolves", "bsg_bat", RegistryIDBSGBat, true},
+		{"bsg-bat catalog id resolves", "bsg-bat", RegistryIDBSGBat, true},
 		{"case insensitive bat", "BAT", RegistryIDBat, true},
 		{"case insensitive bsg", "BSG", RegistryIDBSG, true},
 		{"perch-v2 catalog id resolves", "perch-v2", RegistryIDPerchV2, true},
@@ -518,6 +554,7 @@ func TestDetectionModelInfoForID_AllModels(t *testing.T) {
 		{RegistryIDPerchV2, "Perch"},
 		{RegistryIDBSG, "BSG"},
 		{RegistryIDBat, "BattyBirdNET"},
+		{RegistryIDBSGBat, detection.ModelNameBSGBat},
 	}
 
 	for _, tt := range tests {
@@ -604,4 +641,44 @@ func TestToDetectionModelInfoVariant(t *testing.T) {
 		m.IsStock = false
 		assert.Equal(t, "custom", m.ToDetectionModelInfo().Variant)
 	})
+}
+
+// TestModelRegistry_SampleCountSpecs checks every spec that sets ClipSamples: the
+// fixed step lies within the window, and ClipLength, which display and timing
+// consumers read, is the duration of ClipSamples at the effective sample rate. A
+// spec whose display length and buffer length disagree would size buffers and
+// report cadence from different windows.
+func TestModelRegistry_SampleCountSpecs(t *testing.T) {
+	t.Parallel()
+
+	checked := 0
+	for id, info := range ModelRegistry {
+		spec := info.Spec
+		if spec.ClipSamples <= 0 {
+			continue
+		}
+		checked++
+		assert.Positivef(t, spec.StepSamples, "%s: a sample-count spec needs a fixed step", id)
+		assert.LessOrEqualf(t, spec.StepSamples, spec.ClipSamples, "%s: step must not exceed the window", id)
+		assert.Equalf(t, spec.EffectiveSampleRate(), spec.SampleRate,
+			"%s: SampleRate must equal the effective rate for a sample-count spec", id)
+		want := time.Duration(spec.ClipSamples) * time.Second / time.Duration(spec.EffectiveSampleRate())
+		assert.Equalf(t, want, spec.ClipLength, "%s: ClipLength must be the duration of ClipSamples", id)
+	}
+	assert.Positive(t, checked, "the registry must hold at least one sample-count spec (BSG-BAT)")
+}
+
+// TestModelRegistry_DetectionNamesMatchModelType pins that the registry's
+// detection name for each bat-group model resolves to the bat model type, which
+// decides lossless clip export and the spectrogram range for its detections.
+func TestModelRegistry_DetectionNamesMatchModelType(t *testing.T) {
+	t.Parallel()
+
+	for id, info := range ModelRegistry {
+		if info.taxonGroup != TaxonGroupBat {
+			continue
+		}
+		assert.Equalf(t, entities.ModelTypeBat, detection.ResolveModelType(info.DetectionName, info.DetectionVersion),
+			"%s: a bat-group model must resolve to the bat model type", id)
+	}
 }

@@ -84,6 +84,17 @@ func TestPatchMissingSections(t *testing.T) {
 			},
 		},
 		{
+			name:    "bsgbat section accepts valid update",
+			section: "bsgbat",
+			body: map[string]any{
+				"threshold": 0.7,
+			},
+			verify: func(t *testing.T, settings *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 0.7, settings.BSGBat.Threshold, 1e-9)
+			},
+		},
+		{
 			name:    "models section accepts valid update",
 			section: "models",
 			body: map[string]any{
