@@ -240,6 +240,37 @@ describe('AudioPlayer playback denoise default', () => {
       expect(screen.queryByRole('alert')).toBeNull();
     });
 
+    it('keeps the player paused when the denoised clip fails before any play', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      mount();
+      ctl.completeLoad();
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      // Picking the default again loads its denoised clip while paused.
+      await chooseDenoise(DENOISE_LIGHT_MEDIUM_TEXT);
+      expect(elementPath()).toBe(DENOISED_URL);
+      const playsBefore = ctl.play.mock.calls.length;
+
+      ctl.failLoad();
+      await settle();
+
+      expect(elementPath()).toBe(STORED_URL);
+      expect(ctl.play.mock.calls.length).toBe(playsBefore);
+    });
+
+    it('points the download link at the stored clip after the fallback', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      // The download link belongs to the guest overlay, which has no clip extraction.
+      mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await press();
+      expect(screen.getByLabelText('media.audio.download')).toHaveAttribute('href', DENOISED_URL);
+
+      ctl.failLoad();
+      await settle();
+
+      expect(screen.getByLabelText('media.audio.download')).toHaveAttribute('href', STORED_URL);
+    });
+
     it('does not ask for the denoised clip again after the fallback', async () => {
       restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
       mount();
@@ -326,6 +357,20 @@ describe('AudioPlayer playback denoise default', () => {
 
       expect(ctl.element.src).toBe(PROCESSED_BLOB_URL);
       expect(URL.revokeObjectURL).toHaveBeenCalledWith(BATS_BLOB_URL);
+    });
+
+    it('does not treat an audible-bats load failure as a denoised-clip failure', async () => {
+      mount({ modelType: 'bat' });
+      ctl.completeLoad();
+      await press();
+      await activateAudibleBats();
+      expect(ctl.element.src).toBe(BATS_BLOB_URL);
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      await settle();
+
+      expect(ctl.element.src).toBe(BATS_BLOB_URL);
     });
 
     it('turns audible bats off before a normalize change replaces the source', async () => {

@@ -320,8 +320,9 @@
   let playUnlocked = false;
   // Set when the default's denoised clip failed for a reason a retry cannot fix: the
   // stored clip plays instead for the rest of this mount. An explicit toolbar choice
-  // is a processed blob and keeps its own error handling.
-  let denoiseFailed = false;
+  // is a processed blob and keeps its own error handling. Reactive: the download link
+  // follows it.
+  let denoiseFailed = $state(false);
   let processAbortController: AbortController | null = null;
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1150,7 +1151,8 @@
   };
 
   // Whether the element is on the default's GET denoise URL.
-  const onDefaultDenoiseClip = () => playUnlocked && defaultApplied && !denoiseFailed;
+  const onDefaultDenoiseClip = () =>
+    playUnlocked && defaultApplied && !denoiseFailed && !(audibleBats.active && audibleBats.url);
 
   // Whether src is a clip the server serves (the stored clip or the default's
   // denoised one), as opposed to a local blob. Only those are probed and checked
@@ -1164,7 +1166,7 @@
   function ensurePlaybackSource() {
     if (playUnlocked) return;
     playUnlocked = true;
-    if (!audioElement || !defaultApplied || denoiseFailed) return;
+    if (!audioElement || !onDefaultDenoiseClip()) return;
     const src = currentSource();
     if (src === audioUrl) return;
     markPlaybackStopped();
@@ -1192,12 +1194,13 @@
   function fallbackToStoredClip() {
     if (!audioElement) return;
     logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
+    const resume = playRequestedAfterRetry || isPlaying;
     denoiseFailed = true;
     resetRetryState();
     markPlaybackStopped();
     error = null;
     swapSourceKeepingPosition(audioElement, audioUrl);
-    void audioElement.play().catch(handlePlayRejection);
+    if (resume) void audioElement.play().catch(handlePlayRejection);
   }
 
   // On the first failure of the denoised clip, ask the server why before retrying:
@@ -2778,7 +2781,7 @@
         <!-- Download button -->
         {#if showDownload}
           <a
-            href={defaultApplied ? defaultDenoiseUrl() : audioUrl}
+            href={defaultApplied && !denoiseFailed ? defaultDenoiseUrl() : audioUrl}
             download
             class="text-white p-1 rounded-full hover:bg-white/20 ml-2 shrink-0"
             aria-label={t('media.audio.download')}

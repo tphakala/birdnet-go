@@ -516,6 +516,22 @@ describe('useAudioPlayback recovery', () => {
         expect(getState().error).toBeNull();
       });
 
+      it('stays paused when the play URL fails after the user paused', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        await toggle();
+        expect(getState().isPlaying).toBe(false);
+        const playsBefore = ctl.play.mock.calls.length;
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(ctl.play.mock.calls.length).toBe(playsBefore);
+      });
+
       it('does not switch back to the play URL on later plays', async () => {
         restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
         await renderAndWait({ playUrl: DENOISED_URL });
