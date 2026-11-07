@@ -44,6 +44,49 @@ const FLOAT_EPSILON = 1e-9;
 const OVERLAP_TOLERANCE_SECONDS = 0.001;
 
 /**
+ * BSG-BAT analysis step (bsgbat.stepframes), counted in mel frames of 768 samples at the
+ * model's 384 kHz rate (2 ms each). These mirror the backend constants
+ * conf.MinBSGBatStepFrames, conf.MaxBSGBatStepFrames and conf.DefaultBSGBatStepFrames
+ * (internal/conf/consts.go); a change there must be repeated here.
+ */
+export const BSG_BAT_STEP_MIN_FRAMES = 100;
+export const BSG_BAT_STEP_MAX_FRAMES = 512;
+export const BSG_BAT_STEP_DEFAULT_FRAMES = 250;
+/** Samples per mel frame (bsgbat.HopSize) and the model's sample rate (bsgbat.SampleRate). */
+const BSG_BAT_HOP_SAMPLES = 768;
+const BSG_BAT_SAMPLE_RATE_HZ = 384000;
+/** One frame in integer nanoseconds, so the step matches the backend's integer duration. */
+const BSG_BAT_FRAME_NS = (BSG_BAT_HOP_SAMPLES * NS_PER_SECOND) / BSG_BAT_SAMPLE_RATE_HZ;
+
+/**
+ * Step of BattyBirdNET in seconds: a fixed 50% overlap of its 3 s clip
+ * (classifier.ResolveModelOverlap).
+ */
+export const BATTYBIRDNET_STEP_SECONDS = BASE_CLIP_SECONDS / 2;
+
+/**
+ * The BSG-BAT step in frames the backend uses for a stored bsgbat.stepframes: the value when it
+ * is a whole number inside the accepted range, otherwise the default (classifier.BSGBatStepSamples;
+ * 0 means unset).
+ */
+export function resolveBsgBatStepFrames(stored: number | undefined): number {
+  if (
+    stored !== undefined &&
+    Number.isInteger(stored) &&
+    stored >= BSG_BAT_STEP_MIN_FRAMES &&
+    stored <= BSG_BAT_STEP_MAX_FRAMES
+  ) {
+    return stored;
+  }
+  return BSG_BAT_STEP_DEFAULT_FRAMES;
+}
+
+/** Seconds between BSG-BAT analysis windows for a step in frames. */
+export function bsgBatStepSeconds(frames: number): number {
+  return durationSeconds(frames * BSG_BAT_FRAME_NS);
+}
+
+/**
  * Taxon group the backend reports for the bat-group models (BattyBirdNET and
  * BSG-BAT), which have their own fixed cadence and filter (classifier.TaxonGroupBat).
  */

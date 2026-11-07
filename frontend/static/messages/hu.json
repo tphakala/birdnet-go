@@ -5599,6 +5599,13 @@
         "helpText": "Minimális megbízhatósági pontszám a BSG-BAT denevérfaj-észleléseihez.",
         "sampleRateWarning": "A 192 kHz-es felvételek működnek, de a 96 kHz felett hívó fajok nem azonosíthatók, és a pontszámok kevésbé megbízhatók. 384 kHz-es mintavételi frekvencia ajánlott."
       },
+      "bsgBatStep": {
+        "label": "BSG-BAT elemzési lépés (képkocka)",
+        "helpText": "2 ms-os képkockák száma a BSG-BAT elemzési ablakai között, 100-tól (0,2 s) 512-ig (1,024 s, átfedés nélkül). Az alapértelmezett 250 (0,5 s) a referencialépés. 375 (0,75 s) mellett az események kb. 85%-a található meg a processzorterhelés kétharmadával; 512 mellett nagyjából 70-75% a terhelés felével, a lépést tartani nem tudó eszközökhöz.",
+        "readout": "Lépés: {seconds} s az elemzési ablakok között.",
+        "readoutWithFilter": "Lépés: {seconds} s az elemzési ablakok között. Denevérszűrő szintje {level}: {count} megerősítés szükséges.",
+        "restartNote": "Új lépés mentése újraindítja a hangrögzítést."
+      },
       "batFilter": {
         "label": "Denevér hang felüláteresztő szűrő",
         "helpText": "Kiszűri az emberi fül számára hallható frekvenciákat a denevérelemzés előtt, hogy csökkentse a madárdal és a környezeti zaj okozta téves észleléseket."
@@ -5620,6 +5627,7 @@
           "strict": "Maximális szűrés a legmagasabb pontosság érdekében."
         },
         "detectionCount": "{count} megerősítés szükséges. {description}",
+        "detectionCountByModel": "BattyBirdNET esetén {batty}, BSG-BAT esetén {bsgBat} megerősítés szükséges. {description}",
         "warningOff": "Szűrés nélkül nagy a hamis pozitívak valószínűsége. A szűrés engedélyezése jelentősen javítja a pontosságot."
       },
       "locale": {

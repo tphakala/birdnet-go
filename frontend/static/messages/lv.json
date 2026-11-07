@@ -5599,6 +5599,13 @@
         "helpText": "Minimālais ticamības rādītājs BSG-BAT sikspārņu sugu noteikšanai.",
         "sampleRateWarning": "Ieraksti ar 192 kHz darbojas, taču sugas, kas izdod signālus virs 96 kHz, netiek noteiktas, un rādītāji ir mazāk ticami. Ieteicamā ierakstīšanas frekvence ir 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "BSG-BAT analīzes solis (kadri)",
+        "helpText": "2 ms kadri starp BSG-BAT analīzes logiem, no 100 (0,2 s) līdz 512 (1,024 s, bez pārklāšanās). Noklusējuma 250 (0,5 s) ir references solis. Ar 375 (0,75 s) atrod aptuveni 85% notikumu ar divām trešdaļām procesora slodzes; ar 512 aptuveni 70-75% ar apmēram pusi slodzes, ierīcēm, kas nespēj sekot līdzi.",
+        "readout": "Solis: {seconds} s starp analīzes logiem.",
+        "readoutWithFilter": "Solis: {seconds} s starp analīzes logiem. Sikspārņu filtra līmenis {level}: nepieciešami {count} apstiprinājumi.",
+        "restartNote": "Jauna soļa saglabāšana restartē audio uztveršanu."
+      },
       "batFilter": {
         "label": "Sikspārņu audio augstfrekvences filtrs",
         "helpText": "Filtrē cilvēka dzirdei pieejamās frekvences pirms sikspārņu analīzes, lai samazinātu viltus pozitīvos rezultātus no putnu dziesmām un apkārtējā trokšņa."
@@ -5620,6 +5627,7 @@
           "strict": "Maksimāla filtrēšana augstākajai precizitātei."
         },
         "detectionCount": "Nepieciešami {count} apstiprinājumi. {description}",
+        "detectionCountByModel": "BattyBirdNET nepieciešami {batty} apstiprinājumi, BSG-BAT {bsgBat}. {description}",
         "warningOff": "Bez filtrēšanas ir liela viltus pozitīvo varbūtība. Filtrēšanas iespējošana ievērojami uzlabo precizitāti."
       },
       "locale": {

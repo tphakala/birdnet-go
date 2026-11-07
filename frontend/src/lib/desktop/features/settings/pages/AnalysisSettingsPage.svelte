@@ -54,13 +54,18 @@
     watchAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
   import {
+    BATTYBIRDNET_STEP_SECONDS,
+    BSG_BAT_STEP_MAX_FRAMES,
+    BSG_BAT_STEP_MIN_FRAMES,
     FILTER_ACTIVE_MIN_LEVEL,
     REFERENCE_WINDOW_SECONDS,
     baseClipMinDetections,
+    bsgBatStepSeconds,
     hasBirdCadenceModels,
     minDetectionsForStep,
     planLagsSettings,
     previewReadout,
+    resolveBsgBatStepFrames,
     sameOverlap,
     savedReadout,
     type CadenceReadoutRow,
@@ -92,6 +97,7 @@
     bsgBatSettings,
     perchSettings,
     birdNetV3Settings,
+    type BSGBatSettings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -153,6 +159,10 @@
   const BAT_THRESHOLD_MIN = 0.01;
   const BAT_THRESHOLD_MAX = 0.99;
   const BAT_THRESHOLD_STEP = 0.01;
+  /** Frames are whole numbers. */
+  const BSG_BAT_STEP_INCREMENT = 1;
+  /** Decimals of the step shown in seconds (one frame is 2 ms, so 0.01 s is five frames). */
+  const BSG_BAT_STEP_SECONDS_DECIMALS = 2;
   /**
    * Subgrid rows for two threshold fields side by side: each field spans four rows (the three
    * of its form control plus the message row below it) and its form control spans the first
@@ -283,6 +293,7 @@
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
   const BSG_BAT_WARNING_ID = generateId('bsg-bat-warning');
+  const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -364,7 +375,15 @@
     }
   );
 
-  let bsgBat = $derived($bsgBatSettings ?? { threshold: BSG_BAT_DEFAULT_THRESHOLD });
+  let bsgBat: BSGBatSettings = $derived(
+    $bsgBatSettings ?? { threshold: BSG_BAT_DEFAULT_THRESHOLD }
+  );
+  // The step the form shows: the saved value, or the default for 0 or no value (the API can store
+  // a raw 0, which the backend resolves to the default).
+  const bsgBatStepFrames = $derived(resolveBsgBatStepFrames(bsgBat.stepFrames));
+  const savedBsgBatStepFrames = $derived(
+    resolveBsgBatStepFrames(store.originalData.bsgbat?.stepFrames)
+  );
 
   // The bat card (schedule, ultrasonic and false positive filters) is shared by every bat model.
   // Each bat model has its own threshold, shown only while that model is installed.
@@ -428,6 +447,7 @@
       bsgBatThreshold: hasBsgBatModel
         ? (store.originalData.bsgbat?.threshold ?? BSG_BAT_DEFAULT_THRESHOLD)
         : undefined,
+      bsgBatStepFrames: hasBsgBatModel ? savedBsgBatStepFrames : undefined,
     },
     current: {
       batThreshold: bat.threshold,
@@ -435,6 +455,7 @@
       batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
       batFPFilter: batFPLevel,
       bsgBatThreshold: hasBsgBatModel ? bsgBat.threshold : undefined,
+      bsgBatStepFrames: hasBsgBatModel ? bsgBatStepFrames : undefined,
     },
   });
   const rangeFilterChange: ChangePair = $derived({
@@ -853,12 +874,13 @@
 
   // A saved level change that stays on one side of the filter on/off line does
   // not re-plan, so no topology event follows; the per-model counts the server
-  // reports still change. Refetch when the saved level or overlap changes. The
-  // first observation after settings load is skipped (the watch already fetched).
+  // reports still change, as do the BSG-BAT step and its counts, for which the plan broadcast does
+  // not fire either. Refetch when the saved level, overlap or BSG-BAT step changes. The first
+  // observation after settings load is skipped (the watch already fetched).
   let fpSavedKey: string | null = null;
   $effect(() => {
     if (!store.originalData.realtime) return; // settings not loaded yet
-    const key = `${savedFpLevel}:${savedOverlap}`;
+    const key = `${savedFpLevel}:${savedOverlap}:${savedBsgBatStepFrames}`;
     if (fpSavedKey === null) {
       fpSavedKey = key;
       return;
@@ -1205,6 +1227,16 @@
     settingsActions.updateSection('bsgbat', { threshold: value });
   }
 
+  // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
+  // saved effective one restores the saved raw value (0 or none for the default), so the form
+  // compares equal to the saved settings again and the save bar does not stay active.
+  function updateBsgBatStep(value: number) {
+    const frames = Math.round(value);
+    const stepFrames =
+      frames === savedBsgBatStepFrames ? store.originalData.bsgbat?.stepFrames : frames;
+    settingsActions.updateSection('bsgbat', { stepFrames });
+  }
+
   function updateBatNighttimeOnly(value: boolean) {
     settingsActions.updateSection('bat', { nighttimeOnly: value });
   }
@@ -1261,9 +1293,9 @@
     },
   ];
 
-  // Bat has only 3 meaningful levels (fixed 50% overlap, 4 detections in window):
-  // Off=bypass (1 det), Moderate=2 det, Strict=3 det.
-  // Lenient(1 det) is functionally identical to Off, so it's excluded.
+  // Bat has only 3 meaningful levels: Off=bypass (1 det), Moderate and Strict. How many
+  // confirmations they need depends on the model's step (BattyBirdNET 1.5 s, BSG-BAT its
+  // configured step). Lenient is functionally identical to Off for BattyBirdNET, so it's excluded.
   const BAT_FP_LEVELS: FilterLevel[] = [
     {
       value: 0,
@@ -1282,14 +1314,25 @@
     },
   ];
 
-  // Bat FP filter calculation helpers.
-  // The bat model uses a fixed 50% overlap (1.5s step for 3s clip),
-  // yielding 4 possible detections in a 6-second reference window.
-  const BAT_MAX_DETECTIONS_IN_WINDOW = 4;
-
-  function calculateBatMinDetections(level: number): number {
-    return minDetectionsForStep(REFERENCE_WINDOW_SECONDS / BAT_MAX_DETECTIONS_IN_WINDOW, level);
+  // Bat FP filter calculation helpers: the same confirmation formula as the backend, applied to
+  // the step each bat model runs at. BattyBirdNET has a fixed 1.5 s step; BSG-BAT uses the step in
+  // the form, so an unsaved step shows its count before saving.
+  function battyBirdNetMinDetections(level: number): number {
+    return minDetectionsForStep(BATTYBIRDNET_STEP_SECONDS, level);
   }
+
+  function bsgBatMinDetections(level: number): number {
+    return minDetectionsForStep(bsgBatStepSeconds(bsgBatStepFrames), level);
+  }
+
+  /** Translation key of a filter level's name (the bird level list holds every level). */
+  function fpLevelNameKey(level: number): string {
+    return BIRD_FP_LEVELS.find(l => l.value === level)?.nameKey ?? '';
+  }
+
+  const bsgBatStepSecondsText = $derived(
+    formatNumber(bsgBatStepSeconds(bsgBatStepFrames), BSG_BAT_STEP_SECONDS_DECIMALS)
+  );
 
   const BAT_FP_DESCRIPTION_KEYS: Record<number, string> = {
     0: 'analysis.detection.batFalsePositiveFilter.levels.off',
@@ -1305,7 +1348,14 @@
     const baseDescription = t(descKey);
     if (level === 0) return baseDescription;
 
-    const minDet = calculateBatMinDetections(level);
+    if (hasBattyBirdNetModel && hasBsgBatModel) {
+      return t('analysis.detection.batFalsePositiveFilter.detectionCountByModel', {
+        batty: battyBirdNetMinDetections(level).toString(),
+        bsgBat: bsgBatMinDetections(level).toString(),
+        description: baseDescription,
+      });
+    }
+    const minDet = hasBsgBatModel ? bsgBatMinDetections(level) : battyBirdNetMinDetections(level);
     return t('analysis.detection.batFalsePositiveFilter.detectionCount', {
       count: minDet.toString(),
       description: baseDescription,
@@ -1988,6 +2038,37 @@
                 />{/snippet}
               <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
             </SettingsNote>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div>
+              <NumberField
+                label={t('analysis.detection.bsgBatStep.label')}
+                value={bsgBatStepFrames}
+                onUpdate={updateBsgBatStep}
+                min={BSG_BAT_STEP_MIN_FRAMES}
+                max={BSG_BAT_STEP_MAX_FRAMES}
+                step={BSG_BAT_STEP_INCREMENT}
+                disabled={store.isLoading || store.isSaving}
+                helpText={t('analysis.detection.bsgBatStep.helpText')}
+                describedByExtra={BSG_BAT_STEP_READOUT_ID}
+              />
+              <p
+                id={BSG_BAT_STEP_READOUT_ID}
+                class="mt-1 text-xs text-[var(--color-base-content)]/70"
+              >
+                {#if batFPLevel === 0}
+                  {t('analysis.detection.bsgBatStep.readout', { seconds: bsgBatStepSecondsText })}
+                {:else}
+                  {t('analysis.detection.bsgBatStep.readoutWithFilter', {
+                    seconds: bsgBatStepSecondsText,
+                    level: t(fpLevelNameKey(batFPLevel)),
+                    count: bsgBatMinDetections(batFPLevel).toString(),
+                  })}
+                {/if}
+                {t('analysis.detection.bsgBatStep.restartNote')}
+              </p>
+            </div>
           </div>
         {/if}
 

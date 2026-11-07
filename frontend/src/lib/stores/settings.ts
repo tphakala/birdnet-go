@@ -156,6 +156,11 @@ export interface BSGBatSettings {
   modelPath?: string | null;
   labelPath?: string | null;
   threshold: number;
+  /**
+   * Analysis step in mel frames (2 ms each); 0 or absent means the default. Range and default
+   * are in fpCadence.ts (BSG_BAT_STEP_*), which mirrors the backend constants.
+   */
+  stepFrames?: number;
 }
 
 // Secondary acoustic classifiers (Perch v2, BirdNET v3.0). Their detections
@@ -997,6 +1002,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
     },
     bsgbat: {
       threshold: 0.5,
+      stepFrames: 0,
     },
     perch: {
       overrideThreshold: false,
