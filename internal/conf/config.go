@@ -1360,8 +1360,10 @@ const (
 )
 
 // OpenVINO device preferences for BirdNET.OpenVINODevice. "auto" picks the GPU
-// (Intel iGPU) when present for eligible models, else the f16 CPU path; "cpu"
-// and "gpu" force a device. An empty string is treated as "auto".
+// (Intel iGPU) when present for eligible models, else the CPU device on an
+// ARMv8.2+ CPU with native f16 (the precision is per model; see
+// classifier.openVINOPrecisionFor); "cpu" and "gpu" force a device. An empty
+// string is treated as "auto".
 const (
 	OVDeviceAuto = "auto"
 	OVDeviceCPU  = "cpu"

@@ -469,9 +469,9 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	bn.classifier = classifier
 	// Publish the concrete OpenVINO device (CPU/GPU) the classifier bound to plus
 	// the live backend and effective runtime precision, so the status card reports
-	// "OpenVINO" + the real compute precision (FP16 by default, FP32 for the
-	// BirdNET v2.4 GPU path and for unverified weights on an explicit openvino
-	// backend) and the real device rather than the static ONNX file metadata.
+	// "OpenVINO" + the real compute precision (FP32 for BirdNET v2.4 on every
+	// device, see openVINOPrecisionFor) and the real device rather than the
+	// static ONNX file metadata.
 	bn.setRuntimeInfo(plan.device, BackendOpenVINO, openVINOEffectivePrecision(plan.precision))
 	log.Info("OpenVINO model initialized",
 		logger.String("model", modelPath),

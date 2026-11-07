@@ -1103,7 +1103,7 @@ func (bn *BirdNET) setRuntimeInfo(device, backend, precision string) {
 // which inference holds for the full native call (issue #3336). device is "CPU"
 // for TFLite/ONNX or the OpenVINO device for the OV path; backend is
 // BackendTFLite/BackendONNX/BackendOpenVINO; precision is "INT8"/"FP16"/"FP32"
-// (an FP32 ONNX model runs at FP16 on OpenVINO CPU). Returns deviceUnknown with
+// (BirdNET v2.4 runs at FP32 on every OpenVINO device). Returns deviceUnknown with
 // empty backend/precision before the first triplet is published. Implements
 // ModelInstance.
 func (bn *BirdNET) RuntimeInfo() (device, backend, precision string) {
