@@ -3729,7 +3729,7 @@
           "error": "Testi epäonnistui",
           "batCompatible": "Yhteensopiva lepakoiden kanssa",
           "batIncompatible": "Ei yhteensopiva lepakoiden kanssa",
-          "minRateWarning": "Valitut mallit vaativat vähintään {rate} kHz:n tallennustaajuuden. Tämä virta jää sen alle."
+          "minRateWarning": "Valitut mallit vaativat vähintään {rate} kHz:n tallennustaajuuden. Tämä striimi jää sen alle."
         },
         "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. BSG-BAT vaatii vähintään 192 kHz. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
         "codecWarning": {
