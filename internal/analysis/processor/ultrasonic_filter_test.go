@@ -35,14 +35,26 @@ const (
 	ultrasonicWindowSeconds = 3
 	ultrasonicEnvelopeHz    = 10.0 // slow envelope: its sidebands stay far from the 20 kHz split
 	ultrasonicNoiseSeed     = 12345
+
+	// The band gate case: a split between a 192 kHz source's Nyquist (96 kHz)
+	// and the 256 kHz Bat window's (128 kHz).
+	ultrasonicNarrowSourceRate = 192000
+	ultrasonicHighSplitHz      = 100000
+	ultrasonicHighToneHz       = 110000.0
 )
 
 // flatUltrasonicToneS16LE returns PCM16 of a constant 40 kHz tone: flat
 // ultrasonic energy, which the filter tags as unlikely.
 func flatUltrasonicToneS16LE() []byte {
+	return flatToneS16LE(ultrasonicTestToneHz)
+}
+
+// flatToneS16LE returns PCM16 of a constant tone at toneHz in a window at the
+// Bat model's rate (ultrasonicTestRate).
+func flatToneS16LE(toneHz float64) []byte {
 	pcm := make([]byte, ultrasonicTestSamples*bytesPerPCM16Sample)
 	for i := range ultrasonicTestSamples {
-		v := ultrasonicTestAmplitude * math.Sin(2*math.Pi*ultrasonicTestToneHz*float64(i)/ultrasonicTestRate)
+		v := ultrasonicTestAmplitude * math.Sin(2*math.Pi*toneHz*float64(i)/ultrasonicTestRate)
 		binary.LittleEndian.PutUint16(pcm[i*bytesPerPCM16Sample:], uint16(int16(math.Round(v)))) //nolint:gosec // G115: intentional int16 to uint16 bit reinterpretation for PCM
 	}
 	return pcm
@@ -86,6 +98,19 @@ func TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered(t *testing.T) {
 
 	settings.Bat.UltrasonicFilter.FrequencySplitHz = ultrasonicTestRate / 2
 	assert.False(t, runUltrasonicFilter(p, settings, pcm), "a split at Nyquist leaves no band")
+}
+
+// TestApplyUltrasonicFilter_BandGateUsesModelRate verifies that the gate on the
+// band above the split reads the model's window rate: a 192 kHz source has no
+// band above a 100 kHz split, but the 256 kHz Bat window does, and holds a flat
+// 110 kHz tone the filter must tag.
+func TestApplyUltrasonicFilter_BandGateUsesModelRate(t *testing.T) {
+	p, settings := newUltrasonicFilterFixtureAt(t, ultrasonicNarrowSourceRate)
+	settings.Bat.UltrasonicFilter.FrequencySplitHz = ultrasonicHighSplitHz
+
+	pcm := flatToneS16LE(ultrasonicHighToneHz)
+	assert.True(t, runUltrasonicFilter(p, settings, pcm),
+		"the Bat window has a band above a 100 kHz split whatever the source rate")
 }
 
 // newUltrasonicFilterFixture returns a Processor whose registry knows a 256 kHz
