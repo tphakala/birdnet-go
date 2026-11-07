@@ -3728,7 +3728,8 @@
           "result": "Testergebnis",
           "error": "Test fehlgeschlagen",
           "batCompatible": "Fledermaus-kompatibel",
-          "batIncompatible": "Nicht fledermaus-kompatibel"
+          "batIncompatible": "Nicht fledermaus-kompatibel",
+          "minRateWarning": "Die gewählten Modelle benötigen eine Aufnahmerate von mindestens {rate} kHz. Dieser Stream liegt darunter."
         },
         "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
         "codecWarning": {
@@ -5590,8 +5591,13 @@
         "helpText": "Mindest-Konfidenzwert (0.0 - 1.0), ab dem eine Erkennung aufgezeichnet wird."
       },
       "batThreshold": {
-        "label": "Fledermaus-Erkennungsschwelle",
-        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen. Gilt nur für Fledermaus-Klassifikatormodelle."
+        "label": "Fledermaus-Erkennungsschwelle (BattyBirdNET)",
+        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BattyBirdNET. BSG-BAT hat eine eigene Schwelle."
+      },
+      "bsgBatThreshold": {
+        "label": "Fledermaus-Erkennungsschwelle (BSG-BAT)",
+        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BSG-BAT.",
+        "sampleRateWarning": "Aufnahmen mit 192 kHz funktionieren, aber Arten, die oberhalb von 96 kHz rufen, können nicht erkannt werden, und die Bewertungen sind weniger zuverlässig. Empfohlen wird eine Abtastrate von 384 kHz."
       },
       "batFilter": {
         "label": "Fledermaus-Audio-Hochpassfilter",

@@ -3728,7 +3728,8 @@
           "result": "Výsledek testu",
           "error": "Test selhal",
           "batCompatible": "Kompatibilní s netopýry",
-          "batIncompatible": "Nekompatibilní s netopýry"
+          "batIncompatible": "Nekompatibilní s netopýry",
+          "minRateWarning": "Vybrané modely vyžadují vzorkovací frekvenci záznamu alespoň {rate} kHz. Tento stream je pod touto hodnotou."
         },
         "batWarning": "Modely netopýrů vyžadují streamy s bezeztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz. Pomocí tlačítka Testovat stream výše ověřte kompatibilitu.",
         "codecWarning": {
@@ -5590,8 +5591,13 @@
         "helpText": "Minimální skóre spolehlivosti (0,0 - 1,0) potřebné pro zaznamenání detekce."
       },
       "batThreshold": {
-        "label": "Práh detekce netopýrů",
-        "helpText": "Minimální skóre spolehlivosti pro detekce druhů netopýrů. Platí pouze pro klasifikační modely netopýrů."
+        "label": "Práh detekce netopýrů (BattyBirdNET)",
+        "helpText": "Minimální skóre spolehlivosti pro detekce druhů netopýrů modelem BattyBirdNET. BSG-BAT má vlastní práh."
+      },
+      "bsgBatThreshold": {
+        "label": "Práh detekce netopýrů (BSG-BAT)",
+        "helpText": "Minimální skóre spolehlivosti pro detekce druhů netopýrů modelem BSG-BAT.",
+        "sampleRateWarning": "Záznamy při 192 kHz fungují, ale druhy, které se ozývají nad 96 kHz, nelze určit a skóre jsou méně spolehlivá. Doporučená vzorkovací frekvence záznamu je 384 kHz."
       },
       "batFilter": {
         "label": "Horní propust pro audio netopýrů",

@@ -3728,7 +3728,8 @@
           "result": "Teszt eredménye",
           "error": "Teszt sikertelen",
           "batCompatible": "Denevér-kompatibilis",
-          "batIncompatible": "Nem denevér-kompatibilis"
+          "batIncompatible": "Nem denevér-kompatibilis",
+          "minRateWarning": "A kiválasztott modellekhez legalább {rate} kHz-es felvételi frekvencia szükséges. Ez az adatfolyam ez alatt van."
         },
         "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
         "codecWarning": {
@@ -5590,8 +5591,13 @@
         "helpText": "Az észlelés rögzítéséhez szükséges minimális megbízhatósági pontszám (0.0 - 1.0)."
       },
       "batThreshold": {
-        "label": "Denevér-észlelési küszöb",
-        "helpText": "Minimális megbízhatósági pontszám a denevérfajok észleléséhez. Csak a denevérosztályozó modellekre vonatkozik."
+        "label": "Denevér-észlelési küszöb (BattyBirdNET)",
+        "helpText": "Minimális megbízhatósági pontszám a BattyBirdNET denevérfaj-észleléseihez. A BSG-BAT saját küszöbértékkel rendelkezik."
+      },
+      "bsgBatThreshold": {
+        "label": "Denevér-észlelési küszöb (BSG-BAT)",
+        "helpText": "Minimális megbízhatósági pontszám a BSG-BAT denevérfaj-észleléseihez.",
+        "sampleRateWarning": "A 192 kHz-es felvételek működnek, de a 96 kHz felett hívó fajok nem azonosíthatók, és a pontszámok kevésbé megbízhatók. 384 kHz-es mintavételi frekvencia ajánlott."
       },
       "batFilter": {
         "label": "Denevér hang felüláteresztő szűrő",

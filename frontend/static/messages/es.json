@@ -3728,7 +3728,8 @@
           "result": "Resultado de la prueba",
           "error": "Prueba fallida",
           "batCompatible": "Compatible con murciélagos",
-          "batIncompatible": "No compatible con murciélagos"
+          "batIncompatible": "No compatible con murciélagos",
+          "minRateWarning": "Los modelos seleccionados necesitan una frecuencia de captura de al menos {rate} kHz. Esta transmisión está por debajo."
         },
         "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
         "codecWarning": {
@@ -5590,8 +5591,13 @@
         "helpText": "Puntuación mínima de confianza (0.0 - 1.0) requerida para registrar una detección."
       },
       "batThreshold": {
-        "label": "Umbral de detección de murciélagos",
-        "helpText": "Puntuación de confianza mínima para detecciones de especies de murciélagos. Solo se aplica a modelos clasificadores de murciélagos."
+        "label": "Umbral de detección de murciélagos (BattyBirdNET)",
+        "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BattyBirdNET. BSG-BAT tiene su propio umbral."
+      },
+      "bsgBatThreshold": {
+        "label": "Umbral de detección de murciélagos (BSG-BAT)",
+        "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BSG-BAT.",
+        "sampleRateWarning": "Las grabaciones a 192 kHz funcionan, pero las especies que emiten por encima de 96 kHz no se pueden identificar y las puntuaciones son menos fiables. Se recomienda una frecuencia de captura de 384 kHz."
       },
       "batFilter": {
         "label": "Filtro de paso alto para murciélagos",

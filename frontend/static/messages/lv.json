@@ -3728,7 +3728,8 @@
           "result": "Pārbaudes rezultāts",
           "error": "Tests neizdevās",
           "batCompatible": "Saderīgs ar sikspārņiem",
-          "batIncompatible": "Nav saderīgs ar sikspārņiem"
+          "batIncompatible": "Nav saderīgs ar sikspārņiem",
+          "minRateWarning": "Atlasītajiem modeļiem nepieciešama ierakstīšanas frekvence vismaz {rate} kHz. Šī straume ir zemāka."
         },
         "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
         "codecWarning": {
@@ -5590,8 +5591,13 @@
         "helpText": "Minimālais pārliecības rezultāts (0.0 - 1.0), kas nepieciešams noteikšanas ierakstīšanai."
       },
       "batThreshold": {
-        "label": "Sikspārņu noteikšanas slieksnis",
-        "helpText": "Minimālais ticamības rādītājs sikspārņu sugu noteikšanai. Attiecas tikai uz sikspārņu klasifikatora modeļiem."
+        "label": "Sikspārņu noteikšanas slieksnis (BattyBirdNET)",
+        "helpText": "Minimālais ticamības rādītājs BattyBirdNET sikspārņu sugu noteikšanai. BSG-BAT ir savs slieksnis."
+      },
+      "bsgBatThreshold": {
+        "label": "Sikspārņu noteikšanas slieksnis (BSG-BAT)",
+        "helpText": "Minimālais ticamības rādītājs BSG-BAT sikspārņu sugu noteikšanai.",
+        "sampleRateWarning": "Ieraksti ar 192 kHz darbojas, taču sugas, kas izdod signālus virs 96 kHz, netiek noteiktas, un rādītāji ir mazāk ticami. Ieteicamā ierakstīšanas frekvence ir 384 kHz."
       },
       "batFilter": {
         "label": "Sikspārņu audio augstfrekvences filtrs",

@@ -9,9 +9,12 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import type { AnalysisCadenceInfo } from '$lib/desktop/features/system/inference.types';
+import type {
+  AnalysisCadenceInfo,
+  AnalysisCadenceModel,
+} from '$lib/desktop/features/system/inference.types';
 import {
-  BAT_MODEL_ID,
+  hasBirdCadenceModels,
   minDetectionsForStep,
   modelStepSeconds,
   baseClipMinDetections,
@@ -64,6 +67,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'BirdNET_V2.4',
         name: 'BirdNET v2.4',
+        taxonGroup: 'bird',
         clipMs: 3000,
         stepMs: 1200,
         probeLatencyMs: 166,
@@ -71,8 +75,9 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
         windowsInReference: 5,
       },
       {
-        id: BAT_MODEL_ID,
+        id: 'Bat',
         name: 'Bat',
+        taxonGroup: 'bat',
         clipMs: 3000,
         stepMs: 1500,
         confirmations: 4,
@@ -81,6 +86,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'BirdNET_V3.0',
         name: 'BirdNET v3.0',
+        taxonGroup: 'bird',
         clipMs: 5000,
         stepMs: 2000,
         probeLatencyMs: 874,
@@ -92,7 +98,53 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
   };
 }
 
+const BSG_BAT_MODEL: AnalysisCadenceModel = {
+  id: 'BSG_BAT',
+  name: 'BSG-BAT',
+  taxonGroup: 'bat',
+  clipMs: 1025,
+  stepMs: 500,
+  confirmations: 5,
+  windowsInReference: 12,
+};
+
 describe('fpCadence', () => {
+  describe('taxon group classification', () => {
+    const [birdV24, bat, birdV3] = cadence().models;
+    const withModels = (models: AnalysisCadenceModel[]) => cadence({ models });
+
+    it('treats Bat only as no bird models', () => {
+      const info = withModels([bat]);
+      expect(hasBirdCadenceModels(info)).toBe(false);
+      expect(savedReadout(info)).toEqual([]);
+      expect(previewReadout(info, 2.8, 5)).toEqual([]);
+    });
+
+    it('treats BSG-BAT only as no bird models', () => {
+      const info = withModels([BSG_BAT_MODEL]);
+      expect(hasBirdCadenceModels(info)).toBe(false);
+      expect(savedReadout(info)).toEqual([]);
+      expect(previewReadout(info, 2.8, 5)).toEqual([]);
+    });
+
+    it('leaves out both bat-group models next to a bird model', () => {
+      const info = withModels([birdV24, bat, BSG_BAT_MODEL]);
+      expect(hasBirdCadenceModels(info)).toBe(true);
+      expect(savedReadout(info).map(r => r.id)).toEqual(['BirdNET_V2.4']);
+      expect(previewReadout(info, 2.8, 5).map(r => r.id)).toEqual(['BirdNET_V2.4']);
+    });
+
+    it('keeps every bird model when no bat model runs', () => {
+      const info = withModels([birdV24, birdV3]);
+      expect(hasBirdCadenceModels(info)).toBe(true);
+      expect(savedReadout(info).map(r => r.id)).toEqual(['BirdNET_V2.4', 'BirdNET_V3.0']);
+    });
+
+    it('treats a model without a taxon group as a bird model', () => {
+      expect(hasBirdCadenceModels(withModels([{ ...birdV24, taxonGroup: undefined }]))).toBe(true);
+    });
+  });
+
   describe('parity with the backend', () => {
     const rows = loadFixture();
 

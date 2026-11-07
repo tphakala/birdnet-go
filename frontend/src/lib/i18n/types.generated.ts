@@ -2718,6 +2718,7 @@ export type TranslationKey =
   | 'settings.audio.streams.test.error'
   | 'settings.audio.streams.test.batCompatible'
   | 'settings.audio.streams.test.batIncompatible'
+  | 'settings.audio.streams.test.minRateWarning' // params: rate
   | 'settings.audio.streams.batWarning'
   | 'settings.audio.streams.codecWarning.lossy'
   | 'settings.audio.streams.channelMode.analyzeError'
@@ -4098,6 +4099,9 @@ export type TranslationKey =
   | 'analysis.detection.confidenceThreshold.helpText'
   | 'analysis.detection.batThreshold.label'
   | 'analysis.detection.batThreshold.helpText'
+  | 'analysis.detection.bsgBatThreshold.label'
+  | 'analysis.detection.bsgBatThreshold.helpText'
+  | 'analysis.detection.bsgBatThreshold.sampleRateWarning'
   | 'analysis.detection.batFilter.label'
   | 'analysis.detection.batFilter.helpText'
   | 'analysis.detection.batNighttimeOnly.label'
@@ -4810,6 +4814,7 @@ export type TranslationParams = {
   'settings.audio.streams.summary': { count: string | number };
   'settings.audio.streams.restartCount': { count: string | number };
   'settings.audio.streams.timeline.eventAt': { time: string | number };
+  'settings.audio.streams.test.minRateWarning': { rate: string | number };
   'settings.audio.streams.channelMode.recommended': { channel: string | number };
   'settings.audio.streams.format.multi': { count: string | number };
   'settings.audio.streams.format.withSampleRate': {
