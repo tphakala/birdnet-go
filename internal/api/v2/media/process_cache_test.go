@@ -1,6 +1,8 @@
 package media
 
 import (
+	"bytes"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -110,7 +112,7 @@ func TestProcessingCache(t *testing.T) {
 	t.Run("get miss returns nil", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		cache := newProcessingCache(dir, 100)
+		cache := newProcessingCache(dir, 100, processingCacheMaxBytes)
 		data := cache.get("nonexistent.wav")
 		assert.Nil(t, data)
 	})
@@ -118,7 +120,7 @@ func TestProcessingCache(t *testing.T) {
 	t.Run("put then get returns data", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		cache := newProcessingCache(dir, 100)
+		cache := newProcessingCache(dir, 100, processingCacheMaxBytes)
 		err := cache.put("test.wav", []byte("fake audio data"))
 		require.NoError(t, err)
 		data := cache.get("test.wav")
@@ -128,7 +130,7 @@ func TestProcessingCache(t *testing.T) {
 	t.Run("directory created on put", func(t *testing.T) {
 		t.Parallel()
 		dir := filepath.Join(t.TempDir(), "subdir", ".processing-cache")
-		cache := newProcessingCache(dir, 100)
+		cache := newProcessingCache(dir, 100, processingCacheMaxBytes)
 		err := cache.put("test.wav", []byte("data"))
 		require.NoError(t, err)
 		_, err = os.Stat(dir)
@@ -138,7 +140,7 @@ func TestProcessingCache(t *testing.T) {
 	t.Run("entries past the TTL are not served and are removed", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		cache := newProcessingCache(dir, processingCacheMaxFiles)
+		cache := newProcessingCache(dir, processingCacheMaxFiles, processingCacheMaxBytes)
 		for _, key := range []string{"fresh.wav", "stale.wav", "stale-read.wav"} {
 			require.NoError(t, cache.put(key, []byte(key)))
 		}
@@ -160,7 +162,7 @@ func TestProcessingCache(t *testing.T) {
 	t.Run("eviction when over limit", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		cache := newProcessingCache(dir, 3)
+		cache := newProcessingCache(dir, 3, processingCacheMaxBytes)
 		// Fill to capacity
 		for i := range 4 {
 			err := cache.put(processingCacheKey("det", "tag", false, "", float64(i)), []byte("data"))
@@ -170,5 +172,49 @@ func TestProcessingCache(t *testing.T) {
 		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(entries), 3)
+	})
+
+	t.Run("eviction honours the byte budget", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		const entrySize = 10
+		cache := newProcessingCache(dir, processingCacheMaxFiles, 3*entrySize)
+		payload := bytes.Repeat([]byte("x"), entrySize)
+		keys := []string{"a.wav", "b.wav", "c.wav", "d.wav"}
+		base := time.Now().Add(-time.Minute)
+		for i, key := range keys {
+			require.NoError(t, cache.put(key, payload))
+			// Distinct write times so eviction order is deterministic.
+			stamp := base.Add(time.Duration(i) * time.Second)
+			require.NoError(t, os.Chtimes(filepath.Join(dir, key), stamp, stamp))
+		}
+		assert.NoFileExists(t, filepath.Join(dir, "a.wav"), "the oldest entry makes room for the new one")
+		for _, key := range keys[1:] {
+			assert.FileExists(t, filepath.Join(dir, key))
+		}
+	})
+
+	t.Run("open serves a handle, honours the TTL and misses cleanly", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		cache := newProcessingCache(dir, processingCacheMaxFiles, processingCacheMaxBytes)
+		require.NoError(t, cache.put("hit.wav", []byte("payload")))
+		require.NoError(t, cache.put("stale.wav", []byte("old")))
+		expired := time.Now().Add(-processingCacheTTL - time.Minute)
+		require.NoError(t, os.Chtimes(filepath.Join(dir, "stale.wav"), expired, expired))
+
+		f, info, ok := cache.open("hit.wav")
+		require.True(t, ok)
+		t.Cleanup(func() { _ = f.Close() })
+		assert.Equal(t, int64(len("payload")), info.Size())
+		got, err := io.ReadAll(f)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("payload"), got)
+
+		_, _, ok = cache.open("stale.wav")
+		assert.False(t, ok, "an entry past the TTL is not opened")
+		assert.NoFileExists(t, filepath.Join(dir, "stale.wav"))
+		_, _, ok = cache.open("missing.wav")
+		assert.False(t, ok)
 	})
 }

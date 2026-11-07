@@ -20,6 +20,11 @@ const (
 	processingCacheTTL            = 15 * time.Minute
 	processingCacheTickerInterval = 5 * time.Minute
 	processingCacheMaxFiles       = 100
+
+	// processingCacheMaxBytes caps the disk the cache may use. The denoised audio
+	// GET makes the cache reachable by every play, so the file count alone does not
+	// bound it: an extended-capture WAV can reach about 115 MB.
+	processingCacheMaxBytes int64 = 512 << 20
 )
 
 // processingCache manages temporary processed audio files.
@@ -27,11 +32,13 @@ type processingCache struct {
 	mu       sync.Mutex
 	dir      string
 	maxFiles int
+	maxBytes int64
 }
 
-// newProcessingCache creates a cache in the specified directory.
-func newProcessingCache(dir string, maxFiles int) *processingCache {
-	return &processingCache{dir: dir, maxFiles: maxFiles}
+// newProcessingCache creates a cache in the specified directory, bounded by a
+// file count and a total byte budget.
+func newProcessingCache(dir string, maxFiles int, maxBytes int64) *processingCache {
+	return &processingCache{dir: dir, maxFiles: maxFiles, maxBytes: maxBytes}
 }
 
 // clipSourceTag identifies the clip file a processed artifact was made from. It
@@ -115,6 +122,34 @@ func (c *processingCache) get(key string) []byte {
 	return data
 }
 
+// open returns an open handle and the file info of a cached entry, or false when
+// it is missing or expired. It serves hits without reading the whole file into
+// memory. The caller closes the handle.
+func (c *processingCache) open(key string) (*os.File, os.FileInfo, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	path := filepath.Join(c.dir, key)
+	f, err := os.Open(path) //nolint:gosec // G304: path derived from controlled cache key
+	if err != nil {
+		return nil, nil, false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, false
+	}
+	if time.Since(info.ModTime()) > processingCacheTTL {
+		_ = f.Close()
+		if err := os.Remove(path); err != nil {
+			apicore.GetLogger().Debug("Processing cache: failed to remove expired entry on open",
+				logger.String("path", path),
+				logger.Error(err))
+		}
+		return nil, nil, false
+	}
+	return f, info, true
+}
+
 // put writes data to cache atomically (temp file + rename), evicting oldest files if over limit.
 func (c *processingCache) put(key string, data []byte) error {
 	c.mu.Lock()
@@ -122,7 +157,7 @@ func (c *processingCache) put(key string, data []byte) error {
 	if err := os.MkdirAll(c.dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
-	c.evictIfNeeded()
+	c.evictIfNeeded(int64(len(data)))
 
 	// Write to temp file first, then rename for atomicity
 	tmpFile, err := os.CreateTemp(c.dir, ".tmp-*")
@@ -149,8 +184,9 @@ func (c *processingCache) put(key string, data []byte) error {
 	return nil
 }
 
-// evictIfNeeded removes oldest files if cache exceeds maxFiles.
-func (c *processingCache) evictIfNeeded() {
+// evictIfNeeded removes oldest files until the cache has room for one more entry
+// of incoming bytes, under both the file-count and the byte budget.
+func (c *processingCache) evictIfNeeded(incoming int64) {
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
 		apicore.GetLogger().Debug("Processing cache: failed to read directory for eviction",
@@ -158,15 +194,17 @@ func (c *processingCache) evictIfNeeded() {
 			logger.Error(err))
 		return
 	}
-	if len(entries) < c.maxFiles {
+	if len(entries) < c.maxFiles && c.maxBytes <= 0 {
 		return
 	}
 
 	type fileAge struct {
 		path    string
 		modTime time.Time
+		size    int64
 	}
 	files := make([]fileAge, 0, len(entries))
+	var totalBytes int64
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -181,24 +219,32 @@ func (c *processingCache) evictIfNeeded() {
 		files = append(files, fileAge{
 			path:    filepath.Join(c.dir, e.Name()),
 			modTime: info.ModTime(),
+			size:    info.Size(),
 		})
+		totalBytes += info.Size()
 	}
 
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].modTime.Before(files[j].modTime)
 	})
 
-	// Remove oldest until under limit
-	toRemove := len(files) - c.maxFiles + 1 // make room for the new entry
-	if toRemove <= 0 {
-		return
-	}
-	for i := range min(toRemove, len(files)) {
-		if err := os.Remove(files[i].path); err != nil {
+	// Remove oldest until the new entry fits under both limits. A failed removal
+	// (for example a file still open for serving on Windows) still counts as
+	// removed here; a later pass retries it.
+	remaining := len(files)
+	for _, f := range files {
+		overCount := remaining >= c.maxFiles
+		overBytes := c.maxBytes > 0 && totalBytes+incoming > c.maxBytes
+		if !overCount && !overBytes {
+			break
+		}
+		if err := os.Remove(f.path); err != nil {
 			apicore.GetLogger().Debug("Processing cache: failed to remove file during eviction",
-				logger.String("path", files[i].path),
+				logger.String("path", f.path),
 				logger.Error(err))
 		}
+		remaining--
+		totalBytes -= f.size
 	}
 }
 

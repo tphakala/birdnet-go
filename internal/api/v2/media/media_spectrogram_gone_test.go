@@ -325,7 +325,7 @@ func TestClipGoneForGood_PendingExportWindowKeepsTheClip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			core := apitest.NewCore(t, apitest.WithSettingsFunc(tt.settings))
-			h := New(core)
+			h := New(core, nil)
 			note := goneNote(goneTestOldAge)
 
 			assert.Equal(t, tt.want, h.clipGoneForGood(retainedClipName, note.BeginTime, note.EndTime))
