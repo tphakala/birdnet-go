@@ -107,7 +107,7 @@ export function coerceSupportedRate(options: SampleRateOption[], current: number
 /**
  * Highest minimum source capture rate in Hz among the selected models, or 0
  * when none of them sets one. A source is only usable by every selected model
- * at or above this rate. Ids the list does not know are ignored.
+ * at or above this rate. Selected IDs that match no model in the list are ignored.
  */
 export function highestMinSampleRate(
   models: ReadonlyArray<{ id: string; minSampleRate?: number }>,
