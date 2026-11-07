@@ -897,6 +897,10 @@
   // --- Audio processing (denoise / normalize preview) ---
 
   function triggerProcessing() {
+    // The audible-bats copy is a time-expanded clip in the state it was made in, and
+    // processing replaces the source with a non-expanded one. Turn audible bats off
+    // first so its stale copy never sits beside the new source.
+    if (audibleBats.active) audibleBats.disable();
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();
@@ -1075,21 +1079,12 @@
     }
   }
 
-  // The audible-bats copy is a time-expanded clip in the state it was made in, and
-  // processAudio replaces the source with a non-expanded one. Turn audible bats
-  // off first so its stale copy never sits beside the new source.
-  function leaveAudibleBats() {
-    if (audibleBats.active) audibleBats.disable();
-  }
-
   function handleDenoiseChange(preset: string) {
-    leaveAudibleBats();
     processingDenoise = preset;
     triggerProcessing();
   }
 
   function handleNormalizeToggle() {
-    leaveAudibleBats();
     processingNormalize = !processingNormalize;
     triggerProcessing();
   }
@@ -1197,13 +1192,11 @@
   function fallbackToStoredClip() {
     if (!audioElement) return;
     logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
-    const position = audioElement.currentTime;
     denoiseFailed = true;
     resetRetryState();
     markPlaybackStopped();
     error = null;
     swapSourceKeepingPosition(audioElement, audioUrl);
-    if (position > 0) audioElement.currentTime = position;
     void audioElement.play().catch(handlePlayRejection);
   }
 

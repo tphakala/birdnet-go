@@ -320,7 +320,6 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   function fallbackToStoredClip() {
     if (!audioElement) return;
     logger.warn('Play URL failed, playing the stored clip', { detectionId });
-    const position = audioElement.currentTime;
     denoiseFailed = true;
     clearRetryTimer();
     audioRetryCount = 0;
@@ -328,7 +327,6 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     markPlaybackStopped();
     error = null;
     swapSourceKeepingPosition(audioElement, audioUrl);
-    if (position > 0) audioElement.currentTime = position;
     void audioElement.play().catch(handlePlayRejection);
   }
 

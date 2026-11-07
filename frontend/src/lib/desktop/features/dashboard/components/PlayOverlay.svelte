@@ -358,7 +358,6 @@
     if (!audioElement) return;
     logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
     const resume = retryWithPlay || isPlaying;
-    const position = audioElement.currentTime;
     denoiseFailed = true;
     clearAudioRetryTimer();
     audioRetryCount = 0;
@@ -366,7 +365,6 @@
     previousEffectiveSrc = audioUrl;
     error = null;
     swapSourceKeepingPosition(audioElement, audioUrl);
-    if (position > 0) audioElement.currentTime = position;
     if (resume) {
       isLoading = true;
       void audioElement.play().then(playStarted).catch(handlePlayRejection);
