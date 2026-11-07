@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Ganancia inicial aplicada al reproducir grabaciones. Los sonidos de aves suelen ser suaves, por lo que se recomienda una amplificación de 6-12 dB.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Reducir el ruido de los clips al reproducirlos",
-        "denoiseHelpText": "Reproduce y descarga una copia sin ruido de cada clip, incluidos los murciélagos audibles y el espectrograma de la página de detección. Los clips guardados no cambian. Las descargas pasan a ser archivos WAV y son más grandes. Los ajustes de audio de un clip permiten elegir otra intensidad o desactivar la reducción de ruido.",
+        "denoiseHelpText": "Reproduce y descarga una copia sin ruido de cada clip. Los clips guardados no cambian. Las descargas pasan a ser archivos WAV y son más grandes. Los ajustes de audio de un clip permiten elegir otra intensidad o desactivar la reducción de ruido.",
         "denoiseStrengthLabel": "Intensidad de la reducción de ruido",
         "denoiseStrengthHelpText": "Suave conserva la mayor parte del sonido original y fuerte elimina más ruido. Suave-medio sirve para la mayoría de las grabaciones.",
         "denoiseStrengthDisabledHelp": "Active arriba la reducción de ruido en la reproducción para elegir una intensidad.",

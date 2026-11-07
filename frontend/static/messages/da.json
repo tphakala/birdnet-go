@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Indledende forstærkning ved afspilning af optagelser. Fuglelyde er ofte stille, så en forstærkning på 6-12 dB anbefales.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Fjern støj fra klip ved afspilning",
-        "denoiseHelpText": "Afspiller og henter en kopi af hvert klip uden støj, også hørbare flagermus og spektrogrammet på detektionssiden. Gemte klip forbliver uændrede. Downloads bliver WAV-filer og er større. Et klips lydindstillinger kan vælge en anden styrke eller slå støjreduktion fra.",
+        "denoiseHelpText": "Afspiller og henter en kopi af hvert klip uden støj. Gemte klip forbliver uændrede. Downloads bliver WAV-filer og er større. Et klips lydindstillinger kan vælge en anden styrke eller slå støjreduktion fra.",
         "denoiseStrengthLabel": "Støjreduktionsstyrke",
         "denoiseStrengthHelpText": "Let bevarer mest af den originale lyd, og kraftig fjerner mest støj. Let-mellem passer til de fleste optagelser.",
         "denoiseStrengthDisabledHelp": "Slå støjreduktion ved afspilning til ovenfor for at vælge en styrke.",

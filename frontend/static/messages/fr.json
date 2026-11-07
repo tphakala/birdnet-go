@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Gain initial appliqué lors de la lecture des enregistrements. Les sons d'oiseaux sont souvent faibles, une amplification de 6 à 12 dB est recommandée.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Réduire le bruit des clips à la lecture",
-        "denoiseHelpText": "Lit et télécharge une copie débruitée de chaque clip, y compris les chauves-souris audibles et le spectrogramme de la page de détection. Les clips enregistrés restent inchangés. Les téléchargements deviennent des fichiers WAV et sont plus volumineux. Les paramètres audio d'un clip permettent de choisir une autre intensité ou de désactiver la réduction de bruit.",
+        "denoiseHelpText": "Lit et télécharge une copie débruitée de chaque clip. Les clips enregistrés restent inchangés. Les téléchargements deviennent des fichiers WAV et sont plus volumineux. Les paramètres audio d'un clip permettent de choisir une autre intensité ou de désactiver la réduction de bruit.",
         "denoiseStrengthLabel": "Intensité de la réduction de bruit",
         "denoiseStrengthHelpText": "Léger conserve le plus du son d'origine et fort supprime le plus de bruit. Léger-moyen convient à la plupart des enregistrements.",
         "denoiseStrengthDisabledHelp": "Activez la réduction de bruit à la lecture ci-dessus pour choisir une intensité.",

@@ -114,6 +114,7 @@ describe('AudioPlayer playback denoise default', () => {
       blob: async () => new Blob(['processed']),
       headers: new Headers(),
     }));
+    // The mock answers only the fields the player reads from a Response.
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
   });
 

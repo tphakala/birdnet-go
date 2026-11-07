@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Počáteční zesílení při přehrávání nahrávek. Zvuky ptáků jsou často tiché, proto se doporučuje zesílení 6-12 dB.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Odšumit klipy při přehrávání",
-        "denoiseHelpText": "Přehrává a stahuje odšuměnou kopii každého klipu, včetně slyšitelných netopýrů a spektrogramu na stránce detekce. Uložené klipy zůstávají beze změny. Stažené soubory jsou ve formátu WAV a jsou větší. V nastavení zvuku klipu lze zvolit jinou sílu nebo odšumění vypnout.",
+        "denoiseHelpText": "Přehrává a stahuje odšuměnou kopii každého klipu. Uložené klipy zůstávají beze změny. Stažené soubory jsou ve formátu WAV a jsou větší. V nastavení zvuku klipu lze zvolit jinou sílu nebo odšumění vypnout.",
         "denoiseStrengthLabel": "Síla odšumění",
         "denoiseStrengthHelpText": "Slabé zachová nejvíce původního zvuku, silné odstraní nejvíce hluku. Středně slabé vyhovuje většině nahrávek.",
         "denoiseStrengthDisabledHelp": "Pro volbu síly zapněte výše odšumění při přehrávání.",

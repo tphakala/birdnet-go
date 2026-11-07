@@ -32,8 +32,7 @@ export function getPlaybackDenoiseDefault(): string {
     const playback = realtime?.dashboard?.playbackDenoise;
     return playback?.enabled && isDenoisePresetId(playback.strength) ? playback.strength : '';
   }
-  // Not every test double of appState carries the field.
-  return (appState as { playbackDenoise?: string }).playbackDenoise ?? '';
+  return appState.playbackDenoise || '';
 }
 
 /**

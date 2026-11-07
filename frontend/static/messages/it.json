@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Guadagno iniziale applicato durante la riproduzione delle registrazioni. I suoni degli uccelli sono spesso deboli, quindi è consigliato un incremento di 6-12 dB.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Riduci il rumore delle clip in riproduzione",
-        "denoiseHelpText": "Riproduce e scarica una copia senza rumore di ogni clip, compresi i pipistrelli udibili e lo spettrogramma della pagina di rilevamento. Le clip salvate restano invariate. I download diventano file WAV e sono più grandi. Le impostazioni audio di una clip permettono di scegliere un'altra intensità o di disattivare la riduzione del rumore.",
+        "denoiseHelpText": "Riproduce e scarica una copia senza rumore di ogni clip. Le clip salvate restano invariate. I download diventano file WAV e sono più grandi. Le impostazioni audio di una clip permettono di scegliere un'altra intensità o di disattivare la riduzione del rumore.",
         "denoiseStrengthLabel": "Intensità della riduzione del rumore",
         "denoiseStrengthHelpText": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
         "denoiseStrengthDisabledHelp": "Attiva sopra la riduzione del rumore in riproduzione per scegliere un'intensità.",

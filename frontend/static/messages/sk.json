@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Odšumiť klipy pri prehrávaní",
-        "denoiseHelpText": "Prehráva a sťahuje odšumenú kópiu každého klipu vrátane počuteľných netopierov a spektrogramu na stránke detekcie. Uložené klipy zostávajú nezmenené. Stiahnuté súbory sú vo formáte WAV a sú väčšie. V nastaveniach zvuku klipu možno zvoliť inú silu alebo odšumenie vypnúť.",
+        "denoiseHelpText": "Prehráva a sťahuje odšumenú kópiu každého klipu. Uložené klipy zostávajú nezmenené. Stiahnuté súbory sú vo formáte WAV a sú väčšie. V nastaveniach zvuku klipu možno zvoliť inú silu alebo odšumenie vypnúť.",
         "denoiseStrengthLabel": "Sila odšumenia",
         "denoiseStrengthHelpText": "Ľahké zachová najviac pôvodného zvuku, silné odstráni najviac šumu. Ľahký-stredný vyhovuje väčšine nahrávok.",
         "denoiseStrengthDisabledHelp": "Na výber sily zapnite vyššie odšumenie pri prehrávaní.",

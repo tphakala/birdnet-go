@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Denoise clips when played",
-        "denoiseHelpText": "Plays and downloads a denoised copy of every clip, including audible bats and the spectrogram on the detection page. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",
+        "denoiseHelpText": "Plays and downloads a denoised copy of every clip. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",
         "denoiseStrengthLabel": "Denoise Strength",
         "denoiseStrengthHelpText": "Light keeps most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
         "denoiseStrengthDisabledHelp": "Turn on playback denoising above to choose a strength.",

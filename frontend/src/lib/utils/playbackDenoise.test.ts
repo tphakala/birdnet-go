@@ -9,6 +9,7 @@ function loadSettings(options: {
   playback?: { enabled: boolean; strength: string };
   exportDenoise?: { enabled: boolean; strength: string };
 }) {
+  // The loaded store is seeded with only the sections the helper reads.
   settingsStore.update(store => {
     const realtime = store.formData.realtime;
     return {

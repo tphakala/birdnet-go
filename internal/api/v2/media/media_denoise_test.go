@@ -628,20 +628,20 @@ func TestServeAudioByID_DenoiseGuestFollowsSetting(t *testing.T) {
 
 	previous := conf.GetSettings()
 	t.Cleanup(func() { conftest.SetTestSettings(previous) })
-	publish := func(playbackOn, exportDenoised bool) {
+	publish := func(playbackOn, exportDenoised bool, strength string) {
 		settings := conf.CloneSettings(controller.CurrentSettings())
-		settings.Realtime.Dashboard.PlaybackDenoise = conf.DenoiseSettings{Enabled: playbackOn, Strength: denoiseTestPreset}
+		settings.Realtime.Dashboard.PlaybackDenoise = conf.DenoiseSettings{Enabled: playbackOn, Strength: strength}
 		settings.Realtime.Audio.Export.Denoise.Enabled = exportDenoised
 		conftest.SetTestSettings(settings)
 	}
 
-	publish(false, false)
+	publish(false, false, denoiseTestPreset)
 	rec := getAudio(e, denoiseURL("7", denoiseTestPreset), nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, stored, rec.Body.Bytes(), "default off: the guest gets the stored clip")
 	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 
-	publish(true, false)
+	publish(true, false, denoiseTestPreset)
 	rec = getAudio(e, denoiseURL("7", denoiseTestPreset), nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, expectedDenoised(t, src), rec.Body.Bytes(), "default on: the guest gets the default preset denoised")
@@ -652,12 +652,14 @@ func TestServeAudioByID_DenoiseGuestFollowsSetting(t *testing.T) {
 	assert.Equal(t, stored, rec.Body.Bytes(), "a preset other than the default is not a guest's to start")
 	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 
-	publish(true, true)
+	publish(true, true, conf.DenoisePresetMedium)
+	// The requested preset equals the configured strength and has no cached
+	// variant, so only the export denoise precedence keeps the guest on the stored clip.
 	rec = getAudio(e, denoiseURL("7", conf.DenoisePresetMedium), nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, stored, rec.Body.Bytes(), "export denoise on: no playback default for guests")
 
-	publish(false, false)
+	publish(false, false, denoiseTestPreset)
 	rec = getAudio(e, denoiseURL("7", conf.DenoisePresetLight), nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, stored, rec.Body.Bytes(), "default off again: the guest gets the stored clip")

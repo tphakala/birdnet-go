@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Sākotnējā pastiprināšana, kas tiek piemērota, atskaņojot ierakstus. Putnu skaņas bieži ir klusas, tāpēc ieteicama 6-12 dB pastiprināšana.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Samazināt klipu troksni atskaņošanas laikā",
-        "denoiseHelpText": "Atskaņo un lejupielādē katra klipa kopiju bez trokšņa, tostarp dzirdamos sikspārņus un spektrogrammu atklājuma lapā. Saglabātie klipi paliek nemainīti. Lejupielādes kļūst par WAV failiem un ir lielākas. Klipa audio iestatījumos var izvēlēties citu stiprumu vai izslēgt trokšņu samazināšanu.",
+        "denoiseHelpText": "Atskaņo un lejupielādē katra klipa kopiju bez trokšņa. Saglabātie klipi paliek nemainīti. Lejupielādes kļūst par WAV failiem un ir lielākas. Klipa audio iestatījumos var izvēlēties citu stiprumu vai izslēgt trokšņu samazināšanu.",
         "denoiseStrengthLabel": "Trokšņu samazināšanas stiprums",
         "denoiseStrengthHelpText": "Viegls saglabā visvairāk oriģinālās skaņas, bet spēcīgs noņem visvairāk trokšņa. Viegls-vidējs der lielākajai daļai ierakstu.",
         "denoiseStrengthDisabledHelp": "Lai izvēlētos stiprumu, augstāk ieslēdziet trokšņu samazināšanu atskaņošanas laikā.",

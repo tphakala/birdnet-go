@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Ganho inicial aplicado ao reproduzir gravações. Os sons de aves são frequentemente baixos, pelo que um reforço de 6-12 dB é recomendado.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Reduzir o ruído dos clipes ao reproduzir",
-        "denoiseHelpText": "Reproduz e transfere uma cópia sem ruído de cada clipe, incluindo morcegos audíveis e o espectrograma da página de deteção. Os clipes guardados não mudam. As transferências passam a ser ficheiros WAV e são maiores. As definições de áudio de um clipe permitem escolher outra intensidade ou desativar a redução de ruído.",
+        "denoiseHelpText": "Reproduz e transfere uma cópia sem ruído de cada clipe. Os clipes guardados não mudam. As transferências passam a ser ficheiros WAV e são maiores. As definições de áudio de um clipe permitem escolher outra intensidade ou desativar a redução de ruído.",
         "denoiseStrengthLabel": "Intensidade da redução de ruído",
         "denoiseStrengthHelpText": "Ligeiro mantém mais do som original e forte remove mais ruído. Ligeiro-médio serve para a maioria das gravações.",
         "denoiseStrengthDisabledHelp": "Ative acima a redução de ruído na reprodução para escolher uma intensidade.",

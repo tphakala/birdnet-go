@@ -305,6 +305,7 @@
   let processedSpectrogramUrl = $state<string | null>(null);
   let isSpectrogramProcessing = $state(false);
   let processingActive = $derived(processingDenoise !== '' || processingNormalize);
+  // The badge reports processing the user chose; the playback default is not shown as one.
   // The toolbar is exactly on the playback default (denoise at the default, no
   // normalize). It then plays the GET denoise URL instead of a /process blob.
   const isDefaultState = $derived(
@@ -2663,7 +2664,7 @@
   {/if}
 
   <!-- Processing active badge (only shown when toolbar is not used) -->
-  {#if processingActive && !enableClipExtraction}
+  {#if processingActive && !isDefaultState && !enableClipExtraction}
     <div class="processing-badge" role="status">
       {t('components.audioPlayer.processing.processingActive')}
     </div>

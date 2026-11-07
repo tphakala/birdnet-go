@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Minták zajszűrése lejátszáskor",
-        "denoiseHelpText": "Minden minta zajszűrt másolatát játssza le és tölti le, a hallható denevérhangokat és az észlelés oldalán lévő spektrogramot is beleértve. A mentett minták változatlanok maradnak. A letöltések WAV fájlok lesznek, és nagyobbak. Egy minta hangbeállításaiban másik erősség választható, vagy a zajszűrés kikapcsolható.",
+        "denoiseHelpText": "Minden minta zajszűrt másolatát játssza le és tölti le. A mentett minták változatlanok maradnak. A letöltések WAV fájlok lesznek, és nagyobbak. Egy minta hangbeállításaiban másik erősség választható, vagy a zajszűrés kikapcsolható.",
         "denoiseStrengthLabel": "Zajszűrés erőssége",
         "denoiseStrengthHelpText": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
         "denoiseStrengthDisabledHelp": "Az erősség kiválasztásához kapcsolja be fent a lejátszás zajszűrését.",

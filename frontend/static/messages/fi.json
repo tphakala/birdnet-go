@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Poista kohinaa leikkeistä toistettaessa",
-        "denoiseHelpText": "Toistaa ja lataa jokaisesta leikkeestä kohinasta puhdistetun kopion, myös kuultavat lepakot ja havaintosivun spektrogrammin. Tallennetut leikkeet pysyvät muuttumattomina. Lataukset ovat WAV-tiedostoja ja suurempia. Leikkeen ääniasetuksista voi valita toisen voimakkuuden tai kytkeä kohinanpoiston pois.",
+        "denoiseHelpText": "Toistaa ja lataa jokaisesta leikkeestä kohinasta puhdistetun kopion. Tallennetut leikkeet pysyvät muuttumattomina. Lataukset ovat WAV-tiedostoja ja suurempia. Leikkeen ääniasetuksista voi valita toisen voimakkuuden tai kytkeä kohinanpoiston pois.",
         "denoiseStrengthLabel": "Kohinanpoiston voimakkuus",
         "denoiseStrengthHelpText": "Kevyt säilyttää eniten alkuperäistä ääntä ja voimakas poistaa eniten kohinaa. Kevyt-keskitaso sopii useimmille äänitteille.",
         "denoiseStrengthDisabledHelp": "Ota toiston kohinanpoisto käyttöön yllä valitaksesi voimakkuuden.",

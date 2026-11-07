@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Startforsterkning ved avspilling av opptak. Fuglelyder er ofte stille, så en forsterkning på 6-12 dB anbefales.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Fjern støy fra klipp ved avspilling",
-        "denoiseHelpText": "Spiller av og laster ned en kopi uten støy av hvert klipp, også hørbare flaggermus og spektrogrammet på deteksjonssiden. Lagrede klipp forblir uendret. Nedlastinger blir WAV-filer og er større. Lydinnstillingene for et klipp kan velge en annen styrke eller slå av støyreduksjon.",
+        "denoiseHelpText": "Spiller av og laster ned en kopi uten støy av hvert klipp. Lagrede klipp forblir uendret. Nedlastinger blir WAV-filer og er større. Lydinnstillingene for et klipp kan velge en annen styrke eller slå av støyreduksjon.",
         "denoiseStrengthLabel": "Støyreduksjonsstyrke",
         "denoiseStrengthHelpText": "Lett beholder mest av den opprinnelige lyden, og kraftig fjerner mest støy. Lett-middels passer for de fleste opptak.",
         "denoiseStrengthDisabledHelp": "Slå på støyreduksjon ved avspilling ovenfor for å velge en styrke.",

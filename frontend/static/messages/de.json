@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Clips bei der Wiedergabe entrauschen",
-        "denoiseHelpText": "Gibt von jedem Clip eine entrauschte Kopie wieder und lädt sie herunter, einschließlich hörbarer Fledermäuse und des Spektrogramms auf der Detektionsseite. Gespeicherte Clips bleiben unverändert. Downloads werden WAV-Dateien und sind größer. In den Audioeinstellungen eines Clips lässt sich eine andere Stärke wählen oder die Rauschunterdrückung ausschalten.",
+        "denoiseHelpText": "Gibt von jedem Clip eine entrauschte Kopie wieder und lädt sie herunter. Gespeicherte Clips bleiben unverändert. Downloads werden WAV-Dateien und sind größer. In den Audioeinstellungen eines Clips lässt sich eine andere Stärke wählen oder die Rauschunterdrückung ausschalten.",
         "denoiseStrengthLabel": "Stärke der Rauschunterdrückung",
         "denoiseStrengthHelpText": "Leicht bewahrt am meisten vom Originalklang, stark entfernt am meisten Rauschen. Leicht-mittel passt zu den meisten Aufnahmen.",
         "denoiseStrengthDisabledHelp": "Aktivieren Sie oben die Rauschunterdrückung bei der Wiedergabe, um eine Stärke zu wählen.",

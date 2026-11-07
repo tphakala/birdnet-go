@@ -460,6 +460,11 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     // Same clip, other play URL: back to the stored clip until the next first play.
     if (audioElement && audioElement.src !== new URL(audioUrl, window.location.origin).href) {
       untrack(() => markPlaybackStopped());
+      // The stored clip starts with a fresh retry budget and no stale error.
+      clearRetryTimer();
+      audioRetryCount = 0;
+      playRequestedAfterRetry = false;
+      error = null;
       audioElement.src = audioUrl;
     }
   }

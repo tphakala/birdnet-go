@@ -38,6 +38,7 @@ function seedStore(options: { playback?: Denoise; exportDenoise?: Denoise; expor
       },
     },
   };
+  // The seeded store holds only the sections the page reads, not a full form type.
   settingsStore.update(
     store =>
       ({
@@ -59,6 +60,7 @@ async function renderAudioPlaybackTab(options: Parameters<typeof seedStore>[0]) 
 }
 
 function playbackDenoise(): unknown {
+  // Narrow view of the loose form data to the one field under test.
   const formData = get(settingsStore).formData as unknown as {
     realtime: { dashboard: { playbackDenoise: unknown } };
   };

@@ -4906,7 +4906,7 @@
         "defaultGainHelpText": "Początkowe wzmocnienie stosowane podczas odtwarzania nagrań. Dźwięki ptaków są często ciche, dlatego zalecane jest wzmocnienie 6-12 dB.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Redukuj szum klipów podczas odtwarzania",
-        "denoiseHelpText": "Odtwarza i pobiera kopię każdego klipu z usuniętym szumem, także słyszalne nietoperze i spektrogram na stronie detekcji. Zapisane klipy pozostają bez zmian. Pobrane pliki mają format WAV i są większe. W ustawieniach dźwięku klipu można wybrać inną siłę lub wyłączyć redukcję szumów.",
+        "denoiseHelpText": "Odtwarza i pobiera kopię każdego klipu z usuniętym szumem. Zapisane klipy pozostają bez zmian. Pobrane pliki mają format WAV i są większe. W ustawieniach dźwięku klipu można wybrać inną siłę lub wyłączyć redukcję szumów.",
         "denoiseStrengthLabel": "Siła redukcji szumów",
         "denoiseStrengthHelpText": "Lekka zachowuje najwięcej oryginalnego dźwięku, a silna usuwa najwięcej szumu. Lekki-średni pasuje do większości nagrań.",
         "denoiseStrengthDisabledHelp": "Aby wybrać siłę, włącz powyżej redukcję szumów podczas odtwarzania.",
