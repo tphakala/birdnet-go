@@ -79,6 +79,42 @@ func exitIfOVProbeHookTestChild() {
 	os.Exit(probeChildGuardExitCode)
 }
 
+// TestProbeChildLibraryPath pins the argv the hook treats as the probe child
+// invocation: only the exact five-element form matches, so an ordinary or partly
+// matching test invocation still runs the tests.
+func TestProbeChildLibraryPath(t *testing.T) {
+	t.Parallel()
+
+	const (
+		exe         = "/path/to/classifier.test"
+		libraryPath = "/opt/openvino/lib/libopenvino_c.so"
+	)
+	tests := []struct {
+		name     string
+		args     []string
+		wantPath string
+		wantOK   bool
+	}{
+		{name: "probe invocation", args: []string{exe, "support", "openvino-probe", "--library-path", libraryPath}, wantPath: libraryPath, wantOK: true},
+		{name: "probe invocation with an empty library path", args: []string{exe, "support", "openvino-probe", "--library-path", ""}, wantPath: "", wantOK: true},
+		{name: "no arguments", args: []string{exe}},
+		{name: "ordinary test flags", args: []string{exe, "-test.run", "TestX"}},
+		{name: "subcommand without the flag", args: []string{exe, "support", "openvino-probe"}},
+		{name: "wrong subcommand", args: []string{exe, "support", "other", "--library-path", libraryPath}},
+		{name: "wrong parent command", args: []string{exe, "debug", "openvino-probe", "--library-path", libraryPath}},
+		{name: "wrong flag", args: []string{exe, "support", "openvino-probe", "--path", libraryPath}},
+		{name: "extra argument", args: []string{exe, "support", "openvino-probe", "--library-path", libraryPath, "extra"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotPath, gotOK := probeChildLibraryPath(tt.args)
+			assert.Equal(t, tt.wantOK, gotOK)
+			assert.Equal(t, tt.wantPath, gotPath)
+		})
+	}
+}
+
 // TestOpenVINOProbeChildHook_ServesProbe runs the real device probe, which
 // re-executes this test binary with the production probe arguments, against a
 // library path that does not exist. The child must serve the probe (and fail to
