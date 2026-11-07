@@ -47,7 +47,7 @@ func TestTensorModel_Functional(t *testing.T) {
 	assert.Equal(t, []int64{1, 1, 512, 128}, m.InputShape(), "a dynamic batch dimension must be pinned to 1")
 	assert.Equal(t, []int{tensorTestClassCount}, m.OutputSizes())
 
-	const inputElements = 512 * 128
+	const inputElements = 1 * 1 * 512 * 128 // matches the asserted input shape
 	outputs, err := m.Run(make([]float32, inputElements))
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)

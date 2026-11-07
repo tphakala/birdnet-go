@@ -58,8 +58,7 @@ func resolveTensorShape(dims []int64) (shape []int64, elements int, err error) {
 	if len(dims) == 0 {
 		return nil, 0, &ModelDetectionError{Reason: "tensor has no dimensions"}
 	}
-	shape = make([]int64, len(dims))
-	copy(shape, dims)
+	shape = slices.Clone(dims)
 	if shape[0] == dynamicDim {
 		shape[0] = pinnedBatchSize
 	}
@@ -181,8 +180,7 @@ func (m *TensorModel) Run(input []float32) ([][]float32, error) {
 	results := make([][]float32, len(outputTensors))
 	for i, t := range outputTensors {
 		data := t.GetData()
-		results[i] = make([]float32, len(data))
-		copy(results[i], data)
+		results[i] = slices.Clone(data)
 	}
 	return results, nil
 }
