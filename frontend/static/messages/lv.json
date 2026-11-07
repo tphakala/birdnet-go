@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128 standarts",
         "noteDescription": "Audio normalizācija atbilst EBU R128 apraides standartam, nodrošinot konsekventus atskaņošanas līmeņus dažādās ierīcēs un novēršot apgriešanu."
       },
+      "exportDenoise": {
+        "title": "Saglabāto klipu trokšņu samazināšana",
+        "description": "Samazina fona troksni klipos to saglabāšanas laikā.",
+        "enable": "Samazināt klipu troksni saglabājot",
+        "enableHelp": "Uzņemtais audio tiek attīrīts no trokšņa atmiņā, pirms tiek ierakstīts klipa fails. Noteikšana vienmēr izmanto oriģinālo audio.",
+        "requiresRecording": "Iespējojiet klipu ierakstīšanu cilnē Ierakstīšana, lai izmantotu klipu trokšņu samazināšanu.",
+        "strengthLabel": "Trokšņu samazināšanas stiprums",
+        "strengthHelp": "Viegls saglabā visvairāk oriģinālās skaņas, bet spēcīgs noņem visvairāk trokšņa. Viegls-vidējs der lielākajai daļai ierakstu.",
+        "warningTitle": "Saglabātos klipus nevar atjaunot",
+        "warningPermanent": "Oriģinālais audio netiek saglabāts. Klipi tiek pastāvīgi attīrīti no trokšņa saglabājot, tostarp sikspārņu ieraksti.",
+        "warningImported": "Importētie ieraksti netiek ietekmēti.",
+        "lossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību."
+      },
       "audioClipRetention": {
         "title": "Audio klipu saglabāšana",
         "description": "Konfigurēt automātisku saglabāto audio klipu tīrīšanu",

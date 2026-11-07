@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128 szabvány",
         "noteDescription": "A hang normalizáció az EBU R128 broadcast szabványt követi, biztosítva a konzisztens lejátszási szinteket a különböző eszközökön és megelőzve a vágást."
       },
+      "exportDenoise": {
+        "title": "Mentett minták zajszűrése",
+        "description": "Csökkenti a háttérzajt a mintákban mentés közben.",
+        "enable": "Minták zajszűrése mentéskor",
+        "enableHelp": "A rögzített hang a memóriában zajszűrésen esik át, mielőtt a mintafájl kiírásra kerül. Az észlelés mindig az eredeti hangon fut.",
+        "requiresRecording": "Engedélyezze a minta rögzítést a Rögzítés lapon a minták zajszűrésének használatához.",
+        "strengthLabel": "Zajszűrés erőssége",
+        "strengthHelp": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
+        "warningTitle": "A mentett minták nem állíthatók vissza",
+        "warningPermanent": "Az eredeti hang nem marad meg. A minták mentéskor véglegesen zajszűrésen esnek át, a denevérfelvételeket is beleértve.",
+        "warningImported": "Az importált felvételeket ez nem érinti.",
+        "lossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
+      },
       "audioClipRetention": {
         "title": "Hangminták megőrzése",
         "description": "Mentett hangminták automatikus karbantartásának konfigurálása",

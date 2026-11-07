@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128 Standard",
         "noteDescription": "Audio normalization follows the EBU R128 broadcast standard, ensuring consistent playback levels across different devices and preventing clipping."
       },
+      "exportDenoise": {
+        "title": "Denoise Saved Clips",
+        "description": "Reduce background noise in clips as they are saved.",
+        "enable": "Denoise clips when saving",
+        "enableHelp": "The captured audio is denoised in memory before the clip file is written. Detection always runs on the original audio.",
+        "requiresRecording": "Enable clip recording in the Recording tab to use clip denoising.",
+        "strengthLabel": "Denoise Strength",
+        "strengthHelp": "Light keeps the most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
+        "warningTitle": "Saved clips cannot be restored",
+        "warningPermanent": "The original audio is not kept. Clips are denoised permanently when they are saved, including bat recordings.",
+        "warningImported": "Imported recordings are not affected.",
+        "lossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets."
+      },
       "audioClipRetention": {
         "title": "Audio Clip Retention",
         "description": "Configure automatic cleanup of saved audio clips",

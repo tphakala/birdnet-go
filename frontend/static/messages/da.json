@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Lydnormalisering følger EBU R128-udsendelsesstandarden, hvilket sikrer ensartede afspilningsniveauer på tværs af forskellige enheder og forhindrer klipning."
       },
+      "exportDenoise": {
+        "title": "Støjreduktion af gemte klip",
+        "description": "Reducerer baggrundsstøj i klip, når de gemmes.",
+        "enable": "Fjern støj fra klip ved lagring",
+        "enableHelp": "Den optagede lyd får fjernet støj i hukommelsen, før klipfilen skrives. Detektion kører altid på den originale lyd.",
+        "requiresRecording": "Aktiver klipoptagelse under fanen Optagelse for at bruge støjreduktion af klip.",
+        "strengthLabel": "Støjreduktionsstyrke",
+        "strengthHelp": "Let bevarer mest af den originale lyd, og kraftig fjerner mest støj. Let-mellem passer til de fleste optagelser.",
+        "warningTitle": "Gemte klip kan ikke gendannes",
+        "warningPermanent": "Den originale lyd gemmes ikke. Klip får permanent fjernet støj, når de gemmes, også flagermusoptagelser.",
+        "warningImported": "Importerede optagelser er ikke påvirket.",
+        "lossyNote": "Støjreduktion virker bedst på FLAC- eller WAV-klip. Under {minBitrate} kbps begrænser kodekartefakter, hvor rent resultatet bliver."
+      },
       "audioClipRetention": {
         "title": "Opbevaring af lydklip",
         "description": "Konfigurer automatisk oprydning af gemte lydklip",

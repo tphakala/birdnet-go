@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128 -standardi",
         "noteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen."
       },
+      "exportDenoise": {
+        "title": "Tallennettujen leikkeiden kohinanpoisto",
+        "description": "Vähentää taustakohinaa leikkeissä, kun ne tallennetaan.",
+        "enable": "Poista kohinaa leikkeistä tallennettaessa",
+        "enableHelp": "Tallennettu ääni puhdistetaan kohinasta muistissa ennen leiketiedoston kirjoittamista. Tunnistus käyttää aina alkuperäistä ääntä.",
+        "requiresRecording": "Ota käyttöön leikkeiden tallennus Tallennus-välilehdellä käyttääksesi leikkeiden kohinanpoistoa.",
+        "strengthLabel": "Kohinanpoiston voimakkuus",
+        "strengthHelp": "Kevyt säilyttää eniten alkuperäistä ääntä ja voimakas poistaa eniten kohinaa. Kevyt-keskitaso sopii useimmille äänitteille.",
+        "warningTitle": "Tallennettuja leikkeitä ei voi palauttaa",
+        "warningPermanent": "Alkuperäistä ääntä ei säilytetä. Leikkeiden kohina poistetaan pysyvästi tallennettaessa, myös lepakkoäänitteistä.",
+        "warningImported": "Tuotuihin äänitteisiin tämä ei vaikuta.",
+        "lossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta."
+      },
       "audioClipRetention": {
         "title": "Äänileikkeiden säilytys",
         "description": "Määritä äänileikkeiden siivous",

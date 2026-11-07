@@ -3907,6 +3907,19 @@
         "noteTitle": "Standard EBU R128",
         "noteDescription": "Normalizacja audio przestrzega standardu nadawczego EBU R128, zapewniając spójne poziomy odtwarzania na różnych urządzeniach i zapobiegając kompresji."
       },
+      "exportDenoise": {
+        "title": "Redukcja szumów zapisanych klipów",
+        "description": "Zmniejsza szum tła w klipach podczas ich zapisywania.",
+        "enable": "Redukuj szum klipów przy zapisie",
+        "enableHelp": "Przechwycony dźwięk jest odszumiany w pamięci, zanim zostanie zapisany plik klipu. Detekcja zawsze działa na oryginalnym dźwięku.",
+        "requiresRecording": "Włącz nagrywanie klipów na karcie Nagrywanie, aby używać redukcji szumów klipów.",
+        "strengthLabel": "Siła redukcji szumów",
+        "strengthHelp": "Lekka zachowuje najwięcej oryginalnego dźwięku, a silna usuwa najwięcej szumu. Lekki-średni pasuje do większości nagrań.",
+        "warningTitle": "Zapisanych klipów nie można przywrócić",
+        "warningPermanent": "Oryginalny dźwięk nie jest przechowywany. Klipy są trwale odszumiane przy zapisie, także nagrania nietoperzy.",
+        "warningImported": "Zaimportowane nagrania nie są objęte.",
+        "lossyNote": "Redukcja szumów działa najlepiej na klipach FLAC lub WAV. Poniżej {minBitrate} kb/s artefakty kodeka ograniczają czystość wyniku."
+      },
       "audioClipRetention": {
         "title": "Retencja Klipów Audio",
         "description": "Konfiguruj automatyczne czyszczenie zapisanych klipów audio",

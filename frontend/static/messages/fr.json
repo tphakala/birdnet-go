@@ -3907,6 +3907,19 @@
         "noteTitle": "Norme EBU R128",
         "noteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage."
       },
+      "exportDenoise": {
+        "title": "Réduction de bruit des clips enregistrés",
+        "description": "Réduit le bruit de fond des clips lors de leur enregistrement.",
+        "enable": "Réduire le bruit des clips à l'enregistrement",
+        "enableHelp": "L'audio capturé est débruité en mémoire avant l'écriture du fichier du clip. La détection s'effectue toujours sur l'audio d'origine.",
+        "requiresRecording": "Activez l'enregistrement des clips dans l'onglet Enregistrement pour utiliser la réduction de bruit des clips.",
+        "strengthLabel": "Intensité de la réduction de bruit",
+        "strengthHelp": "Léger conserve le plus du son d'origine et fort supprime le plus de bruit. Léger-moyen convient à la plupart des enregistrements.",
+        "warningTitle": "Les clips enregistrés ne peuvent pas être restaurés",
+        "warningPermanent": "L'audio d'origine n'est pas conservé. Les clips sont débruités définitivement à l'enregistrement, y compris les enregistrements de chauves-souris.",
+        "warningImported": "Les enregistrements importés ne sont pas concernés.",
+        "lossyNote": "La réduction de bruit donne les meilleurs résultats sur les clips FLAC ou WAV. En dessous de {minBitrate} kbps, les artefacts du codec limitent la propreté du résultat."
+      },
       "audioClipRetention": {
         "title": "Rétention des clips audio",
         "description": "Configurer le nettoyage des clips audio",

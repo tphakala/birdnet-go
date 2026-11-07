@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128 Standaard",
         "noteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping."
       },
+      "exportDenoise": {
+        "title": "Ruisonderdrukking voor opgeslagen clips",
+        "description": "Vermindert achtergrondruis in clips wanneer ze worden opgeslagen.",
+        "enable": "Ruis uit clips verwijderen bij opslaan",
+        "enableHelp": "De opgenomen audio wordt in het geheugen ontdaan van ruis voordat het clipbestand wordt geschreven. Detectie gebruikt altijd de originele audio.",
+        "requiresRecording": "Schakel clip opname in op het Opname tabblad om ruisonderdrukking voor clips te gebruiken.",
+        "strengthLabel": "Sterkte van de ruisonderdrukking",
+        "strengthHelp": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
+        "warningTitle": "Opgeslagen clips kunnen niet worden hersteld",
+        "warningPermanent": "De originele audio wordt niet bewaard. Clips worden bij het opslaan definitief ontdaan van ruis, ook vleermuisopnames.",
+        "warningImported": "Geïmporteerde opnames worden niet beïnvloed.",
+        "lossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt."
+      },
       "audioClipRetention": {
         "title": "Audio Clip Bewaring",
         "description": "Configureer automatische opschoning van opgeslagen audio clips",

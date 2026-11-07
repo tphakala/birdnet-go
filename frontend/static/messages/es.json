@@ -3907,6 +3907,19 @@
         "noteTitle": "Estándar EBU R128",
         "noteDescription": "La normalización de audio sigue el estándar de transmisión EBU R128, asegurando niveles de reproducción consistentes en diferentes dispositivos y evitando recortes."
       },
+      "exportDenoise": {
+        "title": "Reducción de ruido de los clips guardados",
+        "description": "Reduce el ruido de fondo de los clips al guardarlos.",
+        "enable": "Reducir el ruido de los clips al guardar",
+        "enableHelp": "El audio capturado se limpia de ruido en memoria antes de escribir el archivo del clip. La detección siempre trabaja con el audio original.",
+        "requiresRecording": "Habilite la grabación de clips en la pestaña Grabación para usar la reducción de ruido de clips.",
+        "strengthLabel": "Intensidad de la reducción de ruido",
+        "strengthHelp": "Suave conserva la mayor parte del sonido original y fuerte elimina más ruido. Suave-medio sirve para la mayoría de las grabaciones.",
+        "warningTitle": "Los clips guardados no se pueden restaurar",
+        "warningPermanent": "El audio original no se conserva. Los clips se limpian de ruido de forma permanente al guardarse, incluidas las grabaciones de murciélagos.",
+        "warningImported": "Las grabaciones importadas no se ven afectadas.",
+        "lossyNote": "La reducción de ruido funciona mejor con clips FLAC o WAV. Por debajo de {minBitrate} kbps, los artefactos del códec limitan lo limpio que queda el resultado."
+      },
       "audioClipRetention": {
         "title": "Retención de clips de audio",
         "description": "Configurar la limpieza de clips de audio",

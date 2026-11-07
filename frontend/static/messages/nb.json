@@ -3907,6 +3907,19 @@
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Lydnormalisering følger EBU R128 kringkastingsstandarden, som sikrer konsistente avspillingsnivåer på tvers av forskjellige enheter og forhindrer klipping."
       },
+      "exportDenoise": {
+        "title": "Støyreduksjon for lagrede klipp",
+        "description": "Reduserer bakgrunnsstøy i klipp når de lagres.",
+        "enable": "Fjern støy fra klipp ved lagring",
+        "enableHelp": "Den innspilte lyden får fjernet støy i minnet før klippfilen skrives. Deteksjon kjører alltid på den opprinnelige lyden.",
+        "requiresRecording": "Aktiver klippopptak i Opptak-fanen for å bruke støyreduksjon for klipp.",
+        "strengthLabel": "Støyreduksjonsstyrke",
+        "strengthHelp": "Lett beholder mest av den opprinnelige lyden, og kraftig fjerner mest støy. Lett-middels passer for de fleste opptak.",
+        "warningTitle": "Lagrede klipp kan ikke gjenopprettes",
+        "warningPermanent": "Den opprinnelige lyden beholdes ikke. Klipp får permanent fjernet støy når de lagres, også flaggermusopptak.",
+        "warningImported": "Importerte opptak påvirkes ikke.",
+        "lossyNote": "Støyreduksjon fungerer best på FLAC- eller WAV-klipp. Under {minBitrate} kbps begrenser kodekartefakter hvor rent resultatet blir."
+      },
       "audioClipRetention": {
         "title": "Oppbevaring av lydklipp",
         "description": "Konfigurer automatisk opprydding av lagrede lydklipp",

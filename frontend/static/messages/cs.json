@@ -3907,6 +3907,19 @@
         "noteTitle": "Standard EBU R128",
         "noteDescription": "Normalizace zvuku se řídí vysílacím standardem EBU R128, čímž zajišťuje konzistentní úrovně přehrávání na různých zařízeních a zabraňuje ořezání."
       },
+      "exportDenoise": {
+        "title": "Odšumění uložených klipů",
+        "description": "Potlačí hluk na pozadí v klipech při jejich ukládání.",
+        "enable": "Odšumit klipy při ukládání",
+        "enableHelp": "Zachycený zvuk se odšumí v paměti dříve, než se zapíše soubor klipu. Detekce vždy pracuje s původním zvukem.",
+        "requiresRecording": "Pro použití odšumění klipů povolte nahrávání klipů na kartě Nahrávání.",
+        "strengthLabel": "Síla odšumění",
+        "strengthHelp": "Slabé zachová nejvíce původního zvuku, silné odstraní nejvíce hluku. Středně slabé vyhovuje většině nahrávek.",
+        "warningTitle": "Uložené klipy nelze obnovit",
+        "warningPermanent": "Původní zvuk se neuchovává. Klipy se při uložení odšumí trvale, včetně nahrávek netopýrů.",
+        "warningImported": "Importované nahrávky nejsou dotčeny.",
+        "lossyNote": "Odšumění funguje nejlépe u klipů FLAC nebo WAV. Pod {minBitrate} kb/s omezují čistotu výsledku artefakty kodeku."
+      },
       "audioClipRetention": {
         "title": "Uchování zvukových klipů",
         "description": "Konfigurace automatického čištění uložených zvukových klipů",
