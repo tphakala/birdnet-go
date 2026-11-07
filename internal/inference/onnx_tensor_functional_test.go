@@ -10,15 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	envTensorModel = "ONNX_TEST_TENSOR_MODEL"
+	envTensorLib   = "ONNX_TEST_ORT_LIB"
+)
+
 // TestNewONNXTensorModel_Functional runs the adapter against a real model. It
 // is skipped unless ONNX_TEST_TENSOR_MODEL points at a single-input ONNX model.
 // ONNX_TEST_ORT_LIB optionally names the libonnxruntime path.
 func TestNewONNXTensorModel_Functional(t *testing.T) {
-	modelPath := os.Getenv("ONNX_TEST_TENSOR_MODEL")
+	modelPath := os.Getenv(envTensorModel)
 	if modelPath == "" {
-		t.Skip("set ONNX_TEST_TENSOR_MODEL to a single-input ONNX model to run")
+		t.Skipf("set %s to a single-input ONNX model to run", envTensorModel)
 	}
-	require.NoError(t, InitONNXRuntime(os.Getenv("ONNX_TEST_ORT_LIB")))
+	require.NoError(t, InitONNXRuntime(os.Getenv(envTensorLib)))
 
 	m, err := NewONNXTensorModel(modelPath, ONNXTensorModelOptions{Threads: 1})
 	require.NoError(t, err)
