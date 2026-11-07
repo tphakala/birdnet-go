@@ -36,8 +36,11 @@ func newProcessingCache(dir string, maxFiles int) *processingCache {
 
 // clipSourceTag identifies the clip file a processed artifact was made from. It
 // hashes the normalized clip path, size and modification time (FNV-1a 64, hex),
-// so a detection ID reused for another clip, or a clip file replaced in place,
-// never matches a cache entry made from the earlier file. The tag depends only
+// so a detection ID reused for a clip at another path, or a clip file replaced
+// with one of a different size or mtime, does not match a cache entry made from
+// the earlier file. A same-size replacement that keeps or restores the mtime
+// (for example a copy that preserves timestamps), or lands within one tick of a
+// coarse mtime clock, keeps the tag until the entry expires. The tag depends only
 // on that one file, so other detections never move its key.
 func clipSourceTag(normalizedPath string, info os.FileInfo) string {
 	h := fnv.New64a()

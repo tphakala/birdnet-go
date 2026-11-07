@@ -1496,8 +1496,8 @@ func clipFileExtension(format string) string {
 
 // ProcessAudioByID applies audio processing filters to a detection's audio clip
 // and returns the processed audio as WAV for browser preview. Results are cached
-// per clip file (path, size and mtime), so a reused detection ID never serves
-// another clip's audio.
+// per clip file (path, size and mtime, see clipSourceTag), so a reused detection
+// ID pointing at another clip file is processed again.
 //
 // POST /api/v2/audio/:id/process
 // Body: {"normalize": true, "denoise": "medium", "gain_db": 6.0}
@@ -1547,7 +1547,8 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
 
 	// A fresh stat, not StatRel's cached one: the cache key is tagged with this
-	// size and mtime, so a clip replaced in place must show up at once.
+	// size and mtime, so a replacement that changes either misses the old entry
+	// on the next request.
 	clipInfo, statErr := c.SFS.Stat(absolutePath)
 	if statErr != nil {
 		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
