@@ -815,9 +815,10 @@
     >
       {#if !settings.audio.export.enabled}
         <div
-          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)] mb-4"
+          id="denoise-requires-recording"
+          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-base-content)] mb-4"
         >
-          <Info class="size-6 shrink-0" />
+          <Info class="size-6 shrink-0 text-[var(--color-info)]" aria-hidden="true" />
           <span>{t('settings.audio.exportDenoise.requiresRecording')}</span>
         </div>
       {/if}
@@ -832,7 +833,9 @@
           <Checkbox
             checked={exportDenoise.enabled}
             label={t('settings.audio.exportDenoise.enable')}
-            helpText={t('settings.audio.exportDenoise.enableHelp')}
+            helpText={settings.audio.export.enabled
+              ? t('settings.audio.exportDenoise.enableHelp')
+              : t('settings.audio.exportDenoise.requiresRecording')}
             disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
             onchange={checked => updateExportDenoise({ enabled: checked })}
           />
@@ -844,6 +847,9 @@
               ? t('settings.audio.exportDenoise.strengthDisabledHelp')
               : t('settings.audio.exportDenoise.strengthHelp')}
             options={denoiseStrengthOptions}
+            aria-describedby={settings.audio.export.enabled
+              ? undefined
+              : 'denoise-requires-recording'}
             disabled={!exportDenoise.enabled ||
               !settings.audio.export.enabled ||
               store.isLoading ||

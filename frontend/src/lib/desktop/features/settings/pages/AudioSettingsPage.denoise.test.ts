@@ -14,6 +14,16 @@ const LOSSY_NOTE = 'settings.audio.exportDenoise.lossyNote';
 const STRENGTH_LABEL = 'settings.audio.exportDenoise.strengthLabel';
 const STRENGTH_HELP = 'settings.audio.exportDenoise.strengthHelp';
 const STRENGTH_DISABLED_HELP = 'settings.audio.exportDenoise.strengthDisabledHelp';
+const REQUIRES_RECORDING = 'settings.audio.exportDenoise.requiresRecording';
+
+// Text of every element an aria-describedby attribute points at.
+function describedText(control: HTMLElement): string {
+  return (control.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(id => document.getElementById(id)?.textContent ?? '')
+    .join(' ');
+}
 
 vi.mock('$lib/desktop/components/forms/StreamManager.svelte');
 vi.mock('$lib/desktop/components/forms/SoundCardManager.svelte');
@@ -172,6 +182,25 @@ describe('AudioSettingsPage clip denoise', () => {
 
     expect(await screen.findByText(STRENGTH_HELP)).toBeTruthy();
     expect(screen.queryByText(STRENGTH_DISABLED_HELP)).toBeNull();
+  });
+
+  it('links the recording-required reason to both disabled controls while recording is off', async () => {
+    await renderProcessingTab({ enabled: false });
+
+    const checkbox = await screen.findByLabelText(ENABLE_LABEL);
+    const strength = await screen.findByLabelText(STRENGTH_LABEL);
+    expect(describedText(checkbox)).toContain(REQUIRES_RECORDING);
+    expect(describedText(strength)).toContain(REQUIRES_RECORDING);
+  });
+
+  it('keeps the regular help descriptions while recording is on', async () => {
+    await renderProcessingTab({});
+
+    const checkbox = await screen.findByLabelText(ENABLE_LABEL);
+    const strength = await screen.findByLabelText(STRENGTH_LABEL);
+    expect(describedText(checkbox)).not.toContain(REQUIRES_RECORDING);
+    expect(describedText(strength)).toContain(STRENGTH_DISABLED_HELP);
+    expect(describedText(strength)).not.toContain(REQUIRES_RECORDING);
   });
 
   it('writes the chosen strength together with the enabled state', async () => {
