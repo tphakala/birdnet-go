@@ -119,7 +119,7 @@ func TestPopulateEventMetadata_DoesNotBlockOnTheProvider(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		action.populateEventMetadata(event, species.NoveltyStatus{})
+		action.populateEventMetadata(event, species.NoveltyStatus{}, false)
 		close(done)
 	}()
 

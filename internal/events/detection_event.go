@@ -13,6 +13,10 @@ const (
 	DetectionMetadataDaysSinceLastSeen   = "days_since_last_seen"
 	DetectionMetadataNoveltyEpisodeDays  = "novelty_episode_days"
 	DetectionMetadataNoveltyEpisodeStart = "novelty_episode_start"
+	// DetectionMetadataIsLifer marks a detection of a species that is not on
+	// the user's imported real-world life list (see internal/conf.HasLifeList).
+	// Set only when true; absent otherwise, matching the novelty fields' convention.
+	DetectionMetadataIsLifer = "is_lifer"
 )
 
 // DetectionEvent represents a bird detection event that can be processed asynchronously
