@@ -498,7 +498,7 @@ describe('AudioPlayer playback denoise default', () => {
       expect(audibleBatsBodies().map(body => body.denoise)).toEqual(['heavy']);
     });
 
-    it('requests the audible copy without denoise once the default clip failed', async () => {
+    async function failDefaultThenRequestBats(choose?: string): Promise<string[]> {
       const restoreProbe = mockAudioProbe({ status: 500 });
       const probe = globalThis.fetch;
       const batsBodies: Array<{ denoise: string }> = [];
@@ -521,12 +521,21 @@ describe('AudioPlayer playback denoise default', () => {
         await settle();
         expect(elementPath()).toBe(STORED_URL);
 
+        if (choose) await chooseDenoise(choose);
         await activateAudibleBats();
 
-        expect(batsBodies.map(body => body.denoise)).toEqual(['']);
+        return batsBodies.map(body => body.denoise);
       } finally {
         restoreProbe();
       }
+    }
+
+    it('requests the audible copy without denoise once the default clip failed', async () => {
+      expect(await failDefaultThenRequestBats()).toEqual(['']);
+    });
+
+    it('requests the audible copy with an explicit choice made after the default clip failed', async () => {
+      expect(await failDefaultThenRequestBats(DENOISE_HEAVY_TEXT)).toEqual(['heavy']);
     });
 
     it('drops an audible copy that was still generating when the toolbar changed', async () => {
