@@ -67,12 +67,41 @@ func TestProcessAudioByID(t *testing.T) {
 	first := bytes.Clone(rec.Body.Bytes())
 
 	// The second identical request is served from the cache: the source now holds
-	// undecodable bytes, so only a cache hit can answer 200. (The handler stats
-	// the clip before consulting the cache, so the file must still exist.)
-	require.NoError(t, os.WriteFile(src, []byte("not audio"), 0o600))
+	// undecodable bytes, so only a cache hit can answer 200. The handler stats
+	// the clip before consulting the cache and keys the entry on the clip's path,
+	// size and mtime, so the garbage keeps the original length and mtime.
+	srcInfo, err := os.Stat(src)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(src, bytes.Repeat([]byte{'x'}, int(srcInfo.Size())), 0o600))
+	require.NoError(t, os.Chtimes(src, srcInfo.ModTime(), srcInfo.ModTime()))
 	rec = postJSON(e, "/api/v2/audio/7/process", body)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, first, rec.Body.Bytes(), "a cache hit skips processing")
+}
+
+func TestProcessAudioByID_CacheFollowsClipFile(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	// Two clips of different length, so the processed bodies differ.
+	writeToneWAV(t, fixturePath(tempDir, "a.wav"), processTestRate, processTestLength, fixtureToneHz)
+	writeToneWAV(t, fixturePath(tempDir, "b.wav"), processTestRate, processTestLength/2, fixtureToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	// Detection 1 points at clip A, then is reused for clip B (an ID reused
+	// after a delete within the cache TTL).
+	mockDS.On("GetNoteClipPath", "1").Return("a.wav", nil).Once()
+	mockDS.On("GetNoteClipPath", "1").Return("b.wav", nil)
+	controller.DS = mockDS
+
+	const body = `{"normalize": true}`
+	rec := postJSON(e, "/api/v2/audio/1/process", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, lenA := wavRateAndLength(t, rec.Body.Bytes())
+	assert.Equal(t, processTestRate*2, lenA)
+
+	rec = postJSON(e, "/api/v2/audio/1/process", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, lenB := wavRateAndLength(t, rec.Body.Bytes())
+	assert.Equal(t, processTestRate, lenB, "the reused ID gets clip B's processing, not clip A's cached audio")
 }
 
 func TestProcessAudioByID_AppliesGain(t *testing.T) {
@@ -163,6 +192,28 @@ func TestAudibleBatsByID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code, "only bat detections are eligible")
 
 	assert.Equal(t, http.StatusBadRequest, postJSON(e, "/api/v2/audio/10/audible-bats", `{"expansion": 7}`).Code)
+}
+
+func TestAudibleBatsByID_CacheFollowsClipFile(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "a.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+	writeToneWAV(t, fixturePath(tempDir, "b.wav"), batTestRate, batTestSeconds*2, fixtureBatToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteModelType", "1").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "1").Return("a.wav", nil).Once()
+	mockDS.On("GetNoteClipPath", "1").Return("b.wav", nil)
+	controller.DS = mockDS
+
+	const body = `{"expansion": 10}`
+	rec := postJSON(e, "/api/v2/audio/1/audible-bats", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, lenA := wavRateAndLength(t, rec.Body.Bytes())
+
+	rec = postJSON(e, "/api/v2/audio/1/audible-bats", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, lenB := wavRateAndLength(t, rec.Body.Bytes())
+	assert.InDelta(t, 2*float64(lenA), float64(lenB), 8192, "the reused ID gets clip B's audible copy, not clip A's cached audio")
 }
 
 func TestProcessedSpectrogramByID_UndecodableSourceIs422(t *testing.T) {
