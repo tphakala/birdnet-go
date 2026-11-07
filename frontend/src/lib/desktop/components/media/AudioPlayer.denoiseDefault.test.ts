@@ -423,6 +423,9 @@ describe('AudioPlayer playback denoise default', () => {
   describe('spectrogram following the denoise strength', () => {
     const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
     const SERVER_ERROR_STATUS = 500;
+    // Longer than the last spectrogram retry delay.
+    const SPECTROGRAM_RETRY_WAIT_MS = 5000;
+    const MAX_SPECTROGRAM_RETRIES_TEST = 6;
     let restoreFetch: (() => void) | undefined;
 
     afterEach(() => {
@@ -510,6 +513,75 @@ describe('AudioPlayer playback denoise default', () => {
       await settle();
 
       expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+    });
+
+    // Answers the spectrogram GET (not the /process POST) with the given status.
+    function answerDenoisedSpectrogramWith(status: number, headers: Record<string, string> = {}) {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const isImageRequest =
+          url.includes('/api/v2/spectrogram/') && !url.includes('/process') && !init?.method;
+        return {
+          ok: !isImageRequest,
+          status: isImageRequest ? status : 200,
+          blob: async () => new Blob(['processed']),
+          headers: new Headers(headers),
+        };
+      });
+    }
+
+    async function failSpectrogramImage() {
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await vi.advanceTimersByTimeAsync(SPECTROGRAM_RETRY_WAIT_MS);
+      await settle();
+    }
+
+    it('falls back to the stored spectrogram at once when the denoised one fails for good', async () => {
+      answerDenoisedSpectrogramWith(422);
+      followingPlayer();
+      await settle();
+
+      await failSpectrogramImage();
+
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+      const imageRequests = fetchMock.mock.calls.filter(call =>
+        String(call[0]).includes('denoise=')
+      );
+      expect(imageRequests.length).toBeLessThanOrEqual(1);
+    });
+
+    it('falls back to the stored spectrogram when the denoised one keeps answering 503', async () => {
+      answerDenoisedSpectrogramWith(503);
+      followingPlayer();
+      await settle();
+
+      for (let attempt = 0; attempt <= MAX_SPECTROGRAM_RETRIES_TEST; attempt++) {
+        if (!spectrogramSrc().searchParams.has('denoise')) break;
+        await failSpectrogramImage();
+      }
+
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+    });
+
+    it('keeps the stored spectrogram for the detection and asks again for the next one', async () => {
+      answerDenoisedSpectrogramWith(422);
+      const { rerender } = followingPlayer();
+      await settle();
+      await failSpectrogramImage();
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+
+      await rerender({
+        detectionId: '4343',
+        audioUrl: '/api/v2/audio/4343',
+        showSpectrogram: true,
+        spectrogramFollowsDenoise: true,
+        enableClipExtraction: true,
+      });
+      await settle();
+      expect(spectrogramSrc().searchParams.get('denoise')).toBe('heavy');
     });
 
     it('does not poll the stored render status for the denoised variant', async () => {

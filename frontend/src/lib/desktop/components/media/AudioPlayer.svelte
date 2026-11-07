@@ -326,6 +326,11 @@
   // stored clip (loaded for metadata) to the denoised one. Plain: the switch is
   // made by hand in ensurePlaybackSource.
   let playUnlocked = false;
+  // The detection whose denoised spectrogram failed for good (an answer a retry cannot
+  // fix, or the retries ran out): the stored one is shown instead for that detection,
+  // and a different detection starts on the denoised one again.
+  let spectrogramFellBackId = $state<string | null>(null);
+  const spectrogramFellBack = $derived(spectrogramFellBackId === detectionId);
   // Set when the default's denoised clip failed for a reason a retry cannot fix: the
   // stored clip plays instead for the rest of this mount. An explicit toolbar choice
   // is a processed blob and keeps its own error handling. Reactive: the download link
@@ -375,6 +380,7 @@
   // 404 from that path still arrives in time.
   const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
   const HTTP_STATUS_NOT_FOUND = 404;
+  const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
   const HTTP_STATUS_REQUEST_TIMEOUT = 408;
   const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
   const HTTP_STATUS_SERVER_ERROR_MIN = 500;
@@ -426,7 +432,9 @@
   // spectrogram. Normalize keeps the processed-spectrogram POST, and a denoised clip
   // that failed returns the spectrogram to the stored one with the audio.
   const spectrogramDenoise = $derived(
-    spectrogramFollowsDenoise && !processingNormalize && !denoiseFailed ? processingDenoise : ''
+    spectrogramFollowsDenoise && !processingNormalize && !denoiseFailed && !spectrogramFellBack
+      ? processingDenoise
+      : ''
   );
 
   // Base URL without cache-busting parameters. It stays null while a bat rate
@@ -1813,6 +1821,39 @@
     }
   };
 
+  // Shows the stored spectrogram instead of the denoised one for the rest of this
+  // detection. The URL change resets the loader and the retries.
+  const fallBackToStoredSpectrogram = () => {
+    debugLog('fallBackToStoredSpectrogram: denoised spectrogram unavailable');
+    spectrogramFellBackId = detectionId;
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer();
+    clearSpectrogramProbe();
+  };
+
+  // An <img> cannot read the response status, so the failed denoised URL is
+  // requested once more with fetch. Any status but 503 (busy, which the retries
+  // wait out) is final: the stored spectrogram is shown at once.
+  const probeDenoisedSpectrogram = async (url: string) => {
+    clearSpectrogramProbe();
+    const controller = new AbortController();
+    spectrogramProbeAbortController = controller;
+    const probedBaseUrl = spectrogramBaseUrl;
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      void response.body?.cancel();
+      if (controller.signal.aborted || spectrogramBaseUrl !== probedBaseUrl) return;
+      if (response.ok || response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) return;
+      fallBackToStoredSpectrogram();
+    } catch {
+      // Aborted or failed: the retries carry on and end in the fallback.
+    } finally {
+      if (spectrogramProbeAbortController === controller) {
+        spectrogramProbeAbortController = undefined;
+      }
+    }
+  };
+
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
@@ -1856,9 +1897,16 @@
       if (spectrogramDenoise === '') {
         statusPollStartTime = Date.now();
         pollSpectrogramStatus();
+      } else if (spectrogramUrl) {
+        void probeDenoisedSpectrogram(spectrogramUrl);
       }
       // An image requested with the clip rate: ask the server why it failed.
-      if (overlayRate !== undefined && !processedSpectrogramUrl && spectrogramUrl) {
+      if (
+        overlayRate !== undefined &&
+        !processedSpectrogramUrl &&
+        spectrogramUrl &&
+        spectrogramDenoise === ''
+      ) {
         void probeExactRateRender(spectrogramUrl);
       }
     }
@@ -1894,6 +1942,13 @@
       }, retryDelay);
 
       return; // Don't set error state yet
+    }
+
+    // Max retries exceeded: a denoised spectrogram that never came is replaced by
+    // the stored one rather than ending on the unavailable state.
+    if (spectrogramDenoise !== '') {
+      fallBackToStoredSpectrogram();
+      return;
     }
 
     // Max retries exceeded - but keep polling if generation is in progress
