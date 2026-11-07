@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/inference/bsgbat"
 )
 
 func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
@@ -318,8 +319,9 @@ func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
 }
 
 // TestModelRegistry_BSGBatEntry pins the BSG-BAT spec: a 384 kHz window of 393472
-// samples stepped by 192000 samples (0.5 s), no zero-headed windows, a source rate
-// floor of bsgBatMinRawSampleRate, and a detection identity of the bat type.
+// samples stepped by the default step (conf.DefaultBSGBatStepFrames mel hops), no
+// zero-headed windows, a source rate floor of bsgBatMinRawSampleRate, and a
+// detection identity of the bat type.
 func TestModelRegistry_BSGBatEntry(t *testing.T) {
 	t.Parallel()
 
@@ -334,15 +336,17 @@ func TestModelRegistry_BSGBatEntry(t *testing.T) {
 	assert.Equal(t, 384000, spec.SampleRate)
 	assert.Equal(t, 384000, spec.EffectiveSampleRate())
 	assert.Equal(t, 393472, spec.ClipSampleCount())
-	assert.Equal(t, 192000, spec.StepSamples)
+	defaultStep := conf.DefaultBSGBatStepFrames * bsgbat.HopSize
+	assert.Equal(t, defaultStep, spec.StepSamples)
 	assert.Equal(t, bsgBatMinRawSampleRate, spec.MinRawSampleRate)
-	assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(0), "the step is fixed at 0.5 s whatever the overlap")
+	assert.Equal(t, time.Duration(conf.DefaultBSGBatStepFrames)*2*time.Millisecond, spec.BufferInterval(0),
+		"the step is fixed (2 ms per mel hop) whatever the overlap")
 	assert.True(t, spec.RequireContiguousWindow)
 
 	clipBytes, overlapBytes, readSize := spec.BufferDimensions(0)
 	assert.Equal(t, 393472*2, clipBytes)
-	assert.Equal(t, (393472-192000)*2, overlapBytes)
-	assert.Equal(t, 192000*2, readSize)
+	assert.Equal(t, (393472-defaultStep)*2, overlapBytes)
+	assert.Equal(t, defaultStep*2, readSize)
 }
 
 func TestModelRegistry_BSGEntry(t *testing.T) {

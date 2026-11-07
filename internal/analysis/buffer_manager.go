@@ -35,6 +35,12 @@ const bufferMonitorPollInterval = 100 * time.Millisecond
 // monitor.
 const bufferAllocGraceTicks = 50
 
+// bufferMonitorPollInterval is how often an analysis buffer monitor polls its
+// buffer. The monitor reads at most one window per poll, so an analysis step
+// shorter than two polls cannot be consumed without loss (see
+// conf.MinBSGBatStepFrames).
+const bufferMonitorPollInterval = 100 * time.Millisecond
+
 // monitorKey identifies a unique monitor (one per source x model).
 type monitorKey struct {
 	sourceID string

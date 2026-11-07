@@ -41,7 +41,8 @@ type ModelSpec struct {
 	ClipSamples int `json:",omitempty"`
 	// StepSamples is a fixed analysis step in samples at EffectiveSampleRate().
 	// Zero keeps the overlap-derived step. When set, BufferDimensions and
-	// BufferInterval ignore the overlap argument.
+	// BufferInterval ignore the overlap argument. A model whose step is a setting
+	// gets it applied by ConfiguredSpec; the registry value is the default.
 	StepSamples int `json:",omitempty"`
 	// RequireContiguousWindow marks a model that must not score a window whose
 	// genuine tail (the audio actually received, as opposed to a zero-filled or

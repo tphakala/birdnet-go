@@ -288,12 +288,13 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: DetectionVersionBSGBat,
 		Description:      "European bat species classifier for 384 kHz ultrasonic audio (21 species)",
 		// The window is not a whole number of seconds, so it is expressed in samples
-		// at the effective rate, with a fixed 0.5 s step and no zero-headed windows.
+		// at the effective rate, with a fixed step (the default here; ConfiguredSpec
+		// applies the bsgbat.stepframes setting) and no zero-headed windows.
 		Spec: ModelSpec{
 			SampleRate:              bsgbat.SampleRate,
 			RawSampleRate:           bsgbat.SampleRate,
 			ClipSamples:             bsgbat.ClipSamples,
-			StepSamples:             bsgbat.StepSamples,
+			StepSamples:             conf.DefaultBSGBatStepFrames * bsgbat.HopSize,
 			ClipLength:              bsgBatClipLength,
 			MinRawSampleRate:        bsgBatMinRawSampleRate,
 			RecommendedSampleRate:   bsgbat.SampleRate,
@@ -486,7 +487,9 @@ func ConfigAliasForRegistry(registryID string) string {
 	return info.ConfigAliases[0]
 }
 
-// GetModelSpec returns the ModelSpec for a registry ID.
+// GetModelSpec returns the ModelSpec for a registry ID. StepSamples there is the
+// registry default; a reader of the analysis step uses RegistrySpec, which
+// applies the settings.
 func GetModelSpec(registryID string) (ModelSpec, bool) {
 	info, ok := ModelRegistry[registryID]
 	if !ok {
