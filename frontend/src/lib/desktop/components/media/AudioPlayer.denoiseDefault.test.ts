@@ -11,6 +11,7 @@ import {
   installFakeMediaElement,
   fakeAudioNodeChain,
   settle,
+  FAKE_MEDIA_DURATION_SECONDS,
   type FakeMediaController,
 } from '../../../../test/fakeMediaElement';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
@@ -52,6 +53,8 @@ const PROCESSING_DEBOUNCE_MS = 300;
 const PROCESSED_BLOB_URL = 'blob:processed-clip';
 const BATS_BLOB_URL = 'blob:audible-bats-clip';
 const WIDE_CONTAINER_PX = 400;
+const SELECTION_START_PX = 40;
+const SELECTION_END_PX = 200;
 
 describe('AudioPlayer playback denoise default', () => {
   let ctl: FakeMediaController;
@@ -212,9 +215,50 @@ describe('AudioPlayer playback denoise default', () => {
     expect(postedUrls()).toHaveLength(postsAfterHeavy);
   });
 
+  it('switches to the GET denoise URL when a selection is played before any other play', async () => {
+    const originalRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = () =>
+      new DOMRect(0, 0, WIDE_CONTAINER_PX, WIDE_CONTAINER_PX);
+    try {
+      const { container } = mount();
+      ctl.completeLoad();
+      await settle();
+      const player = container.firstElementChild as HTMLElement;
+      await fireEvent.mouseDown(player, { button: 0, clientX: SELECTION_START_PX });
+      await fireEvent.mouseMove(document, { buttons: 1, clientX: SELECTION_END_PX });
+      await fireEvent.mouseUp(document, { clientX: SELECTION_END_PX });
+
+      await press();
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      // Playing the selection starts at its start; a plain play would stay at 0.
+      expect(ctl.element.currentTime).toBe(
+        (SELECTION_START_PX / WIDE_CONTAINER_PX) * FAKE_MEDIA_DURATION_SECONDS
+      );
+    } finally {
+      Element.prototype.getBoundingClientRect = originalRect;
+    }
+  });
+
+  describe('download link of the guest overlay', () => {
+    const downloadHref = () => screen.getByLabelText('media.audio.download').getAttribute('href');
+
+    it('follows the default while it applies and the stored clip otherwise', async () => {
+      mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      expect(downloadHref()).toBe(DENOISED_URL);
+
+      playbackDefault.preset = '';
+      cleanup();
+      mount({ enableClipExtraction: false });
+      expect(downloadHref()).toBe(STORED_URL);
+    });
+  });
+
   describe('when the default denoised clip fails', () => {
     const SERVER_ERROR_STATUS = 500;
     const PENDING_STATUS = 503;
+    const NOT_FOUND_STATUS = 404;
     const SEEK_POSITION_SECONDS = 12;
     let restoreFetch: (() => void) | undefined;
 
@@ -285,6 +329,19 @@ describe('AudioPlayer playback denoise default', () => {
       await toggleNormalize();
 
       expect(elementPath()).toBe(STORED_URL);
+    });
+
+    it('ends with the load error when the denoised clip is gone (404)', async () => {
+      restoreFetch = mockAudioProbe({ status: NOT_FOUND_STATUS });
+      mount();
+      ctl.completeLoad();
+      await press();
+
+      ctl.failLoad();
+      await settle();
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(screen.getByRole('alert')).toBeInTheDocument();
     });
 
     it('keeps retrying the denoised clip while the server answers 503', async () => {
