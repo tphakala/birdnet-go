@@ -3917,6 +3917,7 @@
         "strengthHelp": "Suave conserva la mayor parte del sonido original y fuerte elimina más ruido. Suave-medio sirve para la mayoría de las grabaciones.",
         "warningTitle": "Los clips guardados no se pueden restaurar",
         "warningPermanent": "El audio original no se conserva. Los clips se limpian de ruido de forma permanente al guardarse, incluidas las grabaciones de murciélagos.",
+        "warningBats": "La reducción de ruido puede atenuar las llamadas débiles de murciélagos; las llamadas fuertes no se ven afectadas.",
         "warningImported": "Las grabaciones importadas no se ven afectadas.",
         "lossyNote": "La reducción de ruido funciona mejor con clips FLAC o WAV. Por debajo de {minBitrate} kbps, los artefactos del códec limitan lo limpio que queda el resultado."
       },

@@ -3917,6 +3917,7 @@
         "strengthHelp": "Lekka zachowuje najwięcej oryginalnego dźwięku, a silna usuwa najwięcej szumu. Lekki-średni pasuje do większości nagrań.",
         "warningTitle": "Zapisanych klipów nie można przywrócić",
         "warningPermanent": "Oryginalny dźwięk nie jest przechowywany. Klipy są trwale odszumiane przy zapisie, także nagrania nietoperzy.",
+        "warningBats": "Redukcja szumów może wyciszyć słabe wołania nietoperzy; silne wołania pozostają bez zmian.",
         "warningImported": "Zaimportowane nagrania nie są objęte.",
         "lossyNote": "Redukcja szumów działa najlepiej na klipach FLAC lub WAV. Poniżej {minBitrate} kb/s artefakty kodeka ograniczają czystość wyniku."
       },

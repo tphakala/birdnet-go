@@ -3917,6 +3917,7 @@
         "strengthHelp": "Kevyt säilyttää eniten alkuperäistä ääntä ja voimakas poistaa eniten kohinaa. Kevyt-keskitaso sopii useimmille äänitteille.",
         "warningTitle": "Tallennettuja leikkeitä ei voi palauttaa",
         "warningPermanent": "Alkuperäistä ääntä ei säilytetä. Leikkeiden kohina poistetaan pysyvästi tallennettaessa, myös lepakkoäänitteistä.",
+        "warningBats": "Kohinanpoisto voi vaimentaa heikkoja lepakoiden ääniä; voimakkaat äänet eivät muutu.",
         "warningImported": "Tuotuihin äänitteisiin tämä ei vaikuta.",
         "lossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta."
       },

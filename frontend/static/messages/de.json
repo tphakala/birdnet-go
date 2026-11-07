@@ -3917,6 +3917,7 @@
         "strengthHelp": "Leicht bewahrt am meisten vom Originalklang, stark entfernt am meisten Rauschen. Leicht-mittel passt zu den meisten Aufnahmen.",
         "warningTitle": "Gespeicherte Clips lassen sich nicht wiederherstellen",
         "warningPermanent": "Das Originalaudio wird nicht aufbewahrt. Clips werden beim Speichern dauerhaft entrauscht, auch Fledermausaufnahmen.",
+        "warningBats": "Die Rauschunterdrückung kann leise Fledermausrufe leiser machen; starke Rufe bleiben unverändert.",
         "warningImported": "Importierte Aufnahmen sind nicht betroffen.",
         "lossyNote": "Die Rauschunterdrückung funktioniert am besten bei FLAC- oder WAV-Clips. Unter {minBitrate} kbps begrenzen Codec-Artefakte, wie sauber das Ergebnis wird."
       },

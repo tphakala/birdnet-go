@@ -3917,6 +3917,7 @@
         "strengthHelp": "Viegls saglabā visvairāk oriģinālās skaņas, bet spēcīgs noņem visvairāk trokšņa. Viegls-vidējs der lielākajai daļai ierakstu.",
         "warningTitle": "Saglabātos klipus nevar atjaunot",
         "warningPermanent": "Oriģinālais audio netiek saglabāts. Klipi tiek pastāvīgi attīrīti no trokšņa saglabājot, tostarp sikspārņu ieraksti.",
+        "warningBats": "Trokšņu samazināšana var padarīt klusākus vājos sikspārņu saucienus; stiprie saucieni netiek ietekmēti.",
         "warningImported": "Importētie ieraksti netiek ietekmēti.",
         "lossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību."
       },

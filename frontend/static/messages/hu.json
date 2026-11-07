@@ -3917,6 +3917,7 @@
         "strengthHelp": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
         "warningTitle": "A mentett minták nem állíthatók vissza",
         "warningPermanent": "Az eredeti hang nem marad meg. A minták mentéskor véglegesen zajszűrésen esnek át, a denevérfelvételeket is beleértve.",
+        "warningBats": "A zajszűrés halkabbá teheti a gyenge denevérhívásokat; az erős hívásokat nem érinti.",
         "warningImported": "Az importált felvételeket ez nem érinti.",
         "lossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
       },

@@ -3917,6 +3917,7 @@
         "strengthHelp": "Slabé zachová nejvíce původního zvuku, silné odstraní nejvíce hluku. Středně slabé vyhovuje většině nahrávek.",
         "warningTitle": "Uložené klipy nelze obnovit",
         "warningPermanent": "Původní zvuk se neuchovává. Klipy se při uložení odšumí trvale, včetně nahrávek netopýrů.",
+        "warningBats": "Odšumění může zeslabit slabá volání netopýrů; silná volání zůstanou beze změny.",
         "warningImported": "Importované nahrávky nejsou dotčeny.",
         "lossyNote": "Odšumění funguje nejlépe u klipů FLAC nebo WAV. Pod {minBitrate} kb/s omezují čistotu výsledku artefakty kodeku."
       },

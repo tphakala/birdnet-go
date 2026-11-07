@@ -3917,6 +3917,7 @@
         "strengthHelp": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
         "warningTitle": "Opgeslagen clips kunnen niet worden hersteld",
         "warningPermanent": "De originele audio wordt niet bewaard. Clips worden bij het opslaan definitief ontdaan van ruis, ook vleermuisopnames.",
+        "warningBats": "Ruisonderdrukking kan zwakke vleermuisroepen zachter maken; sterke roepen worden niet beïnvloed.",
         "warningImported": "Geïmporteerde opnames worden niet beïnvloed.",
         "lossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt."
       },

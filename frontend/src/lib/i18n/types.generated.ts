@@ -2875,6 +2875,7 @@ export type TranslationKey =
   | 'settings.audio.exportDenoise.strengthHelp'
   | 'settings.audio.exportDenoise.warningTitle'
   | 'settings.audio.exportDenoise.warningPermanent'
+  | 'settings.audio.exportDenoise.warningBats'
   | 'settings.audio.exportDenoise.warningImported'
   | 'settings.audio.exportDenoise.lossyNote' // params: minBitrate
   | 'settings.audio.audioClipRetention.title'

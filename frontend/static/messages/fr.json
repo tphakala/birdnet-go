@@ -3917,6 +3917,7 @@
         "strengthHelp": "Léger conserve le plus du son d'origine et fort supprime le plus de bruit. Léger-moyen convient à la plupart des enregistrements.",
         "warningTitle": "Les clips enregistrés ne peuvent pas être restaurés",
         "warningPermanent": "L'audio d'origine n'est pas conservé. Les clips sont débruités définitivement à l'enregistrement, y compris les enregistrements de chauves-souris.",
+        "warningBats": "La réduction de bruit peut atténuer les cris faibles de chauves-souris ; les cris forts ne sont pas affectés.",
         "warningImported": "Les enregistrements importés ne sont pas concernés.",
         "lossyNote": "La réduction de bruit donne les meilleurs résultats sur les clips FLAC ou WAV. En dessous de {minBitrate} kbps, les artefacts du codec limitent la propreté du résultat."
       },

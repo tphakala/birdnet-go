@@ -3917,6 +3917,7 @@
         "strengthHelp": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
         "warningTitle": "Le clip salvate non possono essere ripristinate",
         "warningPermanent": "L'audio originale non viene conservato. Le clip vengono ripulite dal rumore in modo permanente al salvataggio, comprese le registrazioni di pipistrelli.",
+        "warningBats": "La riduzione del rumore può attenuare i richiami deboli dei pipistrelli; i richiami forti non sono interessati.",
         "warningImported": "Le registrazioni importate non sono interessate.",
         "lossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato."
       },

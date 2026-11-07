@@ -3917,6 +3917,7 @@
         "strengthHelp": "Let bevarer mest af den originale lyd, og kraftig fjerner mest støj. Let-mellem passer til de fleste optagelser.",
         "warningTitle": "Gemte klip kan ikke gendannes",
         "warningPermanent": "Den originale lyd gemmes ikke. Klip får permanent fjernet støj, når de gemmes, også flagermusoptagelser.",
+        "warningBats": "Støjreduktion kan gøre svage flagermuskald svagere; kraftige kald påvirkes ikke.",
         "warningImported": "Importerede optagelser er ikke påvirket.",
         "lossyNote": "Støjreduktion virker bedst på FLAC- eller WAV-klip. Under {minBitrate} kbps begrænser kodekartefakter, hvor rent resultatet bliver."
       },
