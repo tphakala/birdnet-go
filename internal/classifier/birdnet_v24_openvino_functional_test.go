@@ -32,8 +32,8 @@ const (
 )
 
 // TestBirdNETV24OpenVINO_LowFrequencyParity drives the real NewBirdNET load path
-// for a BirdNET v2.4 FP32 model twice, once on the auto backend (the production
-// OpenVINO plan, device and precision included) and once on ONNX Runtime as the
+// for a BirdNET v2.4 FP32 model twice, once on the openvino backend (the OpenVINO
+// plan an opted-in host takes, device and precision included) and once on ONNX Runtime as the
 // reference, and compares their scores window by window. It is the regression
 // check for GitHub #4986: on the A76 CPU, OpenVINO's default f16 zeroes the scores
 // of windows whose power is mostly below about 150 Hz (wind, handling noise), so
@@ -47,8 +47,8 @@ const (
 // token fails the test there instead of skipping it. Env knobs:
 //
 //   - OV_V24_MODEL:   path to a BirdNET v2.4 FP32 ONNX model whose file name carries
-//     the fp32 token (for example BirdNET_v2.4_fp32_dfttrunc.onnx), so auto plans
-//     OpenVINO for it.
+//     the fp32 token (for example BirdNET_v2.4_fp32_dfttrunc.onnx), so the openvino
+//     backend runs it at f32.
 //   - OV_V24_WINDOWS: raw little-endian float32 PCM, a whole number of 144000-sample
 //     (48 kHz, 3 s) windows. Use low-frequency-heavy windows; clean ones pass at f16.
 //   - OV_V24_LABELS:  optional label file (embedded English labels when unset).
@@ -76,13 +76,13 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 	require.NotEmpty(t, samples)
 	require.Zero(t, len(samples)%windowSamples, "windows file must hold whole %d-sample windows", windowSamples)
 
-	candidate := newV24ForParity(t, modelPath, conf.BackendPrefAuto)
+	candidate := newV24ForParity(t, modelPath, conf.BackendPrefOpenVINO)
 	device, backend, precision := candidate.RuntimeInfo()
 	t.Logf("candidate backend=%s device=%s precision=%s", backend, device, precision)
 	if backend != BackendOpenVINO {
-		// auto plans OpenVINO for an fp32-token v2.4 file on an ARMv8.2+ CPU with
-		// native f16 (and on an Intel GPU, which only an explicit device can
-		// demand here), so a fallback is the regression on such a host.
+		// the openvino backend plans OpenVINO for an fp32-token v2.4 file on an
+		// ARMv8.2+ CPU with native f16 (and on an Intel GPU, which only an explicit
+		// device can demand here), so a fallback is the regression on such a host.
 		dev := os.Getenv("OV_V24_DEVICE")
 		if dev == "" && !cpuspec.HasNativeF16() {
 			t.Skipf("OpenVINO backend not active on this host (backend=%s); set OV_V24_DEVICE to require it", backend)

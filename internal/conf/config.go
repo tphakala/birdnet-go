@@ -1360,7 +1360,9 @@ const (
 )
 
 // OpenVINO device preferences for BirdNET.OpenVINODevice. "auto" picks the GPU
-// (Intel iGPU) when present for eligible models, else the CPU device on an
+// (Intel iGPU) when present for eligible models. On arm64 the auto backend keeps
+// models on ONNX Runtime unless birdnet.backend is openvino (or, for BirdNET
+// v2.4, ONNX Runtime is unavailable), and then uses the CPU device on an
 // ARMv8.2+ CPU with native f16 (the precision is per model; see
 // classifier.openVINOPrecisionFor); "cpu" and "gpu" force a device. An empty
 // string is treated as "auto".
