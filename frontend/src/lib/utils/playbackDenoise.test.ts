@@ -8,28 +8,32 @@ import { audioUrlFor, getPlaybackDenoiseDefault } from './playbackDenoise';
 function loadSettings(options: {
   playback?: { enabled: boolean; strength: string };
   exportDenoise?: { enabled: boolean; strength: string };
+  // Unsaved form edits; the saved settings in the options above must win.
+  unsavedPlayback?: { enabled: boolean; strength: string };
 }) {
   // The loaded store is seeded with only the sections the helper reads.
   settingsStore.update(store => {
-    const realtime = store.formData.realtime;
+    const realtime = store.originalData.realtime;
+    const section = (playback?: { enabled: boolean; strength: string }) => ({
+      ...realtime,
+      audio: {
+        ...realtime?.audio,
+        export: {
+          ...realtime?.audio?.export,
+          denoise: options.exportDenoise ?? { enabled: false, strength: 'light-medium' },
+        },
+      },
+      dashboard: { ...realtime?.dashboard, playbackDenoise: playback },
+    });
     return {
       ...store,
       dataLoaded: true,
+      originalData: { ...store.originalData, realtime: section(options.playback) },
       formData: {
         ...store.formData,
-        realtime: {
-          ...realtime,
-          audio: {
-            ...realtime?.audio,
-            export: {
-              ...realtime?.audio?.export,
-              denoise: options.exportDenoise ?? { enabled: false, strength: 'light-medium' },
-            },
-          },
-          dashboard: { ...realtime?.dashboard, playbackDenoise: options.playback },
-        },
-      } as unknown as typeof store.formData,
-    };
+        realtime: section(options.unsavedPlayback ?? options.playback),
+      },
+    } as unknown as typeof store;
   });
 }
 
@@ -72,6 +76,20 @@ describe('getPlaybackDenoiseDefault', () => {
       exportDenoise: { enabled: true, strength: 'light' },
     });
     expect(getPlaybackDenoiseDefault()).toBe('');
+  });
+
+  it('follows the saved setting, not unsaved form edits', () => {
+    loadSettings({
+      playback: { enabled: false, strength: 'light-medium' },
+      unsavedPlayback: { enabled: true, strength: 'heavy' },
+    });
+    expect(getPlaybackDenoiseDefault()).toBe('');
+
+    loadSettings({
+      playback: { enabled: true, strength: 'medium' },
+      unsavedPlayback: { enabled: false, strength: 'heavy' },
+    });
+    expect(getPlaybackDenoiseDefault()).toBe('medium');
   });
 
   it('is empty for an unknown strength', () => {

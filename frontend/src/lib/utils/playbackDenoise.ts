@@ -23,11 +23,12 @@ interface PlaybackDenoiseSources {
  * The preset to apply to playback and downloads by default, or '' when none
  * applies. Export-stage denoise takes precedence: clips saved denoised are not
  * denoised again, so the default is '' while it is on. Mirrors the server's
- * `Settings.EffectivePlaybackDenoise`.
+ * `Settings.EffectivePlaybackDenoise` and reads the saved settings, not unsaved
+ * form edits, so it agrees with what the server applies.
  */
 export function getPlaybackDenoiseDefault(): string {
   if (get(settingsDataLoaded)) {
-    const realtime: PlaybackDenoiseSources | undefined = get(settingsStore).formData.realtime;
+    const realtime: PlaybackDenoiseSources | undefined = get(settingsStore).originalData.realtime;
     if (realtime?.audio?.export?.denoise?.enabled) return '';
     const playback = realtime?.dashboard?.playbackDenoise;
     return playback?.enabled && isDenoisePresetId(playback.strength) ? playback.strength : '';
