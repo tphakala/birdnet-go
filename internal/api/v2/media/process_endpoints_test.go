@@ -385,3 +385,44 @@ func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
 		}
 	})
 }
+
+// TestProcessEndpoints_DeletedClipIs404 pins that a clip deleted after it was
+// processed answers 404, not the processed audio still in the cache. The first
+// request of each endpoint fills both the processing cache and the SecureFS stat
+// cache, so a handler that trusted a cached stat would still answer 200.
+func TestProcessEndpoints_DeletedClipIs404(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "bird.wav"), processTestRate, processTestLength, fixtureToneHz)
+	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+
+	tests := []struct {
+		name  string
+		path  string
+		body  string
+		clip  string
+		model string
+	}{
+		{name: "process", path: "/api/v2/audio/1/process", body: `{"normalize": true}`, clip: "bird.wav"},
+		{name: "audible bats", path: "/api/v2/audio/1/audible-bats", body: `{"expansion": 10}`, clip: "bat.wav", model: "bat"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Each subtest sets its own expectations, so it also runs on its own.
+			mockDS := mocks.NewMockInterface(t)
+			mockDS.On("GetNoteClipPath", "1").Return(tt.clip, nil)
+			if tt.model != "" {
+				mockDS.On("GetNoteModelType", "1").Return(tt.model, nil)
+			}
+			controller.DS = mockDS
+
+			rec := postJSON(e, tt.path, tt.body)
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+			require.NoError(t, os.Remove(fixturePath(tempDir, tt.clip)))
+			rec = postJSON(e, tt.path, tt.body)
+			assert.Equal(t, http.StatusNotFound, rec.Code, "a deleted clip is not served from the processing cache")
+			assert.Contains(t, rec.Body.String(), "Audio clip not found")
+		})
+	}
+}
