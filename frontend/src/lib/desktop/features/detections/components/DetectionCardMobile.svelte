@@ -74,9 +74,12 @@
   // generated `url` while the spectrogram keeps spanning the full original clip.
   const MODEL_TYPE_BAT = 'bat';
   const isBatDetection = $derived(detection.modelType === MODEL_TYPE_BAT);
+  // Set by the play overlay when the default's denoised clip failed and the stored clip
+  // plays: the audible copy then carries no denoise either. Read when the request is made.
+  let denoiseFailed = false;
   const audibleBats = useAudibleBats({
     getDetectionId: () => detection.id,
-    getDenoise: getPlaybackDenoiseDefault,
+    getDenoise: () => (denoiseFailed ? '' : getPlaybackDenoiseDefault()),
   });
 
   // Reset derived playback if this card instance is recycled to a different
@@ -253,6 +256,7 @@
         onAudioContextAvailable={handleAudioContextAvailable}
         audibleBatsSrc={audibleBats.url}
         denoisePreset={getPlaybackDenoiseDefault()}
+        onDenoiseFailedChange={failed => (denoiseFailed = failed)}
       />
     {/if}
 
