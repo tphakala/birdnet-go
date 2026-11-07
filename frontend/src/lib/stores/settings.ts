@@ -683,6 +683,7 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  playbackDenoise?: DenoiseSettings; // Denoise clips when they are played or downloaded
 }
 
 // Dashboard layout configuration
@@ -1157,6 +1158,10 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
           ],
         },
         defaultAudioGain: 0,
+        playbackDenoise: {
+          enabled: false, // Off by default
+          strength: DEFAULT_DENOISE_PRESET,
+        },
       },
     },
     webServer: {},

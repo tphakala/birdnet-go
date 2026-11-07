@@ -3921,7 +3921,8 @@
         "warningPermanent": "Originalljudet sparas inte. Klipp brusreduceras permanent när de sparas, även fladdermusinspelningar.",
         "warningBats": "Brusreducering kan göra svaga fladdermusläten svagare; kraftiga läten påverkas inte.",
         "warningImported": "Importerade inspelningar påverkas inte.",
-        "lossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir."
+        "lossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir.",
+        "warningPlayback": "Standardbrusreduceringen vid uppspelning tillämpas inte medan detta är på. Om du senare stänger av detta och slår på standarden för uppspelning brusreduceras dessa klipp en andra gång vid uppspelning."
       },
       "audioClipRetention": {
         "title": "Lagring av ljudklipp",
@@ -4903,7 +4904,15 @@
         "description": "Standardinställningar för uppspelning av fågelinspelningar.",
         "defaultGain": "Standard volymförstärkning",
         "defaultGainHelpText": "Initial förstärkning vid uppspelning av inspelningar. Fågelljud är ofta svaga, så en förstärkning på 6-12 dB rekommenderas.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Brusreducera klipp vid uppspelning",
+        "denoiseHelpText": "Spelar upp och laddar ner en brusreducerad kopia av varje klipp, även hörbara fladdermöss och spektrogrammet på detektionssidan. Sparade klipp förblir oförändrade. Nedladdningar blir WAV-filer och är större. Ett klipps ljudinställningar kan välja en annan styrka eller stänga av brusreducering.",
+        "denoiseStrengthLabel": "Brusreduceringens styrka",
+        "denoiseStrengthHelpText": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "denoiseStrengthDisabledHelp": "Slå på brusreducering vid uppspelning ovan för att välja en styrka.",
+        "denoiseExportPrecedence": "Tillämpas inte medan „Brusreducering av sparade klipp” är på (Ljudinställningar, fliken Bearbetning). Dessa klipp är redan brusreducerade.",
+        "denoiseRedenoiseNote": "Klipp som sparades medan „Brusreducering av sparade klipp” var på brusreduceras igen vid uppspelning. Välj Av i ett klipps ljudinställningar för att höra det som det sparades.",
+        "denoiseLossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir."
       }
     },
     "restartRequired": "Vissa ändringar kräver en omstart av servern för att träda i kraft. Starta om BirdNET-Go."

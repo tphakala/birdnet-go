@@ -880,6 +880,9 @@
               <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
                 {t('settings.audio.exportDenoise.warningImported')}
               </p>
+              <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
+                {t('settings.audio.exportDenoise.warningPlayback')}
+              </p>
               {#if isLossyExportType}
                 <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
                   {t('settings.audio.exportDenoise.lossyNote', {

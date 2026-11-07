@@ -3921,7 +3921,8 @@
         "warningPermanent": "Den originale lyd gemmes ikke. Klip får permanent fjernet støj, når de gemmes, også flagermusoptagelser.",
         "warningBats": "Støjreduktion kan gøre svage flagermuskald svagere; kraftige kald påvirkes ikke.",
         "warningImported": "Importerede optagelser er ikke påvirket.",
-        "lossyNote": "Støjreduktion virker bedst på FLAC- eller WAV-klip. Under {minBitrate} kbps begrænser kodekartefakter, hvor rent resultatet bliver."
+        "lossyNote": "Støjreduktion virker bedst på FLAC- eller WAV-klip. Under {minBitrate} kbps begrænser kodekartefakter, hvor rent resultatet bliver.",
+        "warningPlayback": "Standardstøjreduktionen ved afspilning anvendes ikke, mens dette er slået til. Hvis du senere slår det fra og slår standarden ved afspilning til, får disse klip fjernet støj en gang til, når de afspilles."
       },
       "audioClipRetention": {
         "title": "Opbevaring af lydklip",
@@ -4903,7 +4904,15 @@
         "description": "Standardindstillinger for afspilning af fugleoptagelser.",
         "defaultGain": "Standard lydstyrkeforstærkning",
         "defaultGainHelpText": "Indledende forstærkning ved afspilning af optagelser. Fuglelyde er ofte stille, så en forstærkning på 6-12 dB anbefales.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Fjern støj fra klip ved afspilning",
+        "denoiseHelpText": "Afspiller og henter en kopi af hvert klip uden støj, også hørbare flagermus og spektrogrammet på detektionssiden. Gemte klip forbliver uændrede. Downloads bliver WAV-filer og er større. Et klips lydindstillinger kan vælge en anden styrke eller slå støjreduktion fra.",
+        "denoiseStrengthLabel": "Støjreduktionsstyrke",
+        "denoiseStrengthHelpText": "Let bevarer mest af den originale lyd, og kraftig fjerner mest støj. Let-mellem passer til de fleste optagelser.",
+        "denoiseStrengthDisabledHelp": "Slå støjreduktion ved afspilning til ovenfor for at vælge en styrke.",
+        "denoiseExportPrecedence": "Anvendes ikke, mens „Støjreduktion af gemte klip“ er slået til (Lydindstillinger, fanen Behandling). Disse klip er allerede uden støj.",
+        "denoiseRedenoiseNote": "Klip, der blev gemt mens „Støjreduktion af gemte klip“ var slået til, får fjernet støj igen ved afspilning. Vælg Fra i et klips lydindstillinger for at høre det, som det blev gemt.",
+        "denoiseLossyNote": "Støjreduktion virker bedst på FLAC- eller WAV-klip. Under {minBitrate} kbps begrænser kodekartefakter, hvor rent resultatet bliver."
       }
     },
     "restartRequired": "Nogle ændringer kræver genstart af serveren for at træde i kraft. Genstart venligst BirdNET-Go."

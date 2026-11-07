@@ -145,6 +145,7 @@ describe('AudioSettingsPage clip denoise', () => {
 
     expect(await screen.findByText(WARNING_PERMANENT)).toBeTruthy();
     expect(screen.getByText('settings.audio.exportDenoise.warningImported')).toBeTruthy();
+    expect(screen.getByText('settings.audio.exportDenoise.warningPlayback')).toBeTruthy();
   });
 
   it('hides the warning while the switch is off', async () => {

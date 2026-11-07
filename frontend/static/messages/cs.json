@@ -3921,7 +3921,8 @@
         "warningPermanent": "Původní zvuk se neuchovává. Klipy se při uložení odšumí trvale, včetně nahrávek netopýrů.",
         "warningBats": "Odšumění může zeslabit slabá volání netopýrů; silná volání zůstanou beze změny.",
         "warningImported": "Importované nahrávky nejsou dotčeny.",
-        "lossyNote": "Odšumění funguje nejlépe u klipů FLAC nebo WAV. Pod {minBitrate} kb/s omezují čistotu výsledku artefakty kodeku."
+        "lossyNote": "Odšumění funguje nejlépe u klipů FLAC nebo WAV. Pod {minBitrate} kb/s omezují čistotu výsledku artefakty kodeku.",
+        "warningPlayback": "Výchozí odšumění při přehrávání se nepoužije, dokud je toto zapnuto. Pokud to později vypnete a zapnete výchozí odšumění při přehrávání, budou se tyto klipy při přehrávání odšumovat podruhé."
       },
       "audioClipRetention": {
         "title": "Uchování zvukových klipů",
@@ -4903,7 +4904,15 @@
         "description": "Výchozí nastavení pro přehrávání nahrávek ptáků.",
         "defaultGain": "Výchozí zesílení hlasitosti",
         "defaultGainHelpText": "Počáteční zesílení při přehrávání nahrávek. Zvuky ptáků jsou často tiché, proto se doporučuje zesílení 6-12 dB.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Odšumit klipy při přehrávání",
+        "denoiseHelpText": "Přehrává a stahuje odšuměnou kopii každého klipu, včetně slyšitelných netopýrů a spektrogramu na stránce detekce. Uložené klipy zůstávají beze změny. Stažené soubory jsou ve formátu WAV a jsou větší. V nastavení zvuku klipu lze zvolit jinou sílu nebo odšumění vypnout.",
+        "denoiseStrengthLabel": "Síla odšumění",
+        "denoiseStrengthHelpText": "Slabé zachová nejvíce původního zvuku, silné odstraní nejvíce hluku. Středně slabé vyhovuje většině nahrávek.",
+        "denoiseStrengthDisabledHelp": "Pro volbu síly zapněte výše odšumění při přehrávání.",
+        "denoiseExportPrecedence": "Nepoužije se, dokud je zapnuto „Odšumění uložených klipů“ (Nastavení zvuku, karta Zpracování). Tyto klipy jsou již odšuměné.",
+        "denoiseRedenoiseNote": "Klipy uložené při zapnutém „Odšumění uložených klipů“ se při přehrávání odšumí znovu. Chcete-li slyšet klip tak, jak byl uložen, zvolte v jeho nastavení zvuku Vypnuto.",
+        "denoiseLossyNote": "Odšumění funguje nejlépe u klipů FLAC nebo WAV. Pod {minBitrate} kb/s omezují čistotu výsledku artefakty kodeku."
       }
     },
     "restartRequired": "Některé změny vyžadují restart serveru. Restartujte prosím BirdNET-Go."

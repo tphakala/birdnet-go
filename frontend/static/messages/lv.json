@@ -3921,7 +3921,8 @@
         "warningPermanent": "Oriģinālais audio netiek saglabāts. Klipi tiek pastāvīgi attīrīti no trokšņa saglabājot, tostarp sikspārņu ieraksti.",
         "warningBats": "Trokšņu samazināšana var padarīt klusākus vājos sikspārņu saucienus; stiprie saucieni netiek ietekmēti.",
         "warningImported": "Importētie ieraksti netiek ietekmēti.",
-        "lossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību."
+        "lossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību.",
+        "warningPlayback": "Noklusējuma trokšņu samazināšana atskaņošanas laikā netiek lietota, kamēr tas ir ieslēgts. Ja vēlāk to izslēgsiet un ieslēgsiet atskaņošanas noklusējumu, šie klipi atskaņošanas laikā tiks attīrīti no trokšņa otrreiz."
       },
       "audioClipRetention": {
         "title": "Audio klipu saglabāšana",
@@ -4903,7 +4904,15 @@
         "description": "Noklusējuma iestatījumi putnu ierakstu atskaņošanai.",
         "defaultGain": "Noklusējuma skaļuma pastiprināšana",
         "defaultGainHelpText": "Sākotnējā pastiprināšana, kas tiek piemērota, atskaņojot ierakstus. Putnu skaņas bieži ir klusas, tāpēc ieteicama 6-12 dB pastiprināšana.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Samazināt klipu troksni atskaņošanas laikā",
+        "denoiseHelpText": "Atskaņo un lejupielādē katra klipa kopiju bez trokšņa, tostarp dzirdamos sikspārņus un spektrogrammu atklājuma lapā. Saglabātie klipi paliek nemainīti. Lejupielādes kļūst par WAV failiem un ir lielākas. Klipa audio iestatījumos var izvēlēties citu stiprumu vai izslēgt trokšņu samazināšanu.",
+        "denoiseStrengthLabel": "Trokšņu samazināšanas stiprums",
+        "denoiseStrengthHelpText": "Viegls saglabā visvairāk oriģinālās skaņas, bet spēcīgs noņem visvairāk trokšņa. Viegls-vidējs der lielākajai daļai ierakstu.",
+        "denoiseStrengthDisabledHelp": "Lai izvēlētos stiprumu, augstāk ieslēdziet trokšņu samazināšanu atskaņošanas laikā.",
+        "denoiseExportPrecedence": "Netiek lietots, kamēr ir ieslēgta „Saglabāto klipu trokšņu samazināšana“ (Audio iestatījumi, cilne Apstrāde). Šie klipi jau ir attīrīti no trokšņa.",
+        "denoiseRedenoiseNote": "Klipi, kas saglabāti, kamēr bija ieslēgta „Saglabāto klipu trokšņu samazināšana“, atskaņošanas laikā tiek attīrīti no trokšņa vēlreiz. Klipa audio iestatījumos izvēlieties Izslēgts, lai to dzirdētu tādu, kāds tas saglabāts.",
+        "denoiseLossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību."
       }
     },
     "restartRequired": "Dažām izmaiņām nepieciešama servera pārstartēšana, lai tās stātos spēkā. Lūdzu, pārstartējiet BirdNET-Go."

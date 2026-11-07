@@ -3921,7 +3921,8 @@
         "warningPermanent": "The original audio is not kept. Clips are denoised permanently when they are saved, including bat recordings.",
         "warningBats": "Denoising can make faint bat calls quieter; strong calls are unaffected.",
         "warningImported": "Imported recordings are not affected.",
-        "lossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets."
+        "lossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets.",
+        "warningPlayback": "The playback denoise default is not applied while this is on. If you turn this off later and switch the playback default on, these clips are denoised a second time when played."
       },
       "audioClipRetention": {
         "title": "Audio Clip Retention",
@@ -4903,7 +4904,15 @@
         "description": "Default settings for playing bird recordings.",
         "defaultGain": "Default Volume Boost",
         "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Denoise clips when played",
+        "denoiseHelpText": "Plays and downloads a denoised copy of every clip, including audible bats and the spectrogram on the detection page. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",
+        "denoiseStrengthLabel": "Denoise Strength",
+        "denoiseStrengthHelpText": "Light keeps most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
+        "denoiseStrengthDisabledHelp": "Turn on playback denoising above to choose a strength.",
+        "denoiseExportPrecedence": "Not applied while Denoise Saved Clips is on (Audio settings, Processing tab). Those clips are already denoised.",
+        "denoiseRedenoiseNote": "Clips saved while Denoise Saved Clips was on are denoised again when played. Choose Off in the audio settings of a clip to hear it as saved.",
+        "denoiseLossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets."
       }
     },
     "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."

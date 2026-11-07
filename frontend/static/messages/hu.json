@@ -3921,7 +3921,8 @@
         "warningPermanent": "Az eredeti hang nem marad meg. A minták mentéskor véglegesen zajszűrésen esnek át, a denevérfelvételeket is beleértve.",
         "warningBats": "A zajszűrés halkabbá teheti a gyenge denevérhívásokat; az erős hívásokat nem érinti.",
         "warningImported": "Az importált felvételeket ez nem érinti.",
-        "lossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
+        "lossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát.",
+        "warningPlayback": "A lejátszás alapértelmezett zajszűrése nem érvényesül, amíg ez be van kapcsolva. Ha ezt később kikapcsolja, és bekapcsolja a lejátszás alapértelmezését, ezek a minták lejátszáskor másodszor is zajszűrésen esnek át."
       },
       "audioClipRetention": {
         "title": "Hangminták megőrzése",
@@ -4903,7 +4904,15 @@
         "description": "Alapértelmezett beállítások a madár hangfelvételek lejátszásához.",
         "defaultGain": "Alapértelmezett hangerő növelés",
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Minták zajszűrése lejátszáskor",
+        "denoiseHelpText": "Minden minta zajszűrt másolatát játssza le és tölti le, a hallható denevérhangokat és az észlelés oldalán lévő spektrogramot is beleértve. A mentett minták változatlanok maradnak. A letöltések WAV fájlok lesznek, és nagyobbak. Egy minta hangbeállításaiban másik erősség választható, vagy a zajszűrés kikapcsolható.",
+        "denoiseStrengthLabel": "Zajszűrés erőssége",
+        "denoiseStrengthHelpText": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
+        "denoiseStrengthDisabledHelp": "Az erősség kiválasztásához kapcsolja be fent a lejátszás zajszűrését.",
+        "denoiseExportPrecedence": "Nem érvényesül, amíg a „Mentett minták zajszűrése” be van kapcsolva (Hangbeállítások, Feldolgozás lap). Ezek a minták már zajszűrtek.",
+        "denoiseRedenoiseNote": "A „Mentett minták zajszűrése” bekapcsolt állapotában mentett minták lejátszáskor újra zajszűrésen esnek át. Válassza a Ki lehetőséget egy minta hangbeállításaiban, hogy úgy hallja, ahogyan mentették.",
+        "denoiseLossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
       }
     },
     "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."
