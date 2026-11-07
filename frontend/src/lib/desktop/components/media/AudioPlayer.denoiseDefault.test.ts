@@ -348,7 +348,7 @@ describe('AudioPlayer playback denoise default', () => {
       expect(elementPath()).toBe(STORED_URL);
     });
 
-    it('retries the denoised clip on schedule while its probe has not answered', async () => {
+    it('retries the denoised clip on schedule while its probe has not answered, then falls back', async () => {
       restoreFetch = mockAudioProbe({
         status: SERVER_ERROR_STATUS,
         delayMs: AUDIO_RETRY_DELAY_MS * 10,
@@ -363,6 +363,17 @@ describe('AudioPlayer playback denoise default', () => {
 
       expect(elementPath()).toBe(DENOISED_URL);
       expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+
+      // The retry dropped the slow probe; the spent budget still falls back.
+      for (let i = 1; i < MAX_AUDIO_LOAD_RETRIES; i++) {
+        ctl.failLoad();
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      }
+      ctl.failLoad();
+      await settle();
+
+      expect(elementPath()).toBe(STORED_URL);
+      expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('ends with the load error when the denoised clip is gone (404)', async () => {

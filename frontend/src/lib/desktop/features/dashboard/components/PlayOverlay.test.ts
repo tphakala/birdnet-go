@@ -870,7 +870,7 @@ describe('PlayOverlay', () => {
         expect(ctl.load).toHaveBeenCalled();
       });
 
-      it('retries the denoised clip on schedule while its probe has not answered', async () => {
+      it('retries the denoised clip on schedule while its probe has not answered, then falls back', async () => {
         const firstDelay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(0) ?? 0;
         restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS, delayMs: firstDelay * 10 });
         mount({ denoisePreset: PRESET });
@@ -883,6 +883,12 @@ describe('PlayOverlay', () => {
 
         expect(new URL(ctl.element.src).searchParams.get('denoise')).toBe(PRESET);
         expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+
+        // The retry dropped the slow probe; the spent budget still falls back.
+        await exhaustRetries(1);
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(alertShown()).toBe(false);
       });
 
       it('ends with the load error when the denoised clip is gone (404)', async () => {
