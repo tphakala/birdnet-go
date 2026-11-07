@@ -1147,11 +1147,13 @@ func TestBatGroupMinDetections(t *testing.T) {
 
 	batSpec := classifier.ModelRegistry[classifier.RegistryIDBat].Spec
 	const (
-		batStepSecs     = 1.5 // 3 s clip, fixed 50% overlap
-		customID        = "custom-bat-group"
-		customStepSecs  = 0.5
-		customClip      = 3 * time.Second
-		customOverlapBy = 2500 * time.Millisecond // 3 s clip - 2.5 s overlap = 0.5 s step
+		batStepSecs = 1.5 // 3 s clip, fixed 50% overlap
+		// batIgnoredBaseOverlap is a base overlap the fixed-overlap Bat model must ignore.
+		batIgnoredBaseOverlap = 2 * time.Second
+		customID              = "custom-bat-group"
+		customStepSecs        = 0.5
+		customClip            = 3 * time.Second
+		customOverlapBy       = 2500 * time.Millisecond // 3 s clip - 2.5 s overlap = 0.5 s step
 	)
 	customSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: customClip}
 
@@ -1163,8 +1165,8 @@ func TestBatGroupMinDetections(t *testing.T) {
 		assert.Equal(t, minDetectionsForSegment(batStepSecs, level),
 			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, classifier.ConfiguredBaseOverlap(s)),
 			"Bat count must be unchanged at level %d", level)
-		assert.Equal(t, calculateBatMinDetections(s),
-			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, 0),
+		assert.Equal(t, minDetectionsForSegment(batStepSecs, level),
+			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, batIgnoredBaseOverlap),
 			"Bat count must ignore the base overlap at level %d", level)
 		assert.Equal(t, minDetectionsForSegment(customStepSecs, level),
 			batGroupMinDetections(s, customID, customSpec, customOverlapBy),
@@ -1180,8 +1182,10 @@ func TestPrecomputeVisibilityThresholds_BatEntry(t *testing.T) {
 	s := &conf.Settings{}
 	s.Bat.FalsePositiveFilter.Level = 4
 	vt := precomputeVisibilityThresholds(s, 0)
-	assert.Equal(t, CalculateVisibilityThreshold(calculateBatMinDetections(s)),
-		vt.getThreshold(classifier.RegistryIDBat))
+	// Level 4 gives 3 confirmations over the 1.5 s step, so the threshold is 2;
+	// the bird default at filter level 0 is 1, so a dropped Bat entry is visible.
+	const wantBatVisibility = 2
+	assert.Equal(t, wantBatVisibility, vt.getThreshold(classifier.RegistryIDBat))
 }
 
 // TestIsBatGroupModel pins the taxon-group predicate behind the ultrasonic filter
