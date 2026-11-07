@@ -118,21 +118,6 @@ func newOVProbeCommand(ctx context.Context, exe, libraryPath string) *exec.Cmd {
 		ovProbeParentCommand, ovProbeSubcommand, ovProbeLibraryPathFlag, libraryPath)
 }
 
-// OVProbeChildLibraryPath reports whether args (os.Args) is the probe child
-// invocation newOVProbeCommand builds, and returns its library path. The real
-// CLI serves that invocation through its `support openvino-probe` command; a test
-// binary that can reach the probe has no such command, so it calls this from an
-// init hook and serves the child with RunOVProbeChild instead of rerunning its
-// tests in every probe child.
-func OVProbeChildLibraryPath(args []string) (libraryPath string, ok bool) {
-	// The executable, the parent command, the subcommand, the flag and its value.
-	const probeChildArgCount = 5
-	if len(args) != probeChildArgCount || args[1] != ovProbeParentCommand || args[2] != ovProbeSubcommand || args[3] != ovProbeLibraryPathFlag {
-		return "", false
-	}
-	return args[4], true
-}
-
 // OpenVINOProbeDevices reports the OpenVINO device names visible on this host
 // (e.g. "CPU", "GPU"), determined by running the enumeration in a short-lived
 // child process so a driver-stack crash cannot abort the caller. Callers treat
