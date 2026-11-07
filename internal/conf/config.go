@@ -557,6 +557,15 @@ type ModelConsensusSettings struct {
 // listed ones.
 func (m *ModelConsensusSettings) Enabled() bool { return m.AllSpecies || m.ListedSpecies }
 
+// FirstDailyConsensusSettings configures the first-daily-detection consensus rule: a species'
+// first detection of the day is discarded unless at least two models detected it in the same
+// detection window. It applies only when two or more models analyzing the audio source can
+// identify the species. Whitelisted species keep normal single-model behavior.
+type FirstDailyConsensusSettings struct {
+	Enabled   bool     `yaml:"enabled" json:"enabled"`     // true to require two models to confirm a species' first detection of the day, when at least two models analyzing its audio source can identify the species
+	Whitelist []string `yaml:"whitelist" json:"whitelist"` // species exempt from the rule, matched by common or scientific name
+}
+
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.
 type RTSPHealthSettings struct {
 	HealthyDataThreshold int `yaml:"healthydatathreshold" json:"healthyDataThreshold"` // seconds before stream considered unhealthy (default: 60)
@@ -932,6 +941,8 @@ type RealtimeSettings struct {
 	Weather          WeatherSettings          `yaml:"weather" json:"weather"`                   // Weather provider related settings
 	SpeciesTracking  SpeciesTrackingSettings  `yaml:"speciestracking" json:"speciesTracking"`   // New species tracking settings
 	ExtendedCapture  ExtendedCaptureSettings  `yaml:"extendedcapture" json:"extendedCapture"`   // Extended capture for long calling species
+
+	FirstDailyConsensus FirstDailyConsensusSettings `yaml:"firstdailyconsensus" json:"firstDailyConsensus"` // Two-model confirmation of each species' first detection of the day
 }
 
 // SpeciesAction represents a single action configuration

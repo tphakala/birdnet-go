@@ -567,6 +567,7 @@
         aria-expanded={showPredictions}
         aria-haspopup="listbox"
         aria-controls={instanceId}
+        aria-describedby={helpText ? `${instanceId}-help` : undefined}
         aria-label={label || placeholder}
       />
       <button
@@ -596,7 +597,7 @@
   <!-- Help Text -->
   {#if helpText}
     <div class="label">
-      <span class="help-text">{helpText}</span>
+      <span id={`${instanceId}-help`} class="help-text">{helpText}</span>
     </div>
   {/if}
 
