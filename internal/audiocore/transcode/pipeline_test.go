@@ -159,7 +159,7 @@ func TestAudibleBats(t *testing.T) {
 
 	_, err = AudibleBats(t.Context(), path, 7, Filters{})
 	require.ErrorIs(t, err, ErrInvalidRequest)
-	_, err = AudibleBats(t.Context(), path, factor, Filters{Denoise: "light"})
+	_, err = AudibleBats(t.Context(), path, factor, Filters{Denoise: "nope"})
 	require.ErrorIs(t, err, ErrInvalidRequest)
 }
 

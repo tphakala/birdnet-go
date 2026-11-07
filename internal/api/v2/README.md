@@ -197,7 +197,9 @@ in the order denoise (`light`, `light-medium`, `medium`, `heavy`), loudness norm
 (`gain_db`, within +/-60). A source that cannot be processed answers **422**: a file
 that is not one of the clip formats (WAV, FLAC, MP3, AAC in M4A, Opus), a corrupt or truncated file, a file or range above the size limits
 (256 MiB on disk, 128 MiB of decoded audio), or a clip window that starts past the end
-of the audio.
+of the audio. `audible-bats` takes the same optional `denoise` preset; it runs at the
+source sample rate before the time expansion, while normalization and gain run after it. An
+unknown preset answers **400**.
 
 **Denoised audio (`GET /audio/:id?denoise=<preset>`).** Without the parameter the stored
 clip is served verbatim, whatever the clip format. With `denoise` set to a preset

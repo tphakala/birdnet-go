@@ -335,6 +335,10 @@
   // source swap (so position is preserved across the duration change).
   const audibleBats = useAudibleBats({
     getDetectionId: () => detectionId,
+    // The audible copy carries the toolbar's denoise, except while the toolbar is
+    // still on the default whose denoised clip failed: the stored clip plays then.
+    getDenoise: () =>
+      denoiseFailed && processingDenoise === defaultDenoise ? '' : processingDenoise,
     onActivate: url => swapAudioSource(url),
     // audibleBats.active is already false here, so this is the plain source.
     onDeactivate: () => swapAudioSource(currentSource()),
@@ -900,12 +904,23 @@
   function triggerProcessing() {
     // The audible-bats copy is a time-expanded clip in the state it was made in, and
     // processing replaces the source with a non-expanded one. Turn audible bats off
-    // first so its stale copy never sits beside the new source.
-    if (audibleBats.active) audibleBats.disable();
+    // first so its stale copy never sits beside the new source. A copy that is still
+    // being generated carries the old toolbar state too, so its request is aborted.
+    if (audibleBats.active || audibleBats.generating) audibleBats.disable();
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();
     }, PROCESS_DEBOUNCE_MS);
+  }
+
+  // Loads a processing result into the element at the same position. An active
+  // audible copy keeps the element: the result is stored and takes over when audible
+  // bats is turned off (currentSource).
+  function swapProcessedSource(url: string) {
+    if (!audioElement || audibleBats.active) return;
+    const pos = audioElement.currentTime;
+    replaceSource(url);
+    audioElement.currentTime = pos;
   }
 
   async function processAudio() {
@@ -927,11 +942,7 @@
         URL.revokeObjectURL(processedSpectrogramUrl);
         processedSpectrogramUrl = null;
       }
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(audioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(audioUrl);
       return;
     }
 
@@ -947,11 +958,7 @@
         processedSpectrogramUrl = null;
       }
       playUnlocked = true;
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(currentSource());
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(currentSource());
       return;
     }
 
@@ -995,11 +1002,7 @@
 
       processedAudioUrl = URL.createObjectURL(blob);
 
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(processedAudioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(processedAudioUrl);
 
       // Update spectrogram to reflect processed audio
       if (enableClipExtraction) {
@@ -1024,11 +1027,7 @@
         URL.revokeObjectURL(processedSpectrogramUrl);
         processedSpectrogramUrl = null;
       }
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(audioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(audioUrl);
     } finally {
       // Only clear state if this is still the active request (avoid stale finally)
       if (processAbortController === controller) {

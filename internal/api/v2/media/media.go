@@ -342,6 +342,9 @@ type AudibleBatsRequest struct {
 	Expansion int `json:"expansion"`
 	// Normalize enables loudness normalization applied after time expansion.
 	Normalize bool `json:"normalize"`
+	// Denoise is the denoise preset ("" off), applied at the source rate before
+	// time expansion.
+	Denoise string `json:"denoise"`
 	// GainDB is the volume adjustment in dB applied to the derived clip.
 	GainDB float64 `json:"gain_db"`
 }
@@ -1679,15 +1682,18 @@ func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absoluteP
 }
 
 // AudibleBatsByID generates a derived "audible bats" review clip from a bat
-// detection's full audio. The ultrasonic clip is time-expanded (slowed and
-// pitched down) into the human hearing range and resampled to 48 kHz, then
-// optionally loudness-normalized (after conversion) and gain-adjusted. The
+// detection's full audio. The ultrasonic clip is optionally denoised at the
+// source rate, time-expanded (slowed and pitched down) into the human hearing
+// range and resampled to 48 kHz, then optionally loudness-normalized (after
+// conversion) and gain-adjusted. The
 // result is returned as WAV for browser playback and cached ephemerally; the
 // original recording and AI pipeline are never touched. The cache is keyed per
-// clip file (path, size and mtime). Requires authentication.
+// clip file (path, size and mtime). Requires authentication. The job runs on the
+// request context, outside the shared processing flight, so a client abort
+// cancels it and frees its processing slot.
 //
 // POST /api/v2/audio/:id/audible-bats
-// Body: {"expansion": 10, "normalize": true, "gain_db": 6.0}
+// Body: {"expansion": 10, "denoise": "light-medium", "normalize": true, "gain_db": 6.0}
 func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	// Defense in depth: RegisterRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereferences below anyway.
@@ -1711,6 +1717,10 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("invalid expansion factor: %d", req.Expansion),
 			expansionFactorMessage(), http.StatusBadRequest)
 	}
+	if !transcode.IsValidDenoisePreset(req.Denoise) {
+		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
+			"Invalid denoise preset", http.StatusBadRequest)
+	}
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
 			gainRangeMessage(), http.StatusBadRequest)
@@ -1724,7 +1734,7 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	}
 
 	// Serve from the ephemeral cache when available.
-	cacheKey := audibleBatsCacheKey(noteID, sourceTag, req.Expansion, req.Normalize, req.GainDB)
+	cacheKey := audibleBatsCacheKey(noteID, sourceTag, req.Expansion, req.Normalize, req.Denoise, req.GainDB)
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(cacheKey); cached != nil {
 			ctx.Response().Header().Set("Cache-Control", "no-store")
@@ -1740,9 +1750,10 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	}
 	defer release()
 
-	// Full-clip time expansion + 48 kHz resample (all-or-nothing; no
-	// detection-window clipping), then normalization (after conversion) and gain.
-	filters := transcode.Filters{Normalize: req.Normalize, GainDB: req.GainDB}
+	// Denoise at the source rate, then full-clip time expansion + 48 kHz resample
+	// (all-or-nothing; no detection-window clipping), then normalization (after
+	// conversion) and gain.
+	filters := transcode.Filters{Denoise: req.Denoise, Normalize: req.Normalize, GainDB: req.GainDB}
 	wavData, err := transcode.AudibleBats(ctx.Request().Context(), absolutePath, req.Expansion, filters)
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_audible_bats_failed", processedAudioFormat,

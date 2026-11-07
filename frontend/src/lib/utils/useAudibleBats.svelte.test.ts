@@ -44,6 +44,20 @@ describe('useAudibleBats', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends the denoise preset read when the request is made', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse()));
+    vi.stubGlobal('fetch', fetchMock);
+    let preset = 'light-medium';
+
+    const bats = useAudibleBats({ getDetectionId: () => 5, getDenoise: () => preset });
+    await bats.enable(SETTINGS);
+    preset = '';
+    await bats.enable(SETTINGS);
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).denoise).toBe('light-medium');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).denoise).toBe('');
+  });
+
   it('generates a derived URL and reports active on enable', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse()));
     vi.stubGlobal('fetch', fetchMock);
@@ -56,7 +70,12 @@ describe('useAudibleBats', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toContain('/api/v2/audio/123/audible-bats');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({ expansion: 10, normalize: false, gain_db: 0 });
+    expect(JSON.parse(init.body)).toEqual({
+      expansion: 10,
+      denoise: '',
+      normalize: false,
+      gain_db: 0,
+    });
 
     expect(bats.active).toBe(true);
     expect(bats.generating).toBe(false);

@@ -4,6 +4,7 @@ import DetectionCard from './DetectionCard.svelte';
 import type { Detection } from '$lib/types/detection.types';
 import { appState } from '$lib/stores/appState.svelte';
 import { installFakeMediaElement, settle } from '../../../../../test/fakeMediaElement';
+import { mockAudioProbe } from '../../../../../test/audioProbeMock';
 
 // The play overlay builds its Web Audio graph on the first play; the graph is not
 // under test here.
@@ -107,5 +108,65 @@ describe('DetectionCard playback denoise default', () => {
     await settle();
 
     expect(new URL(ctl.element.src).search).toBe(`?denoise=${PRESET}`);
+  });
+
+  describe('audible bats request', () => {
+    const SERVER_ERROR_STATUS = 500;
+    let restoreProbe: (() => void) | undefined;
+    let probe: typeof globalThis.fetch;
+    let batsBodies: Array<{ denoise: string }>;
+
+    beforeEach(() => {
+      batsBodies = [];
+      restoreProbe = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      probe = globalThis.fetch;
+      const wrapper = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (!String(input).includes('/audible-bats')) return probe(input, init);
+        batsBodies.push(JSON.parse(String(init?.body)));
+        return new Response('wav-data', { status: 200 });
+      });
+      globalThis.fetch = wrapper;
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:bats');
+    });
+
+    afterEach(() => {
+      globalThis.fetch = probe;
+      restoreProbe?.();
+      vi.restoreAllMocks();
+    });
+
+    async function requestBats(): Promise<string[]> {
+      render(DetectionCard, {
+        props: {
+          detection: createDetection({ clipName: 'clip_654.wav', modelType: 'bat' }),
+        },
+      });
+      ctl.completeLoad();
+      await fireEvent.click(screen.getAllByRole('button', { name: /play/i })[0]);
+      await settle();
+      return batsBodies.map(body => body.denoise);
+    }
+
+    async function enableBats() {
+      await fireEvent.click(screen.getByLabelText('media.audio.audibleBats.title'));
+      await fireEvent.click(screen.getByText('media.audio.audibleBats.enable'));
+      await settle();
+    }
+
+    it('sends the playback default', async () => {
+      await requestBats();
+      await enableBats();
+
+      expect(batsBodies.map(body => body.denoise)).toEqual([PRESET]);
+    });
+
+    it('sends no denoise once the denoised clip failed', async () => {
+      await requestBats();
+      ctl.failLoad();
+      await settle();
+      await enableBats();
+
+      expect(batsBodies.map(body => body.denoise)).toEqual(['']);
+    });
   });
 });

@@ -96,6 +96,15 @@ func newPCM(samples []int16, rate, channels int) *pcmBuffer {
 	return &pcmBuffer{Data: int16Bytes(samples), SampleRate: rate, Channels: channels}
 }
 
+// applyFilters runs the denoise step and then the loudness and gain steps, the
+// order every pipeline job uses.
+func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
+	if err := applyDenoise(ctx, p, f); err != nil {
+		return err
+	}
+	return applyLoudnessAndGain(ctx, p, f)
+}
+
 func TestApplyFilters_NoFiltersLeaveBytesIdentical(t *testing.T) {
 	t.Parallel()
 

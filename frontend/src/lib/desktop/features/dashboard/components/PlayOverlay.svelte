@@ -13,6 +13,8 @@
   - filterFreq?: number - High-pass filter frequency in Hz (controlled by parent)
   - playbackSpeed?: number - Playback speed multiplier (controlled by parent)
   - onAudioContextAvailable?: (available: boolean) => void - Callback for audio context status
+  - onDenoiseFailedChange?: (failed: boolean) => void - Reports the denoised clip failing (true)
+    and the next detection starting over (false)
   - denoisePreset?: string - Playback denoise default. The element loads the stored clip for
     metadata; the first play switches it to the denoised clip, so a card never triggers a
     denoise just by rendering.
@@ -72,6 +74,9 @@
     audibleBatsSrc?: string | null;
     // Playback denoise default ('' for none). Applied on the first play only.
     denoisePreset?: string;
+    // Called when the denoised clip failed and the stored clip plays instead (true),
+    // and when the next detection starts over (false).
+    onDenoiseFailedChange?: (_failed: boolean) => void;
   }
 
   let {
@@ -84,6 +89,7 @@
     onAudioContextAvailable,
     audibleBatsSrc = null,
     denoisePreset = '',
+    onDenoiseFailedChange,
   }: Props = $props();
 
   let audioElement: HTMLAudioElement;
@@ -133,6 +139,11 @@
   // Set when the denoised clip failed for a reason a retry cannot fix: this card then
   // plays the stored clip for the rest of its mount.
   let denoiseFailed = false;
+  function setDenoiseFailed(failed: boolean) {
+    if (denoiseFailed === failed) return;
+    denoiseFailed = failed;
+    onDenoiseFailedChange?.(failed);
+  }
   // The clip a plain (non audible-bats) play uses: the denoised clip once the first
   // play switched to it, otherwise the stored clip.
   // Whether a plain play currently uses the denoised clip.
@@ -206,7 +217,7 @@
       // A new detection starts from its stored clip again: the first play of
       // that detection decides whether to denoise it.
       denoiseSwapped = false;
-      denoiseFailed = false;
+      setDenoiseFailed(false);
       const newSrc = audibleBatsSrc ?? baseUrl;
       previousAudioUrl = baseUrl;
       previousEffectiveSrc = newSrc;
@@ -358,7 +369,7 @@
     if (!audioElement) return;
     logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
     const resume = retryWithPlay || isPlaying;
-    denoiseFailed = true;
+    setDenoiseFailed(true);
     clearAudioRetryTimer();
     audioRetryCount = 0;
     markPlaybackStopped();

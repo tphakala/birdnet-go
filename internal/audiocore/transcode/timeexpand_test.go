@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -128,4 +129,43 @@ func TestAudibleBats_NormalizesAfterExpansion(t *testing.T) {
 	require.NoError(t, err)
 	got := decodeBytes(t, data, ".wav")
 	assert.InDelta(t, normalizeTargetLUFS, lufsOf(t, got).IntegratedLUFS, normalizeToleranceLU)
+}
+
+// Denoise must run at the source rate: the audible copy is exactly the time
+// expansion of the denoised clip, and a job without a preset is unchanged.
+func TestAudibleBats_DenoiseRunsAtTheSourceRate(t *testing.T) {
+	t.Parallel()
+
+	const (
+		factor  = 10
+		preset  = "light-medium"
+		gainDB  = -2.0
+		seconds = noiseOnlySeconds + noiseToneSeconds
+	)
+	samples := noisePlusTone(noiseSeed, batSourceRate, int(seconds*batSourceRate), int(noiseOnlySeconds*batSourceRate), noiseAmp, noiseToneAmp)
+	path := filepath.Join(t.TempDir(), "bat.wav")
+	writeWAVFile(t, path, samples, batSourceRate)
+
+	reference := func(denoise bool) []byte {
+		t.Helper()
+		pcm := newPCM(slices.Clone(samples), batSourceRate, 1)
+		if denoise {
+			require.NoError(t, denoisePCM(t.Context(), pcm, preset))
+		}
+		expanded, err := timeExpand(t.Context(), pcm, factor, maxDecodedPCMBytes)
+		require.NoError(t, err)
+		require.NoError(t, applyFilters(t.Context(), expanded, Filters{GainDB: gainDB}))
+		out, err := encode(t.Context(), expanded, "wav", "")
+		require.NoError(t, err)
+		return out
+	}
+
+	denoised, err := AudibleBats(t.Context(), path, factor, Filters{Denoise: preset, GainDB: gainDB})
+	require.NoError(t, err)
+	assert.Equal(t, reference(true), denoised, "denoise then expand then gain")
+
+	plain, err := AudibleBats(t.Context(), path, factor, Filters{GainDB: gainDB})
+	require.NoError(t, err)
+	assert.Equal(t, reference(false), plain, "no preset leaves the output unchanged")
+	assert.NotEqual(t, plain, denoised)
 }

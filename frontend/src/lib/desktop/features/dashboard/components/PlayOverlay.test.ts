@@ -95,6 +95,7 @@ describe('PlayOverlay', () => {
       onAudioContextAvailable: (_a: boolean) => void;
       audibleBatsSrc: string | null;
       denoisePreset: string;
+      onDenoiseFailedChange: (_failed: boolean) => void;
     }> = {}
   ) {
     return render(PlayOverlay, { props: { detectionId: DETECTION_ID, ...props } });
@@ -902,6 +903,27 @@ describe('PlayOverlay', () => {
 
         expect(elementPath()).toBe(DENOISED_URL);
         expect(alertShown()).toBe(true);
+      });
+
+      it('reports the failure to the parent and clears it for the next detection', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        const onDenoiseFailedChange = vi.fn();
+        const { rerender } = mount({ denoisePreset: PRESET, onDenoiseFailedChange });
+        ctl.completeLoad();
+        await click();
+        expect(onDenoiseFailedChange).not.toHaveBeenCalled();
+
+        ctl.failLoad();
+        await settle();
+        expect(onDenoiseFailedChange.mock.calls).toEqual([[true]]);
+
+        await rerender({
+          detectionId: NEXT_DETECTION_ID,
+          denoisePreset: PRESET,
+          onDenoiseFailedChange,
+        });
+        await settle();
+        expect(onDenoiseFailedChange.mock.calls).toEqual([[true], [false]]);
       });
 
       it('asks for the next detection denoised again after a fallback', async () => {

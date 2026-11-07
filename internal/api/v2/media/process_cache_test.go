@@ -93,17 +93,18 @@ func TestAudibleBatsCacheKey(t *testing.T) {
 
 	negZero := math.Copysign(0, -1)
 	assertCacheKeyPairs(t, []cacheKeyPair{
-		{"negative zero gain is zero", audibleBatsCacheKey("1", "tag", 10, false, 0), audibleBatsCacheKey("1", "tag", 10, false, negZero), true},
-		{"clip source tag separates entries", audibleBatsCacheKey("1", "tagA", 10, false, 0), audibleBatsCacheKey("1", "tagB", 10, false, 0), false},
-		{"expansion separates entries", audibleBatsCacheKey("1", "tag", 10, false, 0), audibleBatsCacheKey("1", "tag", 20, false, 0), false},
-		{"normalize separates entries", audibleBatsCacheKey("1", "tag", 10, true, 0), audibleBatsCacheKey("1", "tag", 10, false, 0), false},
+		{"negative zero gain is zero", audibleBatsCacheKey("1", "tag", 10, false, "", 0), audibleBatsCacheKey("1", "tag", 10, false, "", negZero), true},
+		{"clip source tag separates entries", audibleBatsCacheKey("1", "tagA", 10, false, "", 0), audibleBatsCacheKey("1", "tagB", 10, false, "", 0), false},
+		{"expansion separates entries", audibleBatsCacheKey("1", "tag", 10, false, "", 0), audibleBatsCacheKey("1", "tag", 20, false, "", 0), false},
+		{"denoise preset separates entries", audibleBatsCacheKey("1", "tag", 10, false, "light-medium", 0), audibleBatsCacheKey("1", "tag", 10, false, "", 0), false},
+		{"normalize separates entries", audibleBatsCacheKey("1", "tag", 10, true, "", 0), audibleBatsCacheKey("1", "tag", 10, false, "", 0), false},
 		// The key keeps the gain at full precision, unlike the processing key.
-		{"gain below 0.1 dB separates entries", audibleBatsCacheKey("1", "tag", 10, false, 6.01), audibleBatsCacheKey("1", "tag", 10, false, 6.04), false},
+		{"gain below 0.1 dB separates entries", audibleBatsCacheKey("1", "tag", 10, false, "", 6.01), audibleBatsCacheKey("1", "tag", 10, false, "", 6.04), false},
 	})
 
 	t.Run("detection id cannot add path elements", func(t *testing.T) {
 		t.Parallel()
-		assertKeyStaysInCacheDir(t, audibleBatsCacheKey(`..\x/y`, "tag", 10, false, 0))
+		assertKeyStaysInCacheDir(t, audibleBatsCacheKey(`..\x/y`, "tag", 10, false, "", 0))
 	})
 }
 
