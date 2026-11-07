@@ -1186,11 +1186,11 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
 	}
 
-	if preset := ctx.QueryParam("denoise"); preset != "" {
-		if !transcode.IsValidDenoisePreset(preset) {
-			return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", preset),
-				"Invalid denoise preset", http.StatusBadRequest)
-		}
+	preset, ok, err := c.queryDenoisePreset(ctx)
+	if !ok {
+		return err
+	}
+	if preset != "" {
 		return c.serveDenoisedAudio(ctx, noteID, preset)
 	}
 	return c.serveStoredAudioByID(ctx, noteID, false)
@@ -1239,7 +1239,7 @@ func (c *Handler) serveStoredAudioByID(ctx echo.Context, noteID string, noStore 
 	c.setPrivateAudioCacheControl(ctx)
 	if noStore {
 		// After setPrivateAudioCacheControl, which would overwrite it with "private".
-		ctx.Response().Header().Set("Cache-Control", "no-store")
+		ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
 	}
 
 	// Serve the file using SecureFS.
@@ -1727,7 +1727,7 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	cacheKey := audibleBatsCacheKey(noteID, sourceTag, req.Expansion, req.Normalize, req.GainDB)
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(cacheKey); cached != nil {
-			ctx.Response().Header().Set("Cache-Control", "no-store")
+			ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
 			return ctx.Blob(http.StatusOK, MimeTypeWAV, cached)
 		}
 	}
@@ -1759,7 +1759,7 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 		}
 	}
 
-	ctx.Response().Header().Set("Cache-Control", "no-store")
+	ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
 }
 
@@ -2355,10 +2355,9 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 // up, an existing render of the clip is served (see serveRetainedSpectrogram) and nothing
 // is generated.
 func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
-	preset := ctx.QueryParam(denoiseQueryParam)
-	if !transcode.IsValidDenoisePreset(preset) {
-		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", preset),
-			"Invalid denoise preset", http.StatusBadRequest)
+	preset, ok, err := c.queryDenoisePreset(ctx)
+	if !ok {
+		return err
 	}
 
 	// Validate note ID and get clip path
@@ -2414,6 +2413,8 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 		if handled, denoiseErr := c.serveDenoisedSpectrogram(ctx, &req); handled {
 			return denoiseErr
 		}
+		// Not the bytes the URL names: keep caches from storing them under it.
+		noStoreBeforeWrite(ctx)
 	}
 
 	// Check spectrogram generation mode
@@ -4048,7 +4049,7 @@ func (c *Handler) respondImagePendingWithBody(ctx echo.Context, scientificName s
 		logger.String("scientific_name", scientificName))
 	header := ctx.Response().Header()
 	header.Set("Retry-After", strconv.Itoa(ImagePendingRetryAfterSeconds))
-	header.Set("Cache-Control", "no-store")
+	header.Set("Cache-Control", cacheControlNoStore)
 	if withJSONBody {
 		return ctx.JSON(http.StatusServiceUnavailable,
 			c.NewErrorResponse(ErrImageNotResolvedYet, "Image is not resolved yet", http.StatusServiceUnavailable))

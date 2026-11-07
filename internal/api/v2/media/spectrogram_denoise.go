@@ -29,12 +29,6 @@ const (
 	cacheControlNoStore = "no-store"
 )
 
-// processedPNG is a rendered spectrogram and the time it was stored.
-type processedPNG struct {
-	data    []byte
-	modTime time.Time
-}
-
 // denoisedSpectrogramRequest is what a denoised spectrogram request resolved from
 // the note, the query and the settings.
 type denoisedSpectrogramRequest struct {
@@ -101,6 +95,18 @@ func (c *Handler) processToWAVInSlot(ctx context.Context, absolutePath string, f
 	return transcode.ProcessToWAV(ctx, absolutePath, filters)
 }
 
+// queryDenoisePreset reads and validates the denoise query parameter ("" when
+// absent). ok is false when it is not a preset: the 400 is written and err is the
+// handler's result.
+func (c *Handler) queryDenoisePreset(ctx echo.Context) (preset string, ok bool, err error) {
+	preset = ctx.QueryParam(denoiseQueryParam)
+	if !transcode.IsValidDenoisePreset(preset) {
+		return "", false, c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", preset),
+			"Invalid denoise preset", http.StatusBadRequest)
+	}
+	return preset, true, nil
+}
+
 // noStoreBeforeWrite marks the response Cache-Control: no-store at the moment the
 // header is written, overriding any cache header the handler that answers sets
 // itself. Used when a URL that names a denoised variant is answered with the
@@ -114,8 +120,7 @@ func noStoreBeforeWrite(ctx echo.Context) {
 // with a render of the stored clip denoised at the preset, made from the same
 // cached WAV the denoised audio GET uses. It reports handled false when it did
 // not answer and the caller must answer with today's stored spectrogram; the
-// response is then already marked no-store, since it is not the bytes the URL
-// names. That happens for a guest asking for anything but the playback default, a
+// caller marks it no-store, since it is not the bytes the URL names. That happens for a guest asking for anything but the playback default, a
 // clip that is not on disk (the stored path owns pending, gone and kept-render
 // handling), and the user-requested mode before the user generated the stored
 // spectrogram, so a page load never starts a denoise there.
@@ -124,7 +129,6 @@ func noStoreBeforeWrite(ctx echo.Context) {
 func (c *Handler) serveDenoisedSpectrogram(ctx echo.Context, req *denoisedSpectrogramRequest) (handled bool, err error) {
 	clip, ok := c.denoiseSourceClip(req.clipPath)
 	if !ok {
-		noStoreBeforeWrite(ctx)
 		return false, nil
 	}
 	freqToken := spectrogram.ProfileSuffix(req.profile)
@@ -138,8 +142,7 @@ func (c *Handler) serveDenoisedSpectrogram(ctx echo.Context, req *denoisedSpectr
 		}
 	}
 
-	if !c.mayDenoise(ctx, req.preset) || !c.mayRenderOnLoad(req, clip, freqToken) {
-		noStoreBeforeWrite(ctx)
+	if !c.mayDenoise(ctx, req.preset) || !c.mayRenderOnLoad(req, clip) {
 		return false, nil
 	}
 
@@ -154,24 +157,24 @@ func (c *Handler) serveDenoisedSpectrogram(ctx echo.Context, req *denoisedSpectr
 // false when it cannot be denoised from disk: an invalid path or a clip that is
 // not there.
 func (c *Handler) denoiseSourceClip(clipPath string) (clipFile, bool) {
-	if normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger); err == nil {
-		if clip, lookupErr := c.statClip(normalizedPath); lookupErr == nil {
-			return clip, true
-		}
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
+	if err != nil {
+		return clipFile{}, false
 	}
-	return clipFile{}, false
+	clip, lookupErr := c.statClip(normalizedPath)
+	return clip, lookupErr == nil
 }
 
 // mayRenderOnLoad reports whether a request may start a render. Outside the
 // user-requested mode it always may. In that mode a page load must not start
 // processing, so it may only when the stored spectrogram for these parameters
 // exists, which means the user asked for this clip's spectrogram.
-func (c *Handler) mayRenderOnLoad(req *denoisedSpectrogramRequest, clip clipFile, freqSuffix string) bool {
+func (c *Handler) mayRenderOnLoad(req *denoisedSpectrogramRequest, clip clipFile) bool {
 	if c.CurrentSettings().Realtime.Dashboard.Spectrogram.GetMode() != conf.SpectrogramModeUserRequested {
 		return true
 	}
 	_, _, _, relSpectrogramPath := buildSpectrogramPaths(clip.normalizedPath, req.params.width, req.params.raw,
-		req.params.style, req.params.dynamicRange, freqSuffix)
+		req.params.style, req.params.dynamicRange, spectrogram.ProfileSuffix(req.profile))
 	info, statErr := c.SFS.StatRel(relSpectrogramPath)
 	return statErr == nil && info.Size() > 0
 }
@@ -182,37 +185,18 @@ func (c *Handler) mayRenderOnLoad(req *denoisedSpectrogramRequest, clip clipFile
 // discard work others wait for. The WAV step shares its cache entry, flight and
 // slot with the denoised audio GET and holds the slot only until the transcode
 // returns; the render runs outside it.
-func (c *Handler) denoisedSpectrogramPNG(reqCtx context.Context, req *denoisedSpectrogramRequest, clip clipFile, key string) (*processedPNG, error) {
-	ch := c.processingFlight.DoChan(key, func() (any, error) {
-		out, err := runTracked(c, key, func() (*processedPNG, error) {
-			return c.renderDenoisedSpectrogram(req, clip, key)
-		})
-		if err != nil {
-			return nil, err
-		}
-		return out, nil
+func (c *Handler) denoisedSpectrogramPNG(reqCtx context.Context, req *denoisedSpectrogramRequest, clip clipFile, key string) (*processedOutput, error) {
+	return doFlight(c, reqCtx, key, func() (*processedOutput, error) {
+		return c.renderDenoisedSpectrogram(req, clip, key)
 	})
-	select {
-	case res := <-ch:
-		if res.Err != nil {
-			return nil, res.Err
-		}
-		out, ok := res.Val.(*processedPNG)
-		if !ok {
-			return nil, fmt.Errorf("unexpected spectrogram result type %T", res.Val)
-		}
-		return out, nil
-	case <-reqCtx.Done():
-		return nil, reqCtx.Err()
-	}
 }
 
 // renderDenoisedSpectrogram is the flight leader's work: a last cache check, the
 // denoised WAV, the render and the cache store.
-func (c *Handler) renderDenoisedSpectrogram(req *denoisedSpectrogramRequest, clip clipFile, key string) (*processedPNG, error) {
+func (c *Handler) renderDenoisedSpectrogram(req *denoisedSpectrogramRequest, clip clipFile, key string) (*processedOutput, error) {
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(key); cached != nil {
-			return &processedPNG{data: cached, modTime: c.entryWriteTime(key)}, nil
+			return &processedOutput{data: cached, modTime: c.entryWriteTime(key)}, nil
 		}
 	}
 
@@ -236,7 +220,7 @@ func (c *Handler) renderDenoisedSpectrogram(req *denoisedSpectrogramRequest, cli
 			)
 		}
 	}
-	return &processedPNG{data: pngData, modTime: c.entryWriteTime(key)}, nil
+	return &processedOutput{data: pngData, modTime: c.entryWriteTime(key)}, nil
 }
 
 // denoisedSpectrogramError answers a failed denoised render: 503 with Retry-After

@@ -106,8 +106,9 @@ func (c *Handler) tryAcquireProcessingSlot() (release func(), ok bool) {
 	}
 }
 
-// processedWAV is the output of a processing job and the time it was stored.
-type processedWAV struct {
+// processedOutput is the output of a processing job (a WAV or a rendered PNG) and
+// the time it was stored.
+type processedOutput struct {
 	data    []byte
 	modTime time.Time
 }
@@ -115,35 +116,43 @@ type processedWAV struct {
 // processWAV runs ProcessToWAV for key through the shared flight group, so
 // concurrent requests for one key (a GET seeking during processing, a POST for
 // the same filters) run one job. The job is tracked by the core wait group (see
-// runTrackedJob) and runs on the handler's lifecycle
+// runTracked) and runs on the handler's lifecycle
 // context, not the leader's request, so an aborted request or a seek does not
 // discard work other callers wait for; each caller waits on its own request
 // context. The leader takes a processing slot without blocking and fails with
 // errProcessingBusy when none is free.
-func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, filters transcode.Filters) (*processedOutput, error) {
+	return doFlight(c, reqCtx, key, func() (*processedOutput, error) {
+		return c.runProcessingJob(key, absolutePath, filters)
+	})
+}
+
+// doFlight runs job once per key across concurrent callers through the shared
+// flight group, tracked by the core wait group (see runTracked) and on the
+// handler's lifecycle context, and waits for it or for reqCtx, whichever ends
+// first.
+func doFlight[T any](c *Handler, reqCtx context.Context, key string, job func() (T, error)) (T, error) {
+	var zero T
 	ch := c.processingFlight.DoChan(key, func() (any, error) {
-		return c.runTrackedJob(key, absolutePath, filters)
+		out, err := runTracked(c, key, job)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
 	})
 	select {
 	case res := <-ch:
 		if res.Err != nil {
-			return nil, res.Err
+			return zero, res.Err
 		}
-		out, ok := res.Val.(*processedWAV)
+		out, ok := res.Val.(T)
 		if !ok {
-			return nil, fmt.Errorf("unexpected processing result type %T", res.Val)
+			return zero, fmt.Errorf("unexpected processing result type %T", res.Val)
 		}
 		return out, nil
 	case <-reqCtx.Done():
-		return nil, reqCtx.Err()
+		return zero, reqCtx.Err()
 	}
-}
-
-// runTrackedJob runs runProcessingJob under runTracked.
-func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
-	return runTracked(c, key, func() (*processedWAV, error) {
-		return c.runProcessingJob(key, absolutePath, filters)
-	})
 }
 
 // runTracked runs job in a goroutine registered with the core's wait group, so
@@ -185,10 +194,10 @@ func runTracked[T any](c *Handler, key string, job func() (T, error)) (T, error)
 // runProcessingJob is the flight leader's work: a last cache check (a flight that
 // just finished may have stored the entry after the caller's miss), a slot, the
 // transcode and the cache store.
-func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.Filters) (*processedOutput, error) {
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(key); cached != nil {
-			return &processedWAV{data: cached, modTime: c.entryWriteTime(key)}, nil
+			return &processedOutput{data: cached, modTime: c.entryWriteTime(key)}, nil
 		}
 	}
 
@@ -215,7 +224,7 @@ func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.F
 			)
 		}
 	}
-	return &processedWAV{data: wavData, modTime: c.entryWriteTime(key)}, nil
+	return &processedOutput{data: wavData, modTime: c.entryWriteTime(key)}, nil
 }
 
 // entryWriteTime is the write time of the cache entry for key, the value a later
