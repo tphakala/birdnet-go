@@ -30,8 +30,10 @@ type ModelSpec struct {
 	MinRawSampleRate      int           // Hz: minimum source capture rate for this model (0 = no constraint)
 	RecommendedSampleRate int           // Hz: recommended source capture rate (0 = no constraint)
 
-	// ClipSamples is the analysis window length in samples at EffectiveSampleRate().
-	// Zero keeps the SampleRate x ClipLength rule (see ClipSampleCount). A model
+	// ClipSamples is the analysis window length in samples. A spec that sets it
+	// must have SampleRate equal to EffectiveSampleRate(), since ClipSizeBytes
+	// counts samples at SampleRate and StepSamples is a duration at the effective
+	// rate. Zero keeps the SampleRate x ClipLength rule (see ClipSampleCount). A model
 	// whose window is not a whole number of seconds sets it, because ClipLength
 	// truncates to whole seconds in ClipSizeBytes. ClipLength must still equal the
 	// window's duration, since display and timing consumers read it.
