@@ -440,6 +440,15 @@ describe('AnalysisSettingsPage bat thresholds', () => {
     expect(screen.queryByText(BATTY_LABEL)).toBeNull();
   });
 
+  it('links the BSG-BAT warning to its threshold input', async () => {
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+
+    const describedBy = screen.getByLabelText(BSG_BAT_LABEL).getAttribute('aria-describedby') ?? '';
+    const note = screen.getByText(BSG_BAT_WARNING).closest('[id]');
+    expect(note).not.toBeNull();
+    expect(describedBy.split(' ')).toContain(note?.id);
+  });
+
   it('shows both thresholds when both bat models are installed', async () => {
     await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
 

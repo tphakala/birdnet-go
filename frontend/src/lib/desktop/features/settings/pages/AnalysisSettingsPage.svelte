@@ -272,6 +272,7 @@
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
+  const BSG_BAT_WARNING_ID = generateId('bsg-bat-warning');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -1958,13 +1959,14 @@
               step={BAT_THRESHOLD_STEP}
               disabled={store.isLoading || store.isSaving}
               helpText={t('analysis.detection.bsgBatThreshold.helpText')}
+              describedByExtra={BSG_BAT_WARNING_ID}
             />
           {/if}
         </div>
 
         {#if hasBsgBatModel}
           <div class="mt-4">
-            <SettingsNote>
+            <SettingsNote id={BSG_BAT_WARNING_ID}>
               {#snippet icon()}<AlertTriangle
                   class="size-4 text-[var(--color-warning)]"
                 />{/snippet}
