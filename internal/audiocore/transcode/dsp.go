@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/tphakala/go-audio-dsp/denoiser"
 	"github.com/tphakala/go-audio-dsp/gain"
@@ -87,6 +88,29 @@ func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
 		}
 	}
 	return nil
+}
+
+// DenoisePCM16 denoises interleaved 16-bit little-endian PCM with the named
+// preset and returns the result as a new slice; pcm is never modified. It is
+// the export-stage entry point: it runs the same code as the playback pipeline
+// (denoisePCM), so a clip denoised at export carries the samples the player
+// would produce for the same audio. It touches no files. An empty or unknown
+// preset, a rate outside the supported range, a channel count below one, or a
+// buffer that is not a whole number of frames wraps ErrInvalidRequest.
+func DenoisePCM16(ctx context.Context, pcm []byte, sampleRate, channels int, preset string) ([]byte, error) {
+	switch {
+	case sampleRate < minSourceSampleRate || sampleRate > maxSourceSampleRate:
+		return nil, validationError(ErrInvalidRequest, "denoise_pcm", "sample rate %d Hz is outside %d to %d Hz", sampleRate, minSourceSampleRate, maxSourceSampleRate)
+	case channels < 1:
+		return nil, validationError(ErrInvalidRequest, "denoise_pcm", "channel count %d is not positive", channels)
+	case len(pcm)%(channels*bytesPerSample) != 0:
+		return nil, validationError(ErrInvalidRequest, "denoise_pcm", "%d bytes is not a whole number of %d-channel frames", len(pcm), channels)
+	}
+	p := &pcmBuffer{Data: slices.Clone(pcm), SampleRate: sampleRate, Channels: channels}
+	if err := denoisePCM(ctx, p, preset); err != nil {
+		return nil, err
+	}
+	return p.Data, nil
 }
 
 // denoisePCM denoises p channel by channel and writes the result back into
