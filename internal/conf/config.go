@@ -54,6 +54,15 @@ type ExportSettings struct {
 	PreCapture     int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`             // pre-capture in seconds
 	Gain           float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                               // gain in dB for audio capture
 	Normalization  NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"`    // audio normalization settings (EBU R128)
+	Denoise        DenoiseSettings       `yaml:"denoise" json:"denoise" mapstructure:"denoise"`                      // denoise the captured audio before it is saved
+}
+
+// DenoiseSettings is a denoise on/off switch with a strength preset. The tags
+// carry no omitempty on purpose: an Off value must stay visible in the settings
+// API so a client never reads a missing object as a different state.
+type DenoiseSettings struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`    // true to apply the denoise
+	Strength string `yaml:"strength" json:"strength" mapstructure:"strength"` // preset name, see the DenoisePreset constants
 }
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
