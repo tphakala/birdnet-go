@@ -375,7 +375,7 @@ func (bn *BirdNET) usesONNXBackend() bool {
 }
 
 // initializeModel loads and initializes the primary BirdNET model.
-// Dispatches to OpenVINO (A76 image, gated), ONNX, or TFLite (see
+// Dispatches to OpenVINO (gated per host and settings, see openVINOPlanFor), ONNX, or TFLite (see
 // usesONNXBackend / openVINOPlan). OpenVINO failures fall back to ONNX, and a
 // declined OpenVINO attempt is logged with the reason (see logOpenVINODeclined),
 // so the chosen backend is never silent in the journal.

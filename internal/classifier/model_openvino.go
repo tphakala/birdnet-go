@@ -28,9 +28,16 @@ const (
 	ovReasonGPUUnavailable    = "gpu device requested but not available"
 	ovReasonCPUUnsupported    = "cpu device not supported on this host (needs an ARMv8.2+/A76 CPU with native f16)"
 	ovReasonNoDevice          = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
+	ovReasonORTPreferredARM64 = "ONNX Runtime is preferred on arm64 CPUs; set birdnet.backend to openvino to use the OpenVINO CPU"
 	ovReasonNotBirdNETv24     = "model is not the stock BirdNET v2.4 classifier"
 	ovReasonNotPerchNoDFT     = "model is not the Perch no_dft variant"
 	ovReasonUnverifiedWeights = "model weights are INT8 or of unrecognized precision, which are not validated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)"
+)
+
+// Go architecture names (runtime.GOARCH values) the OpenVINO device policy keys on.
+const (
+	goarchARM64 = "arm64"
+	goarchAMD64 = "amd64"
 )
 
 // openVINOPlan describes how a model should run on the OpenVINO backend.
@@ -53,48 +60,98 @@ type openVINOPlan struct {
 //
 // Both BirdNET v2.4 and Perch may target the Intel iGPU; the per-(model, device)
 // precision is chosen by openVINOPrecisionFor (BirdNET v2.4 is forced to f32 on
-// every device because both the GPU and the A76 CPU f16 paths break it). cpuspec.HasNativeF16() is
-// true only on ARMv8.2+ (A76), which keeps amd64 CPU out of the auto path (a
-// non-win); an explicit "cpu" device is still allowed on amd64 for
-// benchmarking/advanced use. The plan helper loads the OpenVINO core (idempotent)
-// only when it must enumerate devices for a GPU decision, so it is independent of
-// caller ordering.
+// every device because both the GPU and the A76 CPU f16 paths break it).
+// cpuspec.HasNativeF16() is true only on ARMv8.2+ (A76), which keeps amd64 CPU out
+// of the auto path (a non-win); an explicit "cpu" device is still allowed on amd64
+// for benchmarking/advanced use. On arm64 the auto backend declines the OpenVINO
+// CPU before any OpenVINO library is loaded (see autoDeclinesOpenVINOCPU); backend
+// "openvino" or device "cpu" opts back in. Perch, bat and v3.0 require ONNX
+// Runtime before they plan (their builders call checkORTOrFail), so this entry
+// point passes ONNX Runtime as available and auto always declines the arm64 CPU
+// for them; BirdNET v2.4 plans through birdnetV24BasePlan, which passes the live
+// answer. The plan helper loads the OpenVINO core (idempotent) only when it must
+// enumerate devices for a GPU decision, so it is independent of caller ordering.
 func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outputIndex int) (plan openVINOPlan, ok bool, reason string) {
+	return openVINOPlanWithHost(backendPref, devicePref, modelID, outputIndex, liveOVHostFacts(libraryPath, true))
+}
+
+// openVINOPlanWithHost is openVINOPlanFor with the host facts supplied by the
+// caller, so BirdNET v2.4 can pass its own ONNX Runtime answer.
+func openVINOPlanWithHost(backendPref, devicePref, modelID string, outputIndex int, host *ovHostFacts) (plan openVINOPlan, ok bool, reason string) {
 	if !openvinoBackendAvailable {
 		return openVINOPlan{}, false, ovReasonNotBuilt
 	}
-	if backendPref == conf.BackendPrefONNX {
-		return openVINOPlan{}, false, ovReasonBackendONNX
+	device, ok, reason := planOpenVINODevice(backendPref, devicePref, host)
+	if !ok {
+		return openVINOPlan{}, false, reason
 	}
-
-	var device string
-	switch devicePref {
-	case conf.OVDeviceGPU:
-		if !openVINOGPUAvailable(libraryPath) {
-			return openVINOPlan{}, false, ovReasonGPUUnavailable
-		}
-		device = inference.OVDeviceGPU
-	case conf.OVDeviceCPU:
-		if !openVINOCPUAllowed(devicePref) {
-			return openVINOPlan{}, false, ovReasonCPUUnsupported
-		}
-		device = inference.OVDeviceCPU
-	default: // "auto" or ""
-		switch {
-		case openVINOGPUAvailable(libraryPath):
-			device = inference.OVDeviceGPU
-		case openVINOCPUAllowed(devicePref):
-			device = inference.OVDeviceCPU
-		default:
-			return openVINOPlan{}, false, ovReasonNoDevice
-		}
-	}
-
 	return openVINOPlan{
 		device:      device,
 		outputIndex: outputIndex,
 		precision:   openVINOPrecisionFor(modelID, device),
 	}, true, ""
+}
+
+// ovHostFacts are the host facts the OpenVINO device decision reads. The GPU probe
+// is a lazy closure because it loads the OpenVINO library and spawns a child
+// process, so it must run only on the branches that need it.
+type ovHostFacts struct {
+	goarch       string      // runtime.GOARCH
+	nativeF16    bool        // cpuspec.HasNativeF16()
+	ortAvailable bool        // ONNX Runtime is available for this model's settings
+	gpuAvailable func() bool // an OpenVINO GPU device is present
+}
+
+// liveOVHostFacts returns the facts of the running host with the given ONNX
+// Runtime answer.
+func liveOVHostFacts(libraryPath string, ortAvailable bool) *ovHostFacts {
+	return &ovHostFacts{
+		goarch:       runtime.GOARCH,
+		nativeF16:    cpuspec.HasNativeF16(),
+		ortAvailable: ortAvailable,
+		gpuAvailable: func() bool { return openVINOGPUAvailable(libraryPath) },
+	}
+}
+
+// planOpenVINODevice picks the OpenVINO device for the settings and host facts,
+// or declines with a reason. It is pure apart from the lazy probes and reads
+// nothing cached, so a settings change takes effect on the next call.
+func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (device string, ok bool, reason string) {
+	if backendPref == conf.BackendPrefONNX {
+		return "", false, ovReasonBackendONNX
+	}
+
+	switch devicePref {
+	case conf.OVDeviceGPU:
+		if !host.gpuAvailable() {
+			return "", false, ovReasonGPUUnavailable
+		}
+		return inference.OVDeviceGPU, true, ""
+	case conf.OVDeviceCPU:
+		if !host.cpuAllowed(devicePref) {
+			return "", false, ovReasonCPUUnsupported
+		}
+		return inference.OVDeviceCPU, true, ""
+	default: // "auto" or ""
+		// Decline before the GPU probe so this decision neither loads
+		// libopenvino_c nor spawns the probe child. On a CPU without native f16 the
+		// OpenVINO CPU could not be used anyway, so keep the no-device reason there:
+		// telling the user to set backend=openvino would not help.
+		if backendPref != conf.BackendPrefOpenVINO && autoDeclinesOpenVINOCPU(host.goarch, host.nativeF16, host.ortAvailable) {
+			if !host.nativeF16 {
+				return "", false, ovReasonNoDevice
+			}
+			return "", false, ovReasonORTPreferredARM64
+		}
+		switch {
+		case host.gpuAvailable():
+			return inference.OVDeviceGPU, true, ""
+		case host.cpuAllowed(devicePref):
+			return inference.OVDeviceCPU, true, ""
+		default:
+			return "", false, ovReasonNoDevice
+		}
+	}
 }
 
 // openVINOPrecisionFor returns the INFERENCE_PRECISION_HINT for a (model, device)
@@ -191,16 +248,28 @@ func BackendForcesFP32(registryID, backendToken string) bool {
 	return openVINOPrecisionFor(registryID, device) == inference.OVPrecisionF32
 }
 
-// openVINOCPUAllowed reports whether the OpenVINO CPU device may be used. The f16
-// CPU kernels are safe only on ARMv8.2+ (HasNativeF16); on ARMv8.0 (A72) they
+// autoDeclinesOpenVINOCPU reports whether the auto backend declines the OpenVINO
+// CPU device for a model. On arm64 it runs models on ONNX Runtime instead:
+// measured on a Raspberry Pi 4 and a Pi 5, OpenVINO at f32 was slower than or
+// tied with ONNX Runtime and held 114 to 166 MB more memory per model, and
+// OpenVINO f16 is unsafe on the A76. The OpenVINO CPU is used on auto only on a
+// CPU with native f16 when ONNX Runtime is missing. An explicit
+// birdnet.backend=openvino or birdnet.openvinodevice=cpu bypasses this rule. It
+// is always false off arm64.
+func autoDeclinesOpenVINOCPU(goarch string, nativeF16, ortAvailable bool) bool {
+	return goarch == goarchARM64 && (!nativeF16 || ortAvailable)
+}
+
+// cpuAllowed reports whether the OpenVINO CPU device may be used. The f16
+// CPU kernels are safe only on ARMv8.2+ (nativeF16); on ARMv8.0 (A72) they
 // would SIGILL, so the CPU path is rejected there. An explicit "cpu" preference
 // on amd64 is allowed without the ARM f16 gate because the x86 CPU plugin is
-// SIGILL-safe; auto never reaches this on amd64 (HasNativeF16 is false there).
-func openVINOCPUAllowed(devicePref string) bool {
-	if cpuspec.HasNativeF16() {
+// SIGILL-safe; auto never reaches this on amd64 (nativeF16 is false there).
+func (h *ovHostFacts) cpuAllowed(devicePref string) bool {
+	if h.nativeF16 {
 		return true
 	}
-	return devicePref == conf.OVDeviceCPU && runtime.GOARCH == "amd64"
+	return devicePref == conf.OVDeviceCPU && h.goarch == goarchAMD64
 }
 
 // openVINOGPUAvailable reports whether an OpenVINO GPU device (Intel iGPU/dGPU via
@@ -290,7 +359,7 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 	if bn.ModelInfo.ID != DefaultModelVersion {
 		return openVINOPlan{}, false, ovReasonNotBirdNETv24
 	}
-	return birdnetV24OpenVINOPlan(&bn.Settings.BirdNET, detectQuantization(bn.onnxModelPath()))
+	return birdnetV24OpenVINOPlan(&bn.Settings.BirdNET, detectQuantization(bn.onnxModelPath()), defaultORTAvailable)
 }
 
 // birdnetV24OpenVINOPlan returns the OpenVINO plan for a BirdNET v2.4 model file
@@ -300,24 +369,35 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 // pass detectQuantization of the model file path. A file whose name carries no
 // precision token is treated as unverified (see applyOpenVINOQuantizationPolicy);
 // only a file whose name misstates its precision can still get the wrong plan.
-func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization) (plan openVINOPlan, ok bool, reason string) {
-	plan, ok, reason = birdnetV24BasePlan(cfg)
+// ortAvailable answers whether ONNX Runtime is available at a configured library
+// path; both callers pass the function their own ONNX Runtime check uses, so the
+// plan and that check cannot disagree.
+func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization, ortAvailable func(configuredPath string) bool) (plan openVINOPlan, ok bool, reason string) {
+	plan, ok, reason = birdnetV24BasePlan(cfg, ortAvailable)
 	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
 }
 
 // birdnetV24BasePlan is the device and precision plan birdnetV24OpenVINOPlan
-// starts from, before the quantization policy is applied. It is a variable only
-// so tests can replace it: in the default (untagged) build openVINOPlanFor always
-// declines with ovReasonNotBuilt, which would leave the policy unreachable through
-// the production entry points.
-var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig) (plan openVINOPlan, ok bool, reason string) {
-	return openVINOPlanFor(
+// starts from, before the quantization policy is applied. BirdNET v2.4 is the one
+// model with a live ONNX Runtime-missing case on arm64 auto (Perch, bat and v3.0
+// require ONNX Runtime first), so it takes the ONNX Runtime answer from its
+// caller. It is a variable only so tests can replace it: in the default (untagged)
+// build openVINOPlanWithHost always declines with ovReasonNotBuilt, which would
+// leave the policy unreachable through the production entry points.
+var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig, ortAvailable func(configuredPath string) bool) (plan openVINOPlan, ok bool, reason string) {
+	return openVINOPlanWithHost(
 		cfg.Backend,
 		cfg.OpenVINODevice,
 		DefaultModelVersion,
-		cfg.OpenVINOPath,
 		birdnetLogitsOutputIndex,
+		liveOVHostFacts(cfg.OpenVINOPath, ortAvailable(cfg.ONNXRuntimePath)),
 	)
+}
+
+// defaultORTAvailable reports whether ONNX Runtime is available at the configured
+// library path, with the probe the ONNX Runtime load gates use.
+func defaultORTAvailable(configuredPath string) bool {
+	return inference.CheckORTAvailability(configuredPath).Available
 }
 
 // applyOpenVINOQuantizationPolicy adjusts an OpenVINO plan for the weight
@@ -345,7 +425,9 @@ var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig) (plan openVINOPlan, ok bo
 // INT8 weights on the OpenVINO GPU plugin have not been validated, while ORT is
 // known to be correct, so auto stays on the verified backend. On a host with
 // OpenVINO but no ONNX Runtime an unverified model therefore fails to load on auto;
-// setting birdnet.backend to openvino runs it on OpenVINO at f32 instead.
+// setting birdnet.backend to openvino runs it on OpenVINO at f32 instead. On arm64
+// with the auto backend and device, an FP32 or FP16 file reaches OpenVINO only when
+// ONNX Runtime is unavailable.
 func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason string) {
 	if !ok || quant == QuantizationFP32 || quant == QuantizationFP16 {
 		return plan, ok, reason
@@ -361,8 +443,9 @@ func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backend
 // primary classifier: the boolean form of openVINOPlan, dropping the plan and the
 // decline reason. True only when built with the openvino tag, the model is the
 // BirdNET v2.4 identity, config does not opt out, a supported device is
-// available (ARM A76 CPU or the Intel iGPU, both at f32; see openVINOPrecisionFor
-// for why BirdNET v2.4 never uses f16), and the model file is not INT8 or of
+// available (the Intel iGPU, or the ARM A76 CPU on an explicit opt-in or when ONNX
+// Runtime is unavailable; both at f32, see openVINOPrecisionFor for why BirdNET
+// v2.4 never uses f16), and the model file is not INT8 or of
 // unrecognized precision on the auto backend (see
 // applyOpenVINOQuantizationPolicy). initializeModel calls openVINOPlan directly
 // so it can also log the decline reason; this predicate keeps the eligibility

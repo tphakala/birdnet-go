@@ -135,7 +135,7 @@ func TestBirdNETV24CatalogModelFilesDetectQuantization(t *testing.T) {
 func stubBirdNETV24BasePlan(t *testing.T, plan openVINOPlan) {
 	t.Helper()
 	orig := birdnetV24BasePlan
-	birdnetV24BasePlan = func(*conf.BirdNETConfig) (openVINOPlan, bool, string) {
+	birdnetV24BasePlan = func(*conf.BirdNETConfig, func(string) bool) (openVINOPlan, bool, string) {
 		return plan, true, ""
 	}
 	t.Cleanup(func() { birdnetV24BasePlan = orig })
