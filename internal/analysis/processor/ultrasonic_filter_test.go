@@ -36,9 +36,11 @@ const (
 	ultrasonicEnvelopeHz    = 10.0 // slow envelope: its sidebands stay far from the 20 kHz split
 	ultrasonicNoiseSeed     = 12345
 
-	// The band gate case: a split between a 192 kHz source's Nyquist (96 kHz)
-	// and the 256 kHz Bat window's (128 kHz).
+	// The band gate cases: a split between a 192 kHz source's Nyquist (96 kHz)
+	// and the 256 kHz Bat window's (128 kHz), and a 384 kHz source whose band
+	// reaches past the Bat window's Nyquist.
 	ultrasonicNarrowSourceRate = 192000
+	ultrasonicWideSourceRate   = 384000
 	ultrasonicHighSplitHz      = 100000
 	ultrasonicHighToneHz       = 110000.0
 )
@@ -101,17 +103,32 @@ func TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered(t *testing.T) {
 	assert.False(t, runUltrasonicFilter(p, settings, pcm), "a split at Nyquist leaves no band")
 }
 
-// TestApplyUltrasonicFilter_BandGateUsesModelRate verifies that the gate on the
-// band above the split reads the model's window rate: a 192 kHz source has no
-// band above a 100 kHz split, but the 256 kHz Bat window does, and holds a flat
-// 110 kHz tone the filter must tag.
-func TestApplyUltrasonicFilter_BandGateUsesModelRate(t *testing.T) {
-	p, settings := newUltrasonicFilterFixtureAt(t, ultrasonicNarrowSourceRate)
-	settings.Bat.UltrasonicFilter.FrequencySplitHz = ultrasonicHighSplitHz
-
+// TestApplyUltrasonicFilter_BandGateNeedsSourceAndModelBand verifies that the
+// filter runs only when both the source and the 256 kHz Bat window have a band
+// above the split. A 192 kHz source carries nothing above 96 kHz, so the window's
+// band above a 100 kHz split holds only resampler residue and must be skipped; a
+// split at the window's Nyquist must be skipped even for a 384 kHz source. The
+// window holds a flat 110 kHz tone, which the filter tags unlikely when it runs
+// with the 100 kHz split.
+func TestApplyUltrasonicFilter_BandGateNeedsSourceAndModelBand(t *testing.T) {
+	tests := []struct {
+		name       string
+		sourceRate int
+		splitHz    int
+		wantTagged bool
+	}{
+		{"source below split", ultrasonicNarrowSourceRate, ultrasonicHighSplitHz, false},
+		{"model window below split", ultrasonicWideSourceRate, ultrasonicTestRate / 2, false},
+		{"both above split", ultrasonicWideSourceRate, ultrasonicHighSplitHz, true},
+	}
 	pcm := flatToneS16LE(ultrasonicHighToneHz)
-	assert.True(t, runUltrasonicFilter(p, settings, pcm),
-		"the Bat window has a band above a 100 kHz split whatever the source rate")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, settings := newUltrasonicFilterFixtureAt(t, tt.sourceRate)
+			settings.Bat.UltrasonicFilter.FrequencySplitHz = tt.splitHz
+			assert.Equal(t, tt.wantTagged, runUltrasonicFilter(p, settings, pcm))
+		})
+	}
 }
 
 // newUltrasonicFilterFixture returns a Processor whose registry knows a 256 kHz
@@ -168,7 +185,7 @@ func runUltrasonicFilterForModel(p *Processor, settings *conf.Settings, modelID 
 	return detections[0].Result.Unlikely
 }
 
-// synthUltrasonicWindowS16LE returns seconds of PCM16 at rate: burst is a tone at
+// synthUltrasonicWindowS16LE returns ultrasonicWindowSeconds of PCM16 at rate: burst is a tone at
 // burstHz with a slow raised-cosine envelope, steadyAmp a constant 30 kHz tone, and
 // a little deterministic noise keeps the quiet band from being digital silence.
 func synthUltrasonicWindowS16LE(rate int, burstHz, steadyAmp float64) []byte {
@@ -194,7 +211,7 @@ func synthUltrasonicWindowS16LE(rate int, burstHz, steadyAmp float64) []byte {
 // above a steady 30 kHz tone must not.
 func TestApplyUltrasonicFilter_SplitFollowsModelRate(t *testing.T) {
 	modelIDs := []string{classifier.RegistryIDBat, classifier.RegistryIDBSGBat}
-	sourceRates := []int{192000, 256000, 384000}
+	sourceRates := []int{ultrasonicNarrowSourceRate, ultrasonicTestRate, ultrasonicWideSourceRate}
 
 	for _, modelID := range modelIDs {
 		spec, ok := classifier.GetModelSpec(modelID)

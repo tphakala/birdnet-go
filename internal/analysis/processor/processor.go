@@ -1032,9 +1032,12 @@ const bytesPerPCM16Sample = 2
 // BSG-BAT 384 kHz), whatever the source rate is: the source audio is resampled to
 // that rate for the model.
 // It does nothing when the filter is disabled, when the model is unknown (its
-// window rate cannot be known), when the model rate leaves no band above the
-// split, when the STFT settings are invalid, or when the PCM cannot be decoded
-// (a half sample) or holds too few frames.
+// window rate cannot be known), when the model rate or the source rate leaves no
+// band above the split, when the STFT settings are invalid, or when the PCM cannot
+// be decoded (a half sample) or holds too few frames. Both rates gate the band:
+// resampling adds no content above the source's Nyquist, so a band the source
+// cannot carry holds only resampler residue, and an unknown source rate counts
+// as no band.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional for item
 func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
@@ -1055,6 +1058,9 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 	}
 
 	resolved := p.resolveAudioSource(item.Source)
+	if !ultrasonic.HasUltrasonicBand(resolved.SampleRate, filterCfg.FrequencySplitHz) {
+		return
+	}
 
 	// Settings that never went through load or the API can carry an STFT
 	// configuration the filter refuses; say so before decoding the chunk.
