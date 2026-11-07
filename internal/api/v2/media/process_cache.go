@@ -2,6 +2,7 @@ package media
 
 import (
 	"fmt"
+	"hash/fnv"
 	"math"
 	"os"
 	"path/filepath"
@@ -33,8 +34,24 @@ func newProcessingCache(dir string, maxFiles int) *processingCache {
 	return &processingCache{dir: dir, maxFiles: maxFiles}
 }
 
-// processingCacheKey builds a deterministic filename for cache lookup.
-func processingCacheKey(detectionID string, normalize bool, denoise string, gainDB float64) string {
+// clipSourceTag identifies the clip file a processed artifact was made from. It
+// hashes the normalized clip path, size and modification time (FNV-1a 64, hex),
+// so a detection ID reused for a clip at another path, or a clip file replaced
+// with one of a different size or mtime, does not match a cache entry made from
+// the earlier file. A same-size replacement that keeps or restores the mtime
+// (for example a copy that preserves timestamps), or lands within one tick of a
+// coarse mtime clock, keeps the tag until the entry expires. The tag depends only
+// on that one file, so other detections never move its key.
+func clipSourceTag(normalizedPath string, info os.FileInfo) string {
+	h := fnv.New64a()
+	// Hash writes never fail.
+	_, _ = fmt.Fprintf(h, "%s\x00%d\x00%d", normalizedPath, info.Size(), info.ModTime().UnixNano())
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+// processingCacheKey builds a deterministic filename for cache lookup. The
+// sourceTag (see clipSourceTag) ties the entry to the clip file it came from.
+func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise string, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
 	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
 
@@ -49,13 +66,14 @@ func processingCacheKey(detectionID string, normalize bool, denoise string, gain
 	if denoise == "" {
 		denoise = "off"
 	}
-	return fmt.Sprintf("%s_%s_%s_%.1f.wav", safeID, norm, denoise, gainDB)
+	return fmt.Sprintf("%s_%s_%s_%s_%.1f.wav", safeID, sourceTag, norm, denoise, gainDB)
 }
 
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible
 // bats" review clip. The key embeds the time-expansion factor alongside the
-// normalize/gain parameters so different settings never collide in the cache.
-func audibleBatsCacheKey(detectionID string, expansion int, normalize bool, gainDB float64) string {
+// normalize/gain parameters so different settings never collide in the cache,
+// and the sourceTag (see clipSourceTag) ties it to the clip file it came from.
+func audibleBatsCacheKey(detectionID, sourceTag string, expansion int, normalize bool, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
 	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
 
@@ -70,7 +88,7 @@ func audibleBatsCacheKey(detectionID string, expansion int, normalize bool, gain
 	// Full precision (shortest round-trip representation) so distinct gain
 	// values never collapse onto the same cache entry, unlike a fixed %.1f.
 	gainStr := strconv.FormatFloat(gainDB, 'f', -1, 64)
-	return fmt.Sprintf("%s_bat%dx_%s_%s.wav", safeID, expansion, norm, gainStr)
+	return fmt.Sprintf("%s_%s_bat%dx_%s_%s.wav", safeID, sourceTag, expansion, norm, gainStr)
 }
 
 // get returns cached file data or nil if not found / expired.
