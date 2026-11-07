@@ -440,6 +440,13 @@ describe('AnalysisSettingsPage bat thresholds', () => {
     expect(screen.queryByText(BATTY_LABEL)).toBeNull();
   });
 
+  it('limits the shared label height to the first label of each threshold field', async () => {
+    await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
+    const grid = screen.getByLabelText(BSG_BAT_LABEL).closest('.grid');
+    const firstLabels = '.form-control>.label:first-child';
+    expect(grid?.querySelectorAll(firstLabels)).toHaveLength(2);
+  });
+
   it('links the BSG-BAT warning to its threshold input', async () => {
     await renderWithCatalog(BSG_BAT_CATALOG_ID);
 

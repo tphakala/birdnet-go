@@ -1936,13 +1936,13 @@
         originalData={batChange.original}
         currentData={batChange.current}
       >
-        <!-- Side by side, a label that wraps to two lines (longer translations) must not push its input below the neighbour: both labels reserve two lines (2 x 1.25rem text plus 0.5rem padding, see .label in custom.css). -->
+        <!-- Side by side, a label that wraps to two lines (longer translations) must not push its input below the neighbour: the first label of each field reserves two lines (2 x 1.25rem text plus 0.5rem padding, see .label in custom.css). The selector is limited to that first label, so the message rows under a field (clamp, error) keep their height. -->
         <div
           class={cn(
             'grid grid-cols-1 md:grid-cols-2 gap-6',
             hasBattyBirdNetModel &&
               hasBsgBatModel &&
-              'md:[&_.label]:min-h-12 md:[&_.label]:items-start'
+              'md:[&_.form-control>.label:first-child]:min-h-12 md:[&_.form-control>.label:first-child]:items-start'
           )}
         >
           {#if hasBattyBirdNetModel}
