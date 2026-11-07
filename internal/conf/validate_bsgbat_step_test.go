@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,6 +56,32 @@ func TestBSGBatStepValidationAndNormalize(t *testing.T) {
 		assert.Equal(t, DefaultBSGBatStepFrames, s.BSGBat.StepFrames)
 		assert.Len(t, s.ValidationWarnings, 1)
 		require.NoError(t, ValidateSettings(s))
+	})
+
+	t.Run("the load pass repairs the step before validation", func(t *testing.T) {
+		stepWarnings := func(s *Settings) []string {
+			var out []string
+			for _, w := range s.ValidationWarnings {
+				if strings.Contains(w, "bsgbat stepframes") {
+					out = append(out, w)
+				}
+			}
+			return out
+		}
+
+		bad := createMinimalValidSettings()
+		bad.BSGBat.StepFrames = MaxBSGBatStepFrames + 1
+		normalizeIncompleteFeatures(bad)
+		assert.Equal(t, DefaultBSGBatStepFrames, bad.BSGBat.StepFrames)
+		assert.Len(t, stepWarnings(bad), 1)
+		require.NoError(t, ValidateSettings(bad))
+
+		unset := createMinimalValidSettings()
+		unset.BSGBat.StepFrames = 0
+		normalizeIncompleteFeatures(unset)
+		assert.Equal(t, DefaultBSGBatStepFrames, unset.BSGBat.StepFrames)
+		assert.Empty(t, stepWarnings(unset))
+		require.NoError(t, ValidateSettings(unset))
 	})
 
 	t.Run("normalize keeps an in-range value", func(t *testing.T) {
