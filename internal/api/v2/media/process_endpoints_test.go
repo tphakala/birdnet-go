@@ -317,8 +317,11 @@ func TestProcessedSpectrogramByID_UndecodableSourceIs422(t *testing.T) {
 	rec := postJSON(e, "/api/v2/spectrogram/20/process", `{"normalize": true}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, "the source is rejected before any rendering")
 
+	// The temp directory is only made once the transcode succeeds.
 	entries, err := os.ReadDir(filepath.Join(tempDir, ".tmp-processing"))
-	require.NoError(t, err)
+	if !os.IsNotExist(err) {
+		require.NoError(t, err)
+	}
 	assert.Empty(t, entries, "no temp file outlives the request")
 }
 

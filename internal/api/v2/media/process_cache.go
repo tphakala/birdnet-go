@@ -60,20 +60,38 @@ func clipSourceTag(normalizedPath string, info os.FileInfo) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+const (
+	// spectrogramCacheKeyPrefix starts the filename of a rendered spectrogram in
+	// the processing cache, apart from the processed audio entries.
+	spectrogramCacheKeyPrefix = "spec"
+	// defaultProfileKeyToken stands in the key for the default bird frequency
+	// profile, whose spectrogram.ProfileSuffix is empty.
+	defaultProfileKeyToken = "bird"
+	// cacheFlagOn and cacheFlagOff encode a boolean in a cache key.
+	cacheFlagOn  = "1"
+	cacheFlagOff = "0"
+)
+
+// sanitizeCacheID makes a detection ID or another key part safe to embed in a
+// cache filename (no path separators or parent references).
+func sanitizeCacheID(part string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(part)
+}
+
 // processingCacheKey builds a deterministic filename for cache lookup. The
 // sourceTag (see clipSourceTag) ties the entry to the clip file it came from, and
 // every filter value is kept exactly, so distinct filter sets never share a key.
 func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise string, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
-	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+	safeID := sanitizeCacheID(detectionID)
 
 	// Canonicalize -0.0 to 0.0
 	if gainDB == 0 {
 		gainDB = math.Copysign(0, 1) // force positive zero
 	}
-	norm := "0"
+	norm := cacheFlagOff
 	if normalize {
-		norm = "1"
+		norm = cacheFlagOn
 	}
 	if denoise == "" {
 		denoise = "off"
@@ -84,21 +102,40 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 	return fmt.Sprintf("%s_%s_%s_%s_%s.wav", safeID, sourceTag, norm, denoise, gainStr)
 }
 
+// denoisedSpectrogramCacheKey builds the filename of a rendered spectrogram of a
+// denoised clip. Beyond the clip's own tag it carries every value the render
+// depends on: preset, width, raw flag, frequency profile token and the style
+// suffix (see buildStyleSuffix), so a change of Style or DynamicRange settings
+// misses the old entry and renders fresh. The style suffix comes from settings
+// values that are not all validated, so it is sanitized like the ID and the key
+// stays one filename inside the cache directory.
+func denoisedSpectrogramCacheKey(detectionID, sourceTag, preset string, width int, raw bool, freqToken, styleSuffix string) string {
+	rawFlag := cacheFlagOff
+	if raw {
+		rawFlag = cacheFlagOn
+	}
+	if freqToken == "" {
+		freqToken = defaultProfileKeyToken
+	}
+	return fmt.Sprintf("%s_%s_%s_%s_%d_%s_%s%s.png", spectrogramCacheKeyPrefix,
+		sanitizeCacheID(detectionID), sourceTag, preset, width, rawFlag, freqToken, sanitizeCacheID(styleSuffix))
+}
+
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible
 // bats" review clip. The key embeds the time-expansion factor alongside the
 // denoise/normalize/gain parameters so different settings never collide in the cache,
 // and the sourceTag (see clipSourceTag) ties it to the clip file it came from.
 func audibleBatsCacheKey(detectionID, sourceTag string, expansion int, normalize bool, denoise string, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
-	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+	safeID := sanitizeCacheID(detectionID)
 
 	// Canonicalize -0.0 to 0.0
 	if gainDB == 0 {
 		gainDB = math.Copysign(0, 1) // force positive zero
 	}
-	norm := "0"
+	norm := cacheFlagOff
 	if normalize {
-		norm = "1"
+		norm = cacheFlagOn
 	}
 	if denoise == "" {
 		denoise = "off"

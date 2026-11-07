@@ -65,6 +65,11 @@ type Handler struct {
 	// in flight. Production leaves it nil.
 	processingStartedHook func()
 
+	// spectrogramRenderHook, when set, runs just before a processed spectrogram is
+	// rendered, outside any processing slot. Tests use it to hold a render in
+	// flight. Production leaves it nil.
+	spectrogramRenderHook func()
+
 	// spectrogramGenerator renders spectrogram images from audio clips via the
 	// media SecureFS sandbox. Built in New from the shared SecureFS.
 	spectrogramGenerator *spectrogram.Generator

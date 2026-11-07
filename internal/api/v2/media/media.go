@@ -1189,11 +1189,11 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
 	}
 
-	if preset := ctx.QueryParam("denoise"); preset != "" {
-		if !transcode.IsValidDenoisePreset(preset) {
-			return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", preset),
-				"Invalid denoise preset", http.StatusBadRequest)
-		}
+	preset, ok, err := c.queryDenoisePreset(ctx)
+	if !ok {
+		return err
+	}
+	if preset != "" {
 		return c.serveDenoisedAudio(ctx, noteID, preset)
 	}
 	return c.serveStoredAudioByID(ctx, noteID, false)
@@ -1242,7 +1242,7 @@ func (c *Handler) serveStoredAudioByID(ctx echo.Context, noteID string, noStore 
 	c.setPrivateAudioCacheControl(ctx)
 	if noStore {
 		// After setPrivateAudioCacheControl, which would overwrite it with "private".
-		ctx.Response().Header().Set("Cache-Control", "no-store")
+		ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
 	}
 
 	// Serve the file using SecureFS.
@@ -1737,7 +1737,7 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	cacheKey := audibleBatsCacheKey(noteID, sourceTag, req.Expansion, req.Normalize, req.Denoise, req.GainDB)
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(cacheKey); cached != nil {
-			ctx.Response().Header().Set("Cache-Control", "no-store")
+			ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
 			return ctx.Blob(http.StatusOK, MimeTypeWAV, cached)
 		}
 	}
@@ -1770,7 +1770,7 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 		}
 	}
 
-	ctx.Response().Header().Set("Cache-Control", "no-store")
+	ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
 }
 
@@ -1843,60 +1843,28 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
 	}
 
-	// Acquire processing semaphore
-	release, ok := c.tryAcquireProcessingSlot()
-	if !ok {
-		return c.HandleError(ctx, errProcessingBusy,
-			"Server busy, try again later", http.StatusServiceUnavailable)
-	}
-	defer release()
-
-	// Create temp directory inside SecureFS root for processed files
-	tmpDir, err := transcode.ProcessingTempDir(c.SFS.BaseDir())
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
-	}
-
-	// Process the audio in memory, then hand the renderer a WAV file with a
-	// correct header.
+	// Process the audio in memory; the slot is held for the transcode only, the
+	// render below runs outside it under the generator's own render budget.
 	filters := transcode.Filters{
 		Normalize: req.Normalize,
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
 	}
-	wavData, err := transcode.ProcessToWAV(ctx.Request().Context(), absolutePath, filters)
+	wavData, err := c.processToWAVInSlot(ctx.Request().Context(), absolutePath, filters)
+	if errors.Is(err, errProcessingBusy) {
+		return c.HandleError(ctx, err, "Server busy, try again later", http.StatusServiceUnavailable)
+	}
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_processed_spectrogram_failed", processedAudioFormat,
 			filters, err, "Failed to process audio")
 	}
-	tmpFile, err := os.CreateTemp(tmpDir, "processed-*.wav")
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
-	}
-	tmpPath := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-	_, writeErr := tmpFile.Write(wavData)
-	if closeErr := tmpFile.Close(); writeErr == nil {
-		writeErr = closeErr
-	}
-	if writeErr != nil {
-		return c.HandleError(ctx, writeErr, "Failed to write processed audio", http.StatusInternalServerError)
-	}
-
-	// Generate spectrogram from processed audio into another temp file
-	tmpSpectrogramFile, err := os.CreateTemp(tmpDir, "spectrogram-*.png")
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp spectrogram file", http.StatusInternalServerError)
-	}
-	tmpSpectrogramPath := tmpSpectrogramFile.Name()
-	_ = tmpSpectrogramFile.Close()
-	defer func() { _ = os.Remove(tmpSpectrogramPath) }()
 
 	// Resolve frequency profile from detection's model type (the helper logs a
 	// warning and falls back to the bird profile when the lookup fails).
 	profileOpt := spectrogram.WithFrequencyProfile(c.resolveDetectionFrequencyProfile(noteID))
 
-	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
+	pngData, err := c.renderSpectrogramPNG(ctx.Request().Context(), wavData, params.width, params.raw, profileOpt)
+	if err != nil {
 		if handled, contextErr := c.handleRequestContextError(ctx); handled {
 			return contextErr
 		}
@@ -1906,15 +1874,9 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
 
-	// Read the generated spectrogram and return it
-	pngData, err := os.ReadFile(tmpSpectrogramPath)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to read spectrogram", http.StatusInternalServerError)
-	}
-
 	// No cache - processed spectrograms are ephemeral previews
-	ctx.Response().Header().Set("Cache-Control", "no-store")
-	return ctx.Blob(http.StatusOK, "image/png", pngData)
+	ctx.Response().Header().Set("Cache-Control", cacheControlNoStore)
+	return ctx.Blob(http.StatusOK, mimePNG, pngData)
 }
 
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
@@ -2404,6 +2366,11 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 // up, an existing render of the clip is served (see serveRetainedSpectrogram) and nothing
 // is generated.
 func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
+	preset, ok, err := c.queryDenoisePreset(ctx)
+	if !ok {
+		return err
+	}
+
 	// Validate note ID and get clip path
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
 	if err != nil {
@@ -2449,6 +2416,20 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 		logger.String("freq_suffix", freqSuffix),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
+
+	// A denoised variant renders from the denoised clip; when it does not answer,
+	// the stored spectrogram below does, marked no-store.
+	if preset != "" {
+		req := denoisedSpectrogramRequest{
+			noteID: noteID, clipPath: clipPath, preset: preset, params: params, profile: profile,
+			settings: c.CurrentSettings(),
+		}
+		if handled, denoiseErr := c.serveDenoisedSpectrogram(ctx, &req); handled {
+			return denoiseErr
+		}
+		// Not the bytes the URL names: keep caches from storing them under it.
+		noStoreBeforeWrite(ctx)
+	}
 
 	// Check spectrogram generation mode
 	spectrogramMode := c.CurrentSettings().Realtime.Dashboard.Spectrogram.GetMode()
@@ -4082,7 +4063,7 @@ func (c *Handler) respondImagePendingWithBody(ctx echo.Context, scientificName s
 		logger.String("scientific_name", scientificName))
 	header := ctx.Response().Header()
 	header.Set("Retry-After", strconv.Itoa(ImagePendingRetryAfterSeconds))
-	header.Set("Cache-Control", "no-store")
+	header.Set("Cache-Control", cacheControlNoStore)
 	if withJSONBody {
 		return ctx.JSON(http.StatusServiceUnavailable,
 			c.NewErrorResponse(ErrImageNotResolvedYet, "Image is not resolved yet", http.StatusServiceUnavailable))

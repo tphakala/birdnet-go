@@ -106,8 +106,9 @@ func (c *Handler) tryAcquireProcessingSlot() (release func(), ok bool) {
 	}
 }
 
-// processedWAV is the output of a processing job and the time it was stored.
-type processedWAV struct {
+// processedOutput is the output of a processing job (a WAV or a rendered PNG) and
+// the time it was stored.
+type processedOutput struct {
 	data    []byte
 	modTime time.Time
 }
@@ -115,40 +116,55 @@ type processedWAV struct {
 // processWAV runs ProcessToWAV for key through the shared flight group, so
 // concurrent requests for one key (a GET seeking during processing, a POST for
 // the same filters) run one job. The job is tracked by the core wait group (see
-// runTrackedJob) and runs on the handler's lifecycle
+// runTracked) and runs on the handler's lifecycle
 // context, not the leader's request, so an aborted request or a seek does not
 // discard work other callers wait for; each caller waits on its own request
 // context. The leader takes a processing slot without blocking and fails with
 // errProcessingBusy when none is free.
-func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, filters transcode.Filters) (*processedOutput, error) {
+	return doFlight(c, reqCtx, key, func() (*processedOutput, error) {
+		return c.runProcessingJob(key, absolutePath, filters)
+	})
+}
+
+// doFlight runs job once per key across concurrent callers through the shared
+// flight group, tracked by the core wait group (see runTracked) and on the
+// handler's lifecycle context, and waits for it or for reqCtx, whichever ends
+// first.
+func doFlight[T any](c *Handler, reqCtx context.Context, key string, job func() (T, error)) (T, error) {
+	var zero T
 	ch := c.processingFlight.DoChan(key, func() (any, error) {
-		return c.runTrackedJob(key, absolutePath, filters)
+		out, err := runTracked(c, key, job)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
 	})
 	select {
 	case res := <-ch:
 		if res.Err != nil {
-			return nil, res.Err
+			return zero, res.Err
 		}
-		out, ok := res.Val.(*processedWAV)
+		out, ok := res.Val.(T)
 		if !ok {
-			return nil, fmt.Errorf("unexpected processing result type %T", res.Val)
+			return zero, fmt.Errorf("unexpected processing result type %T", res.Val)
 		}
 		return out, nil
 	case <-reqCtx.Done():
-		return nil, reqCtx.Err()
+		return zero, reqCtx.Err()
 	}
 }
 
-// runTrackedJob runs runProcessingJob in a goroutine registered with the core's
-// wait group, so Shutdown waits for a job still holding a slot and writing to the
-// cache, and waits for its result. A panic in the job becomes an error: the
-// flight function runs on a goroutine of its own, where nothing could recover
-// it and the process would exit; the panic is logged with its stack. Once
-// Shutdown has cancelled the core no job starts and the call fails with
-// context.Canceled (see Core.GoUnlessStopped), so a job never outlives Shutdown.
-func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+// runTracked runs job in a goroutine registered with the core's wait group, so
+// Shutdown waits for a job still holding a slot, a temp file or a cache write, and
+// waits for its result. A panic in the job becomes an error: the flight function
+// runs on a goroutine of its own, where nothing could recover it and the process
+// would exit; the panic is logged with its stack and the cache key. Once Shutdown
+// has cancelled the core no job starts and the call fails with context.Canceled
+// (see Core.GoUnlessStopped), so a job never outlives Shutdown.
+func runTracked[T any](c *Handler, key string, job func() (T, error)) (T, error) {
 	type jobResult struct {
-		out *processedWAV
+		out T
 		err error
 	}
 	done := make(chan jobResult, 1)
@@ -165,10 +181,11 @@ func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filt
 			}
 			done <- res
 		}()
-		res.out, res.err = c.runProcessingJob(key, absolutePath, filters)
+		res.out, res.err = job()
 	})
 	if !started {
-		return nil, context.Canceled
+		var zero T
+		return zero, context.Canceled
 	}
 	res := <-done
 	return res.out, res.err
@@ -177,10 +194,10 @@ func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filt
 // runProcessingJob is the flight leader's work: a last cache check (a flight that
 // just finished may have stored the entry after the caller's miss), a slot, the
 // transcode and the cache store.
-func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.Filters) (*processedOutput, error) {
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(key); cached != nil {
-			return &processedWAV{data: cached, modTime: c.entryWriteTime(key)}, nil
+			return &processedOutput{data: cached, modTime: c.entryWriteTime(key)}, nil
 		}
 	}
 
@@ -207,7 +224,7 @@ func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.F
 			)
 		}
 	}
-	return &processedWAV{data: wavData, modTime: c.entryWriteTime(key)}, nil
+	return &processedOutput{data: wavData, modTime: c.entryWriteTime(key)}, nil
 }
 
 // entryWriteTime is the write time of the cache entry for key, the value a later
@@ -343,8 +360,14 @@ func (c *Handler) serveProcessedWAV(ctx echo.Context, key, originalName string, 
 	header.Set(echo.HeaderContentType, MimeTypeWAV)
 	setAudioContentDisposition(ctx, strings.TrimSuffix(originalName, filepath.Ext(originalName))+".wav")
 	header.Set(headerAcceptRanges, acceptRangesBytes)
-	header.Set("ETag", `"`+strings.TrimSuffix(key, ".wav")+"-"+strconv.FormatInt(size, 10)+`"`)
+	header.Set("ETag", processedETag(key, size))
 	c.setPrivateAudioCacheControl(ctx)
 	http.ServeContent(ctx.Response(), ctx.Request(), "", modTime, content)
 	return nil
+}
+
+// processedETag is the ETag of a processed artifact: the cache key, which names
+// the clip file and every parameter, and the output length.
+func processedETag(key string, size int64) string {
+	return `"` + strings.TrimSuffix(key, filepath.Ext(key)) + "-" + strconv.FormatInt(size, 10) + `"`
 }
