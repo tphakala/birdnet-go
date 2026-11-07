@@ -67,7 +67,7 @@ const (
 	// defaultProfileKeyToken stands in the key for the default bird frequency
 	// profile, whose spectrogram.ProfileSuffix is empty.
 	defaultProfileKeyToken = "bird"
-	// cacheFlagOn and cacheFlagOff encode the raw flag in a denoised spectrogram key.
+	// cacheFlagOn and cacheFlagOff encode a boolean in a cache key.
 	cacheFlagOn  = "1"
 	cacheFlagOff = "0"
 )
@@ -89,9 +89,9 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 	if gainDB == 0 {
 		gainDB = math.Copysign(0, 1) // force positive zero
 	}
-	norm := "0"
+	norm := cacheFlagOff
 	if normalize {
-		norm = "1"
+		norm = cacheFlagOn
 	}
 	if denoise == "" {
 		denoise = "off"
@@ -131,9 +131,9 @@ func audibleBatsCacheKey(detectionID, sourceTag string, expansion int, normalize
 	if gainDB == 0 {
 		gainDB = math.Copysign(0, 1) // force positive zero
 	}
-	norm := "0"
+	norm := cacheFlagOff
 	if normalize {
-		norm = "1"
+		norm = cacheFlagOn
 	}
 	// Full precision (shortest round-trip representation) so distinct gain
 	// values never collapse onto the same cache entry, unlike a fixed %.1f.
