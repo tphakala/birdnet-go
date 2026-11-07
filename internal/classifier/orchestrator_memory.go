@@ -75,7 +75,7 @@ func (o *Orchestrator) warmup(modelID string, instance ModelInstance, input [][]
 // silentInput returns one clip of silence sized from the model spec, or nil when
 // the spec has no samples. The warm-up and the latency probe share it.
 func silentInput(spec ModelSpec) [][]float32 {
-	n := int(float64(spec.SampleRate) * spec.ClipLength.Seconds())
+	n := spec.ClipSampleCount()
 	if n <= 0 {
 		return nil
 	}

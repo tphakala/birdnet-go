@@ -65,13 +65,18 @@ func ConfiguredBaseOverlap(s *conf.Settings) time.Duration {
 }
 
 // ResolveModelOverlap returns the effective analysis-window overlap for a model
-// given the effective base overlap (see Orchestrator.EffectiveBaseOverlap). The
-// bat model always uses a fixed 50% overlap (ClipLength/2), matching its
-// historically fixed buffer cadence; every other model uses baseOverlap,
-// ratio-scaled to the model's clip length. The result is clamped to
-// [0, ClipLength - minAnalysisStep] so the derived read size is always
-// strictly positive.
+// given the effective base overlap (see Orchestrator.EffectiveBaseOverlap). A
+// spec with a fixed StepSamples returns ClipLength minus that step, whatever the
+// base overlap (not clamped, so the spec must keep ClipLength consistent with
+// ClipSamples). The bat model always uses a fixed 50% overlap (ClipLength/2),
+// matching its historically fixed buffer cadence; every other model uses
+// baseOverlap, ratio-scaled to the model's clip length. Apart from the
+// fixed-step case, the result is clamped to [0, ClipLength - minAnalysisStep]
+// so the derived read size is always strictly positive.
 func ResolveModelOverlap(modelID string, spec ModelSpec, baseOverlap time.Duration) time.Duration {
+	if spec.StepSamples > 0 {
+		return spec.ClipLength - spec.BufferInterval(0)
+	}
 	if modelID == RegistryIDBat {
 		return spec.ClipLength / 2
 	}

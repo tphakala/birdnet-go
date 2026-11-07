@@ -29,13 +29,38 @@ type ModelSpec struct {
 	RawSampleRate         int           // Hz: when non-zero, the model expects raw audio at this rate (e.g. 256000 for bat detection)
 	MinRawSampleRate      int           // Hz: minimum source capture rate for this model (0 = no constraint)
 	RecommendedSampleRate int           // Hz: recommended source capture rate (0 = no constraint)
+
+	// ClipSamples is the analysis window length in samples at EffectiveSampleRate().
+	// Zero keeps the SampleRate x ClipLength rule (see ClipSampleCount). A model
+	// whose window is not a whole number of seconds sets it, because ClipLength
+	// truncates to whole seconds in ClipSizeBytes. ClipLength must still equal the
+	// window's duration, since display and timing consumers read it.
+	ClipSamples int `json:",omitempty"`
+	// StepSamples is a fixed analysis step in samples at EffectiveSampleRate().
+	// Zero keeps the overlap-derived step. When set, BufferDimensions and
+	// BufferInterval ignore the overlap argument.
+	StepSamples int `json:",omitempty"`
+	// RequireContiguousWindow marks a model that must not score a window whose
+	// genuine tail (the audio actually received, as opposed to a zero-filled or
+	// spliced head) is shorter than the window. The analysis buffer monitor skips
+	// such windows for this model.
+	RequireContiguousWindow bool `json:",omitempty"`
+}
+
+// ClipSampleCount returns the analysis window length in samples: ClipSamples when
+// set, otherwise SampleRate x whole seconds of ClipLength.
+func (s ModelSpec) ClipSampleCount() int {
+	if s.ClipSamples > 0 {
+		return s.ClipSamples
+	}
+	return s.SampleRate * int(s.ClipLength.Seconds())
 }
 
 // ClipSizeBytes returns the analysis window size in bytes for this model.
 // Uses SampleRate (not EffectiveSampleRate) because the model's inference
 // layer determines the window size regardless of the source capture rate.
 func (s ModelSpec) ClipSizeBytes() int {
-	return s.SampleRate * int(s.ClipLength.Seconds()) * conf.NumChannels * conf.BytesPerSample
+	return s.ClipSampleCount() * conf.NumChannels * conf.BytesPerSample
 }
 
 // BufferDimensions returns the analysis buffer dimensions for this model given
@@ -44,13 +69,18 @@ func (s ModelSpec) ClipSizeBytes() int {
 // (the bat model's fixed 50% or the ratio-scaled effective overlap). overlapBytes
 // is aligned to a whole sample frame, and readSize is kept positive (at least one
 // frame) for any spec with a non-empty clip (all registered models); a
-// degenerate spec with clipBytes == 0 yields readSize 0.
+// degenerate spec with clipBytes == 0 yields readSize 0. A spec with StepSamples
+// set derives overlapBytes from its fixed step and ignores overlap.
 func (s ModelSpec) BufferDimensions(overlap time.Duration) (clipBytes, overlapBytes, readSize int) {
 	clipBytes = s.ClipSizeBytes()
-	overlapBytes = overlapToBytes(overlap, s.SampleRate)
 	frame := conf.NumChannels * conf.BytesPerSample
 	if frame <= 0 {
 		frame = 1
+	}
+	if s.StepSamples > 0 {
+		overlapBytes = (s.ClipSampleCount() - s.StepSamples) * frame
+	} else {
+		overlapBytes = overlapToBytes(overlap, s.SampleRate)
 	}
 	// Guarantee at least one frame of read size so the buffer never stalls.
 	if maxOverlap := clipBytes - frame; overlapBytes > maxOverlap {
@@ -66,8 +96,13 @@ func (s ModelSpec) BufferDimensions(overlap time.Duration) (clipBytes, overlapBy
 // BufferInterval returns how often a new analysis window is produced given the
 // effective overlap: ClipLength - overlap, floored at minAnalysisStep. If
 // inference exceeds this interval the pipeline falls behind real-time input.
-// overlap is the per-model overlap resolved by ResolveModelOverlap.
+// overlap is the per-model overlap resolved by ResolveModelOverlap. A spec with
+// StepSamples set returns that step as a duration at EffectiveSampleRate() and
+// ignores overlap.
 func (s ModelSpec) BufferInterval(overlap time.Duration) time.Duration {
+	if rate := s.EffectiveSampleRate(); s.StepSamples > 0 && rate > 0 {
+		return time.Duration(s.StepSamples) * time.Second / time.Duration(rate)
+	}
 	return max(s.ClipLength-overlap, minAnalysisStep)
 }
 
