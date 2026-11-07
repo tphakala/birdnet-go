@@ -84,7 +84,11 @@
   import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
-  import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
+  import {
+    audioUrlFor,
+    getPlaybackDenoiseDefault,
+    swapSourceKeepingPosition,
+  } from '$lib/utils/playbackDenoise';
 
   const logger = loggers.audio;
 
@@ -1160,9 +1164,8 @@
     if (!audioElement || !defaultApplied) return;
     const src = currentSource();
     if (src === audioUrl) return;
-    const pos = audioElement.currentTime;
-    replaceSource(src);
-    if (pos > 0) audioElement.currentTime = pos;
+    markPlaybackStopped();
+    swapSourceKeepingPosition(audioElement, src);
   }
 
   // Also ends the probe: it only matters while the retry it may cancel is pending.

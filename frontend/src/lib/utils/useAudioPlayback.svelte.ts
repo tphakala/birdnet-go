@@ -38,6 +38,7 @@ import {
   pendingRetryDelayMs,
   probeAudioSource,
 } from '$lib/utils/audio';
+import { swapSourceKeepingPosition } from '$lib/utils/playbackDenoise';
 import { isSpectrogramSourceKnownMissing } from '$lib/utils/spectrogramStatus';
 import {
   getAudioContext,
@@ -243,10 +244,8 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   // call that follows keeps its user gesture.
   function useDenoisedSource() {
     if (playSwapped || !playUrl || !audioElement) return;
-    const position = audioElement.currentTime;
     playSwapped = true;
-    audioElement.src = playUrl;
-    if (position > 0) audioElement.currentTime = position;
+    swapSourceKeepingPosition(audioElement, playUrl);
   }
 
   // A src assignment or load() pauses the element without a 'pause' event, so

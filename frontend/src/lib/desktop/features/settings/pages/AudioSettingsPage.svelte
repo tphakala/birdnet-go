@@ -68,6 +68,7 @@
     chooseBitrateForFormat,
     isExportFormat,
     isLosslessExportFormat,
+    DENOISE_LOSSY_MIN_BITRATE_KBPS,
     type ExportFormat,
     type LosslessExportFormat,
   } from './audioExportFormat';
@@ -86,9 +87,6 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.audio;
-
-  // Below this bitrate, codec artefacts limit how clean a denoised lossy clip gets
-  const DENOISE_LOSSY_MIN_BITRATE_KBPS = 64;
 
   // Storage key for remembering last active tab
   const STORAGE_KEY = 'birdnet-audio-settings-active-tab';

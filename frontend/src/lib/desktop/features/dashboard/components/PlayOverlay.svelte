@@ -23,7 +23,11 @@
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { audioUrlFor, withCacheBuster } from '$lib/utils/playbackDenoise';
+  import {
+    audioUrlFor,
+    swapSourceKeepingPosition,
+    withCacheBuster,
+  } from '$lib/utils/playbackDenoise';
   import { t } from '$lib/i18n';
   import {
     applyPlaybackRate,
@@ -123,7 +127,7 @@
   const audioUrl = $derived(buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}`));
   // Whether the first play has switched this card to the denoised clip. Plain, not
   // reactive: the switch is made by hand in the play handler (see
-  // useDenoisedSource), and the source effect only reads it when it needs the
+  // swapToDenoisedSource), and the source effect only reads it when it needs the
   // clip to fall back to.
   let denoiseSwapped = false;
   // The clip a plain (non audible-bats) play uses: the denoised clip once the first
@@ -272,14 +276,12 @@
   // keeps its user gesture and the source effect (which is told the switch
   // already happened) does not race the play call. The position is kept.
   // Audible bats carry their own denoise and are not switched.
-  function useDenoisedSource() {
+  function swapToDenoisedSource() {
     if (denoiseSwapped || !denoisePreset || audibleBatsSrc || !audioElement) return;
-    const position = audioElement.currentTime;
     denoiseSwapped = true;
     const src = playUrl();
     previousEffectiveSrc = src;
-    audioElement.src = src;
-    if (position > 0) audioElement.currentTime = position;
+    swapSourceKeepingPosition(audioElement, src);
   }
 
   // Reload the clip after the given delay. The reload plays only when the user
@@ -382,7 +384,7 @@
         // during the context wait retries with play.
         retryWithPlay = true;
         isLoading = true;
-        useDenoisedSource();
+        swapToDenoisedSource();
         // A failed element cannot play: reload it inside this gesture.
         if (audioElement.error) {
           markPlaybackStopped();

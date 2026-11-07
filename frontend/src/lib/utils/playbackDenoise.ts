@@ -46,6 +46,16 @@ export function audioUrlFor(detectionId: string | number, preset: string): strin
 }
 
 /**
+ * Point the element at src and keep its position. Meant for the first play, run
+ * synchronously in the click handler so the play call keeps its user gesture.
+ */
+export function swapSourceKeepingPosition(element: HTMLAudioElement, src: string): void {
+  const position = element.currentTime;
+  element.src = src;
+  if (position > 0) element.currentTime = position;
+}
+
+/**
  * The url with a `t` cache-busting query parameter set as a parameter of its
  * own, so a url that already carries `denoise` stays valid for a reload that
  * must bypass a cached failure.

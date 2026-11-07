@@ -29,7 +29,7 @@
     DENOISE_STRENGTH_OPTIONS,
     isDenoisePresetId,
   } from '$lib/utils/denoisePresets';
-  import { isLosslessExportFormat } from './audioExportFormat';
+  import { DENOISE_LOSSY_MIN_BITRATE_KBPS, isLosslessExportFormat } from './audioExportFormat';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -46,9 +46,6 @@
   import { Palette, Globe, Image, Volume2, Info } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-
-  // Below this bitrate, codec artefacts limit how clean a denoised lossy clip gets
-  const DENOISE_LOSSY_MIN_BITRATE_KBPS = 64;
 
   let activeTab = $state('appearance');
   let store = $derived($settingsStore);
