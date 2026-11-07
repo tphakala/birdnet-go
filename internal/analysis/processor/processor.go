@@ -1043,11 +1043,9 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
-	resolved := p.resolveAudioSource(item.Source)
 	spec, found := classifier.GetModelSpec(item.ModelID)
 	if !found {
 		GetLogger().Debug("ultrasonic filter: unknown model, window rate unknown, skipping",
-			logger.String("source", resolved.DisplayName),
 			logger.String("model", item.ModelID))
 		return
 	}
@@ -1055,6 +1053,8 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 	if !ultrasonic.HasUltrasonicBand(windowRate, filterCfg.FrequencySplitHz) {
 		return
 	}
+
+	resolved := p.resolveAudioSource(item.Source)
 
 	// Settings that never went through load or the API can carry an STFT
 	// configuration the filter refuses; say so before decoding the chunk.

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,17 +27,14 @@ const (
 
 	// The rate cases cover the filter's 20 kHz split: the analysis window is
 	// always at the model's rate, whatever the source rate.
-	ultrasonicBurstToneHz   = 25000.0 // above the split, below the 26.7 kHz a 256 kHz window gives at a 192 kHz rate
-	ultrasonicLowBurstHz    = 15000.0 // below the split, above the 13.3 kHz a 256 kHz window gives at a 384 kHz rate
+	ultrasonicBurstToneHz   = 25000.0 // above the split, below the split a 192 kHz rate puts in a 256 kHz window
+	ultrasonicLowBurstHz    = 15000.0 // below the split, above the split a 384 kHz rate puts in a 256 kHz window
 	ultrasonicSteadyToneHz  = 30000.0
 	ultrasonicSteadyAmp     = 300.0
 	ultrasonicNoiseAmp      = 20.0
 	ultrasonicWindowSeconds = 3
 	ultrasonicEnvelopeHz    = 10.0 // slow envelope: its sidebands stay far from the 20 kHz split
 	ultrasonicNoiseSeed     = 12345
-	ultrasonicLCGMul        = 1664525
-	ultrasonicLCGInc        = 1013904223
-	ultrasonicNoiseBits     = 16
 )
 
 // flatUltrasonicToneS16LE returns PCM16 of a constant 40 kHz tone: flat
@@ -147,16 +145,15 @@ func runUltrasonicFilterForModel(p *Processor, settings *conf.Settings, modelID 
 // synthUltrasonicWindowS16LE returns seconds of PCM16 at rate: burst is a tone at
 // burstHz with a slow raised-cosine envelope, steadyAmp a constant 30 kHz tone, and
 // a little deterministic noise keeps the quiet band from being digital silence.
-func synthUltrasonicWindowS16LE(rate int, burstHz, burstAmp, steadyAmp float64) []byte {
+func synthUltrasonicWindowS16LE(rate int, burstHz, steadyAmp float64) []byte {
 	n := rate * ultrasonicWindowSeconds
 	pcm := make([]byte, n*bytesPerPCM16Sample)
-	state := uint32(ultrasonicNoiseSeed)
+	rng := rand.New(rand.NewPCG(ultrasonicNoiseSeed, ultrasonicNoiseSeed)) //nolint:gosec // G404: deterministic test noise
 	for i := range n {
 		t := float64(i) / float64(rate)
 		envelope := 0.5 * (1 + math.Sin(2*math.Pi*ultrasonicEnvelopeHz*t))
-		state = state*ultrasonicLCGMul + ultrasonicLCGInc
-		noise := (float64(state>>ultrasonicNoiseBits)/math.MaxUint16 - 0.5) * 2 * ultrasonicNoiseAmp
-		v := burstAmp*envelope*math.Sin(2*math.Pi*burstHz*t) +
+		noise := (rng.Float64() - 0.5) * 2 * ultrasonicNoiseAmp
+		v := ultrasonicTestAmplitude*envelope*math.Sin(2*math.Pi*burstHz*t) +
 			steadyAmp*math.Sin(2*math.Pi*ultrasonicSteadyToneHz*t) + noise
 		binary.LittleEndian.PutUint16(pcm[i*bytesPerPCM16Sample:], uint16(int16(math.Round(v)))) //nolint:gosec // G115: intentional int16 to uint16 bit reinterpretation for PCM
 	}
@@ -170,32 +167,26 @@ func synthUltrasonicWindowS16LE(rate int, burstHz, burstAmp, steadyAmp float64) 
 // frequency: a 25 kHz burst must count as ultrasonic content, and a 15 kHz burst
 // above a steady 30 kHz tone must not.
 func TestApplyUltrasonicFilter_SplitFollowsModelRate(t *testing.T) {
-	models := []struct {
-		id   string
-		rate int
-	}{
-		{classifier.RegistryIDBat, 256000},
-		{classifier.RegistryIDBSGBat, 384000},
-	}
+	modelIDs := []string{classifier.RegistryIDBat, classifier.RegistryIDBSGBat}
 	sourceRates := []int{192000, 256000, 384000}
 
-	for _, m := range models {
-		spec, ok := classifier.GetModelSpec(m.id)
+	for _, modelID := range modelIDs {
+		spec, ok := classifier.GetModelSpec(modelID)
 		require.True(t, ok)
-		require.Equal(t, m.rate, spec.EffectiveSampleRate(), "test premise: model window rate")
+		windowRate := spec.EffectiveSampleRate()
+		// The window does not depend on the source rate, so build it once per model.
+		// Bursts above the split leave a bursty band; bursts below it over a steady
+		// tone above leave a flat one.
+		above := synthUltrasonicWindowS16LE(windowRate, ultrasonicBurstToneHz, 0)
+		below := synthUltrasonicWindowS16LE(windowRate, ultrasonicLowBurstHz, ultrasonicSteadyAmp)
 
 		for _, sourceRate := range sourceRates {
-			t.Run(fmt.Sprintf("%s_source_%dHz", m.id, sourceRate), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s_source_%dHz", modelID, sourceRate), func(t *testing.T) {
 				p, settings := newUltrasonicFilterFixtureAt(t, sourceRate)
 
-				// Bursts above the split: the band is bursty, so not unlikely.
-				above := synthUltrasonicWindowS16LE(m.rate, ultrasonicBurstToneHz, ultrasonicTestAmplitude, 0)
-				assert.False(t, runUltrasonicFilterForModel(p, settings, m.id, above),
+				assert.False(t, runUltrasonicFilterForModel(p, settings, modelID, above),
 					"a 25 kHz burst is ultrasonic content and must not be tagged unlikely")
-
-				// Bursts below the split over a steady tone above it: the band is flat.
-				below := synthUltrasonicWindowS16LE(m.rate, ultrasonicLowBurstHz, ultrasonicTestAmplitude, ultrasonicSteadyAmp)
-				assert.True(t, runUltrasonicFilterForModel(p, settings, m.id, below),
+				assert.True(t, runUltrasonicFilterForModel(p, settings, modelID, below),
 					"a burst below 20 kHz must not count; the steady ultrasonic band is unlikely")
 			})
 		}
