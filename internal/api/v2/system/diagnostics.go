@@ -453,7 +453,8 @@ func (c *Handler) buildInferenceFailuresProvider() func() []checks.ModelInferenc
 // buildPerModelInferenceProvider returns a closure that queries per-model
 // inference counters and model specs to produce per-model latency stats.
 // Each model's analysis window is derived from its own BufferInterval
-// (ClipLength - resolved overlap; the bat model stays fixed at 50%).
+// (ClipLength - resolved overlap, or the spec's fixed StepSamples; the bat
+// model stays fixed at 50%).
 func (c *Handler) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
 	return func() []checks.ModelInferenceInfo {
 		p := c.Processor

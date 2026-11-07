@@ -15,9 +15,10 @@ import (
 const AnalysisBaseClipLength = 3 * time.Second
 
 // minAnalysisStep is the smallest analysis step, in the DURATION domain, that a
-// resolved overlap may leave (ClipLength - overlap). It floors BufferInterval and
-// caps ResolveModelOverlap so the derived read size cannot reach zero and stall
-// the buffer manager. The separate one-sample-frame floor on the byte read size
+// resolved overlap may leave (ClipLength - overlap). It floors the overlap-derived
+// BufferInterval and caps the overlap-derived ResolveModelOverlap (a fixed
+// StepSamples step is neither floored nor capped) so the derived read size cannot
+// reach zero and stall the buffer manager. The separate one-sample-frame floor on the byte read size
 // is enforced in BufferDimensions.
 const minAnalysisStep = time.Millisecond
 

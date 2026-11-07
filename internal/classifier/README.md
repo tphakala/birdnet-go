@@ -85,7 +85,7 @@ Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 use
 ## Results, overlap and cadence
 
 - `ResultsQueue` carries `Results` from the analysis pipeline to the detection processor. Its default capacity is `DefaultQueueSize` (100) and `ResizeQueue` replaces it. A value sent on the queue belongs to the receiver, so the sender must not modify it.
-- `birdnet.overlap` is defined on a 3 second window. `ResolveModelOverlap` scales it to each model's clip length so the overlap fraction stays the same, and fixes the bat model at 50 percent.
+- `birdnet.overlap` is defined on a 3 second window. `ResolveModelOverlap` scales it to each model's clip length so the overlap fraction stays the same, and fixes the bat model at 50 percent. A spec that sets `StepSamples` keeps that fixed step and ignores the overlap.
 - The `cadence` package solves for the effective base overlap that keeps the inference load of all source and model pairs under a duty ceiling when the false positive filter is on. The orchestrator publishes the plan (`SetCadencePlan`) and probes model latency for it; `EffectiveBaseOverlap` returns the overlap the pipeline actually uses. The configured value is never changed.
 
 ## Nighttime scheduler
