@@ -174,25 +174,21 @@ func TestAnalysisRing_OneWindowRingLosesAudioAtLargeStep(t *testing.T) {
 	assert.True(t, res.lateShort)
 }
 
-// TestAnalysisBufferGeometry_RegistryUnchanged pins that every registry entry
-// keeps its overlap and read size, and that only a contiguous-window spec gets a
-// ring larger than one window.
-func TestAnalysisBufferGeometry_RegistryUnchanged(t *testing.T) {
+// TestAnalysisBufferGeometry_ForwardsSpec checks that for every registry entry
+// the helper takes its ring capacity from AnalysisRingCapacity and its overlap
+// and read size from BufferDimensions, the values the allocation site uses.
+func TestAnalysisBufferGeometry_ForwardsSpec(t *testing.T) {
 	t.Parallel()
 
 	overlaps := []time.Duration{0, 500 * time.Millisecond, 1500 * time.Millisecond, 2400 * time.Millisecond}
 	for id := range classifier.ModelRegistry {
 		spec := classifier.ModelRegistry[id].Spec
 		for _, overlap := range overlaps {
-			clipBytes, wantOverlap, wantRead := spec.BufferDimensions(overlap)
+			_, wantOverlap, wantRead := spec.BufferDimensions(overlap)
 			capacity, gotOverlap, gotRead := analysisBufferGeometry(spec, overlap)
+			assert.Equal(t, spec.AnalysisRingCapacity(), capacity, "%s ring capacity at %v", id, overlap)
 			assert.Equal(t, wantOverlap, gotOverlap, "%s overlap bytes at %v", id, overlap)
 			assert.Equal(t, wantRead, gotRead, "%s read size at %v", id, overlap)
-			if spec.RequireContiguousWindow {
-				assert.Equal(t, 2*clipBytes, capacity, "%s ring capacity", id)
-			} else {
-				assert.Equal(t, clipBytes, capacity, "%s ring capacity", id)
-			}
 		}
 	}
 }
