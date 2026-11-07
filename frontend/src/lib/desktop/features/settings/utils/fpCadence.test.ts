@@ -111,7 +111,7 @@ const BSG_BAT_MODEL: AnalysisCadenceModel = {
   id: 'BSG_BAT',
   name: 'BSG-BAT',
   taxonGroup: 'bat',
-  clipMs: 1025,
+  clipMs: 1024,
   stepMs: 500,
   confirmations: 5,
   windowsInReference: 12,

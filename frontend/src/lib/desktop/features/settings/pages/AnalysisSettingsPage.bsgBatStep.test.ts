@@ -277,6 +277,22 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
       expect(stepInput()).toHaveValue(250);
     });
 
+    it.each([
+      { name: 'a stored 0', stored: 0 },
+      { name: 'a removed value', stored: undefined },
+      { name: 'a value below the range', stored: 99 },
+      { name: 'a value above the range', stored: 513 },
+      { name: 'a fractional value', stored: 300.5 },
+    ])('falls back to 250 frames when the form value becomes $name', async ({ stored }) => {
+      seedSection('bsgbat', { threshold: 0.5, stepFrames: 300 });
+      await renderWithCatalog(BSG_BAT_CATALOG_ID);
+      expect(stepInput()).toHaveValue(300);
+
+      editSection('bsgbat', { stepFrames: stored });
+
+      await waitFor(() => expect(stepInput()).toHaveValue(250));
+    });
+
     it('shows the step in seconds and the confirmation count of the bat filter level', async () => {
       seedSection('bat', {
         enabled: true,
