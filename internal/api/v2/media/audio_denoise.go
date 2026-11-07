@@ -94,6 +94,17 @@ func (c *Handler) lookupClip(noteID string) (clipFile, *clipLookupError) {
 	return c.statClip(normalizedPath)
 }
 
+// tryAcquireProcessingSlot takes one of the shared processing slots without
+// blocking. When ok is true the caller must call release.
+func (c *Handler) tryAcquireProcessingSlot() (release func(), ok bool) {
+	select {
+	case c.processingSemaphore <- struct{}{}:
+		return func() { <-c.processingSemaphore }, true
+	default:
+		return nil, false
+	}
+}
+
 // processedWAV is the output of a processing job and the time it was stored.
 type processedWAV struct {
 	data    []byte
@@ -136,12 +147,11 @@ func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.F
 		}
 	}
 
-	select {
-	case c.processingSemaphore <- struct{}{}:
-		defer func() { <-c.processingSemaphore }()
-	default:
+	release, ok := c.tryAcquireProcessingSlot()
+	if !ok {
 		return nil, errProcessingBusy
 	}
+	defer release()
 	if c.processingStartedHook != nil {
 		c.processingStartedHook()
 	}
@@ -179,6 +189,7 @@ func (c *Handler) clientAuthenticated(ctx echo.Context) bool {
 // raw bytes: it follows the same not-ready and gone decision as the stored-clip
 // path, or is denoised from its alternate-extension file.
 func (c *Handler) serveDenoisedAudio(ctx echo.Context, noteID, preset string) error {
+	authenticated := c.clientAuthenticated(ctx)
 	normalizedPath, lookupErr := c.resolveClipPath(noteID)
 	if lookupErr != nil {
 		return c.respondClipLookupError(ctx, lookupErr)
@@ -188,7 +199,7 @@ func (c *Handler) serveDenoisedAudio(ctx echo.Context, noteID, preset string) er
 		if !errors.Is(lookupErr.err, os.ErrNotExist) {
 			return c.respondClipLookupError(ctx, lookupErr)
 		}
-		if !c.clientAuthenticated(ctx) {
+		if !authenticated {
 			// Guests get the stored-clip answer, including its not-ready handling.
 			return c.serveStoredAudioByID(ctx, noteID, true)
 		}
@@ -211,7 +222,7 @@ func (c *Handler) serveDenoisedAudio(ctx echo.Context, noteID, preset string) er
 		}
 	}
 
-	if !c.clientAuthenticated(ctx) {
+	if !authenticated {
 		return c.serveStoredAudioByID(ctx, noteID, true)
 	}
 

@@ -194,10 +194,6 @@ func (c *processingCache) evictIfNeeded(incoming int64) {
 			logger.Error(err))
 		return
 	}
-	if len(entries) < c.maxFiles && c.maxBytes <= 0 {
-		return
-	}
-
 	type fileAge struct {
 		path    string
 		modTime time.Time
@@ -234,7 +230,7 @@ func (c *processingCache) evictIfNeeded(incoming int64) {
 	remaining := len(files)
 	for _, f := range files {
 		overCount := remaining >= c.maxFiles
-		overBytes := c.maxBytes > 0 && totalBytes+incoming > c.maxBytes
+		overBytes := totalBytes+incoming > c.maxBytes
 		if !overCount && !overBytes {
 			break
 		}

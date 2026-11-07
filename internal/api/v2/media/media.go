@@ -1647,9 +1647,8 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 		return c.transcodeError(ctx, noteID, "media_processed_audio_failed", processedAudioFormat,
 			filters, err, "Failed to process audio")
 	}
-	wavData := processed.data
 
-	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
+	return ctx.Blob(http.StatusOK, MimeTypeWAV, processed.data)
 }
 
 // resolveBatClipFile confirms noteID refers to a bat detection and returns the
@@ -1734,13 +1733,12 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	}
 
 	// Limit concurrent processing (non-blocking, returns 503 if full).
-	select {
-	case c.processingSemaphore <- struct{}{}:
-		defer func() { <-c.processingSemaphore }()
-	default:
-		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+	release, ok := c.tryAcquireProcessingSlot()
+	if !ok {
+		return c.HandleError(ctx, errProcessingBusy,
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
+	defer release()
 
 	// Full-clip time expansion + 48 kHz resample (all-or-nothing; no
 	// detection-window clipping), then normalization (after conversion) and gain.
@@ -1835,13 +1833,12 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Acquire processing semaphore
-	select {
-	case c.processingSemaphore <- struct{}{}:
-		defer func() { <-c.processingSemaphore }()
-	default:
-		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+	release, ok := c.tryAcquireProcessingSlot()
+	if !ok {
+		return c.HandleError(ctx, errProcessingBusy,
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
+	defer release()
 
 	// Create temp directory inside SecureFS root for processed files
 	tmpDir, err := transcode.ProcessingTempDir(c.SFS.BaseDir())
