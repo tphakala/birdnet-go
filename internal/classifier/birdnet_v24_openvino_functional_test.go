@@ -112,9 +112,12 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 		worst = max(worst, diff)
 		assert.LessOrEqualf(t, diff, maxDiff, "window %d: %s moved by %.4f (reference %.4f, candidate %.4f)",
 			w, labels[at], diff, ref[at], got[at])
+		// The candidate's top-1 must be a reference top-1 within the score limit, so
+		// two labels tied for first place do not fail the comparison.
 		refTop, gotTop := argmaxScore(ref), argmaxScore(got)
 		if ref[refTop] >= v24ParityMinTop1Confidence {
-			assert.Equalf(t, labels[refTop], labels[gotTop], "window %d: top-1 changed", w)
+			assert.LessOrEqualf(t, ref[refTop]-ref[gotTop], maxDiff, "window %d: top-1 changed from %s (%.4f) to %s, which the reference scores %.4f",
+				w, labels[refTop], ref[refTop], labels[gotTop], ref[gotTop])
 		}
 	}
 	t.Logf("%d windows, worst confidence change %.6f (limit %.4f)", windows, worst, maxDiff)
@@ -150,6 +153,10 @@ func v24ParityScores(t *testing.T, bn *BirdNET, window []float32) []float32 {
 	logits, err := bn.classifier.Predict(window)
 	require.NoError(t, err)
 	require.NotEmpty(t, logits)
+	// Reject non-finite logits the way BirdNET.Predict does: a NaN score would
+	// compare false against the limit and pass unnoticed.
+	idx := firstNonFinite(logits)
+	require.Equalf(t, noNonFiniteScore, idx, "non-finite logit at index %d of %d", idx, len(logits))
 	return applySigmoidToPredictions(logits, v24ParitySensitivity)
 }
 

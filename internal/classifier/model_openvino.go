@@ -30,7 +30,7 @@ const (
 	ovReasonNoDevice          = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
 	ovReasonNotBirdNETv24     = "model is not the stock BirdNET v2.4 classifier"
 	ovReasonNotPerchNoDFT     = "model is not the Perch no_dft variant"
-	ovReasonUnverifiedWeights = "model weights are INT8 or of unrecognized precision, which overflow at f16 on the ARM CPU or are unvalidated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)"
+	ovReasonUnverifiedWeights = "model weights are INT8 or of unrecognized precision, which are not validated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)"
 )
 
 // openVINOPlan describes how a model should run on the OpenVINO backend.
