@@ -99,6 +99,10 @@ func TestLoadModel_SchedulerRestartsOnlyForFirstGatedModel(t *testing.T) {
 		ungatedID = "test-ungated-load"
 	)
 	settings := conftest.GetTestSettings()
+	// Night-only with no configured location makes a started scheduler's initial
+	// refresh set locationWarn, which tells a started scheduler from a stored one.
+	settings.Bat.NighttimeOnly = true
+	settings.BirdNET.LocationConfigured = false
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
@@ -130,7 +134,8 @@ func TestLoadModel_SchedulerRestartsOnlyForFirstGatedModel(t *testing.T) {
 	started := o.scheduler.Load()
 	assert.NotSame(t, initial, started, "the first gated model gets a fresh scheduler")
 	assert.True(t, schedulerStopped(initial), "the previous scheduler is stopped")
-	assert.False(t, schedulerStopped(started), "the fresh scheduler is running")
+	assert.False(t, schedulerStopped(started), "the fresh scheduler is not stopped")
+	assert.True(t, started.locationWarn.Load(), "the fresh scheduler was started and ran its initial refresh")
 
 	require.NoError(t, o.LoadModel(secondID))
 	assert.Same(t, started, o.scheduler.Load(), "a second gated model keeps the running scheduler")
