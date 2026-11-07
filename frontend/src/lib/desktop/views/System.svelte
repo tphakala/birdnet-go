@@ -1,5 +1,6 @@
 <script lang="ts">
   import MetricStrip from '$lib/desktop/features/system/components/MetricStrip.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import SystemDetailsCard from '$lib/desktop/features/system/components/SystemDetailsCard.svelte';
   import StorageCard from '$lib/desktop/features/system/components/StorageCard.svelte';
   import SystemProcessTable from '$lib/desktop/features/system/components/SystemProcessTable.svelte';
@@ -328,7 +329,7 @@
   // Connect to metrics SSE stream for live updates
   function connectMetricsStream(): void {
     metricsSSE = new ReconnectingEventSource(
-      `/api/v2/system/metrics/stream?metrics=${buildMetricsParam()}`,
+      buildAppUrl(`/api/v2/system/metrics/stream?metrics=${buildMetricsParam()}`),
       { max_retry_time: 30000 }
     );
 

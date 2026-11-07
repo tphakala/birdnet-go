@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -470,7 +471,9 @@
   function connectMetricsStream(): void {
     disconnectMetricsStream();
     metricsSSE = new ReconnectingEventSource(
-      '/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec',
+      buildAppUrl(
+        '/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec'
+      ),
       { max_retry_time: 30000 }
     );
 
