@@ -1507,11 +1507,17 @@ func (c UltrasonicFilterConfig) validateSplit() error {
 
 // BSGBatConfig holds configuration for the BSG-BAT bat classifier. The schedule,
 // false positive filter and ultrasonic filter are shared with the bat section
-// (BatConfig); only the model files and the confidence threshold are its own.
+// (BatConfig); only the model files, the confidence threshold and the analysis
+// step are its own.
 type BSGBatConfig struct {
 	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG-BAT ONNX model file
 	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BSG-BAT label file
 	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for BSG-BAT detections
+	// StepFrames is the analysis step between successive BSG-BAT windows, in mel
+	// frames of 768 samples (2 ms at 384 kHz). Accepted values are 100 to 512; 0
+	// uses the default of 250. The bat false positive filter count follows it as
+	// ceil(6 / step seconds * level fraction). A change restarts audio capture.
+	StepFrames int `yaml:"stepframes" json:"stepFrames"`
 }
 
 // BSGConfig holds configuration for BSG regional bird models.

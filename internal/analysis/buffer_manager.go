@@ -17,7 +17,9 @@ import (
 const bufferMonitorDebugEveryTicks = 300
 
 // bufferMonitorPollInterval is how often an analysis buffer monitor polls its
-// buffer. The monitor reads at most one window per poll.
+// buffer. The monitor reads at most one window per poll, so an analysis step
+// shorter than two polls cannot be consumed without loss (see
+// conf.MinBSGBatStepFrames).
 const bufferMonitorPollInterval = 100 * time.Millisecond
 
 // bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis

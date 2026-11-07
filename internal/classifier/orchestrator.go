@@ -675,7 +675,7 @@ func (o *Orchestrator) ModelSpecFor(modelID string) (ModelSpec, bool) {
 	if entry.instance == nil {
 		return ModelSpec{}, false
 	}
-	return entry.instance.Spec(), true
+	return ConfiguredSpec(modelID, entry.instance.Spec(), o.CurrentSettings()), true
 }
 
 // startBatScheduler creates a fresh scheduler (preserving the suncalc
@@ -2677,6 +2677,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	// overlap), so every returned ModelInfo carries the effective overlap used for
 	// buffer allocation and cadence.
 	base := o.EffectiveBaseOverlap()
+	settings := o.CurrentSettings()
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
@@ -2717,6 +2718,8 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		// carries the stock catalog count, so source it from the live instance to
 		// report what is actually loaded.
 		info.NumSpecies = instance.NumSpecies()
+		// info is a copy, so applying the settings does not touch the registry.
+		info.Spec = ConfiguredSpec(info.ID, info.Spec, settings)
 		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, base)
 		infos = append(infos, info)
 	}

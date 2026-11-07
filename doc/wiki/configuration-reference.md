@@ -135,6 +135,7 @@ BSGBatConfig holds configuration for the BSG-BAT bat classifier.
 | `bsgbat.modelpath` | string | path to BSG-BAT ONNX model file |
 | `bsgbat.labelpath` | string | path to BSG-BAT label file |
 | `bsgbat.threshold` | number | confidence threshold for BSG-BAT detections |
+| `bsgbat.stepframes` | integer | StepFrames is the analysis step between successive BSG-BAT windows, in mel frames of 768 samples (2 ms at 384 kHz). Accepted values are 100 to 512; 0 uses the default of 250. The bat false positive filter count follows it as ceil(6 / step seconds * level fraction). A change restarts audio capture. |
 
 ## bsg
 

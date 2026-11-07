@@ -87,11 +87,13 @@ func TestPatchMissingSections(t *testing.T) {
 			name:    "bsgbat section accepts valid update",
 			section: "bsgbat",
 			body: map[string]any{
-				"threshold": 0.7,
+				"threshold":  0.7,
+				"stepFrames": 400,
 			},
 			verify: func(t *testing.T, settings *conf.Settings) {
 				t.Helper()
 				assert.InDelta(t, 0.7, settings.BSGBat.Threshold, 1e-9)
+				assert.Equal(t, 400, settings.BSGBat.StepFrames)
 			},
 		},
 		{
@@ -204,6 +206,28 @@ func TestPatchAlertingValidation(t *testing.T) {
 	var response map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	assert.Contains(t, response["error"], "historyRetentionDays must be non-negative")
+}
+
+// TestPatchBSGBatStepOutOfRange verifies that the settings API rejects a
+// bsgbat.stepframes above the model window and keeps the stored value.
+func TestPatchBSGBatStepOutOfRange(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+	controller.Settings.Load().BSGBat.StepFrames = conf.DefaultBSGBatStepFrames
+
+	body, err := json.Marshal(map[string]any{"stepFrames": conf.MaxBSGBatStepFrames + 1})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/bsgbat", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("bsgbat")
+
+	require.NoError(t, controller.UpdateSectionSettings(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, conf.DefaultBSGBatStepFrames, controller.Settings.Load().BSGBat.StepFrames)
 }
 
 // TestPatchAlertingZeroRetention verifies that zero is accepted as a valid

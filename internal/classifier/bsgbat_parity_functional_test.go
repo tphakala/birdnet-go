@@ -4,12 +4,14 @@ package classifier
 
 import (
 	"encoding/binary"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,8 +19,11 @@ import (
 	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 	"github.com/tphakala/go-audio-dsp/stft"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/bsgbat"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -261,6 +266,131 @@ func TestBSGBatParity_Functional(t *testing.T) {
 	}
 	t.Logf("max |logit - shipped| = %.5f (tolerance %.3f), max |live - whole recording| = %.2e (tolerance %.0e)",
 		maxShipped, shippedLogitsTolerance, maxLive, liveWindowTolerance)
+}
+
+// liveWriteBytes is the size of one write into the analysis buffer in the
+// configured-step test, one ffmpeg read.
+const liveWriteBytes = 32 * 1024
+
+// interiorSegment returns the normalized model input made of the reference mel
+// frames start to start+NumFrames-1.
+func interiorSegment(m *mel.Matrix, start int) []float32 {
+	seg := make([]float32, bsgbat.InputSize)
+	for f := range bsgbat.NumFrames {
+		copy(seg[f*bsgbat.NumMels:(f+1)*bsgbat.NumMels], m.Column(start+f))
+	}
+	bsgbat.Normalize(seg, bsgbat.NumMels)
+	return seg
+}
+
+// TestBSGBatParity_ConfiguredStep_Functional checks that the windows an analysis
+// buffer delivers at a configured step are interior segments of the recording's
+// hop grid. The stream starts at recording sample bsgbat.FrameSize, so the first
+// contiguous window is the m0-th read (m0 = ceil(window / step)) and the k-th
+// contiguous one starts at recording sample 768*s_k - 512 with
+// s_k = (m0 + k) * S - 511 frames, which is the segment of reference frames
+// s_k to s_k+511. The reads before it must be dropped as non-contiguous.
+// Skipped like TestBSGBatParity_Functional.
+func TestBSGBatParity_ConfiguredStep_Functional(t *testing.T) {
+	modelPath := os.Getenv(envBSGBatModel)
+	labelPath := os.Getenv(envBSGBatLabels)
+	dataDir := os.Getenv(envBSGBatData)
+	if modelPath == "" || labelPath == "" || dataDir == "" {
+		t.Skipf("set %s, %s and %s to run", envBSGBatModel, envBSGBatLabels, envBSGBatData)
+	}
+
+	inst, err := NewBSGBat(&BSGBatModelConfig{
+		ModelPath:       modelPath,
+		LabelPath:       labelPath,
+		ONNXRuntimePath: os.Getenv(envBSGBatORTLib),
+		Threads:         1,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = inst.Close() })
+
+	ref, err := inference.NewONNXTensorModel(modelPath, inference.ONNXTensorModelOptions{Threads: 1})
+	require.NoError(t, err)
+	t.Cleanup(ref.Close)
+
+	ex, err := mel.New(bsgbat.MelConfig())
+	require.NoError(t, err)
+
+	const (
+		lowStepFrames    = conf.MinBSGBatStepFrames
+		oddStepFrames    = 333
+		maxStepFrames    = conf.MaxBSGBatStepFrames
+		streamStartShift = bsgbat.FrameSize / 2
+	)
+	var maxLive float64
+	for _, stepFrames := range []int{lowStepFrames, oddStepFrames, maxStepFrames} {
+		spec := ConfiguredSpec(RegistryIDBSGBat, ModelRegistry[RegistryIDBSGBat].Spec, settingsWithBSGBatStep(stepFrames))
+		clipBytes, overlapBytes, readSize := spec.BufferDimensions(0)
+		stepSamples := stepFrames * bsgbat.HopSize
+		m0 := (bsgbat.ClipSamples + stepSamples - 1) / stepSamples
+
+		for _, name := range []string{"example1", "example2", "example3"} {
+			t.Run(name+"_step"+strconv.Itoa(stepFrames), func(t *testing.T) {
+				samples := readMono16WAV(t, filepath.Join(dataDir, "data", name+".wav"), bsgbat.SampleRate)
+				m := ex.Compute(samples, stft.PadZero)
+
+				ab, aerr := buffer.NewAnalysisBuffer(2*clipBytes, overlapBytes, readSize, "parity",
+					logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC), nil)
+				require.NoError(t, aerr)
+
+				stream := make([]byte, 0, (len(samples)-streamStartShift)*pcm16Bytes)
+				for _, v := range samples[streamStartShift:] {
+					stream = binary.LittleEndian.AppendUint16(stream, uint16(int16(math.Round(float64(v)*pcm16Scale))))
+				}
+
+				reads, skipped, compared := 0, 0, 0
+				for off := 0; off < len(stream); off += liveWriteBytes {
+					require.NoError(t, ab.Write(stream[off:min(off+liveWriteBytes, len(stream))]))
+					for {
+						window, info, release, rerr := ab.ReadWindow()
+						require.NoError(t, rerr)
+						if window == nil {
+							release()
+							break
+						}
+						reads++
+						if info.ContiguousBytes < clipBytes {
+							skipped++
+							release()
+							continue
+						}
+						// This is read number m0+k, so s_k = reads*S - 511.
+						s := reads*stepFrames - bsgbat.NumFrames + 1
+						if s+bsgbat.NumFrames > m.Frames {
+							release()
+							continue
+						}
+						live := make([]float32, len(window)/pcm16Bytes)
+						_, derr := dsppcm.BytesToFloat32(live, window)
+						require.NoError(t, derr)
+						release()
+
+						// The reference is the same graph on the interior segment of
+						// the whole recording, run through an independent runner.
+						want, werr := inst.run(live)
+						require.NoError(t, werr)
+						out, gerr := ref.Run(interiorSegment(&m, s))
+						require.NoError(t, gerr)
+						got := out[0]
+						require.Len(t, want, len(got))
+						for c := range want {
+							d := math.Abs(float64(want[c] - got[c]))
+							maxLive = max(maxLive, d)
+							assert.LessOrEqualf(t, d, liveWindowTolerance, "read %d column %d: live %v vs interior segment %v", reads, c, want[c], got[c])
+						}
+						compared++
+					}
+				}
+				assert.Equal(t, m0-1, skipped, "reads before the first contiguous window")
+				assert.Positive(t, compared, "the recording must hold at least one contiguous window at %d frames", stepFrames)
+			})
+		}
+	}
+	t.Logf("max |live - interior segment| = %.2e (tolerance %.0e)", maxLive, liveWindowTolerance)
 }
 
 // TestBSGBat_PredictSilence_Functional checks that digital silence, which is what

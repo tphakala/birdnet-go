@@ -38,14 +38,14 @@ const (
 const (
 	// NumFrames is the number of mel frames in one model input.
 	NumFrames = 512
-	// StepFrames is the frame advance between successive model inputs.
+	// StepFrames is the frame advance between successive model inputs in the
+	// reference implementation. It segments the reference in the parity test and is
+	// deliberately independent of the default live step (conf.DefaultBSGBatStepFrames),
+	// which is the bsgbat.stepframes setting.
 	StepFrames = 250
 	// ClipSamples is the number of samples that frame to exactly NumFrames frames
 	// without padding.
 	ClipSamples = (NumFrames-1)*HopSize + FrameSize
-	// StepSamples is the sample advance between successive windows, so that
-	// successive windows share the hop grid of one continuous recording.
-	StepSamples = StepFrames * HopSize
 	// InputSize is the element count of one model input.
 	InputSize = NumFrames * NumMels
 )

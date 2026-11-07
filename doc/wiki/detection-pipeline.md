@@ -165,6 +165,12 @@ The `Orchestrator` divides the configured thread count across all loaded models 
 
 Bat models support a nighttime-only mode. When `settings.Bat.NighttimeOnly=true`, the `analysisBufferMonitor` checks `orchestrator.IsModelActive` for each bat model (Bat and BSG-BAT) before calling `ProcessData()`. The nighttime scheduler uses solar position calculations to determine sunrise/sunset.
 
+### BSG-BAT Analysis Step
+
+BSG-BAT scores a 512-frame window (1.0247 s at 384 kHz) and advances it by a configurable step, `bsgbat.stepframes`, counted in mel frames of 768 samples (2 ms each). The accepted range is 100 to 512 frames (0.2 s to 1.024 s) and 0 means the default of 250 frames (0.5 s). The minimum is twice the 100 ms buffer poll, because the monitor reads at most one window per poll. A larger step cuts the number of inferences per second, at the cost of fewer windows per detection. Changing the step restarts audio capture, but does not reload the model.
+
+The bat false positive filter count follows the step as `ceil(6 / step seconds * level fraction)`. At level 2 it is 4 windows at 250 frames and 2 at 512 frames; at level 5 it is 9 at 250 frames and 5 at 512 frames. At 512 frames a 6 s span holds only 5 or 6 windows, so level 5 needs all of them in the worst case. Unlike the other models, the BSG-BAT analysis ring holds two windows, so a step close to the window length does not overwrite audio that has not been read yet.
+
 ## Stage 4: Detection Processing
 
 ```mermaid

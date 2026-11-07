@@ -110,6 +110,7 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeWebServer()
 	s.normalizeProfiling()
 	s.normalizeModelThresholds()
+	s.normalizeBSGBatStep()
 	s.normalizeAlternateMinConfidence()
 	s.normalizeModelConsensus()
 	s.normalizeUltrasonicFilter()
@@ -180,6 +181,24 @@ func (s *Settings) normalizeModelThresholds() {
 	reset("perch", &s.Perch.Threshold)
 	reset("birdnetv3", &s.BirdNETV3.Threshold)
 	reset("bsgbat", &s.BSGBat.Threshold)
+}
+
+// normalizeBSGBatStep resolves an unset bsgbat.stepframes (0) to the default and
+// repairs an out-of-range value to it with a warning, for the same reason as
+// normalizeModelThresholds: ValidateSettings is fatal on Load, so a bad value
+// must not stop boot. The settings API path does not run this pass and rejects
+// the value instead.
+func (s *Settings) normalizeBSGBatStep() {
+	frames := s.BSGBat.StepFrames
+	switch {
+	case frames == 0:
+		s.BSGBat.StepFrames = DefaultBSGBatStepFrames
+	case !ValidBSGBatStepFrames(frames):
+		s.recordValidationWarning(warnComponentModels,
+			"bsgbat stepframes %d is outside [%d, %d]; using the default %d (set a value in range to use it)",
+			frames, MinBSGBatStepFrames, MaxBSGBatStepFrames, DefaultBSGBatStepFrames)
+		s.BSGBat.StepFrames = DefaultBSGBatStepFrames
+	}
 }
 
 // normalizeAlternateMinConfidence repairs an invalid birdnet.alternateminconfidence

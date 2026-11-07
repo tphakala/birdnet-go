@@ -2,6 +2,7 @@ package processor
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1208,6 +1209,38 @@ func TestBatGroupMinDetections(t *testing.T) {
 		assert.Equal(t, minDetectionsForSegment(customStepSecs, level),
 			batGroupMinDetections(s, customID, customSpec, customOverlapBy),
 			"bat-group model with a %.1f s step at level %d", customStepSecs, level)
+	}
+}
+
+// TestMinDetectionsForModel_BSGBatConfiguredStep pins that both false positive
+// sites read the configured BSG-BAT step, not the static registry default: the
+// confirmation count and the visibility threshold follow bsgbat.stepframes and
+// the bat filter level.
+func TestMinDetectionsForModel_BSGBatConfiguredStep(t *testing.T) {
+	t.Parallel()
+
+	const minFrames = 100 // a step below the default, so a static read is visible
+	tests := []struct {
+		frames int
+		level  int
+		want   int
+	}{
+		{minFrames, 2, 9}, {minFrames, 5, 21},
+		{conf.DefaultBSGBatStepFrames, 2, 4}, {conf.DefaultBSGBatStepFrames, 5, 9},
+		{conf.MaxBSGBatStepFrames, 2, 2}, {conf.MaxBSGBatStepFrames, 5, 5},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("frames_%d_level_%d", tt.frames, tt.level), func(t *testing.T) {
+			t.Parallel()
+			s := &conf.Settings{}
+			s.BSGBat.StepFrames = tt.frames
+			s.Bat.FalsePositiveFilter.Level = tt.level
+
+			got := MinDetectionsForModel(s, classifier.RegistryIDBSGBat, 0)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, CalculateVisibilityThreshold(got),
+				precomputeVisibilityThresholds(s, 0).getThreshold(classifier.RegistryIDBSGBat))
+		})
 	}
 }
 
