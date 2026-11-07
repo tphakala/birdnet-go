@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import userEvent from '@testing-library/user-event';
 import type { CatalogEntry, InstalledModel } from '$lib/types/models';
 
 // The Analysis page tabs show an unsaved-change dot when any card badge on the tab would.
@@ -86,6 +87,7 @@ vi.mock('$lib/stores/settings', async () => {
     // No bat, Perch or BirdNET v3.0 section in the config unless a test seeds one, as on a
     // default install.
     batSettings: derived(mockStore, state => state.formData.bat),
+    bsgBatSettings: derived(mockStore, state => state.formData.bsgbat),
     perchSettings: derived(mockStore, state => state.formData.perch),
     birdNetV3Settings: derived(mockStore, state => state.formData.birdnetv3),
   };
@@ -120,6 +122,7 @@ const SETTINGS_SECTION_TITLE = {
 const PERCH_CATALOG_ID = 'perch-v2';
 const BIRDNET_V3_CATALOG_ID = 'birdnet-v3.0';
 const BAT_CATALOG_ID = 'bat-test';
+const BSG_BAT_CATALOG_ID = 'bsg-bat';
 const EDITED_THRESHOLD = 0.7;
 const EDITED_TRIGGER = 0.9;
 
@@ -163,9 +166,9 @@ function installedModel(catalogId: string): InstalledModel {
   };
 }
 
-function batCatalogEntry(): CatalogEntry {
+function batCatalogEntry(id: string = BAT_CATALOG_ID): CatalogEntry {
   return {
-    id: BAT_CATALOG_ID,
+    id,
     name: 'Test Bat Model',
     description: 'A test bat classifier',
     author: 'Tester',
@@ -330,6 +333,20 @@ describe('AnalysisSettingsPage tab change dots', () => {
         },
       },
       {
+        name: 'BSG-BAT',
+        section: 'bsgbat',
+        saved: { threshold: 0.5 },
+        edit: { threshold: EDITED_THRESHOLD },
+        titleKey: SETTINGS_SECTION_TITLE.bat,
+        install: () => {
+          // The bat card also reads the bat section, which a server always sends.
+          seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
+          vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+            catalog: [batCatalogEntry(BSG_BAT_CATALOG_ID)],
+          });
+        },
+      },
+      {
         name: 'bat',
         section: 'bat',
         saved: { enabled: true, threshold: 0.5, nighttimeOnly: true },
@@ -373,5 +390,108 @@ describe('AnalysisSettingsPage tab change dots', () => {
         expect(descriptionOf(settingsTab())).toBe('');
       }
     );
+  });
+});
+
+describe('AnalysisSettingsPage bat thresholds', () => {
+  const BATTY_LABEL = 'analysis.detection.batThreshold.label';
+  const BSG_BAT_LABEL = 'analysis.detection.bsgBatThreshold.label';
+  const BSG_BAT_WARNING = 'analysis.detection.bsgBatThreshold.sampleRateWarning';
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mockStore.update(state => ({
+      ...state,
+      originalData: savedConfig(),
+      formData: savedConfig(),
+    }));
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+    Object.defineProperty(window, 'location', {
+      value: document.location,
+      writable: true,
+      configurable: true,
+    });
+    navigation.redirect('/ui/settings/analysis');
+  });
+
+  async function renderWithCatalog(...ids: string[]) {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: ids.map(id => batCatalogEntry(id)),
+    });
+    render(AnalysisSettingsPage);
+    await screen.findByText(SETTINGS_SECTION_TITLE.bat);
+  }
+
+  it('shows only the BattyBirdNET threshold when only a BattyBirdNET model is installed', async () => {
+    await renderWithCatalog(BAT_CATALOG_ID);
+
+    expect(screen.getByText(BATTY_LABEL)).toBeInTheDocument();
+    expect(screen.queryByText(BSG_BAT_LABEL)).toBeNull();
+    expect(screen.queryByText(BSG_BAT_WARNING)).toBeNull();
+  });
+
+  it('shows only the BSG-BAT threshold and its warning when only BSG-BAT is installed', async () => {
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+
+    expect(screen.getByText(BSG_BAT_LABEL)).toBeInTheDocument();
+    expect(screen.getByText(BSG_BAT_WARNING)).toBeInTheDocument();
+    expect(screen.queryByText(BATTY_LABEL)).toBeNull();
+  });
+
+  it('gives each threshold field one form control under a direct grid child for the shared rows', async () => {
+    await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
+    const grid = screen.getByLabelText(BSG_BAT_LABEL).closest('.grid');
+
+    // The shared-row utilities select grid > * and grid > * > .form-control, so each field must
+    // keep that shape, with the label as the first child of its form control.
+    expect(grid?.querySelectorAll(':scope>*>.form-control')).toHaveLength(2);
+    expect(grid?.querySelectorAll(':scope>*>.form-control>label:first-child')).toHaveLength(2);
+  });
+
+  it('links the BSG-BAT warning to its threshold input', async () => {
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+
+    const describedBy = screen.getByLabelText(BSG_BAT_LABEL).getAttribute('aria-describedby') ?? '';
+    const note = screen.getByText(BSG_BAT_WARNING).closest('[id]');
+    expect(note).not.toBeNull();
+    expect(describedBy.split(' ')).toContain(note?.id);
+  });
+
+  it('shows both thresholds when both bat models are installed', async () => {
+    await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
+
+    expect(screen.getByText(BATTY_LABEL)).toBeInTheDocument();
+    expect(screen.getByText(BSG_BAT_LABEL)).toBeInTheDocument();
+  });
+
+  it('shows no change dot for BSG-BAT while no bsgbat section is saved', async () => {
+    // A server always sends the bat section; the bsgbat section is the one left out.
+    seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+    await screen.findByLabelText(BSG_BAT_LABEL);
+    await tick();
+
+    expect(descriptionOf(settingsTab())).toBe('');
+  });
+
+  it('saves a BSG-BAT threshold edit to the bsgbat section only', async () => {
+    seedSection('bsgbat', { threshold: 0.5 });
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+
+    const user = userEvent.setup();
+    const input = screen.getByLabelText(BSG_BAT_LABEL);
+    await user.clear(input);
+    await user.type(input, '0.7');
+    await user.tab();
+
+    const { settingsActions } = await import('$lib/stores/settings');
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('bsgbat', {
+      threshold: EDITED_THRESHOLD,
+    });
+    expect(
+      vi.mocked(settingsActions.updateSection).mock.calls.map(([section]) => section)
+    ).not.toContain('bat');
   });
 });

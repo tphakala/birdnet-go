@@ -3728,9 +3728,10 @@
           "result": "Resultado do teste",
           "error": "Teste falhou",
           "batCompatible": "Compatível com morcegos",
-          "batIncompatible": "Não compatível com morcegos"
+          "batIncompatible": "Não compatível com morcegos",
+          "minRateWarning": "Os modelos selecionados precisam de uma taxa de captura de pelo menos {rate} kHz. Este stream está abaixo."
         },
-        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. O BSG-BAT requer pelo menos 192 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
         "codecWarning": {
           "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
         },
@@ -5590,8 +5591,13 @@
         "helpText": "Pontuação mínima de confiança (0.0 - 1.0) necessária para que uma detecção seja registrada."
       },
       "batThreshold": {
-        "label": "Limiar de deteção de morcegos",
-        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos. Aplica-se apenas a modelos classificadores de morcegos."
+        "label": "Limiar de deteção de morcegos (BattyBirdNET)",
+        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos do BattyBirdNET. O BSG-BAT tem o seu próprio limiar."
+      },
+      "bsgBatThreshold": {
+        "label": "Limiar de deteção de morcegos (BSG-BAT)",
+        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos do BSG-BAT.",
+        "sampleRateWarning": "As capturas a 192 kHz funcionam, mas as espécies que emitem acima de 96 kHz não podem ser identificadas e as pontuações são menos fiáveis. Recomenda-se uma taxa de captura de 384 kHz."
       },
       "batFilter": {
         "label": "Filtro passa-altas para morcegos",

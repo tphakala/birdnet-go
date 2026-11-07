@@ -3728,9 +3728,10 @@
           "result": "Risultato del test",
           "error": "Test fallito",
           "batCompatible": "Compatibile con pipistrelli",
-          "batIncompatible": "Non compatibile con pipistrelli"
+          "batIncompatible": "Non compatibile con pipistrelli",
+          "minRateWarning": "I modelli selezionati richiedono una frequenza di acquisizione di almeno {rate} kHz. Questo flusso è al di sotto."
         },
-        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
+        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. BSG-BAT richiede almeno 192 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
         "codecWarning": {
           "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
         },
@@ -5590,8 +5591,13 @@
         "helpText": "Punteggio di confidenza minimo (0.0 - 1.0) richiesto affinché un rilevamento venga registrato."
       },
       "batThreshold": {
-        "label": "Soglia di rilevamento pipistrelli",
-        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli. Si applica solo ai modelli classificatori di pipistrelli."
+        "label": "Soglia di rilevamento pipistrelli (BattyBirdNET)",
+        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli di BattyBirdNET. BSG-BAT ha una propria soglia."
+      },
+      "bsgBatThreshold": {
+        "label": "Soglia di rilevamento pipistrelli (BSG-BAT)",
+        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli di BSG-BAT.",
+        "sampleRateWarning": "Le registrazioni a 192 kHz funzionano, ma le specie che emettono sopra i 96 kHz non possono essere identificate e i punteggi sono meno affidabili. Si consiglia una frequenza di acquisizione di 384 kHz."
       },
       "batFilter": {
         "label": "Filtro passa-alto audio pipistrelli",

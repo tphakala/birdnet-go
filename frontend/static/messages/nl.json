@@ -3728,9 +3728,10 @@
           "result": "Testresultaat",
           "error": "Test mislukt",
           "batCompatible": "Vleermuis-compatibel",
-          "batIncompatible": "Niet vleermuis-compatibel"
+          "batIncompatible": "Niet vleermuis-compatibel",
+          "minRateWarning": "De geselecteerde modellen hebben een opnamefrequentie van minimaal {rate} kHz nodig. Deze stream ligt eronder."
         },
-        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
+        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. BSG-BAT vereist minimaal 192 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
         "codecWarning": {
           "lossy": "Codecs met verlies (AAC, Opus, MP3) vernietigen ultrasone frequenties boven ~20 kHz, waardoor de stream ongeschikt wordt voor vleermuisdetectie."
         },
@@ -5590,8 +5591,13 @@
         "helpText": "Minimale betrouwbaarheidsscore (0.0 - 1.0) vereist om een detectie vast te leggen."
       },
       "batThreshold": {
-        "label": "Vleermuis-detectiedrempel",
-        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties. Geldt alleen voor vleermuisclassificatiemodellen."
+        "label": "Vleermuis-detectiedrempel (BattyBirdNET)",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BattyBirdNET. BSG-BAT heeft een eigen drempel."
+      },
+      "bsgBatThreshold": {
+        "label": "Vleermuis-detectiedrempel (BSG-BAT)",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BSG-BAT.",
+        "sampleRateWarning": "Opnamen op 192 kHz werken, maar soorten die boven 96 kHz roepen kunnen niet worden herkend en de scores zijn minder betrouwbaar. Een opnamefrequentie van 384 kHz wordt aanbevolen."
       },
       "batFilter": {
         "label": "Vleermuis audio hoogdoorlaatfilter",

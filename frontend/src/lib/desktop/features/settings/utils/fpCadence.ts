@@ -43,8 +43,11 @@ const FLOAT_EPSILON = 1e-9;
 /** Tolerance when comparing overlaps given in seconds. */
 const OVERLAP_TOLERANCE_SECONDS = 0.001;
 
-/** Registry ID of the bat model, which has its own fixed cadence and filter. */
-export const BAT_MODEL_ID = 'Bat';
+/**
+ * Taxon group the backend reports for the bat-group models (BattyBirdNET and
+ * BSG-BAT), which have their own fixed cadence and filter (classifier.TaxonGroupBat).
+ */
+export const BAT_TAXON_GROUP = 'bat';
 
 /** Lowest filter level at which the backend caps the cadence (cadence.FilterActive). */
 export const FILTER_ACTIVE_MIN_LEVEL = 1;
@@ -111,9 +114,14 @@ export interface CadenceReadoutRow {
   stepSeconds: number;
 }
 
-/** Bird models the readout covers; the bat model has its own filter and section. */
+/** Bird models the readout covers; the bat-group models have their own filter and section. */
 function birdModels(cadence: AnalysisCadenceInfo): AnalysisCadenceModel[] {
-  return cadence.models.filter(m => m.id !== BAT_MODEL_ID);
+  return cadence.models.filter(m => m.taxonGroup !== BAT_TAXON_GROUP);
+}
+
+/** True when the plan holds at least one model the bird readout covers. */
+export function hasBirdCadenceModels(cadence: AnalysisCadenceInfo): boolean {
+  return birdModels(cadence).length > 0;
 }
 
 /** Readout of the running configuration, from the server's own counts. */

@@ -3728,9 +3728,10 @@
           "result": "Testresultat",
           "error": "Test mislykkedes",
           "batCompatible": "Kompatibel med flagermus",
-          "batIncompatible": "Ikke kompatibel med flagermus"
+          "batIncompatible": "Ikke kompatibel med flagermus",
+          "minRateWarning": "De valgte modeller kræver en optagelsesfrekvens på mindst {rate} kHz. Denne stream ligger under."
         },
-        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. BSG-BAT kræver mindst 192 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         },
@@ -5590,8 +5591,13 @@
         "helpText": "Minimum konfidensværdi (0,0 - 1,0) der kræves for at en detektion registreres."
       },
       "batThreshold": {
-        "label": "Flagermus-detekteringsgrænse",
-        "helpText": "Minimum konfidensscore for flagermusartsdetektioner. Gælder kun for flagermusklassificeringsmodeller."
+        "label": "Flagermus-detekteringsgrænse (BattyBirdNET)",
+        "helpText": "Minimum konfidensscore for BattyBirdNET-flagermusartsdetektioner. BSG-BAT har sin egen grænseværdi."
+      },
+      "bsgBatThreshold": {
+        "label": "Flagermus-detekteringsgrænse (BSG-BAT)",
+        "helpText": "Minimum konfidensscore for BSG-BAT-flagermusartsdetektioner.",
+        "sampleRateWarning": "Optagelser ved 192 kHz fungerer, men arter, der kalder over 96 kHz, kan ikke identificeres, og scorerne er mindre pålidelige. En optagelsesfrekvens på 384 kHz anbefales."
       },
       "batFilter": {
         "label": "Flagermus-audio-højpasfilter",
