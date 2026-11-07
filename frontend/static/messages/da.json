@@ -3915,6 +3915,7 @@
         "requiresRecording": "Aktiver klipoptagelse under fanen Optagelse for at bruge støjreduktion af klip.",
         "strengthLabel": "Støjreduktionsstyrke",
         "strengthHelp": "Let bevarer mest af den originale lyd, og kraftig fjerner mest støj. Let-mellem passer til de fleste optagelser.",
+        "strengthDisabledHelp": "Slå støjreduktion af klip til ovenfor for at vælge en styrke.",
         "warningTitle": "Gemte klip kan ikke gendannes",
         "warningPermanent": "Den originale lyd gemmes ikke. Klip får permanent fjernet støj, når de gemmes, også flagermusoptagelser.",
         "warningBats": "Støjreduktion kan gøre svage flagermuskald svagere; kraftige kald påvirkes ikke.",

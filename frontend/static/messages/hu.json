@@ -3915,6 +3915,7 @@
         "requiresRecording": "Engedélyezze a minta rögzítést a Rögzítés lapon a minták zajszűrésének használatához.",
         "strengthLabel": "Zajszűrés erőssége",
         "strengthHelp": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
+        "strengthDisabledHelp": "A erősség kiválasztásához kapcsolja be fent a minták zajszűrését.",
         "warningTitle": "A mentett minták nem állíthatók vissza",
         "warningPermanent": "Az eredeti hang nem marad meg. A minták mentéskor véglegesen zajszűrésen esnek át, a denevérfelvételeket is beleértve.",
         "warningBats": "A zajszűrés halkabbá teheti a gyenge denevérhívásokat; az erős hívásokat nem érinti.",

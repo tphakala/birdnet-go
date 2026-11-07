@@ -3915,6 +3915,7 @@
         "requiresRecording": "Aktiver klippopptak i Opptak-fanen for å bruke støyreduksjon for klipp.",
         "strengthLabel": "Støyreduksjonsstyrke",
         "strengthHelp": "Lett beholder mest av den opprinnelige lyden, og kraftig fjerner mest støy. Lett-middels passer for de fleste opptak.",
+        "strengthDisabledHelp": "Slå på støyreduksjon for klipp ovenfor for å velge en styrke.",
         "warningTitle": "Lagrede klipp kan ikke gjenopprettes",
         "warningPermanent": "Den opprinnelige lyden beholdes ikke. Klipp får permanent fjernet støy når de lagres, også flaggermusopptak.",
         "warningBats": "Støyreduksjon kan gjøre svake flaggermuslyder svakere; kraftige lyder påvirkes ikke.",

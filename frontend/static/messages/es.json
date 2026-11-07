@@ -3915,6 +3915,7 @@
         "requiresRecording": "Habilite la grabación de clips en la pestaña Grabación para usar la reducción de ruido de clips.",
         "strengthLabel": "Intensidad de la reducción de ruido",
         "strengthHelp": "Suave conserva la mayor parte del sonido original y fuerte elimina más ruido. Suave-medio sirve para la mayoría de las grabaciones.",
+        "strengthDisabledHelp": "Active arriba la reducción de ruido de clips para elegir una intensidad.",
         "warningTitle": "Los clips guardados no se pueden restaurar",
         "warningPermanent": "El audio original no se conserva. Los clips se limpian de ruido de forma permanente al guardarse, incluidas las grabaciones de murciélagos.",
         "warningBats": "La reducción de ruido puede atenuar las llamadas débiles de murciélagos; las llamadas fuertes no se ven afectadas.",

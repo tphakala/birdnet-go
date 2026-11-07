@@ -3915,6 +3915,7 @@
         "requiresRecording": "Activez l'enregistrement des clips dans l'onglet Enregistrement pour utiliser la réduction de bruit des clips.",
         "strengthLabel": "Intensité de la réduction de bruit",
         "strengthHelp": "Léger conserve le plus du son d'origine et fort supprime le plus de bruit. Léger-moyen convient à la plupart des enregistrements.",
+        "strengthDisabledHelp": "Activez la réduction de bruit des clips ci-dessus pour choisir une intensité.",
         "warningTitle": "Les clips enregistrés ne peuvent pas être restaurés",
         "warningPermanent": "L'audio d'origine n'est pas conservé. Les clips sont débruités définitivement à l'enregistrement, y compris les enregistrements de chauves-souris.",
         "warningBats": "La réduction de bruit peut atténuer les cris faibles de chauves-souris ; les cris forts ne sont pas affectés.",

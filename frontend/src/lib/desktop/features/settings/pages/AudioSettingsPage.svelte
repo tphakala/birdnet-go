@@ -840,7 +840,9 @@
           <SelectDropdown
             value={exportDenoise.strength}
             label={t('settings.audio.exportDenoise.strengthLabel')}
-            helpText={t('settings.audio.exportDenoise.strengthHelp')}
+            helpText={settings.audio.export.enabled && !exportDenoise.enabled
+              ? t('settings.audio.exportDenoise.strengthDisabledHelp')
+              : t('settings.audio.exportDenoise.strengthHelp')}
             options={denoiseStrengthOptions}
             disabled={!exportDenoise.enabled ||
               !settings.audio.export.enabled ||

@@ -3915,6 +3915,7 @@
         "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda brusreducering av klipp.",
         "strengthLabel": "Brusreduceringens styrka",
         "strengthHelp": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "strengthDisabledHelp": "Slå på brusreducering av klipp ovan för att välja en styrka.",
         "warningTitle": "Sparade klipp kan inte återställas",
         "warningPermanent": "Originalljudet sparas inte. Klipp brusreduceras permanent när de sparas, även fladdermusinspelningar.",
         "warningBats": "Brusreducering kan göra svaga fladdermusläten svagare; kraftiga läten påverkas inte.",

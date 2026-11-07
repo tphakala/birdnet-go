@@ -3915,6 +3915,7 @@
         "requiresRecording": "Iespējojiet klipu ierakstīšanu cilnē Ierakstīšana, lai izmantotu klipu trokšņu samazināšanu.",
         "strengthLabel": "Trokšņu samazināšanas stiprums",
         "strengthHelp": "Viegls saglabā visvairāk oriģinālās skaņas, bet spēcīgs noņem visvairāk trokšņa. Viegls-vidējs der lielākajai daļai ierakstu.",
+        "strengthDisabledHelp": "Lai izvēlētos stiprumu, augstāk ieslēdziet klipu trokšņu samazināšanu.",
         "warningTitle": "Saglabātos klipus nevar atjaunot",
         "warningPermanent": "Oriģinālais audio netiek saglabāts. Klipi tiek pastāvīgi attīrīti no trokšņa saglabājot, tostarp sikspārņu ieraksti.",
         "warningBats": "Trokšņu samazināšana var padarīt klusākus vājos sikspārņu saucienus; stiprie saucieni netiek ietekmēti.",

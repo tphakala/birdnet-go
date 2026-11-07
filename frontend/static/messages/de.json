@@ -3915,6 +3915,7 @@
         "requiresRecording": "Aktivieren Sie die Clip-Aufnahme im Aufnahme-Tab, um die Rauschunterdrückung für Clips zu verwenden.",
         "strengthLabel": "Stärke der Rauschunterdrückung",
         "strengthHelp": "Leicht bewahrt am meisten vom Originalklang, stark entfernt am meisten Rauschen. Leicht-mittel passt zu den meisten Aufnahmen.",
+        "strengthDisabledHelp": "Aktivieren Sie oben die Rauschunterdrückung für Clips, um eine Stärke zu wählen.",
         "warningTitle": "Gespeicherte Clips lassen sich nicht wiederherstellen",
         "warningPermanent": "Das Originalaudio wird nicht aufbewahrt. Clips werden beim Speichern dauerhaft entrauscht, auch Fledermausaufnahmen.",
         "warningBats": "Die Rauschunterdrückung kann leise Fledermausrufe leiser machen; starke Rufe bleiben unverändert.",

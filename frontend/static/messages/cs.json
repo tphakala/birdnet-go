@@ -3915,6 +3915,7 @@
         "requiresRecording": "Pro použití odšumění klipů povolte nahrávání klipů na kartě Nahrávání.",
         "strengthLabel": "Síla odšumění",
         "strengthHelp": "Slabé zachová nejvíce původního zvuku, silné odstraní nejvíce hluku. Středně slabé vyhovuje většině nahrávek.",
+        "strengthDisabledHelp": "Pro volbu síly zapněte výše odšumění klipů.",
         "warningTitle": "Uložené klipy nelze obnovit",
         "warningPermanent": "Původní zvuk se neuchovává. Klipy se při uložení odšumí trvale, včetně nahrávek netopýrů.",
         "warningBats": "Odšumění může zeslabit slabá volání netopýrů; silná volání zůstanou beze změny.",

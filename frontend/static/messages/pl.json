@@ -3915,6 +3915,7 @@
         "requiresRecording": "Włącz nagrywanie klipów na karcie Nagrywanie, aby używać redukcji szumów klipów.",
         "strengthLabel": "Siła redukcji szumów",
         "strengthHelp": "Lekka zachowuje najwięcej oryginalnego dźwięku, a silna usuwa najwięcej szumu. Lekki-średni pasuje do większości nagrań.",
+        "strengthDisabledHelp": "Aby wybrać siłę, włącz powyżej redukcję szumów klipów.",
         "warningTitle": "Zapisanych klipów nie można przywrócić",
         "warningPermanent": "Oryginalny dźwięk nie jest przechowywany. Klipy są trwale odszumiane przy zapisie, także nagrania nietoperzy.",
         "warningBats": "Redukcja szumów może wyciszyć słabe wołania nietoperzy; silne wołania pozostają bez zmian.",

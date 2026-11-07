@@ -3915,6 +3915,7 @@
         "requiresRecording": "Schakel clip opname in op het Opname tabblad om ruisonderdrukking voor clips te gebruiken.",
         "strengthLabel": "Sterkte van de ruisonderdrukking",
         "strengthHelp": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
+        "strengthDisabledHelp": "Schakel hierboven ruisonderdrukking voor clips in om een sterkte te kiezen.",
         "warningTitle": "Opgeslagen clips kunnen niet worden hersteld",
         "warningPermanent": "De originele audio wordt niet bewaard. Clips worden bij het opslaan definitief ontdaan van ruis, ook vleermuisopnames.",
         "warningBats": "Ruisonderdrukking kan zwakke vleermuisroepen zachter maken; sterke roepen worden niet beïnvloed.",

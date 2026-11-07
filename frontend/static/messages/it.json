@@ -3915,6 +3915,7 @@
         "requiresRecording": "Abilita la registrazione delle clip nella scheda Registrazione per usare la riduzione del rumore delle clip.",
         "strengthLabel": "Intensità della riduzione del rumore",
         "strengthHelp": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
+        "strengthDisabledHelp": "Attiva sopra la riduzione del rumore delle clip per scegliere un'intensità.",
         "warningTitle": "Le clip salvate non possono essere ripristinate",
         "warningPermanent": "L'audio originale non viene conservato. Le clip vengono ripulite dal rumore in modo permanente al salvataggio, comprese le registrazioni di pipistrelli.",
         "warningBats": "La riduzione del rumore può attenuare i richiami deboli dei pipistrelli; i richiami forti non sono interessati.",

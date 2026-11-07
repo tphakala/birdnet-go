@@ -2873,6 +2873,7 @@ export type TranslationKey =
   | 'settings.audio.exportDenoise.requiresRecording'
   | 'settings.audio.exportDenoise.strengthLabel'
   | 'settings.audio.exportDenoise.strengthHelp'
+  | 'settings.audio.exportDenoise.strengthDisabledHelp'
   | 'settings.audio.exportDenoise.warningTitle'
   | 'settings.audio.exportDenoise.warningPermanent'
   | 'settings.audio.exportDenoise.warningBats'

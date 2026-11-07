@@ -11,6 +11,8 @@ const TAB_STORAGE_KEY = 'birdnet-audio-settings-active-tab';
 const ENABLE_LABEL = 'settings.audio.exportDenoise.enable';
 const WARNING_PERMANENT = 'settings.audio.exportDenoise.warningPermanent';
 const LOSSY_NOTE = 'settings.audio.exportDenoise.lossyNote';
+const STRENGTH_HELP = 'settings.audio.exportDenoise.strengthHelp';
+const STRENGTH_DISABLED_HELP = 'settings.audio.exportDenoise.strengthDisabledHelp';
 
 vi.mock('$lib/desktop/components/forms/StreamManager.svelte');
 vi.mock('$lib/desktop/components/forms/SoundCardManager.svelte');
@@ -50,7 +52,7 @@ vi.mock('$lib/stores/settings', async () => {
   };
 });
 
-type ExportOverrides = { type?: string; denoise?: unknown };
+type ExportOverrides = { enabled?: boolean; type?: string; denoise?: unknown };
 
 async function renderProcessingTab(exportOverrides: ExportOverrides) {
   // The module is mocked above with writable stores; the real types are readable.
@@ -148,5 +150,26 @@ describe('AudioSettingsPage clip denoise', () => {
 
     await screen.findByText(WARNING_PERMANENT);
     expect(screen.queryByText(LOSSY_NOTE) !== null).toBe(shown);
+  });
+
+  it('names the reason the strength dropdown is disabled while the switch is off', async () => {
+    await renderProcessingTab({});
+
+    expect(await screen.findByText(STRENGTH_DISABLED_HELP)).toBeTruthy();
+    expect(screen.queryByText(STRENGTH_HELP)).toBeNull();
+  });
+
+  it('shows the strength explanation while the switch is on', async () => {
+    await renderProcessingTab({ denoise: { enabled: true, strength: 'light-medium' } });
+
+    expect(await screen.findByText(STRENGTH_HELP)).toBeTruthy();
+    expect(screen.queryByText(STRENGTH_DISABLED_HELP)).toBeNull();
+  });
+
+  it('does not tell the reader to flip a disabled switch while recording is off', async () => {
+    await renderProcessingTab({ enabled: false });
+
+    expect(await screen.findByText(STRENGTH_HELP)).toBeTruthy();
+    expect(screen.queryByText(STRENGTH_DISABLED_HELP)).toBeNull();
   });
 });
