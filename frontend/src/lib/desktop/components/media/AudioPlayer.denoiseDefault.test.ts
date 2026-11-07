@@ -348,6 +348,23 @@ describe('AudioPlayer playback denoise default', () => {
       expect(elementPath()).toBe(STORED_URL);
     });
 
+    it('retries the denoised clip on schedule while its probe has not answered', async () => {
+      restoreFetch = mockAudioProbe({
+        status: SERVER_ERROR_STATUS,
+        delayMs: AUDIO_RETRY_DELAY_MS * 10,
+      });
+      mount();
+      ctl.completeLoad();
+      await press();
+      const loadsBefore = ctl.load.mock.calls.length;
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+    });
+
     it('ends with the load error when the denoised clip is gone (404)', async () => {
       restoreFetch = mockAudioProbe({ status: NOT_FOUND_STATUS });
       mount();

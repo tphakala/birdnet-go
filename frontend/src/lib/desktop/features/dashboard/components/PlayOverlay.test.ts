@@ -870,6 +870,21 @@ describe('PlayOverlay', () => {
         expect(ctl.load).toHaveBeenCalled();
       });
 
+      it('retries the denoised clip on schedule while its probe has not answered', async () => {
+        const firstDelay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(0) ?? 0;
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS, delayMs: firstDelay * 10 });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+        const loadsBefore = ctl.load.mock.calls.length;
+
+        ctl.failLoad();
+        await advanceRetry(0);
+
+        expect(new URL(ctl.element.src).searchParams.get('denoise')).toBe(PRESET);
+        expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+      });
+
       it('ends with the load error when the denoised clip is gone (404)', async () => {
         restoreFetch = mockAudioProbe({ status: MISSING_STATUS });
         mount({ denoisePreset: PRESET });

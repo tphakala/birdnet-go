@@ -334,9 +334,9 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     if (resume) void audioElement.play().catch(handlePlayRejection);
   }
 
-  // On the first failure of the play URL, ask the server why before retrying: a 503
-  // keeps its Retry-After retry, a 404 ends it, and anything else is a failure a
-  // retry cannot fix.
+  // On the first failure of the play URL, ask the server why beside the scheduled
+  // retry: a 503 moves that retry to its Retry-After, a 404 ends it, and anything
+  // else is a failure a retry cannot fix.
   function probeDenoisedLoad() {
     const controller = new AbortController();
     audioProbeController = controller;
@@ -347,7 +347,6 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       if (outcome.kind === 'missing') {
         failLoadPermanently();
       } else if (outcome.kind === 'pending') {
-        audioRetryCount++;
         scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
       } else {
         fallbackToStoredClip();
@@ -624,15 +623,15 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       }
       if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
         const isFirstFailure = audioRetryCount === 0;
-        if (isFirstFailure && onPlayUrl()) {
-          probeDenoisedLoad();
-          return;
-        }
         clearRetryTimer();
         audioRetryCount++;
         debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
         scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
-        if (isFirstFailure) probeFailedLoad();
+        // The probe runs beside the scheduled retry, so a slow answer never stalls recovery.
+        if (isFirstFailure) {
+          if (onPlayUrl()) probeDenoisedLoad();
+          else probeFailedLoad();
+        }
         return;
       }
 

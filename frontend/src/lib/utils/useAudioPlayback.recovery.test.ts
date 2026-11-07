@@ -578,6 +578,23 @@ describe('useAudioPlayback recovery', () => {
         expect(elementPath()).toBe(STORED_URL);
       });
 
+      it('retries the play URL on schedule while its probe has not answered', async () => {
+        restoreFetch = mockAudioProbe({
+          status: SERVER_ERROR_STATUS,
+          delayMs: AUDIO_RETRY_DELAY_MS * 10,
+        });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        const loadsBefore = ctl.load.mock.calls.length;
+
+        ctl.failLoad();
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+      });
+
       it('falls back once the retry budget of the play URL is spent', async () => {
         restoreFetch = mockAudioProbe({ status: PENDING_STATUS });
         await renderAndWait({ playUrl: DENOISED_URL });

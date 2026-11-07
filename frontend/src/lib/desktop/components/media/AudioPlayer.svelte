@@ -1206,9 +1206,9 @@
     if (resume) void audioElement.play().catch(handlePlayRejection);
   }
 
-  // On the first failure of the denoised clip, ask the server why before retrying:
-  // a 503 keeps its Retry-After retry, a 404 ends it, and anything else is a failure
-  // a retry cannot fix.
+  // On the first failure of the denoised clip, ask the server why beside the
+  // scheduled retry: a 503 moves that retry to its Retry-After, a 404 ends it, and
+  // anything else is a failure a retry cannot fix.
   function probeDenoisedLoad() {
     const controller = new AbortController();
     audioProbeController = controller;
@@ -1219,7 +1219,6 @@
       if (outcome.kind === 'missing') {
         failLoadPermanently();
       } else if (outcome.kind === 'pending') {
-        audioRetryCount++;
         scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
       } else {
         fallbackToStoredClip();
@@ -2253,15 +2252,15 @@
         // be encoding (backend returns 503 which the browser treats as a load error)
         if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
           const isFirstFailure = audioRetryCount === 0;
-          if (isFirstFailure && onDefaultDenoiseClip()) {
-            probeDenoisedLoad();
-            return;
-          }
           clearAudioRetryTimer();
           audioRetryCount++;
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
-          if (isFirstFailure) probeFailedLoad();
+          // The probe runs beside the scheduled retry, so a slow answer never stalls recovery.
+          if (isFirstFailure) {
+            if (onDefaultDenoiseClip()) probeDenoisedLoad();
+            else probeFailedLoad();
+          }
           return;
         }
 

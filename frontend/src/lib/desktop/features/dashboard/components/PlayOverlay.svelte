@@ -371,9 +371,10 @@
     }
   }
 
-  // On the first failure of the denoised clip, ask the server why before retrying:
-  // a 503 keeps its Retry-After retry, a 404 ends it, and anything else is a failure
-  // a retry cannot fix, so the card falls back to the stored clip.
+  // On the first failure of the denoised clip, ask the server why beside the
+  // scheduled retry: a 503 moves that retry to its Retry-After, a 404 ends it, and
+  // anything else is a failure a retry cannot fix, so the card falls back to the
+  // stored clip.
   function probeDenoisedLoad(scheduledDelay: number) {
     const controller = new AbortController();
     audioProbeController = controller;
@@ -383,7 +384,7 @@
       if (outcome.kind === 'missing') {
         failLoadPermanently();
       } else if (outcome.kind === 'pending') {
-        scheduleRetry(pendingRetryDelayMs(outcome, scheduledDelay));
+        armRetryTimer(pendingRetryDelayMs(outcome, scheduledDelay));
       } else {
         fallbackToStoredClip();
       }
@@ -697,12 +698,12 @@
     const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(audioRetryCount);
     if (delay !== undefined) {
       const isFirstFailure = audioRetryCount === 0;
-      if (isFirstFailure && !audibleBatsSrc && onDenoisedClip()) {
-        probeDenoisedLoad(delay);
-        return;
-      }
       scheduleRetry(delay);
-      if (isFirstFailure) probeFailedLoad(delay);
+      // The probe runs beside the scheduled retry, so a slow answer never stalls recovery.
+      if (isFirstFailure) {
+        if (!audibleBatsSrc && onDenoisedClip()) probeDenoisedLoad(delay);
+        else probeFailedLoad(delay);
+      }
       return;
     }
 
