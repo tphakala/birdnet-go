@@ -37,10 +37,6 @@ const (
 	// denoiseStartTimeout bounds waits for a job to reach or leave its hook so a
 	// regression fails instead of hanging the package.
 	denoiseStartTimeout = 10 * time.Second
-	// denoiseNeverWindow and denoiseNeverTick size the negative check that Wait
-	// stays blocked; it can pass spuriously on a slow machine but never fail.
-	denoiseNeverWindow = 100 * time.Millisecond
-	denoiseNeverTick   = 10 * time.Millisecond
 )
 
 // signedIn marks every request as coming from an authenticated client.
@@ -465,52 +461,43 @@ func TestProcessWAV_JobPanicBecomesError(t *testing.T) {
 }
 
 func TestProcessWAV_ShutdownWaitsForJob(t *testing.T) {
-	_, controller, dir := setupMediaTestEnvironment(t)
-	src := fixturePath(dir, "clip.wav")
-	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseJob := func() { releaseOnce.Do(func() { close(release) }) }
-	t.Cleanup(releaseJob)
-	controller.processingStartedHook = func() {
-		close(entered)
-		<-release
-	}
+	// Inside the bubble synctest.Wait returns once every goroutine is blocked, so
+	// "Wait is still blocked on the running job" is observed, not timed.
+	synctest.Test(t, func(t *testing.T) {
+		_, controller, dir := setupMediaTestEnvironment(t)
+		src := fixturePath(dir, "clip.wav")
+		writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+		release := make(chan struct{})
+		var releaseOnce sync.Once
+		releaseJob := func() { releaseOnce.Do(func() { close(release) }) }
+		t.Cleanup(releaseJob)
+		controller.processingStartedHook = func() { <-release }
 
-	const key = "shutdown.wav"
-	reqCtx, cancel := context.WithCancel(t.Context())
-	go func() { _, _ = controller.processWAV(reqCtx, key, src, transcode.Filters{Denoise: denoiseTestPreset}) }()
-	select {
-	case <-entered:
-	case <-time.After(denoiseStartTimeout):
-		t.Fatal("the job never started")
-	}
-	cancel()
+		reqCtx, cancel := context.WithCancel(t.Context())
+		go func() {
+			_, _ = controller.processWAV(reqCtx, "shutdown.wav", src, transcode.Filters{Denoise: denoiseTestPreset})
+		}()
+		synctest.Wait() // the job is parked in the hook
+		cancel()
 
-	// Shutdown is Cancel then Wait.
-	controller.Cancel()
-	waited := make(chan struct{})
-	go func() {
-		controller.Wait()
-		close(waited)
-	}()
-	assert.Never(t, func() bool {
+		// Shutdown is Cancel then Wait.
+		controller.Cancel()
+		waited := make(chan struct{})
+		go func() {
+			controller.Wait()
+			close(waited)
+		}()
+		synctest.Wait()
 		select {
 		case <-waited:
-			return true
+			t.Fatal("Shutdown must wait for a job that is still running")
 		default:
-			return false
 		}
-	}, denoiseNeverWindow, denoiseNeverTick, "Shutdown must wait for a job that is still running")
 
-	releaseJob()
-	select {
-	case <-waited:
-	case <-time.After(denoiseStartTimeout):
-		t.Fatal("Wait did not return after the job finished")
-	}
-	assert.Empty(t, controller.processingSemaphore, "the job released its slot before Wait returned")
+		releaseJob()
+		<-waited
+		assert.Empty(t, controller.processingSemaphore, "the job released its slot before Wait returned")
+	})
 }
 
 func TestProcessWAV_NoJobStartsAfterShutdown(t *testing.T) {
