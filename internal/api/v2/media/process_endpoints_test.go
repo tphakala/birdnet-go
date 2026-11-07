@@ -48,6 +48,16 @@ func wavRateAndLength(t *testing.T, body []byte) (rate, dataLen int) {
 	return rate, dataLen
 }
 
+// corruptKeepingStat overwrites path with undecodable bytes of the same length
+// and restores its mtime, so the clip's cache tag (path, size, mtime) is unchanged.
+func corruptKeepingStat(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{'x'}, int(info.Size())), 0o600))
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+}
+
 func TestProcessAudioByID(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
@@ -70,10 +80,7 @@ func TestProcessAudioByID(t *testing.T) {
 	// undecodable bytes, so only a cache hit can answer 200. The handler stats
 	// the clip before consulting the cache and keys the entry on the clip's path,
 	// size and mtime, so the garbage keeps the original length and mtime.
-	srcInfo, err := os.Stat(src)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(src, bytes.Repeat([]byte{'x'}, int(srcInfo.Size())), 0o600))
-	require.NoError(t, os.Chtimes(src, srcInfo.ModTime(), srcInfo.ModTime()))
+	corruptKeepingStat(t, src)
 	rec = postJSON(e, "/api/v2/audio/7/process", body)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, first, rec.Body.Bytes(), "a cache hit skips processing")
@@ -225,11 +232,7 @@ func TestAudibleBatsByID_CacheFollowsClipFile(t *testing.T) {
 
 	// An unchanged clip is served from the cache: the source now holds
 	// undecodable bytes of the same length and mtime, so only a hit can answer 200.
-	srcPath := fixturePath(tempDir, "b.wav")
-	srcInfo, err := os.Stat(srcPath)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(srcPath, bytes.Repeat([]byte{'x'}, int(srcInfo.Size())), 0o600))
-	require.NoError(t, os.Chtimes(srcPath, srcInfo.ModTime(), srcInfo.ModTime()))
+	corruptKeepingStat(t, fixturePath(tempDir, "b.wav"))
 	rec = postJSON(e, "/api/v2/audio/1/audible-bats", body)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, second, rec.Body.Bytes(), "an unchanged clip is served from the cache")

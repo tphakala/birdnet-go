@@ -1595,22 +1595,22 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 }
 
 // resolveBatClipFile confirms noteID refers to a bat detection and returns the
-// absolute, validated path to its source audio clip, plus the normalized path
-// and the clip's file info that the cache source tag is built from, following
+// absolute, validated path to its source audio clip, plus the clip's cache
+// source tag (see clipSourceTag), following
 // the same path-resolution pattern as ProcessAudioByID. When ok is false it has already
 // written the HTTP error response and the caller must return respErr unchanged
 // (respErr is nil once the JSON error body is written successfully).
-func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absolutePath, normalizedPath string, info os.FileInfo, ok bool, respErr error) {
+func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absolutePath, sourceTag string, ok bool, respErr error) {
 	// Audible-bats playback only applies to bat detections.
 	modelType, err := c.DS.GetNoteModelType(noteID)
 	if err != nil {
 		if isClipNotFoundErr(err) {
-			return "", "", nil, false, c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+			return "", "", false, c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 		}
-		return "", "", nil, false, c.HandleError(ctx, err, "Failed to resolve detection model type", http.StatusInternalServerError)
+		return "", "", false, c.HandleError(ctx, err, "Failed to resolve detection model type", http.StatusInternalServerError)
 	}
 	if modelType != modelTypeBat {
-		return "", "", nil, false, c.HandleError(ctx, fmt.Errorf("model type %q is not a bat model", modelType),
+		return "", "", false, c.HandleError(ctx, fmt.Errorf("model type %q is not a bat model", modelType),
 			"Audible bats mode is only available for bat detections", http.StatusBadRequest)
 	}
 
@@ -1618,24 +1618,24 @@ func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absoluteP
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		if isClipNotFoundErr(err) {
-			return "", "", nil, false, c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
+			return "", "", false, c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
 		}
-		return "", "", nil, false, c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+		return "", "", false, c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
 	}
 	if clipPath == "" {
-		return "", "", nil, false, c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
+		return "", "", false, c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
 	}
-	normalizedPath, err = c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
 	if err != nil {
-		return "", "", nil, false, c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+		return "", "", false, c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
 	}
 	absolutePath = filepath.Join(c.SFS.BaseDir(), normalizedPath)
 	// A fresh stat, not StatRel's cached one (see ProcessAudioByID).
-	info, err = c.SFS.Stat(absolutePath)
+	info, err := c.SFS.Stat(absolutePath)
 	if err != nil {
-		return "", "", nil, false, c.HandleError(ctx, err, "Audio clip not found", http.StatusNotFound)
+		return "", "", false, c.HandleError(ctx, err, "Audio clip not found", http.StatusNotFound)
 	}
-	return absolutePath, normalizedPath, info, true, nil
+	return absolutePath, clipSourceTag(normalizedPath, info), true, nil
 }
 
 // AudibleBatsByID generates a derived "audible bats" review clip from a bat
@@ -1678,13 +1678,13 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 
 	// Confirm this is a bat detection and resolve its validated source clip path.
 	// When ok is false the helper has already written the HTTP error response.
-	absolutePath, normalizedPath, clipInfo, ok, respErr := c.resolveBatClipFile(ctx, noteID)
+	absolutePath, sourceTag, ok, respErr := c.resolveBatClipFile(ctx, noteID)
 	if !ok {
 		return respErr
 	}
 
 	// Serve from the ephemeral cache when available.
-	cacheKey := audibleBatsCacheKey(noteID, clipSourceTag(normalizedPath, clipInfo), req.Expansion, req.Normalize, req.GainDB)
+	cacheKey := audibleBatsCacheKey(noteID, sourceTag, req.Expansion, req.Normalize, req.GainDB)
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(cacheKey); cached != nil {
 			ctx.Response().Header().Set("Cache-Control", "no-store")
