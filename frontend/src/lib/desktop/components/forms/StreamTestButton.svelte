@@ -12,6 +12,7 @@
   import { api } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { highestMinSampleRate } from '$lib/utils/audio/sampleRate';
+  import { HZ_PER_KHZ } from '$lib/utils/spectrogramAxis';
 
   interface ModelOption {
     id: string;
@@ -50,9 +51,6 @@
       return model?.category === 'bat';
     })
   );
-
-  /** Hz per kHz, for the rate shown in the below-minimum hint. */
-  const HZ_PER_KHZ = 1000;
 
   // The probe verdict only knows the bat floor and the codec, since the backend has no model
   // context. The highest minimum capture rate among the models enabled for this source is applied
@@ -107,6 +105,16 @@
   });
 </script>
 
+{#snippet warning(message: string)}
+  <div
+    class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+    role="status"
+  >
+    <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+    <span class="text-[var(--color-base-content)]">{message}</span>
+  </div>
+{/snippet}
+
 <div class="space-y-2">
   <div class="flex items-center gap-2">
     <button
@@ -151,29 +159,15 @@
   </div>
 
   {#if hasBatModel && belowModelMinimum}
-    <div
-      class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-      role="status"
-    >
-      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-      <span class="text-[var(--color-base-content)]">
-        {t('settings.audio.streams.test.minRateWarning', {
-          rate: String(requiredRate / HZ_PER_KHZ),
-        })}
-      </span>
-    </div>
+    {@render warning(
+      t('settings.audio.streams.test.minRateWarning', {
+        rate: String(requiredRate / HZ_PER_KHZ),
+      })
+    )}
   {/if}
 
   {#if testResult && hasBatModel && !testResult.batCompatible && testResult.sampleRate >= 96000}
-    <div
-      class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-      role="status"
-    >
-      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-      <span class="text-[var(--color-base-content)]">
-        {t('settings.audio.streams.codecWarning.lossy')}
-      </span>
-    </div>
+    {@render warning(t('settings.audio.streams.codecWarning.lossy'))}
   {/if}
 
   {#if testError !== null}
