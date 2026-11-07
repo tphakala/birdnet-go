@@ -143,20 +143,16 @@ func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, f
 // wait group, so Shutdown waits for a job still holding a slot and writing to the
 // cache, and waits for its result. A panic in the job becomes an error: the
 // flight function runs on a goroutine of its own, where nothing could recover
-// it and the process would exit; the panic is logged with its stack. Once the
-// lifecycle context is cancelled no job starts. The check narrows, but does not
-// close, the window against a Shutdown that cancels and waits right after it: that
-// window is the one every Core.Go caller has.
+// it and the process would exit; the panic is logged with its stack. Once
+// Shutdown has cancelled the core no job starts and the call fails with
+// context.Canceled (see Core.GoUnlessStopped), so a job never outlives Shutdown.
 func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
-	if err := c.Context().Err(); err != nil {
-		return nil, err
-	}
 	type jobResult struct {
 		out *processedWAV
 		err error
 	}
 	done := make(chan jobResult, 1)
-	c.Go(func() {
+	started := c.GoUnlessStopped(func() {
 		var res jobResult
 		defer func() {
 			if r := recover(); r != nil {
@@ -171,6 +167,9 @@ func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filt
 		}()
 		res.out, res.err = c.runProcessingJob(key, absolutePath, filters)
 	})
+	if !started {
+		return nil, context.Canceled
+	}
 	res := <-done
 	return res.out, res.err
 }

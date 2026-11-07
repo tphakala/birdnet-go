@@ -129,6 +129,9 @@ type Core struct {
 	ctx    context.Context    // Context for managing goroutines
 	cancel context.CancelFunc // Cancel function for graceful shutdown
 	wg     sync.WaitGroup     // tracks background goroutines for clean shutdown
+	// admitMu orders Cancel against GoUnlessStopped's check and registration.
+	admitMu sync.Mutex
+	stopped bool // set by Cancel under admitMu; GoUnlessStopped admits nothing after it
 
 	// privateModeExempt reports whether a (method, path) pair is exempt from the
 	// PrivateMode auth gate. Injected by the facade so the exempt allow-list stays
@@ -396,9 +399,29 @@ func (c *Core) Go(fn func()) {
 	c.wg.Go(fn)
 }
 
+// GoUnlessStopped runs fn in a tracked goroutine unless Cancel has been called or
+// the lifecycle context is already done, and reports whether it started fn. The
+// check and the registration run under the lock Cancel takes, so once Cancel
+// returns no later call starts a goroutine, and every goroutine started before it
+// is one Wait waits for. Use it for goroutines started from request handlers,
+// which can race with Shutdown.
+func (c *Core) GoUnlessStopped(fn func()) bool {
+	c.admitMu.Lock()
+	defer c.admitMu.Unlock()
+	if c.stopped || (c.ctx != nil && c.ctx.Err() != nil) {
+		return false
+	}
+	c.wg.Go(fn)
+	return true
+}
+
 // Cancel cancels the controller lifecycle context, signalling background
-// goroutines to stop. Safe to call when no context was created.
+// goroutines to stop, and stops GoUnlessStopped from admitting new ones. Safe to
+// call when no context was created.
 func (c *Core) Cancel() {
+	c.admitMu.Lock()
+	defer c.admitMu.Unlock()
+	c.stopped = true
 	if c.cancel != nil {
 		c.cancel()
 	}
