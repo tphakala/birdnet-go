@@ -426,7 +426,8 @@ func defaultORTAvailable(configuredPath string) bool {
 // known to be correct, so auto stays on the verified backend. On a host with
 // OpenVINO but no ONNX Runtime an unverified model therefore fails to load on auto;
 // setting birdnet.backend to openvino runs it on OpenVINO at f32 instead. On arm64
-// auto an FP32 or FP16 file reaches OpenVINO only when ONNX Runtime is unavailable.
+// with the auto backend and device, an FP32 or FP16 file reaches OpenVINO only when
+// ONNX Runtime is unavailable.
 func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason string) {
 	if !ok || quant == QuantizationFP32 || quant == QuantizationFP16 {
 		return plan, ok, reason

@@ -598,8 +598,9 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
 // Intel iGPU runs these variants with no ORT installed at all (except an INT8 or
 // unrecognized-precision build on the auto backend, which OpenVINO declines; see
-// applyOpenVINOQuantizationPolicy). On arm64 the auto backend plans the A76 CPU
-// only when ONNX Runtime is unavailable, which is exactly this case; the plan
+// applyOpenVINOQuantizationPolicy). On arm64 the auto backend with the default
+// device plans the A76 CPU only when ONNX Runtime is unavailable, which is exactly
+// this case; the plan
 // takes its ONNX Runtime answer from the same function as the ONNX Runtime leg
 // below, so the two cannot disagree. Gating on ORT alone would refuse a variant
 // that would have loaded, silently dropping such a host to the embedded model and
