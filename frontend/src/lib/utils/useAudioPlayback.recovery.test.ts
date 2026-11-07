@@ -562,6 +562,22 @@ describe('useAudioPlayback recovery', () => {
         expect(elementPath()).toBe(STORED_URL);
       });
 
+      it('gives the play URL a fresh retry budget when the first play lands during a stored clip retry', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        // The stored clip fails its metadata load, leaving a retry pending.
+        ctl.failLoad();
+        await settle();
+        await toggle();
+        expect(elementPath()).toBe(DENOISED_URL);
+
+        ctl.failLoad();
+        await settle();
+
+        // The play URL's first failure is probed, so the 500 falls back at once.
+        expect(elementPath()).toBe(STORED_URL);
+      });
+
       it('falls back once the retry budget of the play URL is spent', async () => {
         restoreFetch = mockAudioProbe({ status: PENDING_STATUS });
         await renderAndWait({ playUrl: DENOISED_URL });

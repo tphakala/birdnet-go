@@ -285,6 +285,22 @@ describe('AudioPlayer playback denoise default', () => {
       expect(screen.queryByRole('alert')).toBeNull();
     });
 
+    it('gives the denoised clip a fresh retry budget when the first play lands during a stored clip retry', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      mount();
+      // The stored clip fails its metadata load, leaving a retry pending.
+      ctl.failLoad();
+      await settle();
+      await press();
+      expect(elementPath()).toBe(DENOISED_URL);
+
+      ctl.failLoad();
+      await settle();
+
+      // The denoised clip's first failure is probed, so the 500 falls back at once.
+      expect(elementPath()).toBe(STORED_URL);
+    });
+
     it('keeps the player paused when the denoised clip fails before any play', async () => {
       restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
       mount();

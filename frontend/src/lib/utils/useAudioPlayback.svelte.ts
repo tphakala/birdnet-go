@@ -253,6 +253,9 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   function useDenoisedSource() {
     if (playSwapped || denoiseFailed || !playUrl || !audioElement) return;
     playSwapped = true;
+    // A retry of the stored clip must not reload or spend the play URL's budget.
+    clearRetryTimer();
+    audioRetryCount = 0;
     swapSourceKeepingPosition(audioElement, playUrl);
   }
 

@@ -1170,6 +1170,9 @@
     const src = currentSource();
     if (src === audioUrl) return;
     markPlaybackStopped();
+    // A retry of the stored clip must not reload or spend the denoised clip's budget.
+    clearAudioRetryTimer();
+    audioRetryCount = 0;
     swapSourceKeepingPosition(audioElement, src);
   }
 
