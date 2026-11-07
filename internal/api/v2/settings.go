@@ -2666,13 +2666,10 @@ func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 }
 
 // bsgBatStepChanged reports whether the resolved BSG-BAT analysis step changed.
-// The step sizes every BSG-BAT analysis buffer, and SameCadence compares only the
-// effective overlap, so no incremental path would notice it; this triggers
-// restart_audio_capture like analysisOverlapChanged. It compares the resolved
-// steps rather than the raw field: the API path stores a raw 0 unnormalized, and
-// 0 means the default, so saving 0 over the default must not restart capture.
-// Between the save and the restart, the false positive filter and the overrun
-// threshold read the new step while the running buffers still use the old one.
+// The step sizes every BSG-BAT analysis buffer and SameCadence compares only the
+// effective overlap, so this triggers restart_audio_capture like
+// analysisOverlapChanged. It compares resolved steps rather than the raw field:
+// the API path stores a raw 0 unnormalized, and 0 means the default.
 func bsgBatStepChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return classifier.BSGBatStepSamples(oldSettings) != classifier.BSGBatStepSamples(currentSettings)
 }

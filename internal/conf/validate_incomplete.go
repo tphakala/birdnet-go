@@ -193,7 +193,7 @@ func (s *Settings) normalizeBSGBatStep() {
 	switch {
 	case frames == 0:
 		s.BSGBat.StepFrames = DefaultBSGBatStepFrames
-	case frames < MinBSGBatStepFrames || frames > MaxBSGBatStepFrames:
+	case !ValidBSGBatStepFrames(frames):
 		s.recordValidationWarning(warnComponentModels,
 			"bsgbat stepframes %d is outside [%d, %d]; using the default %d (set a value in range to use it)",
 			frames, MinBSGBatStepFrames, MaxBSGBatStepFrames, DefaultBSGBatStepFrames)

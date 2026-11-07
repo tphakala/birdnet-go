@@ -374,6 +374,13 @@ func validateProfilingSettings(p *ProfilingConfig) error {
 	return nil
 }
 
+// ValidBSGBatStepFrames reports whether frames is within
+// [MinBSGBatStepFrames, MaxBSGBatStepFrames]. Zero (unset) is not in range; the
+// callers that accept it test for it themselves.
+func ValidBSGBatStepFrames(frames int) bool {
+	return frames >= MinBSGBatStepFrames && frames <= MaxBSGBatStepFrames
+}
+
 // validateBSGBatStep checks bsgbat.stepframes: 0 (unset, resolves to
 // DefaultBSGBatStepFrames) or a value within [MinBSGBatStepFrames,
 // MaxBSGBatStepFrames]. Zero must pass because settings built without a BSG-BAT
@@ -381,7 +388,7 @@ func validateProfilingSettings(p *ProfilingConfig) error {
 // out-of-range value; on the API path this rejects it.
 func validateBSGBatStep(settings *Settings) error {
 	frames := settings.BSGBat.StepFrames
-	if frames == 0 || (frames >= MinBSGBatStepFrames && frames <= MaxBSGBatStepFrames) {
+	if frames == 0 || ValidBSGBatStepFrames(frames) {
 		return nil
 	}
 	return errors.Newf("bsgbat.stepframes must be 0 (default) or between %d and %d, got %d",

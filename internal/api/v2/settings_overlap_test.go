@@ -10,6 +10,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// findSettingsChangeCheck returns the detector row with the given name and fails
+// the test when the table has none.
+func findSettingsChangeCheck(t *testing.T, name string) *settingsChangeCheck {
+	t.Helper()
+	for i := range settingsChangeChecks {
+		if settingsChangeChecks[i].changed != nil && settingsChangeChecks[i].name == name {
+			return &settingsChangeChecks[i]
+		}
+	}
+	require.FailNowf(t, "missing detector", "settingsChangeChecks must contain the %q detector", name)
+	return nil
+}
+
 // TestAnalysisOverlapDispatchesRestart guards the actual hot-reload wiring: an
 // overlap change must resolve, through the settingsChangeChecks table, to the
 // restart_audio_capture action (a full teardown that reallocates the analysis
@@ -18,17 +31,7 @@ import (
 func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 	t.Parallel()
 
-	var entry *settingsChangeCheck
-	for i := range settingsChangeChecks {
-		if settingsChangeChecks[i].changed == nil {
-			continue
-		}
-		if settingsChangeChecks[i].name == "Analysis overlap" {
-			entry = &settingsChangeChecks[i]
-			break
-		}
-	}
-	require.NotNil(t, entry, "settingsChangeChecks must contain the Analysis overlap detector")
+	entry := findSettingsChangeCheck(t, "Analysis overlap")
 	assert.Equal(t, actionRestartAudioCapture, entry.action,
 		"an overlap change must trigger a full audio-capture restart, not the diff-based reconfigure")
 
@@ -47,14 +50,7 @@ func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 func TestBSGBatStepDispatchesRestart(t *testing.T) {
 	t.Parallel()
 
-	var entry *settingsChangeCheck
-	for i := range settingsChangeChecks {
-		if settingsChangeChecks[i].changed != nil && settingsChangeChecks[i].name == "BSG-BAT step" {
-			entry = &settingsChangeChecks[i]
-			break
-		}
-	}
-	require.NotNil(t, entry, "settingsChangeChecks must contain the BSG-BAT step detector")
+	entry := findSettingsChangeCheck(t, "BSG-BAT step")
 	assert.Equal(t, actionRestartAudioCapture, entry.action)
 
 	base := apitest.NewValidTestSettings()

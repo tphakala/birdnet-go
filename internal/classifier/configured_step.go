@@ -12,7 +12,7 @@ import (
 // stays on the model's hop grid.
 func BSGBatStepSamples(s *conf.Settings) int {
 	frames := conf.DefaultBSGBatStepFrames
-	if s != nil && s.BSGBat.StepFrames >= conf.MinBSGBatStepFrames && s.BSGBat.StepFrames <= conf.MaxBSGBatStepFrames {
+	if s != nil && conf.ValidBSGBatStepFrames(s.BSGBat.StepFrames) {
 		frames = s.BSGBat.StepFrames
 	}
 	return frames * bsgbat.HopSize
