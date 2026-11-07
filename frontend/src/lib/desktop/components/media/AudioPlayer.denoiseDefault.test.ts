@@ -223,7 +223,8 @@ describe('AudioPlayer playback denoise default', () => {
       const { container } = mount();
       ctl.completeLoad();
       await settle();
-      const player = container.firstElementChild as HTMLElement;
+      const player = container.firstElementChild;
+      if (!(player instanceof HTMLElement)) throw new Error('player container missing');
       await fireEvent.mouseDown(player, { button: 0, clientX: SELECTION_START_PX });
       await fireEvent.mouseMove(document, { buttons: 1, clientX: SELECTION_END_PX });
       await fireEvent.mouseUp(document, { clientX: SELECTION_END_PX });
