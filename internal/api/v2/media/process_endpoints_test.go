@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -272,21 +273,36 @@ func TestAudibleBatsByID_DenoiseSeparatesCacheEntries(t *testing.T) {
 func TestAudibleBatsByID_CancelledRequestFreesItsSlot(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+	// Long enough that the job is still denoising when the client leaves.
+	const inFlightSeconds = 10
+	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, inFlightSeconds, fixtureBatToneHz)
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteModelType", "3").Return("bat", nil)
 	mockDS.On("GetNoteClipPath", "3").Return("bat.wav", nil)
 	controller.DS = mockDS
 
 	reqCtx, cancel := context.WithCancel(t.Context())
-	cancel()
+	defer cancel()
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/audio/3/audible-bats",
 		strings.NewReader(`{"expansion": 10, "denoise": "light-medium"}`)).WithContext(reqCtx)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		e.ServeHTTP(rec, req)
+	}()
 
-	assert.Empty(t, rec.Body.Bytes(), "a client that left gets no error body")
+	require.Eventually(t, func() bool { return len(controller.processingSemaphore) == 1 },
+		5*time.Second, time.Millisecond, "the job took its processing slot")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		require.FailNow(t, "the handler did not return after the client left")
+	}
+
+	assert.Empty(t, rec.Body.Bytes(), "a client that left gets no error body and no audio")
 	assert.Empty(t, controller.processingSemaphore, "the aborted job released its processing slot")
 }
 

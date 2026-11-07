@@ -113,12 +113,13 @@ describe('DetectionCard playback denoise default', () => {
   describe('audible bats request', () => {
     const SERVER_ERROR_STATUS = 500;
     let restoreProbe: (() => void) | undefined;
+    let probe: typeof globalThis.fetch;
     let batsBodies: Array<{ denoise: string }>;
 
     beforeEach(() => {
       batsBodies = [];
       restoreProbe = mockAudioProbe({ status: SERVER_ERROR_STATUS });
-      const probe = globalThis.fetch;
+      probe = globalThis.fetch;
       const wrapper = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         if (!String(input).includes('/audible-bats')) return probe(input, init);
         batsBodies.push(JSON.parse(String(init?.body)));
@@ -129,6 +130,7 @@ describe('DetectionCard playback denoise default', () => {
     });
 
     afterEach(() => {
+      globalThis.fetch = probe;
       restoreProbe?.();
       vi.restoreAllMocks();
     });
