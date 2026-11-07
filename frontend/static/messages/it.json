@@ -5599,6 +5599,13 @@
         "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli di BSG-BAT.",
         "sampleRateWarning": "Le registrazioni a 192 kHz funzionano, ma le specie che emettono sopra i 96 kHz non possono essere identificate e i punteggi sono meno affidabili. Si consiglia una frequenza di acquisizione di 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "Passo di analisi BSG-BAT (frame)",
+        "helpText": "Frame da 2 ms tra le finestre di analisi di BSG-BAT, da 100 (0,2 s) a 512 (1,024 s, nessuna sovrapposizione). Il valore predefinito di 250 (0,5 s) è il passo di riferimento. Con 375 (0,75 s) si trova circa l'85% degli eventi con due terzi della CPU; con 512 circa il 70-75% con circa metà della CPU, per i dispositivi che non riescono a tenere il passo.",
+        "readout": "Passo: {seconds} s tra le finestre di analisi.",
+        "readoutWithFilter": "Passo: {seconds} s tra le finestre di analisi. Livello del filtro pipistrelli {level}: {count} conferme richieste.",
+        "restartNote": "Il salvataggio di un nuovo passo riavvia l'acquisizione audio."
+      },
       "batFilter": {
         "label": "Filtro passa-alto audio pipistrelli",
         "helpText": "Filtra le frequenze udibili dall'uomo prima dell'analisi dei pipistrelli per ridurre i falsi positivi causati dal canto degli uccelli e dal rumore ambientale."
@@ -5620,6 +5627,7 @@
           "strict": "Filtraggio massimo per la massima precisione."
         },
         "detectionCount": "{count} conferme richieste. {description}",
+        "detectionCountByModel": "{batty} conferme richieste per BattyBirdNET, {bsgBat} per BSG-BAT. {description}",
         "warningOff": "Senza filtraggio c'è un'alta probabilità di falsi positivi. L'attivazione del filtraggio migliora significativamente la precisione."
       },
       "locale": {

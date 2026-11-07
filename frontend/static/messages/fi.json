@@ -5599,6 +5599,13 @@
         "helpText": "Vähimmäisluottamusarvo BSG-BATin lepakkolajitunnistuksille.",
         "sampleRateWarning": "192 kHz:n tallenteet toimivat, mutta yli 96 kHz:n taajuudella kutsuvia lajeja ei voida tunnistaa ja pisteet ovat epäluotettavampia. Suositeltu tallennustaajuus on 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "BSG-BAT-analyysiaskel (kehykset)",
+        "helpText": "Kehyksiä (2 ms) BSG-BAT-analyysi-ikkunoiden välillä, 100:sta (0,2 s) 512:een (1,024 s, ei päällekkäisyyttä). Oletus 250 (0,5 s) on vertailuaskel. Arvolla 375 (0,75 s) löytyy noin 85 % tapahtumista kahdella kolmasosalla suorittimen kuormasta; arvolla 512 noin 70-75 % noin puolella kuormasta, laitteille, jotka eivät pysy mukana.",
+        "readout": "Askel: {seconds} s analyysi-ikkunoiden välillä.",
+        "readoutWithFilter": "Askel: {seconds} s analyysi-ikkunoiden välillä. Lepakkosuodattimen taso {level}: {count} vahvistusta vaaditaan.",
+        "restartNote": "Uuden askeleen tallentaminen käynnistää äänentallennuksen uudelleen."
+      },
       "batFilter": {
         "label": "Lepakkoäänen ylipäästösuodatin",
         "helpText": "Suodattaa kuultavat taajuudet ennen lepakkoanalyysiä vähentääkseen linnunlaulun ja taustamelun aiheuttamia vääriä tunnistuksia."
@@ -5620,6 +5627,7 @@
           "strict": "Maksimaalinen suodatus korkeimman tarkkuuden saavuttamiseksi."
         },
         "detectionCount": "{count} vahvistusta vaaditaan. {description}",
+        "detectionCountByModel": "BattyBirdNET vaatii {batty} vahvistusta, BSG-BAT {bsgBat}. {description}",
         "warningOff": "Ilman suodatusta väärien positiivisten todennäköisyys on suuri. Suodatuksen käyttöönotto parantaa tarkkuutta merkittävästi."
       },
       "locale": {

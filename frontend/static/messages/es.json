@@ -5599,6 +5599,13 @@
         "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BSG-BAT.",
         "sampleRateWarning": "Las grabaciones a 192 kHz funcionan, pero las especies que emiten por encima de 96 kHz no se pueden identificar y las puntuaciones son menos fiables. Se recomienda una frecuencia de captura de 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "Paso de análisis de BSG-BAT (fotogramas)",
+        "helpText": "Fotogramas de 2 ms entre las ventanas de análisis de BSG-BAT, de 100 (0,2 s) a 512 (1,024 s, sin solapamiento). El valor predeterminado de 250 (0,5 s) es el paso de referencia. Con 375 (0,75 s) se encuentra cerca del 85 % de los eventos con dos tercios de la CPU; con 512 aproximadamente entre el 70 y el 75 % con cerca de la mitad de la CPU, para dispositivos que no pueden seguir el ritmo.",
+        "readout": "Paso: {seconds} s entre ventanas de análisis.",
+        "readoutWithFilter": "Paso: {seconds} s entre ventanas de análisis. Nivel del filtro de murciélagos {level}: se requieren {count} confirmaciones.",
+        "restartNote": "Al guardar un nuevo paso se reinicia la captura de audio."
+      },
       "batFilter": {
         "label": "Filtro de paso alto para murciélagos",
         "helpText": "Filtra las frecuencias audibles antes del análisis de murciélagos para reducir falsos positivos por cantos de aves y ruido ambiental."
@@ -5620,6 +5627,7 @@
           "strict": "Filtrado máximo para la mayor precisión."
         },
         "detectionCount": "{count} confirmaciones requeridas. {description}",
+        "detectionCountByModel": "Se requieren {batty} confirmaciones para BattyBirdNET y {bsgBat} para BSG-BAT. {description}",
         "warningOff": "Sin filtrado hay una alta probabilidad de falsos positivos. Activar el filtrado mejora significativamente la precisión."
       },
       "locale": {

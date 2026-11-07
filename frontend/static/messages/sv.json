@@ -5599,6 +5599,13 @@
         "helpText": "Minsta konfidenspoäng för BSG-BAT:s detektering av fladdermusarter.",
         "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
       },
+      "bsgBatStep": {
+        "label": "Analyssteg för BSG-BAT (ramar)",
+        "helpText": "Ramar på 2 ms mellan BSG-BAT:s analysfönster, från 100 (0,2 s) till 512 (1,024 s, ingen överlappning). Standardvärdet 250 (0,5 s) är referenssteget. Med 375 (0,75 s) hittas ungefär 85 % av händelserna med två tredjedelar av CPU:n; med 512 ungefär 70-75 % med ungefär hälften av CPU:n, för enheter som inte hänger med.",
+        "readout": "Steg: {seconds} s mellan analysfönstren.",
+        "readoutWithFilter": "Steg: {seconds} s mellan analysfönstren. Fladdermusfilter, nivå {level}: {count} bekräftelser krävs.",
+        "restartNote": "När ett nytt steg sparas startas ljudinspelningen om."
+      },
       "batFilter": {
         "label": "Högpassfilter för fladdermöss-ljud",
         "helpText": "Filtrerar bort hörbara frekvenser före fladdermöss-analysen för att minska falska positiva resultat från fågelsång och omgivningsljud."
@@ -5620,6 +5627,7 @@
           "strict": "Maximal filtrering för högsta noggrannhet."
         },
         "detectionCount": "{count} bekräftelser krävs. {description}",
+        "detectionCountByModel": "{batty} bekräftelser krävs för BattyBirdNET, {bsgBat} för BSG-BAT. {description}",
         "warningOff": "Utan filtrering finns det hög sannolikhet för falska positiva. Att aktivera filtrering förbättrar noggrannheten avsevärt."
       },
       "locale": {

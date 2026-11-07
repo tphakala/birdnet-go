@@ -5599,6 +5599,13 @@
         "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris de BSG-BAT.",
         "sampleRateWarning": "Les captures à 192 kHz fonctionnent, mais les espèces qui émettent au-dessus de 96 kHz ne peuvent pas être identifiées et les scores sont moins fiables. Une fréquence de capture de 384 kHz est recommandée."
       },
+      "bsgBatStep": {
+        "label": "Pas d'analyse BSG-BAT (trames)",
+        "helpText": "Trames de 2 ms entre les fenêtres d'analyse BSG-BAT, de 100 (0,2 s) à 512 (1,024 s, sans chevauchement). La valeur par défaut de 250 (0,5 s) est le pas de référence. Avec 375 (0,75 s), environ 85 % des événements sont trouvés pour les deux tiers du processeur ; avec 512, environ 70 à 75 % pour la moitié du processeur, pour les appareils qui ne suivent pas.",
+        "readout": "Pas : {seconds} s entre les fenêtres d'analyse.",
+        "readoutWithFilter": "Pas : {seconds} s entre les fenêtres d'analyse. Niveau du filtre chauves-souris {level} : {count} confirmations requises.",
+        "restartNote": "L'enregistrement d'un nouveau pas redémarre la capture audio."
+      },
       "batFilter": {
         "label": "Filtre passe-haut pour chauves-souris",
         "helpText": "Filtre les fréquences audibles avant l'analyse des chauves-souris pour réduire les faux positifs dus aux chants d'oiseaux et au bruit ambiant."
@@ -5620,6 +5627,7 @@
           "strict": "Filtrage maximal pour la plus grande précision."
         },
         "detectionCount": "{count} confirmations requises. {description}",
+        "detectionCountByModel": "{batty} confirmations requises pour BattyBirdNET, {bsgBat} pour BSG-BAT. {description}",
         "warningOff": "Sans filtrage, la probabilité de faux positifs est élevée. L'activation du filtrage améliore considérablement la précision."
       },
       "locale": {

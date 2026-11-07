@@ -5599,6 +5599,13 @@
         "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy przez BSG-BAT.",
         "sampleRateWarning": "Nagrania przy 192 kHz działają, ale gatunków wołających powyżej 96 kHz nie można zidentyfikować, a oceny są mniej wiarygodne. Zalecana częstotliwość nagrywania to 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "Krok analizy BSG-BAT (ramki)",
+        "helpText": "Ramki po 2 ms między oknami analizy BSG-BAT, od 100 (0,2 s) do 512 (1,024 s, bez nakładania). Wartość domyślna 250 (0,5 s) to krok referencyjny. Przy 375 (0,75 s) wykrywa się około 85% zdarzeń przy dwóch trzecich obciążenia procesora; przy 512 około 70-75% przy mniej więcej połowie obciążenia, dla urządzeń, które nie nadążają.",
+        "readout": "Krok: {seconds} s między oknami analizy.",
+        "readoutWithFilter": "Krok: {seconds} s między oknami analizy. Poziom filtra nietoperzy {level}: wymagane potwierdzenia: {count}.",
+        "restartNote": "Zapisanie nowego kroku restartuje przechwytywanie dźwięku."
+      },
       "batFilter": {
         "label": "Filtr górnoprzepustowy dla nietoperzy",
         "helpText": "Filtruje słyszalne częstotliwości przed analizą nietoperzy, aby zmniejszyć fałszywe wykrycia spowodowane śpiewem ptaków i hałasem otoczenia."
@@ -5620,6 +5627,7 @@
           "strict": "Maksymalne filtrowanie dla najwyższej dokładności."
         },
         "detectionCount": "Wymagane {count} potwierdzeń. {description}",
+        "detectionCountByModel": "BattyBirdNET wymaga {batty} potwierdzeń, BSG-BAT {bsgBat}. {description}",
         "warningOff": "Bez filtrowania istnieje duże prawdopodobieństwo fałszywych trafień. Włączenie filtrowania znacznie poprawia dokładność."
       },
       "locale": {

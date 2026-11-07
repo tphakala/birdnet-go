@@ -5599,6 +5599,13 @@
         "helpText": "Minimum konfidensscore for BSG-BAT-flagermusartsdetektioner.",
         "sampleRateWarning": "Optagelser ved 192 kHz fungerer, men arter, der kalder over 96 kHz, kan ikke identificeres, og scorerne er mindre pålidelige. En optagelsesfrekvens på 384 kHz anbefales."
       },
+      "bsgBatStep": {
+        "label": "Analysetrin for BSG-BAT (frames)",
+        "helpText": "Antal frames på 2 ms mellem BSG-BAT-analysevinduerne, fra 100 (0,2 s) til 512 (1,024 s, ingen overlapning). Standardværdien på 250 (0,5 s) er referencetrinnet. 375 (0,75 s) finder omkring 85 % af hændelserne med to tredjedele af CPU-forbruget; 512 finder cirka 70 til 75 % med omkring halvdelen af CPU-forbruget, til enheder der ikke kan følge med.",
+        "readout": "Trin: {seconds} s mellem analysevinduerne.",
+        "readoutWithFilter": "Trin: {seconds} s mellem analysevinduerne. Flagermusfilter, niveau {level}: {count} bekræftelser kræves.",
+        "restartNote": "Når et nyt trin gemmes, genstartes lydoptagelsen."
+      },
       "batFilter": {
         "label": "Flagermus-audio-højpasfilter",
         "helpText": "Filtrerer hørbare frekvenser fra før flagermusanalysen for at reducere falske positiver fra fuglesang og omgivende støj."
@@ -5620,6 +5627,7 @@
           "strict": "Maksimal filtrering for højeste nøjagtighed."
         },
         "detectionCount": "{count} bekræftelser krævet. {description}",
+        "detectionCountByModel": "{batty} bekræftelser kræves for BattyBirdNET, {bsgBat} for BSG-BAT. {description}",
         "warningOff": "Uden filtrering er der stor sandsynlighed for falske positiver. Aktivering af filtrering forbedrer nøjagtigheden markant."
       },
       "locale": {

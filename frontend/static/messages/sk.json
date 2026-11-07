@@ -5599,6 +5599,13 @@
         "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov modelom BSG-BAT.",
         "sampleRateWarning": "Záznamy pri 192 kHz fungujú, ale druhy, ktoré sa ozývajú nad 96 kHz, nemožno identifikovať a skóre sú menej spoľahlivé. Odporúča sa vzorkovacia frekvencia záznamu 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "Krok analýzy BSG-BAT (snímky)",
+        "helpText": "Snímky po 2 ms medzi analyzovanými oknami BSG-BAT, od 100 (0,2 s) do 512 (1,024 s, bez prekrytia). Predvolená hodnota 250 (0,5 s) je referenčný krok. Pri 375 (0,75 s) sa nájde asi 85 % udalostí za dve tretiny výkonu procesora; pri 512 zhruba 70-75 % pri približne polovici výkonu, pre zariadenia, ktoré nestíhajú.",
+        "readout": "Krok: {seconds} s medzi analyzovanými oknami.",
+        "readoutWithFilter": "Krok: {seconds} s medzi analyzovanými oknami. Úroveň filtra netopierov {level}: požadované potvrdenia: {count}.",
+        "restartNote": "Uloženie nového kroku reštartuje zachytávanie zvuku."
+      },
       "batFilter": {
         "label": "Horný priepustný filter pre netopiere",
         "helpText": "Filtruje počuteľné frekvencie pred analýzou netopierov na zníženie falošných detekcií spôsobených spevom vtákov a okolitým hlukom."
@@ -5620,6 +5627,7 @@
           "strict": "Maximálne filtrovanie pre najvyššiu presnosť."
         },
         "detectionCount": "Vyžaduje sa {count} potvrdení. {description}",
+        "detectionCountByModel": "BattyBirdNET vyžaduje {batty} potvrdení, BSG-BAT {bsgBat}. {description}",
         "warningOff": "Bez filtrovania je vysoká pravdepodobnosť falošných pozitív. Zapnutie filtrovania výrazne zlepšuje presnosť."
       },
       "locale": {

@@ -5599,6 +5599,13 @@
         "helpText": "Minimum confidence score for BSG-BAT bat species detections.",
         "sampleRateWarning": "Captures at 192 kHz work, but species that call above 96 kHz cannot be identified and scores are less reliable. A capture rate of 384 kHz is recommended."
       },
+      "bsgBatStep": {
+        "label": "BSG-BAT Analysis Step (frames)",
+        "helpText": "Frames of 2 ms between BSG-BAT analysis windows, from 100 (0.2 s) to 512 (1.024 s, no overlap). The default of 250 (0.5 s) is the reference step. 375 (0.75 s) finds about 85% of the events at two thirds of the CPU; 512 finds roughly 70 to 75% at about half the CPU, for devices that cannot keep up.",
+        "readout": "Step: {seconds} s between analysis windows.",
+        "readoutWithFilter": "Step: {seconds} s between analysis windows. Bat filter level {level}: {count} confirmations required.",
+        "restartNote": "Saving a new step restarts audio capture."
+      },
       "batFilter": {
         "label": "Bat Audio High-Pass Filter",
         "helpText": "Filters out human-audible frequencies before bat analysis to reduce false positives from bird songs and ambient noise."
@@ -5620,6 +5627,7 @@
           "strict": "Maximum filtering for highest accuracy."
         },
         "detectionCount": "{count} confirmations required. {description}",
+        "detectionCountByModel": "{batty} confirmations required for BattyBirdNET, {bsgBat} for BSG-BAT. {description}",
         "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy."
       },
       "locale": {

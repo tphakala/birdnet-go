@@ -4102,6 +4102,11 @@ export type TranslationKey =
   | 'analysis.detection.bsgBatThreshold.label'
   | 'analysis.detection.bsgBatThreshold.helpText'
   | 'analysis.detection.bsgBatThreshold.sampleRateWarning'
+  | 'analysis.detection.bsgBatStep.label'
+  | 'analysis.detection.bsgBatStep.helpText'
+  | 'analysis.detection.bsgBatStep.readout' // params: seconds
+  | 'analysis.detection.bsgBatStep.readoutWithFilter' // params: seconds, level, count
+  | 'analysis.detection.bsgBatStep.restartNote'
   | 'analysis.detection.batFilter.label'
   | 'analysis.detection.batFilter.helpText'
   | 'analysis.detection.batNighttimeOnly.label'
@@ -4114,6 +4119,7 @@ export type TranslationKey =
   | 'analysis.detection.batFalsePositiveFilter.levels.moderate'
   | 'analysis.detection.batFalsePositiveFilter.levels.strict'
   | 'analysis.detection.batFalsePositiveFilter.detectionCount' // params: count, description
+  | 'analysis.detection.batFalsePositiveFilter.detectionCountByModel' // params: batty, bsgBat, description
   | 'analysis.detection.batFalsePositiveFilter.warningOff'
   | 'analysis.detection.locale.label'
   | 'analysis.detection.locale.helpText'
@@ -4953,8 +4959,19 @@ export type TranslationParams = {
   'wizard.progress': { current: string | number; total: string | number };
   'wizard.whatsNew.title': { version: string | number };
   'wizard.steps.detection.descriptionStored': { threshold: string | number };
+  'analysis.detection.bsgBatStep.readout': { seconds: string | number };
+  'analysis.detection.bsgBatStep.readoutWithFilter': {
+    seconds: string | number;
+    level: string | number;
+    count: string | number;
+  };
   'analysis.detection.batFalsePositiveFilter.detectionCount': {
     count: string | number;
+    description: string | number;
+  };
+  'analysis.detection.batFalsePositiveFilter.detectionCountByModel': {
+    batty: string | number;
+    bsgBat: string | number;
     description: string | number;
   };
   'analysis.rangeFilter.status.geomodelInfo': {

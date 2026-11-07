@@ -5599,6 +5599,13 @@
         "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BSG-BAT.",
         "sampleRateWarning": "Aufnahmen mit 192 kHz funktionieren, aber Arten, die oberhalb von 96 kHz rufen, können nicht erkannt werden, und die Bewertungen sind weniger zuverlässig. Empfohlen wird eine Abtastrate von 384 kHz."
       },
+      "bsgBatStep": {
+        "label": "BSG-BAT-Analyseschritt (Frames)",
+        "helpText": "Frames à 2 ms zwischen den BSG-BAT-Analysefenstern, von 100 (0,2 s) bis 512 (1,024 s, keine Überlappung). Der Standard von 250 (0,5 s) ist der Referenzschritt. Mit 375 (0,75 s) werden etwa 85 % der Ereignisse bei zwei Dritteln der CPU-Last gefunden; mit 512 grob 70 bis 75 % bei etwa der halben CPU-Last, für Geräte, die nicht mithalten können.",
+        "readout": "Schritt: {seconds} s zwischen den Analysefenstern.",
+        "readoutWithFilter": "Schritt: {seconds} s zwischen den Analysefenstern. Fledermausfilter-Stufe {level}: {count} Bestätigungen erforderlich.",
+        "restartNote": "Das Speichern eines neuen Schritts startet die Audioaufnahme neu."
+      },
       "batFilter": {
         "label": "Fledermaus-Audio-Hochpassfilter",
         "helpText": "Filtert hörbare Frequenzen vor der Fledermausanalyse heraus, um Fehlerkennungen durch Vogelgesang und Umgebungsgeräusche zu reduzieren."
@@ -5620,6 +5627,7 @@
           "strict": "Maximale Filterung für höchste Genauigkeit."
         },
         "detectionCount": "{count} Bestätigungen erforderlich. {description}",
+        "detectionCountByModel": "{batty} Bestätigungen erforderlich für BattyBirdNET, {bsgBat} für BSG-BAT. {description}",
         "warningOff": "Ohne Filterung besteht eine hohe Wahrscheinlichkeit für Fehlerkennungen. Die Aktivierung der Filterung verbessert die Genauigkeit erheblich."
       },
       "locale": {
