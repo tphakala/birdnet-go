@@ -84,6 +84,7 @@
   import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
+  import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
 
   const logger = loggers.audio;
 
@@ -290,13 +291,28 @@
   let loopEnabled = $state(false);
 
   // Processing state
-  let processingDenoise = $state('');
+  // The playback denoise default, read once when the player mounts like the default
+  // gain. The toolbar starts on it, and it is what the first play loads.
+  const defaultDenoise = getPlaybackDenoiseDefault();
+  let processingDenoise = $state(defaultDenoise);
   let processingNormalize = $state(false);
   let isProcessing = $state(false);
   let processedAudioUrl = $state<string | null>(null);
   let processedSpectrogramUrl = $state<string | null>(null);
   let isSpectrogramProcessing = $state(false);
   let processingActive = $derived(processingDenoise !== '' || processingNormalize);
+  // The toolbar is exactly on the playback default (denoise at the default, no
+  // normalize). It then plays the GET denoise URL instead of a /process blob.
+  const isDefaultState = $derived(
+    defaultDenoise !== '' && processingDenoise === defaultDenoise && !processingNormalize
+  );
+  // The default applies to what is loaded: the toolbar state is the default and
+  // no processed blob replaces it.
+  const defaultApplied = $derived(isDefaultState && processedAudioUrl === null);
+  // Whether a play was started, which is what switches the element from the
+  // stored clip (loaded for metadata) to the denoised one. Plain: the switch is
+  // made by hand in ensurePlaybackSource.
+  let playUnlocked = false;
   let processAbortController: AbortController | null = null;
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -310,7 +326,8 @@
   const audibleBats = useAudibleBats({
     getDetectionId: () => detectionId,
     onActivate: url => swapAudioSource(url),
-    onDeactivate: () => swapAudioSource(processedAudioUrl ?? audioUrl),
+    // audibleBats.active is already false here, so this is the plain source.
+    onDeactivate: () => swapAudioSource(currentSource()),
   });
   // Proportional position (0-1) to restore after an audio source swap, applied
   // once the new source's metadata (and therefore its duration) is available.
@@ -731,6 +748,7 @@
 
   const playSelection = () => {
     if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
+    ensurePlaybackSource();
 
     const start = Math.min(selectionStartSec, selectionEndSec);
     const end = Math.max(selectionStartSec, selectionEndSec);
@@ -903,6 +921,26 @@
       return;
     }
 
+    if (isDefaultState) {
+      // Back on the playback default (for example normalize toggled on and off):
+      // drop the blobs and play the GET denoise URL instead of posting /process.
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+        processedAudioUrl = null;
+      }
+      if (processedSpectrogramUrl) {
+        URL.revokeObjectURL(processedSpectrogramUrl);
+        processedSpectrogramUrl = null;
+      }
+      playUnlocked = true;
+      if (audioElement) {
+        const pos = audioElement.currentTime;
+        replaceSource(currentSource());
+        audioElement.currentTime = pos;
+      }
+      return;
+    }
+
     isProcessing = true;
     // Pause playback while backend applies filters
     if (isPlaying && audioElement) {
@@ -1028,12 +1066,21 @@
     }
   }
 
+  // The audible-bats copy is a time-expanded clip in the state it was made in, and
+  // processAudio replaces the source with a non-expanded one. Turn audible bats
+  // off first so its stale copy never sits beside the new source.
+  function leaveAudibleBats() {
+    if (audibleBats.active) audibleBats.disable();
+  }
+
   function handleDenoiseChange(preset: string) {
+    leaveAudibleBats();
     processingDenoise = preset;
     triggerProcessing();
   }
 
   function handleNormalizeToggle() {
+    leaveAudibleBats();
     processingNormalize = !processingNormalize;
     triggerProcessing();
   }
@@ -1086,10 +1133,37 @@
     }
   };
 
+  // The URL of the playback default's denoised clip.
+  const defaultDenoiseUrl = () => audioUrlFor(detectionId, defaultDenoise);
+
   // The source the element should currently load: the audible-bats clip or the
-  // processed clip when active, otherwise the original.
-  const currentSource = () =>
-    audibleBats.active && audibleBats.url ? audibleBats.url : (processedAudioUrl ?? audioUrl);
+  // processed clip when active, otherwise the denoised clip once a play started
+  // on the playback default, otherwise the original.
+  const currentSource = () => {
+    if (audibleBats.active && audibleBats.url) return audibleBats.url;
+    if (processedAudioUrl) return processedAudioUrl;
+    return playUnlocked && defaultApplied ? defaultDenoiseUrl() : audioUrl;
+  };
+
+  // Whether src is a clip the server serves (the stored clip or the default's
+  // denoised one), as opposed to a local blob. Only those are probed and checked
+  // against the known-missing clips.
+  const isServerClip = (src: string) =>
+    src === audioUrl || (defaultDenoise !== '' && src === defaultDenoiseUrl());
+
+  // Switch from the stored clip (loaded for metadata) to the denoised default on
+  // the first play, keeping the position. Runs synchronously in the play entry
+  // point, before its first await, so the click keeps its user gesture.
+  function ensurePlaybackSource() {
+    if (playUnlocked) return;
+    playUnlocked = true;
+    if (!audioElement || !defaultApplied) return;
+    const src = currentSource();
+    if (src === audioUrl) return;
+    const pos = audioElement.currentTime;
+    replaceSource(src);
+    if (pos > 0) audioElement.currentTime = pos;
+  }
 
   // Also ends the probe: it only matters while the retry it may cancel is pending.
   function clearAudioRetryTimer() {
@@ -1176,13 +1250,13 @@
   // any other answer leaves the scheduled blind retry in place. Only the original clip is
   // probed: a processed or audible-bats source is a local blob URL.
   function probeFailedLoad() {
-    if (currentSource() !== audioUrl) return;
+    const probedUrl = currentSource();
+    if (!isServerClip(probedUrl)) return;
     const controller = new AbortController();
     audioProbeController = controller;
-    const probedUrl = audioUrl;
     void probeAudioSource(probedUrl, controller.signal).then(outcome => {
       // An answer for a clip that is no longer the current source says nothing about it
-      if (controller.signal.aborted || probedUrl !== audioUrl) return;
+      if (controller.signal.aborted || probedUrl !== currentSource()) return;
       audioProbeController = undefined;
       if (outcome.kind === 'missing') {
         debugLog('Audio probe: clip is gone, not retrying');
@@ -1220,6 +1294,7 @@
     }
 
     error = null;
+    ensurePlaybackSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
     // reload it now instead of swallowing the click.
     if (audioElement.error) reloadAfterFailure();
@@ -1984,9 +2059,12 @@
           URL.revokeObjectURL(processedAudioUrl);
           processedAudioUrl = null;
         }
-        processingDenoise = '';
+        processingDenoise = defaultDenoise;
         processingNormalize = false;
         isProcessing = false;
+        // The new detection starts from its stored clip: its first play switches to
+        // the denoised default again.
+        playUnlocked = false;
         // Reset audible-bats derived playback for the new detection (the source
         // is reset to audioUrl above; this just clears the derived-copy state).
         audibleBats.reset();
@@ -2119,7 +2197,7 @@
 
         // The original clip, already reported gone for good, is not retried or probed. A
         // processed or audible-bats source is a local blob and keeps its retries.
-        if (currentSource() === audioUrl && isSpectrogramSourceKnownMissing(detectionId)) {
+        if (isServerClip(currentSource()) && isSpectrogramSourceKnownMissing(detectionId)) {
           failLoadPermanently();
           return;
         }
@@ -2650,7 +2728,7 @@
         <!-- Download button -->
         {#if showDownload}
           <a
-            href={audioUrl}
+            href={defaultApplied ? defaultDenoiseUrl() : audioUrl}
             download
             class="text-white p-1 rounded-full hover:bg-white/20 ml-2 shrink-0"
             aria-label={t('media.audio.download')}

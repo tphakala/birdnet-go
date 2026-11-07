@@ -58,6 +58,12 @@ const logger = loggers.audio;
 export interface AudioPlaybackOptions {
   /** Initial audio source URL */
   audioUrl: string;
+  /**
+   * URL played instead of audioUrl once the first play starts (the denoised
+   * clip when a playback denoise default is set). audioUrl is still what loads
+   * for metadata, so a row never triggers server processing just by rendering.
+   */
+  playUrl?: string;
   /** Unique detection ID for logging, element IDs and the known-missing check; read once, so it must not change for one instance */
   detectionId: string;
   /** Default gain in dB (default: 0) */
@@ -105,8 +111,8 @@ export interface AudioPlaybackState {
   updateFilter: (freq: number) => void;
   /** Change playback speed */
   setPlaybackSpeed: (speed: number) => void;
-  /** Update the audio source URL (e.g. when detection changes) */
-  setAudioUrl: (url: string) => void;
+  /** Update the audio source URL (e.g. when detection changes) and the URL its first play switches to */
+  setAudioUrl: (url: string, playUrl?: string) => void;
 }
 
 export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackState {
@@ -122,6 +128,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
   // --- Reactive state ---
   let audioUrl = $state(options.audioUrl);
+  // The URL the first play switches to ('' for none) and whether that switch has
+  // happened. Plain: the swap is made by hand in togglePlayPause.
+  let playUrl = options.playUrl ?? '';
+  let playSwapped = false;
   let audioElement = $state<HTMLAudioElement | null>(null);
   let isPlaying = $state(false);
   let currentTime = $state(0);
@@ -223,6 +233,22 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     }, PLAY_END_DELAY_MS);
   }
 
+  // The clip a (re)load uses: the play URL once the first play switched to it.
+  function currentUrl(): string {
+    return playSwapped && playUrl ? playUrl : audioUrl;
+  }
+
+  // Switch from the stored clip to the play URL on the first play, keeping the
+  // position. Runs synchronously in the click, before any await, so the play
+  // call that follows keeps its user gesture.
+  function useDenoisedSource() {
+    if (playSwapped || !playUrl || !audioElement) return;
+    const position = audioElement.currentTime;
+    playSwapped = true;
+    audioElement.src = playUrl;
+    if (position > 0) audioElement.currentTime = position;
+  }
+
   // A src assignment or load() pauses the element without a 'pause' event, so
   // mirror the pause listener when the flag still says playing.
   function markPlaybackStopped() {
@@ -246,7 +272,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       clearRetryTimer();
       if (audioElement) {
         markPlaybackStopped();
-        audioElement.src = audioUrl;
+        audioElement.src = currentUrl();
         audioElement.load();
       }
     }, delayMs);
@@ -268,10 +294,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   function probeFailedLoad() {
     const controller = new AbortController();
     audioProbeController = controller;
-    const probedUrl = audioUrl;
+    const probedUrl = currentUrl();
     void probeAudioSource(probedUrl, controller.signal).then(outcome => {
       // An answer for a clip that is no longer the current source says nothing about it
-      if (controller.signal.aborted || probedUrl !== audioUrl) return;
+      if (controller.signal.aborted || probedUrl !== currentUrl()) return;
       audioProbeController = undefined;
       if (outcome.kind === 'missing') {
         debugLog('Audio probe: clip is gone, not retrying');
@@ -322,7 +348,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     audioRetryCount = 0;
     playRequestedAfterRetry = false;
     markPlaybackStopped();
-    audioElement.src = audioUrl;
+    audioElement.src = currentUrl();
     audioElement.load();
   }
 
@@ -404,6 +430,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     }
 
     error = null;
+    useDenoisedSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
     // reload it now instead of swallowing the click.
     if (audioElement.error) reloadAfterFailure();
@@ -423,9 +450,19 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     progress = (clamped / duration) * 100;
   }
 
-  function setAudioUrl(url: string) {
-    if (url === audioUrl) return;
-    audioUrl = url;
+  function setAudioUrl(url: string, nextPlayUrl = '') {
+    if (url === audioUrl && nextPlayUrl === playUrl) return;
+    playUrl = nextPlayUrl;
+    playSwapped = false;
+    if (url !== audioUrl) {
+      audioUrl = url;
+      return;
+    }
+    // Same clip, other play URL: back to the stored clip until the next first play.
+    if (audioElement && audioElement.src !== new URL(audioUrl, window.location.origin).href) {
+      untrack(() => markPlaybackStopped());
+      audioElement.src = audioUrl;
+    }
   }
 
   // --- Audio URL change effect ---

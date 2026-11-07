@@ -60,7 +60,7 @@ describe('useAudioPlayback recovery', () => {
     return capturedState;
   }
 
-  async function renderAndWait(options: { onPlayEnd?: () => void } = {}) {
+  async function renderAndWait(options: { onPlayEnd?: () => void; playUrl?: string } = {}) {
     wrapperTest.render({
       options: { audioUrl: '/audio/test.mp3', detectionId: 'test-123', ...options },
       onState: (s: AudioPlaybackState) => {
@@ -440,6 +440,79 @@ describe('useAudioPlayback recovery', () => {
       ctl.completeLoad();
 
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+    });
+  });
+  describe('play URL (playback denoise default)', () => {
+    const STORED_URL = '/audio/test.mp3';
+    const DENOISED_URL = '/audio/test.mp3?denoise=light-medium';
+    const OTHER_DENOISED_URL = '/audio/other.mp3?denoise=light-medium';
+    const SEEK_POSITION_SECONDS = 12;
+
+    function elementPath(): string {
+      const url = new URL(ctl.element.src);
+      return `${url.pathname}${url.search}`;
+    }
+
+    it('loads the stored clip for metadata and switches to the play URL on the first play', async () => {
+      await renderAndWait({ playUrl: DENOISED_URL });
+      expect(elementPath()).toBe(STORED_URL);
+      ctl.completeLoad();
+      ctl.element.currentTime = SEEK_POSITION_SECONDS;
+
+      await toggle();
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
+      expect(ctl.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the stored clip without a play URL', async () => {
+      await renderAndWait();
+      ctl.completeLoad();
+
+      await toggle();
+
+      expect(elementPath()).toBe(STORED_URL);
+    });
+
+    it('stays on the play URL when a load fails after the first play', async () => {
+      await renderAndWait({ playUrl: DENOISED_URL });
+      ctl.completeLoad();
+      await toggle();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(elementPath()).toBe(DENOISED_URL);
+    });
+
+    it('probes the play URL, not the stored clip, after the first play', async () => {
+      const restoreFetch = mockAudioProbe({ status: 206 });
+      try {
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+
+        ctl.failLoad();
+
+        expect(String(probeCalls()[0]?.[0])).toContain('denoise=light-medium');
+      } finally {
+        restoreFetch();
+      }
+    });
+
+    it('gives a recycled row the new play URL and starts from its stored clip again', async () => {
+      await renderAndWait({ playUrl: DENOISED_URL });
+      ctl.completeLoad();
+      await toggle();
+
+      getState().setAudioUrl(OTHER_AUDIO_URL, OTHER_DENOISED_URL);
+      await settle();
+      expect(elementPath()).toBe(OTHER_AUDIO_URL);
+
+      ctl.completeLoad();
+      await toggle();
+      expect(elementPath()).toBe(OTHER_DENOISED_URL);
     });
   });
 });

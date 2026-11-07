@@ -13,6 +13,9 @@
   - filterFreq?: number - High-pass filter frequency in Hz (controlled by parent)
   - playbackSpeed?: number - Playback speed multiplier (controlled by parent)
   - onAudioContextAvailable?: (available: boolean) => void - Callback for audio context status
+  - denoisePreset?: string - Playback denoise default. The element loads the stored clip for
+    metadata; the first play switches it to the denoised clip, so a card never triggers a
+    denoise just by rendering.
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
@@ -20,6 +23,7 @@
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { audioUrlFor, withCacheBuster } from '$lib/utils/playbackDenoise';
   import { t } from '$lib/i18n';
   import {
     applyPlaybackRate,
@@ -62,6 +66,8 @@
     // original clip; the playhead stays in sync because progress is computed as a
     // fraction of whichever source's duration is loaded.
     audibleBatsSrc?: string | null;
+    // Playback denoise default ('' for none). Applied on the first play only.
+    denoisePreset?: string;
   }
 
   let {
@@ -73,6 +79,7 @@
     playbackSpeed = 1.0,
     onAudioContextAvailable,
     audibleBatsSrc = null,
+    denoisePreset = '',
   }: Props = $props();
 
   let audioElement: HTMLAudioElement;
@@ -114,9 +121,21 @@
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
 
   const audioUrl = $derived(buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}`));
+  // Whether the first play has switched this card to the denoised clip. Plain, not
+  // reactive: the switch is made by hand in the play handler (see
+  // useDenoisedSource), and the source effect only reads it when it needs the
+  // clip to fall back to.
+  let denoiseSwapped = false;
+  // The clip a plain (non audible-bats) play uses: the denoised clip once the first
+  // play switched to it, otherwise the stored clip.
+  function playUrl(): string {
+    return denoiseSwapped && denoisePreset ? audioUrlFor(detectionId, denoisePreset) : audioUrl;
+  }
   // The source actually loaded into the element: the derived audible-bats clip
-  // when one is active, otherwise the original.
-  const effectiveSrc = $derived(audibleBatsSrc ?? audioUrl);
+  // when one is active, otherwise the clip a play uses.
+  function effectiveSrc(): string {
+    return audibleBatsSrc ?? playUrl();
+  }
 
   // Source-swap bookkeeping. previousAudioUrl distinguishes a detection change
   // (full reset) from an audible-bats toggle on the same detection (preserve the
@@ -164,7 +183,7 @@
   //   - Audible-bats toggle on the same detection: swap the source but preserve
   //     the proportional position and play/pause state across the swap.
   $effect(() => {
-    const src = effectiveSrc;
+    const src = effectiveSrc();
     const baseUrl = audioUrl;
     if (!audioElement || !src) return;
 
@@ -173,11 +192,15 @@
     if (!detectionChanged && !srcChanged) return;
 
     if (detectionChanged) {
+      // A new detection starts from its stored clip again: the first play of
+      // that detection decides whether to denoise it.
+      denoiseSwapped = false;
+      const newSrc = audibleBatsSrc ?? baseUrl;
       previousAudioUrl = baseUrl;
-      previousEffectiveSrc = src;
+      previousEffectiveSrc = newSrc;
       pendingFraction = null;
       untrack(() => markPlaybackStopped());
-      audioElement.src = src;
+      audioElement.src = newSrc;
       // Reset playback state for the new detection.
       isPlaying = false;
       currentTime = 0;
@@ -237,10 +260,26 @@
   }
 
   // The source for a reload. The derived audible-bats blob URL is local and can't
-  // take a query param, so use it as-is; only the original clip needs a
-  // cache-busting parameter to avoid the browser serving a cached failure.
+  // take a query param, so use it as-is; a server clip needs a cache-busting
+  // parameter to avoid the browser serving a cached failure, added as a parameter
+  // of its own because the denoised clip's URL already has a query.
   function retrySource(): string {
-    return audibleBatsSrc ?? `${audioUrl}?t=${String(Date.now())}`;
+    return audibleBatsSrc ?? withCacheBuster(playUrl());
+  }
+
+  // Switch from the stored clip to the denoised one on the first play. Runs
+  // synchronously in the play handler, before its first await, so the click
+  // keeps its user gesture and the source effect (which is told the switch
+  // already happened) does not race the play call. The position is kept.
+  // Audible bats carry their own denoise and are not switched.
+  function useDenoisedSource() {
+    if (denoiseSwapped || !denoisePreset || audibleBatsSrc || !audioElement) return;
+    const position = audioElement.currentTime;
+    denoiseSwapped = true;
+    const src = playUrl();
+    previousEffectiveSrc = src;
+    audioElement.src = src;
+    if (position > 0) audioElement.currentTime = position;
   }
 
   // Reload the clip after the given delay. The reload plays only when the user
@@ -290,7 +329,7 @@
     if (audibleBatsSrc) return;
     const controller = new AbortController();
     audioProbeController = controller;
-    void probeAudioSource(audioUrl, controller.signal).then(outcome => {
+    void probeAudioSource(playUrl(), controller.signal).then(outcome => {
       if (controller.signal.aborted) return;
       audioProbeController = undefined;
       if (outcome.kind === 'missing') {
@@ -343,6 +382,7 @@
         // during the context wait retries with play.
         retryWithPlay = true;
         isLoading = true;
+        useDenoisedSource();
         // A failed element cannot play: reload it inside this gesture.
         if (audioElement.error) {
           markPlaybackStopped();
