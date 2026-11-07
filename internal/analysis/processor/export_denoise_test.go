@@ -266,6 +266,16 @@ func TestSaveAudioAction_DenoiseFallsBackToRawPCM(t *testing.T) {
 			wantCalled: true,
 		},
 		{
+			// Exactly the budget is still denoised; the error stub shows the denoiser
+			// ran, so a budget check that turned > into >= fails here.
+			name: "at the frame budget, denoiser error",
+			pcm:  func() []byte { return make([]byte, maxExportDenoiseFrames*conf.BytesPerSample) },
+			denoise: func(context.Context, []byte, int, int, string) ([]byte, error) {
+				return nil, errTestEncodeFailed
+			},
+			wantCalled: true,
+		},
+		{
 			name:       "over the frame budget",
 			pcm:        func() []byte { return make([]byte, (maxExportDenoiseFrames+1)*conf.BytesPerSample) },
 			denoise:    nil,
