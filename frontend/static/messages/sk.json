@@ -3729,9 +3729,9 @@
           "error": "Test zlyhal",
           "batCompatible": "Kompatibilný s netopiermi",
           "batIncompatible": "Nekompatibilný s netopiermi",
-          "minRateWarning": "Vybrané modely vyžadujú vzorkovaciu frekvenciu záznamu aspoň {rate} kHz. Tento stream je pod ňou."
+          "minRateWarning": "Vybrané modely vyžadujú vzorkovaciu frekvenciu záznamu aspoň {rate} kHz. Tento stream je pod ňou."
         },
-        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. BSG-BAT vyžaduje aspoň 192 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
+        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. BSG-BAT vyžaduje aspoň 192 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
         "codecWarning": {
           "lossy": "Stratové kodeky (AAC, Opus, MP3) ničia ultrazvukové frekvencie nad ~20 kHz, čím sa stream stáva nevhodným na detekciu netopierov."
         },
@@ -5597,7 +5597,7 @@
       "bsgBatThreshold": {
         "label": "Prah detekcie netopierov (BSG-BAT)",
         "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov modelom BSG-BAT.",
-        "sampleRateWarning": "Záznamy pri 192 kHz fungujú, ale druhy, ktoré sa ozývajú nad 96 kHz, nemožno identifikovať a skóre sú menej spoľahlivé. Odporúča sa vzorkovacia frekvencia záznamu 384 kHz."
+        "sampleRateWarning": "Záznamy pri 192 kHz fungujú, ale druhy, ktoré sa ozývajú nad 96 kHz, nemožno identifikovať a skóre sú menej spoľahlivé. Odporúča sa vzorkovacia frekvencia záznamu 384 kHz."
       },
       "batFilter": {
         "label": "Horný priepustný filter pre netopiere",

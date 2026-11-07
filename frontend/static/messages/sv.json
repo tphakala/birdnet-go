@@ -3729,9 +3729,9 @@
           "error": "Test misslyckades",
           "batCompatible": "Fladdermus-kompatibel",
           "batIncompatible": "Inte fladdermus-kompatibel",
-          "minRateWarning": "De valda modellerna kräver en inspelningsfrekvens på minst {rate} kHz. Den här strömmen ligger under."
+          "minRateWarning": "De valda modellerna kräver en inspelningsfrekvens på minst {rate} kHz. Den här strömmen ligger under."
         },
-        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. BSG-BAT kräver minst 192 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. BSG-BAT kräver minst 192 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
         "codecWarning": {
           "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
         },
@@ -5597,7 +5597,7 @@
       "bsgBatThreshold": {
         "label": "Tröskel för fladdermöss-detektion (BSG-BAT)",
         "helpText": "Minsta konfidenspoäng för BSG-BAT:s detektering av fladdermusarter.",
-        "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
+        "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
       },
       "batFilter": {
         "label": "Högpassfilter för fladdermöss-ljud",

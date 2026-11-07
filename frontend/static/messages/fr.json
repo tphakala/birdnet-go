@@ -3729,9 +3729,9 @@
           "error": "Test échoué",
           "batCompatible": "Compatible chauves-souris",
           "batIncompatible": "Non compatible chauves-souris",
-          "minRateWarning": "Les modèles sélectionnés nécessitent une fréquence de capture d'au moins {rate} kHz. Ce flux est en dessous."
+          "minRateWarning": "Les modèles sélectionnés nécessitent une fréquence de capture d'au moins {rate} kHz. Ce flux est en dessous."
         },
-        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. BSG-BAT nécessite au moins 192 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
+        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. BSG-BAT nécessite au moins 192 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
         "codecWarning": {
           "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         },
@@ -5597,7 +5597,7 @@
       "bsgBatThreshold": {
         "label": "Seuil de détection des chauves-souris (BSG-BAT)",
         "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris de BSG-BAT.",
-        "sampleRateWarning": "Les captures à 192 kHz fonctionnent, mais les espèces qui émettent au-dessus de 96 kHz ne peuvent pas être identifiées et les scores sont moins fiables. Une fréquence de capture de 384 kHz est recommandée."
+        "sampleRateWarning": "Les captures à 192 kHz fonctionnent, mais les espèces qui émettent au-dessus de 96 kHz ne peuvent pas être identifiées et les scores sont moins fiables. Une fréquence de capture de 384 kHz est recommandée."
       },
       "batFilter": {
         "label": "Filtre passe-haut pour chauves-souris",

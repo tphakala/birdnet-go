@@ -3729,9 +3729,9 @@
           "error": "Testi epäonnistui",
           "batCompatible": "Yhteensopiva lepakoiden kanssa",
           "batIncompatible": "Ei yhteensopiva lepakoiden kanssa",
-          "minRateWarning": "Valitut mallit vaativat vähintään {rate} kHz:n tallennustaajuuden. Tämä striimi jää sen alle."
+          "minRateWarning": "Valitut mallit vaativat vähintään {rate} kHz:n tallennustaajuuden. Tämä striimi jää sen alle."
         },
-        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. BSG-BAT vaatii vähintään 192 kHz. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
+        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. BSG-BAT vaatii vähintään 192 kHz. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
         "codecWarning": {
           "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         },
@@ -5597,7 +5597,7 @@
       "bsgBatThreshold": {
         "label": "Lepakkotunnistuksen kynnysarvo (BSG-BAT)",
         "helpText": "Vähimmäisluottamusarvo BSG-BATin lepakkolajitunnistuksille.",
-        "sampleRateWarning": "192 kHz:n tallenteet toimivat, mutta yli 96 kHz:n taajuudella kutsuvia lajeja ei voida tunnistaa ja pisteet ovat epäluotettavampia. Suositeltu tallennustaajuus on 384 kHz."
+        "sampleRateWarning": "192 kHz:n tallenteet toimivat, mutta yli 96 kHz:n taajuudella kutsuvia lajeja ei voida tunnistaa ja pisteet ovat epäluotettavampia. Suositeltu tallennustaajuus on 384 kHz."
       },
       "batFilter": {
         "label": "Lepakkoäänen ylipäästösuodatin",
