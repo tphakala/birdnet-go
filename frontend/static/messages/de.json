@@ -3907,6 +3907,21 @@
         "noteTitle": "EBU R128-Standard",
         "noteDescription": "Die Audio-Normalisierung folgt dem EBU R128 Broadcast-Standard und gewährleistet konsistente Wiedergabepegel über verschiedene Geräte und verhindert Übersteuerung."
       },
+      "exportDenoise": {
+        "title": "Rauschunterdrückung für gespeicherte Clips",
+        "description": "Verringert Hintergrundrauschen in Clips, während sie gespeichert werden.",
+        "enable": "Clips beim Speichern entrauschen",
+        "enableHelp": "Das aufgenommene Audio wird im Speicher entrauscht, bevor die Clip-Datei geschrieben wird. Die Erkennung arbeitet immer mit dem Originalaudio.",
+        "requiresRecording": "Aktivieren Sie die Clip-Aufnahme im Aufnahme-Tab, um die Rauschunterdrückung für Clips zu verwenden.",
+        "strengthLabel": "Stärke der Rauschunterdrückung",
+        "strengthHelp": "Leicht bewahrt am meisten vom Originalklang, stark entfernt am meisten Rauschen. Leicht-mittel passt zu den meisten Aufnahmen.",
+        "strengthDisabledHelp": "Aktivieren Sie oben die Rauschunterdrückung für Clips, um eine Stärke zu wählen.",
+        "warningTitle": "Gespeicherte Clips lassen sich nicht wiederherstellen",
+        "warningPermanent": "Das Originalaudio wird nicht aufbewahrt. Clips werden beim Speichern dauerhaft entrauscht, auch Fledermausaufnahmen.",
+        "warningBats": "Die Rauschunterdrückung kann leise Fledermausrufe leiser machen; starke Rufe bleiben unverändert.",
+        "warningImported": "Importierte Aufnahmen sind nicht betroffen.",
+        "lossyNote": "Die Rauschunterdrückung funktioniert am besten bei FLAC- oder WAV-Clips. Unter {minBitrate} kbps begrenzen Codec-Artefakte, wie sauber das Ergebnis wird."
+      },
       "audioClipRetention": {
         "title": "Audioclip-Aufbewahrung",
         "description": "Audioclip-Bereinigung konfigurieren",

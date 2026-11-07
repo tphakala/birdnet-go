@@ -4,6 +4,7 @@
 package processor
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -807,6 +808,10 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	exportRate, exportFormat, outputPath := a.resolveExportParams(outputPath)
 
+	// Denoise the captured PCM, after the container and rate are settled and
+	// before any encoder sees it. The clip file is written once, from this PCM.
+	a.applyExportDenoise(ctx, exportRate)
+
 	enc, err := a.encodeClip(ctx, exportRate, exportFormat, outputPath)
 	if err != nil {
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
@@ -843,9 +848,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// back off this line (the audio_export_success case in
 	// internal/api/v2/system/events_aggregation.go). It consumes only this line, so
 	// dropping the field empties every ClipPaths the endpoint returns.
-	// 15 = the 13 unconditional fields below, plus bitrate_kbps on the lossy
+	// 16 = the 14 unconditional fields below, plus bitrate_kbps on the lossy
 	// formats, plus operation.
-	fields := make([]logger.Field, 0, 15)
+	fields := make([]logger.Field, 0, 16)
 	fields = append(fields,
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
@@ -860,6 +865,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		logger.Int64("duration_ms", clipDurationMs(len(a.pcmData), exportRate)),
 		logger.Int64("measure_ms", enc.MeasureMs),
 		logger.Int64("encode_ms", enc.EncodeMs),
+		logger.String("denoise", cmp.Or(a.denoisePreset, exportDenoiseOff)),
 	)
 	if enc.BitrateKbps > 0 {
 		fields = append(fields, logger.Int("bitrate_kbps", enc.BitrateKbps))
@@ -1133,7 +1139,11 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 	enc.Normalized = normalized
 
 	encodeStart := time.Now()
-	err = a.runEncoder(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
+	encode := a.encode
+	if encode == nil {
+		encode = a.runEncoder
+	}
+	err = encode(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
 	enc.EncodeMs = time.Since(encodeStart).Milliseconds()
 	return enc, err
 }

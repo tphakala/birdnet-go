@@ -150,6 +150,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0)                         // typical range for broadcast
 	viper.SetDefault("realtime.audio.export.normalization.truePeak", DefaultNormalizationTruePeak)     // headroom to prevent clipping
 
+	// Export-stage denoise: off by default, and when switched on without a
+	// strength the default preset applies.
+	viper.SetDefault("realtime.audio.export.denoise.enabled", false)
+	viper.SetDefault("realtime.audio.export.denoise.strength", DefaultDenoisePreset)
+
 	// Quiet hours configuration (sound card)
 	viper.SetDefault("realtime.audio.quiethours.enabled", false)
 	viper.SetDefault("realtime.audio.quiethours.mode", QuietHoursModeFixed)

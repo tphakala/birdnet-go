@@ -3907,6 +3907,21 @@
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Ljudnormalisering följer EBU R128 sändningsstandard, vilket säkerställer konsekventa uppspelningsnivåer på olika enheter och förhindrar klippning."
       },
+      "exportDenoise": {
+        "title": "Brusreducering av sparade klipp",
+        "description": "Minskar bakgrundsbrus i klipp när de sparas.",
+        "enable": "Brusreducera klipp vid sparande",
+        "enableHelp": "Det inspelade ljudet brusreduceras i minnet innan klippfilen skrivs. Detektionen körs alltid på originalljudet.",
+        "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda brusreducering av klipp.",
+        "strengthLabel": "Brusreduceringens styrka",
+        "strengthHelp": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "strengthDisabledHelp": "Slå på brusreducering av klipp ovan för att välja en styrka.",
+        "warningTitle": "Sparade klipp kan inte återställas",
+        "warningPermanent": "Originalljudet sparas inte. Klipp brusreduceras permanent när de sparas, även fladdermusinspelningar.",
+        "warningBats": "Brusreducering kan göra svaga fladdermusläten svagare; kraftiga läten påverkas inte.",
+        "warningImported": "Importerade inspelningar påverkas inte.",
+        "lossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir."
+      },
       "audioClipRetention": {
         "title": "Lagring av ljudklipp",
         "description": "Konfigurera automatisk rensning av sparade ljudklipp",

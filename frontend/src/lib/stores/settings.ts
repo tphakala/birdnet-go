@@ -57,6 +57,7 @@ import {
   rebaseSettingsKeepingEdits,
 } from '$lib/utils/settingsMerge';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
+import { DEFAULT_DENOISE_PRESET } from '$lib/utils/denoisePresets';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
 import { toastActions } from './toast.js';
@@ -337,6 +338,12 @@ export interface ExportSettings {
   preCapture: number; // pre-capture in seconds
   gain: number; // gain in dB for audio capture
   normalization: NormalizationSettings; // audio normalization settings (EBU R128)
+  denoise: DenoiseSettings; // denoise the captured audio before it is saved
+}
+
+export interface DenoiseSettings {
+  enabled: boolean; // true to denoise
+  strength: string; // preset id, see $lib/utils/denoisePresets
 }
 
 export interface NormalizationSettings {
@@ -1026,6 +1033,10 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
             targetLUFS: -23.0, // EBU R128 broadcast standard
             loudnessRange: 7.0, // Typical range for broadcast
             truePeak: -2.0, // Headroom to prevent clipping
+          },
+          denoise: {
+            enabled: false, // Off by default
+            strength: DEFAULT_DENOISE_PRESET,
           },
         },
         soundLevel: {

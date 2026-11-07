@@ -41,10 +41,16 @@
     realtimeSettings,
     extendedCaptureSettings,
     type AudioSourceConfig,
+    type DenoiseSettings,
     type EqualizerFilterType,
     type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import {
+    DEFAULT_DENOISE_PRESET,
+    DENOISE_STRENGTH_OPTIONS,
+    isDenoisePresetId,
+  } from '$lib/utils/denoisePresets';
   import SettingsTabs, {
     type TabDefinition,
   } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -80,6 +86,9 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.audio;
+
+  // Below this bitrate, codec artefacts limit how clean a denoised lossy clip gets
+  const DENOISE_LOSSY_MIN_BITRATE_KBPS = 64;
 
   // Storage key for remembering last active tab
   const STORAGE_KEY = 'birdnet-audio-settings-active-tab';
@@ -169,6 +178,10 @@
             loudnessRange: 7.0, // Typical range for broadcast
             truePeak: -2.0, // Headroom to prevent clipping
           },
+          denoise: {
+            enabled: false, // Off by default
+            strength: DEFAULT_DENOISE_PRESET,
+          },
         },
       };
 
@@ -200,6 +213,31 @@
   );
   let store = $derived($settingsStore);
 
+  // The page defaults and the settings coercion keep this object complete, so the
+  // update below always writes both fields.
+  let exportDenoise = $derived<DenoiseSettings>(settings.audio.export.denoise);
+  let isLossyExportType = $derived(!isLosslessExportFormat(settings.audio.export.type));
+  const denoiseStrengthOptions = $derived(
+    DENOISE_STRENGTH_OPTIONS.map(option => ({
+      value: option.id,
+      label: t(option.labelKey),
+    }))
+  );
+
+  // Writes the denoise object whole: updateSection merges shallowly, so a partial
+  // object would drop the other field.
+  function updateExportDenoise(patch: Partial<DenoiseSettings>) {
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...settings.audio,
+        export: {
+          ...settings.audio.export,
+          denoise: { ...exportDenoise, ...patch },
+        },
+      },
+    });
+  }
+
   // PERFORMANCE OPTIMIZATION: Reactive change detection per tab with $derived
   // Sound Card tab changes
   let soundCardTabHasChanges = $derived(
@@ -225,7 +263,15 @@
     )
   );
 
-  // Processing tab changes (equalizer + sound level + normalization)
+  // Export denoise section changes
+  let denoiseHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.audio?.export?.denoise,
+      store.formData.realtime?.audio?.export?.denoise
+    )
+  );
+
+  // Processing tab changes (equalizer + sound level + normalization + denoise)
   let processingTabHasChanges = $derived(
     hasSettingsChanged(
       {
@@ -236,7 +282,9 @@
         equalizer: store.formData.realtime?.audio?.equalizer,
         soundLevel: store.formData.realtime?.audio?.soundLevel,
       }
-    ) || normalizationHasChanges
+    ) ||
+      normalizationHasChanges ||
+      denoiseHasChanges
   );
 
   // Clip Recording section changes (enable, capture settings)
@@ -758,6 +806,93 @@
 
 {#snippet processingTabContent()}
   <div class="space-y-6">
+    <!-- Clip denoise (applies to saved clips, before they are written) -->
+    <SettingsSection
+      title={t('settings.audio.exportDenoise.title')}
+      description={t('settings.audio.exportDenoise.description')}
+      originalData={store.originalData.realtime?.audio?.export?.denoise}
+      currentData={store.formData.realtime?.audio?.export?.denoise}
+    >
+      {#if !settings.audio.export.enabled}
+        <div
+          id="denoise-requires-recording"
+          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-base-content)] mb-4"
+        >
+          <Info class="size-6 shrink-0 text-[var(--color-info)]" aria-hidden="true" />
+          <span>{t('settings.audio.exportDenoise.requiresRecording')}</span>
+        </div>
+      {/if}
+      <fieldset
+        disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+        class="contents"
+      >
+        <div
+          class="space-y-4 transition-opacity duration-200"
+          class:opacity-50={!settings.audio.export.enabled}
+        >
+          <Checkbox
+            checked={exportDenoise.enabled}
+            label={t('settings.audio.exportDenoise.enable')}
+            helpText={settings.audio.export.enabled
+              ? t('settings.audio.exportDenoise.enableHelp')
+              : t('settings.audio.exportDenoise.requiresRecording')}
+            disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+            onchange={checked => updateExportDenoise({ enabled: checked })}
+          />
+
+          <SelectDropdown
+            value={exportDenoise.strength}
+            label={t('settings.audio.exportDenoise.strengthLabel')}
+            helpText={settings.audio.export.enabled && !exportDenoise.enabled
+              ? t('settings.audio.exportDenoise.strengthDisabledHelp')
+              : t('settings.audio.exportDenoise.strengthHelp')}
+            options={denoiseStrengthOptions}
+            aria-describedby={settings.audio.export.enabled
+              ? undefined
+              : 'denoise-requires-recording'}
+            disabled={!exportDenoise.enabled ||
+              !settings.audio.export.enabled ||
+              store.isLoading ||
+              store.isSaving}
+            onChange={value => {
+              const candidate = Array.isArray(value) ? value[0] : value;
+              if (isDenoisePresetId(candidate)) {
+                updateExportDenoise({ strength: candidate });
+              } else {
+                logger.warn('Ignoring unknown denoise strength candidate', { candidate });
+              }
+            }}
+            groupBy={false}
+            menuSize="sm"
+          />
+
+          {#if exportDenoise.enabled}
+            <SettingsNote>
+              <p class="font-semibold">
+                {t('settings.audio.exportDenoise.warningTitle')}
+              </p>
+              <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
+                {t('settings.audio.exportDenoise.warningPermanent')}
+              </p>
+              <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
+                {t('settings.audio.exportDenoise.warningBats')}
+              </p>
+              <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
+                {t('settings.audio.exportDenoise.warningImported')}
+              </p>
+              {#if isLossyExportType}
+                <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
+                  {t('settings.audio.exportDenoise.lossyNote', {
+                    minBitrate: DENOISE_LOSSY_MIN_BITRATE_KBPS,
+                  })}
+                </p>
+              {/if}
+            </SettingsNote>
+          {/if}
+        </div>
+      </fieldset>
+    </SettingsSection>
+
     <!-- Audio Normalization (applies to saved clips) -->
     <SettingsSection
       title={t('settings.audio.audioNormalization.title')}

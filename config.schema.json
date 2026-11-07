@@ -765,6 +765,21 @@
       "type": "object",
       "description": "DaylightFilterSettings contains settings for the daylight species filter."
     },
+    "DenoiseSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to apply the denoise"
+        },
+        "strength": {
+          "type": "string",
+          "description": "preset name, see the DenoisePreset constants"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DenoiseSettings is a denoise on/off switch with a strength preset."
+    },
     "DetectionsGridConfig": {
       "properties": {},
       "additionalProperties": false,
@@ -981,6 +996,10 @@
         "normalization": {
           "$ref": "#/$defs/NormalizationSettings",
           "description": "audio normalization settings (EBU R128)"
+        },
+        "denoise": {
+          "$ref": "#/$defs/DenoiseSettings",
+          "description": "denoise the captured audio before it is saved"
         }
       },
       "additionalProperties": false,

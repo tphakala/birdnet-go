@@ -381,6 +381,51 @@ describe('settingsCoercion realtime audio export ultrasonicType', () => {
   });
 });
 
+describe('settingsCoercion realtime audio export denoise', () => {
+  const exportDenoise = (denoise?: unknown) =>
+    coerceSettings('realtime', {
+      audio: {
+        export: { enabled: true, type: 'wav', ...(denoise === undefined ? {} : { denoise }) },
+      },
+    }) as { audio: { export: { denoise: unknown } } };
+
+  it('backfills a missing denoise object as off at light-medium (older server)', () => {
+    expect(exportDenoise().audio.export.denoise).toEqual({
+      enabled: false,
+      strength: 'light-medium',
+    });
+  });
+
+  it('keeps an explicit off state and strength', () => {
+    expect(exportDenoise({ enabled: false, strength: 'heavy' }).audio.export.denoise).toEqual({
+      enabled: false,
+      strength: 'heavy',
+    });
+  });
+
+  it('keeps an enabled state and strength', () => {
+    expect(exportDenoise({ enabled: true, strength: 'light' }).audio.export.denoise).toEqual({
+      enabled: true,
+      strength: 'light',
+    });
+  });
+
+  it('completes a partial object and replaces an unknown strength with the default', () => {
+    expect(exportDenoise({ enabled: true }).audio.export.denoise).toEqual({
+      enabled: true,
+      strength: 'light-medium',
+    });
+    expect(exportDenoise({ enabled: true, strength: 'extreme' }).audio.export.denoise).toEqual({
+      enabled: true,
+      strength: 'light-medium',
+    });
+    expect(exportDenoise({ enabled: true, strength: '' }).audio.export.denoise).toEqual({
+      enabled: true,
+      strength: 'light-medium',
+    });
+  });
+});
+
 describe('settingsCoercion security trustedProxies', () => {
   it('keeps a trusted proxy list in order', () => {
     const result = coerceSettings('security', {

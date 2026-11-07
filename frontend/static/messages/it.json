@@ -3907,6 +3907,21 @@
         "noteTitle": "Standard EBU R128",
         "noteDescription": "La normalizzazione audio segue lo standard broadcast EBU R128, assicurando livelli riproduzione coerenti tra diversi dispositivi e prevenendo clipping."
       },
+      "exportDenoise": {
+        "title": "Riduzione del rumore delle clip salvate",
+        "description": "Riduce il rumore di fondo nelle clip durante il salvataggio.",
+        "enable": "Riduci il rumore delle clip al salvataggio",
+        "enableHelp": "L'audio catturato viene ripulito dal rumore in memoria prima che il file della clip venga scritto. Il rilevamento usa sempre l'audio originale.",
+        "requiresRecording": "Abilita la registrazione delle clip nella scheda Registrazione per usare la riduzione del rumore delle clip.",
+        "strengthLabel": "Intensità della riduzione del rumore",
+        "strengthHelp": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
+        "strengthDisabledHelp": "Attiva sopra la riduzione del rumore delle clip per scegliere un'intensità.",
+        "warningTitle": "Le clip salvate non possono essere ripristinate",
+        "warningPermanent": "L'audio originale non viene conservato. Le clip vengono ripulite dal rumore in modo permanente al salvataggio, comprese le registrazioni di pipistrelli.",
+        "warningBats": "La riduzione del rumore può attenuare i richiami deboli dei pipistrelli; i richiami forti non sono interessati.",
+        "warningImported": "Le registrazioni importate non sono interessate.",
+        "lossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato."
+      },
       "audioClipRetention": {
         "title": "Conservazione Clip Audio",
         "description": "Configura pulizia automatica clip audio salvate",

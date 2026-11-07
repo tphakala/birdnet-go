@@ -5,7 +5,9 @@ import (
 	"context"
 	"math"
 	"math/rand/v2"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -442,4 +444,66 @@ func TestApplyFilters_NormalizeMeasuresTheDenoisedSamples(t *testing.T) {
 	p := newPCM(src, testRate, 1)
 	require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
 	assert.InDelta(t, normalizeTargetLUFS, lufsOf(t, p).IntegratedLUFS, normalizeToleranceLU)
+}
+
+// TestDenoisePCM16 pins the export entry point: it leaves its input untouched
+// and returns exactly the samples the playback pipeline produces for the same
+// PCM, at the analysis rate and at a bat capture rate, so an exported clip is
+// the denoise a user would hear from the player.
+func TestDenoisePCM16(t *testing.T) {
+	t.Parallel()
+	for _, rate := range []int{48000, 256000} {
+		t.Run(strconv.Itoa(rate), func(t *testing.T) {
+			t.Parallel()
+			samples := noisyTone(rate)
+			pcm := int16Bytes(samples)
+			before := bytes.Clone(pcm)
+
+			path := filepath.Join(t.TempDir(), "in.wav")
+			writeWAVFile(t, path, samples, rate)
+			wantWAV, err := ProcessToWAV(t.Context(), path, Filters{Denoise: conf.DenoisePresetLightMedium})
+			require.NoError(t, err)
+
+			got, err := DenoisePCM16(t.Context(), pcm, rate, 1, conf.DenoisePresetLightMedium)
+			require.NoError(t, err)
+
+			assert.Equal(t, before, pcm, "the input must not be modified")
+			assert.NotEqual(t, before, got, "denoise must change the samples")
+			assert.Equal(t, wantWAV[wavHeaderBytes:], got, "export must equal the playback denoise")
+		})
+	}
+}
+
+func TestDenoisePCM16_RejectsBadInput(t *testing.T) {
+	t.Parallel()
+	pcm := int16Bytes(noisyTone(48000))
+	tests := []struct {
+		name     string
+		pcm      []byte
+		rate     int
+		channels int
+		preset   string
+	}{
+		{"empty preset", pcm, 48000, 1, ""},
+		{"unknown preset", pcm, 48000, 1, "extreme"},
+		{"partial sample", pcm[:len(pcm)-1], 48000, 1, conf.DenoisePresetLight},
+		{"zero channels", pcm, 48000, 0, conf.DenoisePresetLight},
+		{"rate above the supported range", pcm, maxSourceSampleRate + 1, 1, conf.DenoisePresetLight},
+		{"rate below the supported range", pcm, minSourceSampleRate - 1, 1, conf.DenoisePresetLight},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := DenoisePCM16(t.Context(), tc.pcm, tc.rate, tc.channels, tc.preset)
+			require.ErrorIs(t, err, ErrInvalidRequest)
+		})
+	}
+}
+
+func TestDenoisePCM16_HonoursCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := DenoisePCM16(ctx, int16Bytes(noisyTone(48000)), 48000, 1, conf.DenoisePresetLight)
+	require.ErrorIs(t, err, context.Canceled)
 }
