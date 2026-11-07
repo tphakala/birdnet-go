@@ -30,7 +30,7 @@ const (
 	ovReasonNoDevice          = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
 	ovReasonNotBirdNETv24     = "model is not the stock BirdNET v2.4 classifier"
 	ovReasonNotPerchNoDFT     = "model is not the Perch no_dft variant"
-	ovReasonUnverifiedWeights = "model weights are INT8 or of unrecognized precision, which overflow at f16 on the ARM CPU or are unvalidated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)"
+	ovReasonUnverifiedWeights = "model weights are INT8 or of unrecognized precision, which are not validated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)"
 )
 
 // openVINOPlan describes how a model should run on the OpenVINO backend.
@@ -53,7 +53,7 @@ type openVINOPlan struct {
 //
 // Both BirdNET v2.4 and Perch may target the Intel iGPU; the per-(model, device)
 // precision is chosen by openVINOPrecisionFor (BirdNET v2.4 is forced to f32 on
-// the GPU because the GPU f16 kernel miscompiles it). cpuspec.HasNativeF16() is
+// every device because both the GPU and the A76 CPU f16 paths break it). cpuspec.HasNativeF16() is
 // true only on ARMv8.2+ (A76), which keeps amd64 CPU out of the auto path (a
 // non-win); an explicit "cpu" device is still allowed on amd64 for
 // benchmarking/advanced use. The plan helper loads the OpenVINO core (idempotent)
@@ -100,16 +100,19 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // openVINOPrecisionFor returns the INFERENCE_PRECISION_HINT for a (model, device)
 // pair, or "" to use the backend default (f16).
 //
-// BirdNET v2.4 is forced to f32 on the GPU: the Intel GPU plugin's f16 kernel
+// BirdNET v2.4 is forced to f32 on EVERY device. On the Intel GPU the f16 kernel
 // miscompiles this single-output sigmoid model. Validated on an Iris Xe iGPU
 // (2026-06-18), f16 collapses on realistic low-SNR audio (max confidence error
 // ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
 // survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
-// ORT CPU. CPU f16 (incl. ARM A76) is unaffected for FP32-weight files, so the
-// override is scoped to the GPU path. Do NOT widen it to f16 without re-running
-// the inference/openvino_parity_functional_test.go soundscape parity check.
-// INT8-weight files are the exception on the CPU too; that depends on the file,
-// not the registry ID, so it is handled by applyOpenVINOQuantizationPolicy.
+// ORT CPU. The A76 CPU's native f16 fails on low-frequency-heavy audio (wind,
+// handling noise): with the static [1, 144000] input shape, windows whose power is
+// mostly below about 150 Hz lose every score (GitHub #4986), while f32 tracks the
+// TFLite reference. Do NOT relax it to f16 on any device without re-running
+// TestBirdNETV24OpenVINO_LowFrequencyParity on a genuine f16 device with
+// low-frequency-heavy windows. INT8-weight files are additionally declined on
+// auto; that depends on the file, not the registry ID, so it is handled by
+// applyOpenVINOQuantizationPolicy.
 //
 // Perch v2 is likewise forced to f32 on the GPU. Its f16-GPU path was validated
 // on an Iris Xe iGPU, but on an Intel Arc A380 (dGPU) the f16 kernel returns
@@ -122,7 +125,7 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // The bat embedding model is forced to f32 on EVERY device:
 // its embedding head overflows at f16 on genuine f16 hardware (the A76 CPU's f16 NEON
 // and the Intel iGPU), corrupting the raw embedding the bat classifier consumes and
-// flipping detections. Unlike BirdNET v2.4 this is not GPU-only. Do NOT relax it to
+// flipping detections. Unlike Perch v2 this is not GPU-only. Do NOT relax it to
 // f16 without re-running the bat embedding parity check.
 //
 // BirdNET v3.0 is likewise forced to f32 on EVERY device. Its EfficientNetV2-S
@@ -140,10 +143,10 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // inference/openvino_parity_functional_test.go on a genuine f16 device (the Intel GPU
 // and the A76 CPU) with an fp16-weight regional tile.
 func openVINOPrecisionFor(modelID, device string) string {
-	if modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 {
+	if modelID == DefaultModelVersion || modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 {
 		return inference.OVPrecisionF32
 	}
-	if device == inference.OVDeviceGPU && (modelID == DefaultModelVersion || modelID == RegistryIDPerchV2) {
+	if device == inference.OVDeviceGPU && modelID == RegistryIDPerchV2 {
 		return inference.OVPrecisionF32
 	}
 	return ""
@@ -278,7 +281,7 @@ func isLibraryAbsent(err error) bool {
 // so only the BirdNET v2.4 identity is valid here; Perch (softmax) runs its own
 // OpenVINO path in the Perch ModelInstance (perch_onnx.go), never through this
 // primary path. The plan carries the device (CPU/GPU), logits output index, and
-// the precision hint (f32 on the GPU for BirdNET v2.4, see openVINOPrecisionFor;
+// the precision hint (f32 on every device for BirdNET v2.4, see openVINOPrecisionFor;
 // INT8 or unrecognized weights are declined on auto and run at f32 on an explicit
 // openvino backend, see applyOpenVINOQuantizationPolicy). The weight precision is
 // read from the model file name, exactly as the installed-variant load gate reads
@@ -334,7 +337,9 @@ var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig) (plan openVINOPlan, ok bo
 // which is correct for any weights. Unrecognized precision is treated like INT8
 // because it may be INT8 (a renamed file); a user-supplied FP32 model named
 // without an fp32 token therefore runs on ORT on auto. An explicit
-// backend=openvino is honored, forced to f32 so it stays correct.
+// backend=openvino is honored, forced to f32 so it stays correct even if the
+// registry-level policy in openVINOPrecisionFor (already f32 for BirdNET v2.4)
+// ever changes.
 //
 // The decline also covers the GPU, where the BirdNET v2.4 plan is already f32:
 // INT8 weights on the OpenVINO GPU plugin have not been validated, while ORT is
@@ -356,8 +361,8 @@ func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backend
 // primary classifier: the boolean form of openVINOPlan, dropping the plan and the
 // decline reason. True only when built with the openvino tag, the model is the
 // BirdNET v2.4 identity, config does not opt out, a supported device is
-// available (ARM A76 f16 CPU, or the Intel iGPU at f32; see openVINOPrecisionFor
-// for why BirdNET v2.4 uses f32 on the GPU), and the model file is not INT8 or of
+// available (ARM A76 CPU or the Intel iGPU, both at f32; see openVINOPrecisionFor
+// for why BirdNET v2.4 never uses f16), and the model file is not INT8 or of
 // unrecognized precision on the auto backend (see
 // applyOpenVINOQuantizationPolicy). initializeModel calls openVINOPlan directly
 // so it can also log the decline reason; this predicate keeps the eligibility
@@ -380,9 +385,8 @@ func openVINOPrecisionLabel(precision string) string {
 // effective runtime precision label shown on the inference status card, using the
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
 // default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
-// explicit override OVPrecisionF32 (BirdNET v2.4 and Perch v2 on the GPU, the bat
-// embedding model and BirdNET v3.0 on every device, and INT8 or unrecognized
-// BirdNET v2.4 weights on an explicit openvino backend) maps to FP32.
+// explicit override OVPrecisionF32 (Perch v2 on the GPU, and BirdNET v2.4, the bat
+// embedding model and BirdNET v3.0 on every device) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)
@@ -465,9 +469,9 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	bn.classifier = classifier
 	// Publish the concrete OpenVINO device (CPU/GPU) the classifier bound to plus
 	// the live backend and effective runtime precision, so the status card reports
-	// "OpenVINO" + the real compute precision (FP16 by default, FP32 for the
-	// BirdNET v2.4 GPU path and for unverified weights on an explicit openvino
-	// backend) and the real device rather than the static ONNX file metadata.
+	// "OpenVINO" + the real compute precision (FP32 for BirdNET v2.4 on every
+	// device, see openVINOPrecisionFor) and the real device rather than the
+	// static ONNX file metadata.
 	bn.setRuntimeInfo(plan.device, BackendOpenVINO, openVINOEffectivePrecision(plan.precision))
 	log.Info("OpenVINO model initialized",
 		logger.String("model", modelPath),
