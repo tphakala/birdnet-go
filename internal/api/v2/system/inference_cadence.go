@@ -59,7 +59,7 @@ type CadenceModelInfo struct {
 	Name string `json:"name"`
 	// TaxonGroup is the broad group the model detects ("bird" or "bat"); empty for
 	// a model outside every group. Bat-group models run on a fixed cadence, so the
-	// frontend reads this instead of matching a model ID.
+	// consumer can read this instead of matching a model ID.
 	TaxonGroup string `json:"taxonGroup,omitempty"`
 	// ClipMs is the model clip length in milliseconds.
 	ClipMs int64 `json:"clipMs"`

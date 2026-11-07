@@ -203,7 +203,7 @@ type Orchestrator struct {
 	runtimeSnaps  atomic.Pointer[map[string]*publishedModel]
 	modelsDirSnap atomic.Pointer[string]
 
-	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
+	// Nighttime scheduling for the bat models. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
 
@@ -543,7 +543,7 @@ func (o *Orchestrator) setV24LabelResolver(labels []string) {
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
-// the nighttime scheduler if a schedule-gated model (today the bat model) is loaded. Called during
+// the nighttime scheduler if a schedule-gated model (the bat models, Bat and BSG-BAT) is loaded. Called during
 // pipeline startup after the suncalc instance is available.
 func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	o.mu.Lock()
@@ -575,11 +575,11 @@ func (o *Orchestrator) hasScheduleGatedModelLocked(excludeID string) bool {
 }
 
 // scheduleReasonNight is the human-readable reason ModelScheduleStatus returns
-// when a model is paused by the nighttime schedule (currently only the bat model).
+// when a model is paused by the nighttime schedule (the bat models, Bat and BSG-BAT).
 const scheduleReasonNight = "Night schedule"
 
 // isScheduleGated reports whether registryID runs only inside a schedule (today
-// the bat model's nighttime scheduler). It is the single predicate behind
+// the nighttime scheduler of the bat models). It is the single predicate behind
 // IsModelActive, ModelScheduleStatus and DefaultTargets, read from the registry
 // table so adding a gated model is a one-line registry change. An unknown ID is
 // never gated: the zero-value ModelInfo has scheduleGated false.
@@ -588,7 +588,7 @@ func isScheduleGated(registryID string) bool {
 }
 
 // IsModelActive returns whether a model should currently run inference. A
-// schedule-gated model (isScheduleGated, today only the bat model) runs only
+// schedule-gated model (isScheduleGated, the bat models Bat and BSG-BAT) runs only
 // while the nighttime scheduler has it active; every other model is always active.
 func (o *Orchestrator) IsModelActive(modelID string) bool {
 	if !isScheduleGated(modelID) {
@@ -604,7 +604,7 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 // ModelScheduleStatus reports whether a model is currently allowed to run and,
 // when paused, a human-readable reason. It is the reason-carrying sibling of
 // IsModelActive (which stays bool-only because it is on the hot monitor-tick
-// path). Only the bat model is schedule-gated today: it returns
+// path). Only the bat models (Bat and BSG-BAT) are schedule-gated today: they return
 // (false, scheduleReasonNight) when the nighttime scheduler has it paused, and
 // (true, "") otherwise. Every other model returns (true, ""). The design is
 // general so a future gated model can return its own reason.
@@ -2584,7 +2584,7 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 
 // DefaultTargets returns the models a source with an empty model list analyzes
 // with: every loaded model that is not schedule-gated (isScheduleGated, today the
-// bat model), the BirdNET v2.4 entry first when it is loaded and the rest byte
+// bat models Bat and BSG-BAT), the BirdNET v2.4 entry first when it is loaded and the rest byte
 // ordered by registry ID, each carrying the live Backend/Quantization/NumSpecies
 // and effective overlap ModelInfos stamps. Nil when nothing qualifies (N = 0, or
 // only gated models loaded). v2.4 leads so the first entry is stable: a source with

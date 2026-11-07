@@ -163,7 +163,7 @@ The `Orchestrator` divides the configured thread count across all loaded models 
 
 ### Nighttime Scheduling
 
-Bat models support a nighttime-only mode. When `settings.Bat.NighttimeOnly=true`, the `analysisBufferMonitor` checks `orchestrator.IsModelActive("Bat")` before calling `ProcessData()`. The nighttime scheduler uses solar position calculations to determine sunrise/sunset.
+Bat models support a nighttime-only mode. When `settings.Bat.NighttimeOnly=true`, the `analysisBufferMonitor` checks `orchestrator.IsModelActive` for each bat model (Bat and BSG-BAT) before calling `ProcessData()`. The nighttime scheduler uses solar position calculations to determine sunrise/sunset.
 
 ## Stage 4: Detection Processing
 

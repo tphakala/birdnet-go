@@ -179,7 +179,7 @@ type ModelInfo struct {
 	// The zero value means it participates in no range-filter auto-selection.
 	rangeFilterCompat rangeFilterCompat
 	// scheduleGated marks a model that runs only inside a schedule (today the bat
-	// model's nighttime scheduler). Such a model is never a default analysis target
+	// models' nighttime scheduler). Such a model is never a default analysis target
 	// (DefaultTargets) and is inactive outside its schedule (IsModelActive,
 	// ModelScheduleStatus), all read through isScheduleGated. Zero value: not gated.
 	scheduleGated bool

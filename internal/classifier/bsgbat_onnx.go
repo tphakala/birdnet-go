@@ -160,7 +160,7 @@ func checkBSGBatShapes(model inference.TensorModel, logitCount int) error {
 	return nil
 }
 
-// Predict scores one window of ClipSampleCount samples at the model's sample rate
+// Predict scores one window of bsgbat.ClipSamples samples at the model's sample rate
 // and returns the top-K species. The confidence threshold is not applied here: the
 // processor applies it per detection after the per-species thresholds.
 // Implements ModelInstance.

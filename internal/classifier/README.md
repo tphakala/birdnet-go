@@ -13,7 +13,7 @@ The `classifier` package loads the acoustic models, runs inference on audio wind
 | Range filter              | `range_filter*.go`, `mapped_range_filter.go`                                    | Location and week based species filtering.                                                                                                 |
 | Labels and names          | `label_files.go`, `label_vocabulary.go`, `names.go`, `taxonomy*.go`, `genus.go` | Label loading and species name and taxonomy lookup.                                                                                        |
 | Results queue and overlap | `queue.go`, `overlap.go`, `cadence/`                                            | Hand-off of results and the analysis window cadence.                                                                                       |
-| Bat scheduler             | `nighttime_scheduler.go`                                                        | Runs the bat model only at night.                                                                                                          |
+| Bat scheduler             | `nighttime_scheduler.go`                                                        | Runs the bat models only at night.                                                                                                         |
 
 ## Models
 
@@ -75,7 +75,7 @@ The range filter (`rangeFilterService`) keeps species that are probable at the s
 - a strict ONNX filter whose output must match the classifier labels one to one;
 - the mapped geomodel, an ONNX model with its own label set whose scores are matched onto each classifier's labels by scientific name (`mappedRangeFilter`).
 
-Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0 and Perch use the geomodel, and Bat and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
+Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0 and Perch use the geomodel, and Bat, BSG-BAT and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
 
 ## Labels and species identity
 
@@ -91,7 +91,7 @@ Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 use
 
 ## Nighttime scheduler
 
-The bat model is schedule gated. `nighttimeScheduler` computes from civil dusk and dawn whether it should be active and refreshes that state every 60 seconds, so the hot path reads one atomic value. It is controlled by `bat.nighttimeonly`, needs a configured location and a `suncalc` instance (`SetSunCalc`), and fails open (the bat model stays active) when either is missing. `IsModelActive` and `ModelScheduleStatus` report the state.
+The bat models (Bat and BSG-BAT) are schedule gated and share the `bat.nighttimeonly` setting. `nighttimeScheduler` computes from civil dusk and dawn whether it should be active and refreshes that state every 60 seconds, so the hot path reads one atomic value. It is controlled by `bat.nighttimeonly`, needs a configured location and a `suncalc` instance (`SetSunCalc`), and fails open (the bat models stay active) when either is missing. `IsModelActive` and `ModelScheduleStatus` report the state.
 
 ## Testing
 
