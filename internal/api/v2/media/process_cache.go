@@ -60,12 +60,18 @@ func clipSourceTag(normalizedPath string, info os.FileInfo) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+// sanitizeCacheID makes a detection ID safe to embed in a cache filename (no path
+// separators or parent references).
+func sanitizeCacheID(detectionID string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+}
+
 // processingCacheKey builds a deterministic filename for cache lookup. The
 // sourceTag (see clipSourceTag) ties the entry to the clip file it came from, and
 // every filter value is kept exactly, so distinct filter sets never share a key.
 func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise string, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
-	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+	safeID := sanitizeCacheID(detectionID)
 
 	// Canonicalize -0.0 to 0.0
 	if gainDB == 0 {
@@ -84,13 +90,29 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 	return fmt.Sprintf("%s_%s_%s_%s_%s.wav", safeID, sourceTag, norm, denoise, gainStr)
 }
 
+// denoisedSpectrogramCacheKey builds the filename of a rendered spectrogram of a
+// denoised clip. Beyond the clip's own tag it carries every value the render
+// depends on: preset, width, raw flag, frequency profile token and the style
+// suffix (see buildStyleSuffix), so a change of Style or DynamicRange settings
+// misses the old entry and renders fresh.
+func denoisedSpectrogramCacheKey(detectionID, sourceTag, preset string, width int, raw bool, freqToken, styleSuffix string) string {
+	rawFlag := "0"
+	if raw {
+		rawFlag = "1"
+	}
+	if freqToken == "" {
+		freqToken = "bird"
+	}
+	return fmt.Sprintf("spec_%s_%s_%s_%d_%s_%s%s.png", sanitizeCacheID(detectionID), sourceTag, preset, width, rawFlag, freqToken, styleSuffix)
+}
+
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible
 // bats" review clip. The key embeds the time-expansion factor alongside the
 // normalize/gain parameters so different settings never collide in the cache,
 // and the sourceTag (see clipSourceTag) ties it to the clip file it came from.
 func audibleBatsCacheKey(detectionID, sourceTag string, expansion int, normalize bool, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
-	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+	safeID := sanitizeCacheID(detectionID)
 
 	// Canonicalize -0.0 to 0.0
 	if gainDB == 0 {

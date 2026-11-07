@@ -139,16 +139,23 @@ func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, f
 	}
 }
 
-// runTrackedJob runs runProcessingJob in a goroutine registered with the core's
-// wait group, so Shutdown waits for a job still holding a slot and writing to the
-// cache, and waits for its result. A panic in the job becomes an error: the
-// flight function runs on a goroutine of its own, where nothing could recover
-// it and the process would exit; the panic is logged with its stack. Once
-// Shutdown has cancelled the core no job starts and the call fails with
-// context.Canceled (see Core.GoUnlessStopped), so a job never outlives Shutdown.
+// runTrackedJob runs runProcessingJob under runTracked.
 func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+	return runTracked(c, key, func() (*processedWAV, error) {
+		return c.runProcessingJob(key, absolutePath, filters)
+	})
+}
+
+// runTracked runs job in a goroutine registered with the core's wait group, so
+// Shutdown waits for a job still holding a slot, a temp file or a cache write, and
+// waits for its result. A panic in the job becomes an error: the flight function
+// runs on a goroutine of its own, where nothing could recover it and the process
+// would exit; the panic is logged with its stack and the cache key. Once Shutdown
+// has cancelled the core no job starts and the call fails with context.Canceled
+// (see Core.GoUnlessStopped), so a job never outlives Shutdown.
+func runTracked[T any](c *Handler, key string, job func() (T, error)) (T, error) {
 	type jobResult struct {
-		out *processedWAV
+		out T
 		err error
 	}
 	done := make(chan jobResult, 1)
@@ -165,10 +172,11 @@ func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filt
 			}
 			done <- res
 		}()
-		res.out, res.err = c.runProcessingJob(key, absolutePath, filters)
+		res.out, res.err = job()
 	})
 	if !started {
-		return nil, context.Canceled
+		var zero T
+		return zero, context.Canceled
 	}
 	res := <-done
 	return res.out, res.err
@@ -343,8 +351,14 @@ func (c *Handler) serveProcessedWAV(ctx echo.Context, key, originalName string, 
 	header.Set(echo.HeaderContentType, MimeTypeWAV)
 	setAudioContentDisposition(ctx, strings.TrimSuffix(originalName, filepath.Ext(originalName))+".wav")
 	header.Set(headerAcceptRanges, acceptRangesBytes)
-	header.Set("ETag", `"`+strings.TrimSuffix(key, ".wav")+"-"+strconv.FormatInt(size, 10)+`"`)
+	header.Set("ETag", processedETag(key, size))
 	c.setPrivateAudioCacheControl(ctx)
 	http.ServeContent(ctx.Response(), ctx.Request(), "", modTime, content)
 	return nil
+}
+
+// processedETag is the ETag of a processed artifact: the cache key, which names
+// the clip file and every parameter, and the output length.
+func processedETag(key string, size int64) string {
+	return `"` + strings.TrimSuffix(key, filepath.Ext(key)) + "-" + strconv.FormatInt(size, 10) + `"`
 }
