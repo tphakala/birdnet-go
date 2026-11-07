@@ -269,8 +269,8 @@ func TestModelSpec_EffectiveSampleRate(t *testing.T) {
 }
 
 // TestModelSpec_AnalysisRingCapacity checks the ring rule itself: a spec that
-// requires a contiguous window gets room for two windows plus a whole fresh
-// step, any other spec keeps one window, and BSG-BAT is the only registry entry
+// requires a contiguous window gets a ring of two windows (room for a whole
+// window plus a fresh step), any other spec keeps one window, and BSG-BAT is the only registry entry
 // that requires one. The per-entry values are pinned in
 // TestModelSpec_RegistryBufferGeometry.
 func TestModelSpec_AnalysisRingCapacity(t *testing.T) {
