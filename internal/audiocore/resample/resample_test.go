@@ -297,6 +297,31 @@ func TestResampleTo_HighRatio(t *testing.T) {
 		"output sample count should be approximately %d (got %d)", expectedSamples, outputSamples)
 }
 
+// TestResampleTo_Upsample2x verifies the BSG-BAT path from a 192 kHz capture to
+// its 384 kHz analysis rate: every chunk roughly doubles in length, so a window of
+// the target rate is filled from half as many source samples.
+func TestResampleTo_Upsample2x(t *testing.T) {
+	const fromRate = 192000
+	const toRate = 384000
+	const inputSamples = 19200 // 100 ms at 192 kHz
+
+	r, err := NewResampler(fromRate, toRate)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	t.Cleanup(func() { require.NoError(t, r.Close()) })
+
+	input := makePCM16(t, inputSamples)
+	dst := make([]byte, r.EstimateOutputBytes(len(input)))
+
+	n, err := r.ResampleTo(input, dst)
+	require.NoError(t, err)
+
+	outputSamples := n / bytesPerSample
+	expectedSamples := inputSamples * toRate / fromRate
+	assert.InDelta(t, expectedSamples, outputSamples, float64(expectedSamples/10),
+		"output sample count should be approximately %d (got %d)", expectedSamples, outputSamples)
+}
+
 // TestResampleFloat32Into_Downsamples verifies the float32-native path produces
 // a plausible downsampled length with all samples within the normalised range
 // plus filter overshoot.
