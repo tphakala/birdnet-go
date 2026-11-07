@@ -41,6 +41,7 @@ func TestParseBSGBatLabels(t *testing.T) {
 		},
 		{name: "no background class is rejected", in: "Myotis daubentonii\n", wantErr: true},
 		{name: "no species is rejected", in: "Background\n", wantErr: true},
+		{name: "a second background class is rejected", in: "Myotis daubentonii\nBackground\nBackground\n", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,6 +60,7 @@ func TestParseBSGBatLabels(t *testing.T) {
 
 // fakeTensorModel returns fixed raw outputs so Predict can run without a model file.
 type fakeTensorModel struct {
+	shape   []int64
 	outputs [][]float32
 	inputs  [][]float32
 	closed  bool
@@ -69,6 +71,9 @@ func (f *fakeTensorModel) Run(input []float32) ([][]float32, error) {
 	return f.outputs, nil
 }
 func (f *fakeTensorModel) InputShape() []int64 {
+	if f.shape != nil {
+		return f.shape
+	}
 	return []int64{1, 1, bsgbat.NumFrames, bsgbat.NumMels}
 }
 func (f *fakeTensorModel) OutputSizes() []int {
@@ -195,5 +200,13 @@ func TestCheckBSGBatShapes(t *testing.T) {
 	good := &fakeTensorModel{outputs: [][]float32{make([]float32, 22)}}
 	require.NoError(t, checkBSGBatShapes(good, 22))
 	require.Error(t, checkBSGBatShapes(good, 21), "output width must match the label count")
-	assert.Error(t, checkBSGBatShapes(&fakeTensorModel{}, 22), "a model without outputs is rejected")
+	require.Error(t, checkBSGBatShapes(&fakeTensorModel{}, 22), "a model without outputs is rejected")
+
+	for _, shape := range [][]int64{
+		{1, 1, bsgbat.NumMels, bsgbat.NumFrames},
+		{1, bsgbat.NumFrames * bsgbat.NumMels},
+	} {
+		transposed := &fakeTensorModel{shape: shape, outputs: [][]float32{make([]float32, 22)}}
+		assert.Error(t, checkBSGBatShapes(transposed, 22), "input shape %v has the right element count but the wrong layout", shape)
+	}
 }

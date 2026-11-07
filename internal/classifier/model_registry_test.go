@@ -366,6 +366,7 @@ func TestRegistryIDConstants_MatchRegistryKeys(t *testing.T) {
 	constants := map[string]string{
 		"RegistryIDBirdNETV3": RegistryIDBirdNETV3,
 		"RegistryIDBSG":       RegistryIDBSG,
+		"RegistryIDBSGBat":    RegistryIDBSGBat,
 		"RegistryIDBat":       RegistryIDBat,
 		"RegistryIDPerchV2":   RegistryIDPerchV2,
 	}
@@ -384,6 +385,7 @@ func TestKnownConfigIDs_AllModels(t *testing.T) {
 	assert.True(t, ids["perch_v2"], "perch_v2 config ID should be known")
 	assert.True(t, ids["bat"], "bat config ID should be known")
 	assert.True(t, ids["bsg"], "bsg config ID should be known")
+	assert.True(t, ids["bsg_bat"], "bsg_bat config ID should be known")
 	assert.False(t, ids["unknown"], "unknown config ID should not be known")
 
 	// Hyphenated catalog-style IDs are accepted as secondary aliases so a config
@@ -392,6 +394,7 @@ func TestKnownConfigIDs_AllModels(t *testing.T) {
 	assert.True(t, ids["birdnet-v3.0"], "birdnet-v3.0 catalog-style ID should be known")
 	assert.True(t, ids["birdnet-v2.4"], "birdnet-v2.4 catalog-style ID should be known")
 	assert.True(t, ids["bsg-finland"], "bsg-finland catalog-style ID should be known")
+	assert.True(t, ids["bsg-bat"], "bsg-bat catalog-style ID should be known")
 }
 
 // TestKnownConfigIDs_MatchesConfValidAudioModels is a drift guard. conf.ValidAudioModels
@@ -427,6 +430,7 @@ func TestConfigAliasForRegistry_ReturnsCanonicalPrimary(t *testing.T) {
 	assert.Equal(t, "birdnet_v3.0", ConfigAliasForRegistry(RegistryIDBirdNETV3))
 	assert.Equal(t, "birdnet", ConfigAliasForRegistry("BirdNET_V2.4"))
 	assert.Equal(t, "bsg", ConfigAliasForRegistry(RegistryIDBSG))
+	assert.Equal(t, "bsg_bat", ConfigAliasForRegistry(RegistryIDBSGBat))
 }
 
 func TestResolveConfigModelID_AllModels(t *testing.T) {
@@ -443,6 +447,8 @@ func TestResolveConfigModelID_AllModels(t *testing.T) {
 		{"perch_v2 resolves", "perch_v2", RegistryIDPerchV2, true},
 		{"bat resolves", "bat", RegistryIDBat, true},
 		{"bsg resolves", "bsg", RegistryIDBSG, true},
+		{"bsg_bat resolves", "bsg_bat", RegistryIDBSGBat, true},
+		{"bsg-bat catalog id resolves", "bsg-bat", RegistryIDBSGBat, true},
 		{"case insensitive bat", "BAT", RegistryIDBat, true},
 		{"case insensitive bsg", "BSG", RegistryIDBSG, true},
 		{"perch-v2 catalog id resolves", "perch-v2", RegistryIDPerchV2, true},
@@ -548,6 +554,7 @@ func TestDetectionModelInfoForID_AllModels(t *testing.T) {
 		{RegistryIDPerchV2, "Perch"},
 		{RegistryIDBSG, "BSG"},
 		{RegistryIDBat, "BattyBirdNET"},
+		{RegistryIDBSGBat, detection.ModelNameBSGBat},
 	}
 
 	for _, tt := range tests {

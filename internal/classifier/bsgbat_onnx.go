@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +53,8 @@ type BSGBatModelConfig struct {
 
 // parseBSGBatLabels reads the BSG-BAT label file: one name per line, the species
 // followed by the Background class. It returns the species labels and the position
-// of Background in the model output.
+// of Background in the model output. A file without exactly one Background line, or
+// without any species, is rejected.
 func parseBSGBatLabels(data []byte) (species []string, backgroundIndex int, err error) {
 	var all []string
 	for line := range strings.SplitSeq(string(data), "\n") {
@@ -63,6 +65,9 @@ func parseBSGBatLabels(data []byte) (species []string, backgroundIndex int, err 
 	backgroundIndex = -1
 	for i, name := range all {
 		if name == bsgbat.BackgroundLabel {
+			if backgroundIndex >= 0 {
+				return nil, 0, fmt.Errorf("label file has more than one %q class", bsgbat.BackgroundLabel)
+			}
 			backgroundIndex = i
 			continue
 		}
@@ -142,16 +147,14 @@ func NewBSGBat(cfg *BSGBatModelConfig) (*BSGBat, error) {
 	}, nil
 }
 
-// checkBSGBatShapes verifies the loaded graph takes one [1, 1, 512, 128]
-// spectrogram and returns one logit per label, Background included.
+// checkBSGBatShapes verifies the loaded graph takes exactly one [1, 1, 512, 128]
+// spectrogram (the layout, not only the element count) and returns one logit per
+// label, Background included.
 func checkBSGBatShapes(model inference.TensorModel, logitCount int) error {
 	shape := model.InputShape()
-	size := int64(1)
-	for _, d := range shape {
-		size *= d
-	}
-	if size != bsgbat.InputSize {
-		return fmt.Errorf("BSG-BAT model input shape %v has %d elements, expected %d", shape, size, bsgbat.InputSize)
+	want := []int64{1, 1, bsgbat.NumFrames, bsgbat.NumMels}
+	if !slices.Equal(shape, want) {
+		return fmt.Errorf("BSG-BAT model input shape %v, expected %v", shape, want)
 	}
 	sizes := model.OutputSizes()
 	if len(sizes) == 0 || sizes[0] != logitCount {
