@@ -440,11 +440,14 @@ describe('AnalysisSettingsPage bat thresholds', () => {
     expect(screen.queryByText(BATTY_LABEL)).toBeNull();
   });
 
-  it('limits the shared label height to the first label of each threshold field', async () => {
+  it('gives each threshold field one form control under a direct grid child for the shared rows', async () => {
     await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
     const grid = screen.getByLabelText(BSG_BAT_LABEL).closest('.grid');
-    const firstLabels = '.form-control>.label:first-child';
-    expect(grid?.querySelectorAll(firstLabels)).toHaveLength(2);
+
+    // The shared-row utilities select grid > * and grid > * > .form-control, so each field must
+    // keep that shape, with the label as the first child of its form control.
+    expect(grid?.querySelectorAll(':scope>*>.form-control')).toHaveLength(2);
+    expect(grid?.querySelectorAll(':scope>*>.form-control>label:first-child')).toHaveLength(2);
   });
 
   it('links the BSG-BAT warning to its threshold input', async () => {

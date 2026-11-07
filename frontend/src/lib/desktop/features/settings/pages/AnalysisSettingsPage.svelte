@@ -153,6 +153,16 @@
   const BAT_THRESHOLD_MIN = 0.01;
   const BAT_THRESHOLD_MAX = 0.99;
   const BAT_THRESHOLD_STEP = 0.01;
+  /**
+   * Subgrid rows for two threshold fields side by side: each field spans four rows (the three
+   * of its form control plus the message row below it) and its form control spans the first
+   * three, so labels, inputs and help texts line up across the fields at their natural heights.
+   */
+  const BAT_THRESHOLD_SHARED_ROWS = [
+    'md:gap-y-1',
+    'md:[&>*]:row-span-4 md:[&>*]:grid md:[&>*]:grid-rows-subgrid',
+    'md:[&>*>.form-control]:row-span-3 md:[&>*>.form-control]:grid md:[&>*>.form-control]:grid-rows-subgrid',
+  ].join(' ');
 
   const MODEL_LOGOS: Record<string, string> = {
     birdnet: logoBirdnet,
@@ -1936,13 +1946,11 @@
         originalData={batChange.original}
         currentData={batChange.current}
       >
-        <!-- Side by side, a label that wraps to two lines (longer translations) must not push its input below the neighbour: the first label of each field reserves two lines (2 x 1.25rem text plus 0.5rem padding, see .label in custom.css). The selector is limited to that first label, so the message rows under a field (clamp, error) keep their height. -->
+        <!-- Side by side at md and up, the two fields share the rows of one grid (label, input, help text, message) through subgrid, so a label that wraps in a longer translation keeps both inputs level without reserving height for labels that do not wrap. -->
         <div
           class={cn(
             'grid grid-cols-1 md:grid-cols-2 gap-6',
-            hasBattyBirdNetModel &&
-              hasBsgBatModel &&
-              'md:[&_.form-control>.label:first-child]:min-h-12 md:[&_.form-control>.label:first-child]:items-start'
+            hasBattyBirdNetModel && hasBsgBatModel && BAT_THRESHOLD_SHARED_ROWS
           )}
         >
           {#if hasBattyBirdNetModel}
