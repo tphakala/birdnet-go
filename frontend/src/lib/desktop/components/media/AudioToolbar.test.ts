@@ -6,7 +6,11 @@ import AudioToolbar from './AudioToolbar.svelte';
 describe('AudioToolbar export menu', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
 
-  function renderToolbar(onExport = vi.fn(), playback = { isPlaying: false, isLoading: false }) {
+  function renderToolbar(
+    onExport = vi.fn(),
+    playback = { isPlaying: false, isLoading: false },
+    onDenoiseChange = vi.fn()
+  ) {
     toolbarTest.render({
       props: {
         isPlaying: playback.isPlaying,
@@ -33,7 +37,7 @@ describe('AudioToolbar export menu', () => {
         onSkipToSelection: vi.fn(),
         onClearSelection: vi.fn(),
         onGainChange: vi.fn(),
-        onDenoiseChange: vi.fn(),
+        onDenoiseChange,
         onNormalizeToggle: vi.fn(),
         onExport,
       },
@@ -104,5 +108,20 @@ describe('AudioToolbar export menu', () => {
       'components.audioPlayer.processing.denoiseMedium',
       'components.audioPlayer.processing.denoiseHeavy',
     ]);
+  });
+
+  it('reports the backend preset id when light-medium is chosen', async () => {
+    const user = userEvent.setup();
+    const onDenoiseChange = vi.fn();
+    renderToolbar(vi.fn(), { isPlaying: false, isLoading: false }, onDenoiseChange);
+
+    await user.click(
+      screen.getByRole('button', { name: 'components.audioPlayer.processing.denoise' })
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'components.audioPlayer.processing.denoiseLightMedium' })
+    );
+
+    expect(onDenoiseChange).toHaveBeenCalledWith('light-medium');
   });
 });
