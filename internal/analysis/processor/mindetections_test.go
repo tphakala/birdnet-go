@@ -1100,6 +1100,41 @@ func TestMinDetections_UsesEffectiveBaseOverlap(t *testing.T) {
 	})
 }
 
+// TestMinDetectionsForSpec_FixedStepBaseClip pins that a model with the 3s base
+// clip and a fixed StepSamples takes its confirmation count from its own fixed
+// step, not from the base overlap, while a 3s spec without one keeps the bird path.
+func TestMinDetectionsForSpec_FixedStepBaseClip(t *testing.T) {
+	t.Parallel()
+
+	const (
+		level       = 3
+		sampleRate  = 48000
+		stepSamples = sampleRate // a fixed one second step
+		modelID     = "fixed-step-test"
+	)
+	s := &conf.Settings{}
+	s.Realtime.FalsePositiveFilter.Level = level
+
+	fixed := classifier.ModelSpec{
+		SampleRate:  sampleRate,
+		ClipLength:  classifier.AnalysisBaseClipLength,
+		StepSamples: stepSamples,
+	}
+	plain := classifier.ModelSpec{SampleRate: sampleRate, ClipLength: classifier.AnalysisBaseClipLength}
+	want := minDetectionsForSegment(time.Second.Seconds(), level)
+
+	for _, baseOverlap := range []time.Duration{0, 1500 * time.Millisecond, 2400 * time.Millisecond} {
+		assert.Equal(t, want, minDetectionsForSpec(s, modelID, fixed, baseOverlap),
+			"fixed-step 3s spec must use its own step (base overlap %v)", baseOverlap)
+		assert.Equal(t, calculateMinDetectionsFromSettings(s, baseOverlap),
+			minDetectionsForSpec(s, modelID, plain, baseOverlap),
+			"3s spec without a fixed step must keep the bird path (base overlap %v)", baseOverlap)
+	}
+	// The fixed step must diverge from the bird path at zero overlap, or the
+	// assertions above would not tell the two branches apart.
+	assert.NotEqual(t, want, calculateMinDetectionsFromSettings(s, 0))
+}
+
 func TestProcessorEffectiveBaseOverlap_NilBnUsesConfigured(t *testing.T) {
 	t.Parallel()
 	s := &conf.Settings{}

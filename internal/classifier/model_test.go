@@ -129,6 +129,50 @@ func TestModelSpec_BufferInterval(t *testing.T) {
 			assert.Equal(t, tt.expected, spec.BufferInterval(tt.overlap))
 		})
 	}
+
+	t.Run("fixed step ignores the overlap argument", func(t *testing.T) {
+		t.Parallel()
+		spec := sampleWindowSpec()
+		assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(0))
+		assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(time.Second))
+	})
+
+	t.Run("step longer than the clip is read as the clip", func(t *testing.T) {
+		t.Parallel()
+		spec := sampleWindowSpec()
+		spec.StepSamples = spec.ClipSamples + sampleWindowStep
+		// BufferDimensions reads a whole clip per window for such a spec.
+		_, _, read := spec.BufferDimensions(0)
+		assert.Equal(t, spec.ClipSizeBytes(), read)
+		assert.Equal(t, time.Duration(sampleWindowClip)*time.Second/sampleWindowRate, spec.BufferInterval(0))
+	})
+}
+
+// Sample-count spec used by the fixed-step tests: 384 kHz, a 393472 sample
+// window (not a whole number of nanoseconds) and a 192000 sample step (0.5 s).
+const (
+	sampleWindowRate    = 384000
+	sampleWindowClip    = 393472
+	sampleWindowStep    = 192000
+	sampleWindowClipLen = 1024666666 * time.Nanosecond // 393472 / 384000 s, truncated
+)
+
+func sampleWindowSpec() ModelSpec {
+	return ModelSpec{
+		SampleRate:    sampleWindowRate,
+		RawSampleRate: sampleWindowRate,
+		ClipLength:    sampleWindowClipLen,
+		ClipSamples:   sampleWindowClip,
+		StepSamples:   sampleWindowStep,
+	}
+}
+
+func TestModelSpec_ClipSampleCount(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 144000, ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}.ClipSampleCount(),
+		"without ClipSamples the SampleRate x ClipLength rule applies")
+	assert.Equal(t, sampleWindowClip, sampleWindowSpec().ClipSampleCount())
 }
 
 func TestModelSpec_BufferDimensions(t *testing.T) {
@@ -175,6 +219,35 @@ func TestModelSpec_BufferDimensions(t *testing.T) {
 		t.Parallel()
 		_, overlap, _ := spec.BufferDimensions(2400 * time.Millisecond)
 		assert.Equal(t, 0, overlap%frame)
+	})
+
+	t.Run("sample-count spec with fixed step ignores the overlap argument", func(t *testing.T) {
+		t.Parallel()
+		fixed := sampleWindowSpec()
+		for _, overlapArg := range []time.Duration{0, 500 * time.Millisecond, 5 * time.Second} {
+			clip, overlap, read := fixed.BufferDimensions(overlapArg)
+			assert.Equal(t, 786944, clip)
+			assert.Equal(t, 786944-384000, overlap)
+			assert.Equal(t, 384000, read)
+		}
+	})
+
+	t.Run("sample-count spec without a step keeps the overlap rule", func(t *testing.T) {
+		t.Parallel()
+		clipOnly := sampleWindowSpec()
+		clipOnly.StepSamples = 0
+		clip, _, read := clipOnly.BufferDimensions(0)
+		assert.Equal(t, 786944, clip)
+		assert.Equal(t, 786944, read)
+	})
+
+	t.Run("step at or above the clip keeps read size positive", func(t *testing.T) {
+		t.Parallel()
+		degenerate := sampleWindowSpec()
+		degenerate.StepSamples = degenerate.ClipSamples + 1
+		_, overlap, read := degenerate.BufferDimensions(0)
+		assert.Equal(t, 0, overlap)
+		assert.Equal(t, 786944, read)
 	})
 }
 

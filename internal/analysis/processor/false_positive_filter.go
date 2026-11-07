@@ -112,12 +112,21 @@ func MinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap 
 	if modelID == classifier.RegistryIDBat {
 		return calculateBatMinDetections(settings)
 	}
-	// For a model whose analysis clip differs from the 3s BirdNET base clip (e.g.
-	// Perch 5s), derive the step from the model's own clip and effective overlap so
-	// the confirmation window matches the buffer cadence. The 3s bird path derives
-	// its step from the effective base overlap in calculateMinDetectionsFromSettings.
-	if info, ok := classifier.ModelRegistry[modelID]; ok && info.Spec.ClipLength > 0 && info.Spec.ClipLength != classifier.AnalysisBaseClipLength {
-		step := info.Spec.BufferInterval(classifier.ResolveModelOverlap(modelID, info.Spec, baseOverlap)).Seconds()
+	if info, ok := classifier.ModelRegistry[modelID]; ok {
+		return minDetectionsForSpec(settings, modelID, info.Spec, baseOverlap)
+	}
+	return calculateMinDetectionsFromSettings(settings, baseOverlap)
+}
+
+// minDetectionsForSpec returns the confirmation count for a non-bat model with
+// the given spec. A model whose analysis clip differs from the 3s BirdNET base
+// clip (e.g. Perch 5s), or one with a fixed StepSamples, derives the step from
+// its own buffer cadence so the confirmation window matches it. The 3s bird path
+// derives its step from the effective base overlap in
+// calculateMinDetectionsFromSettings.
+func minDetectionsForSpec(settings *conf.Settings, modelID string, spec classifier.ModelSpec, baseOverlap time.Duration) int {
+	if spec.ClipLength > 0 && (spec.ClipLength != classifier.AnalysisBaseClipLength || spec.StepSamples > 0) {
+		step := spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, baseOverlap)).Seconds()
 		return minDetectionsForSegment(step, settings.Realtime.FalsePositiveFilter.Level)
 	}
 	return calculateMinDetectionsFromSettings(settings, baseOverlap)
