@@ -11,6 +11,7 @@ const TAB_STORAGE_KEY = 'birdnet-audio-settings-active-tab';
 const ENABLE_LABEL = 'settings.audio.exportDenoise.enable';
 const WARNING_PERMANENT = 'settings.audio.exportDenoise.warningPermanent';
 const LOSSY_NOTE = 'settings.audio.exportDenoise.lossyNote';
+const STRENGTH_LABEL = 'settings.audio.exportDenoise.strengthLabel';
 const STRENGTH_HELP = 'settings.audio.exportDenoise.strengthHelp';
 const STRENGTH_DISABLED_HELP = 'settings.audio.exportDenoise.strengthDisabledHelp';
 
@@ -171,5 +172,33 @@ describe('AudioSettingsPage clip denoise', () => {
 
     expect(await screen.findByText(STRENGTH_HELP)).toBeTruthy();
     expect(screen.queryByText(STRENGTH_DISABLED_HELP)).toBeNull();
+  });
+
+  it('writes the chosen strength together with the enabled state', async () => {
+    const updateSection = await renderProcessingTab({
+      denoise: { enabled: true, strength: 'light-medium' },
+    });
+
+    await fireEvent.click(await screen.findByLabelText(STRENGTH_LABEL));
+    await fireEvent.click(
+      await screen.findByText('components.audioPlayer.processing.denoiseHeavy')
+    );
+
+    await waitFor(() => expect(updateSection).toHaveBeenCalled());
+    const data = updateSection.mock.calls[0][1] as {
+      audio: { export: { denoise: unknown } };
+    };
+    expect(data.audio.export.denoise).toEqual({ enabled: true, strength: 'heavy' });
+  });
+
+  it.each([
+    ['denoise off', { denoise: { enabled: false, strength: 'light-medium' } }, true],
+    ['denoise on', { denoise: { enabled: true, strength: 'light-medium' } }, false],
+    ['recording off', { enabled: false, denoise: { enabled: true, strength: 'light' } }, true],
+  ])('strength dropdown disabled state with %s', async (_name, overrides, disabled) => {
+    await renderProcessingTab(overrides);
+
+    const control = await screen.findByLabelText(STRENGTH_LABEL);
+    expect((control as HTMLButtonElement).disabled).toBe(disabled);
   });
 });
