@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 )
@@ -24,6 +25,12 @@ const (
 	// top-1 label is not compared: near-silent windows have many labels tied near
 	// zero, so their order is noise rather than a result.
 	v24ParityMinTop1Confidence = 0.1
+	// v24ParityLocale, v24ParitySensitivity and v24ParityThreads are the fixture
+	// settings both classifiers load with: English labels, the neutral sigmoid
+	// sensitivity, and one thread so the two runs are comparable.
+	v24ParityLocale      = "en"
+	v24ParitySensitivity = 1.0
+	v24ParityThreads     = 1
 )
 
 // TestBirdNETV24OpenVINO_LowFrequencyParity drives the real NewBirdNET load path
@@ -35,8 +42,11 @@ const (
 // the candidate must compile at FP32 (openVINOPrecisionFor) and keep every
 // window's top-1 and scores within the tolerance of ONNX Runtime.
 //
-// Hardware/lib/model-gated so normal CI stays green (CI never builds the openvino
-// tag). Skipped unless OV_V24_MODEL and OV_V24_WINDOWS are set. Env knobs:
+// Model-gated so normal CI stays green (CI builds and vets the openvino tag but
+// never runs these tests). Skipped unless OV_V24_MODEL and OV_V24_WINDOWS are set.
+// On an ARMv8.2+ CPU with native f16, or with OV_V24_DEVICE set, it requires the
+// OpenVINO backend, so a missing libopenvino_c or a model file without the fp32
+// token fails the test there instead of skipping it. Env knobs:
 //
 //   - OV_V24_MODEL:   path to a BirdNET v2.4 FP32 ONNX model whose file name carries
 //     the fp32 token (for example BirdNET_v2.4_fp32_dfttrunc.onnx), so auto plans
@@ -72,10 +82,16 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 	device, backend, precision := candidate.RuntimeInfo()
 	t.Logf("candidate backend=%s device=%s precision=%s", backend, device, precision)
 	if backend != BackendOpenVINO {
-		if dev := os.Getenv("OV_V24_DEVICE"); dev != "" {
-			t.Fatalf("OV_V24_DEVICE=%s requested but BirdNET v2.4 fell back to %s; the OpenVINO path regressed", dev, backend)
+		// auto plans OpenVINO for an fp32-token v2.4 file on an ARMv8.2+ CPU with
+		// native f16 (and on an Intel GPU, which only an explicit device can
+		// demand here), so a fallback is the regression on such a host.
+		dev := os.Getenv("OV_V24_DEVICE")
+		if dev == "" && !cpuspec.HasNativeF16() {
+			t.Skipf("OpenVINO backend not active on this host (backend=%s); set OV_V24_DEVICE to require it", backend)
 		}
-		t.Skipf("OpenVINO backend not active on this host (backend=%s); set OV_V24_DEVICE to require it", backend)
+		require.Equalf(t, BackendOpenVINO, backend,
+			"BirdNET v2.4 fell back to %s (OV_V24_DEVICE=%q, native f16 CPU=%t): libopenvino_c is not loadable, the model file lacks the fp32 token, or the OpenVINO path regressed",
+			backend, dev, cpuspec.HasNativeF16())
 	}
 	require.Equal(t, string(QuantizationFP32), precision,
 		"BirdNET v2.4 on OpenVINO must run at FP32 (openVINOPrecisionFor), not the f16 default; see GitHub #4986")
@@ -114,9 +130,9 @@ func newV24ForParity(t *testing.T, modelPath, backendPref string) *BirdNET {
 	settings := &conf.Settings{}
 	settings.BirdNET.ModelPath = modelPath
 	settings.BirdNET.LabelPath = os.Getenv("OV_V24_LABELS")
-	settings.BirdNET.Locale = "en"
-	settings.BirdNET.Sensitivity = 1.0
-	settings.BirdNET.Threads = 1
+	settings.BirdNET.Locale = v24ParityLocale
+	settings.BirdNET.Sensitivity = v24ParitySensitivity
+	settings.BirdNET.Threads = v24ParityThreads
 	settings.BirdNET.Backend = backendPref
 	settings.BirdNET.OpenVINODevice = os.Getenv("OV_V24_DEVICE")
 	settings.BirdNET.OpenVINOPath = os.Getenv("OV_V24_LIB")
