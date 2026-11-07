@@ -447,6 +447,16 @@ describe('AnalysisSettingsPage bat thresholds', () => {
     expect(screen.getByText(BSG_BAT_LABEL)).toBeInTheDocument();
   });
 
+  it('shows no change dot for BSG-BAT while no bsgbat section is saved', async () => {
+    // A server always sends the bat section; the bsgbat section is the one left out.
+    seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+    await screen.findByLabelText(BSG_BAT_LABEL);
+    await tick();
+
+    expect(descriptionOf(settingsTab())).toBe('');
+  });
+
   it('saves a BSG-BAT threshold edit to the bsgbat section only', async () => {
     seedSection('bsgbat', { threshold: 0.5 });
     await renderWithCatalog(BSG_BAT_CATALOG_ID);
