@@ -17,7 +17,9 @@ import (
 const bufferMonitorDebugEveryTicks = 300
 
 // bufferMonitorPollInterval is how often an analysis buffer monitor polls its
-// buffer. The monitor reads at most one window per poll.
+// buffer. The monitor reads at most one window per poll, so an analysis step
+// shorter than two polls cannot be consumed without loss (see
+// conf.MinBSGBatStepFrames).
 const bufferMonitorPollInterval = 100 * time.Millisecond
 
 // bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
@@ -34,12 +36,6 @@ const bufferMonitorPollInterval = 100 * time.Millisecond
 // than the sub-tick (re)allocation normally takes, short enough to bound a stuck
 // monitor.
 const bufferAllocGraceTicks = 50
-
-// bufferMonitorPollInterval is how often an analysis buffer monitor polls its
-// buffer. The monitor reads at most one window per poll, so an analysis step
-// shorter than two polls cannot be consumed without loss (see
-// conf.MinBSGBatStepFrames).
-const bufferMonitorPollInterval = 100 * time.Millisecond
 
 // monitorKey identifies a unique monitor (one per source x model).
 type monitorKey struct {
