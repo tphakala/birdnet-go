@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -17,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -31,10 +34,6 @@ const (
 	denoiseRangeEnd   = 199
 	// denoiseFollowers is the number of extra concurrent requests in the dedup test.
 	denoiseFollowers = 3
-	// denoiseJoinGrace gives followers time to reach the flight before the leader
-	// is released. The assertions hold even if one arrives late (it then hits the
-	// cache), so this only makes the test exercise the join.
-	denoiseJoinGrace = 100 * time.Millisecond
 	// denoiseStartTimeout bounds waits for a job to reach or leave its hook so a
 	// regression fails instead of hanging the package.
 	denoiseStartTimeout = 10 * time.Second
@@ -190,81 +189,79 @@ func TestServeAudioByID_DenoiseRange(t *testing.T) {
 }
 
 func TestServeAudioByID_DenoiseDedup(t *testing.T) {
-	e, controller, dir := setupMediaTestEnvironment(t)
-	controller.isClientAuthenticated = signedIn
-	writeToneFLAC(t, fixturePath(dir, "clip.flac"), processTestRate, denoiseTestSeconds, fixtureToneHz)
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("GetNoteClipPath", "7").Return("clip.flac", nil)
-	controller.DS = mockDS
+	// Inside the bubble synctest.Wait returns once every goroutine is blocked, so
+	// the leader is parked in the hook and every follower is waiting on its flight:
+	// the join is observed, not slept for.
+	synctest.Test(t, func(t *testing.T) {
+		e, controller, dir := setupMediaTestEnvironment(t)
+		controller.isClientAuthenticated = signedIn
+		writeToneFLAC(t, fixturePath(dir, "clip.flac"), processTestRate, denoiseTestSeconds, fixtureToneHz)
+		mockDS := mocks.NewMockInterface(t)
+		mockDS.On("GetNoteClipPath", "7").Return("clip.flac", nil)
+		controller.DS = mockDS
 
-	var started atomic.Int32
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	controller.processingStartedHook = func() {
-		if started.Add(1) == 1 {
-			close(entered)
+		var started atomic.Int32
+		release := make(chan struct{})
+		var releaseOnce sync.Once
+		releaseJob := func() { releaseOnce.Do(func() { close(release) }) }
+		t.Cleanup(releaseJob)
+		controller.processingStartedHook = func() {
+			started.Add(1)
+			<-release
 		}
-		<-release
-	}
 
-	const total = denoiseFollowers + 1
-	recs := make([]*httptest.ResponseRecorder, total)
-	var wg sync.WaitGroup
-	var launched atomic.Int32
-	for i := range total {
-		wg.Go(func() {
-			launched.Add(1)
-			recs[i] = getAudio(e, denoiseURL("7", denoiseTestPreset), nil)
-		})
-		if i == 0 {
-			<-entered // the leader holds the job before followers start
+		const total = denoiseFollowers + 1
+		recs := make([]*httptest.ResponseRecorder, total)
+		var wg sync.WaitGroup
+		for i := range total {
+			wg.Go(func() { recs[i] = getAudio(e, denoiseURL("7", denoiseTestPreset), nil) })
 		}
-	}
-	require.Eventually(t, func() bool { return launched.Load() == total }, 5*time.Second, time.Millisecond)
-	time.Sleep(denoiseJoinGrace)
-	close(release)
-	wg.Wait()
+		synctest.Wait()
+		require.Equal(t, int32(1), started.Load(), "every request is waiting on the one job")
+		releaseJob()
+		wg.Wait()
 
-	assert.Equal(t, int32(1), started.Load(), "concurrent requests for one key run one job")
-	for i, rec := range recs {
-		require.Equal(t, http.StatusOK, rec.Code, "request %d", i)
-		assert.Equal(t, recs[0].Body.Bytes(), rec.Body.Bytes(), "request %d", i)
-	}
+		for i, rec := range recs {
+			require.Equal(t, http.StatusOK, rec.Code, "request %d", i)
+			assert.Equal(t, recs[0].Body.Bytes(), rec.Body.Bytes(), "request %d", i)
+		}
+	})
 }
 
 func TestServeAudioByID_DenoiseSharesJobWithPost(t *testing.T) {
-	e, controller, dir := setupMediaTestEnvironment(t)
-	controller.isClientAuthenticated = signedIn
-	src := fixturePath(dir, "clip.flac")
-	writeToneFLAC(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("GetNoteClipPath", "7").Return("clip.flac", nil)
-	controller.DS = mockDS
+	synctest.Test(t, func(t *testing.T) {
+		e, controller, dir := setupMediaTestEnvironment(t)
+		controller.isClientAuthenticated = signedIn
+		src := fixturePath(dir, "clip.flac")
+		writeToneFLAC(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+		mockDS := mocks.NewMockInterface(t)
+		mockDS.On("GetNoteClipPath", "7").Return("clip.flac", nil)
+		controller.DS = mockDS
 
-	var started atomic.Int32
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	controller.processingStartedHook = func() {
-		if started.Add(1) == 1 {
-			close(entered)
+		var started atomic.Int32
+		release := make(chan struct{})
+		var releaseOnce sync.Once
+		releaseJob := func() { releaseOnce.Do(func() { close(release) }) }
+		t.Cleanup(releaseJob)
+		controller.processingStartedHook = func() {
+			started.Add(1)
+			<-release
 		}
-		<-release
-	}
 
-	var wg sync.WaitGroup
-	var getRec, postRec *httptest.ResponseRecorder
-	wg.Go(func() { getRec = getAudio(e, denoiseURL("7", denoiseTestPreset), nil) })
-	<-entered
-	wg.Go(func() { postRec = postJSON(e, "/api/v2/audio/7/process", `{"denoise": "`+denoiseTestPreset+`"}`) })
-	time.Sleep(denoiseJoinGrace)
-	close(release)
-	wg.Wait()
+		var wg sync.WaitGroup
+		var getRec, postRec *httptest.ResponseRecorder
+		wg.Go(func() { getRec = getAudio(e, denoiseURL("7", denoiseTestPreset), nil) })
+		wg.Go(func() { postRec = postJSON(e, "/api/v2/audio/7/process", `{"denoise": "`+denoiseTestPreset+`"}`) })
+		synctest.Wait()
+		require.Equal(t, int32(1), started.Load(), "a denoise-only POST joins the GET's job")
+		releaseJob()
+		wg.Wait()
 
-	assert.Equal(t, int32(1), started.Load(), "a denoise-only POST joins the GET's job")
-	require.Equal(t, http.StatusOK, getRec.Code)
-	require.Equal(t, http.StatusOK, postRec.Code)
-	assert.Equal(t, getRec.Body.Bytes(), postRec.Body.Bytes())
-	assert.Equal(t, expectedDenoised(t, src), postRec.Body.Bytes())
+		require.Equal(t, http.StatusOK, getRec.Code)
+		require.Equal(t, http.StatusOK, postRec.Code)
+		assert.Equal(t, getRec.Body.Bytes(), postRec.Body.Bytes())
+		assert.Equal(t, expectedDenoised(t, src), postRec.Body.Bytes())
+	})
 }
 
 func TestServeAudioByID_DenoiseBusyIs503(t *testing.T) {
@@ -413,6 +410,9 @@ func TestProcessWAV_CallerLeavesWithoutCancellingTheJob(t *testing.T) {
 	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseJob := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseJob)
 	controller.processingStartedHook = func() {
 		close(entered)
 		<-release
@@ -425,14 +425,25 @@ func TestProcessWAV_CallerLeavesWithoutCancellingTheJob(t *testing.T) {
 		_, err := controller.processWAV(reqCtx, key, src, transcode.Filters{Denoise: denoiseTestPreset})
 		errCh <- err
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case err := <-errCh:
+		t.Fatalf("the job never started: %v", err)
+	case <-time.After(denoiseStartTimeout):
+		t.Fatal("the job never started")
+	}
 	cancel()
-	require.ErrorIs(t, <-errCh, context.Canceled)
+	select {
+	case err := <-errCh:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(denoiseStartTimeout):
+		t.Fatal("the caller did not leave after its request was cancelled")
+	}
 
 	// The job finishes and fills the cache for the next caller.
-	close(release)
+	releaseJob()
 	require.Eventually(t, func() bool { return controller.processingCache.get(key) != nil },
-		5*time.Second, 10*time.Millisecond, "the abandoned job still stores its result")
+		denoiseStartTimeout, 10*time.Millisecond, "the abandoned job still stores its result")
 }
 
 func TestProcessWAV_JobPanicBecomesError(t *testing.T) {
@@ -459,6 +470,9 @@ func TestProcessWAV_ShutdownWaitsForJob(t *testing.T) {
 	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseJob := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseJob)
 	controller.processingStartedHook = func() {
 		close(entered)
 		<-release
@@ -490,7 +504,7 @@ func TestProcessWAV_ShutdownWaitsForJob(t *testing.T) {
 		}
 	}, denoiseNeverWindow, denoiseNeverTick, "Shutdown must wait for a job that is still running")
 
-	close(release)
+	releaseJob()
 	select {
 	case <-waited:
 	case <-time.After(denoiseStartTimeout):
@@ -535,4 +549,72 @@ func TestProcessWAV_ModTimeIsCacheEntryWriteTime(t *testing.T) {
 	got, err = controller.processWAV(t.Context(), earlier, src, transcode.Filters{Denoise: denoiseTestPreset})
 	require.NoError(t, err)
 	assert.True(t, written.Equal(got.modTime), "cached result carries %v, entry was written %v", got.modTime, written)
+}
+
+func TestServeAudioByID_DenoiseValidators(t *testing.T) {
+	e, controller, dir := setupMediaTestEnvironment(t)
+	controller.isClientAuthenticated = signedIn
+	src := fixturePath(dir, "clip.flac")
+	writeToneFLAC(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+	// The stored clip and the cache entry get different, known write times.
+	sourceTime := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(src, sourceTime, sourceTime))
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "7").Return("clip.flac", nil)
+	controller.DS = mockDS
+	url := denoiseURL("7", denoiseTestPreset)
+
+	miss := getAudio(e, url, nil)
+	require.Equal(t, http.StatusOK, miss.Code)
+	etag := miss.Header().Get("ETag")
+	assert.Contains(t, etag, denoiseTestPreset, "the ETag carries the cache key")
+	assert.True(t, strings.HasSuffix(etag, "-"+strconv.Itoa(miss.Body.Len())+`"`), "the ETag carries the output length: %s", etag)
+
+	entries, err := os.ReadDir(filepath.Join(dir, processingCacheDirName))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	entryTime := time.Now().Add(-time.Minute).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(filepath.Join(dir, processingCacheDirName, entries[0].Name()), entryTime, entryTime))
+
+	hit := getAudio(e, url, nil)
+	require.Equal(t, http.StatusOK, hit.Code)
+	assert.Equal(t, etag, hit.Header().Get("ETag"), "a miss and a hit share one ETag")
+	assert.Equal(t, entryTime.UTC().Format(http.TimeFormat), hit.Header().Get("Last-Modified"),
+		"Last-Modified is the cache entry's write time, not the stored clip's")
+
+	assert.Equal(t, http.StatusNotModified, getAudio(e, url, map[string]string{"If-None-Match": etag}).Code)
+
+	rangeHeader := "bytes=" + strconv.Itoa(denoiseRangeStart) + "-" + strconv.Itoa(denoiseRangeEnd)
+	assert.Equal(t, http.StatusPartialContent,
+		getAudio(e, url, map[string]string{"Range": rangeHeader, "If-Range": etag}).Code,
+		"If-Range with the ETag keeps the range")
+	assert.Equal(t, http.StatusOK,
+		getAudio(e, url, map[string]string{"Range": rangeHeader, "If-Range": sourceTime.UTC().Format(http.TimeFormat)}).Code,
+		"an If-Range date taken from the stored clip must not match the denoised variant")
+}
+
+func TestServeAudioByID_DenoiseWaitsForEncodingClip(t *testing.T) {
+	e, controller, dir := setupMediaTestEnvironment(t)
+	controller.isClientAuthenticated = signedIn
+	controller.audioWaitTimeoutOverride = testAudioAsyncTimeout
+	const clipName = "encoding_88p_20260724T143045Z.wav"
+	clipPath := fixturePath(dir, clipName)
+	tempPath := clipPath + ".99999.1" + audiotemp.Ext
+	require.NoError(t, os.WriteFile(tempPath, []byte("temp encoding data"), 0o600))
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "7").Return(clipName, nil)
+	now := time.Now()
+	mockDS.On("Get", "7").Return(datastore.Note{ID: 7, BeginTime: now, EndTime: now}, nil).Maybe()
+	controller.DS = mockDS
+
+	// The export finishes while the request waits for it.
+	controller.audioWaitStartedHook = func() {
+		writeToneWAV(t, clipPath, processTestRate, denoiseTestSeconds, fixtureToneHz)
+		require.NoError(t, os.Remove(tempPath))
+	}
+
+	rec := getAudio(e, denoiseURL("7", denoiseTestPreset), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, MimeTypeWAV, rec.Header().Get(echo.HeaderContentType))
+	assert.Equal(t, expectedDenoised(t, clipPath), rec.Body.Bytes(), "the clip that appeared is denoised")
 }
