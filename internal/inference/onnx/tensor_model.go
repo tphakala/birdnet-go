@@ -72,9 +72,22 @@ func resolveTensorShape(dims []int64) (shape []int64, elements int, err error) {
 	return shape, int(total), nil
 }
 
+// requireFloatTensor returns a ModelDetectionError unless info describes a
+// float32 tensor. Run binds the input and every output as float32 tensors, so
+// any other type would fail on each call instead of at load time.
+func requireFloatTensor(info *ort.InputOutputInfo) error {
+	if info.OrtValueType != ort.ONNXTypeTensor {
+		return &ModelDetectionError{Reason: fmt.Sprintf("value is a %v, expected a tensor", info.OrtValueType)}
+	}
+	if info.DataType != ort.TensorElementDataTypeFloat {
+		return &ModelDetectionError{Reason: fmt.Sprintf("tensor element type is %v, expected float32", info.DataType)}
+	}
+	return nil
+}
+
 // NewTensorModel loads the model at modelPath. It requires exactly one input
-// and at least one output, and resolves every shape with the rules of
-// resolveTensorShape. The ONNX Runtime must be initialized first.
+// and at least one output, all float32 tensors, and resolves every shape with
+// the rules of resolveTensorShape. The ONNX Runtime must be initialized first.
 func NewTensorModel(modelPath string, opts TensorModelOptions) (*TensorModel, error) {
 	if modelPath == "" {
 		return nil, ErrModelPathRequired
@@ -91,6 +104,9 @@ func NewTensorModel(modelPath string, opts TensorModelOptions) (*TensorModel, er
 		return nil, &ModelDetectionError{Reason: "tensor model has no outputs"}
 	}
 
+	if err := requireFloatTensor(&inputInfos[0]); err != nil {
+		return nil, fmt.Errorf("birdnet: input %q: %w", inputInfos[0].Name, err)
+	}
 	inputShape, inputSize, err := resolveTensorShape(inputInfos[0].Dimensions)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: input %q: %w", inputInfos[0].Name, err)
@@ -100,7 +116,10 @@ func NewTensorModel(modelPath string, opts TensorModelOptions) (*TensorModel, er
 	outputShapes := make([]ort.Shape, len(outputInfos))
 	outputSizes := make([]int, len(outputInfos))
 	for i := range outputInfos {
-		info := outputInfos[i]
+		info := &outputInfos[i]
+		if err := requireFloatTensor(info); err != nil {
+			return nil, fmt.Errorf("birdnet: output %q: %w", info.Name, err)
+		}
 		shape, size, err := resolveTensorShape(info.Dimensions)
 		if err != nil {
 			return nil, fmt.Errorf("birdnet: output %q: %w", info.Name, err)
