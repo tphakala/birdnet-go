@@ -3921,7 +3921,8 @@
         "warningPermanent": "O áudio original não é mantido. Os clipes são limpos de ruído de forma permanente ao serem guardados, incluindo gravações de morcegos.",
         "warningBats": "A redução de ruído pode atenuar chamadas fracas de morcegos; as chamadas fortes não são afetadas.",
         "warningImported": "As gravações importadas não são afetadas.",
-        "lossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado."
+        "lossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado.",
+        "warningPlayback": "A redução de ruído predefinida na reprodução não é aplicada enquanto isto estiver ativo. Se o desativar mais tarde e ativar a predefinição de reprodução, estes clipes serão limpos de ruído uma segunda vez ao reproduzir."
       },
       "audioClipRetention": {
         "title": "Retenção de clipes de áudio",
@@ -4903,7 +4904,15 @@
         "description": "Definições padrão para reprodução de gravações de aves.",
         "defaultGain": "Amplificação de Volume Padrão",
         "defaultGainHelpText": "Ganho inicial aplicado ao reproduzir gravações. Os sons de aves são frequentemente baixos, pelo que um reforço de 6-12 dB é recomendado.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Reduzir o ruído dos clipes ao reproduzir",
+        "denoiseHelpText": "Reproduz e transfere uma cópia sem ruído de cada clipe. Os clipes guardados não mudam. As transferências passam a ser ficheiros WAV e são maiores. As definições de áudio de um clipe permitem escolher outra intensidade ou desativar a redução de ruído.",
+        "denoiseStrengthLabel": "Intensidade da redução de ruído",
+        "denoiseStrengthHelpText": "Ligeiro mantém mais do som original e forte remove mais ruído. Ligeiro-médio serve para a maioria das gravações.",
+        "denoiseStrengthDisabledHelp": "Ative acima a redução de ruído na reprodução para escolher uma intensidade.",
+        "denoiseExportPrecedence": "Não é aplicada enquanto «Redução de ruído dos clipes guardados» estiver ativa (Definições de áudio, separador Processamento). Esses clipes já estão sem ruído.",
+        "denoiseRedenoiseNote": "Os clipes guardados enquanto «Redução de ruído dos clipes guardados» estava ativa são limpos de ruído de novo ao reproduzir. Escolha Desativado nas definições de áudio de um clipe para o ouvir tal como foi guardado.",
+        "denoiseLossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado."
       }
     },
     "restartRequired": "Algumas alterações requerem um reinício do servidor para terem efeito. Por favor, reinicie o BirdNET-Go."

@@ -4,6 +4,7 @@ import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
 import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
 import type { Detection } from '$lib/types/detection.types';
+import { appState } from '$lib/stores/appState.svelte';
 
 // Heavy / context-dependent children are not relevant to the fetch-race logic.
 vi.mock('$lib/desktop/components/media/AudioPlayer.svelte');
@@ -164,6 +165,40 @@ describe('DetectionDetail audio download', () => {
     // Keep the attribute valueless so the response's Content-Disposition header
     // supplies the canonical filename and extension.
     expect(downloadLink).toHaveAttribute('download', '');
+  });
+
+  it('downloads the denoised clip when a playback denoise default is set', async () => {
+    const detection = makeDetection({
+      id: 1240,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: 'phalaenoptilus_nuttallii_88p_20260720T051601Z.m4a',
+    });
+    appState.playbackDenoise = 'light-medium';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1240')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    try {
+      const { container } = detailTest.render({ detectionId: '1240' });
+
+      await waitFor(() => {
+        expect(container.querySelector('a.meta-download')).not.toBeNull();
+      });
+
+      expect(container.querySelector('a.meta-download')?.getAttribute('href')).toBe(
+        '/api/v2/audio/1240?denoise=light-medium'
+      );
+    } finally {
+      appState.playbackDenoise = '';
+    }
   });
 
   it('passes the clip sample rate from the detail response to the player', async () => {

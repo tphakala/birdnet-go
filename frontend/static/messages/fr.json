@@ -3921,7 +3921,8 @@
         "warningPermanent": "L'audio d'origine n'est pas conservé. Les clips sont débruités définitivement à l'enregistrement, y compris les enregistrements de chauves-souris.",
         "warningBats": "La réduction de bruit peut atténuer les cris faibles de chauves-souris ; les cris forts ne sont pas affectés.",
         "warningImported": "Les enregistrements importés ne sont pas concernés.",
-        "lossyNote": "La réduction de bruit donne les meilleurs résultats sur les clips FLAC ou WAV. En dessous de {minBitrate} kbps, les artefacts du codec limitent la propreté du résultat."
+        "lossyNote": "La réduction de bruit donne les meilleurs résultats sur les clips FLAC ou WAV. En dessous de {minBitrate} kbps, les artefacts du codec limitent la propreté du résultat.",
+        "warningPlayback": "La réduction de bruit par défaut à la lecture n'est pas appliquée tant que ceci est activé. Si vous le désactivez plus tard et activez la valeur par défaut de lecture, ces clips seront débruités une seconde fois à la lecture."
       },
       "audioClipRetention": {
         "title": "Rétention des clips audio",
@@ -4903,7 +4904,15 @@
         "description": "Paramètres par défaut pour la lecture des enregistrements d'oiseaux.",
         "defaultGain": "Amplification du volume par défaut",
         "defaultGainHelpText": "Gain initial appliqué lors de la lecture des enregistrements. Les sons d'oiseaux sont souvent faibles, une amplification de 6 à 12 dB est recommandée.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Réduire le bruit des clips à la lecture",
+        "denoiseHelpText": "Lit et télécharge une copie débruitée de chaque clip. Les clips enregistrés restent inchangés. Les téléchargements deviennent des fichiers WAV et sont plus volumineux. Les paramètres audio d'un clip permettent de choisir une autre intensité ou de désactiver la réduction de bruit.",
+        "denoiseStrengthLabel": "Intensité de la réduction de bruit",
+        "denoiseStrengthHelpText": "Léger conserve le plus du son d'origine et fort supprime le plus de bruit. Léger-moyen convient à la plupart des enregistrements.",
+        "denoiseStrengthDisabledHelp": "Activez la réduction de bruit à la lecture ci-dessus pour choisir une intensité.",
+        "denoiseExportPrecedence": "Non appliquée tant que « Réduction de bruit des clips enregistrés » est activée (Paramètres audio, onglet Traitement). Ces clips sont déjà débruités.",
+        "denoiseRedenoiseNote": "Les clips enregistrés pendant que « Réduction de bruit des clips enregistrés » était activée sont débruités une seconde fois à la lecture. Choisissez Désactivé dans les paramètres audio d'un clip pour l'entendre tel qu'il a été enregistré.",
+        "denoiseLossyNote": "La réduction de bruit donne les meilleurs résultats sur les clips FLAC ou WAV. En dessous de {minBitrate} kbps, les artefacts du codec limitent la propreté du résultat."
       }
     },
     "restartRequired": "Certaines modifications nécessitent un redémarrage du serveur pour prendre effet. Veuillez redémarrer BirdNET-Go."

@@ -3921,7 +3921,8 @@
         "warningPermanent": "L'audio originale non viene conservato. Le clip vengono ripulite dal rumore in modo permanente al salvataggio, comprese le registrazioni di pipistrelli.",
         "warningBats": "La riduzione del rumore può attenuare i richiami deboli dei pipistrelli; i richiami forti non sono interessati.",
         "warningImported": "Le registrazioni importate non sono interessate.",
-        "lossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato."
+        "lossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato.",
+        "warningPlayback": "La riduzione del rumore predefinita in riproduzione non viene applicata finché questa opzione è attiva. Se la disattivi in seguito e attivi l'impostazione predefinita di riproduzione, queste clip vengono ripulite dal rumore una seconda volta in riproduzione."
       },
       "audioClipRetention": {
         "title": "Conservazione Clip Audio",
@@ -4903,7 +4904,15 @@
         "description": "Impostazioni predefinite per la riproduzione delle registrazioni di uccelli.",
         "defaultGain": "Amplificazione volume predefinita",
         "defaultGainHelpText": "Guadagno iniziale applicato durante la riproduzione delle registrazioni. I suoni degli uccelli sono spesso deboli, quindi è consigliato un incremento di 6-12 dB.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Riduci il rumore delle clip in riproduzione",
+        "denoiseHelpText": "Riproduce e scarica una copia senza rumore di ogni clip. Le clip salvate restano invariate. I download diventano file WAV e sono più grandi. Le impostazioni audio di una clip permettono di scegliere un'altra intensità o di disattivare la riduzione del rumore.",
+        "denoiseStrengthLabel": "Intensità della riduzione del rumore",
+        "denoiseStrengthHelpText": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
+        "denoiseStrengthDisabledHelp": "Attiva sopra la riduzione del rumore in riproduzione per scegliere un'intensità.",
+        "denoiseExportPrecedence": "Non applicata finché «Riduzione del rumore delle clip salvate» è attiva (Impostazioni audio, scheda Elaborazione). Queste clip sono già ripulite dal rumore.",
+        "denoiseRedenoiseNote": "Le clip salvate mentre «Riduzione del rumore delle clip salvate» era attiva vengono ripulite dal rumore una seconda volta in riproduzione. Scegli Disattivato nelle impostazioni audio di una clip per ascoltarla come è stata salvata.",
+        "denoiseLossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato."
       }
     },
     "restartRequired": "Alcune modifiche richiedono un riavvio del server per avere effetto. Riavvia BirdNET-Go."

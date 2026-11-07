@@ -336,6 +336,20 @@ export function coerceBirdNetSettings(settings: PartialBirdNetSettings): Partial
 }
 
 /**
+ * Complete a denoise setting (export-stage or playback default): a missing or
+ * malformed object becomes off at the default strength, and an unknown strength
+ * falls back to the default so the strength dropdown always has a valid value.
+ */
+function coerceDenoiseSettings(value: unknown): { enabled: boolean; strength: string } {
+  const denoise = isPlainObject(value) ? value : {};
+  return {
+    ...denoise,
+    enabled: coerceBoolean(denoise.enabled, false),
+    strength: isDenoisePresetId(denoise.strength) ? denoise.strength : DEFAULT_DENOISE_PRESET,
+  };
+}
+
+/**
  * Validate and coerce audio settings
  */
 export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudioSettings {
@@ -432,12 +446,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     // Denoise: backfill the object for a response from an older server and keep
     // both fields complete, so the strength dropdown always has a valid value
     // and an Off state is a real value rather than a missing key.
-    const denoise = isPlainObject(exp.denoise) ? exp.denoise : {};
-    coercedExport.denoise = {
-      ...denoise,
-      enabled: coerceBoolean(denoise.enabled, false),
-      strength: isDenoisePresetId(denoise.strength) ? denoise.strength : DEFAULT_DENOISE_PRESET,
-    };
+    coercedExport.denoise = coerceDenoiseSettings(exp.denoise);
 
     // Cast back to appropriate type for assignment
     coerced.export = coercedExport as unknown as typeof settings.export;
@@ -892,6 +901,15 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
         coercedRealtime.privacyFilter = coercePrivacyFilterSettings(
           data.privacyFilter as Partial<PrivacyFilterSettings> & UnknownSettings
         );
+      }
+
+      // Backfill the playback denoise object for a response from an older server,
+      // so an Off state is a real value and the strength is always a valid preset.
+      if (isPlainObject(data.dashboard)) {
+        coercedRealtime.dashboard = {
+          ...data.dashboard,
+          playbackDenoise: coerceDenoiseSettings(data.dashboard.playbackDenoise),
+        };
       }
 
       // Backfill extendedCapture defaults for legacy configs

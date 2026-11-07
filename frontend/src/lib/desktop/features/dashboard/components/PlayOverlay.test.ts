@@ -93,6 +93,8 @@ describe('PlayOverlay', () => {
       onFreezeStart: () => void;
       onFreezeEnd: () => void;
       onAudioContextAvailable: (_a: boolean) => void;
+      audibleBatsSrc: string | null;
+      denoisePreset: string;
     }> = {}
   ) {
     return render(PlayOverlay, { props: { detectionId: DETECTION_ID, ...props } });
@@ -729,6 +731,236 @@ describe('PlayOverlay', () => {
 
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
       expect(alertShown()).toBe(false);
+    });
+  });
+  describe('playback denoise default', () => {
+    const PRESET = 'light-medium';
+    const STORED_URL = `/api/v2/audio/${DETECTION_ID}`;
+    const DENOISED_URL = `${STORED_URL}?denoise=${PRESET}`;
+    const SEEK_POSITION_SECONDS = 12;
+    const NEXT_DETECTION_ID = DETECTION_ID + 1;
+
+    function elementPath(): string {
+      const url = new URL(ctl.element.src);
+      return `${url.pathname}${url.search}`;
+    }
+
+    it('loads the stored clip for metadata and never asks for a denoise by rendering', () => {
+      mount({ denoisePreset: PRESET });
+
+      expect(elementPath()).toBe(STORED_URL);
+    });
+
+    it('switches to the denoised clip on the first play and keeps the position', async () => {
+      mount({ denoisePreset: PRESET });
+      ctl.completeLoad();
+      ctl.element.currentTime = SEEK_POSITION_SECONDS;
+
+      await click();
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
+      expect(ctl.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the stored clip when no default is set', async () => {
+      mount();
+      ctl.completeLoad();
+
+      await click();
+
+      expect(elementPath()).toBe(STORED_URL);
+    });
+
+    it('leaves an audible-bats source alone, and denoises the next play once it is off', async () => {
+      const { rerender } = mount({ denoisePreset: PRESET });
+      ctl.completeLoad();
+      await rerender({
+        detectionId: DETECTION_ID,
+        audibleBatsSrc: BATS_SRC,
+        denoisePreset: PRESET,
+      });
+      await settle();
+
+      await click();
+      expect(ctl.element.src).toBe(BATS_SRC);
+
+      await rerender({ detectionId: DETECTION_ID, audibleBatsSrc: null, denoisePreset: PRESET });
+      await settle();
+      expect(elementPath()).toBe(STORED_URL);
+
+      await click();
+      expect(elementPath()).toBe(DENOISED_URL);
+    });
+
+    it('keeps the denoise parameter on a retry and adds the cache-buster as its own parameter', async () => {
+      // A 503 means the clip is still being produced, so the denoised URL is retried.
+      const restoreFetch = mockAudioProbe({ status: 503 });
+      mount({ denoisePreset: PRESET });
+      ctl.completeLoad();
+      await click();
+
+      ctl.failLoad();
+      await advanceRetry(0);
+      restoreFetch();
+
+      const url = new URL(ctl.element.src);
+      expect(url.searchParams.get('denoise')).toBe(PRESET);
+      expect(url.searchParams.has('t')).toBe(true);
+      expect(ctl.element.src).not.toContain('?denoise=light-medium?');
+    });
+
+    describe('when the denoised clip fails', () => {
+      const SERVER_ERROR_STATUS = 500;
+      const PENDING_STATUS = 503;
+      const MISSING_STATUS = 404;
+      let restoreFetch: (() => void) | undefined;
+
+      afterEach(() => {
+        restoreFetch?.();
+        restoreFetch = undefined;
+      });
+
+      it('falls back to the stored clip at the same position and keeps playing', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        ctl.element.currentTime = SEEK_POSITION_SECONDS;
+        await click();
+        const playsBefore = ctl.play.mock.calls.length;
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
+        expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+        expect(alertShown()).toBe(false);
+      });
+
+      it('does not ask for the denoised clip again after the fallback', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+        ctl.failLoad();
+        await settle();
+        ctl.completeLoad();
+        await settle();
+
+        await click();
+        await click();
+
+        expect(elementPath()).toBe(STORED_URL);
+      });
+
+      it('keeps retrying the denoised clip while the server answers 503', async () => {
+        restoreFetch = mockAudioProbe({
+          status: PENDING_STATUS,
+          headers: { 'Retry-After': '1' },
+        });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+
+        ctl.failLoad();
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(new URL(ctl.element.src).searchParams.get('denoise')).toBe(PRESET);
+        expect(ctl.load).toHaveBeenCalled();
+      });
+
+      it('retries the denoised clip on schedule while its probe has not answered, then falls back', async () => {
+        const firstDelay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(0) ?? 0;
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS, delayMs: firstDelay * 10 });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+        const loadsBefore = ctl.load.mock.calls.length;
+
+        ctl.failLoad();
+        await advanceRetry(0);
+
+        expect(new URL(ctl.element.src).searchParams.get('denoise')).toBe(PRESET);
+        expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+
+        // The retry dropped the slow probe; the spent budget still falls back.
+        await exhaustRetries(1);
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(alertShown()).toBe(false);
+      });
+
+      it('ends with the load error when the denoised clip is gone (404)', async () => {
+        restoreFetch = mockAudioProbe({ status: MISSING_STATUS });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(alertShown()).toBe(true);
+      });
+
+      it('asks for the next detection denoised again after a fallback', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        const { rerender } = mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+        ctl.failLoad();
+        await settle();
+        expect(elementPath()).toBe(STORED_URL);
+
+        await rerender({ detectionId: NEXT_DETECTION_ID, denoisePreset: PRESET });
+        await settle();
+        ctl.completeLoad();
+        await click();
+
+        expect(elementPath()).toBe(`/api/v2/audio/${NEXT_DETECTION_ID}?denoise=${PRESET}`);
+      });
+
+      it('falls back once the retry budget of the denoised clip is spent', async () => {
+        restoreFetch = mockAudioProbe({ status: PENDING_STATUS });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+
+        await exhaustRetries();
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(alertShown()).toBe(false);
+      });
+    });
+
+    it('loads the stored clip of the next detection and denoises it on its first play', async () => {
+      const { rerender } = mount({ denoisePreset: PRESET });
+      ctl.completeLoad();
+      await click();
+      expect(elementPath()).toBe(DENOISED_URL);
+
+      await rerender({ detectionId: NEXT_DETECTION_ID, denoisePreset: PRESET });
+      await settle();
+      expect(elementPath()).toBe(`/api/v2/audio/${NEXT_DETECTION_ID}`);
+      ctl.completeLoad();
+      await click();
+
+      expect(elementPath()).toBe(`/api/v2/audio/${NEXT_DETECTION_ID}?denoise=${PRESET}`);
+    });
+
+    it('does not switch again on a later play', async () => {
+      mount({ denoisePreset: PRESET });
+      ctl.completeLoad();
+      await click();
+      const loadsAfterFirstPlay = ctl.load.mock.calls.length;
+
+      await click();
+      await click();
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(ctl.load.mock.calls.length).toBe(loadsAfterFirstPlay);
     });
   });
 });

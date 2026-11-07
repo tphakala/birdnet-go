@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coerceSettings } from './settingsCoercion';
+import { hasSettingsChanged } from './settingsChanges';
 
 describe('settingsCoercion realtime rtsp streams', () => {
   it('defaults missing stream enabled flag to true', () => {
@@ -423,6 +424,53 @@ describe('settingsCoercion realtime audio export denoise', () => {
       enabled: true,
       strength: 'light-medium',
     });
+  });
+});
+
+describe('settingsCoercion realtime dashboard playbackDenoise', () => {
+  const playbackDenoise = (dashboard: Record<string, unknown>) =>
+    (
+      coerceSettings('realtime', { dashboard }) as {
+        dashboard: { playbackDenoise: unknown };
+      }
+    ).dashboard.playbackDenoise;
+
+  it('backfills a missing object as off at light-medium (older server)', () => {
+    expect(playbackDenoise({ summaryLimit: 30 })).toEqual({
+      enabled: false,
+      strength: 'light-medium',
+    });
+  });
+
+  it('keeps an explicit off state and strength', () => {
+    expect(playbackDenoise({ playbackDenoise: { enabled: false, strength: 'heavy' } })).toEqual({
+      enabled: false,
+      strength: 'heavy',
+    });
+  });
+
+  it('completes a partial object and replaces an unknown strength with the default', () => {
+    expect(playbackDenoise({ playbackDenoise: { enabled: true } })).toEqual({
+      enabled: true,
+      strength: 'light-medium',
+    });
+    expect(playbackDenoise({ playbackDenoise: { enabled: true, strength: 'extreme' } })).toEqual({
+      enabled: true,
+      strength: 'light-medium',
+    });
+  });
+
+  it('does not invent a dashboard for a realtime payload without one', () => {
+    expect(coerceSettings('realtime', { rtsp: { streams: [] } })).not.toHaveProperty('dashboard');
+  });
+
+  it('leaves the store clean after the switch goes off, on, off', () => {
+    const original = playbackDenoise({
+      playbackDenoise: { enabled: false, strength: 'light-medium' },
+    });
+    const toggledBack = { ...(original as object), enabled: false };
+    expect(hasSettingsChanged(original, toggledBack)).toBe(false);
+    expect(hasSettingsChanged(original, { ...(original as object), enabled: true })).toBe(true);
   });
 });
 

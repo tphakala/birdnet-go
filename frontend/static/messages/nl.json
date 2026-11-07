@@ -3921,7 +3921,8 @@
         "warningPermanent": "De originele audio wordt niet bewaard. Clips worden bij het opslaan definitief ontdaan van ruis, ook vleermuisopnames.",
         "warningBats": "Ruisonderdrukking kan zwakke vleermuisroepen zachter maken; sterke roepen worden niet beïnvloed.",
         "warningImported": "Geïmporteerde opnames worden niet beïnvloed.",
-        "lossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt."
+        "lossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt.",
+        "warningPlayback": "De standaard ruisonderdrukking bij afspelen wordt niet toegepast zolang dit aan staat. Als u dit later uitschakelt en de standaard voor afspelen inschakelt, worden deze clips bij het afspelen een tweede keer ontdaan van ruis."
       },
       "audioClipRetention": {
         "title": "Audio Clip Bewaring",
@@ -4903,7 +4904,15 @@
         "description": "Standaardinstellingen voor het afspelen van vogelopnames.",
         "defaultGain": "Standaard volumeversterking",
         "defaultGainHelpText": "Initiële versterking bij het afspelen van opnames. Vogelgeluiden zijn vaak zacht, dus een versterking van 6-12 dB wordt aanbevolen.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Ruis uit clips verwijderen bij afspelen",
+        "denoiseHelpText": "Speelt een ruisvrije kopie van elke clip af en downloadt die. Opgeslagen clips blijven ongewijzigd. Downloads worden WAV-bestanden en zijn groter. In de audio-instellingen van een clip kan een andere sterkte worden gekozen of ruisonderdrukking worden uitgeschakeld.",
+        "denoiseStrengthLabel": "Sterkte van de ruisonderdrukking",
+        "denoiseStrengthHelpText": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
+        "denoiseStrengthDisabledHelp": "Schakel hierboven ruisonderdrukking bij afspelen in om een sterkte te kiezen.",
+        "denoiseExportPrecedence": "Niet toegepast zolang „Ruisonderdrukking voor opgeslagen clips” aan staat (Audio-instellingen, tabblad Verwerking). Die clips zijn al ontdaan van ruis.",
+        "denoiseRedenoiseNote": "Clips die zijn opgeslagen terwijl „Ruisonderdrukking voor opgeslagen clips” aan stond, worden bij het afspelen opnieuw ontdaan van ruis. Kies Uit in de audio-instellingen van een clip om hem te horen zoals hij is opgeslagen.",
+        "denoiseLossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt."
       }
     },
     "restartRequired": "Sommige wijzigingen vereisen een herstart van de server. Herstart BirdNET-Go."

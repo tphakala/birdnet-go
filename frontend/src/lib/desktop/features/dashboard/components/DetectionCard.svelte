@@ -30,6 +30,7 @@
   import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import { cn } from '$lib/utils/cn';
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
+  import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { get } from 'svelte/store';
@@ -289,6 +290,7 @@
         playbackSpeed={audioPlaybackSpeed}
         onAudioContextAvailable={handleAudioContextAvailable}
         audibleBatsSrc={audibleBats.url}
+        denoisePreset={getPlaybackDenoiseDefault()}
       />
     {/if}
 

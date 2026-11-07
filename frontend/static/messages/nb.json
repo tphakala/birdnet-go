@@ -3921,7 +3921,8 @@
         "warningPermanent": "Den opprinnelige lyden beholdes ikke. Klipp får permanent fjernet støy når de lagres, også flaggermusopptak.",
         "warningBats": "Støyreduksjon kan gjøre svake flaggermuslyder svakere; kraftige lyder påvirkes ikke.",
         "warningImported": "Importerte opptak påvirkes ikke.",
-        "lossyNote": "Støyreduksjon fungerer best på FLAC- eller WAV-klipp. Under {minBitrate} kbps begrenser kodekartefakter hvor rent resultatet blir."
+        "lossyNote": "Støyreduksjon fungerer best på FLAC- eller WAV-klipp. Under {minBitrate} kbps begrenser kodekartefakter hvor rent resultatet blir.",
+        "warningPlayback": "Standard støyreduksjon ved avspilling brukes ikke mens dette er slått på. Hvis du senere slår dette av og slår på standarden for avspilling, får disse klippene fjernet støy en gang til når de spilles av."
       },
       "audioClipRetention": {
         "title": "Oppbevaring av lydklipp",
@@ -4903,7 +4904,15 @@
         "description": "Standardinnstillinger for avspilling av fugleopptak.",
         "defaultGain": "Standard volumforsterkning",
         "defaultGainHelpText": "Startforsterkning ved avspilling av opptak. Fuglelyder er ofte stille, så en forsterkning på 6-12 dB anbefales.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Fjern støy fra klipp ved avspilling",
+        "denoiseHelpText": "Spiller av og laster ned en kopi uten støy av hvert klipp. Lagrede klipp forblir uendret. Nedlastinger blir WAV-filer og er større. Lydinnstillingene for et klipp kan velge en annen styrke eller slå av støyreduksjon.",
+        "denoiseStrengthLabel": "Støyreduksjonsstyrke",
+        "denoiseStrengthHelpText": "Lett beholder mest av den opprinnelige lyden, og kraftig fjerner mest støy. Lett-middels passer for de fleste opptak.",
+        "denoiseStrengthDisabledHelp": "Slå på støyreduksjon ved avspilling ovenfor for å velge en styrke.",
+        "denoiseExportPrecedence": "Brukes ikke mens «Støyreduksjon for lagrede klipp» er slått på (Lydinnstillinger, fanen Behandling). Disse klippene har allerede fått fjernet støy.",
+        "denoiseRedenoiseNote": "Klipp som ble lagret mens «Støyreduksjon for lagrede klipp» var slått på, får fjernet støy en gang til ved avspilling. Velg Av i lydinnstillingene for et klipp for å høre det slik det ble lagret.",
+        "denoiseLossyNote": "Støyreduksjon fungerer best på FLAC- eller WAV-klipp. Under {minBitrate} kbps begrenser kodekartefakter hvor rent resultatet blir."
       }
     },
     "restartRequired": "Noen endringer krever en serveromstart for å ta effekt. Start BirdNET-Go på nytt."

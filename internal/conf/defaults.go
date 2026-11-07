@@ -190,10 +190,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "avicommons")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
-	viper.SetDefault("realtime.dashboard.locale", "en")               // Default UI locale
-	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius") // Temperature display unit: "celsius" or "fahrenheit"
-	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)      // Default playback gain in dB (no boost)
-	viper.SetDefault("realtime.dashboard.livespectrogram", false)     // Auto-start live spectrogram on dashboard
+	viper.SetDefault("realtime.dashboard.locale", "en")                                   // Default UI locale
+	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius")                     // Temperature display unit: "celsius" or "fahrenheit"
+	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)                          // Default playback gain in dB (no boost)
+	viper.SetDefault("realtime.dashboard.livespectrogram", false)                         // Auto-start live spectrogram on dashboard
+	viper.SetDefault("realtime.dashboard.playbackdenoise.enabled", false)                 // Playback denoise off by default
+	viper.SetDefault("realtime.dashboard.playbackdenoise.strength", DefaultDenoisePreset) // Strength used when it is switched on
 
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                                // Opt-in for safety

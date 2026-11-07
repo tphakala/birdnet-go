@@ -187,6 +187,31 @@ describe('SpectrogramPlayer', () => {
     expect(img.getAttribute('src')).toContain('raw=true');
   });
 
+  it('hands the playback engine the denoised clip to switch to, only when a preset is set', () => {
+    const { unmount } = spectrogramTest.render({
+      audioUrl: '/api/v2/audio/test-123',
+      detectionId: 'test-123',
+      denoisePreset: 'light-medium',
+    });
+
+    expect(vi.mocked(useAudioPlayback)).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        audioUrl: '/api/v2/audio/test-123',
+        playUrl: '/api/v2/audio/test-123?denoise=light-medium',
+      })
+    );
+    expect(mockAudioState.setAudioUrl).toHaveBeenLastCalledWith(
+      '/api/v2/audio/test-123',
+      '/api/v2/audio/test-123?denoise=light-medium'
+    );
+    unmount();
+
+    spectrogramTest.render({ audioUrl: '/api/v2/audio/test-123', detectionId: 'test-123' });
+    expect(vi.mocked(useAudioPlayback)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ playUrl: '' })
+    );
+  });
+
   // ---------------------------------------------------------------
   // 2. Shows play button overlay
   // ---------------------------------------------------------------

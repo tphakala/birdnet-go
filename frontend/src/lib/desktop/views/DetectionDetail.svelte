@@ -28,6 +28,7 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import {
@@ -695,7 +696,7 @@
       {#if det.clipName}
         <div class="meta-section">
           <a
-            href={buildAppUrl(`/api/v2/audio/${det.id}`)}
+            href={audioUrlFor(det.id, getPlaybackDenoiseDefault())}
             download
             class="meta-download"
             aria-label={t('detections.detail.aria.downloadAudioClip', { name: displayName })}

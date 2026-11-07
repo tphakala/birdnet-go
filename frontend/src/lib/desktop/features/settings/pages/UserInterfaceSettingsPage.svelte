@@ -18,11 +18,18 @@
     settingsActions,
     dashboardSettings,
     DEFAULT_SPECTROGRAM_SETTINGS,
+    type DenoiseSettings,
     type SpectrogramPreRender,
     type SpectrogramStyle,
     type SpectrogramDynamicRange,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import {
+    DEFAULT_DENOISE_PRESET,
+    DENOISE_STRENGTH_OPTIONS,
+    isDenoisePresetId,
+  } from '$lib/utils/denoisePresets';
+  import { DENOISE_LOSSY_MIN_BITRATE_KBPS, isLosslessExportFormat } from './audioExportFormat';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -36,7 +43,7 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
-  import { Palette, Globe, Image, Volume2 } from '@lucide/svelte';
+  import { Palette, Globe, Image, Volume2, Info } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
 
@@ -158,6 +165,25 @@
     },
   });
 
+  // The settings coercion keeps this object complete; the fallback covers a store
+  // that has not loaded yet, so the update below always writes both fields.
+  let playbackDenoise = $derived<DenoiseSettings>(
+    settings.dashboard.playbackDenoise ?? { enabled: false, strength: DEFAULT_DENOISE_PRESET }
+  );
+  // Saved clips already denoised: the playback default is not applied then, so the
+  // controls are disabled with the reason.
+  let exportDenoiseOn = $derived(store.formData.realtime?.audio?.export?.denoise?.enabled === true);
+  let isLossyExportType = $derived(
+    !isLosslessExportFormat(store.formData.realtime?.audio?.export?.type)
+  );
+  const denoiseStrengthOptions = $derived.by(() => {
+    getLocale();
+    return DENOISE_STRENGTH_OPTIONS.map(option => ({
+      value: option.id,
+      label: t(option.labelKey),
+    }));
+  });
+
   let currentSpectrogramStyle = $derived<SpectrogramStyle>(
     (settings.dashboard.spectrogram?.style as SpectrogramStyle) ?? 'default'
   );
@@ -212,9 +238,11 @@
     hasSettingsChanged(
       {
         defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
+        playbackDenoise: store.originalData.realtime?.dashboard?.playbackDenoise,
       },
       {
         defaultAudioGain: store.formData.realtime?.dashboard?.defaultAudioGain,
+        playbackDenoise: store.formData.realtime?.dashboard?.playbackDenoise,
       }
     )
   );
@@ -223,6 +251,14 @@
   function updateDashboardSetting(key: string, value: string | number | boolean) {
     settingsActions.updateSection('realtime', {
       dashboard: { ...settings.dashboard, [key]: value },
+    });
+  }
+
+  // Writes the denoise object whole: updateSection merges shallowly, so a partial
+  // object would drop the other field.
+  function updatePlaybackDenoise(patch: Partial<DenoiseSettings>) {
+    settingsActions.updateSection('realtime', {
+      dashboard: { ...settings.dashboard, playbackDenoise: { ...playbackDenoise, ...patch } },
     });
   }
 
@@ -384,9 +420,11 @@
       description={t('settings.userInterface.audioPlayback.description')}
       originalData={{
         defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
+        playbackDenoise: store.originalData.realtime?.dashboard?.playbackDenoise,
       }}
       currentData={{
         defaultAudioGain: store.formData.realtime?.dashboard?.defaultAudioGain,
+        playbackDenoise: store.formData.realtime?.dashboard?.playbackDenoise,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
@@ -401,6 +439,65 @@
           unit={t('settings.userInterface.audioPlayback.defaultGainUnit')}
           disabled={store.isLoading || store.isSaving}
         />
+      </div>
+
+      <div class="mt-6 space-y-4">
+        {#if exportDenoiseOn}
+          <div
+            id="playback-denoise-export-precedence"
+            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-base-content)]"
+          >
+            <Info class="size-6 shrink-0 text-[var(--color-info)]" aria-hidden="true" />
+            <span>{t('settings.userInterface.audioPlayback.denoiseExportPrecedence')}</span>
+          </div>
+        {/if}
+
+        <Checkbox
+          checked={playbackDenoise.enabled}
+          label={t('settings.userInterface.audioPlayback.denoiseLabel')}
+          helpText={exportDenoiseOn
+            ? t('settings.userInterface.audioPlayback.denoiseExportPrecedence')
+            : t('settings.userInterface.audioPlayback.denoiseHelpText')}
+          disabled={exportDenoiseOn || store.isLoading || store.isSaving}
+          onchange={checked => updatePlaybackDenoise({ enabled: checked })}
+        />
+
+        <SelectDropdown
+          value={playbackDenoise.strength}
+          label={t('settings.userInterface.audioPlayback.denoiseStrengthLabel')}
+          helpText={playbackDenoise.enabled || exportDenoiseOn
+            ? t('settings.userInterface.audioPlayback.denoiseStrengthHelpText')
+            : t('settings.userInterface.audioPlayback.denoiseStrengthDisabledHelp')}
+          options={denoiseStrengthOptions}
+          aria-describedby={exportDenoiseOn ? 'playback-denoise-export-precedence' : undefined}
+          disabled={!playbackDenoise.enabled ||
+            exportDenoiseOn ||
+            store.isLoading ||
+            store.isSaving}
+          onChange={value => {
+            const candidate = Array.isArray(value) ? value[0] : value;
+            if (isDenoisePresetId(candidate)) {
+              updatePlaybackDenoise({ strength: candidate });
+            }
+          }}
+          groupBy={false}
+          menuSize="sm"
+        />
+
+        {#if playbackDenoise.enabled && !exportDenoiseOn}
+          <SettingsNote>
+            <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
+              {t('settings.userInterface.audioPlayback.denoiseRedenoiseNote')}
+            </p>
+            {#if isLossyExportType}
+              <p class="mt-2 text-[color:var(--color-base-content)] opacity-90 text-sm">
+                {t('settings.userInterface.audioPlayback.denoiseLossyNote', {
+                  minBitrate: DENOISE_LOSSY_MIN_BITRATE_KBPS,
+                })}
+              </p>
+            {/if}
+          </SettingsNote>
+        {/if}
       </div>
     </SettingsSection>
   </div>

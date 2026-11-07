@@ -685,6 +685,10 @@
         "livespectrogram": {
           "type": "boolean",
           "description": "auto-start live spectrogram on dashboard"
+        },
+        "playbackdenoise": {
+          "$ref": "#/$defs/DenoiseSettings",
+          "description": "denoise clips when they are played or downloaded; stored clips stay unchanged"
         }
       },
       "additionalProperties": false,

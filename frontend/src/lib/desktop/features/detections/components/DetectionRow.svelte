@@ -42,6 +42,7 @@
   import { navigation } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
+  import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.ui;
@@ -303,6 +304,7 @@
         audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
         detectionId={detection.id.toString()}
         spectrogramSize="md"
+        denoisePreset={getPlaybackDenoiseDefault()}
       />
     {:else if detection.spectrogramOnly}
       <!-- Retention removed the audio but kept the image: no player, no download. -->

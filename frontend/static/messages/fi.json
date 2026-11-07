@@ -3921,7 +3921,8 @@
         "warningPermanent": "Alkuperäistä ääntä ei säilytetä. Leikkeiden kohina poistetaan pysyvästi tallennettaessa, myös lepakkoäänitteistä.",
         "warningBats": "Kohinanpoisto voi vaimentaa heikkoja lepakoiden ääniä; voimakkaat äänet eivät muutu.",
         "warningImported": "Tuotuihin äänitteisiin tämä ei vaikuta.",
-        "lossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta."
+        "lossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta.",
+        "warningPlayback": "Toiston oletuskohinanpoistoa ei käytetä, kun tämä on päällä. Jos kytket tämän myöhemmin pois ja toiston oletuksen päälle, nämä leikkeet puhdistetaan kohinasta toistettaessa toisen kerran."
       },
       "audioClipRetention": {
         "title": "Äänileikkeiden säilytys",
@@ -4903,7 +4904,15 @@
         "description": "Oletusasetukset lintuäänitteiden toistoon.",
         "defaultGain": "Oletusäänenvahvistus",
         "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Poista kohinaa leikkeistä toistettaessa",
+        "denoiseHelpText": "Toistaa ja lataa jokaisesta leikkeestä kohinasta puhdistetun kopion. Tallennetut leikkeet pysyvät muuttumattomina. Lataukset ovat WAV-tiedostoja ja suurempia. Leikkeen ääniasetuksista voi valita toisen voimakkuuden tai kytkeä kohinanpoiston pois.",
+        "denoiseStrengthLabel": "Kohinanpoiston voimakkuus",
+        "denoiseStrengthHelpText": "Kevyt säilyttää eniten alkuperäistä ääntä ja voimakas poistaa eniten kohinaa. Kevyt-keskitaso sopii useimmille äänitteille.",
+        "denoiseStrengthDisabledHelp": "Ota toiston kohinanpoisto käyttöön yllä valitaksesi voimakkuuden.",
+        "denoiseExportPrecedence": "Ei käytössä, kun „Tallennettujen leikkeiden kohinanpoisto“ on päällä (Ääniasetukset, Käsittely-välilehti). Nämä leikkeet on jo puhdistettu kohinasta.",
+        "denoiseRedenoiseNote": "Leikkeet, jotka tallennettiin „Tallennettujen leikkeiden kohinanpoiston“ ollessa päällä, puhdistetaan kohinasta uudelleen toistettaessa. Valitse leikkeen ääniasetuksista Pois kuullaksesi sen tallennettuna.",
+        "denoiseLossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta."
       }
     },
     "restartRequired": "Jotkin muutokset vaativat palvelimen uudelleenkäynnistyksen astuakseen voimaan. Käynnistä BirdNET-Go uudelleen."
