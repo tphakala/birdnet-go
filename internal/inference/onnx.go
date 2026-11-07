@@ -229,6 +229,65 @@ func (c *onnxCustomClassifier) Close() {
 	}
 }
 
+// ONNXTensorModelOptions configures the ONNX tensor model.
+type ONNXTensorModelOptions struct {
+	// Threads sets the intra and inter-op thread counts; zero or less uses
+	// runtime.NumCPU().
+	Threads int
+}
+
+type onnxTensorModel struct {
+	model *ort.TensorModel
+}
+
+// NewONNXTensorModel creates a TensorModel backed by an ONNX Runtime model
+// with a single N-D float input. The ONNX Runtime must be initialized first.
+func NewONNXTensorModel(modelPath string, opts ONNXTensorModelOptions) (TensorModel, error) {
+	threads := opts.Threads
+	if threads <= 0 {
+		threads = runtime.NumCPU()
+	}
+	var configErr error
+	model, err := ort.NewTensorModel(modelPath, ort.TensorModelOptions{
+		SessionOptions: func(so *ortlib.SessionOptions) {
+			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+			}
+			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+			}
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ONNX tensor model: %w", err)
+	}
+	if configErr != nil {
+		_ = model.Close()
+		return nil, fmt.Errorf("failed to configure ONNX tensor model session: %w", configErr)
+	}
+	return &onnxTensorModel{model: model}, nil
+}
+
+// Run feeds input to the model and returns the raw outputs.
+func (m *onnxTensorModel) Run(input []float32) ([][]float32, error) {
+	return m.model.Run(input)
+}
+
+// InputShape returns the resolved input tensor shape.
+func (m *onnxTensorModel) InputShape() []int64 {
+	return m.model.InputShape()
+}
+
+// OutputSizes returns the element count of each output.
+func (m *onnxTensorModel) OutputSizes() []int {
+	return m.model.OutputSizes()
+}
+
+// Close releases the ONNX session. It is safe to call more than once.
+func (m *onnxTensorModel) Close() {
+	_ = m.model.Close()
+}
+
 // ONNXRangeFilterOptions configures the ONNX range filter.
 type ONNXRangeFilterOptions struct {
 	// Labels is the species label list. Required.
