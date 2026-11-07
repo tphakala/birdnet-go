@@ -33,12 +33,16 @@ type processingCache struct {
 	dir      string
 	maxFiles int
 	maxBytes int64
+
+	// removeEvicted deletes an entry during eviction. It is os.Remove; tests
+	// replace it to make a removal fail.
+	removeEvicted func(name string) error
 }
 
 // newProcessingCache creates a cache in the specified directory, bounded by a
 // file count and a total byte budget.
 func newProcessingCache(dir string, maxFiles int, maxBytes int64) *processingCache {
-	return &processingCache{dir: dir, maxFiles: maxFiles, maxBytes: maxBytes}
+	return &processingCache{dir: dir, maxFiles: maxFiles, maxBytes: maxBytes, removeEvicted: os.Remove}
 }
 
 // clipSourceTag identifies the clip file a processed artifact was made from. It
@@ -57,7 +61,8 @@ func clipSourceTag(normalizedPath string, info os.FileInfo) string {
 }
 
 // processingCacheKey builds a deterministic filename for cache lookup. The
-// sourceTag (see clipSourceTag) ties the entry to the clip file it came from.
+// sourceTag (see clipSourceTag) ties the entry to the clip file it came from, and
+// every filter value is kept exactly, so distinct filter sets never share a key.
 func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise string, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
 	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
@@ -73,7 +78,10 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 	if denoise == "" {
 		denoise = "off"
 	}
-	return fmt.Sprintf("%s_%s_%s_%s_%.1f.wav", safeID, sourceTag, norm, denoise, gainDB)
+	// Full precision, as in audibleBatsCacheKey: a rounded gain would let a POST
+	// with a small nonzero gain share the entry and the job of the denoise-only GET.
+	gainStr := strconv.FormatFloat(gainDB, 'f', -1, 64)
+	return fmt.Sprintf("%s_%s_%s_%s_%s.wav", safeID, sourceTag, norm, denoise, gainStr)
 }
 
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible
@@ -162,14 +170,22 @@ func (c *processingCache) entryModTime(key string) (time.Time, bool) {
 	return info.ModTime(), true
 }
 
-// put writes data to cache atomically (temp file + rename), evicting oldest files if over limit.
+// put writes data to cache atomically (temp file + rename), evicting oldest files
+// to stay under both limits. It stores nothing, and returns an error, when data
+// alone exceeds the byte budget or eviction could not make room.
 func (c *processingCache) put(key string, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	incoming := int64(len(data))
+	if incoming > c.maxBytes {
+		return fmt.Errorf("entry of %d bytes exceeds the cache budget of %d bytes", incoming, c.maxBytes)
+	}
 	if err := os.MkdirAll(c.dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
-	c.evictIfNeeded(int64(len(data)))
+	if !c.evictIfNeeded(incoming) {
+		return fmt.Errorf("no room for a %d byte entry: older entries could not be removed", incoming)
+	}
 
 	// Write to temp file first, then rename for atomicity
 	tmpFile, err := os.CreateTemp(c.dir, ".tmp-*")
@@ -197,14 +213,16 @@ func (c *processingCache) put(key string, data []byte) error {
 }
 
 // evictIfNeeded removes oldest files until the cache has room for one more entry
-// of incoming bytes, under both the file-count and the byte budget.
-func (c *processingCache) evictIfNeeded(incoming int64) {
+// of incoming bytes, under both the file-count and the byte budget. It reports
+// whether the entry fits. A file whose removal fails (for example one still open
+// for serving on Windows) stays counted, and eviction moves on to the next oldest.
+func (c *processingCache) evictIfNeeded(incoming int64) bool {
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
 		apicore.GetLogger().Debug("Processing cache: failed to read directory for eviction",
 			logger.String("dir", c.dir),
 			logger.Error(err))
-		return
+		return false
 	}
 	type fileAge struct {
 		path    string
@@ -236,24 +254,23 @@ func (c *processingCache) evictIfNeeded(incoming int64) {
 		return files[i].modTime.Before(files[j].modTime)
 	})
 
-	// Remove oldest until the new entry fits under both limits. A failed removal
-	// (for example a file still open for serving on Windows) still counts as
-	// removed here; a later pass retries it.
+	// Remove oldest until the new entry fits under both limits.
 	remaining := len(files)
+	fits := func() bool { return remaining < c.maxFiles && totalBytes+incoming <= c.maxBytes }
 	for _, f := range files {
-		overCount := remaining >= c.maxFiles
-		overBytes := totalBytes+incoming > c.maxBytes
-		if !overCount && !overBytes {
+		if fits() {
 			break
 		}
-		if err := os.Remove(f.path); err != nil {
+		if err := c.removeEvicted(f.path); err != nil {
 			apicore.GetLogger().Debug("Processing cache: failed to remove file during eviction",
 				logger.String("path", f.path),
 				logger.Error(err))
+			continue
 		}
 		remaining--
 		totalBytes -= f.size
 	}
+	return fits()
 }
 
 // cleanExpired removes all files older than TTL.

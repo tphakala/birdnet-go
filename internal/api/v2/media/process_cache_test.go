@@ -77,6 +77,7 @@ func TestProcessingCacheKey(t *testing.T) {
 		{"normalize separates entries", processingCacheKey("1", "tag", true, "medium", 6), processingCacheKey("1", "tag", false, "medium", 6), false},
 		{"denoise separates entries", processingCacheKey("1", "tag", true, "medium", 6), processingCacheKey("1", "tag", true, "heavy", 6), false},
 		{"gain separates entries", processingCacheKey("1", "tag", true, "medium", 6), processingCacheKey("1", "tag", true, "medium", 3), false},
+		{"small gain does not share the denoise-only entry", processingCacheKey("1", "tag", false, "medium", 0.04), processingCacheKey("1", "tag", false, "medium", 0), false},
 		{"detection id separates entries", processingCacheKey("1", "tag", true, "medium", 6), processingCacheKey("2", "tag", true, "medium", 6), false},
 		{"clip source tag separates entries", processingCacheKey("1", "tagA", true, "medium", 6), processingCacheKey("1", "tagB", true, "medium", 6), false},
 	})
@@ -192,6 +193,51 @@ func TestProcessingCache(t *testing.T) {
 		for _, key := range keys[1:] {
 			assert.FileExists(t, filepath.Join(dir, key))
 		}
+	})
+
+	t.Run("an entry larger than the byte budget is not stored", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		const budget = 10
+		cache := newProcessingCache(dir, processingCacheMaxFiles, budget)
+		require.NoError(t, cache.put("small.wav", []byte("small")))
+
+		err := cache.put("big.wav", bytes.Repeat([]byte("x"), budget+1))
+		require.Error(t, err)
+		assert.NoFileExists(t, filepath.Join(dir, "big.wav"))
+		assert.FileExists(t, filepath.Join(dir, "small.wav"), "an oversized entry evicts nothing")
+	})
+
+	t.Run("a failed removal is not counted as room", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		const entrySize = 10
+		cache := newProcessingCache(dir, processingCacheMaxFiles, 2*entrySize)
+		payload := bytes.Repeat([]byte("x"), entrySize)
+		base := time.Now().Add(-time.Minute)
+		for i, key := range []string{"locked.wav", "next.wav"} {
+			require.NoError(t, cache.put(key, payload))
+			stamp := base.Add(time.Duration(i) * time.Second)
+			require.NoError(t, os.Chtimes(filepath.Join(dir, key), stamp, stamp))
+		}
+		locked := filepath.Join(dir, "locked.wav")
+		cache.removeEvicted = func(name string) error {
+			if name == locked {
+				return os.ErrPermission
+			}
+			return os.Remove(name)
+		}
+
+		// The oldest entry cannot be removed, so the next oldest goes instead.
+		require.NoError(t, cache.put("new.wav", payload))
+		assert.FileExists(t, locked)
+		assert.NoFileExists(t, filepath.Join(dir, "next.wav"))
+		assert.FileExists(t, filepath.Join(dir, "new.wav"))
+
+		// With no removable entry left the new one is not written.
+		cache.removeEvicted = func(string) error { return os.ErrPermission }
+		require.Error(t, cache.put("refused.wav", payload))
+		assert.NoFileExists(t, filepath.Join(dir, "refused.wav"))
 	})
 
 	t.Run("open serves a handle, honours the TTL and misses cleanly", func(t *testing.T) {
