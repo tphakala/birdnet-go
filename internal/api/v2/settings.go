@@ -2413,6 +2413,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Models.Enabled", "reconcile_models", modelsEnabledChanged, "Applying enabled model changes...", "", ToastTypeInfo, toastDurationLong},
 	{"Analysis overlap", actionRestartAudioCapture, analysisOverlapChanged, "Restarting audio capture to apply new overlap...", "", ToastTypeInfo, toastDurationMedium},
+	{"BSG-BAT step", actionRestartAudioCapture, bsgBatStepChanged, "Restarting audio capture to apply the new BSG-BAT step...", "", ToastTypeInfo, toastDurationMedium},
 	{"FP filter cadence", actionReconfigureAudioSources, falsePositiveFilterActiveChanged, "Re-planning the analysis cadence...", "", ToastTypeInfo, toastDurationMedium},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
@@ -2662,6 +2663,18 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // rebuilds the model instance, not the source buffers).
 func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.BirdNET.Overlap != currentSettings.BirdNET.Overlap
+}
+
+// bsgBatStepChanged reports whether the resolved BSG-BAT analysis step changed.
+// The step sizes every BSG-BAT analysis buffer, and SameCadence compares only the
+// effective overlap, so no incremental path would notice it; this triggers
+// restart_audio_capture like analysisOverlapChanged. It compares the resolved
+// steps rather than the raw field: the API path stores a raw 0 unnormalized, and
+// 0 means the default, so saving 0 over the default must not restart capture.
+// Between the save and the restart, the false positive filter and the overrun
+// threshold read the new step while the running buffers still use the old one.
+func bsgBatStepChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return classifier.BSGBatStepSamples(oldSettings) != classifier.BSGBatStepSamples(currentSettings)
 }
 
 // falsePositiveFilterActiveChanged reports whether the bird false positive filter

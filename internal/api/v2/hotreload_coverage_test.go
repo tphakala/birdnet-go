@@ -114,6 +114,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// (modelGlobalConfidenceThreshold), so it hot-reloads with no action.
 	"BSGBat":           {categories: []hotReloadCategory{hotReloadRestart}},
 	"BSGBat.Threshold": {categories: []hotReloadCategory{hotReloadFresh}},
+	// The analysis step sizes every BSG-BAT analysis buffer, so a change reallocates
+	// them via a full audio-capture restart (restart_audio_capture; bsgBatStepChanged
+	// in the detector table). It never reloads the model.
+	"BSGBat.StepFrames": {categories: []hotReloadCategory{hotReloadFresh}, action: "restart_audio_capture"},
 
 	// --- BSG ---
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},

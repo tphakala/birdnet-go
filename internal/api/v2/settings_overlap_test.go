@@ -40,6 +40,41 @@ func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 	assert.False(t, entry.changed(base, conf.CloneSettings(base)), "identical settings must not fire")
 }
 
+// TestBSGBatStepDispatchesRestart pins the hot-reload wiring of bsgbat.stepframes:
+// a changed resolved step resolves to restart_audio_capture (the analysis buffers
+// must be reallocated), while a save that resolves to the same step does not,
+// including 0 over the default (0 means the default).
+func TestBSGBatStepDispatchesRestart(t *testing.T) {
+	t.Parallel()
+
+	var entry *settingsChangeCheck
+	for i := range settingsChangeChecks {
+		if settingsChangeChecks[i].changed != nil && settingsChangeChecks[i].name == "BSG-BAT step" {
+			entry = &settingsChangeChecks[i]
+			break
+		}
+	}
+	require.NotNil(t, entry, "settingsChangeChecks must contain the BSG-BAT step detector")
+	assert.Equal(t, actionRestartAudioCapture, entry.action)
+
+	base := apitest.NewValidTestSettings()
+	base.BSGBat.StepFrames = conf.DefaultBSGBatStepFrames
+
+	changed := conf.CloneSettings(base)
+	changed.BSGBat.StepFrames = conf.MaxBSGBatStepFrames
+	assert.True(t, entry.changed(base, changed), "a step change must fire")
+	assert.False(t, entry.changed(base, conf.CloneSettings(base)), "identical settings must not fire")
+
+	unset := conf.CloneSettings(base)
+	unset.BSGBat.StepFrames = 0
+	assert.False(t, entry.changed(base, unset), "0 resolves to the default step and must not restart capture")
+	assert.False(t, entry.changed(unset, base), "the default over 0 must not restart capture")
+
+	threshold := conf.CloneSettings(base)
+	threshold.BSGBat.Threshold = base.BSGBat.Threshold + 0.1
+	assert.False(t, entry.changed(base, threshold), "a threshold-only change must not fire")
+}
+
 // TestAnalysisOverlapChangedIgnoresOtherBirdNETFields verifies that a save that
 // touches an unrelated birdnet field does not look like an overlap change, so the
 // analysis buffers are not rebuilt (a full restart_audio_capture) needlessly.
