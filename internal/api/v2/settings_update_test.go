@@ -195,8 +195,13 @@ func TestPatchSectionPreservesOmittedFields(t *testing.T) {
 		{
 			name:    "empty body changes nothing",
 			section: "dashboard",
-			seed:    func(s *conf.Settings) { s.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia" },
-			body:    map[string]any{},
+			seed: func(s *conf.Settings) {
+				s.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia"
+				// A loaded config always carries a strength (the defaults set one);
+				// validation heals an empty one, which would count as a change here.
+				s.Realtime.Dashboard.PlaybackDenoise.Strength = conf.DefaultDenoisePreset
+			},
+			body: map[string]any{},
 			preserved: func(t *testing.T, s *conf.Settings) any {
 				t.Helper()
 				return marshaled(t, s.Realtime.Dashboard)
