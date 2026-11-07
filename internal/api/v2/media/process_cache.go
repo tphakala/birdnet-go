@@ -72,10 +72,10 @@ const (
 	cacheFlagOff = "0"
 )
 
-// sanitizeCacheID makes a detection ID safe to embed in a cache filename (no path
-// separators or parent references).
-func sanitizeCacheID(detectionID string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+// sanitizeCacheID makes a detection ID or another key part safe to embed in a
+// cache filename (no path separators or parent references).
+func sanitizeCacheID(part string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(part)
 }
 
 // processingCacheKey builds a deterministic filename for cache lookup. The
@@ -106,7 +106,9 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 // denoised clip. Beyond the clip's own tag it carries every value the render
 // depends on: preset, width, raw flag, frequency profile token and the style
 // suffix (see buildStyleSuffix), so a change of Style or DynamicRange settings
-// misses the old entry and renders fresh.
+// misses the old entry and renders fresh. The style suffix comes from settings
+// values that are not all validated, so it is sanitized like the ID and the key
+// stays one filename inside the cache directory.
 func denoisedSpectrogramCacheKey(detectionID, sourceTag, preset string, width int, raw bool, freqToken, styleSuffix string) string {
 	rawFlag := cacheFlagOff
 	if raw {
@@ -116,7 +118,7 @@ func denoisedSpectrogramCacheKey(detectionID, sourceTag, preset string, width in
 		freqToken = defaultProfileKeyToken
 	}
 	return fmt.Sprintf("%s_%s_%s_%s_%d_%s_%s%s.png", spectrogramCacheKeyPrefix,
-		sanitizeCacheID(detectionID), sourceTag, preset, width, rawFlag, freqToken, styleSuffix)
+		sanitizeCacheID(detectionID), sourceTag, preset, width, rawFlag, freqToken, sanitizeCacheID(styleSuffix))
 }
 
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible

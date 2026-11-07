@@ -2409,7 +2409,10 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	// A denoised variant renders from the denoised clip; when it does not answer,
 	// the stored spectrogram below does, marked no-store.
 	if preset != "" {
-		req := denoisedSpectrogramRequest{noteID: noteID, clipPath: clipPath, preset: preset, params: params, profile: profile}
+		req := denoisedSpectrogramRequest{
+			noteID: noteID, clipPath: clipPath, preset: preset, params: params, profile: profile,
+			settings: c.CurrentSettings(),
+		}
 		if handled, denoiseErr := c.serveDenoisedSpectrogram(ctx, &req); handled {
 			return denoiseErr
 		}

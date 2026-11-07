@@ -37,6 +37,10 @@ type denoisedSpectrogramRequest struct {
 	preset   string
 	params   spectrogramParameters
 	profile  spectrogram.FrequencyProfile
+	// settings is the one snapshot the cache key's Style and DynamicRange and the
+	// render both read, so a settings change in between cannot store an image
+	// under a key it does not match.
+	settings *conf.Settings
 }
 
 // renderSpectrogramPNG renders the spectrogram of wavData, a complete WAV file in
@@ -125,15 +129,17 @@ func noStoreBeforeWrite(ctx echo.Context) {
 // handling), and the user-requested mode before the user generated the stored
 // spectrogram, so a page load never starts a denoise there.
 //
-// A cached render is served first, before guest and mode gating.
+// A cached render is served first, before guest and mode gating. The key's Style
+// and DynamicRange come from req.settings, the snapshot the render reads too.
 func (c *Handler) serveDenoisedSpectrogram(ctx echo.Context, req *denoisedSpectrogramRequest) (handled bool, err error) {
 	clip, ok := c.denoiseSourceClip(req.clipPath)
 	if !ok {
 		return false, nil
 	}
 	freqToken := spectrogram.ProfileSuffix(req.profile)
+	visual := req.settings.Realtime.Dashboard.Spectrogram
 	key := denoisedSpectrogramCacheKey(req.noteID, clip.sourceTag, req.preset, req.params.width, req.params.raw,
-		freqToken, buildStyleSuffix(req.params.style, req.params.dynamicRange))
+		freqToken, buildStyleSuffix(visual.Style, visual.DynamicRange))
 
 	if c.processingCache != nil {
 		if f, info, hit := c.processingCache.open(key); hit {
@@ -207,7 +213,7 @@ func (c *Handler) renderDenoisedSpectrogram(req *denoisedSpectrogramRequest, cli
 		return nil, err
 	}
 	pngData, err := c.renderSpectrogramPNG(c.Context(), wav.data, req.params.width, req.params.raw,
-		spectrogram.WithFrequencyProfile(req.profile))
+		spectrogram.WithFrequencyProfile(req.profile), spectrogram.WithSettings(req.settings))
 	if err != nil {
 		return nil, err
 	}

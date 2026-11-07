@@ -210,6 +210,33 @@ func TestServeSpectrogramByID_DenoiseFollowsStyleSettings(t *testing.T) {
 	assert.Equal(t, int32(1), env.wavJobs.Load(), "the denoised WAV is shared by every render")
 }
 
+// A settings change while the render runs does not reach it: the image matches
+// the Style in its cache key, which was read from the request's snapshot.
+func TestServeSpectrogramByID_DenoiseRendersWithTheKeySnapshot(t *testing.T) {
+	env := newSpecDenoiseEnv(t, specModelBird, processTestRate, fixtureToneHz)
+	previous := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(previous) })
+	publish := func(style string) {
+		settings := conf.CloneSettings(env.controller.CurrentSettings())
+		settings.Realtime.Dashboard.Spectrogram.Style = style
+		conftest.SetTestSettings(settings)
+	}
+
+	publish(conf.SpectrogramStyleDefault)
+	env.controller.spectrogramRenderHook = func() { publish(conf.SpectrogramStyleScientificDark) }
+	rec := getURL(env.e, specDenoiseURL(denoiseTestPreset))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	env.controller.spectrogramRenderHook = nil
+
+	publish(conf.SpectrogramStyleDefault)
+	want := postJSON(env.e, "/api/v2/spectrogram/"+specDenoiseID+"/process", `{"denoise":"`+denoiseTestPreset+`"}`)
+	require.Equal(t, http.StatusOK, want.Code, want.Body.String())
+	assert.Equal(t, want.Body.Bytes(), rec.Body.Bytes(), "the render used the Style the key was built from")
+	names := cachedPNGs(t, env.dir)
+	require.Len(t, names, 1)
+	assert.True(t, strings.HasSuffix(names[0], "_"+defaultProfileKeyToken+specPNGExt), "the key names the default Style: %s", names[0])
+}
+
 func TestServeSpectrogramByID_DenoiseUserRequestedMode(t *testing.T) {
 	tests := []struct {
 		name      string

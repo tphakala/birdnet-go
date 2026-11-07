@@ -242,6 +242,27 @@ func TestNativeGate_StyleHotReload(t *testing.T) {
 	assert.NotEqual(t, decodePNG(t, first).Palette, decodePNG(t, second).Palette)
 }
 
+// WithSettings renders from the snapshot it is given, not the current settings.
+func TestNativeGate_WithSettingsSnapshot(t *testing.T) {
+	gen, env := newNativeGenerator(t)
+	samples := nativeTestSamples(24000)
+	audio := writeNativeWAV(t, env.TempDir, "in.wav", samples, 24000)
+
+	env.Settings.Realtime.Dashboard.Spectrogram.Style = conf.SpectrogramStyleScientific
+	want := filepath.Join(env.TempDir, "scientific.png")
+	require.NoError(t, gen.GenerateFromFile(t.Context(), audio, want, nativeTestWidth, false))
+	snapshot := conf.CloneSettings(env.Settings)
+
+	env.Settings.Realtime.Dashboard.Spectrogram.Style = conf.SpectrogramStyleDefault
+	fromFile := filepath.Join(env.TempDir, "file.png")
+	require.NoError(t, gen.GenerateFromFile(t.Context(), audio, fromFile, nativeTestWidth, false, WithSettings(snapshot)))
+	fromPCM := filepath.Join(env.TempDir, "pcm.png")
+	require.NoError(t, gen.GenerateFromPCM(t.Context(), samplesToPCM(samples), fromPCM, nativeTestWidth, false, 24000, WithSettings(snapshot)))
+
+	assert.Equal(t, decodePNG(t, want).Palette, decodePNG(t, fromFile).Palette, "the file render used the snapshot")
+	assert.Equal(t, decodePNG(t, want).Palette, decodePNG(t, fromPCM).Palette, "the PCM render used the snapshot")
+}
+
 func TestNativeGate_FileAndPCMAgree(t *testing.T) {
 	gen, env := newNativeGenerator(t)
 	samples := nativeTestSamples(48000)

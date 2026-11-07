@@ -278,6 +278,7 @@ func TestDenoisedSpectrogramCacheKey(t *testing.T) {
 		{name: "bat profile, legend", id: "7", freqToken: "bat-v3", want: "spec_7_tag_light-medium_1026_0_bat-v3.png"},
 		{name: "style suffix is appended", id: "7", raw: true, styleSuffix: "-scientific_dark-dr80", want: "spec_7_tag_light-medium_1026_1_bird-scientific_dark-dr80.png"},
 		{name: "path separators in the id are neutralised", id: "../a/b", raw: true, want: "spec__" + "_a_b_tag_light-medium_1026_1_bird.png"},
+		{name: "path separators in the style suffix are neutralised", id: "7", raw: true, styleSuffix: "-dr../../outside", want: "spec_7_tag_light-medium_1026_1_bird-dr____outside.png"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
