@@ -193,6 +193,26 @@ func TestPatchSectionPreservesOmittedFields(t *testing.T) {
 			},
 		},
 		{
+			name:    "playback denoise switched off applies the body strength and stays in the JSON",
+			section: "dashboard",
+			seed: func(s *conf.Settings) {
+				s.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia"
+				s.Realtime.Dashboard.PlaybackDenoise = conf.DenoiseSettings{Enabled: true, Strength: conf.DenoisePresetHeavy}
+			},
+			body: map[string]any{"playbackDenoise": map[string]any{"enabled": false, "strength": conf.DenoisePresetLight}},
+			changed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.False(t, s.Realtime.Dashboard.PlaybackDenoise.Enabled)
+				assert.Equal(t, conf.DenoisePresetLight, s.Realtime.Dashboard.PlaybackDenoise.Strength)
+				// An off value must not vanish from GET /settings (no omitempty).
+				assert.Contains(t, marshaled(t, s.Realtime.Dashboard), `"playbackDenoise":{"enabled":false,"strength":"light"}`)
+			},
+			preserved: func(t *testing.T, s *conf.Settings) any {
+				t.Helper()
+				return s.Realtime.Dashboard.Thumbnails.ImageProvider
+			},
+		},
+		{
 			name:    "empty body changes nothing",
 			section: "dashboard",
 			seed: func(s *conf.Settings) {
