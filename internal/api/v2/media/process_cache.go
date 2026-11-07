@@ -60,6 +60,18 @@ func clipSourceTag(normalizedPath string, info os.FileInfo) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+const (
+	// spectrogramCacheKeyPrefix starts the filename of a rendered spectrogram in
+	// the processing cache, apart from the processed audio entries.
+	spectrogramCacheKeyPrefix = "spec"
+	// defaultProfileKeyToken stands in the key for the default bird frequency
+	// profile, whose spectrogram.ProfileSuffix is empty.
+	defaultProfileKeyToken = "bird"
+	// cacheFlagOn and cacheFlagOff encode the raw flag in a denoised spectrogram key.
+	cacheFlagOn  = "1"
+	cacheFlagOff = "0"
+)
+
 // sanitizeCacheID makes a detection ID safe to embed in a cache filename (no path
 // separators or parent references).
 func sanitizeCacheID(detectionID string) string {
@@ -96,14 +108,15 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 // suffix (see buildStyleSuffix), so a change of Style or DynamicRange settings
 // misses the old entry and renders fresh.
 func denoisedSpectrogramCacheKey(detectionID, sourceTag, preset string, width int, raw bool, freqToken, styleSuffix string) string {
-	rawFlag := "0"
+	rawFlag := cacheFlagOff
 	if raw {
-		rawFlag = "1"
+		rawFlag = cacheFlagOn
 	}
 	if freqToken == "" {
-		freqToken = "bird"
+		freqToken = defaultProfileKeyToken
 	}
-	return fmt.Sprintf("spec_%s_%s_%s_%d_%s_%s%s.png", sanitizeCacheID(detectionID), sourceTag, preset, width, rawFlag, freqToken, styleSuffix)
+	return fmt.Sprintf("%s_%s_%s_%s_%d_%s_%s%s.png", spectrogramCacheKeyPrefix,
+		sanitizeCacheID(detectionID), sourceTag, preset, width, rawFlag, freqToken, styleSuffix)
 }
 
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible

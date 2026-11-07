@@ -264,3 +264,25 @@ func TestProcessingCache(t *testing.T) {
 		assert.False(t, ok)
 	})
 }
+
+func TestDenoisedSpectrogramCacheKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		id          string
+		raw         bool
+		freqToken   string
+		styleSuffix string
+		want        string
+	}{
+		{name: "bird profile, raw", id: "7", raw: true, want: "spec_7_tag_light-medium_1026_1_bird.png"},
+		{name: "bat profile, legend", id: "7", freqToken: "bat-v3", want: "spec_7_tag_light-medium_1026_0_bat-v3.png"},
+		{name: "style suffix is appended", id: "7", raw: true, styleSuffix: "-scientific_dark-dr80", want: "spec_7_tag_light-medium_1026_1_bird-scientific_dark-dr80.png"},
+		{name: "path separators in the id are neutralised", id: "../a/b", raw: true, want: "spec__" + "_a_b_tag_light-medium_1026_1_bird.png"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := denoisedSpectrogramCacheKey(tc.id, "tag", "light-medium", 1026, tc.raw, tc.freqToken, tc.styleSuffix)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
