@@ -105,19 +105,14 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // (2026-06-18), f16 collapses on realistic low-SNR audio (max confidence error
 // ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
 // survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
-// ORT CPU. The A76 CPU's native f16 fails the same way on low-frequency-heavy
-// audio (wind, handling noise): with the static [1, 144000] input shape, windows
-// whose power is mostly below about 150 Hz lose every score for the whole window
-// (GitHub #4986). Measured on a Pi 5 (OpenVINO 2026.2.1) against the TFLite
-// reference on the 60 corpus windows with the most power below 150 Hz, f16 kept
-// the top-1 on only 83% (fp32_dfttrunc) and moved scores by up to 0.39, with some
-// windows falling to 0.00; f32 kept 100% with a worst move of 0.015. An earlier
-// A76 check that found f16 harmless used a single clean recording. Do NOT relax
-// it to f16 on any device without re-running the
-// inference/openvino_parity_functional_test.go parity check on a genuine f16
-// device with low-frequency-heavy audio. INT8-weight files are additionally
-// declined on auto; that depends on the file, not the registry ID, so it is
-// handled by applyOpenVINOQuantizationPolicy.
+// ORT CPU. The A76 CPU's native f16 fails on low-frequency-heavy audio (wind,
+// handling noise): with the static [1, 144000] input shape, windows whose power is
+// mostly below about 150 Hz lose every score (GitHub #4986), while f32 tracks the
+// TFLite reference. Do NOT relax it to f16 on any device without re-running
+// TestBirdNETV24OpenVINO_LowFrequencyParity on a genuine f16 device with
+// low-frequency-heavy windows. INT8-weight files are additionally declined on
+// auto; that depends on the file, not the registry ID, so it is handled by
+// applyOpenVINOQuantizationPolicy.
 //
 // Perch v2 is likewise forced to f32 on the GPU. Its f16-GPU path was validated
 // on an Iris Xe iGPU, but on an Intel Arc A380 (dGPU) the f16 kernel returns

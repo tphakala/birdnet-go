@@ -119,6 +119,35 @@ func shortenOVProbeTimeout(t *testing.T, d time.Duration) {
 	t.Cleanup(func() { ovProbeTimeout = orig })
 }
 
+// TestOVProbeChildLibraryPath pins that the parser test binaries use to serve
+// the probe child recognizes exactly the invocation newOVProbeCommand builds, so
+// a change to the child's arguments cannot silently stop a test binary from
+// serving it.
+func TestOVProbeChildLibraryPath(t *testing.T) {
+	t.Parallel()
+
+	const libraryPath = "/opt/openvino/lib/libopenvino_c.so"
+	cmd := newOVProbeCommand(t.Context(), "/path/to/binary", libraryPath)
+	got, ok := OVProbeChildLibraryPath(cmd.Args)
+	require.True(t, ok, "the probe child invocation must be recognized: %q", cmd.Args)
+	assert.Equal(t, libraryPath, got)
+
+	emptyPath, ok := OVProbeChildLibraryPath(newOVProbeCommand(t.Context(), "/path/to/binary", "").Args)
+	require.True(t, ok, "an empty library path is still a probe child invocation")
+	assert.Empty(t, emptyPath)
+
+	for _, args := range [][]string{
+		{"/path/to/binary"},
+		{"/path/to/binary", "-test.run", "TestX"},
+		{"/path/to/binary", "support", "openvino-probe"},
+		{"/path/to/binary", "support", "other", "--library-path", libraryPath},
+		{"/path/to/binary", "support", "openvino-probe", "--library-path", libraryPath, "extra"},
+	} {
+		_, ok := OVProbeChildLibraryPath(args)
+		assert.False(t, ok, "not a probe child invocation: %q", args)
+	}
+}
+
 func TestParseOVProbeOutput(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

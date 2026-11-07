@@ -3,6 +3,7 @@
 package classifier
 
 import (
+	"math"
 	"os"
 	"strconv"
 	"testing"
@@ -11,11 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 )
 
 const (
-	// birdnetV24WindowSamples is one BirdNET v2.4 analysis window: 3 s at 48 kHz.
-	birdnetV24WindowSamples = 144000
 	// v24ParityDefaultMaxConfDiff is the largest allowed confidence change between
 	// the OpenVINO candidate and the ONNX Runtime reference for any label in either
 	// top-K list.
@@ -62,6 +62,12 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 		maxDiff = float32(parsed)
 	}
 
+	// Validate the windows before the two model loads, so a bad file fails fast.
+	windowSamples := onnx.BirdNETv24.SampleCount()
+	samples := readV3AudioOrZeros(t, windowsPath)
+	require.NotEmpty(t, samples)
+	require.Zero(t, len(samples)%windowSamples, "windows file must hold whole %d-sample windows", windowSamples)
+
 	candidate := newV24ForParity(t, modelPath, conf.BackendPrefAuto)
 	device, backend, precision := candidate.RuntimeInfo()
 	t.Logf("candidate backend=%s device=%s precision=%s", backend, device, precision)
@@ -78,14 +84,10 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 	_, refBackend, _ := reference.RuntimeInfo()
 	require.Equal(t, BackendONNX, refBackend, "the reference must run on ONNX Runtime")
 
-	samples := readV3AudioOrZeros(t, windowsPath)
-	require.NotEmpty(t, samples)
-	require.Zero(t, len(samples)%birdnetV24WindowSamples, "windows file must hold whole 144000-sample windows")
-
-	windows := len(samples) / birdnetV24WindowSamples
+	windows := len(samples) / windowSamples
 	var worst float32
 	for w := range windows {
-		window := samples[w*birdnetV24WindowSamples : (w+1)*birdnetV24WindowSamples]
+		window := samples[w*windowSamples : (w+1)*windowSamples]
 		ref, err := reference.Predict(t.Context(), [][]float32{window})
 		require.NoError(t, err)
 		got, err := candidate.Predict(t.Context(), [][]float32{window})
@@ -139,11 +141,11 @@ func topKConfidenceDiff(ref, got []datastore.Results) float32 {
 		if !ok {
 			g = gotMin
 		}
-		worst = max(worst, abs32(r-g))
+		worst = max(worst, float32(math.Abs(float64(r-g))))
 	}
 	for label, g := range gotByLabel {
 		if _, ok := refByLabel[label]; !ok {
-			worst = max(worst, abs32(g-refMin))
+			worst = max(worst, float32(math.Abs(float64(g-refMin))))
 		}
 	}
 	return worst
@@ -158,12 +160,4 @@ func confidenceByLabel(results []datastore.Results) (byLabel map[string]float32,
 		lowest = min(lowest, r.Confidence)
 	}
 	return byLabel, lowest
-}
-
-// abs32 returns the absolute value of a float32.
-func abs32(v float32) float32 {
-	if v < 0 {
-		return -v
-	}
-	return v
 }
