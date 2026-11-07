@@ -146,6 +146,13 @@
      * when it is missing the player asks the detection endpoint for it once.
      */
     clipSampleRate?: number;
+    /**
+     * Render the spectrogram from the denoised clip at the strength the toolbar is on
+     * (the playback default at first), so spectrogram and audio move together. Only
+     * the single-detection review page sets it: lists and cards keep the stored
+     * spectrogram, so rendering them never starts a denoise.
+     */
+    spectrogramFollowsDenoise?: boolean;
   }
 
   let {
@@ -166,6 +173,7 @@
     clipLabel = '',
     modelType = '',
     clipSampleRate,
+    spectrogramFollowsDenoise = false,
   }: Props = $props();
 
   // Audio and UI elements
@@ -414,13 +422,20 @@
   // Spinner delay is now handled by useDelayedLoading utility
 
   // Computed values
+  // The denoise strength the spectrogram is rendered at, or '' for the stored
+  // spectrogram. Normalize keeps the processed-spectrogram POST, and a denoised clip
+  // that failed returns the spectrogram to the stored one with the audio.
+  const spectrogramDenoise = $derived(
+    spectrogramFollowsDenoise && !processingNormalize && !denoiseFailed ? processingDenoise : ''
+  );
+
   // Base URL without cache-busting parameters. It stays null while a bat rate
   // is being resolved, so an image cached under a URL without the rate is never
   // shown first under an axis it does not match.
   const spectrogramBaseUrl = $derived(
     showSpectrogram && !rateResolvePending
       ? buildAppUrl(
-          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}${overlayRate !== undefined ? `&${SPECTROGRAM_RATE_PARAM}=${overlayRate}` : ''}`
+          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}${overlayRate !== undefined ? `&${SPECTROGRAM_RATE_PARAM}=${overlayRate}` : ''}${spectrogramDenoise !== '' ? `&denoise=${encodeURIComponent(spectrogramDenoise)}` : ''}`
         )
       : null
   );
@@ -1001,8 +1016,9 @@
         audioElement.currentTime = pos;
       }
 
-      // Update spectrogram to reflect processed audio
-      if (enableClipExtraction) {
+      // Update spectrogram to reflect processed audio. A denoise-only state on a
+      // player that follows denoise loads the denoised spectrogram by URL instead.
+      if (enableClipExtraction && spectrogramDenoise === '') {
         updateProcessedSpectrogram(controller.signal);
       }
     } catch (err) {
@@ -1833,11 +1849,14 @@
       return;
     }
 
-    // Start polling for generation status on first error
+    // Start polling for generation status on first error. The status describes the
+    // stored render, not the denoised variant, which answers 200 or 503 directly.
     if (spectrogramRetryCount === 0 && !spectrogramStatusFailed) {
       debugLog('handleSpectrogramError: first error, starting status polling');
-      statusPollStartTime = Date.now();
-      pollSpectrogramStatus();
+      if (spectrogramDenoise === '') {
+        statusPollStartTime = Date.now();
+        pollSpectrogramStatus();
+      }
       // An image requested with the clip rate: ask the server why it failed.
       if (overlayRate !== undefined && !processedSpectrogramUrl && spectrogramUrl) {
         void probeExactRateRender(spectrogramUrl);

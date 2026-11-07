@@ -233,6 +233,29 @@ describe('DetectionDetail audio download', () => {
     });
   });
 
+  it('lets the player render the spectrogram from the denoised clip', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          jsonResponse(
+            String(input).includes('/api/v2/detections/1243')
+              ? makeDetection({ id: 1243, clipName: 'clip_1243.wav' })
+              : {}
+          )
+        )
+      )
+    );
+
+    detailTest.render({ detectionId: '1243' });
+
+    await waitFor(() => {
+      expect(vi.mocked(AudioPlayer)).toHaveBeenCalled();
+    });
+    const lastCall: unknown[] | undefined = vi.mocked(AudioPlayer).mock.calls.at(-1);
+    expect(lastCall?.[1]).toMatchObject({ spectrogramFollowsDenoise: true });
+  });
+
   it('labels the media region as an audio recording when the detection has a clip', async () => {
     const detection = makeDetection({
       id: 1241,

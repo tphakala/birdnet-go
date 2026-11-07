@@ -420,6 +420,103 @@ describe('AudioPlayer playback denoise default', () => {
     });
   });
 
+  describe('spectrogram following the denoise strength', () => {
+    const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
+    const SERVER_ERROR_STATUS = 500;
+    let restoreFetch: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreFetch?.();
+      restoreFetch = undefined;
+    });
+
+    function spectrogramSrc(): URL {
+      return new URL(screen.getByAltText(SPECTROGRAM_ALT).getAttribute('src') ?? '', 'http://x');
+    }
+
+    function followingPlayer(props: Record<string, unknown> = {}) {
+      return mount({ showSpectrogram: true, spectrogramFollowsDenoise: true, ...props });
+    }
+
+    function statusRequests(): string[] {
+      return fetchMock.mock.calls
+        .map(call => String(call[0]))
+        .filter(url => url.includes('/status'));
+    }
+
+    it('carries the strength the play URL carries', async () => {
+      followingPlayer();
+      await settle();
+
+      expect(spectrogramSrc().searchParams.get('denoise')).toBe(PRESET);
+      ctl.completeLoad();
+      await press();
+      expect(new URL(ctl.element.src).searchParams.get('denoise')).toBe(PRESET);
+    });
+
+    it('follows a toolbar change and drops the parameter on Off', async () => {
+      followingPlayer();
+      ctl.completeLoad();
+
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      expect(spectrogramSrc().searchParams.get('denoise')).toBe('heavy');
+
+      await chooseDenoise(DENOISE_OFF_TEXT);
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+    });
+
+    it('never carries it without the prop', async () => {
+      mount({ showSpectrogram: true });
+      ctl.completeLoad();
+      await settle();
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+    });
+
+    it('requests no processed spectrogram for a denoise-only state, and keeps it for normalize', async () => {
+      followingPlayer();
+      ctl.completeLoad();
+
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      expect(postedUrls().filter(url => url.includes('/spectrogram/'))).toHaveLength(0);
+
+      await toggleNormalize();
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+      expect(postedUrls().filter(url => url.includes('/spectrogram/'))).toHaveLength(1);
+    });
+
+    it('returns to the stored spectrogram when the denoised clip fails', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      followingPlayer();
+      ctl.completeLoad();
+      await press();
+      expect(spectrogramSrc().searchParams.get('denoise')).toBe(PRESET);
+
+      ctl.failLoad();
+      await settle();
+
+      expect(spectrogramSrc().searchParams.has('denoise')).toBe(false);
+    });
+
+    it('does not poll the stored render status for the denoised variant', async () => {
+      followingPlayer();
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+      expect(statusRequests()).toHaveLength(0);
+
+      cleanup();
+      fetchMock.mockClear();
+      mount({ showSpectrogram: true });
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+      expect(statusRequests().length).toBeGreaterThan(0);
+    });
+  });
+
   describe('with audible bats active', () => {
     beforeEach(() => {
       Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
