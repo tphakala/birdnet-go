@@ -98,9 +98,8 @@ const (
 	DefaultUltrasonicSplitHz = 20000
 
 	// The BSG-BAT analysis step (bsgbat.stepframes) is counted in mel frames of 768
-	// samples, 2 ms each at the model's 384 kHz rate. The frontend mirrors the
-	// default and the range as constants (BSG_BAT_DEFAULT_STEP_FRAMES and its range
-	// siblings), so a change here is repeated there.
+	// samples, 2 ms each at the model's 384 kHz rate. A settings UI that offers
+	// this field must use the same default and range.
 	//
 	// DefaultBSGBatStepFrames is the step used when the setting is unset (0). It is
 	// also the static registry step; changing it is this one line.
