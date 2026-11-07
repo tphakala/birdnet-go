@@ -573,8 +573,13 @@ func TestServeAudioByID_DenoiseValidators(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(dir, processingCacheDirName))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
+	entryPath := filepath.Join(dir, processingCacheDirName, entries[0].Name())
+	entryInfo, err := os.Stat(entryPath)
+	require.NoError(t, err)
+	assert.Equal(t, entryInfo.ModTime().UTC().Format(http.TimeFormat), miss.Header().Get("Last-Modified"),
+		"the first response already carries the cache entry's write time")
 	entryTime := time.Now().Add(-time.Minute).Truncate(time.Second)
-	require.NoError(t, os.Chtimes(filepath.Join(dir, processingCacheDirName, entries[0].Name()), entryTime, entryTime))
+	require.NoError(t, os.Chtimes(entryPath, entryTime, entryTime))
 
 	hit := getAudio(e, url, nil)
 	require.Equal(t, http.StatusOK, hit.Code)
