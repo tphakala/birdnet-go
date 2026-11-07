@@ -57,7 +57,7 @@ type Handler struct {
 
 	// isClientAuthenticated reports whether the request comes from a signed-in
 	// client (true as well when authentication is not required). Nil means every
-	// client is unauthenticated. Guests never trigger a denoise job.
+	// client is unauthenticated. Guests start a denoise only for the playback default.
 	isClientAuthenticated func(echo.Context) bool
 
 	// processingStartedHook, when set, runs inside a processing job after it holds
