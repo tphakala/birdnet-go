@@ -501,6 +501,20 @@ describe('useAudioPlayback recovery', () => {
       }
     });
 
+    it('drops a pending retry of the denoised clip when the row gets another play URL', async () => {
+      await renderAndWait({ playUrl: DENOISED_URL });
+      ctl.completeLoad();
+      await toggle();
+      ctl.failLoad();
+      const loadsBefore = ctl.load.mock.calls.length;
+
+      getState().setAudioUrl(STORED_URL, OTHER_DENOISED_URL);
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(elementPath()).toBe(STORED_URL);
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore);
+    });
+
     it('gives a recycled row the new play URL and starts from its stored clip again', async () => {
       await renderAndWait({ playUrl: DENOISED_URL });
       ctl.completeLoad();

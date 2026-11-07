@@ -140,6 +140,13 @@ describe('AudioPlayer playback denoise default', () => {
     expect(postedUrls()).toHaveLength(0);
   });
 
+  it('does not show the processing badge for the default itself', async () => {
+    mount({ enableClipExtraction: false });
+    await settle();
+
+    expect(screen.queryByText('components.audioPlayer.processing.processingActive')).toBeNull();
+  });
+
   it('plays the GET denoise URL without posting any processing request', async () => {
     mount();
     ctl.completeLoad();
