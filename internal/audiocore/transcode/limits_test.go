@@ -34,8 +34,9 @@ func TestIsValidDenoisePreset(t *testing.T) {
 	}
 }
 
-// The transcode strength map and the conf preset list must name the same presets,
-// and each name must select its own strength.
+// Every name in the transcode strength map must be a conf preset name and select
+// its own strength, and the ordered test preset list must name the same presets as
+// the map.
 func TestDenoiseStrengthsMatchConfPresets(t *testing.T) {
 	t.Parallel()
 
