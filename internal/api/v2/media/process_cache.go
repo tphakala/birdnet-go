@@ -20,6 +20,11 @@ const (
 	processingCacheTTL            = 15 * time.Minute
 	processingCacheTickerInterval = 5 * time.Minute
 	processingCacheMaxFiles       = 100
+
+	// processingCacheMaxBytes caps the disk the cache may use. The denoised audio
+	// GET makes the cache reachable by every play, so the file count alone does not
+	// bound it: an extended-capture WAV can reach about 115 MB.
+	processingCacheMaxBytes int64 = 512 << 20
 )
 
 // processingCache manages temporary processed audio files.
@@ -27,11 +32,17 @@ type processingCache struct {
 	mu       sync.Mutex
 	dir      string
 	maxFiles int
+	maxBytes int64
+
+	// removeEvicted deletes an entry during eviction. It is os.Remove; tests
+	// replace it to make a removal fail.
+	removeEvicted func(name string) error
 }
 
-// newProcessingCache creates a cache in the specified directory.
-func newProcessingCache(dir string, maxFiles int) *processingCache {
-	return &processingCache{dir: dir, maxFiles: maxFiles}
+// newProcessingCache creates a cache in the specified directory, bounded by a
+// file count and a total byte budget.
+func newProcessingCache(dir string, maxFiles int, maxBytes int64) *processingCache {
+	return &processingCache{dir: dir, maxFiles: maxFiles, maxBytes: maxBytes, removeEvicted: os.Remove}
 }
 
 // clipSourceTag identifies the clip file a processed artifact was made from. It
@@ -50,7 +61,8 @@ func clipSourceTag(normalizedPath string, info os.FileInfo) string {
 }
 
 // processingCacheKey builds a deterministic filename for cache lookup. The
-// sourceTag (see clipSourceTag) ties the entry to the clip file it came from.
+// sourceTag (see clipSourceTag) ties the entry to the clip file it came from, and
+// every filter value is kept exactly, so distinct filter sets never share a key.
 func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise string, gainDB float64) string {
 	// Sanitize detection ID to prevent path traversal in cache filenames
 	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
@@ -66,7 +78,10 @@ func processingCacheKey(detectionID, sourceTag string, normalize bool, denoise s
 	if denoise == "" {
 		denoise = "off"
 	}
-	return fmt.Sprintf("%s_%s_%s_%s_%.1f.wav", safeID, sourceTag, norm, denoise, gainDB)
+	// Full precision, as in audibleBatsCacheKey: a rounded gain would let a POST
+	// with a small nonzero gain share the entry and the job of the denoise-only GET.
+	gainStr := strconv.FormatFloat(gainDB, 'f', -1, 64)
+	return fmt.Sprintf("%s_%s_%s_%s_%s.wav", safeID, sourceTag, norm, denoise, gainStr)
 }
 
 // audibleBatsCacheKey builds a deterministic filename for a derived "audible
@@ -115,14 +130,62 @@ func (c *processingCache) get(key string) []byte {
 	return data
 }
 
-// put writes data to cache atomically (temp file + rename), evicting oldest files if over limit.
+// open returns an open handle and the file info of a cached entry, or false when
+// it is missing or expired. It serves hits without reading the whole file into
+// memory. The caller closes the handle.
+func (c *processingCache) open(key string) (*os.File, os.FileInfo, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	path := filepath.Join(c.dir, key)
+	f, err := os.Open(path) //nolint:gosec // G304: path derived from controlled cache key
+	if err != nil {
+		return nil, nil, false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, false
+	}
+	if time.Since(info.ModTime()) > processingCacheTTL {
+		_ = f.Close()
+		if err := os.Remove(path); err != nil {
+			apicore.GetLogger().Debug("Processing cache: failed to remove expired entry on open",
+				logger.String("path", path),
+				logger.Error(err))
+		}
+		return nil, nil, false
+	}
+	return f, info, true
+}
+
+// entryModTime returns the write time of a cached entry, or false when it is
+// missing.
+func (c *processingCache) entryModTime(key string) (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	info, err := os.Stat(filepath.Join(c.dir, key))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
+// put writes data to cache atomically (temp file + rename), evicting oldest files
+// to stay under both limits. It stores nothing, and returns an error, when data
+// alone exceeds the byte budget or eviction could not make room.
 func (c *processingCache) put(key string, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	incoming := int64(len(data))
+	if incoming > c.maxBytes {
+		return fmt.Errorf("entry of %d bytes exceeds the cache budget of %d bytes", incoming, c.maxBytes)
+	}
 	if err := os.MkdirAll(c.dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
-	c.evictIfNeeded()
+	if !c.evictIfNeeded(incoming) {
+		return fmt.Errorf("no room for a %d byte entry: older entries could not be removed", incoming)
+	}
 
 	// Write to temp file first, then rename for atomicity
 	tmpFile, err := os.CreateTemp(c.dir, ".tmp-*")
@@ -149,24 +212,25 @@ func (c *processingCache) put(key string, data []byte) error {
 	return nil
 }
 
-// evictIfNeeded removes oldest files if cache exceeds maxFiles.
-func (c *processingCache) evictIfNeeded() {
+// evictIfNeeded removes oldest files until the cache has room for one more entry
+// of incoming bytes, under both the file-count and the byte budget. It reports
+// whether the entry fits. A file whose removal fails (for example one still open
+// for serving on Windows) stays counted, and eviction moves on to the next oldest.
+func (c *processingCache) evictIfNeeded(incoming int64) bool {
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
 		apicore.GetLogger().Debug("Processing cache: failed to read directory for eviction",
 			logger.String("dir", c.dir),
 			logger.Error(err))
-		return
+		return false
 	}
-	if len(entries) < c.maxFiles {
-		return
-	}
-
 	type fileAge struct {
 		path    string
 		modTime time.Time
+		size    int64
 	}
 	files := make([]fileAge, 0, len(entries))
+	var totalBytes int64
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -181,25 +245,32 @@ func (c *processingCache) evictIfNeeded() {
 		files = append(files, fileAge{
 			path:    filepath.Join(c.dir, e.Name()),
 			modTime: info.ModTime(),
+			size:    info.Size(),
 		})
+		totalBytes += info.Size()
 	}
 
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].modTime.Before(files[j].modTime)
 	})
 
-	// Remove oldest until under limit
-	toRemove := len(files) - c.maxFiles + 1 // make room for the new entry
-	if toRemove <= 0 {
-		return
-	}
-	for i := range min(toRemove, len(files)) {
-		if err := os.Remove(files[i].path); err != nil {
-			apicore.GetLogger().Debug("Processing cache: failed to remove file during eviction",
-				logger.String("path", files[i].path),
-				logger.Error(err))
+	// Remove oldest until the new entry fits under both limits.
+	remaining := len(files)
+	fits := func() bool { return remaining < c.maxFiles && totalBytes+incoming <= c.maxBytes }
+	for _, f := range files {
+		if fits() {
+			break
 		}
+		if err := c.removeEvicted(f.path); err != nil {
+			apicore.GetLogger().Debug("Processing cache: failed to remove file during eviction",
+				logger.String("path", f.path),
+				logger.Error(err))
+			continue
+		}
+		remaining--
+		totalBytes -= f.size
 	}
+	return fits()
 }
 
 // cleanExpired removes all files older than TTL.

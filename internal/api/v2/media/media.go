@@ -940,7 +940,8 @@ func (c *Handler) unrenderedSourceReason(relAudioPath string, begin, end time.Ti
 // then falls back to a brief grace period for the race window where the export
 // hasn't created its temp file yet or already renamed it. Returns nil if the file
 // was served or a 503 pending answer was written, or the original/translated
-// error otherwise.
+// error otherwise. The decision itself is assessMissingClip, shared with the
+// denoised audio path.
 func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, detectionBeginTime, detectionEndTime time.Time, logFields ...logger.Field) error {
 	// A completed clip whose stored name drifted from the file on disk (a row from
 	// an older version, or a manual rename) is served from its actual path rather
@@ -965,70 +966,133 @@ func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, o
 		setAudioContentDisposition(ctx, filepath.Base(relClipPath))
 	}
 
-	if tempPath, encoding := c.findEncodingTempPath(relClipPath); encoding {
-		// Wait server-side for the file to appear instead of immediately
-		// returning 503, reducing unnecessary client round-trips. Pass the
-		// concrete temp path so the wait loop polls it directly.
-		if c.waitForAudioFile(ctx, relClipPath, tempPath) {
-			// File appeared - serve it now
-			if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
-				return c.translateAudioServeError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
-			}
-			c.LogInfoIfEnabled("Successfully served audio clip after waiting for encoding", logFields...)
-			return nil
+	verdict := c.assessMissingClip(ctx, relClipPath, detectionBeginTime, detectionEndTime)
+	switch verdict.outcome {
+	case missingClipAppearedAfterEncoding:
+		// File appeared - serve it now
+		if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
+			return c.translateAudioServeError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
 		}
-		// Distinguish "still encoding" from "encoder exited/failed".
-		if c.isAudioBeingEncoded(relClipPath) {
-			return c.handleAudioNotReady(ctx)
-		}
-		// Temp file disappeared and final file is still missing -
-		// encoding failed, fall back to normal error translation.
-		return c.translateAudioServeError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
-	}
-
-	// No temp file yet, but the export may be legitimately pending: for an
-	// Extended Capture detection the DB note and SSE broadcast go out immediately while
-	// the clip write is deferred until the capture tail is recorded (the job queue
-	// retries until then). If we are still inside that window (ReadyAt + margin), return
-	// 503 + Retry-After so the client comes back once the clip lands, instead of a 404
-	// that reads as data loss. This returns immediately (no wait loop), so it does not
-	// pin the worker. Once encoding actually starts, the temp-file branch above handles
-	// it. Filename-based serves pass zero times, so ok is false and this is skipped.
-	if readyAt, deadline, ok := c.pendingExportWindow(detectionBeginTime, detectionEndTime); ok && time.Now().Before(deadline) {
-		return c.handleAudioPending(ctx, readyAt, logFields...)
-	}
-
-	// No temp file visible. For a detection whose capture completed long ago,
-	// skip the grace wait entirely and return 404 now: no export is in flight
-	// (the temp-file check above already ruled that out), so the file is a
-	// pre-reconcile ghost, not a live encode. Waiting would only pin an HTTP
-	// worker for the full grace period, and a page full of such ghosts would pin
-	// one worker each. Recent (or unknown-age) detections still get the brief
-	// grace wait for the export race window.
-	if !isRecentClipCompletion(detectionEndTime) {
-		return c.translateAudioServeError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
-	}
-
-	// Brief grace wait for the race window where the export hasn't created its
-	// temp file yet or already renamed it.
-	if c.waitForAudioFileGrace(ctx, relClipPath) {
+		c.LogInfoIfEnabled("Successfully served audio clip after waiting for encoding", logFields...)
+		return nil
+	case missingClipAppearedAfterGrace:
 		if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
 			return c.translateAudioServeError(ctx, retryErr, "Failed to serve audio clip after grace wait")
 		}
 		c.LogInfoIfEnabled("Successfully served audio clip after grace wait", logFields...)
 		return nil
+	default:
+		return c.writeMissingClipVerdict(ctx, verdict, originalErr, logFields...)
+	}
+}
+
+// missingClipOutcome is the decision about an audio clip that is not on disk.
+type missingClipOutcome int
+
+const (
+	// missingClipAppearedAfterEncoding: an encode was in progress and the clip is
+	// on disk now.
+	missingClipAppearedAfterEncoding missingClipOutcome = iota
+	// missingClipAppearedAfterGrace: the clip showed up during the grace wait for
+	// the export race window.
+	missingClipAppearedAfterGrace
+	// missingClipEncoding: an encode is still running; answer 503 + Retry-After.
+	missingClipEncoding
+	// missingClipPending: the export is scheduled but not started (Extended
+	// Capture); answer 503 + Retry-After sized to readyAt.
+	missingClipPending
+	// missingClipRecent: a recent detection whose clip is still missing after the
+	// grace wait; answer 503 + Retry-After.
+	missingClipRecent
+	// missingClipGone: nothing indicates the clip is coming; answer with the
+	// translated original error.
+	missingClipGone
+)
+
+// missingClipVerdict carries a missingClipOutcome and, for missingClipPending,
+// the time the export is expected to be ready.
+type missingClipVerdict struct {
+	outcome missingClipOutcome
+	readyAt time.Time
+}
+
+// assessMissingClip decides what to do about a clip that is not on disk and has
+// no alternate-extension file. It waits server-side for an in-flight encode and
+// for the export race window, and never serves or writes anything itself, so the
+// raw serve path and the denoise path can each act on the verdict. Filename-based
+// serves pass zero capture times, which skips the pending window and keeps the
+// grace wait (fail-safe).
+func (c *Handler) assessMissingClip(ctx echo.Context, relClipPath string, detectionBeginTime, detectionEndTime time.Time) missingClipVerdict {
+	if tempPath, encoding := c.findEncodingTempPath(relClipPath); encoding {
+		// Wait server-side for the file to appear instead of immediately
+		// returning 503, reducing unnecessary client round-trips. Pass the
+		// concrete temp path so the wait loop polls it directly.
+		if c.waitForAudioFile(ctx, relClipPath, tempPath) {
+			return missingClipVerdict{outcome: missingClipAppearedAfterEncoding}
+		}
+		// Distinguish "still encoding" from "encoder exited/failed".
+		if c.isAudioBeingEncoded(relClipPath) {
+			return missingClipVerdict{outcome: missingClipEncoding}
+		}
+		// Temp file disappeared and final file is still missing: encoding failed.
+		return missingClipVerdict{outcome: missingClipGone}
+	}
+
+	// No temp file yet, but the export may be legitimately pending: for an
+	// Extended Capture detection the DB note and SSE broadcast go out immediately while
+	// the clip write is deferred until the capture tail is recorded (the job queue
+	// retries until then). If we are still inside that window (ReadyAt + margin), the
+	// answer is 503 + Retry-After so the client comes back once the clip lands, instead
+	// of a 404 that reads as data loss. This returns immediately (no wait loop), so it
+	// does not pin the worker. Once encoding actually starts, the temp-file branch above
+	// handles it.
+	if readyAt, deadline, ok := c.pendingExportWindow(detectionBeginTime, detectionEndTime); ok && time.Now().Before(deadline) {
+		return missingClipVerdict{outcome: missingClipPending, readyAt: readyAt}
+	}
+
+	// No temp file visible. For a detection whose capture completed long ago,
+	// skip the grace wait entirely: no export is in flight (the temp-file check
+	// above already ruled that out), so the file is a pre-reconcile ghost, not a
+	// live encode. Waiting would only pin an HTTP worker for the full grace period,
+	// and a page full of such ghosts would pin one worker each. Recent (or
+	// unknown-age) detections still get the brief grace wait for the export race
+	// window.
+	if !isRecentClipCompletion(detectionEndTime) {
+		return missingClipVerdict{outcome: missingClipGone}
+	}
+
+	// Brief grace wait for the race window where the export hasn't created its
+	// temp file yet or already renamed it.
+	if c.waitForAudioFileGrace(ctx, relClipPath) {
+		return missingClipVerdict{outcome: missingClipAppearedAfterGrace}
 	}
 
 	// The detection finished recently and no encode is visible yet, so the export may
-	// still be queued: answer 503 + Retry-After (like the pending window above) instead
+	// still be queued: 503 + Retry-After (like the pending window above) instead
 	// of a 404 that clients read as a clip that is gone for good. An unknown completion
 	// time cannot be judged (filename-based serves), so it keeps the plain 404.
 	if !detectionEndTime.IsZero() {
-		c.LogDebugIfEnabled("Audio clip still missing after the grace wait for a recent detection", logFields...)
-		return c.handleAudioNotReady(ctx)
+		return missingClipVerdict{outcome: missingClipRecent}
 	}
 
-	return c.translateAudioServeError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
+	return missingClipVerdict{outcome: missingClipGone}
+}
+
+// writeMissingClipVerdict answers a verdict that did not produce a file: the
+// 503 + Retry-After outcomes, or the translated original error for a clip that is
+// gone. The appeared outcomes are the caller's to act on.
+func (c *Handler) writeMissingClipVerdict(ctx echo.Context, verdict missingClipVerdict, originalErr error, logFields ...logger.Field) error {
+	switch verdict.outcome {
+	case missingClipEncoding:
+		return c.handleAudioNotReady(ctx)
+	case missingClipPending:
+		return c.handleAudioPending(ctx, verdict.readyAt, logFields...)
+	case missingClipRecent:
+		c.LogDebugIfEnabled("Audio clip still missing after the grace wait for a recent detection", logFields...)
+		return c.handleAudioNotReady(ctx)
+	default:
+		return c.translateAudioServeError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
+	}
 }
 
 // ServeAudioClip serves an audio clip file by filename using SecureFS
@@ -1098,7 +1162,12 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 	return nil
 }
 
-// ServeAudioByID serves an audio clip file based on note ID using SecureFS
+// ServeAudioByID serves an audio clip file based on note ID using SecureFS.
+//
+// GET /api/v2/audio/:id
+// Query: denoise (optional preset). Without it the stored clip is served
+// verbatim. With it the response is a WAV of the clip denoised at that preset
+// (see serveDenoisedAudio).
 func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereference below anyway.
@@ -1117,6 +1186,21 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
 	}
 
+	if preset := ctx.QueryParam("denoise"); preset != "" {
+		if !transcode.IsValidDenoisePreset(preset) {
+			return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", preset),
+				"Invalid denoise preset", http.StatusBadRequest)
+		}
+		return c.serveDenoisedAudio(ctx, noteID, preset)
+	}
+	return c.serveStoredAudioByID(ctx, noteID, false)
+}
+
+// serveStoredAudioByID serves the stored clip of noteID verbatim (Range capable,
+// through SecureFS). noStore marks the response Cache-Control: no-store, for a
+// guest who asked for a denoised variant and got the stored clip at the same
+// URL; a cache must not keep that under the URL of the denoised bytes.
+func (c *Handler) serveStoredAudioByID(ctx echo.Context, noteID string, noStore bool) error {
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		// Check if error is due to record not found
@@ -1153,6 +1237,10 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 
 	// In Private Mode, keep shared/proxy caches from retaining this clip.
 	c.setPrivateAudioCacheControl(ctx)
+	if noStore {
+		// After setPrivateAudioCacheControl, which would overwrite it with "private".
+		ctx.Response().Header().Set("Cache-Control", "no-store")
+	}
 
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
@@ -1497,7 +1585,10 @@ func clipFileExtension(format string) string {
 // ProcessAudioByID applies audio processing filters to a detection's audio clip
 // and returns the processed audio as WAV for browser preview. Results are cached
 // per clip file (path, size and mtime, see clipSourceTag), so a reused detection
-// ID pointing at another clip file is processed again.
+// ID pointing at another clip file is processed again. A request shares its job
+// with any other for the same cache key, including the denoised audio GET (see
+// processWAV); the job runs on the handler's lifecycle context, so a client that
+// disconnects mid-job does not cancel it.
 //
 // POST /api/v2/audio/:id/process
 // Body: {"normalize": true, "denoise": "medium", "gain_db": 6.0}
@@ -1528,30 +1619,9 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 			gainRangeMessage(), http.StatusBadRequest)
 	}
 
-	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)
-	clipPath, err := c.DS.GetNoteClipPath(noteID)
-	if err != nil {
-		if isClipNotFoundErr(err) {
-			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
-	}
-	if clipPath == "" {
-		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
-	}
-
-	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
-	if err != nil {
-		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
-	}
-	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
-
-	// A fresh stat, not StatRel's cached one: the cache key is tagged with this
-	// size and mtime, so a replacement that changes either misses the old entry
-	// on the next request.
-	clipInfo, statErr := c.SFS.Stat(absolutePath)
-	if statErr != nil {
-		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	clip, lookupErr := c.lookupClip(noteID)
+	if lookupErr != nil {
+		return c.respondClipLookupError(ctx, lookupErr)
 	}
 
 	// Check cache
@@ -1560,44 +1630,30 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
 	}
-	cacheKey := processingCacheKey(noteID, clipSourceTag(normalizedPath, clipInfo), req.Normalize, req.Denoise, req.GainDB)
+	cacheKey := processingCacheKey(noteID, clip.sourceTag, req.Normalize, req.Denoise, req.GainDB)
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(cacheKey); cached != nil {
 			return ctx.Blob(http.StatusOK, MimeTypeWAV, cached)
 		}
 	}
 
-	// Acquire semaphore (non-blocking, returns 503 if full)
-	select {
-	case c.processingSemaphore <- struct{}{}:
-		defer func() { <-c.processingSemaphore }()
-	default:
-		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
-			"Server busy, try again later", http.StatusServiceUnavailable)
+	// One job per key across this endpoint and the denoised audio GET; a full
+	// semaphore answers 503.
+	processed, err := c.processWAV(ctx.Request().Context(), cacheKey, clip.absolutePath, filters)
+	if errors.Is(err, errProcessingBusy) {
+		return c.HandleError(ctx, err, "Server busy, try again later", http.StatusServiceUnavailable)
 	}
-
-	wavData, err := transcode.ProcessToWAV(ctx.Request().Context(), absolutePath, filters)
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_processed_audio_failed", processedAudioFormat,
 			filters, err, "Failed to process audio")
 	}
 
-	// Cache the result (non-fatal on failure)
-	if c.processingCache != nil {
-		if err := c.processingCache.put(cacheKey, wavData); err != nil {
-			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to cache processed audio",
-				logger.String("cache_key", cacheKey),
-				logger.Error(err),
-			)
-		}
-	}
-
-	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
+	return ctx.Blob(http.StatusOK, MimeTypeWAV, processed.data)
 }
 
 // resolveBatClipFile confirms noteID refers to a bat detection and returns the
 // absolute, validated path to its source audio clip, plus the clip's cache
-// source tag (see clipSourceTag), following the same path-resolution pattern as
+// source tag (see clipSourceTag), resolved through lookupClip like
 // ProcessAudioByID. When ok is false it has already written the HTTP error
 // response and the caller must return respErr unchanged (respErr is nil once the
 // JSON error body is written successfully).
@@ -1615,28 +1671,11 @@ func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absoluteP
 			"Audible bats mode is only available for bat detections", http.StatusBadRequest)
 	}
 
-	// Resolve and validate clip path (same pattern as ProcessAudioByID).
-	clipPath, err := c.DS.GetNoteClipPath(noteID)
-	if err != nil {
-		if isClipNotFoundErr(err) {
-			return "", "", false, c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
-		}
-		return "", "", false, c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+	clip, lookupErr := c.lookupClip(noteID)
+	if lookupErr != nil {
+		return "", "", false, c.respondClipLookupError(ctx, lookupErr)
 	}
-	if clipPath == "" {
-		return "", "", false, c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
-	}
-	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
-	if err != nil {
-		return "", "", false, c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
-	}
-	absolutePath = filepath.Join(c.SFS.BaseDir(), normalizedPath)
-	// A fresh stat, not StatRel's cached one (see ProcessAudioByID).
-	info, err := c.SFS.Stat(absolutePath)
-	if err != nil {
-		return "", "", false, c.HandleError(ctx, err, "Audio clip not found", http.StatusNotFound)
-	}
-	return absolutePath, clipSourceTag(normalizedPath, info), true, nil
+	return clip.absolutePath, clip.sourceTag, true, nil
 }
 
 // AudibleBatsByID generates a derived "audible bats" review clip from a bat
@@ -1694,13 +1733,12 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	}
 
 	// Limit concurrent processing (non-blocking, returns 503 if full).
-	select {
-	case c.processingSemaphore <- struct{}{}:
-		defer func() { <-c.processingSemaphore }()
-	default:
-		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+	release, ok := c.tryAcquireProcessingSlot()
+	if !ok {
+		return c.HandleError(ctx, errProcessingBusy,
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
+	defer release()
 
 	// Full-clip time expansion + 48 kHz resample (all-or-nothing; no
 	// detection-window clipping), then normalization (after conversion) and gain.
@@ -1795,13 +1833,12 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Acquire processing semaphore
-	select {
-	case c.processingSemaphore <- struct{}{}:
-		defer func() { <-c.processingSemaphore }()
-	default:
-		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+	release, ok := c.tryAcquireProcessingSlot()
+	if !ok {
+		return c.HandleError(ctx, errProcessingBusy,
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
+	defer release()
 
 	// Create temp directory inside SecureFS root for processed files
 	tmpDir, err := transcode.ProcessingTempDir(c.SFS.BaseDir())

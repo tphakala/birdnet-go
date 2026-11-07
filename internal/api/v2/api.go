@@ -534,7 +534,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// SecureFS in mediaapi.New). It is constructed BEFORE the species handler
 	// because species injects c.media.ServeSpeciesImageProxy (a method value on
 	// the media handler) for its thumbnail endpoint.
-	c.media = mediaapi.New(c.Core)
+	c.media = mediaapi.New(c.Core, c.isClientAuthenticated)
 	// The species handler delegates to two dependencies: loadNameMaps (the shared
 	// species-index snapshot read accessor, facade-owned in name_maps.go) and the
 	// media domain's species-image proxy handler

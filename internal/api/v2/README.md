@@ -199,6 +199,21 @@ that is not one of the clip formats (WAV, FLAC, MP3, AAC in M4A, Opus), a corrup
 (256 MiB on disk, 128 MiB of decoded audio), or a clip window that starts past the end
 of the audio.
 
+**Denoised audio (`GET /audio/:id?denoise=<preset>`).** Without the parameter the stored
+clip is served verbatim, whatever the clip format. With `denoise` set to a preset
+(`light`, `light-medium`, `medium`, `heavy`) the response is a 16-bit WAV (`audio/wav`)
+of the whole clip denoised at that preset and at the source sample rate, with `Range`,
+`ETag` and `Last-Modified` support so players can seek. An unknown preset answers
+**400**; an empty value is the same as no parameter. The result is cached for 15 minutes
+and shares its cache entry and its job with `POST /audio/:id/process` for a denoise-only
+request, so a seek during processing does not start a second job. Processing shares the
+two-slot limit of the other processing endpoints: when both slots are busy and the
+variant is not cached, the request answers **503** with `Retry-After` and never the
+stored clip. A clip that is not on disk yet follows the pending clip handling below, or
+is denoised from its copy under another audio extension. Unauthenticated clients never
+start a denoise: they get the stored clip with `Cache-Control: no-store`, unless the
+denoised variant is already cached, which is served to them as to anyone.
+
 **Spectrogram status codes.** All five spectrogram endpoints (`/media/spectrogram/:filename`,
 `/spectrogram/:id`, `/spectrogram/:id/generate`, `/spectrogram/:id/status` and
 `/spectrogram/:id/process`) answer **400** for a legacy `width` query value that is an

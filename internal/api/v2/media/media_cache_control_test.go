@@ -39,7 +39,7 @@ func newCacheControlTestHandler(t *testing.T, privateMode bool) (*Handler, *echo
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithSettingsFunc(func(s *conf.Settings) {
 		s.Security.PrivateMode = privateMode
 	}))
-	h := New(core)
+	h := New(core, nil)
 	return h, e, core.SFS.BaseDir()
 }
 
@@ -49,7 +49,7 @@ func newCacheControlTestHandler(t *testing.T, privateMode bool) (*Handler, *echo
 // effect without a restart; each subtest publishes its own settings snapshot.
 func TestMediaCacheVisibility(t *testing.T) {
 	t.Run("public when Private Mode is off", func(t *testing.T) {
-		h := New(apitest.NewCore(t))
+		h := New(apitest.NewCore(t), nil)
 		assert.Equal(t, "public", h.mediaCacheVisibility(),
 			"media must be publicly cacheable when Private Mode is disabled")
 	})
@@ -57,7 +57,7 @@ func TestMediaCacheVisibility(t *testing.T) {
 	t.Run("private when Private Mode is on", func(t *testing.T) {
 		h := New(apitest.NewCore(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
 			s.Security.PrivateMode = true
-		})))
+		})), nil)
 		assert.Equal(t, "private", h.mediaCacheVisibility(),
 			"media must be marked private so shared caches do not retain it when Private Mode is enabled")
 	})
