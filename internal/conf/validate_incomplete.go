@@ -158,7 +158,7 @@ func (s *Settings) normalizeUltrasonicFilter() {
 }
 
 // normalizeModelThresholds resets an out-of-range per-model confidence threshold
-// (bat, perch, birdnetv3) to the documented default on load, recording a warning.
+// (bat, perch, birdnetv3, bsgbat) to the documented default on load, recording a warning.
 // Unlike a never-written zero, an out-of-range or NaN/Inf threshold changes
 // detection gating, so ValidateSettings rejects it. But ValidateSettings is fatal
 // on Load (storage.go), and refusing to boot over a threshold takes away the web
@@ -179,6 +179,7 @@ func (s *Settings) normalizeModelThresholds() {
 	reset("bat", &s.Bat.Threshold)
 	reset("perch", &s.Perch.Threshold)
 	reset("birdnetv3", &s.BirdNETV3.Threshold)
+	reset("bsgbat", &s.BSGBat.Threshold)
 }
 
 // normalizeAlternateMinConfidence repairs an invalid birdnet.alternateminconfidence

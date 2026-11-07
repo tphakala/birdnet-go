@@ -126,6 +126,16 @@ BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 | `bat.ultrasonicfilter.hopsize` | integer | STFT hop size in samples, 1 to fftsize |
 | `bat.ultrasonicfilter.frequencysplithz` | integer | boundary between audible and ultrasonic bands in Hz |
 
+## bsgbat
+
+BSGBatConfig holds configuration for the BSG-BAT bat classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `bsgbat.modelpath` | string | path to BSG-BAT ONNX model file |
+| `bsgbat.labelpath` | string | path to BSG-BAT label file |
+| `bsgbat.threshold` | number | confidence threshold for BSG-BAT detections |
+
 ## bsg
 
 BSGConfig holds configuration for BSG regional bird models.

@@ -72,6 +72,7 @@ func TestValidateModelThresholds(t *testing.T) {
 		s.Bat.Threshold = 0.5
 		s.Perch.Threshold = 0.5
 		s.BirdNETV3.Threshold = 0.5
+		s.BSGBat.Threshold = 0.5
 		return s
 	}
 
@@ -106,6 +107,12 @@ func TestValidateModelThresholds(t *testing.T) {
 			mutate:      func(s *Settings) { s.BirdNETV3.Threshold = 1.5 },
 			wantErr:     true,
 			errContains: "birdnetv3.threshold must be between",
+		},
+		{
+			name:        "bsgbat threshold above 1 rejected",
+			mutate:      func(s *Settings) { s.BSGBat.Threshold = 1.5 },
+			wantErr:     true,
+			errContains: "bsgbat.threshold must be between",
 		},
 		{
 			name:        "NaN threshold rejected (comparison would silently pass)",

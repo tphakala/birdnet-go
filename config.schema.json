@@ -115,6 +115,25 @@
       "type": "object",
       "description": "AudioSourceConfig represents a single audio capture device with per-source settings."
     },
+    "BSGBatConfig": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BSG-BAT ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BSG-BAT label file"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for BSG-BAT detections"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BSGBatConfig holds configuration for the BSG-BAT bat classifier."
+    },
     "BSGConfig": {
       "properties": {
         "modelpath": {
@@ -2288,6 +2307,10 @@
         "bat": {
           "$ref": "#/$defs/BatConfig",
           "description": "Bat detection configuration"
+        },
+        "bsgbat": {
+          "$ref": "#/$defs/BSGBatConfig",
+          "description": "BSG-BAT bat classifier configuration"
         },
         "bsg": {
           "$ref": "#/$defs/BSGConfig",
