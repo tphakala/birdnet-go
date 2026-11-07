@@ -16,6 +16,11 @@ export const DENOISE_OPTIONS: readonly DenoiseOption[] = [
   { id: 'heavy', labelKey: 'components.audioPlayer.processing.denoiseHeavy' },
 ];
 
+/** The selectable strengths: every option except the "off" entry. */
+export const DENOISE_STRENGTH_OPTIONS: readonly DenoiseOption[] = DENOISE_OPTIONS.filter(
+  option => option.id !== ''
+);
+
 /**
  * The strength a denoise setting starts with when it is switched on without a
  * choice. Matches the backend `conf.DefaultDenoisePreset`.
@@ -24,5 +29,5 @@ export const DEFAULT_DENOISE_PRESET = 'light-medium';
 
 /** Whether id names a real strength (the empty "off" id is not one). */
 export function isDenoisePresetId(id: unknown): id is string {
-  return typeof id === 'string' && id !== '' && DENOISE_OPTIONS.some(option => option.id === id);
+  return typeof id === 'string' && DENOISE_STRENGTH_OPTIONS.some(option => option.id === id);
 }

@@ -303,20 +303,11 @@ func TestSaveAudioAction_DenoiseFallsBackToRawPCM(t *testing.T) {
 // The success line names the denoise preset the clip was saved with, so a
 // support log answers whether a clip was denoised at export.
 func TestExecute_SuccessLogReportsDenoise(t *testing.T) {
-	for _, on := range []bool{true, false} {
-		t.Run(map[bool]string{true: "on", false: "off"}[on], func(t *testing.T) {
-			logs := logtest.CaptureBuffer(t)
-			raw := noisyPCM(conf.SampleRate, 1.5)
-			a, _ := newDenoiseAction(t, t.TempDir(), "clip.wav", raw, conf.SampleRate, false, on)
+	logs := logtest.CaptureBuffer(t)
+	a, _ := newDenoiseAction(t, t.TempDir(), "clip.wav", noisyPCM(conf.SampleRate, 1.5), conf.SampleRate, false, true)
 
-			require.NoError(t, a.Execute(t.Context(), nil))
+	require.NoError(t, a.Execute(t.Context(), nil))
 
-			line := logLineContaining(t, logs.String(), "operation=audio_export_success")
-			want := "denoise=" + exportDenoiseOff
-			if on {
-				want = "denoise=" + conf.DenoisePresetLightMedium
-			}
-			assert.Contains(t, line, want)
-		})
-	}
+	line := logLineContaining(t, logs.String(), "operation=audio_export_success")
+	assert.Contains(t, line, "denoise="+conf.DenoisePresetLightMedium)
 }

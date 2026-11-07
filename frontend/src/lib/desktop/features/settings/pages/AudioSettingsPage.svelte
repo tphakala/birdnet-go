@@ -48,7 +48,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import {
     DEFAULT_DENOISE_PRESET,
-    DENOISE_OPTIONS,
+    DENOISE_STRENGTH_OPTIONS,
     isDenoisePresetId,
   } from '$lib/utils/denoisePresets';
   import SettingsTabs, {
@@ -213,15 +213,12 @@
   );
   let store = $derived($settingsStore);
 
-  // Export denoise with every field defaulted, so the update below always writes
-  // a complete object even before the store has loaded or from an older server.
-  let exportDenoise = $derived<DenoiseSettings>({
-    enabled: settings.audio.export.denoise?.enabled ?? false,
-    strength: settings.audio.export.denoise?.strength ?? DEFAULT_DENOISE_PRESET,
-  });
+  // The page defaults and the settings coercion keep this object complete, so the
+  // update below always writes both fields.
+  let exportDenoise = $derived<DenoiseSettings>(settings.audio.export.denoise);
   let isLossyExportType = $derived(!isLosslessExportFormat(settings.audio.export.type));
   const denoiseStrengthOptions = $derived(
-    DENOISE_OPTIONS.filter(option => option.id !== '').map(option => ({
+    DENOISE_STRENGTH_OPTIONS.map(option => ({
       value: option.id,
       label: t(option.labelKey),
     }))
