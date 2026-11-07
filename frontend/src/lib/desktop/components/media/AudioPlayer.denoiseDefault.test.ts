@@ -14,6 +14,8 @@ import {
   type FakeMediaController,
 } from '../../../../test/fakeMediaElement';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
+import { mockAudioProbe } from '../../../../test/audioProbeMock';
+import { AUDIO_RETRY_DELAY_MS, MAX_AUDIO_LOAD_RETRIES } from '$lib/utils/audio';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -208,6 +210,81 @@ describe('AudioPlayer playback denoise default', () => {
     await chooseDenoise(DENOISE_LIGHT_MEDIUM_TEXT);
     expect(elementPath()).toBe(DENOISED_URL);
     expect(postedUrls()).toHaveLength(postsAfterHeavy);
+  });
+
+  describe('when the default denoised clip fails', () => {
+    const SERVER_ERROR_STATUS = 500;
+    const PENDING_STATUS = 503;
+    const SEEK_POSITION_SECONDS = 12;
+    let restoreFetch: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreFetch?.();
+      restoreFetch = undefined;
+    });
+
+    it('falls back to the stored clip at the same position and keeps playing', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      mount();
+      ctl.completeLoad();
+      ctl.element.currentTime = SEEK_POSITION_SECONDS;
+      await press();
+      const playsBefore = ctl.play.mock.calls.length;
+
+      ctl.failLoad();
+      await settle();
+
+      expect(elementPath()).toBe(STORED_URL);
+      expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
+      expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('does not ask for the denoised clip again after the fallback', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      mount();
+      ctl.completeLoad();
+      await press();
+      ctl.failLoad();
+      await settle();
+      ctl.completeLoad();
+      await settle();
+
+      await toggleNormalize();
+      await toggleNormalize();
+
+      expect(elementPath()).toBe(STORED_URL);
+    });
+
+    it('keeps retrying the denoised clip while the server answers 503', async () => {
+      restoreFetch = mockAudioProbe({ status: PENDING_STATUS, headers: { 'Retry-After': '1' } });
+      mount();
+      ctl.completeLoad();
+      await press();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(ctl.load).toHaveBeenCalled();
+    });
+
+    it('does not fall back for an explicit toolbar choice: the processing error stays', async () => {
+      restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+      mount();
+      ctl.completeLoad();
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      expect(ctl.element.src).toBe(PROCESSED_BLOB_URL);
+
+      for (let i = 0; i <= MAX_AUDIO_LOAD_RETRIES; i++) {
+        ctl.failLoad();
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      }
+      await settle();
+
+      expect(ctl.element.src).toBe(PROCESSED_BLOB_URL);
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
   });
 
   describe('with audible bats active', () => {

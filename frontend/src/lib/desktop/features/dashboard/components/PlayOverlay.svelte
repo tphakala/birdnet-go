@@ -130,10 +130,17 @@
   // swapToDenoisedSource), and the source effect only reads it when it needs the
   // clip to fall back to.
   let denoiseSwapped = false;
+  // Set when the denoised clip failed for a reason a retry cannot fix: this card then
+  // plays the stored clip for the rest of its mount.
+  let denoiseFailed = false;
   // The clip a plain (non audible-bats) play uses: the denoised clip once the first
   // play switched to it, otherwise the stored clip.
+  // Whether a plain play currently uses the denoised clip.
+  function onDenoisedClip(): boolean {
+    return denoiseSwapped && !denoiseFailed && denoisePreset !== '';
+  }
   function playUrl(): string {
-    return denoiseSwapped && denoisePreset ? audioUrlFor(detectionId, denoisePreset) : audioUrl;
+    return onDenoisedClip() ? audioUrlFor(detectionId, denoisePreset) : audioUrl;
   }
   // The source actually loaded into the element: the derived audible-bats clip
   // when one is active, otherwise the clip a play uses.
@@ -199,6 +206,7 @@
       // A new detection starts from its stored clip again: the first play of
       // that detection decides whether to denoise it.
       denoiseSwapped = false;
+      denoiseFailed = false;
       const newSrc = audibleBatsSrc ?? baseUrl;
       previousAudioUrl = baseUrl;
       previousEffectiveSrc = newSrc;
@@ -277,7 +285,8 @@
   // already happened) does not race the play call. The position is kept.
   // Audible bats carry their own denoise and are not switched.
   function swapToDenoisedSource() {
-    if (denoiseSwapped || !denoisePreset || audibleBatsSrc || !audioElement) return;
+    if (denoiseSwapped || denoiseFailed || !denoisePreset || audibleBatsSrc || !audioElement)
+      return;
     denoiseSwapped = true;
     const src = playUrl();
     previousEffectiveSrc = src;
@@ -343,10 +352,50 @@
     });
   }
 
+  // The denoised clip failed for a reason a retry cannot fix: play the stored clip
+  // from the same position instead, and do not ask for the denoised one again.
+  function fallbackToStoredClip() {
+    if (!audioElement) return;
+    logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
+    const resume = retryWithPlay || isPlaying;
+    const position = audioElement.currentTime;
+    denoiseFailed = true;
+    clearAudioRetryTimer();
+    audioRetryCount = 0;
+    markPlaybackStopped();
+    previousEffectiveSrc = audioUrl;
+    error = null;
+    swapSourceKeepingPosition(audioElement, audioUrl);
+    if (position > 0) audioElement.currentTime = position;
+    if (resume) {
+      isLoading = true;
+      void audioElement.play().then(playStarted).catch(handlePlayRejection);
+    }
+  }
+
+  // On the first failure of the denoised clip, ask the server why before retrying:
+  // a 503 keeps its Retry-After retry, a 404 ends it, and anything else is a failure
+  // a retry cannot fix, so the card falls back to the stored clip.
+  function probeDenoisedLoad(scheduledDelay: number) {
+    const controller = new AbortController();
+    audioProbeController = controller;
+    void probeAudioSource(playUrl(), controller.signal).then(outcome => {
+      if (controller.signal.aborted) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        scheduleRetry(pendingRetryDelayMs(outcome, scheduledDelay));
+      } else {
+        fallbackToStoredClip();
+      }
+    });
+  }
+
   // Handle a rejected play(). While a retry timer is pending the retry plays
   // (retryWithPlay), so the rejection is expected and ignored.
   function handlePlayRejection(err: unknown) {
-    if (audioRetryTimer !== undefined) return;
+    if (audioRetryTimer !== undefined || audioProbeController !== undefined) return;
     isLoading = false;
     if (isPlayInterruptedError(err)) {
       logger.debug('Audio play interrupted', { detectionId });
@@ -650,8 +699,17 @@
     const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(audioRetryCount);
     if (delay !== undefined) {
       const isFirstFailure = audioRetryCount === 0;
+      if (isFirstFailure && !audibleBatsSrc && onDenoisedClip()) {
+        probeDenoisedLoad(delay);
+        return;
+      }
       scheduleRetry(delay);
       if (isFirstFailure) probeFailedLoad(delay);
+      return;
+    }
+
+    if (!audibleBatsSrc && onDenoisedClip()) {
+      fallbackToStoredClip();
       return;
     }
 

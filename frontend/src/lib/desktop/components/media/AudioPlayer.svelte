@@ -318,6 +318,10 @@
   // stored clip (loaded for metadata) to the denoised one. Plain: the switch is
   // made by hand in ensurePlaybackSource.
   let playUnlocked = false;
+  // Set when the default's denoised clip failed for a reason a retry cannot fix: the
+  // stored clip plays instead for the rest of this mount. An explicit toolbar choice
+  // is a processed blob and keeps its own error handling.
+  let denoiseFailed = false;
   let processAbortController: AbortController | null = null;
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1147,8 +1151,11 @@
   const currentSource = () => {
     if (audibleBats.active && audibleBats.url) return audibleBats.url;
     if (processedAudioUrl) return processedAudioUrl;
-    return playUnlocked && defaultApplied ? defaultDenoiseUrl() : audioUrl;
+    return onDefaultDenoiseClip() ? defaultDenoiseUrl() : audioUrl;
   };
+
+  // Whether the element is on the default's GET denoise URL.
+  const onDefaultDenoiseClip = () => playUnlocked && defaultApplied && !denoiseFailed;
 
   // Whether src is a clip the server serves (the stored clip or the default's
   // denoised one), as opposed to a local blob. Only those are probed and checked
@@ -1162,7 +1169,7 @@
   function ensurePlaybackSource() {
     if (playUnlocked) return;
     playUnlocked = true;
-    if (!audioElement || !defaultApplied) return;
+    if (!audioElement || !defaultApplied || denoiseFailed) return;
     const src = currentSource();
     if (src === audioUrl) return;
     markPlaybackStopped();
@@ -1185,6 +1192,42 @@
     if (isPlaying) handlePause();
   }
 
+  // The default's denoised clip failed for a reason a retry cannot fix: play the
+  // stored clip from the same position instead, and do not ask for it again.
+  function fallbackToStoredClip() {
+    if (!audioElement) return;
+    logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
+    const position = audioElement.currentTime;
+    denoiseFailed = true;
+    resetRetryState();
+    markPlaybackStopped();
+    error = null;
+    swapSourceKeepingPosition(audioElement, audioUrl);
+    if (position > 0) audioElement.currentTime = position;
+    void audioElement.play().catch(handlePlayRejection);
+  }
+
+  // On the first failure of the denoised clip, ask the server why before retrying:
+  // a 503 keeps its Retry-After retry, a 404 ends it, and anything else is a failure
+  // a retry cannot fix.
+  function probeDenoisedLoad() {
+    const controller = new AbortController();
+    audioProbeController = controller;
+    const probedUrl = currentSource();
+    void probeAudioSource(probedUrl, controller.signal).then(outcome => {
+      if (controller.signal.aborted || probedUrl !== currentSource()) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        audioRetryCount++;
+        scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      } else {
+        fallbackToStoredClip();
+      }
+    });
+  }
+
   // Resume playback the user asked for during a retry, at most once.
   function consumePendingPlay() {
     if (!playRequestedAfterRetry) return;
@@ -1197,7 +1240,7 @@
   // Handle a rejected play(). While a retry timer is pending the retry can
   // still succeed, so only remember the play intent.
   function handlePlayRejection(err: unknown) {
-    if (audioRetryTimer !== undefined) {
+    if (audioRetryTimer !== undefined || audioProbeController !== undefined) {
       playRequestedAfterRetry = true;
       return;
     }
@@ -2069,6 +2112,7 @@
         // The new detection starts from its stored clip: its first play switches to
         // the denoised default again.
         playUnlocked = false;
+        denoiseFailed = false;
         // Reset audible-bats derived playback for the new detection (the source
         // is reset to audioUrl above; this just clears the derived-copy state).
         audibleBats.reset();
@@ -2210,11 +2254,20 @@
         // be encoding (backend returns 503 which the browser treats as a load error)
         if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
           const isFirstFailure = audioRetryCount === 0;
+          if (isFirstFailure && onDefaultDenoiseClip()) {
+            probeDenoisedLoad();
+            return;
+          }
           clearAudioRetryTimer();
           audioRetryCount++;
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
           if (isFirstFailure) probeFailedLoad();
+          return;
+        }
+
+        if (onDefaultDenoiseClip()) {
+          fallbackToStoredClip();
           return;
         }
 
