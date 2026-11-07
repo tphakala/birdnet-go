@@ -245,6 +245,51 @@ func TestAudibleBatsByID_CacheFollowsClipFile(t *testing.T) {
 	assert.InDelta(t, float64(lenA), float64(lenB2), 8192, "a clip replaced in place is processed again, not served from its old cache entry")
 }
 
+func TestAudibleBatsByID_DenoiseSeparatesCacheEntries(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteModelType", "2").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "2").Return("bat.wav", nil)
+	controller.DS = mockDS
+
+	const denoised = `{"expansion": 10, "denoise": "light-medium"}`
+	rec := postJSON(e, "/api/v2/audio/2/audible-bats", denoised)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	// The source now holds undecodable bytes of the same length and mtime, so
+	// only a cache hit can answer 200.
+	corruptKeepingStat(t, fixturePath(tempDir, "bat.wav"))
+	rec = postJSON(e, "/api/v2/audio/2/audible-bats", denoised)
+	assert.Equal(t, http.StatusOK, rec.Code, "the same preset is served from the cache")
+	rec = postJSON(e, "/api/v2/audio/2/audible-bats", `{"expansion": 10}`)
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, "no preset is a different entry and is processed again")
+
+	assert.Equal(t, http.StatusBadRequest, postJSON(e, "/api/v2/audio/2/audible-bats", `{"expansion": 10, "denoise": "extreme"}`).Code)
+}
+
+func TestAudibleBatsByID_CancelledRequestFreesItsSlot(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteModelType", "3").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "3").Return("bat.wav", nil)
+	controller.DS = mockDS
+
+	reqCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/audio/3/audible-bats",
+		strings.NewReader(`{"expansion": 10, "denoise": "light-medium"}`)).WithContext(reqCtx)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Empty(t, rec.Body.Bytes(), "a client that left gets no error body")
+	assert.Empty(t, controller.processingSemaphore, "the aborted job released its processing slot")
+}
+
 func TestProcessedSpectrogramByID_UndecodableSourceIs422(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 

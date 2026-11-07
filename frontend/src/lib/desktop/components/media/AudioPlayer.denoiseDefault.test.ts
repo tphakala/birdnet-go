@@ -475,6 +475,60 @@ describe('AudioPlayer playback denoise default', () => {
       expect(ctl.element.src).toBe(BATS_BLOB_URL);
     });
 
+    function audibleBatsBodies(): Array<{ denoise: string }> {
+      return fetchMock.mock.calls
+        .filter(call => String(call[0]).includes('/audible-bats'))
+        .map(call => JSON.parse(String((call[1] as RequestInit).body)));
+    }
+
+    it('requests the audible copy with the playback default', async () => {
+      mount({ modelType: 'bat' });
+      ctl.completeLoad();
+      await activateAudibleBats();
+
+      expect(audibleBatsBodies().map(body => body.denoise)).toEqual([PRESET]);
+    });
+
+    it('requests the audible copy with the clip override from the toolbar', async () => {
+      mount({ modelType: 'bat' });
+      ctl.completeLoad();
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      await activateAudibleBats();
+
+      expect(audibleBatsBodies().map(body => body.denoise)).toEqual(['heavy']);
+    });
+
+    it('requests the audible copy without denoise once the default clip failed', async () => {
+      const restoreProbe = mockAudioProbe({ status: 500 });
+      const probe = globalThis.fetch;
+      const batsBodies: Array<{ denoise: string }> = [];
+      const wrapper = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (!String(input).includes('/audible-bats')) return probe(input, init);
+        batsBodies.push(JSON.parse(String(init?.body)));
+        return {
+          ok: true,
+          status: 200,
+          blob: async () => new Blob(['bats']),
+          headers: new Headers(),
+        };
+      });
+      globalThis.fetch = wrapper as unknown as typeof globalThis.fetch;
+      try {
+        mount({ modelType: 'bat' });
+        ctl.completeLoad();
+        await press();
+        ctl.failLoad();
+        await settle();
+        expect(elementPath()).toBe(STORED_URL);
+
+        await activateAudibleBats();
+
+        expect(batsBodies.map(body => body.denoise)).toEqual(['']);
+      } finally {
+        restoreProbe();
+      }
+    });
+
     it('turns audible bats off before a normalize change replaces the source', async () => {
       mount({ modelType: 'bat' });
       ctl.completeLoad();

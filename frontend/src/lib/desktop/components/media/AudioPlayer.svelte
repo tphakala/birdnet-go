@@ -335,6 +335,9 @@
   // source swap (so position is preserved across the duration change).
   const audibleBats = useAudibleBats({
     getDetectionId: () => detectionId,
+    // The audible copy carries the toolbar's denoise, except after the default's
+    // denoised clip failed: the stored clip is what plays then.
+    getDenoise: () => (denoiseFailed ? '' : processingDenoise),
     onActivate: url => swapAudioSource(url),
     // audibleBats.active is already false here, so this is the plain source.
     onDeactivate: () => swapAudioSource(currentSource()),

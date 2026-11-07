@@ -51,14 +51,17 @@ func (f Filters) Active() bool {
 	return f.Denoise != "" || f.Normalize || f.GainDB != 0
 }
 
-// applyFilters runs the enabled filters over p in place; p.Data is modified.
-func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
-	if f.Denoise != "" {
-		if err := denoisePCM(ctx, p, f.Denoise); err != nil {
-			return err
-		}
+// applyDenoise runs the denoise step of f over p in place, if one is selected.
+func applyDenoise(ctx context.Context, p *pcmBuffer, f Filters) error {
+	if f.Denoise == "" {
+		return nil
 	}
+	return denoisePCM(ctx, p, f.Denoise)
+}
 
+// applyLoudnessAndGain runs the normalization and gain steps of f over p in
+// place; p.Data is modified. The denoise step is applyDenoise.
+func applyLoudnessAndGain(ctx context.Context, p *pcmBuffer, f Filters) error {
 	totalGain := f.GainDB
 	if f.Normalize {
 		plan, err := loudnorm.PlanBytes(ctx, p.Data,

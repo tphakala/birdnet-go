@@ -3,8 +3,8 @@
 // external FFmpeg binary.
 //
 // The steps are decode (decoder chosen by extension, size and rate bounded),
-// applyFilters (denoise, then loudness normalization, then user gain), timeExpand
-// (audible bats playback) and encode (WAV, FLAC, MP3, AAC and Opus through the same encoder
+// applyDenoise, timeExpand (audible bats playback), applyLoudnessAndGain
+// (loudness normalization, then user gain) and encode (WAV, FLAC, MP3, AAC and Opus through the same encoder
 // wrappers clip export uses). ExtractClip, ProcessToWAV and AudibleBats run
 // them through one pipeline for the three request shapes.
 //

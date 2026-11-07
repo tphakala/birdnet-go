@@ -96,7 +96,10 @@
   // generated `url` while the spectrogram keeps spanning the full original clip.
   const MODEL_TYPE_BAT = 'bat';
   const isBatDetection = $derived(detection.modelType === MODEL_TYPE_BAT);
-  const audibleBats = useAudibleBats({ getDetectionId: () => detection.id });
+  const audibleBats = useAudibleBats({
+    getDetectionId: () => detection.id,
+    getDenoise: getPlaybackDenoiseDefault,
+  });
 
   // Reset derived playback if this card instance is recycled to a different
   // detection (keyed {#each} normally avoids this, but guard defensively).
