@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -113,14 +114,15 @@ type processedWAV struct {
 
 // processWAV runs ProcessToWAV for key through the shared flight group, so
 // concurrent requests for one key (a GET seeking during processing, a POST for
-// the same filters) run one job. The job runs on the handler's lifecycle
+// the same filters) run one job. The job is tracked by the core wait group (see
+// runTrackedJob) and runs on the handler's lifecycle
 // context, not the leader's request, so an aborted request or a seek does not
 // discard work other callers wait for; each caller waits on its own request
 // context. The leader takes a processing slot without blocking and fails with
 // errProcessingBusy when none is free.
 func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
 	ch := c.processingFlight.DoChan(key, func() (any, error) {
-		return c.runProcessingJob(key, absolutePath, filters)
+		return c.runTrackedJob(key, absolutePath, filters)
 	})
 	select {
 	case res := <-ch:
@@ -135,6 +137,42 @@ func (c *Handler) processWAV(reqCtx context.Context, key, absolutePath string, f
 	case <-reqCtx.Done():
 		return nil, reqCtx.Err()
 	}
+}
+
+// runTrackedJob runs runProcessingJob in a goroutine registered with the core's
+// wait group, so Shutdown waits for a job still holding a slot and writing to the
+// cache, and waits for its result. A panic in the job becomes an error: the
+// flight function runs on a goroutine of its own, where nothing could recover
+// it and the process would exit; the panic is logged with its stack. Once the
+// lifecycle context is cancelled no job starts. The check narrows, but does not
+// close, the window against a Shutdown that cancels and waits right after it: that
+// window is the one every Core.Go caller has.
+func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
+	if err := c.Context().Err(); err != nil {
+		return nil, err
+	}
+	type jobResult struct {
+		out *processedWAV
+		err error
+	}
+	done := make(chan jobResult, 1)
+	c.Go(func() {
+		var res jobResult
+		defer func() {
+			if r := recover(); r != nil {
+				c.LogErrorIfEnabled("Processing job panicked",
+					logger.String("cache_key", key),
+					logger.String("panic", fmt.Sprint(r)),
+					logger.String("stack", string(debug.Stack())),
+				)
+				res = jobResult{err: fmt.Errorf("processing job panicked: %v", r)}
+			}
+			done <- res
+		}()
+		res.out, res.err = c.runProcessingJob(key, absolutePath, filters)
+	})
+	res := <-done
+	return res.out, res.err
 }
 
 // runProcessingJob is the flight leader's work: a last cache check (a flight that

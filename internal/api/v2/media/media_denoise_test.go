@@ -34,6 +34,13 @@ const (
 	// is released. The assertions hold even if one arrives late (it then hits the
 	// cache), so this only makes the test exercise the join.
 	denoiseJoinGrace = 100 * time.Millisecond
+	// denoiseStartTimeout bounds waits for a job to reach or leave its hook so a
+	// regression fails instead of hanging the package.
+	denoiseStartTimeout = 10 * time.Second
+	// denoiseNeverWindow and denoiseNeverTick size the negative check that Wait
+	// stays blocked; it can pass spuriously on a slow machine but never fail.
+	denoiseNeverWindow = 100 * time.Millisecond
+	denoiseNeverTick   = 10 * time.Millisecond
 )
 
 // signedIn marks every request as coming from an authenticated client.
@@ -425,4 +432,81 @@ func TestProcessWAV_CallerLeavesWithoutCancellingTheJob(t *testing.T) {
 	close(release)
 	require.Eventually(t, func() bool { return controller.processingCache.get(key) != nil },
 		5*time.Second, 10*time.Millisecond, "the abandoned job still stores its result")
+}
+
+func TestProcessWAV_JobPanicBecomesError(t *testing.T) {
+	_, controller, dir := setupMediaTestEnvironment(t)
+	src := fixturePath(dir, "clip.wav")
+	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+	controller.processingStartedHook = func() { panic("job failure") }
+
+	// Without recovery the job's panic is re-raised on a goroutine nothing can
+	// recover and ends the test binary instead of failing an assertion.
+	_, err := controller.processWAV(t.Context(), "panics.wav", src, transcode.Filters{Denoise: denoiseTestPreset})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "job failure")
+
+	// The slot is released and the key is free for the next caller.
+	controller.processingStartedHook = nil
+	_, err = controller.processWAV(t.Context(), "panics.wav", src, transcode.Filters{Denoise: denoiseTestPreset})
+	require.NoError(t, err)
+}
+
+func TestProcessWAV_ShutdownWaitsForJob(t *testing.T) {
+	_, controller, dir := setupMediaTestEnvironment(t)
+	src := fixturePath(dir, "clip.wav")
+	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	controller.processingStartedHook = func() {
+		close(entered)
+		<-release
+	}
+
+	const key = "shutdown.wav"
+	reqCtx, cancel := context.WithCancel(t.Context())
+	go func() { _, _ = controller.processWAV(reqCtx, key, src, transcode.Filters{Denoise: denoiseTestPreset}) }()
+	select {
+	case <-entered:
+	case <-time.After(denoiseStartTimeout):
+		t.Fatal("the job never started")
+	}
+	cancel()
+
+	// Shutdown is Cancel then Wait.
+	controller.Cancel()
+	waited := make(chan struct{})
+	go func() {
+		controller.Wait()
+		close(waited)
+	}()
+	assert.Never(t, func() bool {
+		select {
+		case <-waited:
+			return true
+		default:
+			return false
+		}
+	}, denoiseNeverWindow, denoiseNeverTick, "Shutdown must wait for a job that is still running")
+
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(denoiseStartTimeout):
+		t.Fatal("Wait did not return after the job finished")
+	}
+	assert.Empty(t, controller.processingSemaphore, "the job released its slot before Wait returned")
+}
+
+func TestProcessWAV_NoJobStartsAfterShutdown(t *testing.T) {
+	_, controller, dir := setupMediaTestEnvironment(t)
+	src := fixturePath(dir, "clip.wav")
+	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+	var started atomic.Int32
+	controller.processingStartedHook = func() { started.Add(1) }
+
+	controller.Cancel()
+	_, err := controller.processWAV(t.Context(), "late.wav", src, transcode.Filters{Denoise: denoiseTestPreset})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Zero(t, started.Load(), "no job starts once the lifecycle context is cancelled")
 }
