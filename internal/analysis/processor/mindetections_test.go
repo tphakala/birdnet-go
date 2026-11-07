@@ -1137,3 +1137,99 @@ func TestMinDetections_ParityFixture(t *testing.T) {
 			"%s overlap %.1f level %d", row.ModelID, row.OverlapSec, row.Level)
 	}
 }
+
+// TestBatGroupMinDetections pins that a bat-group model's confirmation count uses
+// the bat filter level and the step of its own spec and resolved overlap: Bat keeps
+// the count calculateBatMinDetections gives, and a model with a shorter step gets
+// minDetectionsForSegment for that step.
+func TestBatGroupMinDetections(t *testing.T) {
+	t.Parallel()
+
+	batSpec := classifier.ModelRegistry[classifier.RegistryIDBat].Spec
+	const (
+		batStepSecs = 1.5 // 3 s clip, fixed 50% overlap
+		// batIgnoredBaseOverlap is a base overlap the fixed-overlap Bat model must ignore.
+		batIgnoredBaseOverlap = 2 * time.Second
+		customID              = "custom-bat-group"
+		customStepSecs        = 0.5
+		customClip            = 3 * time.Second
+		customOverlapBy       = 2500 * time.Millisecond // 3 s clip - 2.5 s overlap = 0.5 s step
+	)
+	customSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: customClip}
+
+	for level := 0; level <= 5; level++ {
+		s := &conf.Settings{}
+		s.Bat.FalsePositiveFilter.Level = level
+		s.Realtime.FalsePositiveFilter.Level = 0 // the bird level must not leak in
+
+		assert.Equal(t, minDetectionsForSegment(batStepSecs, level),
+			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, classifier.ConfiguredBaseOverlap(s)),
+			"Bat count must be unchanged at level %d", level)
+		assert.Equal(t, minDetectionsForSegment(batStepSecs, level),
+			batGroupMinDetections(s, classifier.RegistryIDBat, batSpec, batIgnoredBaseOverlap),
+			"Bat count must ignore the base overlap at level %d", level)
+		assert.Equal(t, minDetectionsForSegment(customStepSecs, level),
+			batGroupMinDetections(s, customID, customSpec, customOverlapBy),
+			"bat-group model with a %.1f s step at level %d", customStepSecs, level)
+	}
+}
+
+// TestPrecomputeVisibilityThresholds_BatEntry pins that the Bat model keeps its
+// visibility threshold, derived from the bat filter level.
+func TestPrecomputeVisibilityThresholds_BatEntry(t *testing.T) {
+	t.Parallel()
+
+	s := &conf.Settings{}
+	s.Bat.FalsePositiveFilter.Level = 4
+	vt := precomputeVisibilityThresholds(s, 0)
+	// Level 4 gives 3 confirmations over the 1.5 s step, so the threshold is 2;
+	// the bird default at filter level 0 is 1, so a dropped Bat entry is visible.
+	const wantBatVisibility = 2
+	assert.Equal(t, wantBatVisibility, vt.getThreshold(classifier.RegistryIDBat))
+}
+
+// TestIsBatGroupModel pins the taxon-group predicate behind the ultrasonic filter
+// and the FP routing.
+func TestIsBatGroupModel(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isBatGroupModel(classifier.RegistryIDBat))
+	assert.False(t, isBatGroupModel(classifier.RegistryIDBirdNETV24))
+	assert.False(t, isBatGroupModel("not-a-model"))
+}
+
+// TestMinDetectionsForModel_RegisteredBatGroupModel pins that the public routing
+// in MinDetectionsForModel and precomputeVisibilityThresholds covers every
+// registered bat-group model, not only the Bat ID: such a model uses the bat
+// filter level and the step of its own resolved overlap.
+func TestMinDetectionsForModel_RegisteredBatGroupModel(t *testing.T) {
+	// Not parallel: mutates the package-global classifier.ModelRegistry.
+	const (
+		otherBatID    = "test-other-bat-group"
+		otherOverlap  = 2800 * time.Millisecond // 3 s clip - 2.8 s overlap = 0.2 s step
+		otherStepSecs = 0.2
+		batLevel      = 4
+	)
+	// A copy of the Bat entry under another ID keeps its bat taxon group.
+	info := classifier.ModelRegistry[classifier.RegistryIDBat]
+	info.ID = otherBatID
+	classifier.ModelRegistry[otherBatID] = info
+	t.Cleanup(func() { delete(classifier.ModelRegistry, otherBatID) })
+
+	s := &conf.Settings{}
+	s.Bat.FalsePositiveFilter.Level = batLevel
+	s.Realtime.FalsePositiveFilter.Level = 0 // a bird path fallback would return 1
+
+	want := minDetectionsForSegment(otherStepSecs, batLevel)
+	require.NotEqual(t, want, calculateBatMinDetections(s),
+		"the custom step must give a count the Bat step does not")
+	assert.Equal(t, want, MinDetectionsForModel(s, otherBatID, otherOverlap),
+		"a registered bat-group model must route to the bat filter")
+
+	vt := precomputeVisibilityThresholds(s, otherOverlap)
+	batVisibility := CalculateVisibilityThreshold(calculateBatMinDetections(s))
+	require.NotContains(t, []int{vt.getThreshold(""), batVisibility}, CalculateVisibilityThreshold(want),
+		"the bat-group threshold must differ from the bird default and the Bat step's threshold")
+	assert.Equal(t, CalculateVisibilityThreshold(want), vt.getThreshold(otherBatID),
+		"a registered bat-group model must get its own visibility threshold")
+}
