@@ -16,13 +16,17 @@ import (
 
 const bufferMonitorDebugEveryTicks = 300
 
+// bufferMonitorPollInterval is how often an analysis buffer monitor polls its
+// buffer. The monitor reads at most one window per poll.
+const bufferMonitorPollInterval = 100 * time.Millisecond
+
 // bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
 // buffer before it is (re)allocated. The buffer is transiently absent on every
 // source (re)start (the stream-reset callback starts the monitor before
 // registerConsumersForSources allocates the buffer) and across a kept-source
 // reconfigure (ReconfigureSource deallocates the buffer before
 // registerConsumersForSources reallocates it). Polling through this grace
-// (pollInterval each) keeps the monitor alive across that window instead of
+// (bufferMonitorPollInterval each) keeps the monitor alive across that window instead of
 // dropping it, while a model that is not a target for the source (no buffer ever
 // appears) still stops once the grace elapses. Genuine (source, model) removal is
 // handled separately by closing the monitor's quit channel, so the grace never
@@ -501,13 +505,12 @@ func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) 
 // audio chunks to the BirdNET analysis pipeline.
 func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monitorConfig) {
 	detectionOffset := cfg.spec.ClipLength
-	const pollInterval = 100 * time.Millisecond
 
 	analysisWindowBytes := cfg.readSize
 	var state monitorTickState
 	var tickCount int64
 
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(bufferMonitorPollInterval)
 	defer ticker.Stop()
 
 	for {

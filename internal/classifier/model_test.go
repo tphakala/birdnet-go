@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
@@ -265,4 +266,31 @@ func TestModelSpec_EffectiveSampleRate(t *testing.T) {
 		spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000}
 		assert.Equal(t, 256000, spec.EffectiveSampleRate())
 	})
+}
+
+// TestModelSpec_AnalysisRingCapacity pins the ring capacity of every registry
+// entry: a spec that requires a contiguous window gets room for two windows, and
+// every other model keeps a ring of exactly one window (its buffer geometry must
+// not change).
+func TestModelSpec_AnalysisRingCapacity(t *testing.T) {
+	t.Parallel()
+
+	require.NotEmpty(t, ModelRegistry)
+	flagged := 0
+	for id := range ModelRegistry {
+		spec := ModelRegistry[id].Spec
+		want := spec.ClipSizeBytes()
+		if spec.RequireContiguousWindow {
+			flagged++
+			want = contiguousWindowRingWindows * spec.ClipSizeBytes()
+		}
+		assert.Equal(t, want, spec.AnalysisRingCapacity(), "ring capacity for %s", id)
+	}
+	assert.Equal(t, 1, flagged, "BSG-BAT is the only contiguous-window model")
+
+	bsgBat := ModelRegistry[RegistryIDBSGBat].Spec
+	assert.Equal(t, 2*786944, bsgBat.AnalysisRingCapacity())
+	_, _, readSize := bsgBat.BufferDimensions(0)
+	assert.GreaterOrEqual(t, bsgBat.AnalysisRingCapacity(), bsgBat.ClipSizeBytes()+readSize,
+		"the ring holds a readable window plus a whole fresh step")
 }
