@@ -245,6 +245,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.layout.elements` | dashboard-element[] |  |
 | `realtime.dashboard.defaultaudiogain` | number | Default playback gain in dB (0-24) |
 | `realtime.dashboard.livespectrogram` | boolean | auto-start live spectrogram on dashboard |
+| `realtime.dashboard.playbackdenoise.enabled` | boolean | true to apply the denoise |
+| `realtime.dashboard.playbackdenoise.strength` | string | preset name, see the DenoisePreset constants |
 | `realtime.dynamicthreshold.enabled` | boolean | true to enable dynamic threshold |
 | `realtime.dynamicthreshold.debug` | boolean | true to enable debug mode |
 | `realtime.dynamicthreshold.trigger` | number | trigger threshold for dynamic threshold |

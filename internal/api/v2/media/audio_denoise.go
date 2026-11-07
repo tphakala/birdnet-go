@@ -222,6 +222,17 @@ func (c *Handler) entryWriteTime(key string) time.Time {
 	return time.Now()
 }
 
+// mayDenoise reports whether the request may start a denoise: a signed-in client
+// always may, a guest only for the playback default currently in effect. The
+// setting is read per request so a change takes effect without a restart.
+func (c *Handler) mayDenoise(ctx echo.Context, preset string) bool {
+	if c.clientAuthenticated(ctx) {
+		return true
+	}
+	effective := c.CurrentSettings().EffectivePlaybackDenoise()
+	return effective != "" && effective == preset
+}
+
 // clientAuthenticated reports whether the request comes from a signed-in client.
 // Without an injected check every client is unauthenticated.
 func (c *Handler) clientAuthenticated(ctx echo.Context) bool {
@@ -233,12 +244,13 @@ func (c *Handler) clientAuthenticated(ctx echo.Context) bool {
 // and jobs with POST /process for a denoise-only request.
 //
 // A cache hit is served before guest gating, so a guest's Range follow-up for a
-// WAV it already got keeps working. On a miss a guest never starts a denoise: it
-// gets the stored clip, marked no-store. A missing clip is never answered with
+// WAV it already got keeps working. On a miss a guest starts a denoise only for
+// the playback default currently in effect; otherwise it gets the stored clip,
+// marked no-store. A missing clip is never answered with
 // raw bytes: it follows the same not-ready and gone decision as the stored-clip
 // path, or is denoised from its alternate-extension file.
 func (c *Handler) serveDenoisedAudio(ctx echo.Context, noteID, preset string) error {
-	authenticated := c.clientAuthenticated(ctx)
+	allowed := c.mayDenoise(ctx, preset)
 	normalizedPath, lookupErr := c.resolveClipPath(noteID)
 	if lookupErr != nil {
 		return c.respondClipLookupError(ctx, lookupErr)
@@ -248,7 +260,7 @@ func (c *Handler) serveDenoisedAudio(ctx echo.Context, noteID, preset string) er
 		if !errors.Is(lookupErr.err, os.ErrNotExist) {
 			return c.respondClipLookupError(ctx, lookupErr)
 		}
-		if !authenticated {
+		if !allowed {
 			// Guests get the stored-clip answer, including its not-ready handling.
 			return c.serveStoredAudioByID(ctx, noteID, true)
 		}
@@ -271,7 +283,7 @@ func (c *Handler) serveDenoisedAudio(ctx echo.Context, noteID, preset string) er
 		}
 	}
 
-	if !authenticated {
+	if !allowed {
 		return c.serveStoredAudioByID(ctx, noteID, true)
 	}
 

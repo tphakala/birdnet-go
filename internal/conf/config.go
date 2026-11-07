@@ -188,6 +188,7 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
+	PlaybackDenoise  DenoiseSettings      `yaml:"playbackdenoise" json:"playbackDenoise"`               // denoise clips when they are played or downloaded; stored clips stay unchanged
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
@@ -2099,6 +2100,21 @@ type Settings struct {
 	// stamped by UpdateSettings and CompareAndStoreSettings and is zero for a
 	// snapshot published by Load or StoreSettings. Read it through Revision.
 	revision uint64
+}
+
+// EffectivePlaybackDenoise returns the denoise preset the UI applies to clip
+// playback and downloads by default, or "" when none applies. The playback
+// default is off while export-stage denoise is on: the saved clips are already
+// denoised, and denoising them again when played would do it twice.
+func (s *Settings) EffectivePlaybackDenoise() string {
+	if s.Realtime.Audio.Export.Denoise.Enabled {
+		return ""
+	}
+	playback := s.Realtime.Dashboard.PlaybackDenoise
+	if !playback.Enabled || !IsValidDenoisePresetName(playback.Strength) {
+		return ""
+	}
+	return playback.Strength
 }
 
 // Revision identifies the client-writable state of this snapshot within one

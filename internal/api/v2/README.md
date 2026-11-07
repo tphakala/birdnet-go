@@ -210,9 +210,12 @@ request, so a seek during processing does not start a second job. Processing sha
 two-slot limit of the other processing endpoints: when both slots are busy and the
 variant is not cached, the request answers **503** with `Retry-After` and never the
 stored clip. A clip that is not on disk yet follows the pending clip handling below, or
-is denoised from its copy under another audio extension. Unauthenticated clients never
-start a denoise: they get the stored clip with `Cache-Control: no-store`, unless the
-denoised variant is already cached, which is served to them as to anyone.
+is denoised from its copy under another audio extension. Unauthenticated clients start a
+denoise only for the playback default (`GET /app/config` field `playbackDenoise`, the
+dashboard "denoise playback" setting, empty while it is off or export-stage denoise is on),
+read per request, and only when `denoise` equals it; otherwise they get the stored clip
+with `Cache-Control: no-store`, unless the denoised variant is already cached, which is
+served to them as to anyone.
 
 **Spectrogram status codes.** All five spectrogram endpoints (`/media/spectrogram/:filename`,
 `/spectrogram/:id`, `/spectrogram/:id/generate`, `/spectrogram/:id/status` and

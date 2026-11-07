@@ -262,6 +262,11 @@ func validateDashboardSettings(settings *Dashboard) error {
 		}
 	}
 
+	// Playback denoise strength: heal an empty value, reject an unknown one.
+	if err := normalizeAndValidateDenoiseStrength(&settings.PlaybackDenoise, "realtime.dashboard.playbackdenoise.strength"); err != nil {
+		return err
+	}
+
 	// Validate spectrogram settings
 	if settings.Spectrogram.Mode != "" {
 		validModes := []string{"auto", "prerender", "user-requested"}
