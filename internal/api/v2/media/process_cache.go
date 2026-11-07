@@ -150,6 +150,18 @@ func (c *processingCache) open(key string) (*os.File, os.FileInfo, bool) {
 	return f, info, true
 }
 
+// entryModTime returns the write time of a cached entry, or false when it is
+// missing.
+func (c *processingCache) entryModTime(key string) (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	info, err := os.Stat(filepath.Join(c.dir, key))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
 // put writes data to cache atomically (temp file + rename), evicting oldest files if over limit.
 func (c *processingCache) put(key string, data []byte) error {
 	c.mu.Lock()

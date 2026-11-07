@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -509,4 +510,29 @@ func TestProcessWAV_NoJobStartsAfterShutdown(t *testing.T) {
 	_, err := controller.processWAV(t.Context(), "late.wav", src, transcode.Filters{Denoise: denoiseTestPreset})
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Zero(t, started.Load(), "no job starts once the lifecycle context is cancelled")
+}
+
+func TestProcessWAV_ModTimeIsCacheEntryWriteTime(t *testing.T) {
+	_, controller, dir := setupMediaTestEnvironment(t)
+	src := fixturePath(dir, "clip.wav")
+	writeToneWAV(t, src, processTestRate, denoiseTestSeconds, fixtureToneHz)
+	cacheDir := filepath.Join(dir, processingCacheDirName)
+
+	// A fresh job reports the mtime of the entry it stored, the value a later
+	// cache hit reports, so Last-Modified does not change between the two.
+	const stored = "stored.wav"
+	got, err := controller.processWAV(t.Context(), stored, src, transcode.Filters{Denoise: denoiseTestPreset})
+	require.NoError(t, err)
+	info, err := os.Stat(filepath.Join(cacheDir, stored))
+	require.NoError(t, err)
+	assert.True(t, info.ModTime().Equal(got.modTime), "job result carries %v, cache entry has %v", got.modTime, info.ModTime())
+
+	// A flight that finds the entry already stored reports its write time too.
+	const earlier = "earlier.wav"
+	require.NoError(t, controller.processingCache.put(earlier, []byte("cached")))
+	written := time.Now().Add(-time.Minute).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(filepath.Join(cacheDir, earlier), written, written))
+	got, err = controller.processWAV(t.Context(), earlier, src, transcode.Filters{Denoise: denoiseTestPreset})
+	require.NoError(t, err)
+	assert.True(t, written.Equal(got.modTime), "cached result carries %v, entry was written %v", got.modTime, written)
 }

@@ -181,7 +181,7 @@ func (c *Handler) runTrackedJob(key, absolutePath string, filters transcode.Filt
 func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.Filters) (*processedWAV, error) {
 	if c.processingCache != nil {
 		if cached := c.processingCache.get(key); cached != nil {
-			return &processedWAV{data: cached, modTime: time.Now()}, nil
+			return &processedWAV{data: cached, modTime: c.entryWriteTime(key)}, nil
 		}
 	}
 
@@ -208,7 +208,19 @@ func (c *Handler) runProcessingJob(key, absolutePath string, filters transcode.F
 			)
 		}
 	}
-	return &processedWAV{data: wavData, modTime: time.Now()}, nil
+	return &processedWAV{data: wavData, modTime: c.entryWriteTime(key)}, nil
+}
+
+// entryWriteTime is the write time of the cache entry for key, the value a later
+// cache hit serves as Last-Modified, or the current time when there is no entry
+// (a failed store or no cache).
+func (c *Handler) entryWriteTime(key string) time.Time {
+	if c.processingCache != nil {
+		if modTime, ok := c.processingCache.entryModTime(key); ok {
+			return modTime
+		}
+	}
+	return time.Now()
 }
 
 // clientAuthenticated reports whether the request comes from a signed-in client.
