@@ -5219,6 +5219,7 @@
         "denoise": "Støjreduktion",
         "denoiseOff": "Fra",
         "denoiseLight": "Let",
+        "denoiseLightMedium": "Let-mellem",
         "denoiseMedium": "Mellem",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normalisér lyd",

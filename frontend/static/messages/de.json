@@ -5219,6 +5219,7 @@
         "denoise": "Entrauschen",
         "denoiseOff": "Aus",
         "denoiseLight": "Leicht",
+        "denoiseLightMedium": "Leicht-mittel",
         "denoiseMedium": "Mittel",
         "denoiseHeavy": "Stark",
         "normalize": "Audio normalisieren",

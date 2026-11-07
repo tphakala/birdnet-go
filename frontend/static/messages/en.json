@@ -5219,6 +5219,7 @@
         "denoise": "Denoise",
         "denoiseOff": "Off",
         "denoiseLight": "Light",
+        "denoiseLightMedium": "Light-medium",
         "denoiseMedium": "Medium",
         "denoiseHeavy": "Heavy",
         "normalize": "Normalize audio",

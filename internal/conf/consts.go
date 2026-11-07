@@ -118,6 +118,35 @@ const (
 	MaxModelConsensusMinModels = 4
 )
 
+// Denoise preset names accepted wherever a clip denoise strength is chosen. They
+// map to go-audio-dsp denoiser strengths in internal/audiocore/transcode, which
+// imports this package, so the names live here.
+const (
+	// DenoisePresetLight is the gentlest denoise strength.
+	DenoisePresetLight = "light"
+	// DenoisePresetLightMedium sits between light and medium.
+	DenoisePresetLightMedium = "light-medium"
+	// DenoisePresetMedium is the medium denoise strength.
+	DenoisePresetMedium = "medium"
+	// DenoisePresetHeavy is the strongest denoise strength.
+	DenoisePresetHeavy = "heavy"
+
+	// DefaultDenoisePreset is the preset used when denoise is enabled without a
+	// named strength.
+	DefaultDenoisePreset = DenoisePresetLightMedium
+)
+
+// IsValidDenoisePresetName reports whether name is one of the denoise preset
+// names. The empty string (denoise off) is not a preset name.
+func IsValidDenoisePresetName(name string) bool {
+	switch name {
+	case DenoisePresetLight, DenoisePresetLightMedium, DenoisePresetMedium, DenoisePresetHeavy:
+		return true
+	default:
+		return false
+	}
+}
+
 // DefaultSessionDuration is the default session duration (7 days).
 const DefaultSessionDuration = 168 * time.Hour
 

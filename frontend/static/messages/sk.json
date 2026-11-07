@@ -5219,6 +5219,7 @@
         "denoise": "Odšumenie",
         "denoiseOff": "Vypnuté",
         "denoiseLight": "Ľahký",
+        "denoiseLightMedium": "Ľahký-stredný",
         "denoiseMedium": "Stredný",
         "denoiseHeavy": "Ťažký",
         "normalize": "Normalizovať zvuk",

@@ -83,4 +83,26 @@ describe('AudioToolbar export menu', () => {
 
     expect(onExport).toHaveBeenCalledWith('opus');
   });
+
+  it('lists the denoise presets from off to heavy, with light-medium between light and medium', async () => {
+    const user = userEvent.setup();
+    renderToolbar();
+
+    await user.click(
+      screen.getByRole('button', { name: 'components.audioPlayer.processing.denoise' })
+    );
+
+    const menu = document.querySelector('.denoise-menu');
+    expect(menu).not.toBeNull();
+    const labels = Array.from(menu?.querySelectorAll('.denoise-option') ?? []).map(option =>
+      option.textContent.trim()
+    );
+    expect(labels).toEqual([
+      'components.audioPlayer.processing.denoiseOff',
+      'components.audioPlayer.processing.denoiseLight',
+      'components.audioPlayer.processing.denoiseLightMedium',
+      'components.audioPlayer.processing.denoiseMedium',
+      'components.audioPlayer.processing.denoiseHeavy',
+    ]);
+  });
 });

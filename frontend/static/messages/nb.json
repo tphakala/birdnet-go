@@ -5219,6 +5219,7 @@
         "denoise": "Støyreduksjon",
         "denoiseOff": "Av",
         "denoiseLight": "Lett",
+        "denoiseLightMedium": "Lett-middels",
         "denoiseMedium": "Middels",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normaliser lyd",

@@ -3829,6 +3829,7 @@ export type TranslationKey =
   | 'components.audioPlayer.processing.denoise'
   | 'components.audioPlayer.processing.denoiseOff'
   | 'components.audioPlayer.processing.denoiseLight'
+  | 'components.audioPlayer.processing.denoiseLightMedium'
   | 'components.audioPlayer.processing.denoiseMedium'
   | 'components.audioPlayer.processing.denoiseHeavy'
   | 'components.audioPlayer.processing.normalize'

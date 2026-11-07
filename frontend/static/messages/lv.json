@@ -5219,6 +5219,7 @@
         "denoise": "Trokšņu samazināšana",
         "denoiseOff": "Izslēgts",
         "denoiseLight": "Viegls",
+        "denoiseLightMedium": "Viegls-vidējs",
         "denoiseMedium": "Vidējs",
         "denoiseHeavy": "Spēcīgs",
         "normalize": "Normalizēt audio",

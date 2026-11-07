@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/go-audio-dsp/denoiser"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 func TestIsSupportedClipFormat(t *testing.T) {
@@ -21,12 +24,31 @@ func TestIsSupportedClipFormat(t *testing.T) {
 func TestIsValidDenoisePreset(t *testing.T) {
 	t.Parallel()
 
-	for _, p := range []string{"", "light", "medium", "heavy"} {
+	for _, p := range []string{"", "light", "light-medium", "medium", "heavy"} {
 		assert.Truef(t, IsValidDenoisePreset(p), "%q", p)
 	}
-	for _, p := range []string{"none", "Light", "extreme", " "} {
+	for _, p := range []string{"none", "Light", "extreme", " ", "light_medium", "Light-Medium", "lightmedium"} {
 		assert.Falsef(t, IsValidDenoisePreset(p), "%q", p)
 	}
+}
+
+// The transcode strength map and the conf preset list must name the same presets,
+// and each name must select its own strength.
+func TestDenoiseStrengthsMatchConfPresets(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]denoiser.Strength{
+		conf.DenoisePresetLight:       denoiser.Light,
+		conf.DenoisePresetLightMedium: denoiser.LightMedium,
+		conf.DenoisePresetMedium:      denoiser.Medium,
+		conf.DenoisePresetHeavy:       denoiser.Heavy,
+	}
+	assert.Equal(t, want, denoiseStrengths)
+	for name := range denoiseStrengths {
+		assert.Truef(t, conf.IsValidDenoisePresetName(name), "%q", name)
+	}
+	assert.True(t, conf.IsValidDenoisePresetName(conf.DefaultDenoisePreset))
+	assert.False(t, conf.IsValidDenoisePresetName(""))
 }
 
 func TestIsValidGainDB(t *testing.T) {
