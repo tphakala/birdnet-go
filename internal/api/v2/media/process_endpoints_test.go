@@ -102,6 +102,13 @@ func TestProcessAudioByID_CacheFollowsClipFile(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	_, lenB := wavRateAndLength(t, rec.Body.Bytes())
 	assert.Equal(t, processTestRate, lenB, "the reused ID gets clip B's processing, not clip A's cached audio")
+
+	// Clip B is rewritten in place at the same path with a different length.
+	writeToneWAV(t, fixturePath(tempDir, "b.wav"), processTestRate, processTestLength/4, fixtureToneHz)
+	rec = postJSON(e, "/api/v2/audio/1/process", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, lenB2 := wavRateAndLength(t, rec.Body.Bytes())
+	assert.Equal(t, processTestRate/2, lenB2, "a clip replaced in place is processed again, not served from its old cache entry")
 }
 
 func TestProcessAudioByID_AppliesGain(t *testing.T) {
@@ -214,6 +221,25 @@ func TestAudibleBatsByID_CacheFollowsClipFile(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	_, lenB := wavRateAndLength(t, rec.Body.Bytes())
 	assert.InDelta(t, 2*float64(lenA), float64(lenB), 8192, "the reused ID gets clip B's audible copy, not clip A's cached audio")
+	second := bytes.Clone(rec.Body.Bytes())
+
+	// An unchanged clip is served from the cache: the source now holds
+	// undecodable bytes of the same length and mtime, so only a hit can answer 200.
+	srcPath := fixturePath(tempDir, "b.wav")
+	srcInfo, err := os.Stat(srcPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(srcPath, bytes.Repeat([]byte{'x'}, int(srcInfo.Size())), 0o600))
+	require.NoError(t, os.Chtimes(srcPath, srcInfo.ModTime(), srcInfo.ModTime()))
+	rec = postJSON(e, "/api/v2/audio/1/audible-bats", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, second, rec.Body.Bytes(), "an unchanged clip is served from the cache")
+
+	// Clip B is rewritten in place at the same path with a different length.
+	writeToneWAV(t, fixturePath(tempDir, "b.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+	rec = postJSON(e, "/api/v2/audio/1/audible-bats", body)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, lenB2 := wavRateAndLength(t, rec.Body.Bytes())
+	assert.InDelta(t, float64(lenA), float64(lenB2), 8192, "a clip replaced in place is processed again, not served from its old cache entry")
 }
 
 func TestProcessedSpectrogramByID_UndecodableSourceIs422(t *testing.T) {

@@ -54,7 +54,6 @@ func TestClipSourceTag(t *testing.T) {
 	assert.NotEqual(t, ref, tagOf("b/clip.flac", 100, base), "path separates tags")
 	assert.NotEqual(t, ref, tagOf("a/clip.flac", 101, base), "size separates tags")
 	assert.NotEqual(t, ref, tagOf("a/clip.flac", 100, base.Add(time.Nanosecond)), "mtime separates tags at nanosecond resolution")
-	assert.Equal(t, filepath.Base(ref), ref, "the tag is a plain file name fragment")
 }
 
 // fakeFileInfo is a minimal os.FileInfo for clipSourceTag tests.

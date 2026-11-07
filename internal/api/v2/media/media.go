@@ -1546,7 +1546,9 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	}
 	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
 
-	clipInfo, statErr := c.SFS.StatRel(normalizedPath)
+	// A fresh stat, not StatRel's cached one: the cache key is tagged with this
+	// size and mtime, so a clip replaced in place must show up at once.
+	clipInfo, statErr := c.SFS.Stat(absolutePath)
 	if statErr != nil {
 		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
 	}
@@ -1628,7 +1630,8 @@ func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absoluteP
 		return "", "", nil, false, c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
 	}
 	absolutePath = filepath.Join(c.SFS.BaseDir(), normalizedPath)
-	info, err = c.SFS.StatRel(normalizedPath)
+	// A fresh stat, not StatRel's cached one (see ProcessAudioByID).
+	info, err = c.SFS.Stat(absolutePath)
 	if err != nil {
 		return "", "", nil, false, c.HandleError(ctx, err, "Audio clip not found", http.StatusNotFound)
 	}
