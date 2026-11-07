@@ -1227,9 +1227,14 @@
     settingsActions.updateSection('bsgbat', { threshold: value });
   }
 
-  // The field clamps to the range; a fractional entry becomes a whole frame.
+  // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
+  // saved effective one restores the saved raw value (0 or none for the default), so the form
+  // compares equal to the saved settings again and the save bar does not stay active.
   function updateBsgBatStep(value: number) {
-    settingsActions.updateSection('bsgbat', { stepFrames: Math.round(value) });
+    const frames = Math.round(value);
+    const stepFrames =
+      frames === savedBsgBatStepFrames ? store.originalData.bsgbat?.stepFrames : frames;
+    settingsActions.updateSection('bsgbat', { stepFrames });
   }
 
   function updateBatNighttimeOnly(value: boolean) {

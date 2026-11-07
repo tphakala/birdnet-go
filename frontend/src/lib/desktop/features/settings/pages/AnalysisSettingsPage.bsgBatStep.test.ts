@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/svelte';
+import { get } from 'svelte/store';
 import { tick } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import { t } from '$lib/i18n';
@@ -234,6 +235,11 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
       originalData: savedConfig(),
       formData: savedConfig(),
     }));
+    // Apply an update to the form copy, as the real store does, so the tests can compare the
+    // form with the saved copy the way hasUnsavedChanges does.
+    vi.mocked(settingsActions.updateSection).mockImplementation((section, data) => {
+      editSection(section, { ...data });
+    });
     vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
     vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
     Object.defineProperty(window, 'location', {
@@ -345,6 +351,29 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
   });
 
   describe('change tracking', () => {
+    /** The global unsaved-changes test: the raw form copy against the raw saved copy. */
+    function formDiffersFromSaved(): boolean {
+      const state = get(mockStore);
+      return JSON.stringify(state.formData) !== JSON.stringify(state.originalData);
+    }
+
+    it.each([
+      { name: 'the default saved as 0', saved: 0 },
+      { name: 'an explicitly saved 250', saved: 250 },
+    ])('leaves nothing unsaved when $name is edited and set back', async ({ saved }) => {
+      seedSection('bsgbat', { threshold: 0.5, stepFrames: saved });
+      await renderWithCatalog(BSG_BAT_CATALOG_ID);
+      expect(formDiffersFromSaved()).toBe(false);
+
+      await typeStep('300');
+      expect(formDiffersFromSaved()).toBe(true);
+      expect(descriptionOf(settingsTab())).toBe(HAS_CHANGES);
+
+      await typeStep('250');
+      expect(formDiffersFromSaved()).toBe(false);
+      expect(descriptionOf(settingsTab())).toBe('');
+    });
+
     it('lights the Settings tab for a step edit and clears it when set back', async () => {
       seedSection('bsgbat', { threshold: 0.5, stepFrames: 250 });
       await renderWithCatalog(BSG_BAT_CATALOG_ID);
