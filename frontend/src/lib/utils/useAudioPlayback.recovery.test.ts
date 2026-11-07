@@ -478,6 +478,7 @@ describe('useAudioPlayback recovery', () => {
     describe('when the play URL fails', () => {
       const SERVER_ERROR_STATUS = 500;
       const PENDING_STATUS = 503;
+      const NOT_FOUND_STATUS = 404;
       let restoreFetch: (() => void) | undefined;
 
       afterEach(() => {
@@ -514,6 +515,19 @@ describe('useAudioPlayback recovery', () => {
         expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
         expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
         expect(getState().error).toBeNull();
+      });
+
+      it('ends with the load error when the play URL is gone (404)', async () => {
+        restoreFetch = mockAudioProbe({ status: NOT_FOUND_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(getState().error).not.toBeNull();
       });
 
       it('stays paused when the play URL fails after the user paused', async () => {
@@ -563,17 +577,24 @@ describe('useAudioPlayback recovery', () => {
     });
 
     it('drops a pending retry of the denoised clip when the row gets another play URL', async () => {
-      await renderAndWait({ playUrl: DENOISED_URL });
-      ctl.completeLoad();
-      await toggle();
-      ctl.failLoad();
-      const loadsBefore = ctl.load.mock.calls.length;
+      // A 503 probe answer leaves a retry timer pending.
+      const restoreFetch = mockAudioProbe({ status: 503, headers: { 'Retry-After': '1' } });
+      try {
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        ctl.failLoad();
+        await settle();
+        const loadsBefore = ctl.load.mock.calls.length;
 
-      getState().setAudioUrl(STORED_URL, OTHER_DENOISED_URL);
-      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+        getState().setAudioUrl(STORED_URL, OTHER_DENOISED_URL);
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
 
-      expect(elementPath()).toBe(STORED_URL);
-      expect(ctl.load.mock.calls.length).toBe(loadsBefore);
+        expect(elementPath()).toBe(STORED_URL);
+        expect(ctl.load.mock.calls.length).toBe(loadsBefore);
+      } finally {
+        restoreFetch();
+      }
     });
 
     it('gives a recycled row the new play URL and starts from its stored clip again', async () => {

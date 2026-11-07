@@ -1,8 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { appState } from '$lib/stores/appState.svelte';
 import { settingsStore } from '$lib/stores/settings';
-import { audioUrlFor, getPlaybackDenoiseDefault } from './playbackDenoise';
+import {
+  audioUrlFor,
+  getPlaybackDenoiseDefault,
+  swapSourceKeepingPosition,
+  withCacheBuster,
+} from './playbackDenoise';
 
 /** Publish a loaded settings store holding the given denoise settings. */
 function loadSettings(options: {
@@ -105,5 +110,71 @@ describe('audioUrlFor', () => {
 
   it('adds the denoise parameter for a preset', () => {
     expect(audioUrlFor('7', 'light-medium')).toBe('/api/v2/audio/7?denoise=light-medium');
+  });
+});
+
+describe('withCacheBuster', () => {
+  const NOW_MS = 1_700_000_000_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW_MS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('adds t as its own parameter to a url without a query', () => {
+    expect(withCacheBuster('/api/v2/audio/1')).toBe(`/api/v2/audio/1?t=${NOW_MS}`);
+  });
+
+  it('keeps the denoise parameter and adds t after it', () => {
+    expect(withCacheBuster('/api/v2/audio/1?denoise=light-medium')).toBe(
+      `/api/v2/audio/1?denoise=light-medium&t=${NOW_MS}`
+    );
+  });
+
+  it('replaces an earlier t instead of stacking another', () => {
+    expect(withCacheBuster('/api/v2/audio/1?denoise=heavy&t=1')).toBe(
+      `/api/v2/audio/1?denoise=heavy&t=${NOW_MS}`
+    );
+  });
+});
+
+describe('swapSourceKeepingPosition', () => {
+  const POSITION_SECONDS = 12;
+
+  /** An audio element whose currentTime records the writes. */
+  function audioWithPosition(position: number) {
+    const element = document.createElement('audio');
+    let current = position;
+    const writes: number[] = [];
+    Object.defineProperty(element, 'currentTime', {
+      get: () => current,
+      set: (value: number) => {
+        current = value;
+        writes.push(value);
+      },
+    });
+    return { element, writes };
+  }
+
+  it('points the element at the new source and restores the position', () => {
+    const { element, writes } = audioWithPosition(POSITION_SECONDS);
+
+    swapSourceKeepingPosition(element, '/api/v2/audio/1?denoise=light-medium');
+
+    expect(element.getAttribute('src')).toBe('/api/v2/audio/1?denoise=light-medium');
+    expect(writes).toEqual([POSITION_SECONDS]);
+  });
+
+  it('does not write the position when the clip is at the start', () => {
+    const { element, writes } = audioWithPosition(0);
+
+    swapSourceKeepingPosition(element, '/api/v2/audio/1');
+
+    expect(element.getAttribute('src')).toBe('/api/v2/audio/1');
+    expect(writes).toEqual([]);
   });
 });
