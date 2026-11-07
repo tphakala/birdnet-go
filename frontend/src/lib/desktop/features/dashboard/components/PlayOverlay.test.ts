@@ -738,6 +738,7 @@ describe('PlayOverlay', () => {
     const STORED_URL = `/api/v2/audio/${DETECTION_ID}`;
     const DENOISED_URL = `${STORED_URL}?denoise=${PRESET}`;
     const SEEK_POSITION_SECONDS = 12;
+    const NEXT_DETECTION_ID = DETECTION_ID + 1;
 
     function elementPath(): string {
       const url = new URL(ctl.element.src);
@@ -812,6 +813,7 @@ describe('PlayOverlay', () => {
     describe('when the denoised clip fails', () => {
       const SERVER_ERROR_STATUS = 500;
       const PENDING_STATUS = 503;
+      const MISSING_STATUS = 404;
       let restoreFetch: (() => void) | undefined;
 
       afterEach(() => {
@@ -868,6 +870,36 @@ describe('PlayOverlay', () => {
         expect(ctl.load).toHaveBeenCalled();
       });
 
+      it('ends with the load error when the denoised clip is gone (404)', async () => {
+        restoreFetch = mockAudioProbe({ status: MISSING_STATUS });
+        mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(alertShown()).toBe(true);
+      });
+
+      it('asks for the next detection denoised again after a fallback', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        const { rerender } = mount({ denoisePreset: PRESET });
+        ctl.completeLoad();
+        await click();
+        ctl.failLoad();
+        await settle();
+        expect(elementPath()).toBe(STORED_URL);
+
+        await rerender({ detectionId: NEXT_DETECTION_ID, denoisePreset: PRESET });
+        await settle();
+        ctl.completeLoad();
+        await click();
+
+        expect(elementPath()).toBe(`/api/v2/audio/${NEXT_DETECTION_ID}?denoise=${PRESET}`);
+      });
+
       it('falls back once the retry budget of the denoised clip is spent', async () => {
         restoreFetch = mockAudioProbe({ status: PENDING_STATUS });
         mount({ denoisePreset: PRESET });
@@ -880,6 +912,21 @@ describe('PlayOverlay', () => {
         expect(elementPath()).toBe(STORED_URL);
         expect(alertShown()).toBe(false);
       });
+    });
+
+    it('loads the stored clip of the next detection and denoises it on its first play', async () => {
+      const { rerender } = mount({ denoisePreset: PRESET });
+      ctl.completeLoad();
+      await click();
+      expect(elementPath()).toBe(DENOISED_URL);
+
+      await rerender({ detectionId: NEXT_DETECTION_ID, denoisePreset: PRESET });
+      await settle();
+      expect(elementPath()).toBe(`/api/v2/audio/${NEXT_DETECTION_ID}`);
+      ctl.completeLoad();
+      await click();
+
+      expect(elementPath()).toBe(`/api/v2/audio/${NEXT_DETECTION_ID}?denoise=${PRESET}`);
     });
 
     it('does not switch again on a later play', async () => {
