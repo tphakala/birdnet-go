@@ -131,8 +131,9 @@ const (
 	// DenoisePresetHeavy is the strongest denoise strength.
 	DenoisePresetHeavy = "heavy"
 
-	// DefaultDenoisePreset is the preset used when denoise is enabled without a
-	// named strength.
+	// DefaultDenoisePreset is the preset to fall back to when a setting turns
+	// denoise on without naming a strength. It does not apply to clip and audio
+	// processing requests, where an empty preset means denoise off.
 	DefaultDenoisePreset = DenoisePresetLightMedium
 )
 

@@ -143,7 +143,7 @@ func TestDenoisePCM_MatchesWholeChannelReference(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		for _, preset := range []string{"light", "medium", "heavy"} {
+		for _, preset := range denoisePresetsGentlestFirst {
 			t.Run(tc.name+"_"+preset, func(t *testing.T) {
 				t.Parallel()
 

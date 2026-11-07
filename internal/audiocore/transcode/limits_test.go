@@ -1,7 +1,9 @@
 package transcode
 
 import (
+	"maps"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,6 +49,7 @@ func TestDenoiseStrengthsMatchConfPresets(t *testing.T) {
 	for name := range denoiseStrengths {
 		assert.Truef(t, conf.IsValidDenoisePresetName(name), "%q", name)
 	}
+	assert.ElementsMatch(t, slices.Collect(maps.Keys(denoiseStrengths)), denoisePresetsGentlestFirst)
 	assert.True(t, conf.IsValidDenoisePresetName(conf.DefaultDenoisePreset))
 	assert.False(t, conf.IsValidDenoisePresetName(""))
 }

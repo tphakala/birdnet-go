@@ -22,9 +22,9 @@ const pcm16Scale = 32768.0
 // denoiseStrengths maps the request presets to denoiser strengths. The mapping is
 // explicit and never defaults: the denoiser's Strength zero value is Medium, so
 // an unknown preset must be rejected here rather than reach it (see Config in
-// the denoiser package). The maximum
-// reductions of Light, Medium and Heavy (6, 12 and 20 dB) equal the afftdn "nr"
-// values the presets used to select.
+// the denoiser package). The maximum reductions of Light, Medium and Heavy (6, 12
+// and 20 dB) equal the afftdn "nr" values the presets used to select; LightMedium
+// (9 dB) sits between Light and Medium.
 var denoiseStrengths = map[string]denoiser.Strength{
 	conf.DenoisePresetLight:       denoiser.Light,
 	conf.DenoisePresetLightMedium: denoiser.LightMedium,
