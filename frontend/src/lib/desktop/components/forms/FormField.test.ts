@@ -83,6 +83,46 @@ describe('FormField', () => {
     });
   });
 
+  describe('aria-describedby', () => {
+    const base = { type: 'text', name: 'rate', label: 'Rate', id: 'rate-field' } as const;
+    const describedBy = () => screen.getByLabelText('Rate').getAttribute('aria-describedby');
+
+    it('has no attribute without help text, error or extra ids', () => {
+      formFieldTest.render({ ...base });
+      expect(describedBy()).toBeNull();
+    });
+
+    it('points at the help text alone as before', () => {
+      formFieldTest.render({ ...base, helpText: 'Help' });
+      expect(describedBy()).toBe('rate-field-help');
+    });
+
+    it('uses the extra ids alone when there is no help text or error', () => {
+      formFieldTest.render({ ...base, describedByExtra: 'note-a note-b' });
+      expect(describedBy()).toBe('note-a note-b');
+    });
+
+    it('lists the help text before the extra ids', () => {
+      formFieldTest.render({ ...base, helpText: 'Help', describedByExtra: 'note-a' });
+      expect(describedBy()).toBe('rate-field-help note-a');
+    });
+
+    it('lists the error instead of the help text, before the extra ids', () => {
+      formFieldTest.render({
+        ...base,
+        helpText: 'Help',
+        error: 'Too low',
+        describedByExtra: 'note-a',
+      });
+      expect(describedBy()).toBe('rate-field-error note-a');
+    });
+
+    it('treats an empty extra string as no extra id', () => {
+      formFieldTest.render({ ...base, describedByExtra: '' });
+      expect(describedBy()).toBeNull();
+    });
+  });
+
   describe('Email Input', () => {
     it('validates email format', async () => {
       const user = userEvent.setup();

@@ -16,6 +16,32 @@ describe('NumberField', () => {
     expect(screen.getByRole('spinbutton')).toHaveValue(0);
   });
 
+  it('passes extra describedby ids to the input after the help text id', () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 1,
+        onUpdate: vi.fn(),
+        helpText: 'Help',
+        describedByExtra: 'note-a',
+      },
+    });
+
+    const describedBy = screen.getByRole('spinbutton').getAttribute('aria-describedby') ?? '';
+    const [helpId, extraId] = describedBy.split(' ');
+    expect(document.getElementById(helpId)?.textContent).toBe('Help');
+    expect(extraId).toBe('note-a');
+  });
+
+  it('keeps the field label as the only first label child when a message row follows', () => {
+    const { container } = render(NumberField, {
+      props: { label: 'Test Number', value: 1, onUpdate: vi.fn(), error: 'Bad value' },
+    });
+
+    expect(container.querySelectorAll('.label')).toHaveLength(2);
+    expect(container.querySelectorAll('.form-control>.label:first-child')).toHaveLength(1);
+  });
+
   it('displays the current value', () => {
     render(NumberField, {
       props: {
