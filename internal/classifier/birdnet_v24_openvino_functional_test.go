@@ -12,14 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 )
 
 const (
 	// v24ParityDefaultMaxConfDiff is the largest allowed confidence change between
-	// the OpenVINO candidate and the ONNX Runtime reference for any label in either
-	// top-K list.
+	// the OpenVINO candidate and the ONNX Runtime reference for any label.
 	v24ParityDefaultMaxConfDiff = 0.02
 	// v24ParityMinTop1Confidence is the reference top-1 confidence below which the
 	// top-1 label is not compared: near-silent windows have many labels tied near
@@ -102,21 +100,21 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 
 	windows := len(samples) / windowSamples
 	var worst float32
+	labels := candidate.currentSettings().BirdNET.Labels
 	for w := range windows {
 		window := samples[w*windowSamples : (w+1)*windowSamples]
-		ref, err := reference.Predict(t.Context(), [][]float32{window})
-		require.NoError(t, err)
-		got, err := candidate.Predict(t.Context(), [][]float32{window})
-		require.NoError(t, err)
-		require.NotEmpty(t, ref)
-		require.NotEmpty(t, got)
+		ref := v24ParityScores(t, reference, window)
+		got := v24ParityScores(t, candidate, window)
+		require.Len(t, got, len(ref), "both backends must score every label")
+		require.Len(t, labels, len(ref), "one label per score")
 
-		diff := topKConfidenceDiff(ref, got)
+		diff, at := maxScoreDiff(ref, got)
 		worst = max(worst, diff)
-		assert.LessOrEqualf(t, diff, maxDiff, "window %d: confidence moved by %.4f (reference top-1 %s %.4f, candidate top-1 %s %.4f)",
-			w, diff, ref[0].Species, ref[0].Confidence, got[0].Species, got[0].Confidence)
-		if ref[0].Confidence >= v24ParityMinTop1Confidence {
-			assert.Equalf(t, ref[0].Species, got[0].Species, "window %d: top-1 changed", w)
+		assert.LessOrEqualf(t, diff, maxDiff, "window %d: %s moved by %.4f (reference %.4f, candidate %.4f)",
+			w, labels[at], diff, ref[at], got[at])
+		refTop, gotTop := argmaxScore(ref), argmaxScore(got)
+		if ref[refTop] >= v24ParityMinTop1Confidence {
+			assert.Equalf(t, labels[refTop], labels[gotTop], "window %d: top-1 changed", w)
 		}
 	}
 	t.Logf("%d windows, worst confidence change %.6f (limit %.4f)", windows, worst, maxDiff)
@@ -144,36 +142,35 @@ func newV24ForParity(t *testing.T, modelPath, backendPref string) *BirdNET {
 	return bn
 }
 
-// topKConfidenceDiff returns the largest confidence change between two top-K
-// result lists over every label in either list. A label missing from one list
-// scored at most that list's lowest confidence, so the lowest confidence stands
-// in for it.
-func topKConfidenceDiff(ref, got []datastore.Results) float32 {
-	refByLabel, refMin := confidenceByLabel(ref)
-	gotByLabel, gotMin := confidenceByLabel(got)
-	var worst float32
-	for label, r := range refByLabel {
-		g, ok := gotByLabel[label]
-		if !ok {
-			g = gotMin
-		}
-		worst = max(worst, float32(math.Abs(float64(r-g))))
-	}
-	for label, g := range gotByLabel {
-		if _, ok := refByLabel[label]; !ok {
-			worst = max(worst, float32(math.Abs(float64(g-refMin))))
-		}
-	}
-	return worst
+// v24ParityScores returns the sensitivity-adjusted confidence of every label for
+// one window from bn's inference backend, the full vector Predict ranks before it
+// keeps the top results, so the comparison covers labels below that cutoff too.
+func v24ParityScores(t *testing.T, bn *BirdNET, window []float32) []float32 {
+	t.Helper()
+	logits, err := bn.classifier.Predict(window)
+	require.NoError(t, err)
+	require.NotEmpty(t, logits)
+	return applySigmoidToPredictions(logits, v24ParitySensitivity)
 }
 
-// confidenceByLabel indexes results by label and returns the lowest confidence.
-func confidenceByLabel(results []datastore.Results) (byLabel map[string]float32, lowest float32) {
-	byLabel = make(map[string]float32, len(results))
-	lowest = results[0].Confidence
-	for _, r := range results {
-		byLabel[r.Species] = r.Confidence
-		lowest = min(lowest, r.Confidence)
+// maxScoreDiff returns the largest absolute difference between two equal-length
+// score vectors and the index where it occurs.
+func maxScoreDiff(ref, got []float32) (diff float32, at int) {
+	for i := range ref {
+		if d := float32(math.Abs(float64(ref[i] - got[i]))); d > diff {
+			diff, at = d, i
+		}
 	}
-	return byLabel, lowest
+	return diff, at
+}
+
+// argmaxScore returns the index of the highest score.
+func argmaxScore(scores []float32) int {
+	best := 0
+	for i, v := range scores {
+		if v > scores[best] {
+			best = i
+		}
+	}
+	return best
 }
