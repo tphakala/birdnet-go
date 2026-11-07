@@ -32,9 +32,6 @@ type TensorModelOptions struct {
 	// SessionOptions, when non-nil, configures the ONNX Runtime session
 	// options after the package defaults are applied.
 	SessionOptions func(*ort.SessionOptions)
-	// Outputs selects which model outputs to bind, by index. Empty binds all
-	// outputs in model order.
-	Outputs []int
 }
 
 // TensorModel runs an ONNX model that takes one float32 tensor of any rank and
@@ -94,27 +91,16 @@ func NewTensorModel(modelPath string, opts TensorModelOptions) (*TensorModel, er
 		return nil, &ModelDetectionError{Reason: "tensor model has no outputs"}
 	}
 
-	selected := opts.Outputs
-	if len(selected) == 0 {
-		selected = make([]int, len(outputInfos))
-		for i := range selected {
-			selected[i] = i
-		}
-	}
-
 	inputShape, inputSize, err := resolveTensorShape(inputInfos[0].Dimensions)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: input %q: %w", inputInfos[0].Name, err)
 	}
 
-	outputNames := make([]string, len(selected))
-	outputShapes := make([]ort.Shape, len(selected))
-	outputSizes := make([]int, len(selected))
-	for i, idx := range selected {
-		if idx < 0 || idx >= len(outputInfos) {
-			return nil, &ModelDetectionError{Reason: fmt.Sprintf("output index %d out of range, model has %d outputs", idx, len(outputInfos))}
-		}
-		info := outputInfos[idx]
+	outputNames := make([]string, len(outputInfos))
+	outputShapes := make([]ort.Shape, len(outputInfos))
+	outputSizes := make([]int, len(outputInfos))
+	for i := range outputInfos {
+		info := outputInfos[i]
 		shape, size, err := resolveTensorShape(info.Dimensions)
 		if err != nil {
 			return nil, fmt.Errorf("birdnet: output %q: %w", info.Name, err)
