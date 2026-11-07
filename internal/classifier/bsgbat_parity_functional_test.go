@@ -53,6 +53,9 @@ const (
 	wavFmtChannelsOffset = 2
 	// pcm16Scale converts a 16-bit sample to the [-1, 1) range the reference reads.
 	pcm16Scale = 32768
+	// pcmScaleTolerance is far below one int16 step (1/32768), so the decoded value
+	// must be the int16/32768 value itself.
+	pcmScaleTolerance = 1e-9
 	// pcm16Bytes is the size of a 16-bit sample.
 	pcm16Bytes = 2
 	// shippedLogitColumns is the number of logits per shipped row (21 species and
@@ -87,7 +90,7 @@ func readMono16WAV(t *testing.T, path string, wantRate int) []float32 {
 			require.NoError(t, derr)
 			for i := range samples {
 				want := float32(int16(binary.LittleEndian.Uint16(body[i*pcm16Bytes:]))) / pcm16Scale
-				require.Equalf(t, want, samples[i], "sample %d must be int16/32768", i)
+				require.InDeltaf(t, want, samples[i], pcmScaleTolerance, "sample %d must be int16/32768", i)
 			}
 		}
 		off += wavHeaderChunkBytes + size + size%2
