@@ -1597,10 +1597,10 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 
 // resolveBatClipFile confirms noteID refers to a bat detection and returns the
 // absolute, validated path to its source audio clip, plus the clip's cache
-// source tag (see clipSourceTag), following
-// the same path-resolution pattern as ProcessAudioByID. When ok is false it has already
-// written the HTTP error response and the caller must return respErr unchanged
-// (respErr is nil once the JSON error body is written successfully).
+// source tag (see clipSourceTag), following the same path-resolution pattern as
+// ProcessAudioByID. When ok is false it has already written the HTTP error
+// response and the caller must return respErr unchanged (respErr is nil once the
+// JSON error body is written successfully).
 func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absolutePath, sourceTag string, ok bool, respErr error) {
 	// Audible-bats playback only applies to bat detections.
 	modelType, err := c.DS.GetNoteModelType(noteID)
