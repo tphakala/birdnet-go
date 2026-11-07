@@ -35,10 +35,8 @@ type BSGBat struct {
 	// skip its logit.
 	labels          []string
 	backgroundIndex int
-	// logitCount is the model's output width: the species plus Background.
-	logitCount int
-	info       ModelInfo
-	mu         sync.Mutex
+	info            ModelInfo
+	mu              sync.Mutex
 	// modelPath is the model file this instance loaded from. Set once at
 	// construction; reported via ResolvedModelPath().
 	modelPath string
@@ -110,8 +108,7 @@ func NewBSGBat(cfg *BSGBatModelConfig) (*BSGBat, error) {
 			Context("model_path", cfg.ModelPath).
 			Build()
 	}
-	logitCount := len(labels) + 1
-	if err := checkBSGBatShapes(model, logitCount); err != nil {
+	if err := checkBSGBatShapes(model, len(labels)+1); err != nil {
 		model.Close()
 		return nil, errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -140,7 +137,6 @@ func NewBSGBat(cfg *BSGBatModelConfig) (*BSGBat, error) {
 		frontEnd:        frontEnd,
 		labels:          labels,
 		backgroundIndex: backgroundIndex,
-		logitCount:      logitCount,
 		info:            info,
 		modelPath:       cfg.ModelPath,
 	}, nil
@@ -238,7 +234,7 @@ func (b *BSGBat) run(window []float32) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(outputs) == 0 || len(outputs[0]) != b.logitCount {
+	if len(outputs) == 0 || len(outputs[0]) != len(b.labels)+1 {
 		return nil, fmt.Errorf("BSG-BAT model returned an unexpected output shape")
 	}
 	return outputs[0], nil

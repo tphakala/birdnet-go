@@ -93,7 +93,6 @@ func newFakeBSGBat(t *testing.T, logits []float32) (*BSGBat, *fakeTensorModel) {
 		frontEnd:        frontEnd,
 		labels:          []string{"Myotis daubentonii", "Nyctalus noctula"},
 		backgroundIndex: 1,
-		logitCount:      3,
 		info:            info,
 		modelPath:       "/models/bsgbat.onnx",
 	}, model
