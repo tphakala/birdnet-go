@@ -626,7 +626,7 @@ func TestServeAudioByID_DenoiseGuestFollowsSetting(t *testing.T) {
 	stored, err := os.ReadFile(src) //nolint:gosec // G304: test fixture path
 	require.NoError(t, err)
 
-	previous := conf.GetSettings()
+	previous := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(previous) })
 	publish := func(playbackOn, exportDenoised bool, strength string) {
 		settings := conf.CloneSettings(controller.CurrentSettings())
