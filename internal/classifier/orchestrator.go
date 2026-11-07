@@ -1930,6 +1930,7 @@ var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
 	RegistryIDBirdNETV3:  (*Orchestrator).loadBirdNETV3,
 	RegistryIDPerchV2:    (*Orchestrator).loadPerch,
 	RegistryIDBat:        (*Orchestrator).loadBat,
+	RegistryIDBSGBat:     (*Orchestrator).loadBSGBat,
 }
 
 // entryBuilder constructs (but does not register) a fresh model instance from a
@@ -1974,6 +1975,18 @@ var openvinoCapableSecondaryBuilders = map[string]entryBuilder{
 		// nil *Bat wrapped in a non-nil ModelInstance).
 		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
 		b, _, err := o.buildBat(settings, threads)
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
+	},
+	RegistryIDBSGBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Explicit nil-on-error return avoids the typed-nil interface trap (a
+		// nil *BSGBat wrapped in a non-nil ModelInstance).
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
+		// BSG-BAT runs on ONNX Runtime only and ignores the OpenVINO preference; it
+		// is listed here so a thread-count change rebuilds it.
+		b, _, err := o.buildBSGBat(settings, threads)
 		if err != nil {
 			return nil, err
 		}

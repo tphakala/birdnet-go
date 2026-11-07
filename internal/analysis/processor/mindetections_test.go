@@ -887,7 +887,7 @@ func TestGetBaseConfidenceThreshold_CustomOverridesModel(t *testing.T) {
 }
 
 // TestModelGlobalConfidenceThreshold verifies the per-model base threshold
-// selection: Bat always uses its own threshold, Perch v2 and BirdNET v3.0 use
+// selection: Bat and BSG-BAT always use their own thresholds, Perch v2 and BirdNET v3.0 use
 // theirs only when their override toggle is on, and everything else follows the
 // primary BirdNET threshold.
 func TestModelGlobalConfidenceThreshold(t *testing.T) {
@@ -897,6 +897,7 @@ func TestModelGlobalConfidenceThreshold(t *testing.T) {
 		s := &conf.Settings{}
 		s.BirdNET.Threshold = 0.8
 		s.Bat.Threshold = 0.3
+		s.BSGBat.Threshold = 0.4
 		s.Perch.Threshold = 0.5
 		s.BirdNETV3.Threshold = 0.6
 		return s
@@ -911,6 +912,7 @@ func TestModelGlobalConfidenceThreshold(t *testing.T) {
 	}{
 		{"birdnet primary uses birdnet threshold", "BirdNET_V2.4", false, false, 0.8},
 		{"bat always uses bat threshold", classifier.RegistryIDBat, false, false, 0.3},
+		{"bsg-bat always uses its own threshold", classifier.RegistryIDBSGBat, false, false, 0.4},
 		{"perch without override follows birdnet", classifier.RegistryIDPerchV2, false, false, 0.8},
 		{"perch with override uses perch threshold", classifier.RegistryIDPerchV2, true, false, 0.5},
 		{"birdnetv3 without override follows birdnet", classifier.RegistryIDBirdNETV3, false, false, 0.8},

@@ -44,6 +44,11 @@ func TestDetermineModelInfo_Deterministic(t *testing.T) {
 		// With the forked RegistryIDBirdNETV24INT8 entry removed, this filename
 		// resolves to DefaultModelVersion via the "birdnet_v2.4" substring token.
 		{"/models/BirdNET_V2.4_INT8.onnx", DefaultModelVersion},
+		// Both "BSG" and "Bat" are registry IDs of three characters, so without the
+		// bsgbat patterns the longest-token tie would resolve these to BSG Finland.
+		{"/models/bsgbat_v0.21_r1.onnx", RegistryIDBSGBat},
+		{"/models/bsg-bat-v0.21-r1.onnx", RegistryIDBSGBat},
+		{"/models/BSG_BAT_model.onnx", RegistryIDBSGBat},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
