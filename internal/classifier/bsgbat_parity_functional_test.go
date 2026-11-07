@@ -272,6 +272,26 @@ func TestBSGBatParity_Functional(t *testing.T) {
 // configured-step test, one ffmpeg read.
 const liveWriteBytes = 32 * 1024
 
+// pcm16WindowToFloat32 decodes a little-endian 16-bit window to the [-1, 1) range.
+func pcm16WindowToFloat32(window []byte) []float32 {
+	live := make([]float32, len(window)/pcm16Bytes)
+	for i := range live {
+		live[i] = float32(int16(binary.LittleEndian.Uint16(window[i*pcm16Bytes:]))) / pcm16Scale
+	}
+	return live
+}
+
+// interiorSegment returns the normalized model input made of the reference mel
+// frames start to start+NumFrames-1.
+func interiorSegment(m *mel.Matrix, start int) []float32 {
+	seg := make([]float32, bsgbat.InputSize)
+	for f := range bsgbat.NumFrames {
+		copy(seg[f*bsgbat.NumMels:(f+1)*bsgbat.NumMels], m.Column(start+f))
+	}
+	bsgbat.Normalize(seg, bsgbat.NumMels)
+	return seg
+}
+
 // TestBSGBatParity_ConfiguredStep_Functional checks that the windows an analysis
 // buffer delivers at a configured step are interior segments of the recording's
 // hop grid. The stream starts at recording sample bsgbat.FrameSize, so the first
@@ -353,23 +373,14 @@ func TestBSGBatParity_ConfiguredStep_Functional(t *testing.T) {
 							release()
 							continue
 						}
-						live := make([]float32, bsgbat.ClipSamples)
-						for i := range live {
-							live[i] = float32(int16(binary.LittleEndian.Uint16(window[i*pcm16Bytes:]))) / pcm16Scale
-						}
+						live := pcm16WindowToFloat32(window)
 						release()
 
-						seg := make([]float32, bsgbat.InputSize)
-						for f := range bsgbat.NumFrames {
-							copy(seg[f*bsgbat.NumMels:(f+1)*bsgbat.NumMels], m.Column(s+f))
-						}
-						bsgbat.Normalize(seg, bsgbat.NumMels)
-
-						want, werr := inst.run(live)
-						require.NoError(t, werr)
 						// The reference is the same graph on the interior segment of
 						// the whole recording, run through an independent runner.
-						out, gerr := ref.Run(seg)
+						want, werr := inst.run(live)
+						require.NoError(t, werr)
+						out, gerr := ref.Run(interiorSegment(&m, s))
 						require.NoError(t, gerr)
 						got := out[0]
 						require.Len(t, want, len(got))
