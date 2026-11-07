@@ -903,8 +903,9 @@
   function triggerProcessing() {
     // The audible-bats copy is a time-expanded clip in the state it was made in, and
     // processing replaces the source with a non-expanded one. Turn audible bats off
-    // first so its stale copy never sits beside the new source.
-    if (audibleBats.active) audibleBats.disable();
+    // first so its stale copy never sits beside the new source. A copy that is still
+    // being generated carries the old toolbar state too, so its request is aborted.
+    if (audibleBats.active || audibleBats.generating) audibleBats.disable();
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();

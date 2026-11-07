@@ -529,6 +529,39 @@ describe('AudioPlayer playback denoise default', () => {
       }
     });
 
+    it('drops an audible copy that was still generating when the toolbar changed', async () => {
+      let resolveBats: (response: unknown) => void = () => {};
+      let batsSignal: AbortSignal | undefined;
+      const processedResponse = {
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['processed']),
+        headers: new Headers(),
+      };
+      fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        if (!String(input).includes('/audible-bats')) return Promise.resolve(processedResponse);
+        batsSignal = init?.signal ?? undefined;
+        return new Promise(resolve => {
+          resolveBats = resolve;
+        });
+      });
+      mount({ modelType: 'bat' });
+      ctl.completeLoad();
+      await activateAudibleBats();
+
+      await chooseDenoise(DENOISE_HEAVY_TEXT);
+      resolveBats({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['bats'], { type: 'bats' }),
+        headers: new Headers(),
+      });
+      await settle();
+
+      expect(batsSignal?.aborted).toBe(true);
+      expect(ctl.element.src).toBe(PROCESSED_BLOB_URL);
+    });
+
     it('turns audible bats off before a normalize change replaces the source', async () => {
       mount({ modelType: 'bat' });
       ctl.completeLoad();
