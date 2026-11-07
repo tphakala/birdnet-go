@@ -20,6 +20,9 @@ import (
 func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 	t.Parallel()
 
+	// cpuF16 is a hand-built base plan at the f16 default, so the f32 forcing
+	// asserted below is the policy's own and not inherited from
+	// openVINOPrecisionFor (which already returns f32 for BirdNET v2.4).
 	cpuF16 := openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex}
 	gpuF32 := openVINOPlan{device: inference.OVDeviceGPU, outputIndex: birdnetLogitsOutputIndex, precision: inference.OVPrecisionF32}
 
@@ -56,7 +59,7 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 			wantOK:   true,
 		},
 		{
-			name: "FP32 weights keep the f16 CPU default", plan: cpuF16, ok: true,
+			name: "FP32 weights keep the plan unchanged", plan: cpuF16, ok: true,
 			backendPref: conf.BackendPrefAuto, quant: QuantizationFP32,
 			wantPlan: cpuF16, wantOK: true,
 		},
@@ -169,7 +172,7 @@ func TestBirdNETOpenVINOPlan_QuantizationPolicyWired(t *testing.T) {
 			backendPref: conf.BackendPrefAuto, wantReason: ovReasonUnverifiedWeights},
 		{name: "gallery INT8 build on explicit openvino runs at f32", path: int8File, infoQuant: QuantizationINT8,
 			backendPref: conf.BackendPrefOpenVINO, wantOK: true, wantPlan: cpuF32},
-		{name: "gallery FP32 build on auto keeps the f16 CPU plan", path: fp32File, infoQuant: QuantizationFP32,
+		{name: "gallery FP32 build on auto keeps the base plan", path: fp32File, infoQuant: QuantizationFP32,
 			backendPref: conf.BackendPrefAuto, wantOK: true, wantPlan: cpuF16},
 		{name: "file with no precision token on auto declines", path: tokenlessFile, infoQuant: QuantizationFP32,
 			backendPref: conf.BackendPrefAuto, wantReason: ovReasonUnverifiedWeights},
