@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // TestModelRegistry_ScheduleGatedIsExactlyBat pins the schedule-gated set to exactly
@@ -74,18 +75,66 @@ func TestUnloadModel_SchedulerStopsWithLastGatedModel(t *testing.T) {
 }
 
 // TestUnloadModel_UngatedUnloadKeepsScheduler pins that unloading a model that is
-// not schedule-gated never stops the scheduler.
+// not schedule-gated never stops the scheduler, including when no gated model is
+// loaded at all.
 func TestUnloadModel_UngatedUnloadKeepsScheduler(t *testing.T) {
-	// Not parallel: mutates the package-global ModelRegistry.
-	const gatedID = "test-gated-only"
-	registerTestGatedModel(t, gatedID)
+	t.Parallel()
 
-	o := newTestOrchestrator(t, &mockModelInstance{id: gatedID}, &mockModelInstance{id: RegistryIDPerchV2})
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDPerchV2})
 	s := newNighttimeScheduler(nil)
 	o.scheduler.Store(s)
 
 	require.NoError(t, o.UnloadModel(RegistryIDPerchV2))
 	assert.False(t, schedulerStopped(s), "unloading an ungated model must not stop the scheduler")
+}
+
+// TestLoadModel_SchedulerRestartsOnlyForFirstGatedModel pins that LoadModel gives
+// the first schedule-gated model a fresh running scheduler, and leaves it in place
+// when an ungated model or a second gated model loads.
+func TestLoadModel_SchedulerRestartsOnlyForFirstGatedModel(t *testing.T) {
+	// Not parallel: mutates the package-global ModelRegistry, modelLoaders and settings.
+	const (
+		firstID   = "test-gated-load-first"
+		secondID  = "test-gated-load-second"
+		ungatedID = "test-ungated-load"
+	)
+	settings := conftest.GetTestSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// An ungated model, registered the same way, to load before any gated one.
+	ModelRegistry[ungatedID] = ModelInfo{ID: ungatedID}
+	t.Cleanup(func() { delete(ModelRegistry, ungatedID) })
+	for _, id := range []string{ungatedID, firstID, secondID} {
+		if id != ungatedID {
+			registerTestGatedModel(t, id)
+		}
+		modelLoaders[id] = func(orc *Orchestrator, _ int) error {
+			orc.models[id] = &modelEntry{instance: &mockModelInstance{id: id}}
+			return nil
+		}
+		t.Cleanup(func() { delete(modelLoaders, id) })
+	}
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.Settings = settings
+	initial := newNighttimeScheduler(suncalc.NewSunCalc(60.17, 24.94))
+	o.scheduler.Store(initial)
+	t.Cleanup(func() { o.scheduler.Load().stop() })
+
+	require.NoError(t, o.LoadModel(ungatedID))
+	assert.Same(t, initial, o.scheduler.Load(), "an ungated model leaves the scheduler in place")
+	assert.False(t, schedulerStopped(initial), "an ungated load does not stop the scheduler")
+
+	require.NoError(t, o.LoadModel(firstID))
+	started := o.scheduler.Load()
+	assert.NotSame(t, initial, started, "the first gated model gets a fresh scheduler")
+	assert.True(t, schedulerStopped(initial), "the previous scheduler is stopped")
+	assert.False(t, schedulerStopped(started), "the fresh scheduler is running")
+
+	require.NoError(t, o.LoadModel(secondID))
+	assert.Same(t, started, o.scheduler.Load(), "a second gated model keeps the running scheduler")
+	assert.False(t, schedulerStopped(started), "the running scheduler is not stopped by a second gated load")
 }
 
 // TestHasScheduleGatedModelLocked pins the predicate behind scheduler start: it is

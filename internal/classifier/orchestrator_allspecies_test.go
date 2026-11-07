@@ -556,9 +556,10 @@ func TestGetAllProbableSpecies_AnyBatGroupModelAlwaysActive(t *testing.T) {
 		Settings:    settings,
 		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
-			primaryID:     {instance: bn},
-			RegistryIDBat: {instance: &mockModelInstance{id: RegistryIDBat, labels: []string{"Myotis daubentonii"}}},
-			otherBatID:    {instance: &mockModelInstance{id: otherBatID, labels: []string{"Nyctalus noctula"}}},
+			primaryID:         {instance: bn},
+			RegistryIDBat:     {instance: &mockModelInstance{id: RegistryIDBat, labels: []string{"Myotis daubentonii"}}},
+			otherBatID:        {instance: &mockModelInstance{id: otherBatID, labels: []string{"Nyctalus noctula"}}},
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: []string{"Rana temporaria"}}},
 		},
 	}
 
@@ -570,4 +571,6 @@ func TestGetAllProbableSpecies_AnyBatGroupModelAlwaysActive(t *testing.T) {
 		require.True(t, ok, "bat-group species %q must be included as always-active", label)
 		assert.InDelta(t, 1.0, got.Score, 0.0001)
 	}
+	assert.False(t, hasScientificName(scores, "Rana temporaria"),
+		"a non-bat secondary must not be added by the bat always-active pass")
 }
