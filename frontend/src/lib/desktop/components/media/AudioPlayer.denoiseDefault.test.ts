@@ -571,6 +571,19 @@ describe('AudioPlayer playback denoise default', () => {
       expect(ctl.element.src).toBe(PROCESSED_BLOB_URL);
     });
 
+    it('keeps an active audible copy when a processing result arrives after it was turned on', async () => {
+      mount({ modelType: 'bat' });
+      ctl.completeLoad();
+      await fireEvent.click(screen.getByLabelText(NORMALIZE_LABEL));
+      await activateAudibleBats();
+      expect(ctl.element.src).toBe(BATS_BLOB_URL);
+
+      await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
+      await settle();
+
+      expect(ctl.element.src).toBe(BATS_BLOB_URL);
+    });
+
     it('turns audible bats off before a normalize change replaces the source', async () => {
       mount({ modelType: 'bat' });
       ctl.completeLoad();

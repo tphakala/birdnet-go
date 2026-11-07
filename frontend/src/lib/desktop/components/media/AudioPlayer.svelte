@@ -913,6 +913,16 @@
     }, PROCESS_DEBOUNCE_MS);
   }
 
+  // Loads a processing result into the element at the same position. An active
+  // audible copy keeps the element: the result is stored and takes over when audible
+  // bats is turned off (currentSource).
+  function swapProcessedSource(url: string) {
+    if (!audioElement || audibleBats.active) return;
+    const pos = audioElement.currentTime;
+    replaceSource(url);
+    audioElement.currentTime = pos;
+  }
+
   async function processAudio() {
     // Abort any in-flight processing request
     if (processAbortController) {
@@ -932,11 +942,7 @@
         URL.revokeObjectURL(processedSpectrogramUrl);
         processedSpectrogramUrl = null;
       }
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(audioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(audioUrl);
       return;
     }
 
@@ -952,11 +958,7 @@
         processedSpectrogramUrl = null;
       }
       playUnlocked = true;
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(currentSource());
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(currentSource());
       return;
     }
 
@@ -1000,11 +1002,7 @@
 
       processedAudioUrl = URL.createObjectURL(blob);
 
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(processedAudioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(processedAudioUrl);
 
       // Update spectrogram to reflect processed audio
       if (enableClipExtraction) {
@@ -1029,11 +1027,7 @@
         URL.revokeObjectURL(processedSpectrogramUrl);
         processedSpectrogramUrl = null;
       }
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(audioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(audioUrl);
     } finally {
       // Only clear state if this is still the active request (avoid stale finally)
       if (processAbortController === controller) {
