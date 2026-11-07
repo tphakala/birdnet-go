@@ -128,6 +128,10 @@
         "threshold": {
           "type": "number",
           "description": "confidence threshold for BSG-BAT detections"
+        },
+        "stepframes": {
+          "type": "integer",
+          "description": "StepFrames is the analysis step between successive BSG-BAT windows, in mel\nframes of 768 samples (2 ms at 384 kHz). Accepted values are 100 to 512; 0\nuses the default of 250. The bat false positive filter count follows it as\nceil(6 / step seconds * level fraction). A change restarts audio capture."
         }
       },
       "additionalProperties": false,

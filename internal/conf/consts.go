@@ -97,6 +97,23 @@ const (
 	DefaultUltrasonicHopSize = 4096
 	DefaultUltrasonicSplitHz = 20000
 
+	// The BSG-BAT analysis step (bsgbat.stepframes) is counted in mel frames of 768
+	// samples, 2 ms each at the model's 384 kHz rate. The frontend mirrors the
+	// default and the range as constants (BSG_BAT_DEFAULT_STEP_FRAMES and its range
+	// siblings), so a change here is repeated there.
+	//
+	// DefaultBSGBatStepFrames is the step used when the setting is unset (0). It is
+	// also the static registry step; changing it is this one line.
+	DefaultBSGBatStepFrames = 250
+	// MinBSGBatStepFrames is the smallest accepted step: 0.2 s, twice the analysis
+	// monitor poll interval, because the monitor reads at most one window per poll.
+	// An analysis test pins it against that interval.
+	MinBSGBatStepFrames = 100
+	// MaxBSGBatStepFrames is the largest accepted step: the model window of 512
+	// frames (bsgbat.NumFrames, pinned by a classifier test because conf does not
+	// import the inference packages).
+	MaxBSGBatStepFrames = 512
+
 	// DefaultEQQFactor is the Q factor applied to an equalizer filter whose q was
 	// never set. eqfilter_config.go offers it as the settings UI's default too, so a
 	// filter created in the UI and one repaired here get the same value. 0.707 is the

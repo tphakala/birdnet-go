@@ -114,6 +114,7 @@ func setDefaultConfig() {
 	// BSG-BAT model configuration. Its schedule, false positive filter and
 	// ultrasonic filter come from the bat section above.
 	viper.SetDefault("bsgbat.threshold", 0.5)
+	viper.SetDefault("bsgbat.stepframes", DefaultBSGBatStepFrames)
 
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})

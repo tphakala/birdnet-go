@@ -304,6 +304,10 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	if err := validateBSGBatStep(settings); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// Validate the bat ultrasonic filter's STFT settings while the filter is on.
 	if err := validateUltrasonicFilter(settings); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
@@ -368,6 +372,25 @@ func validateProfilingSettings(p *ProfilingConfig) error {
 			Build()
 	}
 	return nil
+}
+
+// validateBSGBatStep checks bsgbat.stepframes: 0 (unset, resolves to
+// DefaultBSGBatStepFrames) or a value within [MinBSGBatStepFrames,
+// MaxBSGBatStepFrames]. Zero must pass because settings built without a BSG-BAT
+// section carry it. On the Load path normalizeBSGBatStep has already repaired an
+// out-of-range value; on the API path this rejects it.
+func validateBSGBatStep(settings *Settings) error {
+	frames := settings.BSGBat.StepFrames
+	if frames == 0 || (frames >= MinBSGBatStepFrames && frames <= MaxBSGBatStepFrames) {
+		return nil
+	}
+	return errors.Newf("bsgbat.stepframes must be 0 (default) or between %d and %d, got %d",
+		MinBSGBatStepFrames, MaxBSGBatStepFrames, frames).
+		Component("config").
+		Category(errors.CategoryValidation).
+		Context("operation", "validate_bsgbat_step").
+		Context("validation_type", "bsgbat-step").
+		Build()
 }
 
 // validateModelThresholds checks the per-model confidence thresholds are within
