@@ -2923,7 +2923,7 @@
       role="alert"
       class="pointer-events-none absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] rounded-md"
     >
-      <span class="text-[color:var(--text-error)] text-sm">{error}</span>
+      <span class="text-[var(--color-error)] text-sm">{error}</span>
     </div>
   {/if}
 </div>
