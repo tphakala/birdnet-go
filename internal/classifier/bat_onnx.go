@@ -253,10 +253,6 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Build()
 	}
 
-	log.Debug("bat predict starting",
-		logger.Int("sample_len", len(samples[0])),
-		logger.Int("chunks", len(samples)))
-
 	embStart := time.Now()
 	_, embeddings, err := b.embeddingExtractor.PredictWithEmbeddings(samples[0])
 	embDuration := time.Since(embStart)
@@ -283,7 +279,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, err
 	}
 
-	log.Debug("bat embeddings extracted",
+	log.Trace("bat embeddings extracted",
 		logger.Int("embedding_dim", len(embeddings)),
 		logger.Duration("duration", embDuration))
 
@@ -303,7 +299,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, err
 	}
 
-	log.Debug("bat classification complete",
+	log.Trace("bat classification complete",
 		logger.Int("score_count", len(scores)),
 		logger.Duration("duration", classDuration))
 
@@ -344,7 +340,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			logger.Float64("top_confidence", float64(topResults[0].Confidence)),
 			logger.Duration("total_duration", embDuration+classDuration))
 	} else {
-		log.Debug("bat no detections above threshold",
+		log.Trace("bat no detections above threshold",
 			logger.Int("pre_filter", preFilterCount),
 			logger.Float64("threshold", threshold),
 			logger.Duration("total_duration", embDuration+classDuration))

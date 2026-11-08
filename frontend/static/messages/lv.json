@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Restartējiet, lai pabeigtu datubāzes migrāciju",
         "legacyRestartRequiredMessage": "Migrācija ir pabeigta. Restartējiet BirdNET-Go, lai pārslēgtos uz jauno datubāzi. Ja šis ziņojums paliek arī pēc restartēšanas, pārbaudiet žurnālā datubāzes kļūdas."
       },
+      "database": {
+        "serverAttentionTitle": "Datubāzes serverim nepieciešama uzmanība",
+        "serverAttentionMessage": "MySQL vai MariaDB servera versija netiek atbalstīta, vai arī datubāze neizmanto rakstzīmju kopu utf8mb4. Sīkāku informāciju skatiet sadaļā Sistēma > Sistēmas veselība."
+      },
       "cleanup": {
         "completeTitle": "Mantotās datubāzes tīrīšana pabeigta",
         "completeMessage": "Atbrīvoti {space} diska vietas.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nav pieejams",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} vai jaunāka versija ir nepieciešama modelim {modelName}, bet netika atrasta. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modeļa reģions var būt novecojis",
@@ -1542,6 +1546,8 @@
           "creating": "Izveido...",
           "createBackup": "Izveidot dublējumkopiju",
           "noBackups": "Dublējumkopiju vēl nav",
+          "loadFailed": "Neizdevās ielādēt dublējumkopiju vēsturi",
+          "createFailed": "Neizdevās sākt dublējumkopijas izveidi",
           "download": "Lejupielādēt",
           "failed": "Neizdevās",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Sāk migrāciju...",
         "status": {
           "idle": "Gatavs sākšanai",
+          "checking": "Priekšnosacījumu pārbaude",
+          "notReady": "Nav gatavs",
           "initializing": "Inicializē",
           "dual_write": "Dubultrakstīšana aktīva",
           "migrating": "Migrē primāros",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Ieraksti",
           "sizeLabel": "Izmērs",
           "prerequisitesNotMet": "Priekšnosacījumi nav izpildīti - atrisiniet kritiskās problēmas zemāk",
+          "prerequisitesUnavailable": "Pirmmigrācijas pārbaudes netika pabeigtas. Skatiet Pirmmigrācijas pārbaudes zemāk.",
+          "prerequisitesFailedList": "Vispirms novērsiet šīs pārbaudes: {checks}",
           "validatingTitle": "Validē datus",
           "validatingBody": "Salīdzina {count} mantotos ierakstus ar V2 datubāzi...",
           "dirtyRecordsCatchup": "{count} izmainīti ieraksti - tiks mēģināta saskaņošana",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} brīdinājums(-i)",
           "running": "Veic pirmmigrācijas pārbaudes...",
           "checkingStep": "Solis {current} no {total}",
+          "currentCheck": "Pārbauda: {name} ({seconds} s)",
+          "slowHint": "Lielas datubāzes var aizņemt vairākas minūtes.",
+          "runFailed": "Pārbaudes pirms migrācijas netika pabeigtas: {error}",
           "passedCount": "{passed}/{total} izturētas",
           "criticalCount": "{count} kritiskas",
           "warningCount": "{count} brīdinājums(-i)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Datubāzes integritāte"
+            },
+            "mysql_server_version": {
+              "name": "Datubāzes servera versija"
+            },
+            "mysql_charset": {
+              "name": "Datubāzes rakstzīmju kopa"
             },
             "mysql_table_health": {
               "name": "Tabulu veselība"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migrācija nav konfigurēta",
-      "preFlightFailed": "Pirms-lidojuma pārbaudes neizdevās",
+      "preFlightFailed": "Pārbaude pirms migrācijas neizdevās: {check}",
+      "prerequisitesNotReady": "Palaidiet pārbaudes pirms migrācijas un uzgaidiet, līdz tās tiek izturētas, pirms sākat migrāciju.",
       "invalidBody": "Nederīgs pieprasījuma saturs",
       "recordCountFailed": "Neizdevās noteikt kopējo ierakstu skaitu",
       "startFailed": "Neizdevās sākt migrāciju",

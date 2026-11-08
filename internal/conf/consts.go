@@ -114,6 +114,10 @@ const (
 	DefaultRetentionMaxUsage            = "80%"
 	DefaultRetryBackoffMultiplier       = 2.0
 
+	// DefaultLogDeduplicationHealthCheckSeconds is the default log deduplication health check
+	// interval in seconds.
+	DefaultLogDeduplicationHealthCheckSeconds = 60
+
 	// The bat ultrasonic filter's STFT defaults. normalizeUltrasonicFilter resets an
 	// invalid or unwritten value to them on load.
 	DefaultUltrasonicFFTSize = 8192
@@ -125,6 +129,22 @@ const (
 	// filter created in the UI and one repaired here get the same value. 0.707 is the
 	// conventional rounding of the Butterworth 1/sqrt(2).
 	DefaultEQQFactor = 0.707
+
+	// DefaultAlternateMinConfidence is the default lowest confidence, on the 0 to 1
+	// scale, at which an alternate prediction of a detection is stored.
+	// normalizeAlternateMinConfidence resets an invalid value to it on load.
+	DefaultAlternateMinConfidence = 0.1
+
+	// DefaultModelConsensusMinModels is the default number of agreeing models the
+	// model consensus filter requires. normalizeModelConsensus resets an invalid
+	// value to it on load.
+	DefaultModelConsensusMinModels = 2
+
+	// MinModelConsensusMinModels is the lowest accepted model consensus minmodels value.
+	MinModelConsensusMinModels = 2
+
+	// MaxModelConsensusMinModels is the highest accepted model consensus minmodels value.
+	MaxModelConsensusMinModels = 4
 )
 
 // DefaultSessionDuration is the default session duration (7 days).

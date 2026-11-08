@@ -6,8 +6,8 @@ package audio
 import (
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -18,61 +18,69 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
-// mockWriteDeadlineResponseWriter tracks whether SetWriteDeadline was called
-// before Write operations to verify proper SSE connection keep-alive handling
-type mockWriteDeadlineResponseWriter struct {
-	http.ResponseWriter
-	setWriteDeadlineCalled atomic.Bool
-	writeCalledFirst       atomic.Bool // True if Write was called before SetWriteDeadline
-	lastDeadline           time.Time
+const (
+	// deadlineTestUpdates is how many audio level updates the update test sends.
+	deadlineTestUpdates = 3
+	// deadlineTestClockStep is how far the fake clock moves between updates:
+	// non-zero and shorter than the deadline, so a stale deadline cannot match.
+	deadlineTestClockStep = audioLevelWriteDeadline / 2
+)
+
+// deadlineRecordingWriter records the last write deadline set through
+// http.NewResponseController, and whether anything was written before one was.
+// The tests call the senders synchronously, so it needs no locking.
+type deadlineRecordingWriter struct {
+	*httptest.ResponseRecorder
+	deadline            time.Time
+	wroteBeforeDeadline bool
 }
 
-// SetWriteDeadline lets http.NewResponseController find and set a write deadline
-func (m *mockWriteDeadlineResponseWriter) SetWriteDeadline(t time.Time) error {
-	m.setWriteDeadlineCalled.Store(true)
-	m.lastDeadline = t
+// SetWriteDeadline lets http.NewResponseController find and set a write deadline.
+func (w *deadlineRecordingWriter) SetWriteDeadline(t time.Time) error {
+	w.deadline = t
 	return nil
 }
 
-// Write tracks if it was called before SetWriteDeadline
-func (m *mockWriteDeadlineResponseWriter) Write(b []byte) (int, error) {
-	if !m.setWriteDeadlineCalled.Load() {
-		m.writeCalledFirst.Store(true)
+// Write notes a write that happens before any write deadline was set.
+func (w *deadlineRecordingWriter) Write(b []byte) (int, error) {
+	if w.deadline.IsZero() {
+		w.wroteBeforeDeadline = true
 	}
-	return m.ResponseWriter.Write(b)
+	return w.ResponseRecorder.Write(b)
 }
 
-// Flush implements http.Flusher
-func (m *mockWriteDeadlineResponseWriter) Flush() {
-	if f, ok := m.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+// newDeadlineTestContext returns a handler and an echo context that writes
+// through a deadlineRecordingWriter.
+func newDeadlineTestContext() (*Handler, echo.Context, *deadlineRecordingWriter) {
+	writer := &deadlineRecordingWriter{ResponseRecorder: httptest.NewRecorder()}
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/audio-level", http.NoBody)
+	ctx := echo.New().NewContext(req, writer)
+
+	controller := &Handler{Core: &apicore.Core{}}
+	controller.Settings.Store(apitest.NewValidTestSettings())
+	return controller, ctx, writer
 }
 
-// TestSendAudioLevelUpdateSetsWriteDeadline verifies that sendAudioLevelUpdate
-// sets the write deadline before writing to prevent server WriteTimeout
-// from terminating the SSE connection prematurely.
+// assertDeadlineSetBeforeWrite checks that nothing was written before a write
+// deadline was set, and that the deadline is audioLevelWriteDeadline after the
+// current time. It must run inside a synctest bubble, where the clock does not
+// move on its own, so the deadline equals that sum exactly.
+func assertDeadlineSetBeforeWrite(t *testing.T, writer *deadlineRecordingWriter) {
+	t.Helper()
+	assert.False(t, writer.wroteBeforeDeadline, "Write should not be called before SetWriteDeadline")
+	assert.Equal(t, time.Now().Add(audioLevelWriteDeadline), writer.deadline,
+		"Write deadline should be audioLevelWriteDeadline (%v) after the current time", audioLevelWriteDeadline)
+}
+
+// TestSendAudioLevelUpdateSetsWriteDeadline verifies that every
+// sendAudioLevelUpdate sets the write deadline before writing, so the server
+// WriteTimeout does not end the SSE connection.
 //
 // This test prevents regression of GitHub issue #1673 where SSE connections
 // were disconnecting every ~30 seconds due to WriteTimeout not being reset.
 func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
-	t.Run("sets write deadline before sending data", func(t *testing.T) {
-		// Create Echo context with mock response writer
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		mockWriter := &mockWriteDeadlineResponseWriter{ResponseWriter: rec}
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/audio-level", http.NoBody)
-		ctx := e.NewContext(req, rec)
-
-		// Replace the response writer with our mock
-		ctx.Response().Writer = mockWriter
-
-		// Create minimal controller
-		controller := &Handler{Core: &apicore.Core{}}
-		controller.Settings.Store(apitest.NewValidTestSettings())
-
-		// Create test audio level data
+	synctest.Test(t, func(t *testing.T) {
+		controller, ctx, writer := newDeadlineTestContext()
 		levels := map[string]audiocore.AudioLevelData{
 			"test_source": {
 				Level:  50,
@@ -81,50 +89,17 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 			},
 		}
 
-		// Call sendAudioLevelUpdate
-		err := controller.sendAudioLevelUpdate(ctx, levels)
-		require.NoError(t, err)
-
-		// Verify SetWriteDeadline was called
-		assert.True(t, mockWriter.setWriteDeadlineCalled.Load(),
-			"SetWriteDeadline should be called before writing SSE data")
-
-		// Verify Write was NOT called before SetWriteDeadline
-		assert.False(t, mockWriter.writeCalledFirst.Load(),
-			"Write should not be called before SetWriteDeadline")
-
-		// Verify the deadline is set to approximately audioLevelWriteDeadline in the future
-		expectedDeadline := time.Now().Add(audioLevelWriteDeadline)
-		deadlineDiff := mockWriter.lastDeadline.Sub(expectedDeadline).Abs()
-		assert.Less(t, deadlineDiff, 100*time.Millisecond,
-			"Write deadline should be set to approximately %v in the future", audioLevelWriteDeadline)
-	})
-
-	t.Run("write deadline extends connection lifetime", func(t *testing.T) {
-		// Create Echo context with mock response writer
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		mockWriter := &mockWriteDeadlineResponseWriter{ResponseWriter: rec}
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/audio-level", http.NoBody)
-		ctx := e.NewContext(req, rec)
-		ctx.Response().Writer = mockWriter
-
-		controller := &Handler{Core: &apicore.Core{}}
-		controller.Settings.Store(apitest.NewValidTestSettings())
-		levels := map[string]audiocore.AudioLevelData{
-			"test_source": {Level: 50, Name: "Test Source", Source: "test_source"},
-		}
-
-		// Call sendAudioLevelUpdate multiple times
-		for i := range 3 {
-			mockWriter.setWriteDeadlineCalled.Store(false)
-			err := controller.sendAudioLevelUpdate(ctx, levels)
-			require.NoError(t, err)
-
-			// Each call should set the write deadline
-			assert.True(t, mockWriter.setWriteDeadlineCalled.Load(),
-				"SetWriteDeadline should be called on each update (iteration %d)", i)
+		// Send repeatedly with the clock moving between updates. The recorded state
+		// is cleared first so every update has to set its own deadline before it
+		// writes, instead of relying on the one set for an earlier update.
+		for range deadlineTestUpdates {
+			writer.deadline = time.Time{}
+			writer.wroteBeforeDeadline = false
+			writer.Body.Reset()
+			require.NoError(t, controller.sendAudioLevelUpdate(ctx, levels))
+			assert.Contains(t, writer.Body.String(), "audio-level", "Each update should write its SSE message")
+			assertDeadlineSetBeforeWrite(t, writer)
+			time.Sleep(deadlineTestClockStep)
 		}
 	})
 }
@@ -132,34 +107,13 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 // TestSendAudioLevelHeartbeatSetsWriteDeadline verifies that heartbeat writes
 // set the write deadline to prevent connection timeout during idle periods.
 func TestSendAudioLevelHeartbeatSetsWriteDeadline(t *testing.T) {
-	t.Run("heartbeat sets write deadline before writing", func(t *testing.T) {
-		// Create Echo context with mock response writer
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		mockWriter := &mockWriteDeadlineResponseWriter{ResponseWriter: rec}
+	synctest.Test(t, func(t *testing.T) {
+		controller, ctx, writer := newDeadlineTestContext()
 
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/audio-level", http.NoBody)
-		ctx := e.NewContext(req, rec)
-		ctx.Response().Writer = mockWriter
+		require.NoError(t, controller.sendAudioLevelHeartbeat(ctx))
 
-		// Create minimal controller
-		controller := &Handler{Core: &apicore.Core{}}
-		controller.Settings.Store(apitest.NewValidTestSettings())
-
-		// Call sendAudioLevelHeartbeat
-		err := controller.sendAudioLevelHeartbeat(ctx)
-		require.NoError(t, err)
-
-		// Verify SetWriteDeadline was called
-		assert.True(t, mockWriter.setWriteDeadlineCalled.Load(),
-			"SetWriteDeadline should be called before writing heartbeat")
-
-		// Verify Write was NOT called before SetWriteDeadline
-		assert.False(t, mockWriter.writeCalledFirst.Load(),
-			"Write should not be called before SetWriteDeadline")
-
-		// Verify heartbeat was written to response
-		assert.Contains(t, rec.Body.String(), "heartbeat",
+		assertDeadlineSetBeforeWrite(t, writer)
+		assert.Contains(t, writer.Body.String(), "heartbeat",
 			"Response should contain heartbeat message")
 	})
 }

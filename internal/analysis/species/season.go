@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // initializeDefaultSeasons sets up the default Northern Hemisphere seasons
@@ -182,7 +183,8 @@ func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	maxDay := max(day1, day2)
 
 	for _, season := range t.seasons {
-		boundaryDate := time.Date(time1.Year(), time.Month(season.month), season.day, 0, 0, 0, 0, time1.Location())
+		// UTC carries the calendar ordinal; a local midnight can be a skipped time.
+		boundaryDate := time.Date(time1.Year(), time.Month(season.month), season.day, 0, 0, 0, 0, time.UTC)
 		boundaryDay := boundaryDate.YearDay()
 
 		// If a season boundary falls between the two times (inclusive of boundary day),
@@ -201,16 +203,30 @@ func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	return timeDiff <= seasonBufferDuration
 }
 
+// trackerDate returns the calendar date year-month-day, with out-of-range fields
+// normalised like time.Date: a configured February 29 is March 1 in a common year,
+// and a month past December rolls into the next year. The UTC midnight only
+// carries the date; a local-zone midnight would not, because on a date whose
+// midnight the zone skips time.Date returns 23:00 on the previous date.
+func trackerDate(year int, month time.Month, day int) wallclock.Date {
+	return wallclock.DateOf(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
+}
+
+// resetDate returns the yearly tracking reset date in the given calendar year.
+func (t *SpeciesTracker) resetDate(year int) wallclock.Date {
+	return trackerDate(year, time.Month(t.resetMonth), t.resetDay)
+}
+
 // calculateSeasonStartDate calculates the start date for a season, adjusting for year boundaries.
-func (t *SpeciesTracker) calculateSeasonStartDate(seasonName string, seasonStart seasonDates, currentTime time.Time) time.Time {
-	seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
+func (t *SpeciesTracker) calculateSeasonStartDate(seasonName string, seasonStart seasonDates, currentTime time.Time) wallclock.Date {
+	seasonDate := trackerDate(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day)
 
 	// Handle seasons that might cross year boundaries
 	if t.shouldAdjustYearForSeason(currentTime, time.Month(seasonStart.month), false) {
-		seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
+		seasonDate = trackerDate(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day)
 		getLog().Debug("Adjusting season to previous year",
 			logger.String("season", seasonName),
-			logger.String("adjusted_date", seasonDate.Format(time.DateOnly)))
+			logger.String("adjusted_date", seasonDate.String()))
 	}
 	return seasonDate
 }
@@ -233,7 +249,8 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 
 	// Find the most recent season start date
 	var currentSeason string
-	var latestDate time.Time
+	var latestDate wallclock.Date
+	today := wallclock.DateOf(currentTime)
 
 	for _, seasonName := range seasonOrder {
 		seasonStart, exists := t.seasons[seasonName]
@@ -244,8 +261,8 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		seasonDate := t.calculateSeasonStartDate(seasonName, seasonStart, currentTime)
 
 		// Check if current date is on or after this season's start and it's the most recent
-		isOnOrAfter := !currentTime.Before(seasonDate)
-		isMoreRecent := currentSeason == "" || seasonDate.After(latestDate)
+		isOnOrAfter := today.Compare(seasonDate) >= 0
+		isMoreRecent := currentSeason == "" || seasonDate.Compare(latestDate) > 0
 		if isOnOrAfter && isMoreRecent {
 			currentSeason = seasonName
 			latestDate = seasonDate
@@ -260,24 +277,31 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 
 	getLog().Debug("Computed season result",
 		logger.String("season", currentSeason),
-		logger.String("season_start_date", latestDate.Format(time.DateOnly)))
+		logger.String("season_start_date", latestDate.String()))
 
 	return currentSeason
+}
+
+// resetYearlyTrackingLocked empties the yearly set and makes trackingYear the
+// current tracking year. checkTime is only used for logging.
+// Assumes lock is held.
+func (t *SpeciesTracker) resetYearlyTrackingLocked(trackingYear int, checkTime time.Time) {
+	oldYear := t.currentYear
+	t.speciesThisYear = make(map[string]time.Time)
+	t.currentYear = trackingYear
+	// Clear status cache when year resets to ensure fresh calculations
+	t.statusCache = make(map[string]cachedSpeciesStatus)
+	getLog().Debug("Reset yearly tracking",
+		logger.Int("old_year", oldYear),
+		logger.Int("new_year", t.currentYear),
+		logger.String("check_time", checkTime.Format(time.DateTime)))
 }
 
 // checkAndResetPeriods checks if we need to reset yearly or seasonal tracking
 func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 	// Check for yearly reset
 	if t.yearlyEnabled && t.shouldResetYear(currentTime) {
-		oldYear := t.currentYear
-		t.speciesThisYear = make(map[string]time.Time)
-		t.currentYear = t.getTrackingYear(currentTime) // Use tracking year, not calendar year
-		// Clear status cache when year resets to ensure fresh calculations
-		t.statusCache = make(map[string]cachedSpeciesStatus)
-		getLog().Debug("Reset yearly tracking",
-			logger.Int("old_year", oldYear),
-			logger.Int("new_year", t.currentYear),
-			logger.String("check_time", currentTime.Format(time.DateTime)))
+		t.resetYearlyTrackingLocked(t.getTrackingYear(currentTime), currentTime)
 	}
 
 	// Check for seasonal reset
@@ -300,19 +324,29 @@ func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 
 // seasonStartDate returns the date-only start of the named season occurrence
 // that contains currentTime.
-func (t *SpeciesTracker) seasonStartDate(seasonName string, currentTime time.Time) (time.Time, bool) {
+func (t *SpeciesTracker) seasonStartDate(seasonName string, currentTime time.Time) (wallclock.Date, bool) {
 	dates, exists := t.seasons[seasonName]
 	if !exists {
-		return time.Time{}, false
+		return wallclock.Date{}, false
 	}
-	return trackerDateOnly(t.calculateSeasonStartDate(seasonName, dates, currentTime)), true
+	return t.calculateSeasonStartDate(seasonName, dates, currentTime), true
 }
 
 // seasonCarryoverLookbackStart returns the first day of the carry-over lookback
 // before seasonStart: a species detected on or after it, and before
 // seasonStart, was already present when the season began.
-func (t *SpeciesTracker) seasonCarryoverLookbackStart(seasonStart time.Time) time.Time {
-	return seasonStart.AddDate(0, 0, -t.seasonalWindowDays)
+func (t *SpeciesTracker) seasonCarryoverLookbackStart(seasonStart wallclock.Date) wallclock.Date {
+	return seasonStart.AddDays(-t.seasonalWindowDays)
+}
+
+// lastSeenCarriesOver reports whether a species last heard at lastSeen was
+// already present when the season starting at seasonStart began: its last
+// detection falls in the lookback window before the start. The live rebuild and
+// the read-only status view share it so they cannot disagree.
+func (t *SpeciesTracker) lastSeenCarriesOver(lastSeen time.Time, seasonStart wallclock.Date) bool {
+	lastSeenDate := wallclock.DateOf(lastSeen)
+	return lastSeenDate.Compare(t.seasonCarryoverLookbackStart(seasonStart)) >= 0 &&
+		lastSeenDate.Compare(seasonStart) < 0
 }
 
 // advanceSeasonCarryoverLocked rebuilds the carry-over set from last-seen times
@@ -324,14 +358,13 @@ func (t *SpeciesTracker) seasonCarryoverLookbackStart(seasonStart time.Time) tim
 // Assumes lock is held.
 func (t *SpeciesTracker) advanceSeasonCarryoverLocked(currentTime time.Time) {
 	seasonStart, ok := t.seasonStartDate(t.currentSeason, currentTime)
-	if !ok || !seasonStart.After(t.seasonCarryoverStart) {
+	if !ok || seasonStart.Compare(t.seasonCarryoverStart) <= 0 {
 		return
 	}
 
-	lookbackStart := t.seasonCarryoverLookbackStart(seasonStart)
 	carryover := make(map[string]struct{})
 	for scientificName, lastSeen := range t.speciesLastSeen {
-		if !dateOnlyBefore(lastSeen, lookbackStart) && dateOnlyBefore(lastSeen, seasonStart) {
+		if t.lastSeenCarriesOver(lastSeen, seasonStart) {
 			carryover[scientificName] = struct{}{}
 		}
 	}
@@ -348,46 +381,19 @@ func (t *SpeciesTracker) isSeasonCarryoverLocked(scientificName, seasonName stri
 		return false
 	}
 	seasonStart, ok := t.seasonStartDate(seasonName, currentTime)
-	return ok && sameTrackerDate(seasonStart, t.seasonCarryoverStart)
+	return ok && seasonStart == t.seasonCarryoverStart
 }
 
-// shouldResetYear determines if we should reset yearly tracking
+// shouldResetYear determines if we should reset yearly tracking. It compares
+// tracking years, so a time in an earlier tracking year never resets and a time
+// in a later one always does, whatever the gap since the last call.
 func (t *SpeciesTracker) shouldResetYear(currentTime time.Time) bool {
 	// If we've never reset before (currentYear is 0), we need to reset
 	if t.currentYear == 0 {
 		return true
 	}
 
-	currentCalendarYear := currentTime.Year()
-
-	// Handle standard January 1st resets
-	if t.resetMonth == 1 && t.resetDay == 1 {
-		// Standard calendar year - reset if we're in a later year
-		return currentCalendarYear > t.currentYear
-	}
-
-	// Handle custom reset dates
-	resetDate := time.Date(currentCalendarYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, currentTime.Location())
-
-	// If we're in a later calendar year, definitely reset
-	if currentCalendarYear > t.currentYear {
-		return true
-	}
-
-	// If we're in an earlier calendar year (shouldn't happen normally), don't reset
-	if currentCalendarYear < t.currentYear {
-		return false
-	}
-
-	// Same calendar year - reset only on the exact reset day
-	// This handles the case where we reach the reset day but not necessarily at midnight
-	if currentCalendarYear == t.currentYear &&
-		currentTime.Month() == resetDate.Month() &&
-		currentTime.Day() == resetDate.Day() {
-		return true
-	}
-
-	return false
+	return t.getTrackingYear(currentTime) > t.currentYear
 }
 
 // getTrackingYear determines which tracking year a given time falls into
@@ -396,9 +402,7 @@ func (t *SpeciesTracker) getTrackingYear(now time.Time) int {
 	currentYear := now.Year()
 
 	// If current time is before this year's reset date, we're still in the previous tracking year
-	currentYearResetDate := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-
-	if now.Before(currentYearResetDate) {
+	if wallclock.DateOf(now).Compare(t.resetDate(currentYear)) < 0 {
 		// We haven't reached this year's reset date yet, so we're still in the previous tracking year
 		return currentYear - 1
 	}
@@ -408,42 +412,14 @@ func (t *SpeciesTracker) getTrackingYear(now time.Time) int {
 
 // getYearDateRange calculates the start and end dates for yearly tracking
 func (t *SpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
-	// Use t.currentYear if explicitly set for testing, otherwise use the provided time's year
-	currentYear := now.Year()
-	useOverride := t.currentYear != 0 && t.currentYear != time.Now().Year()
-
-	if useOverride {
-		// Only use t.currentYear if it was explicitly set for testing (different from real current year)
-		currentYear = t.currentYear
-	}
-
-	// Determine the tracking year based on reset date
-	var trackingYear int
-
-	if useOverride {
-		// When year is overridden for testing, use it directly as the tracking year
-		trackingYear = currentYear
-	} else {
-		// Normal operation: determine based on reset date
-		// If current time is before this year's reset date, we're still in the previous tracking year
-		currentYearResetDate := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-
-		if now.Before(currentYearResetDate) {
-			// We haven't reached this year's reset date yet, so we're still in the previous tracking year
-			trackingYear = currentYear - 1
-		} else {
-			// We've passed this year's reset date, so we're in the current tracking year
-			trackingYear = currentYear
-		}
-	}
+	trackingYear := t.getTrackingYear(now)
 
 	// Calculate the tracking period: from reset date of trackingYear to day before reset date of next year
-	yearStart := time.Date(trackingYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-	nextYearReset := time.Date(trackingYear+1, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-	yearEnd := nextYearReset.AddDate(0, 0, -1)
+	yearStart := t.resetDate(trackingYear)
+	yearEnd := t.resetDate(trackingYear + 1).AddDays(-1)
 
-	startDate = yearStart.Format(time.DateOnly)
-	endDate = yearEnd.Format(time.DateOnly)
+	startDate = yearStart.String()
+	endDate = yearEnd.String()
 
 	return startDate, endDate
 }
@@ -456,26 +432,21 @@ func (t *SpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (s
 		return "", ""
 	}
 
-	// Use test year override if set, otherwise use now's year
-	currentYear := now.Year()
-	if t.currentYear != 0 && t.currentYear != time.Now().Year() {
-		currentYear = t.currentYear
-	}
-
-	// Calculate season start date
-	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
-
-	// Handle seasons that might need adjustment to previous year
+	// Calculate season start date, adjusting to the previous year where needed
+	seasonYear := now.Year()
 	if t.shouldAdjustYearForSeason(now, time.Month(season.month), true) {
-		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
+		seasonYear--
 	}
+	seasonStart := trackerDate(seasonYear, time.Month(season.month), season.day)
 
 	// Calculate season end date - seasons last monthsPerSeason months
-	// Add monthsPerSeason months, then subtract 1 day to get the last day of the final month
-	seasonEnd := seasonStart.AddDate(0, monthsPerSeason, 0).AddDate(0, 0, -1)
+	// Add monthsPerSeason months, then subtract 1 day to get the last day of the final month.
+	// The month addition normalises like time.AddDate, so a season from November 30
+	// ends on March 1; it starts from the normalised start date's fields.
+	seasonEnd := trackerDate(seasonStart.Year, seasonStart.Month+monthsPerSeason, seasonStart.Day).AddDays(-1)
 
-	startDate = seasonStart.Format(time.DateOnly)
-	endDate = seasonEnd.Format(time.DateOnly)
+	startDate = seasonStart.String()
+	endDate = seasonEnd.String()
 
 	return startDate, endDate
 }

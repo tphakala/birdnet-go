@@ -54,61 +54,19 @@ func (r *insightsRepository) modelContributionsTable() string {
 	return tableDetectionModelContributions
 }
 
+// hitContributionsTable is the contribution table restricted to rows with a hit.
+// A row with hit_count 0 records a model that was active on the source without a
+// hit; the contribution statistics select from this relation, so they count hits
+// only and a new query gets the filter by construction.
+func (r *insightsRepository) hitContributionsTable() string {
+	return "(SELECT * FROM " + r.modelContributionsTable() + " WHERE hit_count > 0)"
+}
+
 func (r *insightsRepository) modelsTable() string {
 	if r.useV2Prefix {
 		return tableV2AIModels
 	}
 	return tableAIModels
-}
-
-// SQL expression helpers, same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
-// offsetSeconds is the configured timezone's UTC offset; it is added to the epoch before the
-// date/hour/year is extracted, so the result buckets by wall-clock value in that zone and is
-// independent of the database session / OS-local timezone (unlike the older 'localtime' /
-// FROM_UNIXTIME forms). detected_at is always positive and offsets are bounded, so the
-// arithmetic stays non-negative even for west-of-UTC (negative) offsets.
-
-// dateFromUnixExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD).
-// SQLite: date(column + offset, 'unixepoch')
-// MySQL:  DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY)
-//
-// The MySQL form computes the civil date arithmetically (DATE_ADD on a literal date with an
-// integer day count) so it does not depend on the session time_zone; DATE(FROM_UNIXTIME(...))
-// would apply the session zone on top of the offset and double-count. Integer DIV avoids any
-// floating-point rounding at exact day boundaries.
-func (r *insightsRepository) dateFromUnixExpr(column string, offsetSeconds int) string {
-	if r.isMySQL {
-		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %d) DIV 86400 DAY)", column, offsetSeconds)
-	}
-	return fmt.Sprintf("date(%s + %d, 'unixepoch')", column, offsetSeconds)
-}
-
-func (r *insightsRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
-	if r.isMySQL {
-		return fmt.Sprintf("FLOOR((%s + %d) / 3600) %% 24", column, offsetSeconds)
-	}
-	return fmt.Sprintf("CAST((%s + %d) / 3600 AS INTEGER) %% 24", column, offsetSeconds)
-}
-
-// yearFromOffsetExpr returns a SQL expression for the wall-clock calendar year of column, with
-// offsetSQL the SQL expression for the UTC offset in seconds that applies to each row (see
-// zoneOffsetSQL).
-func (r *insightsRepository) yearFromOffsetExpr(column, offsetSQL string) string {
-	if r.isMySQL {
-		return fmt.Sprintf("YEAR(DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV 86400 DAY))", column, offsetSQL)
-	}
-	return fmt.Sprintf("CAST(strftime('%%Y', %s + %s, 'unixepoch') AS INTEGER)", column, offsetSQL)
-}
-
-// perRowOffsetSQL returns the SQL expression for the UTC offset of loc (UTC when nil) at each
-// row of column, for rows whose instants lie in [start, end): a CASE over the offset changes
-// of loc in the span, or a literal when there are none. Rows outside the span use the offset of
-// the nearest segment, see wallclock.CoveringSegments.
-func perRowOffsetSQL(column string, loc *time.Location, start, end int64, now time.Time) string {
-	if loc == nil {
-		loc = time.UTC
-	}
-	return zoneOffsetSQL(column, wallclock.CoveringSegments(loc, start, end, now), wallclock.OffsetAt(loc, time.Unix(start, 0)))
 }
 
 // yearRangesSpan returns the smallest Unix-seconds span that contains every range.
@@ -152,7 +110,7 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 	now := time.Now()
 	from, to := wallclock.Span(spanStart, spanEnd, now)
 	dateExpr := WallClockDateExpr("d.detected_at", loc, from, to, r.isMySQL)
-	yearExpr := r.yearFromOffsetExpr("d.detected_at", perRowOffsetSQL("d.detected_at", loc, spanStart, spanEnd, now))
+	yearExpr := wallClockYearSQL("d.detected_at", perRowOffsetSQL("d.detected_at", loc, spanStart, spanEnd, now), r.isMySQL)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -257,8 +215,9 @@ func (r *insightsRepository) dawnChorusSegmentRows(ctx context.Context, seg wall
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	hourExpr := r.hourFromUnixExpr("d.detected_at", seg.OffsetSeconds)
-	dateExpr := r.dateFromUnixExpr("d.detected_at", seg.OffsetSeconds)
+	offset := segmentOffsetSQL(seg)
+	hourExpr := wallClockHourSQL("d.detected_at", offset, r.isMySQL)
+	dateExpr := wallClockDateSQL("d.detected_at", offset, r.isMySQL)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -473,11 +432,12 @@ func (r *insightsRepository) GetModelContributionStats(ctx context.Context, star
 	return result, nil
 }
 
-// queryModelContributionRows runs the per-model aggregate. The derived table pd
-// counts the contributing models per detection over the same range, which gives
-// the sole-contributor count without a subquery inside an aggregate.
+// queryModelContributionRows runs the per-model aggregate over hit rows. The
+// derived table pd counts the models with a hit per detection over the same
+// range, which gives the sole-contributor count without a subquery inside an
+// aggregate.
 func (r *insightsRepository) queryModelContributionRows(tx *gorm.DB, start, end int64) ([]modelContributionRow, error) {
-	contrib := r.modelContributionsTable()
+	contrib := r.hitContributionsTable()
 	query := fmt.Sprintf(`
 SELECT c.model_id AS model_id, m.name AS name, m.version AS version, m.variant AS variant, m.model_type AS model_type,
   COUNT(*) AS detection_count,
@@ -517,8 +477,9 @@ ORDER BY detection_count DESC, c.model_id ASC`,
 	return rows, nil
 }
 
-// queryModelAgreements counts the detections each model pair shares. The join
-// condition c2.model_id > c1.model_id yields each pair once with model_a < model_b.
+// queryModelAgreements counts the detections in which both models of a pair have
+// a hit. The join condition c2.model_id > c1.model_id yields each pair once with
+// model_a < model_b.
 func (r *insightsRepository) queryModelAgreements(tx *gorm.DB, start, end int64) ([]ModelAgreement, error) {
 	query := fmt.Sprintf(`
 SELECT c1.model_id AS model_a_id, c2.model_id AS model_b_id, COUNT(*) AS shared_detections
@@ -528,7 +489,7 @@ JOIN %[2]s d ON d.id = c1.detection_id
 WHERE d.detected_at >= ? AND d.detected_at < ?
 GROUP BY c1.model_id, c2.model_id
 ORDER BY shared_detections DESC, model_a_id ASC, model_b_id ASC`,
-		r.modelContributionsTable(), r.detectionsTable())
+		r.hitContributionsTable(), r.detectionsTable())
 
 	var agreements []ModelAgreement
 	if err := tx.Raw(query, start, end).Scan(&agreements).Error; err != nil {
@@ -538,13 +499,13 @@ ORDER BY shared_detections DESC, model_a_id ASC, model_b_id ASC`,
 }
 
 // queryContributionTotals counts the detections in range and those with at least
-// one contribution row.
+// one hit row. The LEFT JOIN keeps detections without one in total_detections.
 func (r *insightsRepository) queryContributionTotals(tx *gorm.DB, start, end int64) (modelContributionTotalsRow, error) {
 	query := fmt.Sprintf(`
 SELECT COUNT(DISTINCT d.id) AS total_detections, COUNT(DISTINCT c.detection_id) AS detections_with_contributions
 FROM %s d LEFT JOIN %s c ON c.detection_id = d.id
 WHERE d.detected_at >= ? AND d.detected_at < ?`,
-		r.detectionsTable(), r.modelContributionsTable())
+		r.detectionsTable(), r.hitContributionsTable())
 
 	var totals modelContributionTotalsRow
 	if err := tx.Raw(query, start, end).Scan(&totals).Error; err != nil {

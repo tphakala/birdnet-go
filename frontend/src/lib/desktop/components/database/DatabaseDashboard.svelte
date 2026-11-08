@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { untrack } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -7,6 +7,7 @@
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import type { DatabaseOverviewResponse } from '$lib/types/database';
   import type { MigrationStatus, ApiState, PrerequisitesResponse } from '$lib/types/migration';
+  import { failedRunMessage } from '$lib/utils/migrationPrerequisites';
   import type { LegacyStatus } from '$lib/types/legacy';
 
   // Sub-components
@@ -29,7 +30,6 @@
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
   import LegacyCleanupCard from './LegacyCleanupCard.svelte';
   import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
 
   import type { DatabaseStats } from '$lib/types/migration';
@@ -39,6 +39,11 @@
   const MAX_HISTORY_POINTS = 60;
   const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
   const STATUS_POLL_INTERVAL_MS = 2000;
+  const PREREQUISITES_POLL_INTERVAL_MS = 2000;
+  /** Error key of a start refused because no usable prerequisites run exists. */
+  const PREREQUISITES_NOT_READY_KEY = 'errors.migration.prerequisitesNotReady';
+  /** Error key of a start refused because a check failed when it was re-run. */
+  const PREFLIGHT_FAILED_KEY = 'errors.migration.preFlightFailed';
 
   // --- Overview state ---
   let overview = $state<DatabaseOverviewResponse | null>(null);
@@ -51,6 +56,11 @@
   let queriesPerSecHistory = $state<number[]>([]);
 
   // --- Migration state (reused from DatabaseManagement) ---
+  /** A start refusal rests on the run it was based on; undefined ids mean there was none. */
+  interface ActionRefusal {
+    runId: number | undefined;
+    startedAt: string | undefined;
+  }
   let migrationStatus = $state<ApiState<MigrationStatus>>({
     loading: true,
     error: null,
@@ -59,7 +69,7 @@
   // Failure of the last migration action. Kept apart from migrationStatus.error because
   // status polling clears that on every successful fetch, which would wipe an action
   // failure before it can be read.
-  let actionError = $state<string | null>(null);
+  let actionError = $state<{ message: string; refusal?: ActionRefusal } | null>(null);
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let prerequisites = $state<ApiState<PrerequisitesResponse>>({
@@ -86,6 +96,11 @@
   let isActive = $derived(ACTIVE_MIGRATION_STATES.includes(migrationStatus.data?.state ?? ''));
   // No status has loaded and the last attempt failed
   let statusUnknown = $derived(migrationStatus.data === null && migrationStatus.error !== null);
+  let prerequisitesRunning = $derived(prerequisites.data?.status === 'running');
+  /** True until the first snapshot arrives and while a run is in progress. */
+  let prerequisitesBusy = $derived(prerequisites.loading || prerequisitesRunning);
+  /** The request error, or the message of a run that did not finish. */
+  let prerequisitesError = $derived(prerequisites.error ?? failedRunMessage(prerequisites.data));
   let isCleanupActive = $derived(migrationStatus.data?.cleanup_state === 'in_progress');
 
   // SSE connection
@@ -100,15 +115,17 @@
   // --- Fetch functions ---
   async function fetchOverview(): Promise<void> {
     if (!connectionState.isOnline) {
-      if (!overview) overviewLoading = false;
+      if (!overview) {
+        overviewLoading = false;
+        overviewError = t('connectivity.offline');
+      }
       return;
     }
     try {
       overview = await api.get<DatabaseOverviewResponse>('/api/v2/system/database/overview');
       overviewError = null;
     } catch (e) {
-      overviewError =
-        e instanceof ApiError ? e.message : t('system.database.dashboard.fetchFailed');
+      overviewError = apiErrorMessage(e);
       logger.debug('Failed to fetch database overview', {
         error: e instanceof Error ? e.message : 'Unknown',
       });
@@ -117,42 +134,37 @@
     }
   }
 
+  /**
+   * Counts the status requests. A response that arrives after a newer request was sent describes
+   * an older state; applying it could fake a change of migration state, which reruns the checks.
+   */
+  let migrationStatusSeq = 0;
+
   async function fetchMigrationStatus(): Promise<void> {
+    const seq = ++migrationStatusSeq;
     try {
-      migrationStatus.data = await api.get<MigrationStatus>(
-        '/api/v2/system/database/migration/status'
-      );
+      const status = await api.get<MigrationStatus>('/api/v2/system/database/migration/status');
+      if (seq !== migrationStatusSeq) return;
+      migrationStatus.data = status;
       migrationStatus.error = null;
     } catch (e) {
-      migrationStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.fetchFailed');
+      if (seq !== migrationStatusSeq) return;
+      migrationStatus.error = apiErrorMessage(e);
     } finally {
-      migrationStatus.loading = false;
+      // A newer request is still in flight and owns the loading flag
+      if (seq === migrationStatusSeq) migrationStatus.loading = false;
     }
   }
-
-  // Retry after a failed first status fetch. Marks the button busy and ignores clicks
-  // meanwhile, so a slow or still-failing server does not collect stacked requests.
-  let statusRetrying = $state(false);
 
   // Wrapper around the alerts and views; see the template
   let viewAnchor = $state<HTMLDivElement>();
 
-  async function retryMigrationStatus(): Promise<void> {
-    if (statusRetrying) return;
-    statusRetrying = true;
-    try {
-      await fetchMigrationStatus();
-    } finally {
-      statusRetrying = false;
-    }
-    if (migrationStatus.error) return;
-    // Success removes the alert and with it the focused Retry button, which would
-    // drop focus to the document body
-    await tick();
-    if (!document.activeElement || document.activeElement === document.body) {
-      viewAnchor?.focus();
-    }
+  // Where focus goes when an alert at the top of the page goes away while focused
+  const focusView = () => [viewAnchor];
+
+  /** The server's reason for a failed request, or a generic one when there is none. */
+  function apiErrorMessage(e: unknown): string {
+    return e instanceof ApiError ? e.message : t('errors.api.unknownError');
   }
 
   async function fetchLegacyStats(): Promise<void> {
@@ -160,8 +172,7 @@
       legacyStats.data = await api.get<DatabaseStats>('/api/v2/system/database/stats');
       legacyStats.error = null;
     } catch (e) {
-      legacyStats.error =
-        e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
+      legacyStats.error = apiErrorMessage(e);
     } finally {
       legacyStats.loading = false;
     }
@@ -176,27 +187,70 @@
         v2Stats.data = null;
         v2Stats.error = null;
       } else {
-        v2Stats.error = e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
+        v2Stats.error = apiErrorMessage(e);
       }
     } finally {
       v2Stats.loading = false;
     }
   }
 
-  async function fetchPrerequisites(): Promise<void> {
+  /** Fetch errors keep the last snapshot; the message is shown next to it. */
+  function setPrerequisitesError(e: unknown): void {
+    prerequisites.error =
+      e instanceof ApiError
+        ? e.message
+        : t('system.database.migration.prerequisites.errors.fetchFailed');
+  }
+
+  /**
+   * Counts the run requests. A poll or an older run request that finishes after a newer run
+   * request was sent describes an older state, so it must not overwrite the newer snapshot.
+   */
+  let prerequisitesRequestSeq = 0;
+
+  /**
+   * Starts the background prerequisites run, or joins the one in progress, and stores the
+   * snapshot. A forced run replaces a fresh passing result. The checks themselves are
+   * followed by the polling effect below. Of overlapping requests the latest one wins.
+   */
+  async function runPrerequisites(force: boolean): Promise<void> {
+    const seq = ++prerequisitesRequestSeq;
     try {
+      // Loading covers every wait for the start response, so an older snapshot, even a
+      // passing one, cannot enable Start while a new run is being requested
       prerequisites.loading = true;
-      prerequisites.data = await api.get<PrerequisitesResponse>(
-        '/api/v2/system/database/migration/prerequisites'
+      const snapshot = await api.post<PrerequisitesResponse>(
+        '/api/v2/system/database/migration/prerequisites/run',
+        { force }
       );
+      if (seq !== prerequisitesRequestSeq) return;
+      prerequisites.data = snapshot;
       prerequisites.error = null;
     } catch (e) {
-      prerequisites.error =
-        e instanceof ApiError
-          ? e.message
-          : t('system.database.migration.prerequisites.errors.fetchFailed');
+      if (seq === prerequisitesRequestSeq) setPrerequisitesError(e);
     } finally {
-      prerequisites.loading = false;
+      // A newer request is still in flight and owns the loading flag
+      if (seq === prerequisitesRequestSeq) prerequisites.loading = false;
+    }
+  }
+
+  async function pollPrerequisites(): Promise<void> {
+    // A run request in flight owns the snapshot; a poll started now could not be ordered after it
+    if (prerequisites.loading) return;
+    const seq = prerequisitesRequestSeq;
+    try {
+      const snapshot = await api.get<PrerequisitesResponse>(
+        '/api/v2/system/database/migration/prerequisites'
+      );
+      // A run request was sent while this poll was in flight: its answer is newer
+      if (seq !== prerequisitesRequestSeq) return;
+      prerequisites.data = snapshot;
+      prerequisites.error = null;
+      // The server lost the run (a restart), so nothing is left to follow: start it again
+      if (snapshot.status === 'idle') await runPrerequisites(false);
+    } catch (e) {
+      // The run goes on server-side, so keep polling
+      if (seq === prerequisitesRequestSeq) setPrerequisitesError(e);
     }
   }
 
@@ -206,11 +260,41 @@
       legacyStatus.data = await api.get<LegacyStatus>('/api/v2/system/database/legacy/status');
       legacyStatus.error = null;
     } catch (e) {
-      legacyStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.legacy.fetchFailed');
+      // The alert names the failure; this is the reason under it
+      legacyStatus.error = apiErrorMessage(e);
     } finally {
       legacyStatus.loading = false;
     }
+  }
+
+  // A statistic is reported as failed only while it has no data; a failed refresh keeps
+  // showing the last values
+  let statsFailures = $derived(
+    [
+      {
+        id: 'legacy',
+        label: t('system.database.migration.strip.legacy'),
+        error: legacyStats.data ? null : legacyStats.error,
+        refetch: fetchLegacyStats,
+      },
+      {
+        id: 'v2',
+        label: t('system.database.migration.strip.v2Target'),
+        error: v2Stats.data ? null : v2Stats.error,
+        refetch: fetchV2Stats,
+      },
+    ].filter(failure => failure.error !== null)
+  );
+  // Refetches only the statistics that failed
+  const retryStats = () => Promise.all(statsFailures.map(failure => failure.refetch()));
+  // Wrapper of the legacy alerts and the cleanup card at the bottom of the v2-only view
+  let legacyAnchor = $state<HTMLDivElement>();
+  // Falls back to the page wrapper when a failed overview refresh replaced the whole view
+  const focusLegacy = () => [legacyAnchor, viewAnchor];
+
+  /** Shows a failed migration action: the server message, or the fallback when there is none. */
+  function failAction(e: unknown, fallbackKey: string, refusal?: ActionRefusal): void {
+    actionError = { message: e instanceof ApiError ? e.message : t(fallbackKey), refusal };
   }
 
   // --- Migration actions (same as DatabaseManagement) ---
@@ -228,8 +312,21 @@
       }
       await fetchMigrationStatus();
     } catch (e) {
-      actionError =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed');
+      const errorKey = e instanceof ApiError ? e.errorKey : undefined;
+      const checkRefused = errorKey === PREFLIGHT_FAILED_KEY;
+      const rerun = checkRefused || errorKey === PREREQUISITES_NOT_READY_KEY;
+      // Only a refusal that rests on the checks goes away when a newer run passes
+      failAction(
+        e,
+        'system.database.migration.errors.startFailed',
+        rerun
+          ? { runId: prerequisites.data?.run_id, startedAt: prerequisites.data?.started_at }
+          : undefined
+      );
+      // A migration that started anyway must show, and a missing or stale run is redone.
+      // A refused check forces a new run so the panel shows it instead of the old pass.
+      await fetchMigrationStatus();
+      if (rerun) await runPrerequisites(checkRefused);
     } finally {
       startLoading = false;
     }
@@ -241,8 +338,7 @@
       await api.post('/api/v2/system/database/migration/pause');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.pauseFailed');
+      failAction(e, 'system.database.migration.errors.pauseFailed');
     }
   }
 
@@ -252,8 +348,7 @@
       await api.post('/api/v2/system/database/migration/resume');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.resumeFailed');
+      failAction(e, 'system.database.migration.errors.resumeFailed');
     }
   }
 
@@ -263,10 +358,7 @@
       await api.post('/api/v2/system/database/migration/retry-validation');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError =
-        e instanceof ApiError
-          ? e.message
-          : t('system.database.migration.errors.retryValidationFailed');
+      failAction(e, 'system.database.migration.errors.retryValidationFailed');
     }
   }
 
@@ -276,20 +368,22 @@
       await api.post('/api/v2/system/database/migration/cancel');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.cancelFailed');
+      failAction(e, 'system.database.migration.errors.cancelFailed');
     }
   }
+
+  // A refused cleanup request; failures of the cleanup itself arrive in the status
+  let cleanupRequestError = $state<string | null>(null);
 
   async function startCleanup(): Promise<void> {
     showCleanupDialog = false;
     cleanupLoading = true;
+    cleanupRequestError = null;
     try {
       await api.post('/api/v2/system/database/legacy/cleanup');
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
     } catch (e) {
-      legacyStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.legacy.cleanup.failed');
+      cleanupRequestError = apiErrorMessage(e);
     } finally {
       cleanupLoading = false;
     }
@@ -311,25 +405,27 @@
 
   let backupJobs = $state<BackupJob[]>([]);
   let backupCreating = $state(false);
+  let backupJobsError = $state<string | null>(null);
+  let backupCreateError = $state<string | null>(null);
 
   async function fetchBackupJobs(): Promise<void> {
     try {
       const resp = await api.get<{ jobs: BackupJob[] }>('/api/v2/system/database/backup/jobs');
       backupJobs = resp.jobs ?? [];
-    } catch {
-      logger.debug('Failed to fetch backup jobs');
+      backupJobsError = null;
+    } catch (e) {
+      backupJobsError = apiErrorMessage(e);
     }
   }
 
   async function createBackup(): Promise<void> {
     backupCreating = true;
+    backupCreateError = null;
     try {
       await api.post('/api/v2/system/database/backup/jobs?type=legacy');
       await fetchBackupJobs();
     } catch (e) {
-      logger.debug('Failed to create backup', {
-        error: e instanceof Error ? e.message : 'Unknown',
-      });
+      backupCreateError = apiErrorMessage(e);
     } finally {
       backupCreating = false;
     }
@@ -424,7 +520,7 @@
       fetchMigrationStatus(),
       fetchLegacyStats(),
       fetchV2Stats(),
-      fetchPrerequisites(),
+      runPrerequisites(false),
       fetchBackupJobs(),
     ]).then(() => {
       if (active.current) {
@@ -464,6 +560,57 @@
       }
     }
     timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  });
+
+  // The stored checks describe the state they ran in: when the migration returns to idle
+  // (cancel from any state, rollback), check again. Not keyed on isActive, which misses
+  // paused, failed and completed.
+  let previousMigrationState: string | undefined;
+  $effect(() => {
+    const state = migrationStatus.data?.state;
+    if (
+      state === 'idle' &&
+      previousMigrationState !== undefined &&
+      previousMigrationState !== 'idle'
+    ) {
+      untrack(() => void runPrerequisites(false));
+    }
+    previousMigrationState = state;
+  });
+
+  // A start refusal says what was wrong at that time: drop it when a newer run completes and
+  // allows the start. It stays while the forced re-run is still running or still failing.
+  $effect(() => {
+    const data = prerequisites.data;
+    const refusal = actionError?.refusal;
+    if (!refusal) return;
+    // Run ids restart with the server, so the start time tells a new run from the refused one
+    const isNewRun = data?.run_id !== refusal.runId || data?.started_at !== refusal.startedAt;
+    if (data?.status === 'completed' && data.can_start_migration && isNewRun) {
+      actionError = null;
+    }
+  });
+
+  // Follow a running prerequisites run (recursive setTimeout to prevent pile-up)
+  $effect(() => {
+    if (!prerequisitesRunning) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      if (cancelled) return;
+
+      if (connectionState.isOnline) {
+        await pollPrerequisites();
+      }
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, PREREQUISITES_POLL_INTERVAL_MS);
+      }
+    }
+    timeoutId = setTimeout(poll, PREREQUISITES_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
@@ -546,22 +693,22 @@
 >
   <!-- Failed status fetches and failed migration actions land here, whichever view follows -->
   {#if !migrationStatus.loading && migrationStatus.error}
-    <ErrorAlert className="mb-4">
-      <span class="block">{migrationStatus.error}</span>
-      <Button
-        className="mt-2"
-        onclick={retryMigrationStatus}
-        aria-disabled={statusRetrying ? 'true' : undefined}
-      >
-        {statusRetrying ? t('common.retrying') : t('common.retry')}
-      </Button>
-    </ErrorAlert>
+    <ErrorAlert
+      className="mb-4"
+      title={t('system.database.migration.errors.fetchFailed')}
+      message={migrationStatus.error}
+      onRetry={fetchMigrationStatus}
+      focusFallback={focusView}
+    />
   {/if}
   {#if actionError}
     <ErrorAlert
-      message={actionError}
+      message={actionError.message}
+      focusFallback={focusView}
       dismissible
-      onDismiss={() => (actionError = null)}
+      onDismiss={() => {
+        actionError = null;
+      }}
       className="mb-4"
     />
   {/if}
@@ -582,11 +729,12 @@
         </div>
       </div>
     {:else if overviewError || !overview}
-      <div
-        class="bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_20%,transparent)] rounded-xl p-4 text-sm text-[var(--color-error)]"
-      >
-        {overviewError ?? t('system.database.dashboard.fetchFailed')}
-      </div>
+      <ErrorAlert
+        title={t('system.database.dashboard.fetchFailed')}
+        message={overviewError ?? ''}
+        onRetry={fetchOverview}
+        focusFallback={focusView}
+      />
     {:else}
       <div class="space-y-4">
         <!-- Top metric strip -->
@@ -625,17 +773,42 @@
           showEngine={overview.engine === 'mysql'}
         />
 
-        <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
-        {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
-          <LegacyCleanupCard
-            status={legacyStatus.data}
-            cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
-            cleanupError={migrationStatus.data?.cleanup_error ?? ''}
-            cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-            isLoading={legacyStatus.loading || cleanupLoading}
-            onDelete={() => (showCleanupDialog = true)}
-          />
-        {/if}
+        <!-- Stays mounted, so focus has somewhere to land when a legacy alert goes away -->
+        <div
+          bind:this={legacyAnchor}
+          tabindex="-1"
+          class="space-y-4 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+        >
+          {#if legacyStatus.error}
+            <ErrorAlert
+              title={t('system.database.legacy.fetchFailed')}
+              message={legacyStatus.error}
+              onRetry={fetchLegacyStatus}
+              focusFallback={focusLegacy}
+            />
+          {/if}
+          {#if cleanupRequestError}
+            <ErrorAlert
+              title={t('system.database.legacy.cleanup.failed')}
+              message={cleanupRequestError}
+              focusFallback={focusLegacy}
+              dismissible
+              onDismiss={() => (cleanupRequestError = null)}
+            />
+          {/if}
+
+          <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
+          {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
+            <LegacyCleanupCard
+              status={legacyStatus.data}
+              cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
+              cleanupError={migrationStatus.data?.cleanup_error ?? ''}
+              cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
+              isLoading={legacyStatus.loading || cleanupLoading}
+              onDelete={() => (showCleanupDialog = true)}
+            />
+          {/if}
+        </div>
       </div>
     {/if}
   {:else}
@@ -652,6 +825,20 @@
         />
       {/if}
 
+      {#if statsFailures.length > 0}
+        <ErrorAlert
+          title={t('system.database.stats.fetchFailed')}
+          onRetry={retryStats}
+          focusFallback={focusView}
+        >
+          <ul>
+            {#each statsFailures as failure (failure.id)}
+              <li>{failure.label}: {failure.error}</li>
+            {/each}
+          </ul>
+        </ErrorAlert>
+      {/if}
+
       <!-- Middle row: details + progress -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <DatabaseMigrationDetails stats={legacyStats.data} />
@@ -662,6 +849,8 @@
               legacyStats={legacyStats.data}
               v2Stats={v2Stats.data}
               prerequisites={prerequisites.data}
+              prerequisitesLoading={prerequisitesBusy}
+              {prerequisitesError}
               isStarting={startLoading}
               onStart={() => (showConfirmDialog = true)}
               onPause={pauseMigration}
@@ -678,7 +867,8 @@
         <DatabasePrerequisites
           prerequisites={prerequisites.data}
           isLoading={prerequisites.loading}
-          onRefresh={fetchPrerequisites}
+          error={prerequisites.error}
+          onRefresh={() => runPrerequisites(true)}
         />
       {/if}
 
@@ -688,6 +878,10 @@
         onCreateBackup={createBackup}
         isCreating={backupCreating}
         disabled={isActive}
+        loadError={backupJobsError}
+        onRetryLoad={fetchBackupJobs}
+        createError={backupCreateError}
+        onDismissCreateError={() => (backupCreateError = null)}
       />
     </div>
   {/if}

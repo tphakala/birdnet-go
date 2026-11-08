@@ -8,11 +8,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -52,9 +54,17 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 	w.mu.Unlock()
 
 	// run() should recover from the panic without itself panicking
+	done := make(chan struct{})
 	assert.NotPanics(t, func() {
-		w.run(t.Context())
+		w.run(t.Context(), done)
 	})
+
+	// A caller waiting in Stop must be released after a panic
+	select {
+	case <-done:
+	default:
+		assert.Fail(t, "done must be closed after the run goroutine panicked")
+	}
 
 	// Verify the worker recorded the panic error
 	state, err := sm.GetState()
@@ -957,4 +967,213 @@ func TestWorker_TransitionToValidation_RecordsAuxiliaryOutcome(t *testing.T) {
 			assert.Equal(t, tt.wantOutcome, state.AuxiliaryDataOutcome())
 		})
 	}
+}
+
+func TestWorker_AbandonDuringValidationDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		sm, cleanup := setupWorkerTest(t)
+		defer cleanup()
+
+		require.NoError(t, sm.StartMigration(10))
+		require.NoError(t, sm.TransitionToDualWrite())
+		require.NoError(t, sm.TransitionToMigrating())
+		require.NoError(t, sm.TransitionToValidating())
+
+		// No expectations: validation must not run once the worker is stopped.
+		w := &Worker{
+			stateManager:    sm,
+			legacy:          mocks.NewMockDetectionRepository(t),
+			logger:          testLogger(),
+			batchSize:       DefaultBatchSize,
+			pauseCh:         make(chan struct{}),
+			resumeCh:        make(chan struct{}),
+			stopCh:          make(chan struct{}),
+			maxConsecErrors: DefaultMaxConsecutiveErrors,
+			rateSamples:     make([]rateSample, DefaultRateWindowSize),
+		}
+
+		for range 2 { // the second round pins that a stopped worker can start again
+			require.NoError(t, w.Start(t.Context()))
+			synctest.Wait() // parked in the validation pre-delay
+			before := time.Now()
+
+			require.NoError(t, w.Abandon(t.Context()))
+
+			assert.Equal(t, before, time.Now(), "abandon must not wait out the validation delay")
+			assert.False(t, w.IsRunning())
+		}
+	})
+}
+
+// newTailSyncWorker returns a worker in COMPLETED state with a mocked legacy
+// repository, built inside the current synctest bubble.
+func newTailSyncWorker(t *testing.T) (*Worker, *mocks.MockDetectionRepository) {
+	t.Helper()
+	sm, cleanup := setupWorkerTest(t)
+	t.Cleanup(cleanup)
+	transitionToCompleted(t, sm)
+	legacy := mocks.NewMockDetectionRepository(t)
+	return &Worker{
+		stateManager:    sm,
+		legacy:          legacy,
+		logger:          testLogger(),
+		batchSize:       DefaultBatchSize,
+		pauseCh:         make(chan struct{}),
+		resumeCh:        make(chan struct{}),
+		stopCh:          make(chan struct{}),
+		maxConsecErrors: DefaultMaxConsecutiveErrors,
+		rateSamples:     make([]rateSample, DefaultRateWindowSize),
+	}, legacy
+}
+
+func TestWorker_StopLifecycle(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+
+		// Abandon in tail sync exits without draining: Search has no expectation yet.
+		require.NoError(t, w.Start(t.Context()))
+		synctest.Wait()
+		require.NoError(t, w.Abandon(t.Context()))
+		assert.False(t, w.IsRunning())
+
+		// A restart resets the abandon request, so a graceful Stop drains.
+		release := make(chan struct{})
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				<-release
+				return nil, 0, nil
+			}).Once()
+		require.NoError(t, w.Start(t.Context()))
+		synctest.Wait()
+
+		stopErrs := make(chan error, 2)
+		go func() { stopErrs <- w.Stop(t.Context()) }()
+		synctest.Wait() // first Stop is waiting inside the drain
+
+		// While the worker is stopping, it still counts as running and cannot be restarted.
+		assert.True(t, w.IsRunning())
+		require.Error(t, w.Start(t.Context()))
+
+		// A second, concurrent Stop must not close the stop channel again.
+		go func() { stopErrs <- w.Stop(t.Context()) }()
+		synctest.Wait()
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-stopErrs)
+		require.NoError(t, <-stopErrs)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 1)
+	})
+}
+
+// TestWorker_StopDuringTailSyncBatchDrains pins that a stop arriving while a
+// periodic tail sync batch is in flight still drains once the batch is done.
+func TestWorker_StopDuringTailSyncBatchDrains(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		var searches atomic.Int32
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				if searches.Add(1) == 1 {
+					entered <- struct{}{} // the periodic batch
+					<-release
+				}
+				return nil, 0, nil
+			}).Twice()
+
+		require.NoError(t, w.Start(t.Context()))
+		<-entered // the periodic batch is inside the legacy search
+
+		stopped := make(chan error, 1)
+		go func() { stopped <- w.Stop(t.Context()) }()
+		synctest.Wait()
+		assert.True(t, w.IsRunning(), "stop waits for the batch in flight")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-stopped)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 2) // the periodic batch and the final drain
+	})
+}
+
+func TestWorker_AbandonDuringTailSyncBatch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				entered <- struct{}{}
+				<-release
+				return nil, 0, nil
+			}).Once()
+
+		require.NoError(t, w.Start(t.Context()))
+		<-entered // the periodic batch is inside the legacy search
+
+		abandoned := make(chan error, 1)
+		go func() { abandoned <- w.Abandon(t.Context()) }()
+		synctest.Wait()
+		assert.True(t, w.IsRunning(), "abandon waits for the batch in flight")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-abandoned)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 1) // no final drain after the batch
+	})
+}
+
+// TestWorker_ValidateWithCounts_FailsWhenNotesWithIntegerZeroBeginTimeAreMissing verifies
+// the count gate sees legacy notes whose begin_time is stored as integer 0: when they are
+// missing from v2, validation must fail instead of passing on a filtered legacy count.
+func TestWorker_ValidateWithCounts_FailsWhenNotesWithIntegerZeroBeginTimeAreMissing(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "legacy.db")
+	store := datastore.New(settings)
+	require.NoError(t, store.Open())
+	t.Cleanup(func() { assert.NoError(t, store.Close()) })
+	sqliteStore, ok := store.(*datastore.SQLiteStore)
+	require.True(t, ok, "expected a SQLite store")
+
+	day := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	notes := make([]datastore.Note, 5)
+	for i := range notes {
+		notes[i] = datastore.Note{ScientificName: "Parus major", Date: "2024-06-15", Time: "10:00:00", BeginTime: day.Add(time.Duration(i) * time.Hour)}
+	}
+	require.NoError(t, sqliteStore.DB.Create(&notes).Error)
+	require.NoError(t, sqliteStore.DB.Exec("UPDATE notes SET begin_time = 0 WHERE id IN ?",
+		[]uint{notes[3].ID, notes[4].ID}).Error)
+	var integerRows int64
+	require.NoError(t, sqliteStore.DB.Raw("SELECT count(*) FROM notes WHERE typeof(begin_time) = 'integer'").
+		Scan(&integerRows).Error)
+	require.Equal(t, int64(2), integerRows)
+
+	// The planted v2 rows stand for the migrated text-begin_time notes; the two
+	// integer-0 notes are the rows missing from v2.
+	v2Repo, _ := newOnDiskDetectionRepo(t)
+	for _, n := range notes[:3] {
+		plantGhostDetection(t, v2Repo, n.ID)
+	}
+
+	sm, cleanup := setupWorkerTest(t)
+	t.Cleanup(cleanup)
+	w := &Worker{
+		legacy:       datastore.NewDetectionRepository(store, time.UTC),
+		v2Detection:  v2Repo,
+		stateManager: sm,
+		logger:       testLogger(),
+	}
+
+	legacyCount, v2Count, err := w.validateWithCounts(t.Context())
+	require.Error(t, err)
+	assert.Equal(t, int64(5), legacyCount)
+	assert.Equal(t, int64(3), v2Count)
 }

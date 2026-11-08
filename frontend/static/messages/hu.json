@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Indítsa újra az adatbázis-migráció befejezéséhez",
         "legacyRestartRequiredMessage": "A migráció befejeződött. Indítsa újra a BirdNET-Go-t az új adatbázis használatához. Ha ez az üzenet újraindítás után is megmarad, ellenőrizze a naplóban az adatbázishibákat."
       },
+      "database": {
+        "serverAttentionTitle": "Az adatbázis-kiszolgáló figyelmet igényel",
+        "serverAttentionMessage": "A MySQL vagy MariaDB kiszolgáló nem támogatott kiadás, vagy az adatbázis nem az utf8mb4 karakterkészletet használja. A részletekért nyissa meg a Rendszer > Rendszerállapot oldalt."
+      },
       "cleanup": {
         "completeTitle": "Régi adatbázis karbantartás befejezve",
         "completeMessage": "{space} lemezterület felszabadítva.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
-        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} vagy újabb verziója szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
       },
       "region": {
         "staleTitle": "A modellrégió elavult lehet",
@@ -1542,6 +1546,8 @@
           "creating": "Létrehozás...",
           "createBackup": "Mentés létrehozása",
           "noBackups": "Még nincs mentés",
+          "loadFailed": "A mentési előzmények nem tölthetők be",
+          "createFailed": "A mentés nem indítható el",
           "download": "Letöltés",
           "failed": "Sikertelen",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Migráció indítása...",
         "status": {
           "idle": "Indításra kész",
+          "checking": "Előfeltételek ellenőrzése",
+          "notReady": "Nem kész",
           "initializing": "Inicializálás",
           "dual_write": "Dupla-írás aktív",
           "migrating": "Elsődleges migrálása",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Rekordok",
           "sizeLabel": "Méret",
           "prerequisitesNotMet": "Előfeltételek nem teljesültek - hárítsa el az alábbi kritikus problémákat",
+          "prerequisitesUnavailable": "A migráció előtti ellenőrzések nem fejeződtek be. Lásd lent: Migráció előtti ellenőrzések.",
+          "prerequisitesFailedList": "Először oldja meg ezeket az ellenőrzéseket: {checks}",
           "validatingTitle": "Adatok validálása",
           "validatingBody": "{count} régi rekord összehasonlítása a V2 adatbázissal...",
           "dirtyRecordsCatchup": "{count} hibás rekord - egyeztetési kísérlet a validálás során",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} figyelmeztetés",
           "running": "Migráció előtti ellenőrzések futtatása...",
           "checkingStep": "{current}. lépés / {total}",
+          "currentCheck": "Ellenőrzés: {name} ({seconds} mp)",
+          "slowHint": "A nagy adatbázisok ellenőrzése több percig is tarthat.",
+          "runFailed": "A migráció előtti ellenőrzések nem fejeződtek be: {error}",
           "passedCount": "{passed}/{total} sikeres",
           "criticalCount": "{count} kritikus",
           "warningCount": "{count} figyelmeztetés",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Adatbázis integritás"
+            },
+            "mysql_server_version": {
+              "name": "Adatbázis-kiszolgáló verziója"
+            },
+            "mysql_charset": {
+              "name": "Adatbázis karakterkészlete"
             },
             "mysql_table_health": {
               "name": "Tábla állapot"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "A migráció nincs konfigurálva",
-      "preFlightFailed": "Az előzetes ellenőrzések sikertelenek",
+      "preFlightFailed": "A migráció előtti ellenőrzés sikertelen: {check}",
+      "prerequisitesNotReady": "Futtassa le a migráció előtti ellenőrzéseket, és várja meg, amíg sikeresek, mielőtt elindítja a migrációt.",
       "invalidBody": "Érvénytelen kérés törzs",
       "recordCountFailed": "Az összes rekord meghatározása sikertelen",
       "startFailed": "A migráció indítása sikertelen",

@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Genstart for at afslutte databasemigreringen",
         "legacyRestartRequiredMessage": "Migreringen er fuldført. Genstart BirdNET-Go for at skifte til den nye database. Hvis denne besked bliver ved efter en genstart, så tjek loggen for databasefejl."
       },
+      "database": {
+        "serverAttentionTitle": "Databaseserveren kræver opmærksomhed",
+        "serverAttentionMessage": "MySQL- eller MariaDB-serveren er ikke en understøttet version, eller databasen bruger ikke tegnsættet utf8mb4. Åbn System > Helbred for at se detaljer."
+      },
       "cleanup": {
         "completeTitle": "Oprydning af ældre database fuldført",
         "completeMessage": "{space} diskplads frigjort.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgængelig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} eller nyere er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modelregionen kan være forældet",
@@ -1542,6 +1546,8 @@
           "creating": "Opretter...",
           "createBackup": "Opret sikkerhedskopi",
           "noBackups": "Ingen sikkerhedskopier endnu",
+          "loadFailed": "Sikkerhedskopieringshistorikken kunne ikke indlæses",
+          "createFailed": "Sikkerhedskopien kunne ikke startes",
           "download": "Download",
           "failed": "Mislykkedes",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Starter migrering...",
         "status": {
           "idle": "Klar til start",
+          "checking": "Kontrollerer forudsætninger",
+          "notReady": "Ikke klar",
           "initializing": "Initialiserer",
           "dual_write": "Dobbeltskrivning aktiv",
           "migrating": "Migrerer primær",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Størrelse",
           "prerequisitesNotMet": "Forudsætninger ikke opfyldt - løs kritiske problemer nedenfor",
+          "prerequisitesUnavailable": "Kontrollerne før migrering blev ikke færdige. Se Kontroller før migrering nedenfor.",
+          "prerequisitesFailedList": "Løs disse kontroller først: {checks}",
           "validatingTitle": "Validerer data",
           "validatingBody": "Sammenligner {count} ældre poster med V2-databasen...",
           "dirtyRecordsCatchup": "{count} ændrede poster - vil forsøge afstemning",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} advarsel(er)",
           "running": "Kører kontroller før migrering...",
           "checkingStep": "Trin {current} af {total}",
+          "currentCheck": "Kontrollerer {name} ({seconds} s)",
+          "slowHint": "Store databaser kan tage flere minutter.",
+          "runFailed": "Kontrollerne før migreringen blev ikke færdige: {error}",
           "passedCount": "{passed}/{total} bestået",
           "criticalCount": "{count} kritiske",
           "warningCount": "{count} advarsel(er)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Databaseintegritet"
+            },
+            "mysql_server_version": {
+              "name": "Databaseserverversion"
+            },
+            "mysql_charset": {
+              "name": "Databasens tegnsæt"
             },
             "mysql_table_health": {
               "name": "Tabelsundhed"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migrering er ikke konfigureret",
-      "preFlightFailed": "Forhåndskontrol mislykkedes",
+      "preFlightFailed": "Kontrollen før migreringen mislykkedes: {check}",
+      "prerequisitesNotReady": "Kør kontrollerne før migreringen, og vent på, at de består, før du starter migreringen.",
       "invalidBody": "Ugyldig forespørgselsindhold",
       "recordCountFailed": "Kunne ikke bestemme det samlede antal poster",
       "startFailed": "Kunne ikke starte migrering",

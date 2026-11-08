@@ -6,12 +6,14 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -33,14 +35,15 @@ const progressUpdateInterval = 1
 // The primary prediction has rank 1 (stored in Detection entity), so secondary predictions start at 2.
 const secondaryPredictionStartRank = 2
 
-// MigrateResult contains statistics from related data migration.
+// MigrateResult contains statistics from the one-time related data migration.
+// ReviewsMigrated counts inserted and updated reviews, LocksMigrated inserted locks.
 type MigrateResult struct {
 	ReviewsMigrated     int
 	CommentsMigrated    int
 	LocksMigrated       int
 	PredictionsMigrated int
-	BatchErrors         int // Count of failed batch save operations
-	SkippedRecords      int // Count of individual records skipped due to errors
+	SkippedRecords      int  // Count of individual records skipped by design
+	Blocked             bool // A pass stopped at a detection that is not in v2 yet; the tail sync continues it
 }
 
 // RelatedDataMigrator handles migration of detection-related data
@@ -52,6 +55,9 @@ type RelatedDataMigrator struct {
 	stateManager  *datastoreV2.StateManager
 	logger        logger.Logger
 	batchSize     int
+
+	// predictionsBatch is the number of legacy results read per batch.
+	predictionsBatch int
 
 	// Cached lookup table IDs for label creation
 	defaultModelID     uint  // Model ID to use for migrated labels
@@ -68,6 +74,11 @@ type RelatedDataMigratorConfig struct {
 	Logger        logger.Logger
 	BatchSize     int // If 0, uses defaultRelatedDataBatchSize
 
+	// PredictionsBatchSize is the number of legacy results read per batch.
+	// If 0, uses predictionsBatchSize. Tests set it small to force batches
+	// that split a detection's results.
+	PredictionsBatchSize int
+
 	// Required: Cached lookup table IDs
 	DefaultModelID     uint  // Model ID to use for migrated labels (typically default BirdNET)
 	SpeciesLabelTypeID uint  // "species" label type ID
@@ -75,6 +86,7 @@ type RelatedDataMigratorConfig struct {
 }
 
 // NewRelatedDataMigrator creates a new related data migrator.
+// BatchSize and PredictionsBatchSize default when zero or negative.
 // Panics if cfg or required dependencies are nil since they are essential for migration.
 func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator {
 	if cfg == nil {
@@ -96,6 +108,10 @@ func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator
 	if batchSize <= 0 {
 		batchSize = defaultRelatedDataBatchSize
 	}
+	predictionsBatch := cfg.PredictionsBatchSize
+	if predictionsBatch <= 0 {
+		predictionsBatch = predictionsBatchSize
+	}
 	return &RelatedDataMigrator{
 		legacyStore:        cfg.LegacyStore,
 		detectionRepo:      cfg.DetectionRepo,
@@ -103,6 +119,7 @@ func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator
 		stateManager:       cfg.StateManager,
 		logger:             cfg.Logger,
 		batchSize:          batchSize,
+		predictionsBatch:   predictionsBatch,
 		defaultModelID:     cfg.DefaultModelID,
 		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
 		avesClassID:        cfg.AvesClassID,
@@ -111,7 +128,11 @@ func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator
 
 // MigrateAll migrates all related data from legacy to V2.
 // Should be called after detection migration is complete.
-// Returns error if any migration fails or if batch errors occurred - caller decides severity.
+// It binds the sync cursors to the current migration attempt and resumes from
+// them, so a rerun for the same attempt adds nothing that is already in v2.
+// Rows whose detection is expected in v2 but not there yet are left for the
+// tail sync, which continues from the same cursors; that is not an error.
+// Returns an error if any phase failed - caller decides severity.
 func (m *RelatedDataMigrator) MigrateAll(ctx context.Context) error {
 	if m.legacyStore == nil {
 		m.logger.Debug("no legacy store provided, skipping related data migration")
@@ -150,307 +171,79 @@ func (m *RelatedDataMigrator) MigrateAll(ctx context.Context) error {
 		m.logger.Info("successfully set migration phase to predictions")
 	}
 
-	var result MigrateResult
-
-	// Migrate in order: reviews, comments, locks, predictions
-	reviewsMigrated, reviewsErrors, reviewsSkipped, err := m.migrateReviews(ctx)
+	cursors, err := m.stateManager.BeginRelatedSync()
 	if err != nil {
-		return fmt.Errorf("reviews migration failed: %w", err)
+		return fmt.Errorf("failed to begin related data sync: %w", err)
 	}
-	result.ReviewsMigrated = reviewsMigrated
-	result.BatchErrors += reviewsErrors
-	result.SkippedRecords += reviewsSkipped
-
-	commentsMigrated, commentsErrors, commentsSkipped, err := m.migrateComments(ctx)
+	state, err := m.stateManager.GetState()
 	if err != nil {
-		return fmt.Errorf("comments migration failed: %w", err)
+		return fmt.Errorf("failed to read migration state: %w", err)
 	}
-	result.CommentsMigrated = commentsMigrated
-	result.BatchErrors += commentsErrors
-	result.SkippedRecords += commentsSkipped
+	lastMigratedID := state.LastMigratedID
+	scanStart := time.Now()
 
-	locksMigrated, locksErrors, locksSkipped, err := m.migrateLocks(ctx)
-	if err != nil {
-		return fmt.Errorf("locks migration failed: %w", err)
-	}
-	result.LocksMigrated = locksMigrated
-	result.BatchErrors += locksErrors
-	result.SkippedRecords += locksSkipped
+	var (
+		result MigrateResult
+		errs   []error
+	)
 
-	predictionsMigrated, predictionsErrors, predictionsSkipped, err := m.migratePredictions(ctx)
+	// Migrate in order: reviews, comments, locks, predictions. A failed phase
+	// does not stop the others, unless the context ended.
+	reviewsInserted, reviewsUpdated, err := m.reconcileReviews(ctx)
+	result.ReviewsMigrated = reviewsInserted + reviewsUpdated
+	reviewsOK := err == nil
 	if err != nil {
-		return fmt.Errorf("predictions migration failed: %w", err)
+		errs = append(errs, fmt.Errorf("reviews migration failed: %w", err))
 	}
-	result.PredictionsMigrated = predictionsMigrated
-	result.BatchErrors += predictionsErrors
-	result.SkippedRecords += predictionsSkipped
+
+	if ctx.Err() == nil {
+		commentsCopied, commentsSkipped, commentsBlocked, commentsErr := m.syncComments(ctx, cursors.CommentID, lastMigratedID)
+		result.CommentsMigrated = commentsCopied
+		result.SkippedRecords += commentsSkipped
+		result.Blocked = result.Blocked || commentsBlocked
+		if commentsErr != nil {
+			errs = append(errs, fmt.Errorf("comments migration failed: %w", commentsErr))
+		}
+	}
+
+	locksOK := false
+	if ctx.Err() == nil {
+		locksInserted, _, locksErr := m.reconcileLocks(ctx)
+		result.LocksMigrated = locksInserted
+		locksOK = locksErr == nil
+		if locksErr != nil {
+			errs = append(errs, fmt.Errorf("locks migration failed: %w", locksErr))
+		}
+	}
+
+	if ctx.Err() == nil {
+		predictions, predictionsErr := m.syncPredictions(ctx, cursors, lastMigratedID, true)
+		result.PredictionsMigrated = predictions.copied
+		result.SkippedRecords += predictions.skipped
+		result.Blocked = result.Blocked || predictions.blocked
+		if predictionsErr != nil {
+			errs = append(errs, fmt.Errorf("predictions migration failed: %w", predictionsErr))
+		}
+	}
+
+	if reviewsOK && locksOK {
+		if recErr := m.stateManager.SetRelatedReconciledAt(scanStart); recErr != nil {
+			errs = append(errs, fmt.Errorf("failed to record reconcile time: %w", recErr))
+		}
+	}
 
 	m.logger.Info("related data migration complete",
 		logger.Int("reviews", result.ReviewsMigrated),
 		logger.Int("comments", result.CommentsMigrated),
 		logger.Int("locks", result.LocksMigrated),
 		logger.Int("predictions", result.PredictionsMigrated),
-		logger.Int("batch_errors", result.BatchErrors),
-		logger.Int("skipped_records", result.SkippedRecords))
+		logger.Int("skipped_records", result.SkippedRecords),
+		logger.Bool("blocked", result.Blocked),
+		logger.Int("failed_phases", len(errs)))
 
-	// Return error only if batch operations failed - skipped records are expected
-	// (low confidence predictions, missing detections, etc. are intentionally filtered)
-	if result.BatchErrors > 0 {
-		return fmt.Errorf("related data migration completed with %d batch errors", result.BatchErrors)
-	}
-
-	return nil
-}
-
-// migrateReviews migrates all note reviews to detection reviews using batched retrieval.
-// Returns (migrated count, batch errors count, skipped count).
-func (m *RelatedDataMigrator) migrateReviews(ctx context.Context) (migrated, batchErrs, skipped int, err error) {
-	var lastID uint
-
-	for {
-		// Check context cancellation
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("context cancelled during reviews migration: %w", ctxErr)
-		}
-
-		// Fetch batch
-		batch, fetchErr := m.legacyStore.GetReviewsBatch(lastID, m.batchSize)
-		if fetchErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to fetch reviews batch (afterID=%d): %w", lastID, fetchErr)
-		}
-
-		if len(batch) == 0 {
-			break // No more data
-		}
-
-		// Collect unique detection IDs from batch to check existence
-		detectionIDSet := make(map[uint]struct{})
-		for i := range batch {
-			detectionIDSet[batch[i].NoteID] = struct{}{}
-		}
-		detectionIDs := slices.Collect(maps.Keys(detectionIDSet))
-
-		// Filter to only IDs that exist in v2 detections table
-		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, detectionIDs)
-		if filterErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to filter existing detection IDs: %w", filterErr)
-		}
-		existingIDSet := make(map[uint]struct{}, len(existingIDs))
-		for _, id := range existingIDs {
-			existingIDSet[id] = struct{}{}
-		}
-
-		// Convert to V2 entities, skipping non-existent detections
-		v2Reviews := make([]*entities.DetectionReview, 0, len(batch))
-		for i := range batch {
-			r := &batch[i]
-			lastID = r.ID // Track last ID for next batch
-
-			// Skip if detection doesn't exist in v2
-			if _, exists := existingIDSet[r.NoteID]; !exists {
-				skipped++
-				continue
-			}
-
-			v2Reviews = append(v2Reviews, &entities.DetectionReview{
-				DetectionID: r.NoteID,
-				Verified:    entities.VerificationStatus(r.Verified),
-				CreatedAt:   r.CreatedAt,
-				UpdatedAt:   r.UpdatedAt,
-			})
-		}
-
-		// Save batch if there are any valid reviews
-		if len(v2Reviews) > 0 {
-			if saveErr := m.detectionRepo.SaveReviewsBatch(ctx, v2Reviews); saveErr != nil {
-				m.logger.Warn("failed to save reviews batch", logger.Error(saveErr))
-				batchErrs++
-			}
-		}
-
-		migrated += len(v2Reviews)
-
-		// If we got fewer than batch size, we're done
-		if len(batch) < m.batchSize {
-			break
-		}
-	}
-
-	if migrated > 0 || skipped > 0 {
-		m.logger.Info("reviews migration completed",
-			logger.Int("migrated", migrated),
-			logger.Int("batch_errors", batchErrs),
-			logger.Int("skipped", skipped))
-	} else {
-		m.logger.Debug("no reviews to migrate")
-	}
-	return migrated, batchErrs, skipped, nil
-}
-
-// migrateComments migrates all note comments to detection comments using batched retrieval.
-// Returns (migrated count, batch errors count, skipped count).
-func (m *RelatedDataMigrator) migrateComments(ctx context.Context) (migrated, batchErrs, skipped int, err error) {
-	var lastID uint
-
-	for {
-		// Check context cancellation
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("context cancelled during comments migration: %w", ctxErr)
-		}
-
-		// Fetch batch
-		batch, fetchErr := m.legacyStore.GetCommentsBatch(lastID, m.batchSize)
-		if fetchErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to fetch comments batch (afterID=%d): %w", lastID, fetchErr)
-		}
-
-		if len(batch) == 0 {
-			break // No more data
-		}
-
-		// Collect unique detection IDs from batch to check existence
-		detectionIDSet := make(map[uint]struct{})
-		for i := range batch {
-			detectionIDSet[batch[i].NoteID] = struct{}{}
-		}
-		detectionIDs := slices.Collect(maps.Keys(detectionIDSet))
-
-		// Filter to only IDs that exist in v2 detections table
-		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, detectionIDs)
-		if filterErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to filter existing detection IDs: %w", filterErr)
-		}
-		existingIDSet := make(map[uint]struct{}, len(existingIDs))
-		for _, id := range existingIDs {
-			existingIDSet[id] = struct{}{}
-		}
-
-		// Convert to V2 entities, skipping non-existent detections
-		v2Comments := make([]*entities.DetectionComment, 0, len(batch))
-		for i := range batch {
-			c := &batch[i]
-			lastID = c.ID // Track last ID for next batch
-
-			// Skip if detection doesn't exist in v2
-			if _, exists := existingIDSet[c.NoteID]; !exists {
-				skipped++
-				continue
-			}
-
-			v2Comments = append(v2Comments, &entities.DetectionComment{
-				DetectionID: c.NoteID,
-				Entry:       c.Entry,
-				CreatedAt:   c.CreatedAt,
-				UpdatedAt:   c.UpdatedAt,
-			})
-		}
-
-		// Save batch if there are any valid comments
-		if len(v2Comments) > 0 {
-			if saveErr := m.detectionRepo.SaveCommentsBatch(ctx, v2Comments); saveErr != nil {
-				m.logger.Warn("failed to save comments batch", logger.Error(saveErr))
-				batchErrs++
-			}
-		}
-
-		migrated += len(v2Comments)
-
-		if len(batch) < m.batchSize {
-			break
-		}
-	}
-
-	if migrated > 0 || skipped > 0 {
-		m.logger.Info("comments migration completed",
-			logger.Int("migrated", migrated),
-			logger.Int("batch_errors", batchErrs),
-			logger.Int("skipped", skipped))
-	} else {
-		m.logger.Debug("no comments to migrate")
-	}
-	return migrated, batchErrs, skipped, nil
-}
-
-// migrateLocks migrates all note locks to detection locks using batched retrieval.
-// Returns (migrated count, batch errors count, skipped count).
-func (m *RelatedDataMigrator) migrateLocks(ctx context.Context) (migrated, batchErrs, skipped int, err error) {
-	var lastNoteID uint
-
-	for {
-		// Check context cancellation
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("context cancelled during locks migration: %w", ctxErr)
-		}
-
-		// Fetch batch (locks use NoteID as the cursor since they don't have an ID field)
-		batch, fetchErr := m.legacyStore.GetLocksBatch(lastNoteID, m.batchSize)
-		if fetchErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to fetch locks batch (afterNoteID=%d): %w", lastNoteID, fetchErr)
-		}
-
-		if len(batch) == 0 {
-			break // No more data
-		}
-
-		// Collect unique detection IDs from batch to check existence
-		detectionIDSet := make(map[uint]struct{})
-		for i := range batch {
-			detectionIDSet[batch[i].NoteID] = struct{}{}
-		}
-		detectionIDs := slices.Collect(maps.Keys(detectionIDSet))
-
-		// Filter to only IDs that exist in v2 detections table
-		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, detectionIDs)
-		if filterErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to filter existing detection IDs: %w", filterErr)
-		}
-		existingIDSet := make(map[uint]struct{}, len(existingIDs))
-		for _, id := range existingIDs {
-			existingIDSet[id] = struct{}{}
-		}
-
-		// Convert to V2 entities, skipping non-existent detections
-		v2Locks := make([]*entities.DetectionLock, 0, len(batch))
-		for i := range batch {
-			l := &batch[i]
-			lastNoteID = l.NoteID // Track last NoteID for next batch
-
-			// Skip if detection doesn't exist in v2
-			if _, exists := existingIDSet[l.NoteID]; !exists {
-				skipped++
-				continue
-			}
-
-			v2Locks = append(v2Locks, &entities.DetectionLock{
-				DetectionID: l.NoteID,
-				LockedAt:    l.LockedAt,
-			})
-		}
-
-		// Save batch if there are any valid locks
-		if len(v2Locks) > 0 {
-			if saveErr := m.detectionRepo.SaveLocksBatch(ctx, v2Locks); saveErr != nil {
-				m.logger.Warn("failed to save locks batch", logger.Error(saveErr))
-				batchErrs++
-			}
-		}
-
-		migrated += len(v2Locks)
-
-		if len(batch) < m.batchSize {
-			break
-		}
-	}
-
-	if migrated > 0 || skipped > 0 {
-		m.logger.Info("locks migration completed",
-			logger.Int("migrated", migrated),
-			logger.Int("batch_errors", batchErrs),
-			logger.Int("skipped", skipped))
-	} else {
-		m.logger.Debug("no locks to migrate")
-	}
-	return migrated, batchErrs, skipped, nil
+	// Skipped records are expected (low confidence predictions, missing
+	// detections, etc. are intentionally filtered); only failures are errors.
+	return errors.Join(errs...)
 }
 
 // collectDetectionIDs extracts unique detection IDs from a batch of results.
@@ -463,10 +256,10 @@ func collectDetectionIDs(batch []datastore.Results) []uint {
 }
 
 // minPredictionConfidence is the minimum confidence threshold for migrating predictions.
-// Set to 0.2 (20%) to reduce table size by excluding predictions that are almost
-// certainly incorrect. Predictions below this threshold provide no analytical value
-// and would only increase storage requirements.
-const minPredictionConfidence = 0.2
+// Set to 0.3 (30%) to reduce table size by excluding secondary predictions that are
+// unlikely to be correct. They provide little analytical value and would only
+// increase storage requirements.
+const minPredictionConfidence = 0.3
 
 // filterBatchByConfidence returns only results that meet the minimum confidence threshold.
 // This should be called BEFORE resolveSpeciesLabels to avoid creating orphaned labels.
@@ -483,7 +276,9 @@ func filterBatchByConfidence(batch []datastore.Results) []datastore.Results {
 // resolveSpeciesLabels ensures all species in the batch have label IDs in the cache.
 // It parses raw BirdNET species strings to extract the scientific name before creating labels.
 // Uses batch resolution to minimize database round-trips (N species -> 2-3 queries instead of N).
-func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []datastore.Results, cache map[string]uint) {
+// A label lookup failure is returned so the caller stops before advancing past
+// rows it could not place.
+func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []datastore.Results, cache map[string]uint) error {
 	// Collect unique species not in cache, map raw species -> scientific name
 	speciesMapping := make(map[string]string) // raw species -> scientific name
 
@@ -508,7 +303,7 @@ func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []
 	}
 
 	if len(speciesMapping) == 0 {
-		return
+		return nil
 	}
 
 	// Extract unique scientific names (multiple raw species may map to same scientific name)
@@ -529,8 +324,7 @@ func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []
 	// Batch resolve all at once
 	labels, err := m.labelRepo.BatchGetOrCreate(ctx, scientificNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
-		m.logger.Warn("failed to batch resolve labels", logger.Error(err))
-		return
+		return fmt.Errorf("failed to batch resolve labels: %w", err)
 	}
 
 	// Update cache: raw species -> label ID (via scientific name)
@@ -539,6 +333,7 @@ func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []
 			cache[rawSpecies] = label.ID
 		}
 	}
+	return nil
 }
 
 // predictionRankTracker tracks rank assignment for predictions within detections.
@@ -558,106 +353,19 @@ func (t *predictionRankTracker) nextRank(noteID uint) int {
 	return t.currentRank
 }
 
-// migratePredictions migrates all results to detection predictions using batched retrieval.
-// Uses keyset pagination with dual cursor (note_id, id) to keep predictions grouped by detection,
-// ensuring correct rank assignment even when predictions span multiple batches.
-// Returns (migrated count, batch errors count, skipped records count).
-func (m *RelatedDataMigrator) migratePredictions(ctx context.Context) (migrated, batchErrs, skipped int, err error) {
-	var lastNoteID, lastResultID uint
-	var rankTracker predictionRankTracker
-	batchCount := 0
-	speciesLabelCache := make(map[string]uint, 2000)
-
-	m.logger.Info("starting predictions migration")
-
-	for {
-		if ctx.Err() != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("context cancelled during predictions migration: %w", ctx.Err())
-		}
-
-		batch, fetchErr := m.legacyStore.GetResultsBatch(lastNoteID, lastResultID, predictionsBatchSize)
-		if fetchErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to fetch results batch: %w", fetchErr)
-		}
-		if len(batch) == 0 {
-			break
-		}
-		batchCount++
-
-		// Get existing detection IDs to filter invalid foreign keys
-		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, collectDetectionIDs(batch))
-		if filterErr != nil {
-			return migrated, batchErrs, skipped, fmt.Errorf("failed to filter existing detection IDs: %w", filterErr)
-		}
-		existingIDSet := make(map[uint]struct{}, len(existingIDs))
-		for _, id := range existingIDs {
-			existingIDSet[id] = struct{}{}
-		}
-
-		// Filter batch to only include predictions that meet minimum confidence threshold
-		// This MUST happen before label resolution to avoid creating orphaned labels
-		filteredBatch := filterBatchByConfidence(batch)
-
-		// Resolve species labels for filtered batch only
-		m.resolveSpeciesLabels(ctx, filteredBatch, speciesLabelCache)
-
-		// Convert batch to v2 predictions
-		v2Predictions, batchSkipped, newLastNoteID, newLastResultID := m.convertResultsToPredictions(
-			batch, existingIDSet, speciesLabelCache, &rankTracker)
-		lastNoteID, lastResultID = newLastNoteID, newLastResultID
-
-		// Save batch
-		if len(v2Predictions) > 0 {
-			if saveErr := m.detectionRepo.SavePredictionsBatch(ctx, v2Predictions); saveErr != nil {
-				m.logger.Warn("failed to save predictions batch", logger.Error(saveErr))
-				batchErrs++
-			}
-		}
-
-		migrated += len(v2Predictions)
-		skipped += batchSkipped
-
-		// Update progress periodically
-		m.updatePredictionsProgress(batchCount, migrated, skipped)
-
-		if len(batch) < predictionsBatchSize {
-			break
-		}
-	}
-
-	// Final progress update to ensure UI shows completion
-	// Use migrated+skipped as "processed" for accurate progress percentage
-	if m.stateManager != nil {
-		processed := int64(migrated + skipped)
-		if updateErr := m.stateManager.UpdateProgress(0, processed); updateErr != nil {
-			m.logger.Warn("failed to update final predictions progress", logger.Error(updateErr))
-		}
-	}
-
-	if migrated > 0 || skipped > 0 {
-		m.logger.Info("predictions migration completed",
-			logger.Int("migrated", migrated),
-			logger.Int("batch_errors", batchErrs),
-			logger.Int("skipped", skipped))
-	} else {
-		m.logger.Debug("no predictions to migrate")
-	}
-	return migrated, batchErrs, skipped, nil
-}
-
 // convertResultsToPredictions converts a batch of legacy results to v2 predictions.
-// Returns the converted predictions, skip count, and updated pagination cursors.
+// Rows whose detection is not in existingIDSet, whose label did not resolve or
+// whose confidence is too low are counted as skipped.
 func (m *RelatedDataMigrator) convertResultsToPredictions(
 	batch []datastore.Results,
 	existingIDSet map[uint]struct{},
 	labelCache map[string]uint,
 	rankTracker *predictionRankTracker,
-) (predictions []*entities.DetectionPrediction, skipped int, lastNoteID, lastResultID uint) {
+) (predictions []*entities.DetectionPrediction, skipped int) {
 	predictions = make([]*entities.DetectionPrediction, 0, len(batch))
 
 	for i := range batch {
 		r := &batch[i]
-		lastNoteID, lastResultID = r.NoteID, r.ID
 
 		// Skip if detection doesn't exist in v2
 		if _, exists := existingIDSet[r.NoteID]; !exists {
@@ -672,8 +380,10 @@ func (m *RelatedDataMigrator) convertResultsToPredictions(
 			continue
 		}
 
-		// Skip low-confidence predictions (< 10%)
-		if r.Confidence < 0.1 {
+		// Skip rows below the threshold that filterBatchByConfidence applied
+		// before label resolution, so a row is kept or dropped the same way
+		// whether or not its species happens to be cached already.
+		if r.Confidence < minPredictionConfidence {
 			skipped++
 			continue
 		}
@@ -686,7 +396,30 @@ func (m *RelatedDataMigrator) convertResultsToPredictions(
 		})
 	}
 
-	return predictions, skipped, lastNoteID, lastResultID
+	return predictions, skipped
+}
+
+// noteBoundaryCursor returns the (note id, result id) of the last row of rows
+// at which the predictions cursor may be persisted. A resumed pass recomputes
+// the ranks of a note from its first result, so the cursor must sit on the last
+// row of a complete note: the last row of the last note that is followed by a
+// row of a different note. When complete is true no row follows rows (the read
+// returned fewer rows than asked, or the pass stopped right after them), so the
+// last row qualifies. ok is false when rows hold only part of one note.
+func noteBoundaryCursor(rows []datastore.Results, complete bool) (noteID, resultID uint, ok bool) {
+	if len(rows) == 0 {
+		return 0, 0, false
+	}
+	last := rows[len(rows)-1]
+	if complete {
+		return last.NoteID, last.ID, true
+	}
+	for i := len(rows) - 2; i >= 0; i-- {
+		if rows[i].NoteID != last.NoteID {
+			return rows[i].NoteID, rows[i].ID, true
+		}
+	}
+	return 0, 0, false
 }
 
 // updatePredictionsProgress updates progress in state manager and logs periodically.
@@ -696,7 +429,7 @@ func (m *RelatedDataMigrator) updatePredictionsProgress(batchCount, migrated, sk
 	// Update state manager for UI (every N batches to reduce DB writes)
 	if m.stateManager != nil && batchCount%progressUpdateInterval == 0 {
 		processed := int64(migrated + skipped)
-		if err := m.stateManager.UpdateProgress(0, processed); err != nil {
+		if err := m.stateManager.UpdatePhaseProgress(processed); err != nil {
 			m.logger.Warn("failed to update predictions progress", logger.Error(err))
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,39 +30,32 @@ func newDictController(t *testing.T) (*echo.Echo, *Handler) {
 	return e, controller
 }
 
-// TestSpeciesDictionary_Headers checks Content-Type, Content-Encoding, and
-// X-Content-Type-Options are set correctly.
-func TestSpeciesDictionary_Headers(t *testing.T) {
+// serveDictionary issues a GET against the registered dictionary route.
+func serveDictionary(t *testing.T, target string, header http.Header) *httptest.ResponseRecorder {
+	t.Helper()
+	e, _ := newDictController(t)
+	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
+	maps.Copy(req.Header, header)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestSpeciesDictionary_OK checks the unversioned 200 response: headers, the
+// gzip-compressed JSON body, the short-lived Cache-Control and the dataset ETag.
+func TestSpeciesDictionary_OK(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "species-dictionary")
 	t.Attr("type", "integration")
 
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
+	rec := serveDictionary(t, "/api/v2/species/dictionary/fi", nil)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 	assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
 	assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
-}
-
-// TestSpeciesDictionary_BodyIsValidGzipJSON decompresses the response and asserts
-// it is a JSON object with at least one scientific-name to common-name mapping.
-func TestSpeciesDictionary_BodyIsValidGzipJSON(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species-dictionary")
-	t.Attr("type", "integration")
-
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, fmt.Sprintf("%q", speciesdict.Version()), rec.Header().Get("ETag"))
 
 	gr, err := gzip.NewReader(rec.Body)
 	require.NoError(t, err, "response body must be valid gzip")
@@ -72,7 +66,6 @@ func TestSpeciesDictionary_BodyIsValidGzipJSON(t *testing.T) {
 	var dict map[string]string
 	err = json.NewDecoder(gr).Decode(&dict)
 	require.NoError(t, err, "decompressed body must be valid JSON object")
-	assert.NotEmpty(t, dict, "dictionary must contain at least one entry")
 	// Spot-check a known entry so a structurally-valid-but-garbage body is caught.
 	assert.Equal(t, "mopsilepakko", dict["Barbastella barbastellus"],
 		"fi dictionary must localize the canonical bat example")
@@ -84,11 +77,7 @@ func TestSpeciesDictionary_UnknownLocale(t *testing.T) {
 	t.Attr("component", "species-dictionary")
 	t.Attr("type", "integration")
 
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/zz", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
+	rec := serveDictionary(t, "/api/v2/species/dictionary/zz", nil)
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 
@@ -108,89 +97,40 @@ func TestSpeciesDictionary_CacheControlVersioned(t *testing.T) {
 	t.Attr("component", "species-dictionary")
 	t.Attr("type", "integration")
 
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi?v=abc123", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
+	rec := serveDictionary(t, "/api/v2/species/dictionary/fi?v=abc123", nil)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 }
 
-// TestSpeciesDictionary_CacheControlUnversioned checks that a request without a ?v=
-// param gets the short-lived Cache-Control header.
-func TestSpeciesDictionary_CacheControlUnversioned(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species-dictionary")
-	t.Attr("type", "integration")
-
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
-}
-
-// TestSpeciesDictionary_ETag checks that the ETag header equals the quoted dataset version.
-func TestSpeciesDictionary_ETag(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species-dictionary")
-	t.Attr("type", "integration")
-
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	expectedETag := fmt.Sprintf("%q", speciesdict.Version())
-	assert.Equal(t, expectedETag, rec.Header().Get("ETag"))
-}
-
 // TestSpeciesDictionary_NotModified checks that If-None-Match with the current ETag
-// returns 304 with no body.
+// returns 304 with no body, including a weakened ETag as a CDN or reverse proxy may
+// rewrite it.
 func TestSpeciesDictionary_NotModified(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "species-dictionary")
 	t.Attr("type", "integration")
 
-	e, _ := newDictController(t)
-
 	etag := fmt.Sprintf("%q", speciesdict.Version())
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	req.Header.Set("If-None-Match", etag)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
+	tests := []struct {
+		name        string
+		ifNoneMatch string
+	}{
+		{name: "strong ETag", ifNoneMatch: etag},
+		{name: "weak ETag", ifNoneMatch: "W/" + etag},
+	}
 
-	assert.Equal(t, http.StatusNotModified, rec.Code)
-	assert.Equal(t, 0, rec.Body.Len(), "304 response must have no body")
-	// A 304 must carry the cache directives so the client knows how long its cached
-	// representation stays fresh (RFC 7232).
-	assert.NotEmpty(t, rec.Header().Get("Cache-Control"), "304 must include Cache-Control")
-	assert.Equal(t, etag, rec.Header().Get("ETag"))
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := serveDictionary(t, "/api/v2/species/dictionary/fi", http.Header{"If-None-Match": {tt.ifNoneMatch}})
 
-// TestSpeciesDictionary_NotModified_WeakETag checks that a weakened ETag (as a CDN or
-// reverse proxy may rewrite it) still yields a 304, so caching is not defeated.
-func TestSpeciesDictionary_NotModified_WeakETag(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species-dictionary")
-	t.Attr("type", "integration")
-
-	e, _ := newDictController(t)
-
-	weakETag := "W/" + fmt.Sprintf("%q", speciesdict.Version())
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	req.Header.Set("If-None-Match", weakETag)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusNotModified, rec.Code)
-	assert.Equal(t, 0, rec.Body.Len(), "304 response must have no body")
+			assert.Equal(t, http.StatusNotModified, rec.Code)
+			assert.Equal(t, 0, rec.Body.Len(), "304 response must have no body")
+			// A 304 must carry the cache directives so the client knows how long its cached
+			// representation stays fresh (RFC 7232).
+			assert.NotEmpty(t, rec.Header().Get("Cache-Control"), "304 must include Cache-Control")
+			assert.Equal(t, etag, rec.Header().Get("ETag"))
+		})
+	}
 }

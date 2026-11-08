@@ -81,6 +81,7 @@ BirdNET configuration
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
 | `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |
 | `birdnet.modelregion` | string | regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto" |
+| `birdnet.alternateminconfidence` | number | AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which an alternate prediction of a detection is stored. Alternates below it are dropped when the detection is saved; the detected species itself is never affected. 0 stores every alternate. Rows already in the database are not changed. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the settings API; a config file edit applies at the next start. |
 
 ## perch
 
@@ -143,7 +144,7 @@ ModelsConfig holds global model enablement and management settings.
 |---------|------|-------------|
 | `models.enabled` | string[] | list of model IDs to load (e.g., "birdnet", "perch_v2") |
 | `models.directory` | string | base directory for downloaded model files |
-| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 2) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
+| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 3) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
 
 ## lowmemory
 
@@ -279,6 +280,12 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.daylightfilter.enabled` | boolean | true to enable daylight filter |
 | `realtime.daylightfilter.offset` | integer | hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict) |
 | `realtime.daylightfilter.species` | string[] | species, families, orders, or genera to filter during daylight |
+| `realtime.modelconsensus.allspecies` | boolean | true to require consensus for every species; takes precedence over listedspecies |
+| `realtime.modelconsensus.listedspecies` | boolean | true to require consensus for the species in species |
+| `realtime.modelconsensus.species` | string[] | species that need consensus when listedspecies is on; scientific names keep working after a locale change |
+| `realtime.modelconsensus.minmodels` | integer | agreeing models required, 2 to 4, capped at the number of eligible models |
+| `realtime.modelconsensus.alleligible` | boolean | true to require every eligible model instead of minmodels |
+| `realtime.modelconsensus.debug` | boolean | true to log each consensus discard at info level, with the agreeing and eligible models |
 | `realtime.rtsp.streams` | stream-config[] | Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB) |
 | `realtime.rtsp.urls` | string[] | Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries |
 | `realtime.rtsp.transport` | string | Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration |

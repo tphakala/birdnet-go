@@ -111,15 +111,14 @@ func TestGetYearDateRange_CriticalReliability(t *testing.T) {
 			"2025-02-28", // Next year is not leap
 			"Leap year custom reset should handle non-leap following year",
 		},
-		// Test with year override (for testing)
-		// Note: Override only works if different from current actual year
+		// Tracker year state must not shift the range: it is a function of now
 		{
-			"override_year_test",
+			"tracker_year_state_does_not_shift_range",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			1, 1, 2030, // Override to 2030 (far future to ensure it's different from current)
-			"2030-01-01",
-			"2030-12-31",
-			"Override year should be used when set for testing",
+			1, 1, 2020, // a past year differs from the real current year in any run
+			"2024-01-01",
+			"2024-12-31",
+			"Range comes from now and the reset date, not from the tracker's current year",
 		},
 		// Edge cases
 		{

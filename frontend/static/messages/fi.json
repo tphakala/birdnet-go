@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Käynnistä uudelleen tietokannan siirron viimeistelemiseksi",
         "legacyRestartRequiredMessage": "Siirto on valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan. Jos tämä viesti pysyy uudelleenkäynnistyksen jälkeen, tarkista lokista tietokantavirheet."
       },
+      "database": {
+        "serverAttentionTitle": "Tietokantapalvelin vaatii huomiota",
+        "serverAttentionMessage": "MySQL- tai MariaDB-palvelimen versio ei ole tuettu, tai tietokanta ei käytä utf8mb4-merkistöä. Katso lisätiedot kohdasta Järjestelmä > Tila."
+      },
       "cleanup": {
         "completeTitle": "Vanhan tietokannan siivous valmis",
         "completeMessage": "{space} levytilaa vapautettu.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} tai uudempi vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Mallialue saattaa olla vanhentunut",
@@ -1542,6 +1546,8 @@
           "creating": "Luodaan...",
           "createBackup": "Luo varmuuskopio",
           "noBackups": "Ei varmuuskopioita vielä",
+          "loadFailed": "Varmuuskopiohistoriaa ei voitu ladata",
+          "createFailed": "Varmuuskopiointia ei voitu käynnistää",
           "download": "Lataa",
           "failed": "Epäonnistui",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Käynnistetään migraatiota...",
         "status": {
           "idle": "Valmis aloitettavaksi",
+          "checking": "Tarkistetaan edellytyksiä",
+          "notReady": "Ei valmis",
           "initializing": "Alustus",
           "dual_write": "Kaksoiskirjoitus aktiivinen",
           "migrating": "Migroidaan ensisijaiset",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Tietueet",
           "sizeLabel": "Koko",
           "prerequisitesNotMet": "Edellytykset eivät täyty - ratkaise alla olevat kriittiset ongelmat",
+          "prerequisitesUnavailable": "Migraation esitarkistukset eivät valmistuneet. Katso Migraation esitarkistukset alla.",
+          "prerequisitesFailedList": "Ratkaise ensin nämä tarkistukset: {checks}",
           "validatingTitle": "Tietojen tarkistus",
           "validatingBody": "Verrataan {count} vanhaa tietuetta V2-tietokantaan...",
           "dirtyRecordsCatchup": "{count} muuttunutta tietuetta - yritetään täsmäytystä",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} varoitus(ta)",
           "running": "Suoritetaan esitarkistuksia...",
           "checkingStep": "Vaihe {current}/{total}",
+          "currentCheck": "Tarkistetaan: {name} ({seconds} s)",
+          "slowHint": "Suuret tietokannat voivat kestää useita minuutteja.",
+          "runFailed": "Siirtoa edeltävät tarkistukset eivät valmistuneet: {error}",
           "passedCount": "{passed}/{total} hyväksytty",
           "criticalCount": "{count} kriittistä",
           "warningCount": "{count} varoitusta",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Tietokannan eheys"
+            },
+            "mysql_server_version": {
+              "name": "Tietokantapalvelimen versio"
+            },
+            "mysql_charset": {
+              "name": "Tietokannan merkistö"
             },
             "mysql_table_health": {
               "name": "Taulujen kunto"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Siirtoa ei ole määritetty",
-      "preFlightFailed": "Esitarkistukset epäonnistuivat",
+      "preFlightFailed": "Siirtoa edeltävä tarkistus epäonnistui: {check}",
+      "prerequisitesNotReady": "Suorita siirtoa edeltävät tarkistukset ja odota niiden läpäisyä ennen siirron aloittamista.",
       "invalidBody": "Virheellinen pyyntösisältö",
       "recordCountFailed": "Tietueiden kokonaismäärää ei voitu määrittää",
       "startFailed": "Siirron käynnistäminen epäonnistui",

@@ -32,6 +32,8 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
         Store: middleware.NewRateLimiterMemoryStoreWithConfig(
             middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 5},
         ),
+        // One bucket per client (per /64 for IPv6)
+        IdentifierExtractor: apicore.RateLimitKey,
     }
     g.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
@@ -115,7 +117,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                         | Handler               | Auth | Description                            |
 | ------ | ----------------------------- | --------------------- | ---- | -------------------------------------- |
-| POST   | `/control/restart`            | `RestartAnalysis`     | ✅   | Restart analysis engine                |
+| POST   | `/control/restart`            | `RestartAnalysis`     | ✅   | Restart audio capture and analysis     |
 | POST   | `/control/reload`             | `ReloadModel`         | ✅   | Reload BirdNET model                   |
 | POST   | `/control/rebuild-filter`     | `RebuildFilter`       | ✅   | Rebuild range filter                   |
 | POST   | `/control/restart-server`     | `RestartServer`       | ✅   | Restart the server binary              |
@@ -133,21 +135,22 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Detections (`detections/detections.go`)
 
-| Method | Route                         | Handler                  | Auth | Description                                                                                                                |
-| ------ | ----------------------------- | ------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/detections`                 | `GetDetections`          | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
-| GET    | `/detections/:id`             | `GetDetection`           | ❌   | Get specific detection                                                                                                     |
-| GET    | `/detections/recent`          | `GetRecentDetections`    | ❌   | Recent detections; `limit` defaults to 10 and is capped at 1000                                                            |
-| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`  | ❌   | Detection time context                                                                                                     |
-| DELETE | `/detections/:id`             | `DeleteDetection`        | ✅   | Delete detection record                                                                                                    |
-| POST   | `/detections/:id/review`      | `ReviewDetection`        | ✅   | Review/verify detection                                                                                                    |
-| POST   | `/detections/:id/lock`        | `LockDetection`          | ✅   | Lock detection from changes                                                                                                |
-| POST   | `/detections/ignore`          | `IgnoreSpecies`          | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
-| GET    | `/detections/ignored`         | `GetExcludedSpecies`     | ✅   | Get list of excluded species                                                                                               |
-| POST   | `/detections/batch/delete`    | `BatchDeleteDetections`  | ✅   | Bulk delete detections by ID                                                                                               |
-| POST   | `/detections/batch/review`    | `BatchReviewDetections`  | ✅   | Bulk set verification status                                                                                               |
-| POST   | `/detections/batch/lock`      | `BatchLockDetections`    | ✅   | Bulk lock or unlock detections                                                                                             |
-| POST   | `/detections/batch/resolve`   | `BatchResolveDetections` | ✅   | Resolve query params to detection IDs                                                                                      |
+| Method | Route                         | Handler                   | Auth | Description                                                                                                                |
+| ------ | ----------------------------- | ------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/detections`                 | `GetDetections`           | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
+| GET    | `/detections/:id`             | `GetDetection`            | ❌   | Get specific detection                                                                                                     |
+| GET    | `/detections/recent`          | `GetRecentDetections`     | ❌   | Recent detections; `limit` defaults to 10 and is capped at 1000                                                            |
+| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`   | ❌   | Detection time context                                                                                                     |
+| GET    | `/detections/:id/predictions` | `GetDetectionPredictions` | ❌   | Alternate species the detecting model scored (enhanced database only)                                                      |
+| DELETE | `/detections/:id`             | `DeleteDetection`         | ✅   | Delete detection record                                                                                                    |
+| POST   | `/detections/:id/review`      | `ReviewDetection`         | ✅   | Review/verify detection                                                                                                    |
+| POST   | `/detections/:id/lock`        | `LockDetection`           | ✅   | Lock detection from changes                                                                                                |
+| POST   | `/detections/ignore`          | `IgnoreSpecies`           | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
+| GET    | `/detections/ignored`         | `GetExcludedSpecies`      | ✅   | Get list of excluded species                                                                                               |
+| POST   | `/detections/batch/delete`    | `BatchDeleteDetections`   | ✅   | Bulk delete detections by ID                                                                                               |
+| POST   | `/detections/batch/review`    | `BatchReviewDetections`   | ✅   | Bulk set verification status                                                                                               |
+| POST   | `/detections/batch/lock`      | `BatchLockDetections`     | ✅   | Bulk lock or unlock detections                                                                                             |
+| POST   | `/detections/batch/resolve`   | `BatchResolveDetections`  | ✅   | Resolve query params to detection IDs                                                                                      |
 
 ### Integrations (`integrations/integrations.go`)
 
@@ -280,6 +283,13 @@ responses carry `spectrogramOnly: true` for these detections (the field is omitt
 otherwise); `clipName` / `hasAudio` stay empty / false, so clients show the image but no
 player or download.
 
+**Detection timestamps.** Detection list, detail and recent responses carry `timestamp`, the stored
+instant of the detection as RFC3339 with the UTC offset in effect at that instant. `date` and `time` are the
+station-local wall clock text of the same instant, so on a v2 database the two detections in the repeated hour
+at the end of daylight saving time show the same `date` and `time` and differ in `timestamp`. The weather
+match and moon phase of a response use the same instant. A legacy database stores only offset-free date and
+time text, so there both detections get the first occurrence's offset.
+
 **Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
 spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
 192 kHz, a 192 kHz clip 0 to 96 kHz). Bat renders carry the `-bat-v3` token in their file name, and a
@@ -303,18 +313,50 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
 
 **Model contributions.** On the enhanced (v2) database, `GET /detections`, `GET /detections/recent` and
 `GET /detections/:id` carry a read-only `modelContributions` array: one element per model that detected
-the species for this detection, largest hit count first (then highest maximum confidence). Each element
-has `modelName`, `modelVersion`, `modelVariant`, `modelType`, `hitCount` and `maxConfidence`, plus
-`minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`. The last four appear together and are
-omitted when they were not recorded (detections recorded before these statistics existed) or the stored
-values are unusable (zero hit count, minimum above maximum, first hit after last hit). Times are RFC3339 in the server's time
-zone, like `beginTime`.
+the species for this detection, largest hit count first (then highest maximum confidence), and, for
+detections saved since this version, one element with `hitCount` 0 per other model that was active on the
+source when the detection was approved (it had an analysis buffer on the source and was not paused by its
+schedule). Each element has `modelName`, `modelVersion`, `modelVariant`, `modelType` and `hitCount`. Elements
+with hits also have `maxConfidence`, plus `minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`; the
+last four appear together and are omitted when they were not recorded (detections recorded before these
+statistics existed) or the stored values are unusable (minimum above maximum, first hit after last hit).
+Times are RFC3339 in the server's time zone, like `beginTime`. A model missing from the list was not active
+on the source, the detection predates this recording, or its entry could not be saved (contributions are
+written best-effort).
 
 - The whole field is omitted on the legacy database, during migration, for detections with no recorded
   contributions (including migrated ones), and when the read fails or takes longer than 1 second.
 - `POST /search` does not carry it.
 - The SSE `pending` event has its own `modelContributions` with a different element shape (`modelID`,
   `hitCount`, `maxConfidence`, present only when more than one model contributed).
+
+**Detection predictions.** On the enhanced (v2) database, `GET /detections/:id/predictions` returns the
+alternate species the detecting model scored for one detection. `modelPredictions` has one element per
+model, today at most one, with `modelName`, `modelVersion`, `modelVariant`, `modelType` and `predictions`.
+`predictions` is never empty, and `modelPredictions` is `[]` when nothing remains after filtering. Each
+prediction has `scientificName` (the current, canonical name), `commonName`, `speciesCode` and
+`confidence`, ordered by confidence descending, then by scientific name.
+
+- Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
+  below every non-dog alternate that remains, and is kept when none remains. This is a heuristic: the classifier adds one past its top results so that
+  it stays visible, which a low dog score usually is, but a genuine low-scoring dog result goes with it.
+  The comparison is against the stored alternates, which are only those at or above
+  `birdnet.alternateminconfidence`, so a genuine dog result is hidden when it scores below every stored non-dog alternate,
+  and with fewer stored rows this happens more often.
+- Scope: the species the detecting model ranked in its top 10 for the analysis window that produced
+  the detection, without the detected species and, when a location is set and the model takes part in
+  range filtering, without species outside the location's range (for detections saved after the range
+  filter was applied to alternates), so fewer than 10 can remain. Other models and other windows are
+  not stored, so a species missing here may still have been scored. Alternates below
+  `birdnet.alternateminconfidence` (default 0.1, config file only, 0 stores all) are not stored either,
+  so an empty `modelPredictions` list is normal, most often for Perch; the cutoff applies to detections saved
+  after it was introduced.
+- Old rows: detections saved before this version may list species outside the location's range or alternates
+  below 0.1; detections migrated from the legacy database list only alternates at or above 0.3; Perch
+  detections saved before human class names were stored in full may list truncated human class names such
+  as Male or Child.
+- Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive
+  integer that fits in 32 bits, `404` when the detection does not exist, and `500` for a database error.
 
 ### Notifications (`notifications/notifications.go`)
 
@@ -706,7 +748,7 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.i
 **Query Parameters:**
 
 - All insights endpoints except `/insights/model-contributions` accept optional `model_id` query parameter to filter by BirdNET model
-- `/insights/model-contributions` requires `start_date` and accepts optional `end_date` (both `YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 366 days). It takes no `model_id`. Counts are lower bounds: contribution rows are written best-effort and are absent for detections migrated from the legacy database
+- `/insights/model-contributions` requires `start_date` and accepts optional `end_date` (both `YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 366 days). It takes no `model_id`. Only contribution rows with at least one hit are counted; rows recording a model that was active without a hit are not. Counts are lower bounds: contribution rows are written best-effort and are absent for detections migrated from the legacy database
 - `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
 
 ### Privacy Filter Activity (`privacy/privacy.go`)
@@ -808,6 +850,22 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
 | POST   | `/system/diagnostics/run`        | `RunDiagnostics`       | ✅   | Run full diagnostic suite   |
 | GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport` | ✅   | Retrieve completed report   |
 | GET    | `/system/diagnostics/errors`     | `GetRecentErrors`      | ✅   | Recent error log entries    |
+
+### Database migration (`imports/migration.go`, `imports/prerequisites.go`)
+
+Routes live under `/system/database/migration`. The prerequisite checks run as one background job per process; the client starts it with POST and polls GET.
+
+| Method | Route                | Handler            | Auth | Description                                                                               |
+| ------ | -------------------- | ------------------ | ---- | ----------------------------------------------------------------------------------------- |
+| GET    | `/prerequisites`     | `GetPrerequisites` | ✅   | Snapshot of the prerequisites run (idle, running, completed or failed); never starts work |
+| POST   | `/prerequisites/run` | `RunPrerequisites` | ✅   | Start the run, or join the one in progress; optional body `{"force": bool}`               |
+| POST   | `/start`             | `StartMigration`   | ✅   | Start the migration; needs a passing prerequisites run younger than 30 minutes            |
+
+**Prerequisites snapshot** - Both routes return the same JSON object: `status` (`idle`, `running`, `completed`, `failed`), `run_id` (increases with every run in this process), `started_at`, `checked_at` (completion time of a completed run), `checks`, `all_passed`, `can_start_migration`, `critical_failures`, `warnings`, `error` (why a `failed` run did not finish) and, only while `running`, `progress` with `completed_steps`, `total_steps`, `current_check_id`, `current_check_name` and `current_check_elapsed_ms`. While a run is in progress `checks` holds the checks finished so far and `all_passed` and `can_start_migration` are false. `failed` means the run itself did not finish (time limit, shutdown, internal error); failing checks still give `completed`.
+
+**POST /api/v2/system/database/migration/prerequisites/run** - Joins the run in progress whatever `force` says. Without `force`, a completed passing result younger than 30 minutes for the same database settings is returned as is; `force` or a failing, older or differently configured result starts a new run. A malformed body returns 400 with `errors.migration.invalidBody`.
+
+**POST /api/v2/system/database/migration/start** - Needs a completed prerequisites run that passed, is younger than 30 minutes and ran against the current database settings. The slow checks (legacy database read, integrity or table health, MySQL permissions, record count) come from that run; the cheap ones (migration state, disk space, write permission, server version, character set) run again inside a 20 second limit. Without a usable run (none, in progress, older than 30 minutes, or for other database settings) it returns 409 with `errors.migration.prerequisitesNotReady`; when the usable stored run or the re-run checks have a failed critical check it returns 400 with `errors.migration.preFlightFailed` and the check name in `error_params.check` (a stored run that failed without a named check returns 409); when the start's own work (the re-run checks, or the record count when no total is known) outlasts the 20 second limit it returns 504 with `errors.migration.startFailed`. If the client has gone away, nothing is started; if the server is stopping, it returns 503 with `errors.migration.startFailed` and nothing is started. A successful start discards the stored run.
 
 ### Import (`imports/import.go`)
 
@@ -945,10 +1003,12 @@ All API errors follow this structure:
 
 SSE endpoints are rate limited to prevent abuse:
 
-- Detection streams: 10 requests/minute per IP
-- Sound level streams: 10 requests/minute per IP
-- Stream health streams: 5 requests/minute per IP (authenticated, settings page)
-- Notification streams: 10 requests/minute per IP, burst of 15 (public, used by dashboard NotificationBell)
+- Detection and sound level streams: 10 requests/minute per client, burst of 10, shared by both streams
+- Stream health streams: 5 requests/minute per client (authenticated, settings page)
+- Metrics stream: 10 requests/minute per client, burst of 10 (authenticated)
+- Notification streams: 10 requests/minute per client, burst of 15 (public, used by dashboard NotificationBell)
+
+A client is identified by its address, and IPv6 clients are counted per /64.
 
 ## Server-Sent Events (SSE)
 
@@ -964,7 +1024,7 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 - `heartbeat` - Keep-alive signal
 - `notification_deleted` - A notification was deleted on the server (a cleared or replaced persistent notice, or a delete from another tab); payload `{"id": "..."}`. Guests receive it only for detection notifications.
 
-**Authentication:** Public read-only SSE, rate-limited (10 connections per minute per IP, burst of 15). Guests receive bird-detection events only; operational/admin notifications and toast messages are suppressed for unauthenticated subscribers so that integration errors and system warnings are never exposed anonymously. Authenticated subscribers receive the full stream.
+**Authentication:** Public read-only SSE, rate-limited (10 connections per minute per client, burst of 15). Guests receive bird-detection events only; operational/admin notifications and toast messages are suppressed for unauthenticated subscribers so that integration errors and system warnings are never exposed anonymously. Authenticated subscribers receive the full stream.
 
 **Toast Event Format:**
 
@@ -1147,7 +1207,7 @@ The API reports these error types (from PR #1380):
 #### GET /api/v2/streams/health/stream
 
 **Authentication:** Required
-**Rate Limit:** 5 connections per minute per IP
+**Rate Limit:** 5 connections per minute per client
 **Connection Duration:** Maximum 30 minutes
 
 Establishes a Server-Sent Events (SSE) connection that pushes real-time updates when stream health changes. This is more efficient than polling for monitoring dashboards that need immediate notification of stream issues.

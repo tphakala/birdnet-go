@@ -3,7 +3,7 @@ package detection
 import (
 	"strings"
 
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // Species holds parsed species identification.
@@ -46,7 +46,7 @@ func ParseSpeciesString(species string) Species {
 	}
 
 	// Perch v2 multi-word sound class: keep the whole label as the identity.
-	if id, display, ok := nonbird.MultiWordLabelNames(species); ok {
+	if id, display, ok := soundevent.MultiWordLabelNames(species); ok {
 		return Species{ScientificName: id, CommonName: display}
 	}
 
@@ -95,7 +95,7 @@ func ParseSpeciesString(species string) Species {
 func ExtractScientificName(label string) string {
 	label = strings.TrimSpace(label)
 	label = strings.ReplaceAll(label, "\r", "")
-	if id, _, ok := nonbird.MultiWordLabelNames(label); ok {
+	if id, _, ok := soundevent.MultiWordLabelNames(label); ok {
 		return id
 	}
 	if sci, _, ok := strings.Cut(label, "_"); ok {
@@ -111,7 +111,7 @@ func ExtractScientificName(label string) string {
 // result parses back to the same ScientificName through ParseSpeciesString and
 // ExtractScientificName. Rows persisted by earlier builds are not rewritten.
 func (s Species) StoredLabel() string {
-	if id, _, ok := nonbird.MultiWordLabelNames(s.ScientificName); ok {
+	if id, _, ok := soundevent.MultiWordLabelNames(s.ScientificName); ok {
 		return id
 	}
 	label := s.ScientificName + "_" + s.CommonName

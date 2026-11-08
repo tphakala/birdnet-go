@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/ttlcache"
 )
@@ -44,7 +44,7 @@ func TestNewDetectionPageCache_AppliesTTLAndBound(t *testing.T) {
 	var calls atomic.Int32
 	load := func(context.Context) (DetectionPage, error) {
 		calls.Add(1)
-		return DetectionPage{Notes: []datastore.Note{{ID: 1}}, Total: 1}, nil
+		return DetectionPage{Results: []*detection.Result{{ID: 1}}, Total: 1}, nil
 	}
 	key := &DetectionPageKey{Kind: DetectionPageHourly, Date: "2026-01-01", Limit: 10}
 

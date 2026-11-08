@@ -36,6 +36,7 @@ func GetLogger() logger.Logger {
 ### Usage Rules
 
 1. **Cache logger at function start** - never in loops:
+
    ```go
    func ProcessItems(items []Item) {
        log := GetLogger()  // Cache once at function start
@@ -55,16 +56,16 @@ func GetLogger() logger.Logger {
 
 ### Available Field Types
 
-| Function | Go Type | JSON Output | Use Case |
-|----------|---------|-------------|----------|
-| `logger.String(key, val)` | string | `"key":"value"` | Text values, identifiers |
-| `logger.Int(key, val)` | int | `"key":123` | Small integers |
-| `logger.Int64(key, val)` | int64 | `"key":123456789` | Large integers, timestamps |
-| `logger.Float64(key, val)` | float64 | `"key":1.234` | Decimal values (auto-rounded to 3 decimals) |
-| `logger.Bool(key, val)` | bool | `"key":true` | Boolean flags |
-| `logger.Duration(key, val)` | time.Duration | `"key":"5s"` | Time durations (config values) |
-| `logger.Error(err)` | error | `"error":"message"` | Error values |
-| `logger.Any(key, val)` | any | varies | Complex/dynamic data (use sparingly) |
+| Function                    | Go Type       | JSON Output         | Use Case                                    |
+| --------------------------- | ------------- | ------------------- | ------------------------------------------- |
+| `logger.String(key, val)`   | string        | `"key":"value"`     | Text values, identifiers                    |
+| `logger.Int(key, val)`      | int           | `"key":123`         | Small integers                              |
+| `logger.Int64(key, val)`    | int64         | `"key":123456789`   | Large integers, timestamps                  |
+| `logger.Float64(key, val)`  | float64       | `"key":1.234`       | Decimal values (auto-rounded to 3 decimals) |
+| `logger.Bool(key, val)`     | bool          | `"key":true`        | Boolean flags                               |
+| `logger.Duration(key, val)` | time.Duration | `"key":"5s"`        | Time durations (config values)              |
+| `logger.Error(err)`         | error         | `"error":"message"` | Error values                                |
+| `logger.Any(key, val)`      | any           | varies              | Complex/dynamic data (use sparingly)        |
 
 ### Numeric Time Fields
 
@@ -96,87 +97,93 @@ logger.Duration("keepalive", 60*time.Second)    // "keepalive":"1m0s"
 
 ### Standard Field Patterns
 
-| Pattern | Examples | Use Case |
-|---------|----------|----------|
-| `{resource}_id` | `notification_id`, `detection_id`, `tx_id` | Unique identifiers |
-| `{resource}_count` | `item_count`, `error_count`, `stream_count` | Numeric counts |
-| `{action}_time` | `detection_time`, `sent_time`, `start_time` | Timestamps |
-| `{resource}_path` | `file_path`, `db_path`, `cert_path` | File/directory paths |
-| `is_{state}` | `is_healthy`, `is_connected`, `is_enabled` | Boolean state |
-| `has_{feature}` | `has_error`, `has_ca_cert`, `has_metadata` | Boolean presence |
-| `{action}_ms` | `latency_ms`, `duration_ms`, `elapsed_ms` | Performance timing |
-| `{action}_seconds` | `timeout_seconds`, `interval_seconds` | Longer durations |
+| Pattern            | Examples                                    | Use Case             |
+| ------------------ | ------------------------------------------- | -------------------- |
+| `{resource}_id`    | `notification_id`, `detection_id`, `tx_id`  | Unique identifiers   |
+| `{resource}_count` | `item_count`, `error_count`, `stream_count` | Numeric counts       |
+| `{action}_time`    | `detection_time`, `sent_time`, `start_time` | Timestamps           |
+| `{resource}_path`  | `file_path`, `db_path`, `cert_path`         | File/directory paths |
+| `is_{state}`       | `is_healthy`, `is_connected`, `is_enabled`  | Boolean state        |
+| `has_{feature}`    | `has_error`, `has_ca_cert`, `has_metadata`  | Boolean presence     |
+| `{action}_ms`      | `latency_ms`, `duration_ms`, `elapsed_ms`   | Performance timing   |
+| `{action}_seconds` | `timeout_seconds`, `interval_seconds`       | Longer durations     |
 
 ### Standard Field Names
 
 #### Identifiers
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | String | Generic ID (avoid - prefer specific names) |
-| `notification_id` | String | Notification identifier |
-| `detection_id` | String | Detection event identifier |
-| `note_id` | String | Note/clip identifier |
-| `tx_id` | String | Database transaction ID |
-| `event_id` | String | Event identifier |
-| `client_id` | String | MQTT/OAuth client identifier |
-| `user_id` | String | User identifier |
-| `job_id` | String | Background job identifier |
-| `trace_id` | String | Distributed trace ID |
-| `correlation_id` | String | Request correlation ID |
+
+| Field             | Type   | Description                                |
+| ----------------- | ------ | ------------------------------------------ |
+| `id`              | String | Generic ID (avoid - prefer specific names) |
+| `notification_id` | String | Notification identifier                    |
+| `detection_id`    | String | Detection event identifier                 |
+| `note_id`         | String | Note/clip identifier                       |
+| `tx_id`           | String | Database transaction ID                    |
+| `event_id`        | String | Event identifier                           |
+| `client_id`       | String | MQTT/OAuth client identifier               |
+| `user_id`         | String | User identifier                            |
+| `job_id`          | String | Background job identifier                  |
+| `trace_id`        | String | Distributed trace ID                       |
+| `correlation_id`  | String | Request correlation ID                     |
 
 #### Operations & Context
-| Field | Type | Description |
-|-------|------|-------------|
+
+| Field       | Type   | Description                       |
+| ----------- | ------ | --------------------------------- |
 | `operation` | String | Current operation being performed |
-| `component` | String | System component name |
-| `category` | String | Error/event category |
-| `action` | String | Specific action being taken |
-| `stage` | String | Processing stage |
-| `status` | String | Current status |
-| `reason` | String | Explanation for an action/state |
+| `component` | String | System component name             |
+| `category`  | String | Error/event category              |
+| `action`    | String | Specific action being taken       |
+| `stage`     | String | Processing stage                  |
+| `status`    | String | Current status                    |
+| `reason`    | String | Explanation for an action/state   |
 
 #### Network & URLs
-| Field | Type | Description |
-|-------|------|-------------|
-| `url` | String | Full URL |
-| `uri` | String | URI path |
-| `path` | String | File or URL path |
-| `host` | String | Hostname |
-| `ip` | String | IP address |
-| `broker` | String | Message broker address |
-| `base_url` | String | Base URL for API |
-| `redirect_uri` | String | OAuth redirect URI |
+
+| Field          | Type   | Description            |
+| -------------- | ------ | ---------------------- |
+| `url`          | String | Full URL               |
+| `uri`          | String | URI path               |
+| `path`         | String | File or URL path       |
+| `host`         | String | Hostname               |
+| `ip`           | String | IP address             |
+| `broker`       | String | Message broker address |
+| `base_url`     | String | Base URL for API       |
+| `redirect_uri` | String | OAuth redirect URI     |
 
 #### Counts & Metrics
-| Field | Type | Description |
-|-------|------|-------------|
-| `count` | Int | Generic count (prefer specific names) |
-| `total` | Int | Total number of items |
-| `batch_size` | Int | Items per batch |
-| `attempt` | Int | Current attempt number |
-| `max_attempts` | Int | Maximum retry attempts |
-| `success_count` | Int | Successful operations |
-| `failure_count` | Int | Failed operations |
-| `rows_affected` | Int64 | Database rows affected |
+
+| Field           | Type  | Description                           |
+| --------------- | ----- | ------------------------------------- |
+| `count`         | Int   | Generic count (prefer specific names) |
+| `total`         | Int   | Total number of items                 |
+| `batch_size`    | Int   | Items per batch                       |
+| `attempt`       | Int   | Current attempt number                |
+| `max_attempts`  | Int   | Maximum retry attempts                |
+| `success_count` | Int   | Successful operations                 |
+| `failure_count` | Int   | Failed operations                     |
+| `rows_affected` | Int64 | Database rows affected                |
 
 #### Time & Duration
-| Field | Type | Description |
-|-------|------|-------------|
-| `latency_ms` | Int64 | Request latency in milliseconds |
-| `duration_ms` | Int64 | Operation duration in milliseconds |
-| `timeout` | Duration | Timeout configuration |
-| `interval` | Duration | Polling/check interval |
-| `delay` | Duration | Delay before action |
-| `age` | Duration | Time since creation |
+
+| Field         | Type     | Description                        |
+| ------------- | -------- | ---------------------------------- |
+| `latency_ms`  | Int64    | Request latency in milliseconds    |
+| `duration_ms` | Int64    | Operation duration in milliseconds |
+| `timeout`     | Duration | Timeout configuration              |
+| `interval`    | Duration | Polling/check interval             |
+| `delay`       | Duration | Delay before action                |
+| `age`         | Duration | Time since creation                |
 
 #### Boolean Flags
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | Bool | Feature is enabled |
-| `connected` | Bool | Connection is active |
-| `tls_enabled` | Bool | TLS is configured |
-| `debug` | Bool | Debug mode is active |
-| `retain` | Bool | MQTT retain flag |
+
+| Field             | Type | Description               |
+| ----------------- | ---- | ------------------------- |
+| `enabled`         | Bool | Feature is enabled        |
+| `connected`       | Bool | Connection is active      |
+| `tls_enabled`     | Bool | TLS is configured         |
+| `debug`           | Bool | Debug mode is active      |
+| `retain`          | Bool | MQTT retain flag          |
 | `partial_success` | Bool | Some operations succeeded |
 
 ---
@@ -186,6 +193,7 @@ logger.Duration("keepalive", 60*time.Second)    // "keepalive":"1m0s"
 ### Message Structure
 
 Log messages should be:
+
 - **Action-oriented** - describe what's happening
 - **Lowercase** - start with lowercase letter
 - **Concise** - keep under 60 characters
@@ -217,12 +225,12 @@ log.Error("authentication failed", logger.String("ip", clientIP), logger.String(
 
 ### Message Patterns by Log Level
 
-| Level | Pattern | Example |
-|-------|---------|---------|
-| Info | `{action} {object}` | `"started health check monitoring"` |
-| Debug | `{action} {object}` | `"processing event batch"` |
-| Warn | `{issue description}` | `"connection attempt too recent"` |
-| Error | `{failed action}` | `"failed to create notification"` |
+| Level | Pattern               | Example                             |
+| ----- | --------------------- | ----------------------------------- |
+| Info  | `{action} {object}`   | `"started health check monitoring"` |
+| Debug | `{action} {object}`   | `"processing event batch"`          |
+| Warn  | `{issue description}` | `"connection attempt too recent"`   |
+| Error | `{failed action}`     | `"failed to create notification"`   |
 
 ---
 
@@ -230,28 +238,28 @@ log.Error("authentication failed", logger.String("ip", clientIP), logger.String(
 
 ### Registered Modules
 
-| Module | Package | Description |
-|--------|---------|-------------|
-| `api` | internal/api/v2 | API endpoints and routing |
-| `access` | internal/api/middleware | HTTP access logging |
-| `analysis` | internal/analysis | Bird sound analysis |
-| `analysis.soundlevel` | internal/analysis | Sound level monitoring |
-| `audio` | internal/audiocore | Audio capture and processing (legacy module name) |
-| `audio.ffmpeg` | internal/audiocore | FFmpeg stream management (legacy module name) |
-| `audiocore` | internal/audiocore | Audio capture and processing |
-| `auth` | internal/security | Authentication |
-| `backup` | internal/backup | Backup operations |
-| `birdweather` | internal/birdweather | BirdWeather integration |
-| `config` | internal/conf | Configuration management |
-| `datastore` | internal/datastore | Database operations |
-| `echo` | internal/logger | Echo web framework adapter |
-| `events` | internal/events | Event bus system |
-| `imageprovider` | internal/imageprovider | Bird image fetching |
-| `mqtt` | internal/mqtt | MQTT client |
-| `notification` | internal/notification | Notification system |
-| `security` | internal/security | Security and authorization |
-| `telemetry` | internal/telemetry | Error reporting and metrics |
-| `weather` | internal/weather | Weather data integration |
+| Module                | Package                 | Description                                       |
+| --------------------- | ----------------------- | ------------------------------------------------- |
+| `api`                 | internal/api/v2         | API endpoints and routing                         |
+| `access`              | internal/api/middleware | HTTP access logging                               |
+| `analysis`            | internal/analysis       | Bird sound analysis                               |
+| `analysis.soundlevel` | internal/analysis       | Sound level monitoring                            |
+| `audio`               | internal/audiocore      | Audio capture and processing (legacy module name) |
+| `audio.ffmpeg`        | internal/audiocore      | FFmpeg stream management (legacy module name)     |
+| `audiocore`           | internal/audiocore      | Audio capture and processing                      |
+| `auth`                | internal/security       | Authentication                                    |
+| `backup`              | internal/backup         | Backup operations                                 |
+| `birdweather`         | internal/birdweather    | BirdWeather integration                           |
+| `config`              | internal/conf           | Configuration management                          |
+| `datastore`           | internal/datastore      | Database operations                               |
+| `echo`                | internal/logger         | Echo web framework adapter                        |
+| `events`              | internal/events         | Event bus system                                  |
+| `imageprovider`       | internal/imageprovider  | Bird image fetching                               |
+| `mqtt`                | internal/mqtt           | MQTT client                                       |
+| `notification`        | internal/notification   | Notification system                               |
+| `security`            | internal/security       | Security and authorization                        |
+| `telemetry`           | internal/telemetry      | Error reporting and metrics                       |
+| `weather`             | internal/weather        | Weather data integration                          |
 
 ### Module Naming Rules
 
@@ -336,16 +344,26 @@ log.Info("detection processed",
 
 ### When to Use Each Level
 
-| Level | Use Case | Visible By Default |
-|-------|----------|-------------------|
-| **Debug** | Verbose operation tracking, diagnostics | No |
-| **Info** | Normal operations, state changes | Yes |
-| **Warn** | Non-critical issues, degraded operation | Yes |
-| **Error** | Failures requiring attention | Yes |
+| Level     | Use Case                                        | Visible By Default                              |
+| --------- | ----------------------------------------------- | ----------------------------------------------- |
+| **Trace** | Per-window, per-tick or per-event receipt lines | No (set `level: trace` on a module and restart) |
+| **Debug** | Verbose operation tracking, diagnostics         | No                                              |
+| **Info**  | Normal operations, state changes                | Yes                                             |
+| **Warn**  | Non-critical issues, degraded operation         | Yes                                             |
+| **Error** | Failures requiring attention                    | Yes                                             |
 
 ### Level Guidelines
 
+**Trace**
+
+- A line that runs once per analysis window, per flush tick or per event receipt belongs here, not at Debug
+- Its useful numbers (counts, durations) go to a periodic Info summary such as `pipeline stats`
+- A line that only repeats another line should be deleted, not demoted
+- A line that reports a decision or an exception stays at Debug or above
+- Trace renders as `"level":"TRACE"` in JSON output and `TRACE` on the console
+
 **Debug**
+
 - Function entry/exit for complex operations
 - Cache hits/misses
 - Retry attempts
@@ -353,6 +371,7 @@ log.Info("detection processed",
 - Values of variables during processing
 
 **Info**
+
 - Service startup/shutdown
 - Successful connections
 - Configuration loaded
@@ -360,6 +379,7 @@ log.Info("detection processed",
 - Feature enabled/disabled
 
 **Warn**
+
 - Deprecated feature usage
 - Rate limiting triggered
 - Fallback behavior activated
@@ -367,6 +387,7 @@ log.Info("detection processed",
 - Configuration issues (non-fatal)
 
 **Error**
+
 - Failed operations that affect functionality
 - Connection failures
 - Database errors
@@ -442,4 +463,4 @@ log.Info("request", logger.Int64("latency_ms", d.Milliseconds()))
 
 ---
 
-*Last updated: 2025-01-01*
+_Last updated: 2025-01-01_

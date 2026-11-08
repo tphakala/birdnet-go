@@ -220,12 +220,19 @@ func TestApplyRuntimeBackend(t *testing.T) {
 	})
 }
 
-// TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
-// 200 and a valid InferenceStatusResponse whose TFLite backend availability
-// tracks the compiled-in state (true by default, false under the notflite build
-// tag). It uses an apitest.NewCore-backed Handler over httptest to exercise the
-// handler without starting any background goroutines.
-func TestGetInferenceStatus_HTTP200(t *testing.T) {
+// TestGetInferenceStatus_BareCore pins what GetInferenceStatus returns for a bare
+// Core with no orchestrator wired, from one request through an
+// apitest.NewCore-backed Handler over httptest (no background goroutines):
+//   - HTTP 200 and a body that decodes to InferenceStatusResponse, with a
+//     non-zero SnapshotAtUnix;
+//   - the TFLite backend and its capability token follow the build tag, not a
+//     hardcoded true, so a notflite build is not offered models it cannot run;
+//   - the no-model fields the dashboard gates on: defaultTargets is always an
+//     array (never null) and acousticModelsState is always present, empty here.
+//     Both are read from the raw JSON because a typed decode hides null versus [];
+//   - the audio block carries the shared queue depth metric key, the queue
+//     capacity equals RouteInboxCapacity, and the depth is not negative.
+func TestGetInferenceStatus_BareCore(t *testing.T) {
 	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
 	e := echo.New()
 	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
@@ -235,33 +242,16 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	ctx := e.NewContext(req, rec)
 
 	require.NoError(t, controller.GetInferenceStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp InferenceStatusResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
-	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available, "TFLite backend availability must match the compiled-in state (false under the notflite build tag)")
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
-}
+	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available, "TFLite backend availability must match the compiled-in state (false under the notflite build tag)")
+	assert.Equal(t, hwprofile.TFLiteLinked(),
+		slices.Contains(resp.Hardware.Capabilities, hwprofile.CapTFLite),
+		"the capability token must agree with the backend the build actually links")
 
-// TestGetInferenceStatus_NoModelFieldsContract pins the Phase 4 no-model fields the
-// dashboard gates on: defaultTargets is always an array (never null), and
-// acousticModelsState is always present. This is the producer-side check that guards the
-// full-stack field-consumption contract (model de-privilege epic, Phase 4): with no
-// orchestrator wired (bare Core) the targets are empty and the state is "".
-func TestGetInferenceStatus_NoModelFieldsContract(t *testing.T) {
-	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
-	e := echo.New()
-	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, controller.GetInferenceStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Assert against the raw JSON so a null-vs-[] regression (which a typed decode hides)
-	// is caught: the frontend indexes defaultTargets.
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
 
@@ -272,6 +262,12 @@ func TestGetInferenceStatus_NoModelFieldsContract(t *testing.T) {
 	st, ok := raw["acousticModelsState"]
 	require.True(t, ok, "acousticModelsState must always be present")
 	assert.Equal(t, `""`, string(st), "acousticModelsState is empty with no orchestrator")
+
+	assert.Equal(t, observability.MetricKeyAudioQueueDepthAggregate, resp.Audio.MetricKeys.QueueDepth,
+		"audio.metricKeys.queueDepth must match the shared constant")
+	assert.Equal(t, audiocore.RouteInboxCapacity, resp.Audio.QueueCapacity,
+		"audio.queueCapacity must equal RouteInboxCapacity")
+	assert.GreaterOrEqual(t, resp.Audio.QueueDepth, 0, "audio.queueDepth must be non-negative")
 }
 
 // TestGetInferenceStatus_AnalysisCadenceFromPublishedPlan pins the handler
@@ -308,31 +304,6 @@ func TestGetInferenceStatus_AnalysisCadenceFromPublishedPlan(t *testing.T) {
 // eventInferenceTopologyChangedName is asserted against the package constant so
 // the SSE event name stays the single source of truth shared with the frontend.
 const eventInferenceTopologyChangedName = "system.inference_topology_changed"
-
-// TestGetInferenceStatus_AudioBlock verifies that GetInferenceStatus returns an
-// audio block with the expected metric key for queue depth and a non-negative
-// queue capacity matching RouteInboxCapacity.
-func TestGetInferenceStatus_AudioBlock(t *testing.T) {
-	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
-	e := echo.New()
-	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, controller.GetInferenceStatus(ctx))
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	var resp InferenceStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-
-	assert.Equal(t, observability.MetricKeyAudioQueueDepthAggregate, resp.Audio.MetricKeys.QueueDepth,
-		"audio.metricKeys.queueDepth must match the shared constant")
-	assert.Equal(t, audiocore.RouteInboxCapacity, resp.Audio.QueueCapacity,
-		"audio.queueCapacity must equal RouteInboxCapacity")
-	assert.GreaterOrEqual(t, resp.Audio.QueueDepth, 0, "audio.queueDepth must be non-negative")
-}
 
 // TestVADStatusInfo_JSONContract pins the wire field names of the VAD block and
 // the omitempty behaviour the frontend InferenceVAD type depends on.
@@ -653,29 +624,6 @@ func TestBuildHardwareInfo(t *testing.T) {
 // predate the hardware profile and the frontend already reads them, so the
 // extension has to be additive: renaming or retyping any of them is a breaking
 // change this test is here to catch.
-// TestGetInferenceStatus_TFLiteFollowsTheBuildTag pins the endpoint to the
-// compile-time fact rather than a hardcoded true. Hardcoding it fed straight
-// into capability derivation, which would have offered a notflite build models
-// it cannot execute.
-func TestGetInferenceStatus_TFLiteFollowsTheBuildTag(t *testing.T) {
-	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
-
-	e := echo.New()
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody), rec)
-	h := &Handler{Core: apitest.NewCore(t)}
-
-	require.NoError(t, h.GetInferenceStatus(ctx))
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	var resp InferenceStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available)
-	assert.Equal(t, hwprofile.TFLiteLinked(),
-		slices.Contains(resp.Hardware.Capabilities, hwprofile.CapTFLite),
-		"the capability token must agree with the backend the build actually links")
-}
-
 func TestHardwareInfo_JSONContract(t *testing.T) {
 	t.Parallel()
 
@@ -835,39 +783,32 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		require.Len(t, prim, 1)
 		assert.False(t, prim[0].NotRunning)
 	})
-}
 
-// TestBuildSourceAttachments_RTSPStream covers an RTSP stream source (the
-// reporters run RTSP; only audio.sources were covered before). An assigned model
-// that the router does not feed for the stream is marked NotRunning.
-func TestBuildSourceAttachments_RTSPStream(t *testing.T) {
-	t.Parallel()
+	t.Run("rtsp stream assigned but not routed is marked not running", func(t *testing.T) {
+		t.Parallel()
 
-	const primaryID = classifier.DefaultModelVersion
-	models := []classifier.ModelInfo{
-		{ID: primaryID},
-		{ID: classifier.RegistryIDPerchV2},
-	}
+		// A stream comes from Realtime.RTSP.Streams, not from the audio sources the
+		// other subtests configure.
+		rtspSettings := &conf.Settings{}
+		rtspSettings.Realtime.RTSP.Streams = []conf.StreamConfig{
+			{Name: "Cam1", Type: "rtsp", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}},
+		}
 
-	settings := &conf.Settings{}
-	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
-		{Name: "Cam1", Type: "rtsp", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}},
-	}
+		// The router feeds only BirdNET for this stream; Perch is assigned but idle.
+		running := map[string]map[string]bool{"Cam1": {primaryID: true}}
 
-	// The router feeds only BirdNET for this stream; Perch is assigned but idle.
-	running := map[string]map[string]bool{"Cam1": {primaryID: true}}
+		got := buildSourceAttachments(rtspSettings, models, []string{primaryID}, running)
 
-	got := buildSourceAttachments(settings, models, []string{primaryID}, running)
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.Equal(t, "Cam1", perch[0].Name)
+		assert.Equal(t, "rtsp", perch[0].Type)
+		assert.True(t, perch[0].NotRunning, "the assigned but unrouted Perch model on the RTSP stream")
 
-	perch := got[classifier.RegistryIDPerchV2]
-	require.Len(t, perch, 1)
-	assert.Equal(t, "Cam1", perch[0].Name)
-	assert.Equal(t, "rtsp", perch[0].Type)
-	assert.True(t, perch[0].NotRunning, "the assigned but unrouted Perch model on the RTSP stream")
-
-	prim := got[primaryID]
-	require.Len(t, prim, 1)
-	assert.False(t, prim[0].NotRunning, "BirdNET is genuinely routed for the stream")
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.False(t, prim[0].NotRunning, "BirdNET is genuinely routed for the stream")
+	})
 }
 
 // TestBuildSourceAttachments_FallbackRowCarriesLiveness pins that the

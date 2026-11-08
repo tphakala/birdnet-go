@@ -78,6 +78,10 @@ const (
 	MsgMigrationLegacyRestartRequiredTitle   = "notifications.content.migration.legacyRestartRequiredTitle"
 	MsgMigrationLegacyRestartRequiredMessage = "notifications.content.migration.legacyRestartRequiredMessage"
 
+	// Database server notice (unsupported release or non-utf8mb4 character set)
+	MsgDatabaseServerAttentionTitle   = "notifications.content.database.serverAttentionTitle"
+	MsgDatabaseServerAttentionMessage = "notifications.content.database.serverAttentionMessage"
+
 	// Legacy database cleanup notifications
 	MsgCleanupCompleteTitle   = "notifications.content.cleanup.completeTitle"
 	MsgCleanupCompleteMessage = "notifications.content.cleanup.completeMessage"
@@ -135,13 +139,14 @@ const (
 	MsgErrBackupV2NotInit         = "errors.backup.v2NotInitialized"
 
 	// Migration errors
-	MsgErrMigrationNotConfigured = "errors.migration.notConfigured"
-	MsgErrMigrationPreFlight     = "errors.migration.preFlightFailed"
-	MsgErrMigrationInvalidBody   = "errors.migration.invalidBody"
-	MsgErrMigrationRecordCount   = "errors.migration.recordCountFailed"
-	MsgErrMigrationStartFailed   = "errors.migration.startFailed"
-	MsgErrMigrationInitFailed    = "errors.migration.initFailed"
-	MsgErrMigrationResumeFailed  = "errors.migration.resumeFailed"
+	MsgErrMigrationNotConfigured  = "errors.migration.notConfigured"
+	MsgErrMigrationPreFlight      = "errors.migration.preFlightFailed"
+	MsgErrMigrationInvalidBody    = "errors.migration.invalidBody"
+	MsgErrMigrationPrereqNotReady = "errors.migration.prerequisitesNotReady"
+	MsgErrMigrationRecordCount    = "errors.migration.recordCountFailed"
+	MsgErrMigrationStartFailed    = "errors.migration.startFailed"
+	MsgErrMigrationInitFailed     = "errors.migration.initFailed"
+	MsgErrMigrationResumeFailed   = "errors.migration.resumeFailed"
 
 	// Legacy cleanup errors
 	MsgErrCleanupNoLegacyDB      = "errors.cleanup.noLegacyDB"

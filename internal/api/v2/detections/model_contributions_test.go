@@ -72,7 +72,12 @@ func TestNewModelContributionResponse_Statistics(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := newModelContributionResponse(tc.row)
 			assert.Equal(t, tc.row.HitCount, got.HitCount)
-			assert.InDelta(t, tc.row.MaxConfidence, got.MaxConfidence, 1e-9)
+			if tc.row.HitCount > 0 {
+				require.NotNil(t, got.MaxConfidence)
+				assert.InDelta(t, tc.row.MaxConfidence, *got.MaxConfidence, 1e-9)
+			} else {
+				assert.Nil(t, got.MaxConfidence, "a model without a hit has no confidence")
+			}
 			if tc.wantMean == nil {
 				assert.Nil(t, got.MinConfidence)
 				assert.Nil(t, got.MeanConfidence)
@@ -86,7 +91,7 @@ func TestNewModelContributionResponse_Statistics(t *testing.T) {
 			require.NotNil(t, got.LastHitAt)
 			assert.InDelta(t, *tc.wantMean, *got.MeanConfidence, 1e-9)
 			assert.LessOrEqual(t, *got.MinConfidence, *got.MeanConfidence)
-			assert.LessOrEqual(t, *got.MeanConfidence, got.MaxConfidence)
+			assert.LessOrEqual(t, *got.MeanConfidence, *got.MaxConfidence)
 		})
 	}
 }

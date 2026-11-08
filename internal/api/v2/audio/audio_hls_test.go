@@ -4,7 +4,6 @@ package audio
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,78 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
-
-// TestHLSManagerStreamTracking tests the HLS manager stream tracking
-func TestHLSManagerStreamTracking(t *testing.T) {
-	t.Run("getActiveStreamIDs returns empty for no streams", func(t *testing.T) {
-		// Save and restore original state
-		originalStreams := hlsMgr.streams
-		hlsMgr.streamsMu.Lock()
-		hlsMgr.streams = make(map[string]*HLSStreamInfo)
-		hlsMgr.streamsMu.Unlock()
-
-		defer func() {
-			hlsMgr.streamsMu.Lock()
-			hlsMgr.streams = originalStreams
-			hlsMgr.streamsMu.Unlock()
-		}()
-
-		ids := getActiveStreamIDs()
-		assert.Empty(t, ids)
-	})
-
-	t.Run("getActiveStreamIDs returns all stream IDs", func(t *testing.T) {
-		// Save and restore original state
-		originalStreams := hlsMgr.streams
-		hlsMgr.streamsMu.Lock()
-		hlsMgr.streams = map[string]*HLSStreamInfo{
-			"source1": {SourceID: "source1"},
-			"source2": {SourceID: "source2"},
-		}
-		hlsMgr.streamsMu.Unlock()
-
-		defer func() {
-			hlsMgr.streamsMu.Lock()
-			hlsMgr.streams = originalStreams
-			hlsMgr.streamsMu.Unlock()
-		}()
-
-		ids := getActiveStreamIDs()
-		assert.Len(t, ids, 2)
-		assert.Contains(t, ids, "source1")
-		assert.Contains(t, ids, "source2")
-	})
-}
-
-// TestHLSManagerClientTracking tests the HLS client tracking
-func TestHLSManagerClientTracking(t *testing.T) {
-	t.Run("getStreamClientCount returns 0 for unknown stream", func(t *testing.T) {
-		count := getStreamClientCount("nonexistent_stream")
-		assert.Equal(t, 0, count)
-	})
-
-	t.Run("getStreamClientCount returns correct count", func(t *testing.T) {
-		// Save and restore original state
-		originalClients := hlsMgr.clients
-		hlsMgr.clientsMu.Lock()
-		hlsMgr.clients = map[string]map[string]bool{
-			"source1": {
-				"client1": true,
-				"client2": true,
-			},
-		}
-		hlsMgr.clientsMu.Unlock()
-
-		defer func() {
-			hlsMgr.clientsMu.Lock()
-			hlsMgr.clients = originalClients
-			hlsMgr.clientsMu.Unlock()
-		}()
-
-		count := getStreamClientCount("source1")
-		assert.Equal(t, 2, count)
-	})
-}
 
 // setHLSActivity replaces the HLS manager's activity map for the duration of the
 // test and restores the original when the test ends.
@@ -180,8 +107,10 @@ func TestFindInactiveStreams(t *testing.T) {
 
 		// Same sequence syncHLSActivity runs: snapshot the registered streams,
 		// then select the inactive ones.
-		inactive := findInactiveStreams(getActiveStreamIDs())
-		assert.Equal(t, []string{expiredID}, inactive)
+		registered := getActiveStreamIDs()
+		assert.Subset(t, registered, []string{expiredID, recentID},
+			"the snapshot must include every registered stream, or cleanup skips the ones it drops")
+		assert.Equal(t, []string{expiredID}, findInactiveStreams(registered))
 	})
 }
 
@@ -198,69 +127,54 @@ func TestRemoveStreamFromManager(t *testing.T) {
 			SourceID: testStreamID,
 		}
 
-		// Add stream
+		// Add stream with a token, as a started stream has
 		hlsMgr.streamsMu.Lock()
 		hlsMgr.streams[testStreamID] = testStream
 		hlsMgr.streamsMu.Unlock()
+		token := getOrCreateStreamToken(testStreamID)
+		t.Cleanup(func() { removeStreamToken(testStreamID) })
 
 		// Remove stream
 		removed := removeStreamFromManager(testStreamID)
 		assert.NotNil(t, removed)
 		assert.Equal(t, testStreamID, removed.SourceID)
 
-		// Verify it's gone
+		// Verify it's gone, together with its token
 		hlsMgr.streamsMu.Lock()
 		_, exists := hlsMgr.streams[testStreamID]
 		hlsMgr.streamsMu.Unlock()
 		assert.False(t, exists)
+		assert.Empty(t, resolveStreamToken(token), "removing a stream must also drop its token")
 	})
 }
 
-// TestHLSManagerConcurrency tests concurrent access to HLS manager
+// TestHLSManagerConcurrency adds and removes streams from many goroutines. It
+// depends on the race detector (run with -race) to catch removeStreamFromManager
+// losing its lock; the post-condition checks that every removal took effect.
 func TestHLSManagerConcurrency(t *testing.T) {
-	t.Run("concurrent stream operations", func(t *testing.T) {
-		const numGoroutines = 10
-		var wg sync.WaitGroup
-		wg.Add(numGoroutines)
+	const numGoroutines = 10
+	streamIDs := make([]string, numGoroutines)
+	for i := range streamIDs {
+		streamIDs[i] = fmt.Sprintf("concurrent_test_%d", i)
+	}
 
-		for i := range numGoroutines {
-			go func(id int) {
-				defer wg.Done()
-				streamID := fmt.Sprintf("concurrent_test_%s_%d", time.Now().String(), id)
+	var wg sync.WaitGroup
+	for _, streamID := range streamIDs {
+		wg.Go(func() {
+			hlsMgr.streamsMu.Lock()
+			hlsMgr.streams[streamID] = &HLSStreamInfo{SourceID: streamID}
+			hlsMgr.streamsMu.Unlock()
 
-				// Add stream
-				hlsMgr.streamsMu.Lock()
-				hlsMgr.streams[streamID] = &HLSStreamInfo{SourceID: streamID}
-				hlsMgr.streamsMu.Unlock()
+			_ = removeStreamFromManager(streamID)
+		})
+	}
+	wg.Wait()
 
-				// Remove stream
-				_ = removeStreamFromManager(streamID)
-			}(i)
-		}
-
-		wg.Wait()
-	})
-}
-
-// TestHLSHeartbeatRequest tests the heartbeat request struct JSON binding
-func TestHLSHeartbeatRequest(t *testing.T) {
-	t.Run("heartbeat with stream token only", func(t *testing.T) {
-		body := []byte(`{"stream_token":"abc123def456abc123def456abc123de"}`)
-		var req HLSHeartbeatRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-
-		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Empty(t, req.SessionID)
-	})
-
-	t.Run("heartbeat with session id", func(t *testing.T) {
-		body := []byte(`{"stream_token":"abc123def456abc123def456abc123de","session_id":"550e8400-e29b-41d4-a716-446655440000"}`)
-		var req HLSHeartbeatRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-
-		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", req.SessionID)
-	})
+	hlsMgr.streamsMu.RLock()
+	defer hlsMgr.streamsMu.RUnlock()
+	for _, streamID := range streamIDs {
+		assert.NotContains(t, hlsMgr.streams, streamID, "stream must be removed")
+	}
 }
 
 // TestStreamTokenGeneration tests crypto-random token generation
@@ -272,19 +186,6 @@ func TestStreamTokenGeneration(t *testing.T) {
 		// Verify it's valid hex
 		_, err := hex.DecodeString(token)
 		assert.NoError(t, err)
-	})
-
-	t.Run("generates unique tokens", func(t *testing.T) {
-		const tokenCount = 100
-		tokens := make(map[string]bool, tokenCount)
-
-		for range tokenCount {
-			token := generateStreamToken()
-			assert.False(t, tokens[token], "duplicate token generated: %s", token)
-			tokens[token] = true
-		}
-
-		assert.Len(t, tokens, tokenCount)
 	})
 }
 

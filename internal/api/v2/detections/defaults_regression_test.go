@@ -89,7 +89,7 @@ func TestGetDetections_DefaultParams(t *testing.T) {
 		apitest.WithSettingsFunc(func(s *conf.Settings) { s.Realtime.Dashboard.SummaryLimit = 0 }))
 
 	notes := testNotes()
-	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, int64(len(notes)), nil).Once()
+	mockDS.On("SearchNotesAdvanced", searchDefaultMatcher("", defaultNumResults, 0)).Return(notes, int64(len(notes)), nil).Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections", controller.GetDetections)
 

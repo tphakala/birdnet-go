@@ -5,6 +5,9 @@ const KEYBOARD_CLICK_DETAIL = 0;
 
 type FocusTarget = HTMLElement | SVGElement;
 
+/** Elements to try, in order, when the container goes away while it holds focus. */
+export type FocusFallback = () => Array<HTMLElement | null | undefined>;
+
 /** Focus return for a dismissible container, created once per component instance. */
 export interface FocusReturn {
   /**
@@ -23,12 +26,27 @@ export interface FocusReturn {
 /**
  * Creates the focus return for one dismissible container (an alert or a banner).
  * Destructure the result and put `use:track` on the container's root element.
+ *
+ * With `fallback`, the container also keeps focus near the user's place when it goes
+ * away for any other reason (a Retry that succeeded, a mouse dismiss, a refresh that
+ * cleared it): removing the focused element drops focus to the document body, so focus
+ * moves to the first fallback element that can take it instead. The container counts as
+ * holding focus from a focusin, or a pointerdown (Safari and iPadOS do not focus a
+ * clicked button, so the user's place is where they pressed), until focus moves to
+ * another element. Focus that left for nothing (a click on plain page content) still
+ * counts, so removal then moves focus to the fallback, which is near where the user was.
  */
-export function createFocusReturn(): FocusReturn {
+export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
   let root: HTMLElement | undefined;
   let returnFocusTo: FocusTarget | null = null;
+  let holdsFocus = false;
+
+  function handleHold() {
+    holdsFocus = true;
+  }
 
   function handleFocusIn(event: FocusEvent) {
+    holdsFocus = true;
     const from = event.relatedTarget;
     // Only focus arriving from an element outside the container replaces the target.
     // Moving between controls inside the container keeps it, and so does focus with no
@@ -42,6 +60,9 @@ export function createFocusReturn(): FocusReturn {
   }
 
   function handleFocusOut(event: FocusEvent) {
+    if (event.relatedTarget instanceof Node && !root?.contains(event.relatedTarget)) {
+      holdsFocus = false;
+    }
     // Focus left for the page body (a click on non-focusable content): forget the
     // target, so a later Tab back in and keyboard dismiss does not jump to a field
     // that may be far away. A window or tab blur also fires focusout with no related
@@ -57,12 +78,19 @@ export function createFocusReturn(): FocusReturn {
     root = node;
     node.addEventListener('focusin', handleFocusIn);
     node.addEventListener('focusout', handleFocusOut);
+    node.addEventListener('pointerdown', handleHold);
     return {
       destroy() {
         node.removeEventListener('focusin', handleFocusIn);
         node.removeEventListener('focusout', handleFocusOut);
+        node.removeEventListener('pointerdown', handleHold);
         root = undefined;
         returnFocusTo = null;
+        if (fallback && holdsFocus) {
+          holdsFocus = false;
+          // Svelte may run this before the node leaves the document
+          queueMicrotask(() => focusFallback(fallback));
+        }
       },
     };
   };
@@ -83,4 +111,14 @@ export function createFocusReturn(): FocusReturn {
   }
 
   return { track, restore };
+}
+
+function focusFallback(fallback: FocusFallback): void {
+  if (document.activeElement && document.activeElement !== document.body) return;
+  for (const el of fallback()) {
+    if (!el?.isConnected) continue;
+    // The alert may go away long after the user stopped looking at it, so do not scroll
+    el.focus({ preventScroll: true });
+    if (document.activeElement === el) return;
+  }
 }

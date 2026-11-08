@@ -12,6 +12,18 @@ vi.mock('$lib/utils/api', () => ({
   api: {
     post: vi.fn(),
   },
+  ApiError: class ApiError extends Error {
+    status: number;
+    response: Response;
+    userMessage: string;
+    constructor(message: string, status: number, response: Response) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.response = response;
+      this.userMessage = message;
+    }
+  },
 }));
 
 // Mock the logger
@@ -583,6 +595,85 @@ describe('LoginModal', () => {
 
       await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
       expect(onCancel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Login failure message', () => {
+    const HTTP_BAD_REQUEST = 400;
+    const HTTP_UNAUTHORIZED = 401;
+    const HTTP_FORBIDDEN = 403;
+    const HTTP_TOO_MANY_REQUESTS = 429;
+    const HTTP_SERVER_ERROR = 500;
+    const HTTP_SERVICE_UNAVAILABLE = 503;
+    // Stand in for the translated messages the server's 429 responses carry.
+    const ATTEMPT_LIMIT_MESSAGE = 'Too many login attempts, try again later';
+    const SECOND_ATTEMPT_LIMIT_MESSAGE = 'Still too many login attempts';
+
+    type ApiErrorClass = new (message: string, status: number, response: Response) => Error;
+
+    function apiFailure(ApiError: ApiErrorClass, status: number, message = ATTEMPT_LIMIT_MESSAGE) {
+      return new ApiError(message, status, new Response(null, { status }));
+    }
+
+    // Renders the dialog, makes the next login requests fail with the given
+    // failures in order, and returns what a test needs to submit again.
+    async function renderFailingLogin(...failures: Error[]) {
+      const { api } = await import('$lib/utils/api');
+      const post = vi.mocked(api.post);
+      post.mockReset();
+      for (const failure of failures) {
+        post.mockRejectedValueOnce(failure);
+      }
+      const onClose = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      const passwordInput = screen.getByLabelText('auth.password');
+      await fireEvent.input(passwordInput, { target: { value: 'wrong-password' } });
+      const submit = screen.getByRole('button', { name: /continue with password/i });
+      return { post, onClose, passwordInput, submit };
+    }
+
+    it('shows the server message when the attempt limit is used up (429)', async () => {
+      const { ApiError } = await import('$lib/utils/api');
+      const { post, onClose, passwordInput, submit } = await renderFailingLogin(
+        apiFailure(ApiError, HTTP_TOO_MANY_REQUESTS),
+        apiFailure(ApiError, HTTP_TOO_MANY_REQUESTS, SECOND_ATTEMPT_LIMIT_MESSAGE)
+      );
+
+      await fireEvent.click(submit);
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(ATTEMPT_LIMIT_MESSAGE);
+      expect(alert).not.toHaveTextContent('auth.errors.loginFailed');
+      expect(onClose).not.toHaveBeenCalled();
+
+      // The form is usable again, and another refused attempt reports its own message.
+      expect(passwordInput).toBeEnabled();
+      expect(submit).toBeEnabled();
+      await fireEvent.click(submit);
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(SECOND_ATTEMPT_LIMIT_MESSAGE)
+      );
+      expect(post).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['a bad request', HTTP_BAD_REQUEST],
+      ['a rejected password', HTTP_UNAUTHORIZED],
+      ['a forbidden request', HTTP_FORBIDDEN],
+      ['a server error', HTTP_SERVER_ERROR],
+      ['an unavailable server', HTTP_SERVICE_UNAVAILABLE],
+    ])('keeps the generic message for %s', async (_name, status) => {
+      const { ApiError } = await import('$lib/utils/api');
+      const { submit } = await renderFailingLogin(apiFailure(ApiError, status));
+
+      await fireEvent.click(submit);
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('auth.errors.loginFailed');
+      expect(alert).not.toHaveTextContent(ATTEMPT_LIMIT_MESSAGE);
     });
   });
 

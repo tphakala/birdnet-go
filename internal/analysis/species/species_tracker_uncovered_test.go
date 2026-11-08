@@ -38,46 +38,6 @@ func TestSpeciesTracker_Close(t *testing.T) {
 	})
 }
 
-// TestSpeciesTracker_SetCurrentYearForTesting tests SetCurrentYearForTesting
-func TestSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
-	t.Parallel()
-
-	ds := mocks.NewMockInterface(t)
-	settings := &conf.SpeciesTrackingSettings{
-		Enabled: true,
-		YearlyTracking: conf.YearlyTrackingSettings{
-			Enabled:    true,
-			ResetMonth: 1,
-			ResetDay:   1,
-		},
-	}
-
-	tracker := NewTrackerFromSettings(ds, settings)
-
-	// Set a specific year for testing
-	testYear := 2024
-	tracker.SetCurrentYearForTesting(testYear)
-
-	// Verify it affects year calculations
-	now := time.Now()
-	start, _ := tracker.getYearDateRange(now)
-	parsedStart, _ := time.Parse(time.DateOnly, start)
-	assert.Equal(t, testYear, parsedStart.Year())
-
-	// Test with different year
-	tracker.SetCurrentYearForTesting(2025)
-	start, _ = tracker.getYearDateRange(now)
-	parsedStart, _ = time.Parse(time.DateOnly, start)
-	assert.Equal(t, 2025, parsedStart.Year())
-
-	// Reset to 0 should use current year
-	tracker.SetCurrentYearForTesting(0)
-	start, _ = tracker.getYearDateRange(now)
-	parsedStart, _ = time.Parse(time.DateOnly, start)
-	currentYear := time.Now().Year()
-	assert.Equal(t, currentYear, parsedStart.Year())
-}
-
 // TestSpeciesTracker_shouldResetYear tests shouldResetYear method
 func TestSpeciesTracker_shouldResetYear(t *testing.T) {
 	t.Parallel()
@@ -146,12 +106,12 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 			{
 				ScientificName: "Robin",
 				CommonName:     "American Robin",
-				FirstSeenDate:  time.Now().Add(-10 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -10).Format(time.DateOnly),
 			},
 			{
 				ScientificName: "Sparrow",
 				CommonName:     "House Sparrow",
-				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -5).Format(time.DateOnly),
 			},
 		}
 
@@ -195,7 +155,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 		tracker := NewTrackerFromSettings(ds, settings)
 
 		// Pre-populate some data
-		tracker.speciesThisYear["Existing"] = time.Now().Add(-20 * 24 * time.Hour)
+		tracker.speciesThisYear["Existing"] = time.Now().AddDate(0, 0, -20)
 
 		now := time.Now()
 		err := tracker.loadYearlyDataFromDatabase(t.Context(), now)
@@ -238,12 +198,12 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 			{
 				ScientificName: "Cardinal",
 				CommonName:     "Northern Cardinal",
-				FirstSeenDate:  time.Now().Add(-3 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -3).Format(time.DateOnly),
 			},
 			{
 				ScientificName: "BlueJay",
 				CommonName:     "Blue Jay",
-				FirstSeenDate:  time.Now().Add(-1 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -1).Format(time.DateOnly),
 			},
 		}
 
@@ -331,7 +291,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		if tracker.speciesBySeason[testSeasonSpring] == nil {
 			tracker.speciesBySeason[testSeasonSpring] = make(map[string]time.Time)
 		}
-		tracker.speciesBySeason[testSeasonSpring]["Existing"] = time.Now().Add(-10 * 24 * time.Hour)
+		tracker.speciesBySeason[testSeasonSpring]["Existing"] = time.Now().AddDate(0, 0, -10)
 
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(t.Context(), now)
@@ -360,9 +320,8 @@ func TestSpeciesTracker_getYearDateRange(t *testing.T) {
 		}
 
 		tracker := NewTrackerFromSettings(ds, settings)
-		tracker.SetCurrentYearForTesting(2024)
 
-		now := time.Now()
+		now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 		start, end := tracker.getYearDateRange(now)
 		assert.Equal(t, "2024-01-01", start)
 		assert.Equal(t, "2024-12-31", end)
@@ -378,11 +337,9 @@ func TestSpeciesTracker_getYearDateRange(t *testing.T) {
 		}
 
 		tracker := NewTrackerFromSettings(ds, settings)
-		tracker.SetCurrentYearForTesting(2024)
 
 		// After reset date in year
-		// Note: Can't directly set lastYearReset (private field)
-		now := time.Now()
+		now := time.Date(2024, 8, 1, 12, 0, 0, 0, time.UTC)
 		start, end := tracker.getYearDateRange(now)
 
 		// Should be from July 15, 2024 to July 14, 2025
@@ -427,9 +384,10 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 			testSeasonSpring: {month: 3, day: 1},
 		}
 		tracker.currentSeason = testSeasonSpring
-		tracker.SetCurrentYearForTesting(2024)
+		// A past tracker year must not shift the season range, which depends on now only
+		tracker.SetCurrentYearForTesting(2020)
 
-		now := time.Now()
+		now := time.Date(2024, 4, 15, 12, 0, 0, 0, time.UTC)
 		start, end := tracker.getSeasonDateRange(testSeasonSpring, now)
 		assert.Equal(t, "2024-03-01", start)
 		assert.Equal(t, "2024-05-31", end)
@@ -448,7 +406,6 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 			"Winter": {month: 12, day: 1},
 		}
 		tracker.currentSeason = "Winter"
-		tracker.SetCurrentYearForTesting(2024)
 
 		// In December - winter extends to next year
 		now := time.Date(2024, 12, 15, 0, 0, 0, 0, time.UTC)

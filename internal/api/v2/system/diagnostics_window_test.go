@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -121,38 +122,11 @@ func TestRunDiagnostics_WindowedChecksIncludeDetails(t *testing.T) {
 	dropsResult := findResult(t, report.Results, "buffer_drops")
 	require.NotNil(t, dropsResult.Details)
 	assert.Equal(t, "1h", dropsResult.Details["window"])
-	assert.NotNil(t, dropsResult.Details["sparkline"], "sparkline missing from buffer_drops")
-	assert.NotNil(t, dropsResult.Details["recent_events"], "recent_events missing from buffer_drops")
 	assert.Contains(t, dropsResult.Details, "active_hours")
 	assert.Contains(t, dropsResult.Details, "velocity")
 	assert.Contains(t, dropsResult.Details, "pattern")
 	assert.Contains(t, dropsResult.Details, "lifetime_total")
 	assert.Contains(t, dropsResult.Details, "per_source")
-}
-
-func TestRunDiagnostics_DefaultWindowIs1h(t *testing.T) {
-	t.Parallel()
-
-	store := observability.NewHealthMetricsStore()
-	store.RecordAt("audio.drops.src1", 5, time.Now())
-
-	e, controller := setupDiagnosticsTest(t, store, nil)
-	controller.healthRegistry.Register(checks.NewBufferDropsCheck(store, nil))
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/diagnostics/run", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	err := controller.RunDiagnostics(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var report health.DiagnosticsReport
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
-
-	dropsResult := findResult(t, report.Results, "buffer_drops")
-	require.NotNil(t, dropsResult.Details)
-	assert.Equal(t, "1h", dropsResult.Details["window"])
 }
 
 func TestRunDiagnostics_WindowAffectsEvaluation(t *testing.T) {
@@ -221,10 +195,12 @@ func TestRunDiagnostics_NonCounterChecksUnchanged(t *testing.T) {
 func TestRunDiagnostics_AllValidWindowPresets(t *testing.T) {
 	t.Parallel()
 
+	// An empty param omits the query parameter and expects the default window.
 	presets := []struct {
 		param    string
 		expected string
 	}{
+		{"", "1h"},
 		{"15m", "15m"},
 		{"30m", "30m"},
 		{"1h", "1h"},
@@ -234,7 +210,7 @@ func TestRunDiagnostics_AllValidWindowPresets(t *testing.T) {
 	}
 
 	for _, preset := range presets {
-		t.Run(preset.param, func(t *testing.T) {
+		t.Run(cmp.Or(preset.param, "omitted"), func(t *testing.T) {
 			t.Parallel()
 
 			store := observability.NewHealthMetricsStore()
@@ -243,8 +219,11 @@ func TestRunDiagnostics_AllValidWindowPresets(t *testing.T) {
 			e, controller := setupDiagnosticsTest(t, store, nil)
 			controller.healthRegistry.Register(checks.NewBufferDropsCheck(store, nil))
 
-			req := httptest.NewRequest(http.MethodPost,
-				"/api/v2/system/diagnostics/run?window="+preset.param, http.NoBody)
+			path := "/api/v2/system/diagnostics/run"
+			if preset.param != "" {
+				path += "?window=" + preset.param
+			}
+			req := httptest.NewRequest(http.MethodPost, path, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 

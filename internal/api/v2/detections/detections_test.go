@@ -24,6 +24,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -130,7 +133,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 10, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -177,7 +180,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("Crow", 10, 0)).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
@@ -279,7 +282,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("Crow", 10, 0)).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
@@ -308,7 +311,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":    "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 5, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 5, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -323,7 +326,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 10, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -1853,9 +1856,7 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "novelty-flags")
 
-	// The yearly reset date is set explicitly: a zero month and day make
-	// shouldResetYear (species/season.go) reset the yearly set on every call
-	// made on 30 November, which would clear the seeded species.
+	// The yearly reset date is set explicitly to the production default.
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 30,
@@ -1903,10 +1904,10 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	}
 }
 
-// TestNoteToDetectionResponse_SourceInfo verifies that noteToDetectionResponse
-// populates DetectionResponse.Source as *SourceInfo when note.Source.ID is set,
+// TestResultToDetectionResponse_SourceInfo verifies that resultToDetectionResponse
+// populates DetectionResponse.Source as *SourceInfo when the result's audio source ID is set,
 // leaves it nil when ID is empty, and derives Type from the SafeString.
-func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
+func TestResultToDetectionResponse_SourceInfo(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "detections")
 	t.Attr("type", "unit")
@@ -1917,7 +1918,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		source      datastore.AudioSource
+		source      detection.AudioSource
 		wantNil     bool
 		wantID      string
 		wantType    string
@@ -1925,12 +1926,12 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	}{
 		{
 			name:    "empty source stays nil",
-			source:  datastore.AudioSource{},
+			source:  detection.AudioSource{},
 			wantNil: true,
 		},
 		{
 			name: "rtsp source populates id, type, and display name",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:          "rtsp_87b89761",
 				SafeString:  "rtsp://camera.local/stream",
 				DisplayName: "Front Yard",
@@ -1941,7 +1942,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 		},
 		{
 			name: "alsa source without friendly name falls back to raw device",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:          "hw:1,0",
 				SafeString:  "hw:1,0",
 				DisplayName: "hw:1,0",
@@ -1952,7 +1953,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 		},
 		{
 			name: "unknown safe string yields type unknown",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:         "custom-source",
 				SafeString: "file:///tmp/audio.wav",
 			},
@@ -1964,22 +1965,68 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			note := &datastore.Note{
-				ID:     42,
-				Date:   "2026-04-14",
-				Time:   "09:30:00",
-				Source: tt.source,
+			r := &detection.Result{
+				ID:          42,
+				Timestamp:   time.Date(2026, time.April, 14, 9, 30, 0, 0, time.UTC),
+				AudioSource: tt.source,
 			}
-			resp := controller.noteToDetectionResponse(note, false, nil)
+			resp := controller.resultToDetectionResponse(r, false, nil)
 
 			if tt.wantNil {
-				assert.Nil(t, resp.Source, "Source should be nil when note.Source.ID is empty")
+				assert.Nil(t, resp.Source, "Source should be nil when the source ID is empty")
 				return
 			}
-			require.NotNil(t, resp.Source, "Source should be populated when note.Source.ID is set")
+			require.NotNil(t, resp.Source, "Source should be populated when the source ID is set")
 			assert.Equal(t, tt.wantID, resp.Source.ID)
 			assert.Equal(t, tt.wantType, resp.Source.Type)
 			assert.Equal(t, tt.wantDisplay, resp.Source.DisplayName)
+		})
+	}
+}
+
+// TestGetDetectionTimeOfDay verifies that the time-of-day endpoint classifies the
+// stored instant of the detection read through the repository, and answers 404
+// when the repository has no such detection. The datastore mock has no
+// expectations, so any read through the legacy datastore fails the test.
+func TestGetDetectionTimeOfDay(t *testing.T) {
+	t.Parallel()
+
+	// Noon at the test location (Helsinki, EEST) in midsummer is daytime.
+	noon := time.Date(2026, time.June, 21, 12, 0, 0, 0, time.FixedZone("EEST", 3*60*60))
+
+	tests := []struct {
+		name       string
+		result     *detection.Result
+		repoErr    error
+		wantStatus int
+		wantTime   string
+	}{
+		{name: "found", result: &detection.Result{ID: 5, Timestamp: noon}, wantStatus: http.StatusOK, wantTime: datastore.TimeOfDayDay},
+		{name: "not found", repoErr: repository.ErrDetectionNotFound, wantStatus: http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e, _, h := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
+			repo := mocks.NewMockDetectionRepository(t)
+			h.Repo = repo
+			repo.EXPECT().Get(mock.Anything, "5").Return(tt.result, tt.repoErr)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/5/time-of-day", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues("5")
+
+			require.NoError(t, h.GetDetectionTimeOfDay(c))
+			require.Equal(t, tt.wantStatus, rec.Code)
+			if tt.wantStatus == http.StatusOK {
+				var resp TimeOfDayResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, tt.wantTime, resp.TimeOfDay)
+			}
 		})
 	}
 }

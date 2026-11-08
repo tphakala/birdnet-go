@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	apicontrol "github.com/tphakala/birdnet-go/internal/api/v2/control"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
@@ -29,6 +30,10 @@ import (
 )
 
 const (
+	// signalRestartAudioCapture tears down and rebuilds the whole audio capture.
+	// The control API's restart_analysis signal runs the same restart.
+	signalRestartAudioCapture = "restart_audio_capture"
+
 	signalReconfigureLogDeduplication = "reconfigure_log_deduplication"
 	signalReconfigureRTSPHealth       = "reconfigure_rtsp_health"
 	signalReconfigureMonitoring       = "reconfigure_monitoring"
@@ -279,6 +284,14 @@ func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
 
 // monitor listens for control signals and handles them
 func (cm *ControlMonitor) monitor() {
+	// NewControlMonitor derives the pair, but a ControlMonitor assembled as a
+	// struct literal has neither, and package-internal tests do assemble it that
+	// way. Deriving here instead of dereferencing a nil CancelFunc also keeps
+	// monitorCtx non-nil for the handlers that pass it on (the guide cache warm),
+	// which would otherwise receive a nil context from such a monitor.
+	if cm.monitorCancel == nil {
+		cm.monitorCtx, cm.monitorCancel = context.WithCancel(context.Background())
+	}
 	// Cancelling here is what ties monitorCtx to quitChan: this loop is the only
 	// thing that returns on quitChan, and it also unwinds on a panic, so detached
 	// handler work cannot outlive the monitor by either exit.
@@ -328,7 +341,7 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureAudioSources()
 	case "update_source_gains":
 		cm.handleUpdateSourceGains()
-	case "restart_audio_capture":
+	case signalRestartAudioCapture, apicontrol.SignalRestartAnalysis:
 		cm.handleRestartAudioCapture()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
@@ -1195,13 +1208,15 @@ func (cm *ControlMonitor) handleReconfigureSentry() {
 	emitHotReload("sentry")
 }
 
-// handleRestartAudioCapture signals a full audio-capture restart. Used for a
-// setting that changes the analysis-buffer dimensions but is not a per-source
-// audio property (e.g. birdnet.overlap): the diff-based reconfigure cannot see
-// it, so the capture is torn down and rebuilt, which re-applies the primary
-// model dimensions and reallocates every analysis buffer with the new values.
+// handleRestartAudioCapture signals a full audio-capture restart. Used for the
+// restart_audio_capture signal, sent for a setting that changes the
+// analysis-buffer dimensions but is not a per-source audio property (e.g.
+// birdnet.overlap), and for the restart_analysis control API signal. The
+// diff-based reconfigure cannot see such a setting, so the capture is torn down
+// and rebuilt, which re-applies the primary model dimensions and reallocates
+// every analysis buffer with the new values.
 func (cm *ControlMonitor) handleRestartAudioCapture() {
-	GetLogger().Info("Restarting audio capture to apply analysis buffer changes")
+	GetLogger().Info("Restarting audio capture")
 	ResetOverrunTrackers()
 	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("audio capture restart signal sent")

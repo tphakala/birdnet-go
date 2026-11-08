@@ -120,6 +120,7 @@ func TimeOfDayToHours(periods []string) []int {
 
 // HourFilterToHours converts an HourFilter to a list of hours.
 // Handles wrap-around (e.g., Start=22, End=2 → [22, 23, 0, 1, 2]).
+// Any integer is accepted and taken modulo 24 with a non-negative result (-2 is 22).
 // Returns nil if hf is nil.
 func HourFilterToHours(hf *datastore.HourFilter) []int {
 	if hf == nil {
@@ -127,8 +128,8 @@ func HourFilterToHours(hf *datastore.HourFilter) []int {
 	}
 
 	// Normalize to valid hour range
-	start := hf.Start % 24
-	end := hf.End % 24
+	start := floorModHours(hf.Start)
+	end := floorModHours(hf.End)
 
 	hours := make([]int, 0)
 
@@ -139,7 +140,7 @@ func HourFilterToHours(hf *datastore.HourFilter) []int {
 		}
 	} else {
 		// Wraps around midnight (e.g., 22-2)
-		for h := start; h <= 23; h++ {
+		for h := start; h < wallClockHoursPerDay; h++ {
 			hours = append(hours, h)
 		}
 		for h := 0; h <= end; h++ {
@@ -148,6 +149,11 @@ func HourFilterToHours(hf *datastore.HourFilter) []int {
 	}
 
 	return hours
+}
+
+// floorModHours reduces h to 0..23, mapping negative values to the hour of the previous day.
+func floorModHours(h int) int {
+	return ((h % wallClockHoursPerDay) + wallClockHoursPerDay) % wallClockHoursPerDay
 }
 
 // MergeHourFilters combines TimeOfDay and Hour filters.

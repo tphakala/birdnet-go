@@ -490,6 +490,10 @@
         "modelregion": {
           "type": "string",
           "description": "regional model preference: \"auto\" (resolve from coordinates, default), \"global\" (always global models), or a region slug pin (e.g. \"iberia\"); empty is treated as \"auto\""
+        },
+        "alternateminconfidence": {
+          "type": "number",
+          "description": "AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which\nan alternate prediction of a detection is stored. Alternates below it are\ndropped when the detection is saved; the detected species itself is never\naffected. 0 stores every alternate. Rows already in the database are not\nchanged. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the\nsettings API; a config file edit applies at the next start."
         }
       },
       "additionalProperties": false,
@@ -1285,6 +1289,40 @@
       "type": "object",
       "description": "MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections"
     },
+    "ModelConsensusSettings": {
+      "properties": {
+        "allspecies": {
+          "type": "boolean",
+          "description": "true to require consensus for every species; takes precedence over listedspecies"
+        },
+        "listedspecies": {
+          "type": "boolean",
+          "description": "true to require consensus for the species in species"
+        },
+        "species": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "species that need consensus when listedspecies is on; scientific names keep working after a locale change"
+        },
+        "minmodels": {
+          "type": "integer",
+          "description": "agreeing models required, 2 to 4, capped at the number of eligible models"
+        },
+        "alleligible": {
+          "type": "boolean",
+          "description": "true to require every eligible model instead of minmodels"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to log each consensus discard at info level, with the agreeing and eligible models"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ModelConsensusSettings configures the model consensus false positive filter."
+    },
     "ModelsConfig": {
       "properties": {
         "enabled": {
@@ -1300,7 +1338,7 @@
         },
         "autoenablemigrated": {
           "type": "boolean",
-          "description": "AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy\nmodel auto-enable has run for this config file, so it never re-runs. Do not edit by hand;\na managed read-only config may set it true (with configversion: 2) to keep an explicit\nmodels.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the\ncompanion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go."
+          "description": "AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy\nmodel auto-enable has run for this config file, so it never re-runs. Do not edit by hand;\na managed read-only config may set it true (with configversion: 3) to keep an explicit\nmodels.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the\ncompanion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go."
         }
       },
       "additionalProperties": false,
@@ -1941,6 +1979,10 @@
         "daylightfilter": {
           "$ref": "#/$defs/DaylightFilterSettings",
           "description": "Daylight filter settings"
+        },
+        "modelconsensus": {
+          "$ref": "#/$defs/ModelConsensusSettings",
+          "description": "Model consensus false positive filter settings"
         },
         "rtsp": {
           "$ref": "#/$defs/RTSPSettings",

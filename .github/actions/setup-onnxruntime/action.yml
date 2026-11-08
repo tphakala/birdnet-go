@@ -5,7 +5,7 @@ inputs:
   onnxruntime-version:
     description: 'ONNX Runtime version'
     required: false
-    default: '1.25.1'
+    default: '1.31.1'
   target-platform:
     description: 'Target platform: linux-amd64, linux-arm64, windows-amd64, darwin-arm64'
     required: false

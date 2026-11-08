@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // updateLifetimeTrackingLocked updates lifetime tracking data. Returns true if this is a new species.
@@ -214,10 +215,10 @@ func (t *SpeciesTracker) checkAndUpdateLifetimeLocked(scientificName string, det
 	// Notification eligibility must expire before an equally long suppression
 	// interval does (#4013). The inclusive calendar-day window used for badges
 	// can outlast that interval, especially across a daylight-saving transition.
-	// Anchor to the first audio day's local midnight: historical loads retain
-	// that calendar date (parsed in UTC), keeping the deadline stable on reload.
-	year, month, day := firstSeen.Date()
-	start := time.Date(year, month, day, 0, 0, 0, 0, detectionTime.Location())
+	// Anchor to the first instant of the first audio day in the detection's zone
+	// (DayBounds handles a skipped midnight); historical loads retain that
+	// calendar date (parsed in UTC), keeping the deadline stable on reload.
+	start, _ := wallclock.DayBounds(wallclock.DateOf(firstSeen), detectionTime.Location())
 	window := time.Duration(t.windowDays) * hoursPerDay * time.Hour
 	return detectionTime.Before(start.Add(window)), daysSince
 }

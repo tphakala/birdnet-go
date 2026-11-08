@@ -48,8 +48,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Main": {categories: []hotReloadCategory{hotReloadDisplay}},
 
 	// --- BirdNET ---
-	"BirdNET.Debug":       {categories: []hotReloadCategory{hotReloadFresh}},
-	"BirdNET.Sensitivity": {categories: []hotReloadCategory{hotReloadFresh}},
+	// Read per save from the action's settings snapshot in storedAlternates; no action needed.
+	"BirdNET.AlternateMinConfidence": {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNET.Debug":                  {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNET.Sensitivity":            {categories: []hotReloadCategory{hotReloadFresh}},
 	// The base threshold is read live per detection; the dynamic threshold applies
 	// it against the shared per-species level at read time, so no recalc action fires.
 	"BirdNET.Threshold": {categories: []hotReloadCategory{hotReloadFresh}},
@@ -237,6 +239,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.PrivacyFilter":  {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.DogBarkFilter":  {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.DaylightFilter": {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.ModelConsensus": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// -- RTSP --
 	"Realtime.RTSP.Streams.*.Name":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},

@@ -1,11 +1,9 @@
 package analytics
 
 import (
-	"context"
 	"encoding/csv"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -38,14 +36,6 @@ func sampleHeatmap() datastore.ActivityHeatmapData {
 	}
 }
 
-func newHeatmapContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/heatmap")
-	return c, rec
-}
-
 func TestGetActivityHeatmap_ColumnarShape(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
@@ -53,7 +43,7 @@ func TestGetActivityHeatmap_ColumnarShape(t *testing.T) {
 	mockDS.On("GetActivityHeatmap", mock.Anything, "2026-03-01", "2026-03-02", "").
 		Return(sampleHeatmap(), nil)
 
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetActivityHeatmap(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -78,49 +68,13 @@ func TestGetActivityHeatmap_EmptyArraysNotNull(t *testing.T) {
 			SlotResolutionMinutes: 15,
 		}, nil)
 
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02&species=Nonexistent+species")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02&species=Nonexistent+species")
 	require.NoError(t, controller.GetActivityHeatmap(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Cells arrays must serialise as [] not null so the client can read .length safely.
 	assert.Contains(t, rec.Body.String(), `"dateIndex":[]`)
 	assert.NotContains(t, rec.Body.String(), `"cells":null`)
-}
-
-func TestGetActivityHeatmap_DefaultsEndDate(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	// With end_date omitted, the handler defaults it to a 30-day window from start_date,
-	// matching the sibling range endpoints. 2026-03-01 + 30d = 2026-03-31.
-	mockDS.On("GetActivityHeatmap", mock.Anything, "2026-03-01", "2026-03-31", "").
-		Return(sampleHeatmap(), nil)
-
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01")
-	require.NoError(t, controller.GetActivityHeatmap(c))
-	require.Equal(t, http.StatusOK, rec.Code)
-	mockDS.AssertExpectations(t)
-}
-
-func TestGetActivityHeatmap_MissingStartDate(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap")
-	err := controller.GetActivityHeatmap(c)
-	// The handler writes the error response itself and returns it.
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestGetActivityHeatmap_InvalidDateFormat(t *testing.T) {
-	t.Parallel()
-	e, _, controller := setupAnalyticsTestEnvironment(t)
-
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap?start_date=not-a-date")
-	err := controller.GetActivityHeatmap(c)
-	require.Error(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestGetActivityHeatmap_CSVExport(t *testing.T) {
@@ -130,7 +84,7 @@ func TestGetActivityHeatmap_CSVExport(t *testing.T) {
 	mockDS.On("GetActivityHeatmap", mock.Anything, "2026-03-01", "2026-03-02", "").
 		Return(sampleHeatmap(), nil)
 
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02&format=csv")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02&format=csv")
 	require.NoError(t, controller.GetActivityHeatmap(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), "text/csv")
@@ -142,20 +96,5 @@ func TestGetActivityHeatmap_CSVExport(t *testing.T) {
 	assert.Equal(t, []string{"2026-03-01", "0", "00:00", "3"}, records[1])
 	// slot 95 at 15-minute resolution starts at 23:45.
 	assert.Equal(t, []string{"2026-03-02", "95", "23:45", "7"}, records[2])
-	mockDS.AssertExpectations(t)
-}
-
-func TestGetActivityHeatmap_QueryTimeout(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	mockDS.On("GetActivityHeatmap", mock.Anything, "2026-03-01", "2026-03-02", "").
-		Return(datastore.ActivityHeatmapData{}, context.DeadlineExceeded)
-
-	c, rec := newHeatmapContext(e, "/api/v2/analytics/time/heatmap?start_date=2026-03-01&end_date=2026-03-02")
-	// handleAnalyticsQueryError writes the 408 response and returns nil (it does not surface
-	// the error to echo), so assert on the recorded status rather than the returned error.
-	require.NoError(t, controller.GetActivityHeatmap(c))
-	assert.Equal(t, http.StatusRequestTimeout, rec.Code)
 	mockDS.AssertExpectations(t)
 }

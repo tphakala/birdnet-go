@@ -18,6 +18,36 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+const (
+	// migrationWorkerStopTimeout bounds how long rollback and cancel wait for the
+	// worker to exit. It stays below the server write timeout (api.DefaultWriteTimeout)
+	// and the frontend request timeout, both 30 s.
+	migrationWorkerStopTimeout = 20 * time.Second
+
+	// startPreflightTimeout bounds the checks a start re-runs. It stays below the
+	// server write timeout and the frontend request timeout, both 30 s: the write
+	// timeout does not cancel the request context, so this bound is what limits the work.
+	startPreflightTimeout = 20 * time.Second
+
+	// preFlightCheckParam is the error parameter that names the blocking check.
+	preFlightCheckParam = "check"
+
+	// msgNoStoredResult is the message of a reused check the stored run did not contain.
+	msgNoStoredResult = "No stored result for this check"
+
+	// migrationWorkerShutdownWait bounds how long shutdown waits for the worker
+	// (including its final tail sync drain) before the databases are closed. It
+	// stays inside the 3 s core shutdown tier budget and leaves time for WAL
+	// checkpoints.
+	migrationWorkerShutdownWait = 2 * time.Second
+
+	// msgMigrationWorkerStopping is shown when the worker did not stop in time.
+	msgMigrationWorkerStopping = "Migration worker is still stopping, try again shortly"
+
+	// msgPreflightInterrupted prefixes the error when the server stopped during the pre-flight checks.
+	msgPreflightInterrupted = "pre-flight checks interrupted"
+)
+
 // MigrationStatusResponse represents the migration status for the API.
 type MigrationStatusResponse struct {
 	State            string     `json:"state"`
@@ -115,10 +145,14 @@ func SetV2OnlyMode() {
 
 // StopMigrationWorker stops the migration worker if it's running.
 // This should be called during graceful shutdown before closing the v2 database.
-// It cancels the worker's context and then calls Stop() for immediate termination.
+// It cancels the worker's context, then calls Stop() and waits, bounded by
+// migrationWorkerShutdownWait and ctx. A final tail sync drain that finishes
+// within that wait completes before the databases close; after it the caller
+// closes them regardless. It returns an error wrapping
+// migration.ErrWorkerStopTimeout when the worker is still running at the deadline.
 // Note: We snapshot the variables under lock then release before calling methods
 // to prevent potential deadlocks if Stop() blocks.
-func StopMigrationWorker() {
+func StopMigrationWorker(ctx context.Context) error {
 	// Snapshot variables under lock to prevent race conditions
 	migrationMu.Lock()
 	cancel := migrationWorkerCancel
@@ -129,10 +163,13 @@ func StopMigrationWorker() {
 	if cancel != nil {
 		cancel()
 	}
-	// Then call Stop() to close the stop channel for immediate termination
-	if worker != nil && worker.IsRunning() {
-		worker.Stop()
+	if worker == nil {
+		return nil
 	}
+	// Then call Stop() to close the stop channel and wait for the goroutine to exit
+	waitCtx, waitCancel := context.WithTimeout(ctx, migrationWorkerShutdownWait)
+	defer waitCancel()
+	return worker.Stop(waitCtx)
 }
 
 // getStateManager returns the state manager with proper locking.
@@ -177,6 +214,9 @@ const migrationNotConfiguredMessage = "Migration is not configured"
 // errMigrationNotConfigured is the error behind migrationNotConfiguredMessage.
 var errMigrationNotConfigured = errors.NewStd("migration not configured")
 
+// errPrerequisitesNotReady is the error behind a start without a usable prerequisites run.
+var errPrerequisitesNotReady = errors.NewStd("prerequisites run missing, running, stale or for other settings")
+
 // requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
 func (c *Handler) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
@@ -204,6 +244,7 @@ func (c *Handler) RegisterMigrationRoutes(g *echo.Group) {
 	// Status and prerequisites have special handling (e.g., v2-only mode) and don't require the state manager
 	protectedGroup.GET("/status", c.GetMigrationStatus)
 	protectedGroup.GET("/prerequisites", c.GetPrerequisites)
+	protectedGroup.POST("/prerequisites/run", c.RunPrerequisites)
 
 	// POST operations require the migration state manager to be available
 	smGroup := protectedGroup.Group("", c.requireMigrationStateManager)
@@ -410,14 +451,7 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
-	// Run pre-flight checks
-	if err := c.runPreflightChecks(); err != nil {
-		c.LogErrorIfEnabled("Pre-flight checks failed",
-			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
-	}
-
-	// Parse request body
+	// Parse request body first, so a slow check can never run into the read timeout
 	var req MigrationStartRequest
 	if err := ctx.Bind(&req); err != nil {
 		c.LogErrorIfEnabled("Failed to parse start request",
@@ -425,21 +459,72 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
 
-	// Count records if not provided
-	// Note: Frontend should pass total_records from the already-fetched stats
-	// to avoid this slower fallback
+	// The checks that remain after the stored run are cheap; bound them below the server
+	// write timeout. A request context does not end when the server stops, so follow the
+	// lifecycle too. A client that has gone or a server that is stopping is answered as
+	// such before anything else looks at the stored run.
+	limit := c.startPreflightLimit
+	if limit == 0 {
+		limit = startPreflightTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx.Request().Context(), limit)
+	defer cancel()
+	defer context.AfterFunc(c.lifecycleContext(), cancel)()
+	if ctx.Request().Context().Err() != nil || c.lifecycleContext().Err() != nil {
+		return c.abandonedStartResponse(ctx, path, ip)
+	}
+
+	// The expensive checks come from the prerequisites run the page started
+	stored, reason := c.prereqRunner().passingResult(c.dbFingerprint())
+	if reason != prereqReuseOK && reason != prereqReuseFailedCheck {
+		c.LogInfoIfEnabled("Start refused: no usable prerequisites run",
+			logger.String("reason", string(reason)), logger.String("path", path), logger.String("ip", ip))
+		return c.prerequisitesNotReady(ctx)
+	}
+
+	if reason == prereqReuseFailedCheck {
+		return c.storedRunFailed(ctx, stored.Response.Checks, path, ip)
+	}
+
+	reused := make(map[string]PrerequisiteCheck, len(stored.Response.Checks))
+	for _, check := range stored.Response.Checks {
+		reused[check.ID] = check
+	}
+	checks := c.runCriticalPrerequisiteChecks(pctx, reused)
+	if pctx.Err() != nil {
+		return c.abandonedStartResponse(ctx, path, ip)
+	}
+	if check := firstBlockingCheck(checks); check != nil {
+		return c.preflightFailed(ctx, check, path, ip)
+	}
+
+	// Count records if not provided by the request or the stored run
 	totalRecords := req.TotalRecords
+	if totalRecords <= 0 && stored.RecordCountKnown {
+		totalRecords = stored.RecordCount
+	}
 	if totalRecords <= 0 {
 		c.LogWarnIfEnabled("Total records not provided, counting from database",
 			logger.String("path", path), logger.String("ip", ip))
 
-		count, err := c.Repo.CountAll(ctx.Request().Context())
+		count, err := c.Repo.CountAll(pctx)
+		if pctx.Err() != nil {
+			return c.abandonedStartResponse(ctx, path, ip)
+		}
 		if err != nil {
 			c.LogErrorIfEnabled("Failed to count legacy records",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			return c.HandleErrorWithKey(ctx, err, "Failed to determine total records", http.StatusInternalServerError, notification.MsgErrMigrationRecordCount, nil)
 		}
 		totalRecords = count
+	}
+
+	// A client that left, or a shutdown that began, after the checks must not start a migration.
+	if pctx.Err() != nil {
+		return c.abandonedStartResponse(ctx, path, ip)
+	}
+	if err := c.lifecycleContext().Err(); err != nil {
+		return c.rejectInterruptedStart(ctx, err)
 	}
 
 	// Start migration
@@ -453,12 +538,28 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	if err := sm.TransitionToDualWrite(); err != nil {
 		c.LogErrorIfEnabled("Failed to transition to dual-write",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		// The state moved even though the start failed, so drop the stored result
+		// whether or not the cancel below succeeds.
+		c.prereqRunner().reset()
 		// Try to cancel since we couldn't complete initialization
 		if cancelErr := sm.Cancel(); cancelErr != nil {
 			c.LogWarnIfEnabled("Failed to cancel after transition failure",
 				logger.Error(cancelErr))
 		}
 		return c.HandleErrorWithKey(ctx, err, "Failed to initialize migration", http.StatusInternalServerError, notification.MsgErrMigrationInitFailed, nil)
+	}
+
+	// The state moved on, so a stored passing result no longer describes it.
+	c.prereqRunner().reset()
+
+	// A shutdown that began since the transition would never stop a worker started
+	// now, so undo the start instead.
+	if err := c.lifecycleContext().Err(); err != nil {
+		if cancelErr := sm.Cancel(); cancelErr != nil {
+			c.LogWarnIfEnabled("Failed to cancel after shutdown during start",
+				logger.Error(cancelErr))
+		}
+		return c.rejectInterruptedStart(ctx, err)
 	}
 
 	// Start the migration worker if available
@@ -508,6 +609,16 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	})
 }
 
+// rejectInterruptedStart answers a start request that the server shutdown
+// interrupted. It is not a failed check, so it does not use the preFlightFailed
+// key, which names a check and makes the page run the checks again.
+func (c *Handler) rejectInterruptedStart(ctx echo.Context, cause error) error {
+	err := fmt.Errorf("%s: %w", msgPreflightInterrupted, cause)
+	c.LogErrorIfEnabled("Migration start interrupted by shutdown",
+		logger.Error(err), logger.String("path", ctx.Request().URL.Path), logger.String("ip", ctx.RealIP()))
+	return c.HandleErrorWithKey(ctx, err, "The server is stopping", http.StatusServiceUnavailable, notification.MsgErrMigrationStartFailed, nil)
+}
+
 // PauseMigration handles POST /api/v2/system/database/migration/pause
 func (c *Handler) PauseMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
@@ -516,7 +627,7 @@ func (c *Handler) PauseMigration(ctx echo.Context) error {
 
 	return c.executeMigrationAction(ctx, &migrationActionParams{
 		logStart:          "Pausing migration",
-		workerAction:      func() { worker.Pause() },
+		workerAction:      func(context.Context) error { worker.Pause(); return nil },
 		stateAction:       func() error { return sm.Pause() },
 		logFailure:        "Failed to pause migration",
 		logSuccess:        "Migration paused successfully",
@@ -632,6 +743,13 @@ func (c *Handler) RetryValidation(ctx echo.Context) error {
 	})
 }
 
+// isMigrationCompleted reports whether the migration state is COMPLETED. A state
+// read error counts as not completed.
+func isMigrationCompleted(sm *datastoreV2.StateManager) bool {
+	state, err := sm.GetState()
+	return err == nil && state.State == entities.MigrationStatusCompleted
+}
+
 // CancelMigration handles POST /api/v2/system/database/migration/cancel
 func (c *Handler) CancelMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
@@ -641,16 +759,25 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
+	// Stop the worker first and wait for it, so its last batch cannot write
+	// after the state is reset. A stop that times out leaves the state untouched.
+	// A COMPLETED migration cannot be cancelled, so its tail sync worker is left
+	// running and sm.Cancel rejects the request below.
+	if worker != nil && !isMigrationCompleted(sm) {
+		stopCtx, stopCancel := context.WithTimeout(ctx.Request().Context(), migrationWorkerStopTimeout)
+		defer stopCancel()
+		if err := worker.Abandon(stopCtx); err != nil {
+			c.LogErrorIfEnabled("Migration worker did not stop in time",
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+			return c.HandleError(ctx, err, msgMigrationWorkerStopping, http.StatusConflict)
+		}
+	}
+
 	// Snapshot progress before cancel resets counters
 	var migratedSoFar, snapshotTotal int64
 	if state, stateErr := sm.GetState(); stateErr == nil {
 		migratedSoFar = state.MigratedRecords
 		snapshotTotal = state.TotalRecords
-	}
-
-	// Stop the worker first if running
-	if worker != nil && worker.IsRunning() {
-		worker.Stop()
 	}
 
 	// Cancel the state
@@ -659,6 +786,9 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to cancel migration", http.StatusConflict)
 	}
+
+	// The state moved on, so a stored passing result no longer describes it.
+	c.prereqRunner().reset()
 
 	// Clear dirty IDs since we're cancelling
 	if err := sm.ClearDirtyIDs(); err != nil {
@@ -700,16 +830,27 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 }
 
 // RollbackMigration handles POST /api/v2/system/database/migration/rollback
-// Rolls back a completed migration to use the legacy database.
+// Rolls back a completed migration to use the legacy database. A running worker
+// is abandoned (no final drain) and waited for before the state is reset; if it
+// does not exit within migrationWorkerStopTimeout the request fails with 409 and
+// the state is left unchanged. The state reset also clears the dirty-ID set and
+// drops the stored prerequisites result.
 func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
 	return c.executeMigrationAction(ctx, &migrationActionParams{
-		logStart:        "Rolling back migration",
-		workerAction:    func() { worker.Stop() },
-		stateAction:     func() error { return sm.Rollback() },
+		logStart:     "Rolling back migration",
+		workerAction: worker.Abandon,
+		stateAction: func() error {
+			if err := sm.Rollback(); err != nil {
+				return err
+			}
+			// The state moved on, so a stored passing result no longer describes it.
+			c.prereqRunner().reset()
+			return nil
+		},
 		logFailure:      "Failed to rollback migration",
 		logSuccess:      "Migration rolled back successfully",
 		responseMessage: "Migration rolled back to legacy database",
@@ -718,54 +859,140 @@ func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	})
 }
 
-// runPreflightChecks verifies the system is ready for migration.
-// This runs the same critical checks as GetPrerequisites and fails if any are not passed.
-func (c *Handler) runPreflightChecks() error {
-	// Run all critical prerequisite checks
-	checks := c.runCriticalPrerequisiteChecks()
+// prerequisitesNotReady answers a start that has no usable prerequisites run.
+func (c *Handler) prerequisitesNotReady(ctx echo.Context) error {
+	return c.HandleErrorWithKey(ctx, errPrerequisitesNotReady, "Run the pre-migration checks first",
+		http.StatusConflict, notification.MsgErrMigrationPrereqNotReady, nil)
+}
 
-	// Check for any failures
-	for _, check := range checks {
-		if check.Status == CheckStatusFailed || check.Status == CheckStatusError {
-			return fmt.Errorf("prerequisite check '%s' failed: %s", check.Name, check.Message)
+// firstBlockingCheck returns the first critical check that failed or errored, or nil.
+func firstBlockingCheck(checks []PrerequisiteCheck) *PrerequisiteCheck {
+	for i := range checks {
+		if isBlockingCheck(&checks[i]) {
+			return &checks[i]
 		}
 	}
-
 	return nil
 }
 
-// runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
-// This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
-// It also records the outcome in the migration_prereq telemetry tag.
-func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
-	checks := make([]PrerequisiteCheck, 0, 6)
+// isBlockingCheck reports whether a check blocks the migration: a critical check
+// that failed or errored.
+func isBlockingCheck(check *PrerequisiteCheck) bool {
+	return check.Severity == CheckSeverityCritical &&
+		(check.Status == CheckStatusFailed || check.Status == CheckStatusError)
+}
 
-	// Common critical checks
-	checks = append(checks,
-		c.checkStateIdle(),
-		c.checkDiskSpace(),
-		c.checkLegacyAccessible(),
-	)
+// storedRunFailed answers a start whose stored prerequisites run has a failed
+// critical check, naming that check.
+func (c *Handler) storedRunFailed(ctx echo.Context, checks []PrerequisiteCheck, path, ip string) error {
+	if check := firstBlockingCheck(checks); check != nil {
+		return c.preflightFailed(ctx, check, path, ip)
+	}
+	return c.prerequisitesNotReady(ctx)
+}
+
+// preflightFailed answers a start blocked by check with a 400 that names it.
+func (c *Handler) preflightFailed(ctx echo.Context, check *PrerequisiteCheck, path, ip string) error {
+	err := fmt.Errorf("prerequisite check '%s' failed: %s", check.Name, check.Message)
+	c.LogErrorIfEnabled("Pre-flight checks failed",
+		logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+	return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest,
+		notification.MsgErrMigrationPreFlight, map[string]any{preFlightCheckParam: check.Name})
+}
+
+// abandonedStartResponse ends a start that was abandoned. A client that is gone
+// gets nothing; one whose server is stopping gets the shutdown answer; one that is
+// still connected after the start's own work outlasted the preflight limit gets a
+// 504. The stored prerequisites are still valid, so the answer is not "run the
+// checks again", and it wraps the deadline error, which the error handler does not
+// report to telemetry.
+func (c *Handler) abandonedStartResponse(ctx echo.Context, path, ip string) error {
+	c.LogInfoIfEnabled("Client went away, the server is stopping or the preflight timed out before the migration started",
+		logger.String("path", path), logger.String("ip", ip))
+	select {
+	case <-ctx.Request().Context().Done():
+		return nil
+	default:
+	}
+	if err := c.lifecycleContext().Err(); err != nil {
+		return c.rejectInterruptedStart(ctx, err)
+	}
+	return c.HandleErrorWithKey(ctx, fmt.Errorf("start preflight: %w", context.DeadlineExceeded),
+		"The migration start took too long", http.StatusGatewayTimeout,
+		notification.MsgErrMigrationStartFailed, nil)
+}
+
+// criticalPrerequisiteSteps lists the checks that must pass before migration,
+// in run order. In the MySQL branch the server version check runs first, so the
+// telemetry tag names it when the server is unsupported. sink, which may be
+// nil, receives the legacy record count from the record_count step.
+func (c *Handler) criticalPrerequisiteSteps(sink *recordCountSink) []prereqStep {
+	steps := []prereqStep{
+		singleCheckStep(checkIDStateIdle, checkNameStateIdle, false, func(context.Context) PrerequisiteCheck { return c.checkStateIdle() }),
+		singleCheckStep(checkIDDiskSpace, checkNameDiskSpace, false, func(context.Context) PrerequisiteCheck { return c.checkDiskSpace() }),
+		singleCheckStep(checkIDLegacyAccessible, checkNameLegacyAccessible, true, c.checkLegacyAccessible),
+	}
 
 	// Database-specific critical checks
 	if c.isUsingMySQL() {
-		checks = append(checks,
-			c.checkMySQLTableHealth(),
-			c.checkMySQLPermissions(),
+		steps = append(steps,
+			singleCheckStep(checkIDMySQLServerVersion, checkNameMySQLServerVersion, false, c.checkMySQLServerVersion),
+			singleCheckStep(checkIDMySQLCharset, checkNameMySQLCharset, false, c.checkMySQLCharset),
+			singleCheckStep(checkIDMySQLTableHealth, checkNameMySQLTableHealth, true, c.checkMySQLTableHealth),
+			singleCheckStep(checkIDMySQLPermissions, checkNameMySQLPermissions, true, c.checkMySQLPermissions),
 		)
 	} else {
-		checks = append(checks,
-			c.checkSQLiteIntegrity(),
-			c.checkWritePermission(),
+		steps = append(steps,
+			singleCheckStep(checkIDSQLiteIntegrity, checkNameSQLiteIntegrity, true, c.checkSQLiteIntegrity),
+			singleCheckStep(checkIDWritePermission, checkNameWritePermission, false, func(context.Context) PrerequisiteCheck { return c.checkWritePermission() }),
 		)
 	}
 
 	// Record count is also critical
-	checks = append(checks, c.checkRecordCount())
+	steps = append(steps, singleCheckStep(checkIDRecordCount, checkNameRecordCount, true, func(ctx context.Context) PrerequisiteCheck {
+		count, check := c.countLegacyRecords(ctx)
+		if sink != nil && check.Status == CheckStatusPassed {
+			sink.count, sink.known = count, true
+		}
+		return check
+	}))
+	return steps
+}
 
-	// Record the outcome for telemetry; this only runs when a user opens the
-	// prerequisites view or starts a migration.
-	telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
+// runCriticalPrerequisiteChecks runs the critical checks that must pass before
+// migration, in order, and returns their results. A step marked reuseAtStart
+// takes its result from reused (a missing entry is an error check, so the gate
+// fails closed); a nil reused runs every step. A step that ignores ctx is
+// abandoned when ctx ends and no later step starts, so the result is then short
+// and the caller must check ctx. It records the outcome in the migration_prereq
+// telemetry tag unless ctx ended, so an abandoned start does not overwrite the
+// tag with a cancellation error.
+func (c *Handler) runCriticalPrerequisiteChecks(ctx context.Context, reused map[string]PrerequisiteCheck) []PrerequisiteCheck {
+	steps := c.criticalPrerequisiteSteps(nil)
+	checks := make([]PrerequisiteCheck, 0, len(steps))
+	for i := range steps {
+		step := &steps[i]
+		if ctx.Err() != nil {
+			break
+		}
+		if reused == nil || !step.reuseAtStart {
+			// runStep abandons a check that ignores ctx, so a stalled mount cannot hold the start
+			checks = append(checks, runStep(ctx, step)...)
+			continue
+		}
+		if check, ok := reused[step.id]; ok {
+			checks = append(checks, check)
+			continue
+		}
+		checks = append(checks, PrerequisiteCheck{
+			ID: step.id, Name: step.name, Status: CheckStatusError, Severity: CheckSeverityCritical,
+			Message: msgNoStoredResult,
+		})
+	}
+
+	if ctx.Err() == nil {
+		telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
+	}
 
 	return checks
 }
@@ -773,7 +1000,7 @@ func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 // migrationActionParams defines parameters for a migration action.
 type migrationActionParams struct {
 	logStart          string
-	workerAction      func()
+	workerAction      func(context.Context) error
 	stateAction       func() error
 	logFailure        string
 	logSuccess        string
@@ -787,6 +1014,9 @@ type migrationActionParams struct {
 }
 
 // executeMigrationAction handles common migration action logic.
+// The worker action runs first when the worker is running, bounded by
+// migrationWorkerStopTimeout; if it fails the state action is skipped and the
+// request fails with 409.
 // All callers are behind the requireMigrationStateManager middleware.
 func (c *Handler) executeMigrationAction(ctx echo.Context, params *migrationActionParams) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
@@ -794,7 +1024,13 @@ func (c *Handler) executeMigrationAction(ctx echo.Context, params *migrationActi
 
 	// Perform worker action if worker is running
 	if params.worker != nil && params.worker.IsRunning() {
-		params.workerAction()
+		stopCtx, stopCancel := context.WithTimeout(ctx.Request().Context(), migrationWorkerStopTimeout)
+		defer stopCancel()
+		if err := params.workerAction(stopCtx); err != nil {
+			c.LogErrorIfEnabled(params.logFailure,
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+			return c.HandleError(ctx, err, msgMigrationWorkerStopping, http.StatusConflict)
+		}
 	}
 
 	// Perform state action

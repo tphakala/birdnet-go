@@ -95,6 +95,42 @@ func TestIsConnectivityError(t *testing.T) {
 	}
 }
 
+func TestIsUnsentError(t *testing.T) {
+	t.Parallel()
+
+	refused := refusedDialError(syscall.ECONNREFUSED)
+	server1045 := &mysql.MySQLError{Number: 1045, SQLState: [5]byte{'2', '8', '0', '0', '0'}, Message: "Access denied for user 'dial'@'host' (connection refused)"}
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"connection refused", refused, true},
+		{"wrapped connection refused", fmt.Errorf("get/create model: %w", refused), true},
+		{"dns error", &net.DNSError{Err: "no such host", Name: "db", IsNotFound: true}, true},
+		{"dial timeout", &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded}, true},
+		{"wrapped bad conn", fmt.Errorf("x: %w", driver.ErrBadConn), true},
+		{"flattened refused", flatten("x", refused), true},
+
+		{"nil", nil, false},
+		// The row that matters: the driver returns this for a COMMIT whose
+		// outcome is unknown, so it must not count as "nothing was sent".
+		{"wrapped invalid connection", fmt.Errorf("commit: %w", mysql.ErrInvalidConn), false},
+		{"bare invalid connection", mysql.ErrInvalidConn, false},
+		{"mysql server error mentioning dial", NewStd(server1045.Error()), false},
+		{"mysql server error type", server1045, false},
+		{"listener error", &net.OpError{Op: "listen", Net: "tcp", Err: os.NewSyscallError("bind", syscall.EADDRINUSE)}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, IsUnsentError(tt.err))
+		})
+	}
+}
+
 func TestShouldReportToSentry_RateLimitsConnectivity(t *testing.T) {
 	resetConnectivityWindow(t)
 

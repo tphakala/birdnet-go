@@ -345,3 +345,46 @@ func TestNoteResultConversion_CarriesClipSampleRate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rate, back.ClipSampleRate)
 }
+
+// TestDetectionRepository_CountAll_CountsNotesWithIntegerZeroBeginTime verifies that
+// legacy CountAll counts notes whose begin_time was stored as integer 0 (rows written
+// before the column existed). SQLite orders every INTEGER below every TEXT, so a
+// begin_time >= zero-time comparison would silently skip them.
+func TestDetectionRepository_CountAll_CountsNotesWithIntegerZeroBeginTime(t *testing.T) {
+	t.Parallel()
+
+	store := createDatabase(t, createTestSettings(t))
+	sqliteStore, ok := store.(*SQLiteStore)
+	require.True(t, ok, "expected a SQLite store")
+
+	day := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	notes := []Note{
+		{ScientificName: "Parus major", Date: "2024-06-15", Time: "10:00:00", BeginTime: day.Add(10 * time.Hour)},
+		{ScientificName: "Parus major", Date: "2024-06-15", Time: "11:00:00", BeginTime: day.Add(11 * time.Hour)},
+		{ScientificName: "Parus major", Date: "2024-06-15", Time: "12:00:00", BeginTime: day.Add(12 * time.Hour)},
+		{ScientificName: "Parus major", Date: "2024-06-14", Time: "09:00:00", BeginTime: day.Add(-15 * time.Hour)},
+		{ScientificName: "Parus major", Date: "2024-06-14", Time: "08:00:00", BeginTime: day.Add(-16 * time.Hour)},
+	}
+	require.NoError(t, sqliteStore.DB.Create(&notes).Error)
+	require.NoError(t, sqliteStore.DB.Exec("UPDATE notes SET begin_time = 0 WHERE id IN ?",
+		[]uint{notes[3].ID, notes[4].ID}).Error)
+
+	// Fixture guard: the two rows really are stored as integers, like pre-begin_time rows.
+	var integerRows int64
+	require.NoError(t, sqliteStore.DB.Raw("SELECT count(*) FROM notes WHERE typeof(begin_time) = 'integer'").
+		Scan(&integerRows).Error)
+	require.Equal(t, int64(2), integerRows)
+
+	total, err := NewDetectionRepository(store, time.UTC).CountAll(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), total, "CountAll must count every row, including integer begin_time 0")
+
+	sinceZero, err := store.CountDetectionsSince(t.Context(), time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, 5, sinceZero, "a zero since counts every detection")
+
+	// A real since keeps filtering: the 11:00 boundary row and the 12:00 row only.
+	sinceEleven, err := store.CountDetectionsSince(t.Context(), day.Add(11*time.Hour))
+	require.NoError(t, err)
+	assert.Equal(t, 2, sinceEleven)
+}

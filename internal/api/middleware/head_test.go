@@ -26,34 +26,25 @@ func TestNewHeadToGet_RewritesHEADToGET(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestNewHeadToGet_DoesNotRewriteGET(t *testing.T) {
+func TestNewHeadToGet_LeavesOtherMethodsAlone(t *testing.T) {
 	t.Parallel()
 
-	c, _ := newTestContext(t, http.MethodGet, "/api/v2/health")
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodOptions} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 
-	mw := NewHeadToGet()
-	handler := mw(func(c echo.Context) error {
-		assert.Equal(t, http.MethodGet, c.Request().Method)
-		return c.String(http.StatusOK, "ok")
-	})
+			c, _ := newTestContext(t, method, "/api/v2/health")
 
-	err := handler(c)
-	require.NoError(t, err)
-}
+			var seen string
+			handler := NewHeadToGet()(func(c echo.Context) error {
+				seen = c.Request().Method
+				return nil
+			})
 
-func TestNewHeadToGet_DoesNotRewritePOST(t *testing.T) {
-	t.Parallel()
-
-	c, _ := newTestContext(t, http.MethodPost, "/api/v2/settings")
-
-	mw := NewHeadToGet()
-	handler := mw(func(c echo.Context) error {
-		assert.Equal(t, http.MethodPost, c.Request().Method)
-		return nil
-	})
-
-	err := handler(c)
-	require.NoError(t, err)
+			require.NoError(t, handler(c))
+			assert.Equal(t, method, seen)
+		})
+	}
 }
 
 func TestNewHeadToGet_IntegrationWithRouter(t *testing.T) {
@@ -78,22 +69,4 @@ func TestNewHeadToGet_IntegrationWithRouter(t *testing.T) {
 	// net/http suppresses the body for HEAD when using a real server,
 	// but httptest.ResponseRecorder does not. The important check is
 	// the status code.
-}
-
-func TestNewHeadToGet_IntegrationWithRouterWithoutMiddleware(t *testing.T) {
-	t.Parallel()
-
-	e := echo.New()
-
-	// Register only a GET route — no pre-middleware
-	e.GET("/test", func(c echo.Context) error {
-		return c.String(http.StatusOK, "hello")
-	})
-
-	// Send a HEAD request — should NOT match (405 Method Not Allowed)
-	req := httptest.NewRequest(http.MethodHead, "/test", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }

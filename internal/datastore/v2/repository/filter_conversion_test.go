@@ -186,6 +186,22 @@ func TestHourFilterToHours(t *testing.T) {
 		result := HourFilterToHours(hf)
 		assert.Equal(t, []int{22, 23, 0, 1, 2}, result)
 	})
+
+	t.Run("negative start wraps to the previous evening", func(t *testing.T) {
+		hf := &datastore.HourFilter{Start: -2, End: 1}
+		result := HourFilterToHours(hf)
+		assert.Equal(t, []int{22, 23, 0, 1}, result)
+	})
+
+	t.Run("negative and large end are taken modulo 24", func(t *testing.T) {
+		hf := &datastore.HourFilter{Start: 20, End: -2}
+		result := HourFilterToHours(hf)
+		assert.Equal(t, []int{20, 21, 22}, result)
+
+		hf = &datastore.HourFilter{Start: 25, End: 26}
+		result = HourFilterToHours(hf)
+		assert.Equal(t, []int{1, 2}, result)
+	})
 }
 
 // =============================================================================

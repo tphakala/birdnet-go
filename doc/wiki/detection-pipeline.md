@@ -248,7 +248,7 @@ Each `PendingDetection` stores a `ModelContributions` map tracking per-model sta
 
 When the audio source supplies no capture time, the hit times use the time of processing instead.
 
-When a detection is approved, these per-model statistics are saved with it in the `DetectionModelContribution` table. `MinConfidence`, `ConfidenceSum`, `FirstHitAt` and `LastHitAt` are stored together or not at all: a contribution that lacks them (for example when two entries of one model are merged and only one of them has them) is stored with NULL in all four.
+When a detection is approved, these per-model statistics are saved with it in the `DetectionModelContribution` table. `MinConfidence`, `ConfidenceSum`, `FirstHitAt` and `LastHitAt` are stored together or not at all: a contribution that lacks them (for example when two entries of one model are merged and only one of them has them) is stored with NULL in all four. Models that were active on the detection's source when it was approved but recorded no hit are saved too, with a hit count of 0 and no statistics; like all contributions they are written best-effort and can be missing.
 
 At flush time, the total hit count is the **sum across all models**. This means:
 
@@ -257,6 +257,10 @@ At flush time, the total hit count is the **sum across all models**. This means:
 - **Cross-model agreement**: When both models independently identify the same species, the combined evidence is stronger, reducing false positives from single-model artifacts
 
 The `BestModelID` field tracks which model produced the highest individual confidence score. This model is credited as the primary detector in the database record, while per-model contributions are stored separately in the `DetectionModelContribution` table.
+
+### Model Consensus Filter
+
+The optional model consensus filter (`realtime.modelconsensus`, off by default) is the last discard check when a pending detection is flushed. It discards the detection unless at least `minmodels` distinct models of its taxon group contributed hits to it. Only eligible models count towards the requirement: a model must be able to classify the species, pass the range filter for it, and have scored all the audio the agreeing models heard without a gap. A model that is still behind in processing is not counted as eligible until it catches up. The requirement is capped at the number of eligible models, so a species that only one model can detect always passes, and so does a detection whose source gives no capture timestamps. Bird and bat models are never counted towards each other. See the [guide](guide.md) for the settings.
 
 ### Range Filter (BirdNET Geomodel v3.0)
 
@@ -294,7 +298,7 @@ flowchart LR
     GA --> CMDA[Custom Command]
 ```
 
-**CompositeAction** runs the database save, a step that enqueues the MQTT publish as its own job, and the SSE broadcast, in that order. MQTT is a separate job so that `realtime.mqtt.retrysettings` applies to it, and it still starts after the save so the payload carries the database id; the composite itself is never retried because that would save the detection again. Without a database, SSE and MQTT are queued as independent actions. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
+**CompositeAction** runs the database save, a step that enqueues the MQTT publish as its own job, and the SSE broadcast, in that order. MQTT is a separate job so that `realtime.mqtt.retrysettings` applies to it, and it still starts after the save so the payload carries the database id; the composite is retried only while the database save has stored nothing. If the database is unreachable (connection refused, host unreachable, a connection that dropped before the commit was sent), the save is retried for about five minutes before the detection is dropped, and MQTT and SSE then run once after the save that lands. Database lock and deadlock errors that happen before the commit are retried the same way. The composite also stays pending while an earlier attempt is still saving or still running the steps after the save, and the next attempt then continues from the stored row instead of saving again. A save that finishes only after the last attempt has ended keeps its row, but MQTT and SSE do not run for it; the log says so. A failure whose commit outcome is unknown, such as a connection lost while the commit was in flight, is logged and not retried, because the row may already be stored. Without a database, SSE and MQTT are queued as independent actions. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
 
 ### Audio Export
 
@@ -304,7 +308,7 @@ flowchart LR
 
 ### JobQueue
 
-The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQTT actions have configurable retry policies. `SaveAudioAction` for Extended Capture uses exponential backoff (1s to 30s, up to ~20 minutes for long captures).
+The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQTT actions have configurable retry policies, and the database save composite retries for about five minutes while the database is unreachable. `SaveAudioAction` for Extended Capture uses exponential backoff (1s to 30s, up to ~20 minutes for long captures).
 
 ## Complete Data Flow Summary
 

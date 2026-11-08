@@ -761,14 +761,16 @@ func (q *JobQueue) executeJobWithTimeout(ctx context.Context, job *Job) (abandon
 	}
 }
 
-// handleJobFailure processes a failed job execution.
+// handleJobFailure processes a failed job execution. The job fails for good
+// once its attempts are used up, or when its RetryConfig.Retryable check refuses
+// the error; otherwise a retry is scheduled.
 // IMPORTANT: Caller must hold q.mu lock.
 func (q *JobQueue) handleJobFailure(ctx context.Context, job *Job, stats *ActionStats, actionKey, actionDesc string, endTime time.Time, err error) {
 	job.LastError = err
 	stats.LastErrorMessage = sanitizeErrorMessage(err)
 	stats.LastFailedTime = endTime
 
-	if job.Attempts >= job.MaxAttempts {
+	if job.Attempts >= job.MaxAttempts || (job.Config.Retryable != nil && !job.Config.Retryable(err)) {
 		job.Status = JobStatusFailed
 		q.stats.FailedJobs++
 		stats.Failed++

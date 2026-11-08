@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Neustart zum Abschluss der Datenbankmigration",
         "legacyRestartRequiredMessage": "Die Migration ist abgeschlossen. Starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln. Wenn diese Meldung nach einem Neustart bestehen bleibt, prüfen Sie das Protokoll auf Datenbankfehler."
       },
+      "database": {
+        "serverAttentionTitle": "Der Datenbankserver benötigt Aufmerksamkeit",
+        "serverAttentionMessage": "Der MySQL- oder MariaDB-Server ist keine unterstützte Version, oder die Datenbank verwendet nicht den Zeichensatz utf8mb4. Details finden Sie unter System > Status."
+      },
       "cleanup": {
         "completeTitle": "Bereinigung der alten Datenbank abgeschlossen",
         "completeMessage": "{space} Speicherplatz freigegeben.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nicht verfügbar",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} wird für {modelName} benötigt, wurde aber nicht gefunden. Siehe Installationsanleitung: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} oder neuer wird für {modelName} benötigt, wurde aber nicht gefunden. Siehe Installationsanleitung: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modellregion ist möglicherweise veraltet",
@@ -1542,6 +1546,8 @@
           "creating": "Wird erstellt...",
           "createBackup": "Sicherung erstellen",
           "noBackups": "Noch keine Sicherungen",
+          "loadFailed": "Der Sicherungsverlauf konnte nicht geladen werden",
+          "createFailed": "Die Sicherung konnte nicht gestartet werden",
           "download": "Herunterladen",
           "failed": "Fehlgeschlagen",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Migration wird gestartet...",
         "status": {
           "idle": "Bereit zum Starten",
+          "checking": "Voraussetzungen werden geprüft",
+          "notReady": "Nicht bereit",
           "initializing": "Initialisierung",
           "dual_write": "Dual-Write aktiv",
           "migrating": "Migriere Primärdaten",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Datensätze",
           "sizeLabel": "Größe",
           "prerequisitesNotMet": "Voraussetzungen nicht erfüllt - beheben Sie die kritischen Probleme unten",
+          "prerequisitesUnavailable": "Die Prüfungen vor der Migration wurden nicht abgeschlossen. Siehe Prüfungen vor der Migration unten.",
+          "prerequisitesFailedList": "Beheben Sie zuerst diese Prüfungen: {checks}",
           "validatingTitle": "Daten werden überprüft",
           "validatingBody": "{count} Legacy-Datensätze werden mit der V2-Datenbank verglichen...",
           "dirtyRecordsCatchup": "{count} schmutzige Datensätze - Nachholabgleich wird versucht",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} Warnung(en)",
           "running": "Führe Vorab-Prüfungen durch...",
           "checkingStep": "Schritt {current} von {total}",
+          "currentCheck": "Prüfe {name} ({seconds} s)",
+          "slowHint": "Große Datenbanken können mehrere Minuten brauchen.",
+          "runFailed": "Die Prüfungen vor der Migration wurden nicht abgeschlossen: {error}",
           "passedCount": "{passed}/{total} bestanden",
           "criticalCount": "{count} kritisch",
           "warningCount": "{count} Warnung(en)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Datenbankintegrität"
+            },
+            "mysql_server_version": {
+              "name": "Datenbankserver-Version"
+            },
+            "mysql_charset": {
+              "name": "Zeichensatz der Datenbank"
             },
             "mysql_table_health": {
               "name": "Tabellengesundheit"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migration ist nicht konfiguriert",
-      "preFlightFailed": "Vorabprüfungen fehlgeschlagen",
+      "preFlightFailed": "Prüfung vor der Migration fehlgeschlagen: {check}",
+      "prerequisitesNotReady": "Führen Sie die Prüfungen vor der Migration aus und warten Sie, bis sie bestanden sind, bevor Sie die Migration starten.",
       "invalidBody": "Ungültiger Anfragekörper",
       "recordCountFailed": "Gesamtanzahl der Datensätze konnte nicht ermittelt werden",
       "startFailed": "Migration konnte nicht gestartet werden",

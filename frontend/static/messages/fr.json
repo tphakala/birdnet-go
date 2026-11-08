@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Redémarrez pour terminer la migration de la base de données",
         "legacyRestartRequiredMessage": "La migration est terminée. Redémarrez BirdNET-Go pour basculer vers la nouvelle base de données. Si ce message persiste après le redémarrage, consultez le journal pour y trouver des erreurs de base de données."
       },
+      "database": {
+        "serverAttentionTitle": "Le serveur de base de données demande votre attention",
+        "serverAttentionMessage": "Le serveur MySQL ou MariaDB n'est pas une version prise en charge, ou la base de données n'utilise pas le jeu de caractères utf8mb4. Ouvrez Système > Santé pour plus de détails."
+      },
       "cleanup": {
         "completeTitle": "Nettoyage de l'ancienne base de données terminé",
         "completeMessage": "{space} d'espace disque récupéré.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime non disponible",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Voir le guide d'installation : {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ou version ultérieure est requis pour {modelName} mais n'a pas été trouvé. Voir le guide d'installation : {installGuideURL}"
       },
       "region": {
         "staleTitle": "La région du modèle est peut-être obsolète",
@@ -1542,6 +1546,8 @@
           "creating": "Création...",
           "createBackup": "Créer une sauvegarde",
           "noBackups": "Aucune sauvegarde",
+          "loadFailed": "Impossible de charger l'historique des sauvegardes",
+          "createFailed": "Impossible de démarrer la sauvegarde",
           "download": "Télécharger",
           "failed": "Échoué",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Démarrage de la migration...",
         "status": {
           "idle": "Prêt à démarrer",
+          "checking": "Vérification des prérequis",
+          "notReady": "Pas prêt",
           "initializing": "Initialisation",
           "dual_write": "Double écriture active",
           "migrating": "Migration des données primaires",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Enregistrements",
           "sizeLabel": "Taille",
           "prerequisitesNotMet": "Prérequis non remplis - résolvez les problèmes critiques ci-dessous",
+          "prerequisitesUnavailable": "Les vérifications pré-migration ne se sont pas terminées. Voir Vérifications pré-migration ci-dessous.",
+          "prerequisitesFailedList": "Résolvez d'abord ces vérifications : {checks}",
           "validatingTitle": "Validation des données",
           "validatingBody": "Comparaison de {count} enregistrements avec la base de données V2...",
           "dirtyRecordsCatchup": "{count} enregistrements modifiés - tentative de réconciliation",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} avertissement(s)",
           "running": "Exécution des vérifications pré-migration...",
           "checkingStep": "Étape {current} sur {total}",
+          "currentCheck": "Vérification de {name} ({seconds} s)",
+          "slowHint": "Les grandes bases de données peuvent prendre plusieurs minutes.",
+          "runFailed": "Les vérifications préalables à la migration ne se sont pas terminées : {error}",
           "passedCount": "{passed}/{total} réussis",
           "criticalCount": "{count} critique(s)",
           "warningCount": "{count} avertissement(s)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Intégrité de la base de données"
+            },
+            "mysql_server_version": {
+              "name": "Version du serveur de base de données"
+            },
+            "mysql_charset": {
+              "name": "Jeu de caractères de la base de données"
             },
             "mysql_table_health": {
               "name": "Santé des tables"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "La migration n'est pas configurée",
-      "preFlightFailed": "Les vérifications préalables ont échoué",
+      "preFlightFailed": "Échec de la vérification préalable à la migration : {check}",
+      "prerequisitesNotReady": "Lancez les vérifications préalables à la migration et attendez qu'elles réussissent avant de démarrer la migration.",
       "invalidBody": "Corps de requête invalide",
       "recordCountFailed": "Impossible de déterminer le nombre total d'enregistrements",
       "startFailed": "Impossible de démarrer la migration",

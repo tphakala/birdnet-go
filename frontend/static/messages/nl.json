@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Herstart om de databasemigratie af te ronden",
         "legacyRestartRequiredMessage": "De migratie is voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Als dit bericht na een herstart blijft staan, controleer dan het logboek op databasefouten."
       },
+      "database": {
+        "serverAttentionTitle": "De databaseserver heeft aandacht nodig",
+        "serverAttentionMessage": "De MySQL- of MariaDB-server is geen ondersteunde versie, of de database gebruikt niet de tekenset utf8mb4. Open Systeem > Gezondheid voor details."
+      },
       "cleanup": {
         "completeTitle": "Opruiming oude database voltooid",
         "completeMessage": "{space} schijfruimte vrijgemaakt.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime niet beschikbaar",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is vereist voor {modelName}, maar werd niet gevonden. Zie de installatiegids: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} of nieuwer is vereist voor {modelName}, maar werd niet gevonden. Zie de installatiegids: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modelregio is mogelijk verouderd",
@@ -1542,6 +1546,8 @@
           "creating": "Aanmaken...",
           "createBackup": "Back-up maken",
           "noBackups": "Nog geen back-ups",
+          "loadFailed": "De back-upgeschiedenis kon niet worden geladen",
+          "createFailed": "De back-up kon niet worden gestart",
           "download": "Downloaden",
           "failed": "Mislukt",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Migratie wordt gestart...",
         "status": {
           "idle": "Klaar om te starten",
+          "checking": "Vereisten controleren",
+          "notReady": "Niet gereed",
           "initializing": "Initialiseren",
           "dual_write": "Dubbel schrijven actief",
           "migrating": "Primaire gegevens migreren",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Records",
           "sizeLabel": "Grootte",
           "prerequisitesNotMet": "Vereisten niet voldaan - los de kritieke problemen hieronder op",
+          "prerequisitesUnavailable": "De pre-migratiecontroles zijn niet voltooid. Zie Pre-migratiecontroles hieronder.",
+          "prerequisitesFailedList": "Los eerst deze controles op: {checks}",
           "validatingTitle": "Gegevens valideren",
           "validatingBody": "{count} legacy-records vergelijken met V2-database...",
           "dirtyRecordsCatchup": "{count} gewijzigde records - poging tot synchronisatie",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} waarschuwing(en)",
           "running": "Pre-migratie controles uitvoeren...",
           "checkingStep": "Stap {current} van {total}",
+          "currentCheck": "{name} controleren ({seconds} s)",
+          "slowHint": "Grote databases kunnen enkele minuten duren.",
+          "runFailed": "De controles vóór de migratie zijn niet voltooid: {error}",
           "passedCount": "{passed}/{total} geslaagd",
           "criticalCount": "{count} kritiek",
           "warningCount": "{count} waarschuwing(en)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Database-integriteit"
+            },
+            "mysql_server_version": {
+              "name": "Versie van databaseserver"
+            },
+            "mysql_charset": {
+              "name": "Tekenset van database"
             },
             "mysql_table_health": {
               "name": "Tabelgezondheid"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migratie is niet geconfigureerd",
-      "preFlightFailed": "Voorafgaande controles mislukt",
+      "preFlightFailed": "Controle vóór de migratie mislukt: {check}",
+      "prerequisitesNotReady": "Voer de controles vóór de migratie uit en wacht tot ze geslaagd zijn voordat u de migratie start.",
       "invalidBody": "Ongeldige aanvraagbody",
       "recordCountFailed": "Kan het totaal aantal records niet bepalen",
       "startFailed": "Kan migratie niet starten",

@@ -214,27 +214,6 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	return notes, totalCount, nil
 }
 
-// ParseDateShortcut converts date shortcuts like "today", "yesterday" to actual dates
-func ParseDateShortcut(shortcut string) (time.Time, error) {
-	now := time.Now()
-
-	switch strings.ToLower(shortcut) {
-	case "today":
-		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), nil
-	case "yesterday":
-		return time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, now.Location()), nil
-	case "week":
-		// Last 7 days
-		return time.Date(now.Year(), now.Month(), now.Day()-7, 0, 0, 0, 0, now.Location()), nil
-	case "month":
-		// Last 30 days
-		return time.Date(now.Year(), now.Month(), now.Day()-30, 0, 0, 0, 0, now.Location()), nil
-	default:
-		// Try parsing as a date
-		return time.Parse(time.DateOnly, shortcut)
-	}
-}
-
 // applyConfidenceFilter applies confidence filtering to the query
 func applyConfidenceFilter(query *gorm.DB, filter *ConfidenceFilter) *gorm.DB {
 	if filter == nil {

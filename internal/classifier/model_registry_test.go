@@ -294,6 +294,27 @@ func TestModelRegistry_BatEntry(t *testing.T) {
 	assert.Equal(t, 256000, info.Spec.EffectiveSampleRate())
 }
 
+func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
+	t.Parallel()
+
+	// Perch and BSG are the entries most likely to be "corrected" to match their
+	// catalog category or lack of a loader, so the table pins every entry.
+	want := map[string]TaxonGroup{
+		RegistryIDBirdNETV24: TaxonGroupBird,
+		RegistryIDBirdNETV3:  TaxonGroupBird,
+		RegistryIDPerchV2:    TaxonGroupBird,
+		RegistryIDBSG:        TaxonGroupBird,
+		RegistryIDBat:        TaxonGroupBat,
+	}
+	for id := range ModelRegistry {
+		assert.Contains(t, want, id, "registry entry %q needs a taxon group in this table", id)
+	}
+	for id, group := range want {
+		assert.Equal(t, group, TaxonGroupFor(id), "taxon group of %q", id)
+	}
+	assert.Equal(t, TaxonGroup(""), TaxonGroupFor("no-such-model"), "unknown ID is ungrouped")
+}
+
 func TestModelRegistry_BSGEntry(t *testing.T) {
 	t.Parallel()
 

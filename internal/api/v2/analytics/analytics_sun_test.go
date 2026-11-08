@@ -5,14 +5,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // sunJSON mirrors the analytics sun-times wire shape. Event fields are pointers so an undefined
@@ -37,14 +38,6 @@ func forwardMinutes(from, to int) int {
 	return (to - from + minutesInDay) % minutesInDay
 }
 
-func newSunContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/sun")
-	return c, rec
-}
-
 func decodeSun(t *testing.T, rec *httptest.ResponseRecorder) sunJSON {
 	t.Helper()
 	var resp sunJSON
@@ -58,7 +51,7 @@ func TestGetAnalyticsSun_SingleDate(t *testing.T) {
 	// Helsinki always has a sunrise and a sunset on a spring date, so events are defined.
 	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=2026-03-20")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?date=2026-03-20")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -87,7 +80,7 @@ func TestGetAnalyticsSun_RangeUsesMidpoint(t *testing.T) {
 
 	// 2026-03-01 .. 2026-03-31 -> calendar midpoint 2026-03-16. The midpoint is computed by
 	// calendar-day arithmetic so it is stable across the end-of-March DST transition.
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?start_date=2026-03-01&end_date=2026-03-31")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?start_date=2026-03-01&end_date=2026-03-31")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -104,7 +97,7 @@ func TestGetAnalyticsSun_LoneStartDate(t *testing.T) {
 	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
 	// With only start_date, that date is used directly (no range to collapse).
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?start_date=2026-03-20")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?start_date=2026-03-20")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "2026-03-20", decodeSun(t, rec).Date)
@@ -117,7 +110,7 @@ func TestGetAnalyticsSun_PolarDayUnavailable(t *testing.T) {
 	// compute sunrise/sunset and the endpoint reports the day as unavailable rather than erroring.
 	controller.SunCalc = suncalc.NewSunCalc(78.9, 11.9)
 
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=2026-06-21")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?date=2026-06-21")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -139,7 +132,7 @@ func TestGetAnalyticsSun_WhiteNightOmitsCivilTwilight(t *testing.T) {
 	// (not the sunrise/sunset fallback values masquerading as a twilight band).
 	controller.SunCalc = suncalc.NewSunCalc(61.0, 24.0)
 
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=2026-06-21")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?date=2026-06-21")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -159,7 +152,7 @@ func TestGetAnalyticsSun_SunCalcUnavailable(t *testing.T) {
 	// still renders its hourly bars without day/night shading.
 	controller.SunCalc = nil
 
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=2026-03-20")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?date=2026-03-20")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -176,12 +169,15 @@ func TestGetAnalyticsSun_DefaultsToToday(t *testing.T) {
 	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
 	// No date params: the handler uses today. Helsinki always has a sunrise/sunset, so available.
-	c, rec := newSunContext(e, "/api/v2/analytics/sun")
+	todayBefore := wallclock.DateOf(time.Now().In(time.Local)).String()
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun")
 	require.NoError(t, controller.GetAnalyticsSun(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	resp := decodeSun(t, rec)
-	assert.NotEmpty(t, resp.Date)
+	// The default is the server's local date. It is read on both sides of the request so the
+	// check holds when the request straddles local midnight.
+	assert.Contains(t, []string{todayBefore, wallclock.DateOf(time.Now().In(time.Local)).String()}, resp.Date)
 	assert.True(t, resp.Available)
 }
 
@@ -190,7 +186,7 @@ func TestGetAnalyticsSun_InvalidDate(t *testing.T) {
 	e, _, controller := setupAnalyticsTestEnvironment(t)
 	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=not-a-date")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?date=not-a-date")
 	err := controller.GetAnalyticsSun(c)
 	require.Error(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -201,7 +197,7 @@ func TestGetAnalyticsSun_InvalidRangeOrder(t *testing.T) {
 	e, _, controller := setupAnalyticsTestEnvironment(t)
 	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?start_date=2026-03-31&end_date=2026-03-01")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?start_date=2026-03-31&end_date=2026-03-01")
 	err := controller.GetAnalyticsSun(c)
 	require.Error(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -214,7 +210,7 @@ func TestGetAnalyticsSun_ImpossibleDateRejected(t *testing.T) {
 
 	// A well-formed but impossible date passes the regex but is rejected explicitly with 400,
 	// rather than surfacing later as a misleading available:false.
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=2026-02-31")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?date=2026-02-31")
 	err := controller.GetAnalyticsSun(c)
 	require.Error(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -227,7 +223,7 @@ func TestGetAnalyticsSun_LoneEndDateRejected(t *testing.T) {
 
 	// end_date with no start_date has nothing to pair with; reject it rather than silently
 	// defaulting to today.
-	c, rec := newSunContext(e, "/api/v2/analytics/sun?end_date=2026-03-20")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sun?end_date=2026-03-20")
 	err := controller.GetAnalyticsSun(c)
 	require.Error(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -244,11 +240,7 @@ func TestHourlyDistribution_BackCompatUnchanged(t *testing.T) {
 	mockDS.On("GetHourlyDistribution", mock.Anything, "2026-03-01", "2026-03-02", "").
 		Return([]datastore.HourlyDistributionData{{Hour: 8, Count: 5}, {Hour: 20, Count: 3}}, nil)
 
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/time/distribution/hourly?start_date=2026-03-01&end_date=2026-03-02", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/distribution/hourly")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/distribution/hourly?start_date=2026-03-01&end_date=2026-03-02")
 
 	require.NoError(t, controller.GetTimeOfDayDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)

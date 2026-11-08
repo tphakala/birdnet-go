@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderTyped, screen, fireEvent, createI18nMock } from '../../../../test/render-helpers';
+import {
+  renderTyped,
+  screen,
+  fireEvent,
+  waitFor,
+  createI18nMock,
+} from '../../../../test/render-helpers';
 import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 import type { ComponentProps } from 'svelte';
@@ -294,6 +300,196 @@ describe('ErrorAlert', () => {
     screen.getByLabelText('Dismiss alert').focus();
 
     expect(onfocusin).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the title above the message', () => {
+    renderErrorAlert({ title: 'Backups could not be loaded', message: 'Disk full' });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/Backups could not be loaded.*Disk full/);
+  });
+
+  describe('Retry', () => {
+    it('calls onRetry and ignores clicks while it runs', async () => {
+      let finish: () => void = () => {};
+      const onRetry = vi.fn(() => new Promise<void>(resolve => (finish = resolve)));
+      renderErrorAlert({ message: 'Offline', onRetry });
+
+      const retry = screen.getByRole('button', { name: 'common.retry' });
+      await fireEvent.click(retry);
+
+      const busy = screen.getByRole('button', { name: 'common.retrying' });
+      expect(busy).toHaveAttribute('aria-disabled', 'true');
+      expect(busy).not.toBeDisabled();
+      await fireEvent.click(busy);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+
+      finish();
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'common.retry' })).not.toHaveAttribute(
+          'aria-disabled'
+        )
+      );
+    });
+
+    it('takes the busy state from retryBusy when the caller owns it', async () => {
+      const onRetry = vi.fn();
+      renderErrorAlert({ message: 'Offline', onRetry, retryBusy: true });
+
+      const busy = screen.getByRole('button', { name: 'common.retrying' });
+      expect(busy).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(busy);
+
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('renders no Retry button without onRetry', () => {
+      renderErrorAlert({ message: 'Offline' });
+
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('focusFallback', () => {
+    it('moves focus to the fallback when the alert is removed while focused', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [null, outside],
+        });
+        screen.getByRole('button', { name: 'common.retry' }).focus();
+
+        unmount();
+
+        await waitFor(() => expect(document.activeElement).toBe(outside));
+      } finally {
+        outside.remove();
+      }
+    });
+
+    it('moves focus to the fallback after a mouse dismiss', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      try {
+        renderErrorAlert({ message: 'Offline', dismissible: true, focusFallback: () => [outside] });
+        const dismissButton = screen.getByLabelText('Dismiss alert');
+        // A pointer press counts as the user's place even where the click does not focus
+        await fireEvent.pointerDown(dismissButton);
+        await fireEvent.click(dismissButton, { detail: MOUSE_CLICK_DETAIL });
+
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        await waitFor(() => expect(document.activeElement).toBe(outside));
+      } finally {
+        outside.remove();
+      }
+    });
+
+    it('moves focus without scrolling the page', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      const focus = vi.spyOn(outside, 'focus');
+
+      try {
+        // The alert can go away long after the user stopped looking at it, for example when a
+        // poll clears it, so the move must not drag the page back to the fallback
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        screen.getByRole('button', { name: 'common.retry' }).focus();
+
+        unmount();
+
+        await waitFor(() => expect(focus).toHaveBeenCalledWith({ preventScroll: true }));
+      } finally {
+        focus.mockRestore();
+        outside.remove();
+      }
+    });
+
+    it('does not pull focus back once it moved away from the alert and left for the page body', async () => {
+      const outside = document.createElement('button');
+      const elsewhere = document.createElement('button');
+      document.body.append(outside, elsewhere);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        screen.getByRole('button', { name: 'common.retry' }).focus();
+        // Focus moves to another element, then to nothing: only the alert losing its hold on
+        // focus keeps the fallback from firing for the empty page body
+        elsewhere.focus();
+        elsewhere.blur();
+
+        unmount();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.activeElement).not.toBe(outside);
+      } finally {
+        outside.remove();
+        elsewhere.remove();
+      }
+    });
+
+    it('does not take focus from another element when the alert is removed after a press on it', async () => {
+      const outside = document.createElement('button');
+      const field = document.createElement('input');
+      document.body.append(outside, field);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        // A press counts as holding focus even where the click does not focus (Safari), so the
+        // alert still holds it when the user then moves to a field that takes focus
+        await fireEvent.pointerDown(screen.getByRole('button', { name: 'common.retry' }));
+        field.focus();
+
+        unmount();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.activeElement).toBe(field);
+      } finally {
+        outside.remove();
+        field.remove();
+      }
+    });
+
+    it('does not move focus when the alert never held it and focus is on the page body', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        // The alert was never focused or pressed, and nothing has focus
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+
+        unmount();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.activeElement).not.toBe(outside);
+      } finally {
+        outside.remove();
+      }
+    });
   });
 
   it('renders with custom className', () => {

@@ -148,10 +148,10 @@ func (c *Handler) RegisterSearchRoutes(g *echo.Group) {
 // supplied group. It preserves the facade's previous initDetectionRoutes entry,
 // including the datastore-disabled guard.
 func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
-	// Detection handlers dereference c.DS. Honor the constructor's "datastore disabled"
-	// mode (NewWithOptions permits a nil datastore) by not registering this route group
-	// when there is no datastore, instead of registering handlers that would panic.
-	if c.DS == nil {
+	// Detection handlers dereference c.DS and c.Repo. Honor the constructor's "datastore
+	// disabled" mode (NewWithOptions permits a nil datastore) by not registering this route
+	// group when either is missing, instead of registering handlers that would panic.
+	if c.DS == nil || c.Repo == nil {
 		c.LogWarnIfEnabled("Skipping detection routes: datastore is not available")
 		return
 	}
@@ -176,6 +176,7 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 	g.GET("/detections/:id", c.GetDetection)
 	g.GET("/detections/recent", c.GetRecentDetections)
 	g.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
+	g.GET("/detections/:id/predictions", c.GetDetectionPredictions)
 
 	// Protected detection management endpoints
 	detectionGroup := g.Group("/detections", c.AuthMiddleware)

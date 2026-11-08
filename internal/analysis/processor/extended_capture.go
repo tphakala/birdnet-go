@@ -6,7 +6,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
@@ -126,7 +126,7 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 	commonToScientific := make(map[string]string)
 	scientificNames := make(map[string]bool)
 	for _, label := range labels {
-		if id, display, ok := nonbird.MultiWordLabelNames(label); ok {
+		if id, display, ok := soundevent.MultiWordLabelNames(label); ok {
 			// Perch v2 multi-word sound class: the whole label is the scientific key.
 			idLower := strings.ToLower(id)
 			commonToScientific[strings.ToLower(display)] = idLower

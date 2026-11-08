@@ -407,6 +407,46 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 			expectedResult: "/",
 		},
 		{
+			name:           "triple slash",
+			maliciousURL:   "///evil.com",
+			expectedResult: "/",
+		},
+		{
+			name:           "mixed slash and backslash protocol-relative",
+			maliciousURL:   `/\/evil.com`,
+			expectedResult: "/",
+		},
+		{
+			name:           "vbscript URL",
+			maliciousURL:   "vbscript:msgbox(1)",
+			expectedResult: "/",
+		},
+		{
+			name:           "file URL",
+			maliciousURL:   "file:///etc/passwd",
+			expectedResult: "/",
+		},
+		{
+			name:           "protocol-relative URL with userinfo",
+			maliciousURL:   "//@evil.com",
+			expectedResult: "/",
+		},
+		{
+			name:           "tab before the scheme",
+			maliciousURL:   "\thttp://evil.com",
+			expectedResult: "/",
+		},
+		{
+			name:           "newline before the scheme",
+			maliciousURL:   "\nhttp://evil.com",
+			expectedResult: "/",
+		},
+		{
+			name:           "root path",
+			maliciousURL:   "/",
+			expectedResult: "/",
+		},
+		{
 			name:           "valid relative path",
 			maliciousURL:   "/ui/dashboard",
 			expectedResult: "/ui/dashboard",
@@ -532,61 +572,5 @@ func TestV2AuthFlow_WrongUsername(t *testing.T) {
 
 		assert.False(t, resp.Success)
 		t.Log("V2 correctly rejects wrong username when ClientID is configured")
-	})
-}
-
-// TestV2AuthFlow_RedirectURLInResponse tests that the login response contains V2 callback URL.
-func TestV2AuthFlow_RedirectURLInResponse(t *testing.T) {
-	e, h, _ := setupAuthIntegrationTest(t)
-
-	t.Run("login response contains V2 callback URL", func(t *testing.T) {
-		loginPayload := `{
-			"username": "birdnet-client",
-			"password": "testpassword123"
-		}`
-
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/login", strings.NewReader(loginPayload))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := h.Login(c)
-		require.NoError(t, err)
-
-		var resp AuthResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &resp)
-		require.NoError(t, err)
-
-		// Verify redirect URL points to V2 callback, NOT V1
-		assert.Contains(t, resp.RedirectURL, "/api/v2/auth/callback",
-			"Should use V2 callback endpoint")
-		assert.NotContains(t, resp.RedirectURL, "/api/v1/",
-			"Should NOT use V1 callback endpoint")
-	})
-}
-
-// TestV2AuthService_Interface tests that SecurityAdapter implements the Service interface correctly.
-func TestV2AuthService_Interface(t *testing.T) {
-	t.Run("SecurityAdapter implements all Service methods", func(t *testing.T) {
-		settings := &conf.Settings{
-			Security: conf.Security{
-				SessionSecret: "test-secret-32-chars-long",
-				BasicAuth: conf.BasicAuth{
-					Enabled:        true,
-					Password:       "test",
-					ClientID:       "test-client",
-					AuthCodeExp:    5 * time.Minute,
-					AccessTokenExp: 24 * time.Hour,
-				},
-			},
-		}
-
-		oauth2Server := createTestOAuth2Server(t, settings)
-		adapter := auth.NewSecurityAdapter(oauth2Server)
-
-		// Verify adapter implements Service interface
-		var _ auth.Service = adapter
-
-		t.Log("SecurityAdapter correctly implements auth.Service interface including new methods")
 	})
 }

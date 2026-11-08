@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Start på nytt for å fullføre databasemigreringen",
         "legacyRestartRequiredMessage": "Migreringen er fullført. Start BirdNET-Go på nytt for å bytte til den nye databasen. Hvis denne meldingen blir stående etter omstart, sjekk loggen for databasefeil."
       },
+      "database": {
+        "serverAttentionTitle": "Databaseserveren trenger oppmerksomhet",
+        "serverAttentionMessage": "MySQL- eller MariaDB-serveren er ikke en støttet versjon, eller databasen bruker ikke tegnsettet utf8mb4. Åpne System > Helse for detaljer."
+      },
       "cleanup": {
         "completeTitle": "Opprydding av eldre database fullført",
         "completeMessage": "{space} diskplass frigjort.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgjengelig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} kreves for {modelName}, men ble ikke funnet. Se installasjonsveiledningen: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} eller nyere kreves for {modelName}, men ble ikke funnet. Se installasjonsveiledningen: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modellregionen kan være utdatert",
@@ -1542,6 +1546,8 @@
           "creating": "Oppretter...",
           "createBackup": "Opprett sikkerhetskopi",
           "noBackups": "Ingen sikkerhetskopier ennå",
+          "loadFailed": "Sikkerhetskopihistorikken kunne ikke lastes inn",
+          "createFailed": "Sikkerhetskopieringen kunne ikke startes",
           "download": "Last ned",
           "failed": "Mislyktes",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Starter migrering...",
         "status": {
           "idle": "Klar til start",
+          "checking": "Sjekker forutsetninger",
+          "notReady": "Ikke klar",
           "initializing": "Initialiserer",
           "dual_write": "Dobbeltskriving aktiv",
           "migrating": "Migrerer primær",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Størrelse",
           "prerequisitesNotMet": "Forutsetninger ikke oppfylt - løs kritiske problemer nedenfor",
+          "prerequisitesUnavailable": "Forhåndssjekkene ble ikke fullført. Se Forhåndssjekker nedenfor.",
+          "prerequisitesFailedList": "Løs disse sjekkene først: {checks}",
           "validatingTitle": "Validerer data",
           "validatingBody": "Sammenligner {count} eldre poster mot V2-database...",
           "dirtyRecordsCatchup": "{count} usynkroniserte poster - vil forsøke innhentings-synkronisering",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} advarsel(er)",
           "running": "Kjører forhåndssjekker...",
           "checkingStep": "Steg {current} av {total}",
+          "currentCheck": "Kontrollerer {name} ({seconds} s)",
+          "slowHint": "Store databaser kan ta flere minutter.",
+          "runFailed": "Kontrollene før migreringen ble ikke fullført: {error}",
           "passedCount": "{passed}/{total} bestått",
           "criticalCount": "{count} kritiske",
           "warningCount": "{count} advarsel(er)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Databaseintegritet"
+            },
+            "mysql_server_version": {
+              "name": "Databaseserverversjon"
+            },
+            "mysql_charset": {
+              "name": "Databasens tegnsett"
             },
             "mysql_table_health": {
               "name": "Tabellhelse"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migrering er ikke konfigurert",
-      "preFlightFailed": "Forhåndssjekker mislyktes",
+      "preFlightFailed": "Kontrollen før migreringen mislyktes: {check}",
+      "prerequisitesNotReady": "Kjør kontrollene før migreringen, og vent til de er bestått før du starter migreringen.",
       "invalidBody": "Ugyldig forespørselskropp",
       "recordCountFailed": "Bestemmelse av totalt posterantall mislyktes",
       "startFailed": "Oppstart av migrering mislyktes",

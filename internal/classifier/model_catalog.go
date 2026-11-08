@@ -4,6 +4,7 @@
 package classifier
 
 import (
+	"math"
 	"slices"
 	"sync"
 
@@ -130,6 +131,44 @@ type CatalogVariant struct {
 	// variant per entry may set it. omitempty keeps the on-disk JSON of every other
 	// entry byte-identical, so adding this field does not shift catalogChecksum.
 	BuiltIn bool `json:"built_in,omitempty"`
+	// ScoreCalibration is the confidence calibration of a regional Perch v2
+	// slice, nil for every other variant. A pointer with omitempty keeps the
+	// on-disk JSON of every other entry byte-identical, so adding this field does
+	// not shift catalogChecksum or make a pristine model-catalog.json read as
+	// edited (the same reasoning as BuiltIn).
+	ScoreCalibration *ScoreCalibration `json:"score_calibration,omitempty"`
+}
+
+// ScoreCalibration describes how to turn a regional Perch v2 slice's logits into
+// scores on the full model's scale. A slice normalizes its softmax over its own
+// smaller label set, so every kept score would be higher than the full model's;
+// the method adds one "rest" term for the dropped classes to the denominator.
+type ScoreCalibration struct {
+	Method    string  `json:"method"`     // calibration method; only ScoreCalibrationSoftmaxRestLogit is defined
+	RestLogit float64 `json:"rest_logit"` // log-sum-exp (nats) of the dropped classes' logits, estimated per tile
+}
+
+const (
+	// ScoreCalibrationSoftmaxRestLogit is the method name: softmax over the kept
+	// logits plus one extra class whose logit is RestLogit.
+	ScoreCalibrationSoftmaxRestLogit = "softmax-rest-logit"
+
+	// scoreCalibrationRestLogitMin and scoreCalibrationRestLogitMax bound a usable
+	// RestLogit. They mirror the acoustic-models manifest validator and the
+	// generator (gen/main.go): the lower bound sits above the digital-silence floor
+	// of every tile (8.7 to 9.1) and the upper bound well above the fitted range
+	// (9.6 to 10.4).
+	scoreCalibrationRestLogitMin = 8.0
+	scoreCalibrationRestLogitMax = 12.0
+)
+
+// validScoreCalibration reports whether c is non-nil, of a known method and has
+// a finite rest logit within the accepted bounds.
+func validScoreCalibration(c *ScoreCalibration) bool {
+	return c != nil &&
+		c.Method == ScoreCalibrationSoftmaxRestLogit &&
+		!math.IsNaN(c.RestLogit) && !math.IsInf(c.RestLogit, 0) &&
+		c.RestLogit >= scoreCalibrationRestLogitMin && c.RestLogit <= scoreCalibrationRestLogitMax
 }
 
 // VariantRequirements declares the host capabilities a variant needs. Arch and

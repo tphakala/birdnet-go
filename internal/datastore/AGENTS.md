@@ -64,13 +64,63 @@ SQL. Reconciling is safe only when all of these hold:
   delete a table or file that holds rows, and never drop a table on the strength
   of a guess about which side is "the real one". Check that a table is empty
   immediately before dropping it. A count or listing that fails is treated as
-  non-empty (fail closed).
+  non-empty (fail closed). The only exception is the regenerable tables below.
 - The result is idempotent: the same state leads to the same decision on every
   boot, with no flapping and nothing recreated that the next boot has to fix.
 - The action is visible: log one clear line saying what was found (with row
   counts), what was chosen and what was dropped, if anything. Use the typed
   logger helpers and include no personal data.
 - Prefer choosing a side and leaving the other untouched over dropping it.
+
+**Exception: regenerable tables at legacy startup.** Two tables hold only data
+BirdNET-Go rebuilds by itself, so their rows are not user data:
+`notification_histories` (when each new species notification was last sent;
+the rows expire on their own) and `image_caches` (species image links, fetched
+again from the provider). When one of them has the enhanced database (v2) shape
+(a NOT NULL `label_id`), `repairV2ShapedLegacyTables` in `manage.go` may drop
+it with its rows so the legacy schema migration recreates it, and only when all
+of these hold:
+
+- The table listing shows no bare `detections` table, at the first listing and
+  in the listing right before the drop. Beside one, a table that holds rows
+  belongs to an enhanced database and is kept.
+- No v2-shaped table outside these two holds rows, and every count succeeded.
+  Otherwise it refuses and drops nothing that holds rows.
+- Immediately before each such drop it lists the tables again and counts the
+  table again, and it refuses when the listing or the count fails, when the
+  table is missing from the listing, or when the table holds rows and a
+  `detections` table is listed.
+- It drops the other, empty tables first, so a refusal caused by any other table
+  never follows the drop of one of these two.
+- It logs one Warn line per table with the table name and its row count.
+
+`dynamic_thresholds` (learned thresholds) and `threshold_events` (threshold
+history) are user data and keep the refusal. A table joins this list only with
+the maintainer's approval in the pull request that adds it. The list in the code
+(`disposableV2ShapedTables` in `manage.go`, mirrored as
+`legacyDisposableSharedTables` in `internal/datastore/v2/startup.go`) must match
+this paragraph.
+
+**Character set repair of empty tables (MySQL and MariaDB).** When the schema
+default character set is not utf8mb4, `MySQLManager.Initialize` converts each
+table of its v2 schema whose text columns are not all utf8mb4 with
+`ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4`, and only when the table
+holds no rows. It takes a WRITE lock on that one table (with a 3 second lock
+wait), checks for a row under the lock, and converts without a collation, so the
+table gets the server's utf8mb4 default collation, the same as tables created
+new. It runs before `AutoMigrate`, which restores the declared `TEXT` columns
+that the conversion widens to `MEDIUMTEXT`. A table with rows, a table outside
+the v2 schema of the manager's naming mode, and every table of a utf8mb4 schema
+are never altered by the app; converting a
+populated table is a manual step. A lock timeout or a failed ALTER leaves the
+table as it was, is logged as a warning, and the next start tries again. Each
+conversion logs one Info line with the table name; a warning after it means
+only that the connection could not be reset.
+
+`validateAndFixSchema` is a separate path that the conditions of the
+regenerable-tables exception do not bound: it recreates a legacy `image_caches`
+with a wrong index or a stray `label_id` column, rows included, and logs its row
+count at Warn.
 
 Refuse to start, with an error that names the cause, only when no safe automatic
 choice exists, for example when both candidate sides hold data. Never destroy
@@ -96,6 +146,41 @@ of copying anything.
 Tests for startup and repair code run against a real database (SQLite in a temp
 directory, MySQL and MariaDB through the testcontainer suites), assert that no
 row is ever dropped, and boot twice to assert the same result both times.
+
+## HARD RULE: support only the MySQL and MariaDB LTS releases we test
+
+BirdNET-Go is tested against the long-term support (LTS) releases of MySQL and
+MariaDB. A release we test is supported. A release we do not test is not
+supported, and a release that is already end of life upstream is not tested, so
+it is not supported either. This is a standing maintainer decision.
+
+- **Supported** (the LTS releases we test against):
+  MySQL 8.4 and 9.7, and MariaDB 10.11, 11.4, 11.8 and 12.3. MySQL Innovation
+  releases and MariaDB rolling releases are not LTS, are not tested, and are not
+  supported.
+- **Not supported:** every release that is not in that list, including the
+  releases already end of life upstream (MySQL 5.7, MySQL 8.0, MariaDB 10.6 and
+  every older release). Do not add workarounds, version checks that keep them
+  working, SQL rewrites or tests for them, and do not fix bugs that only show on
+  them. A bug that also reproduces on a supported release is a real bug,
+  whatever release it was first reported on.
+- **No end of life dates in code.** Support follows the tested list, not an
+  upstream calendar: a listed release stays supported until a maintainer takes
+  it off the list. Do not add end of life dates, "ending soon" states or
+  date-driven checks.
+- **One table in code.** The list of supported series lives in
+  `internal/datastore/dbserver`; change it together with the list above. The
+  health checks, the startup log and notice, the telemetry tags and the support
+  dump all read that one table. Known MySQL Innovation series above the oldest
+  supported release (9.0 to 9.6) are listed there as not supported; older
+  series need no entry.
+- **Changing the list.** A new LTS release joins the list once we test against
+  it. A listed release leaves it only when a maintainer takes it off; then take
+  it out of the table, the CI test matrix and the testcontainer defaults, and
+  remove code that exists only for it.
+- Test MySQL and MariaDB changes against supported releases only, and keep the
+  testcontainer images (`MYSQL_TEST_IMAGE` and its defaults) on supported
+  releases.
 
 ## How to add persistence (v2 only)
 

@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Starta om för att slutföra databasmigreringen",
         "legacyRestartRequiredMessage": "Migreringen är slutförd. Starta om BirdNET-Go för att byta till den nya databasen. Om det här meddelandet finns kvar efter en omstart, kontrollera loggen efter databasfel."
       },
+      "database": {
+        "serverAttentionTitle": "Databasservern behöver uppmärksamhet",
+        "serverAttentionMessage": "MySQL- eller MariaDB-servern är inte en version som stöds, eller så använder databasen inte teckenuppsättningen utf8mb4. Öppna System > Hälsa för detaljer."
+      },
       "cleanup": {
         "completeTitle": "Rensning av gammal databas slutförd",
         "completeMessage": "{space} diskutrymme frigjort.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime inte tillgänglig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} krävs för {modelName} men hittades inte. Se installationsguiden: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} eller senare krävs för {modelName} men hittades inte. Se installationsguiden: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modellregionen kan vara föråldrad",
@@ -1542,6 +1546,8 @@
           "creating": "Skapar...",
           "createBackup": "Skapa säkerhetskopia",
           "noBackups": "Inga säkerhetskopior ännu",
+          "loadFailed": "Säkerhetskopieringshistoriken kunde inte läsas in",
+          "createFailed": "Säkerhetskopieringen kunde inte startas",
           "download": "Ladda ner",
           "failed": "Misslyckades",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Startar migrering...",
         "status": {
           "idle": "Redo att starta",
+          "checking": "Kontrollerar förutsättningar",
+          "notReady": "Inte redo",
           "initializing": "Initierar",
           "dual_write": "Dubbelskrivning aktiv",
           "migrating": "Migrerar primär",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Storlek",
           "prerequisitesNotMet": "Förutsättningar ej uppfyllda - åtgärda kritiska problem nedan",
+          "prerequisitesUnavailable": "Kontrollerna före migrering slutfördes inte. Se Kontroller före migrering nedan.",
+          "prerequisitesFailedList": "Åtgärda först dessa kontroller: {checks}",
           "validatingTitle": "Validerar data",
           "validatingBody": "Jämför {count} äldre poster mot V2-databasen...",
           "dirtyRecordsCatchup": "{count} ändrade poster - försöker inhämtningsavstämning",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} varning(ar)",
           "running": "Kör kontroller före migrering...",
           "checkingStep": "Steg {current} av {total}",
+          "currentCheck": "Kontrollerar {name} ({seconds} s)",
+          "slowHint": "Stora databaser kan ta flera minuter.",
+          "runFailed": "Kontrollerna före migreringen slutfördes inte: {error}",
           "passedCount": "{passed}/{total} godkända",
           "criticalCount": "{count} kritiska",
           "warningCount": "{count} varning(ar)",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Databasintegritet"
+            },
+            "mysql_server_version": {
+              "name": "Databasserverns version"
+            },
+            "mysql_charset": {
+              "name": "Databasens teckenuppsättning"
             },
             "mysql_table_health": {
               "name": "Tabellhälsa"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migrering är inte konfigurerad",
-      "preFlightFailed": "Förkontroller misslyckades",
+      "preFlightFailed": "Kontrollen före migreringen misslyckades: {check}",
+      "prerequisitesNotReady": "Kör kontrollerna före migreringen och vänta tills de godkänns innan du startar migreringen.",
       "invalidBody": "Ogiltigt förfrågningsinnehåll",
       "recordCountFailed": "Kunde inte bestämma totalt antal poster",
       "startFailed": "Kunde inte starta migrering",

@@ -225,7 +225,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2023, 12, 15, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	// Simulate detection in 2023
@@ -266,7 +266,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 	assert.Equal(t, 0, status.DaysThisYear, "Expected DaysThisYear to be 0 on detection day")
 
 	// Check 35 days later (outside yearly window)
-	feb2024 := jan2024.Add(35 * 24 * time.Hour)
+	feb2024 := jan2024.AddDate(0, 0, 35)
 	status = tracker.GetSpeciesStatus("Turdus merula", feb2024)
 
 	assert.False(t, status.IsNewThisYear, "Expected species to not be new this year after window expires")
@@ -413,7 +413,7 @@ func TestBatchSpeciesStatusPerformance(t *testing.T) {
 
 	// Add detections at various times
 	for i, sp := range species {
-		detectionTime := currentTime.Add(-time.Duration(i*2) * 24 * time.Hour)
+		detectionTime := currentTime.AddDate(0, 0, -i*2)
 		tracker.UpdateSpecies(sp, detectionTime)
 	}
 
@@ -475,7 +475,7 @@ func BenchmarkBatchSpeciesStatusPerformance(b *testing.B) {
 
 	// Add detections at various times
 	for i, sp := range species {
-		detectionTime := currentTime.Add(-time.Duration(i*2) * 24 * time.Hour)
+		detectionTime := currentTime.AddDate(0, 0, -i*2)
 		tracker.UpdateSpecies(sp, detectionTime)
 	}
 
@@ -580,7 +580,8 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
-	_ = tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
 
 	species := "Motacilla alba"
 	detectionTime := time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC)
@@ -603,7 +604,7 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			checkTime := detectionTime.Add(time.Duration(tc.daysLater) * 24 * time.Hour)
+			checkTime := detectionTime.AddDate(0, 0, tc.daysLater)
 			status := tracker.GetSpeciesStatus(species, checkTime)
 
 			assert.Equal(t, tc.expectNew, status.IsNew,

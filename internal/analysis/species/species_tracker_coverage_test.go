@@ -816,7 +816,7 @@ func TestCheckAndResetPeriods(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2023, 6, 15, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	// Add data for 2023

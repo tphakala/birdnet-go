@@ -172,14 +172,21 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 
 		// Check if it's time to run this schedule
 		if now.After(schedule.NextRun) || now.Equal(schedule.NextRun) {
-			scheduleTime := schedule.NextRun // Store the scheduled time for logging
+			scheduleTime := schedule.NextRun // The due time of this run
+
+			// Advance the schedule first, then snapshot it under s.mu. The run gets the
+			// snapshot, so it never reads the live element that later ticks write.
+			schedule.LastRun = now // Record the time we *checked* this schedule
+			schedule.NextRun = s.calculateNextRun(now, schedule.Hour, schedule.Minute, schedule.Weekday, schedule.IsWeekly)
+			run := *schedule
+
 			// If we're more than 5 minutes past the scheduled time, consider it missed
 			if now.Sub(scheduleTime) > 5*time.Minute {
 				reason := fmt.Sprintf("System time %v was more than 5 minutes past scheduled time %v",
 					now.Format(time.RFC3339),
 					scheduleTime.Format(time.RFC3339))
 
-				if err := s.state.AddMissedBackup(schedule, reason); err != nil {
+				if err := s.state.AddMissedBackup(&run, scheduleTime, reason); err != nil {
 					s.logger.Warn("Failed to record missed backup state", logger.Time("scheduled_time", scheduleTime), logger.Error(err))
 				}
 				s.logger.Warn("Missed backup schedule", logger.Time("scheduled_time", scheduleTime), logger.Time("current_time", now), logger.String("reason", reason))
@@ -187,7 +194,7 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 				// Try to acquire the lock to prevent concurrent backups
 				if s.runningBackup.TryLock() {
 					// Run the backup
-					go s.runBackup(schedule)
+					go s.runBackup(&run, scheduleTime)
 				} else {
 					s.logger.Warn("Skipping backup - another backup is already running",
 						logger.Time("scheduled_time", scheduleTime),
@@ -195,16 +202,14 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 				}
 			}
 
-			// Calculate next run time
-			schedule.LastRun = now // Record the time we *checked* this schedule
-			schedule.NextRun = s.calculateNextRun(now, schedule.Hour, schedule.Minute, schedule.Weekday, schedule.IsWeekly)
 			s.logger.Debug("Calculated next run time for schedule", logger.String("schedule_type", s.getScheduleType(schedule)), logger.Time("next_run", schedule.NextRun))
 		}
 	}
 }
 
-// runBackup executes a backup task
-func (s *Scheduler) runBackup(schedule *BackupSchedule) {
+// runBackup executes a backup task. schedule is a copy owned by this goroutine and
+// scheduledTime is when this run was due.
+func (s *Scheduler) runBackup(schedule *BackupSchedule, scheduledTime time.Time) {
 	// Ensure the mutex is unlocked when we're done
 	defer s.runningBackup.Unlock()
 
@@ -220,7 +225,7 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	// Run the backup
 	if err := s.manager.RunBackup(ctx); err != nil {
 		duration := time.Since(start)
-		s.logger.Error("Scheduled backup failed", logger.String("schedule_type", scheduleType), logger.Error(err), logger.Int64("duration_ms", duration.Milliseconds()))
+		s.logger.Error("Scheduled backup failed", logger.String("schedule_type", scheduleType), logger.Time("scheduled_time", scheduledTime), logger.Error(err), logger.Int64("duration_ms", duration.Milliseconds()))
 
 		// Record failure in state
 		if errState := s.state.UpdateScheduleState(schedule, false); errState != nil {
@@ -229,7 +234,7 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 
 		// Record as missed backup (since it failed)
 		reason := fmt.Sprintf("Backup operation failed: %v", err)
-		if errState := s.state.AddMissedBackup(schedule, reason); errState != nil {
+		if errState := s.state.AddMissedBackup(schedule, scheduledTime, reason); errState != nil {
 			s.logger.Warn("Failed to record missed backup after failure", logger.String("schedule_type", scheduleType), logger.Error(errState))
 		}
 		return

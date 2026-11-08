@@ -8,7 +8,7 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 - 24/7 real-time analysis of soundcard capture
 - Real-time analysis output compatible with OBS chat log input for wildlife streams
 - BirdWeather API support for real-time analysis
-- Analysis output options: SQLite or MySQL database
+- Analysis output options: SQLite or MySQL/MariaDB database
 - Localized species labels, with extensive language support (over 30 languages)
 - Runs on Windows, Linux (including Raspberry Pi), and macOS
 - Minimal runtime dependencies; the BirdNET TensorFlow Lite model and other supporting files are embedded in the executable
@@ -331,7 +331,7 @@ realtime:
     newSpeciesWindowDays: 7 # Days to show "New Species" badge after first detection (default: 7)
     syncIntervalMinutes: 60 # How often to sync tracking data with database in minutes (default: 60)
 
-    # Yearly tracking - tracks first arrivals each calendar year
+    # Yearly tracking - tracks first arrivals each year, counted from the reset date
     yearlyTracking:
       enabled: true # Enable yearly "New This Year" tracking (default: true)
       resetMonth: 1 # Month when yearly tracking resets (1-12, default: 1 for January)
@@ -409,15 +409,22 @@ output:
     enabled: false # Enable SQLite output
     path: birdnet.db # Path to SQLite database
 
-  # MySQL database output settings
+  # MySQL or MariaDB database output settings
   mysql:
-    enabled: false # Enable MySQL output
+    enabled: false # Enable MySQL or MariaDB output
     username: birdnet # MySQL database username
     password: secret # MySQL database user password
     database: birdnet # MySQL database name
     host: localhost # MySQL database host
     port: 3306 # MySQL database port
 ```
+
+MySQL and MariaDB are supported only in the LTS releases BirdNET-Go is tested
+with: MySQL 8.4 and 9.7, and MariaDB 10.11, 11.4, 11.8 or 12.3. MySQL Innovation
+releases (such as 9.0 to 9.6), MariaDB rolling releases and older releases such
+as MySQL 5.7, MySQL 8.0 and MariaDB 10.6 are not supported. Create the database
+with the `utf8mb4` character set (the default on supported releases), for example
+`CREATE DATABASE birdnet CHARACTER SET utf8mb4;`.
 
 ### Command Line Interface
 
@@ -767,7 +774,9 @@ graph TD
     H -->|Human Detected| D
     H -->|No Human| I{Dog Bark Filter}
     I -->|Recent Bark| D
-    I -->|No Recent Bark| J[✅ Accept Detection]
+    I -->|No Recent Bark| M{"Model Consensus Filter, if enabled"}
+    M -->|Too Few Models Agree| D
+    M -->|Enough Models Agree| J[✅ Accept Detection]
     G --> K{Timeout Reached?}
     K -->|No| G
     K -->|Yes| L{Min Detections Met?}
@@ -1087,6 +1096,27 @@ realtime:
 - **Use Cases**: Prevents false detections during periods of constant dog barking, particularly for species that have acoustic similarities to canine vocalizations
 - **Species Selection**: Focus on owl species (especially larger owls) and corvids (crows/ravens) which are most commonly confused with dog barks
 
+#### Model Consensus Filter
+
+```yaml
+realtime:
+  modelconsensus:
+    allspecies: false # Require consensus for every species
+    listedspecies: true # Require consensus for the species listed below
+    species: ["Parus major"] # Scientific names recommended
+    minmodels: 2 # Agreeing models required, 2 to 4
+    alleligible: false # Require every eligible model instead of minmodels
+    debug: false # Log each consensus discard at info level
+```
+
+- Discards a detection unless at least `minmodels` distinct models of its taxon group detected it within the detection window. Bird and bat models are counted separately, and BirdNET 2.4 and 3.0 count as separate models
+- A model is eligible only if it can classify the species, is not excluded by the range filter for it, and has scored all the audio the agreeing models heard. A model that is still behind in processing is not counted as eligible until it catches up. The requirement is capped at the number of eligible models, so a species that only one model can detect is never blocked
+- `alleligible` requires every eligible model to agree, whatever `minmodels` is
+- A model that knows a species but rarely scores it above its threshold blocks it, so start with `listedspecies` for the species you want to confirm
+- List entries are best written as scientific names in `config.yaml`: a common name stops matching after a locale change. The settings API converts the entries it can resolve to scientific names
+- Detections from audio sources that give no capture timestamps are not filtered
+- The filter is off by default and has no settings page yet; use `config.yaml` or the settings API
+
 ### Setting Precedence Summary
 
 **Highest to Lowest Precedence:**
@@ -1101,6 +1131,7 @@ realtime:
 8. **Deep Detection Filter** - Requires multiple matches
 9. **Privacy Filter** - Environmental safety
 10. **Dog Bark Filter** - Behavioral filtering
+11. **Model Consensus Filter** - Requires multiple models to agree
 
 ### Optimization Tips
 
@@ -1538,7 +1569,7 @@ graph TD
     I -->|No| J[❌ Rejected<br/>False Positive]
     I -->|Yes| K{Final Safety<br/>Checks Pass?}
 
-    K -->|No| L[❌ Blocked by<br/>Privacy/Dog Filter]
+    K -->|No| L[❌ Blocked by<br/>Privacy/Dog/Consensus Filter]
     K -->|Yes| M[✅ Detection Approved<br/>Saved to Database]
 
     J --> N[🗂️ Log: Not enough matches]
@@ -2863,7 +2894,7 @@ The system tracks three different types of "new" species appearances:
 
 ##### 📅 **New This Year** (Annual First)
 
-- **What it means**: A bird species detected for the first time this calendar year
+- **What it means**: A bird species detected for the first time since the yearly reset date (January 1 by default)
 - **Visual indicator**: Blue calendar icon
 - **When shown**: For 7 days after the first detection of the year (configurable via `yearlyTracking.windowDays`)
 - **Resets**: January 1st each year (configurable via `yearlyTracking.resetMonth` and `resetDay`)
@@ -2907,7 +2938,7 @@ The species tracking system is enabled by default with sensible settings. You ca
 
 ##### Yearly Tracking Settings
 
-Configure how the system tracks first arrivals each calendar year:
+Configure how the system tracks first arrivals each year, counted from the reset date:
 
 - **Enable Yearly Tracking** (`yearlyTracking.enabled`): Turn yearly tracking on/off (default: `true`)
 - **Reset Date** (`yearlyTracking.resetMonth` and `resetDay`): When to reset the yearly list
@@ -3071,7 +3102,7 @@ BirdNET-Go provides a Server-Sent Events (SSE) API that streams bird detections 
 - Compatibility with embedded systems and IoT devices
 - Reduced complexity for read-only access to detection data
 
-The endpoints include built-in rate limiting (10 requests per minute per IP) to prevent abuse while maintaining open access.
+The endpoints include built-in rate limiting (10 requests per minute per client; IPv6 clients are counted per /64) to prevent abuse while maintaining open access.
 
 > **🔒 Need Authentication?** If you require password protection for the detection stream API, please file a feature request by creating a GitHub issue at [https://github.com/tphakala/birdnet-go/issues](https://github.com/tphakala/birdnet-go/issues). Include your specific use case and security requirements to help guide the implementation.
 
@@ -3081,7 +3112,7 @@ The endpoints include built-in rate limiting (10 requests per minute per IP) to 
 
 **URL:** `GET /api/v2/detections/stream`  
 **Authentication:** None required (public endpoint)  
-**Rate Limiting:** 10 connections per minute per IP address
+**Rate Limiting:** 10 connections per minute per client (IPv6 clients are counted per /64)
 
 The SSE stream sends different types of events:
 

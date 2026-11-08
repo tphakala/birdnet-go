@@ -14,8 +14,8 @@ const (
 	// later lands on or after 1 January, where the bound advances again.
 	zoneBoundStuckStepSeconds = secondsPerDay
 
-	// spanEpochFloor is where offset enumeration starts at the earliest: the Unix epoch, which
-	// precedes every stored row because detected_at is positive.
+	// spanEpochFloor is where offset enumeration starts at the earliest: the Unix epoch. A row
+	// before it takes the offset of the oldest segment.
 	spanEpochFloor int64 = 0
 
 	// spanFutureMargin is how far past now an explicit end still gets its own offsets: one leap

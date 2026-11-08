@@ -22,10 +22,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	gorm_logger "gorm.io/gorm/logger"
 )
 
 // createTestSettings creates settings for SQLite-based legacy cleanup tests.
@@ -45,6 +47,158 @@ func createLegacyTestHandler(tb testing.TB, e *echo.Echo, settings *conf.Setting
 	apitest.PublishTestSettings(tb, settings)
 	c := &Handler{Core: &apicore.Core{Echo: e}, cleanupStatus: NewCleanupStatus()}
 	c.Settings.Store(settings)
+	if settings.Output.SQLite.Enabled {
+		// The failed-consolidation layout: the process runs on the _v2 sidecar and
+		// the configured path is the legacy file, the only layout where the SQLite
+		// delete is legitimate.
+		c.V2Manager = &fakeV2Manager{
+			path: datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path),
+			db:   newV2StateDB(tb, defaultSQLiteFixtureConfig()),
+		}
+	}
+	return c
+}
+
+// Fixture values for the SQLite cleanup tests. The watermark and the ids below
+// it are in both databases; ids above it are the tail.
+const (
+	fixtureLastMigratedID = 10
+	fixtureTailID         = fixtureLastMigratedID + 1
+)
+
+// fixtureAttemptStart is the migration attempt start shared by StartedAt and
+// AuxiliaryDataStartedAt, so the recorded outcome belongs to the attempt. A whole
+// second, so it survives a database round trip unchanged.
+var fixtureAttemptStart = time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
+
+// sqliteFixtureConfig describes the migration state and databases of a SQLite
+// cleanup fixture.
+type sqliteFixtureConfig struct {
+	state       entities.MigrationStatus
+	aux         entities.AuxiliaryDataStatus
+	relatedErr  string
+	legacyTable string // table holding the legacy ids; "notes" in a legacy database
+	legacyIDs   []uint
+	v2IDs       []uint
+	// staleAux records the auxiliary outcome against an earlier migration attempt.
+	staleAux bool
+	// dirtyIDs leaves a pending dirty ID in the v2 database.
+	dirtyIDs bool
+	// noRelatedMarker leaves related_sync_started_at and the related sync cursors
+	// NULL, as a migration whose related copy ran before the related sync was
+	// recorded, or a fresh install.
+	noRelatedMarker bool
+	// relatedSyncOverride rewrites columns of the migration state row after the
+	// fixture's related sync step, as a marker that belongs to an earlier attempt
+	// or a cursor that was never set. A nil value writes NULL.
+	relatedSyncOverride map[string]any
+}
+
+// defaultSQLiteFixtureConfig is a fully proven migration: completed, auxiliary
+// data succeeded, related sync recorded for the attempt, no related-data error,
+// every legacy id in v2.
+func defaultSQLiteFixtureConfig() *sqliteFixtureConfig {
+	ids := make([]uint, 0, fixtureLastMigratedID)
+	for id := uint(1); id <= fixtureLastMigratedID; id++ {
+		ids = append(ids, id)
+	}
+	return &sqliteFixtureConfig{
+		state:       entities.MigrationStatusCompleted,
+		aux:         entities.AuxiliaryDataStatusSucceeded,
+		legacyTable: "notes",
+		legacyIDs:   slices.Clone(ids),
+		v2IDs:       slices.Clone(ids),
+	}
+}
+
+// newV2StateDB creates the v2 database of a fixture: a migration state row and a
+// detections table holding cfg.v2IDs.
+func newV2StateDB(tb testing.TB, cfg *sqliteFixtureConfig) *gorm.DB {
+	tb.Helper()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(tb.TempDir(), "v2.db")), &gorm.Config{
+		Logger: gorm_logger.Default.LogMode(gorm_logger.Silent),
+	})
+	require.NoError(tb, err)
+	sqlDB, err := db.DB()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { assert.NoError(tb, sqlDB.Close()) })
+
+	require.NoError(tb, db.AutoMigrate(&entities.MigrationState{}))
+	attempt := fixtureAttemptStart
+	auxAttempt := attempt
+	if cfg.staleAux {
+		auxAttempt = attempt.Add(-time.Hour)
+	}
+	require.NoError(tb, db.Create(&entities.MigrationState{
+		ID:                     1,
+		State:                  cfg.state,
+		StartedAt:              &attempt,
+		AuxiliaryDataStartedAt: &auxAttempt,
+		AuxiliaryDataStatus:    cfg.aux,
+		RelatedDataError:       cfg.relatedErr,
+		LastMigratedID:         fixtureLastMigratedID,
+	}).Error)
+	if !cfg.noRelatedMarker {
+		// The writer the migration uses, so the fixture follows its marker shape.
+		_, err := datastoreV2.NewStateManager(db).BeginRelatedSync()
+		require.NoError(tb, err)
+	}
+	if len(cfg.relatedSyncOverride) > 0 {
+		require.NoError(tb, db.Model(&entities.MigrationState{}).Where("id = ?", 1).
+			Updates(cfg.relatedSyncOverride).Error)
+	}
+	require.NoError(tb, db.Exec("CREATE TABLE detections (id INTEGER PRIMARY KEY)").Error)
+	for _, id := range cfg.v2IDs {
+		require.NoError(tb, db.Exec("INSERT INTO detections (id) VALUES (?)", id).Error)
+	}
+	if cfg.dirtyIDs {
+		require.NoError(tb, db.Exec("CREATE TABLE migration_dirty_ids (id INTEGER PRIMARY KEY)").Error)
+		require.NoError(tb, db.Exec("INSERT INTO migration_dirty_ids (id) VALUES (?)", fixtureTailID).Error)
+	}
+	return db
+}
+
+// writeLegacySQLite creates a real SQLite database at path with one table holding ids.
+func writeLegacySQLite(tb testing.TB, path, table string, ids []uint) {
+	tb.Helper()
+	db, err := sql.Open("sqlite3", path)
+	require.NoError(tb, err)
+	defer func() { assert.NoError(tb, db.Close()) }()
+	_, err = db.Exec("CREATE TABLE " + table + " (id INTEGER PRIMARY KEY)")
+	require.NoError(tb, err)
+	for _, id := range ids {
+		_, err = db.Exec("INSERT INTO "+table+" (id) VALUES (?)", id)
+		require.NoError(tb, err)
+	}
+}
+
+// sqliteCleanupFixture is a failed-consolidation layout: a real legacy database at
+// legacyPath and a manager that opened the _v2 sidecar beside it.
+type sqliteCleanupFixture struct {
+	legacyPath string
+	mgr        *fakeV2Manager
+}
+
+// newSQLiteCleanupFixture builds the legacy database and the manager for cfg.
+func newSQLiteCleanupFixture(tb testing.TB, cfg *sqliteFixtureConfig) *sqliteCleanupFixture {
+	tb.Helper()
+	legacyPath := filepath.Join(tb.TempDir(), "birdnet.db")
+	writeLegacySQLite(tb, legacyPath, cfg.legacyTable, cfg.legacyIDs)
+	return &sqliteCleanupFixture{
+		legacyPath: legacyPath,
+		mgr: &fakeV2Manager{
+			path: datastoreV2.V2MigrationPathFromConfigured(legacyPath),
+			db:   newV2StateDB(tb, cfg),
+		},
+	}
+}
+
+// handler returns a v2-only handler wired to the fixture.
+func (f *sqliteCleanupFixture) handler(t *testing.T) *Handler {
+	t.Helper()
+	c := createLegacyTestHandler(t, echo.New(), createTestSettings(f.legacyPath))
+	c.V2Manager = f.mgr
+	setV2OnlyMode(t, true)
 	return c
 }
 
@@ -62,9 +216,7 @@ func TestGetLegacyStatus_V2OnlyMode_NoLegacy(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -100,9 +252,7 @@ func TestGetLegacyStatus_V2OnlyMode_WithLegacy(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -138,9 +288,7 @@ func TestGetLegacyStatus_NotV2OnlyMode(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// NOT in v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = false
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -175,9 +323,7 @@ func TestStartLegacyCleanup_NotV2OnlyMode(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// NOT in v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = false
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -200,27 +346,18 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	e := echo.New()
-	tmpDir := t.TempDir()
-
-	// Create legacy database file
-	legacyPath := filepath.Join(tmpDir, "birdnet.db")
-	err := os.WriteFile(legacyPath, []byte("legacy database content"), 0o600)
-	require.NoError(t, err)
+	// A real legacy database whose migration is proven.
+	fx := newSQLiteCleanupFixture(t, defaultSQLiteFixtureConfig())
+	legacyPath := fx.legacyPath
 
 	// Create WAL and SHM files
-	err = os.WriteFile(legacyPath+"-wal", []byte("wal"), 0o600)
+	err := os.WriteFile(legacyPath+"-wal", []byte("wal"), 0o600)
 	require.NoError(t, err)
 	err = os.WriteFile(legacyPath+"-shm", []byte("shm"), 0o600)
 	require.NoError(t, err)
 
-	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestHandler(t, e, settings)
-
-	// Set v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	controller := fx.handler(t)
+	e := controller.Echo
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -257,21 +394,19 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 	assert.Equal(t, CleanupStateCompleted, state)
 }
 
-// TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck tests that V2 databases are not deleted.
-func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
+// TestStartLegacyCleanup_SQLite_RefusesTargetWithoutNotesTable tests that the POST
+// refuses a target that holds a migration state table but no legacy notes table.
+func TestStartLegacyCleanup_SQLite_RefusesTargetWithoutNotesTable(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
 	e := echo.New()
 	tmpDir := t.TempDir()
 
-	// Create a file that would be detected as a V2 database
-	// We need to mock CheckSQLiteHasV2Schema or create a real V2 database
-	// For this test, we'll verify the safety check is called by checking error message
 	legacyPath := filepath.Join(tmpDir, "birdnet.db")
 
-	// Create a minimal SQLite database with migration_states table to simulate V2
-	// The table structure must match what GORM expects for entities.MigrationState
+	// A minimal SQLite database that looks like a v2 database: it has a
+	// migration_states table and no notes table.
 	db, err := sql.Open("sqlite3", legacyPath)
 	require.NoError(t, err)
 	_, err = db.Exec(`
@@ -297,10 +432,7 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 
 	settings := createTestSettings(legacyPath)
 	controller := createLegacyTestHandler(t, e, settings)
-
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, true)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -308,22 +440,17 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 
 	err = controller.StartLegacyCleanup(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code) // Request accepted, but async will fail
-
-	// Wait for async cleanup to complete using Eventually
-	require.Eventually(t, func() bool {
-		state, _, _, _ := controller.cleanupStatus.Get()
-		return state == CleanupStateCompleted || state == CleanupStateFailed
-	}, 5*time.Second, 10*time.Millisecond, "cleanup should complete")
-
-	// Verify cleanup failed due to safety check
-	state, errMsg, _, _ := controller.cleanupStatus.Get()
-	assert.Equal(t, CleanupStateFailed, state)
-	assert.Contains(t, errMsg, "V2 database")
+	// The target holds no legacy notes table, so the proof refuses synchronously.
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	var response CleanupActionResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Equal(t, notification.MsgErrCleanupSafetyCheck, response.ErrorKey)
+	state, _, _, _ := controller.cleanupStatus.Get()
+	assert.Equal(t, CleanupStateIdle, state, "a refused POST must not enter in_progress")
 
 	// Verify file was NOT deleted
 	_, err = os.Stat(legacyPath)
-	assert.NoError(t, err, "V2 database file should NOT be deleted")
+	assert.NoError(t, err, "the refused target must not be deleted")
 }
 
 // TestStartLegacyCleanup_AlreadyInProgress tests cleanup when already running.
@@ -331,19 +458,9 @@ func TestStartLegacyCleanup_AlreadyInProgress(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	e := echo.New()
-	tmpDir := t.TempDir()
-
-	legacyPath := filepath.Join(tmpDir, "birdnet.db")
-	err := os.WriteFile(legacyPath, []byte("test"), 0o600)
-	require.NoError(t, err)
-
-	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestHandler(t, e, settings)
-
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	// The proof runs before the in-progress check, so the target must be proven.
+	controller := newSQLiteCleanupFixture(t, defaultSQLiteFixtureConfig()).handler(t)
+	e := controller.Echo
 
 	// Set cleanup as already in progress
 	controller.cleanupStatus.Set(CleanupStateInProgress, "", nil, 0)
@@ -352,7 +469,7 @@ func TestStartLegacyCleanup_AlreadyInProgress(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	err = controller.StartLegacyCleanup(ctx)
+	err := controller.StartLegacyCleanup(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusConflict, rec.Code)
 
@@ -373,52 +490,28 @@ func createMySQLTestSettings() *conf.Settings {
 	return settings
 }
 
-// legacyDBRepo is a test-only repository that exposes a GORM connection through
-// GetDB, the seam the MySQL cleanup reads its connection from. Production
-// repositories do not implement it.
-type legacyDBRepo struct {
-	datastore.DetectionRepository
-	db *gorm.DB
-}
-
-// GetDB returns the wrapped connection.
-func (r *legacyDBRepo) GetDB() *gorm.DB { return r.db }
-
-// enableV2OnlyMode switches the package-wide v2-only flag on for one test.
-func enableV2OnlyMode(t *testing.T) {
-	t.Helper()
-	prev := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prev })
-}
-
-// wantLegacyOnly and wantLegacyShared spell out the legacy table names so a name
-// dropped from the production lists fails the test.
-var (
-	wantLegacyOnly   = []string{"note_reviews", "note_comments", "note_locks", "results", "notes"}
-	wantLegacyShared = []string{"hourly_weathers", "daily_events", "image_caches", "dynamic_thresholds", "threshold_events", "notification_histories"}
-)
+// wantLegacyOnly spells out the legacy-only table names so a name dropped from
+// the production list fails the test.
+var wantLegacyOnly = []string{"note_reviews", "note_comments", "note_locks", "results", "notes"}
 
 // TestMySQLLegacyCandidates pins the candidate rule: a bare table prefix means
-// the legacy-named tables are live v2 tables, and bare v2 tables beside a prefixed
-// schema keep the shared names out of the list.
+// the legacy-named tables are live v2 tables, and a prefixed schema offers only
+// the legacy-only tables, never the shared auxiliary ones.
 func TestMySQLLegacyCandidates(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
 	tests := []struct {
-		name          string
-		prefix        string
-		bareV2Present bool
-		want          []string
+		name   string
+		prefix string
+		want   []string
 	}{
-		{"bare schema offers nothing", "", false, nil},
-		{"prefixed schema without bare v2 offers every legacy table", "v2_", false, append(slices.Clone(wantLegacyOnly), wantLegacyShared...)},
-		{"prefixed schema beside bare v2 tables offers legacy-only tables", "v2_", true, wantLegacyOnly},
+		{"bare schema offers nothing", "", nil},
+		{"prefixed schema offers only the legacy-only tables", "v2_", wantLegacyOnly},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, mysqlLegacyCandidates(tt.prefix, tt.bareV2Present))
+			assert.Equal(t, tt.want, mysqlLegacyCandidates(tt.prefix))
 		})
 	}
 }
@@ -429,7 +522,7 @@ func TestMySQLLegacyCandidates_DropOrder(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	got := mysqlLegacyCandidates("v2_", false)
+	got := mysqlLegacyCandidates("v2_")
 	for _, child := range []string{"note_reviews", "note_comments", "note_locks", "results"} {
 		assert.Less(t, slices.Index(got, child), slices.Index(got, "notes"), "%s must be dropped before notes", child)
 	}
@@ -456,25 +549,21 @@ func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
 	tests := []struct {
 		name string
-		repo func() datastore.DetectionRepository
 		mgr  datastoreV2.Manager
 	}{
-		{"repository without a connection", func() datastore.DetectionRepository { return nil }, nil},
-		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, nil},
-		{"non-MySQL v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, sqliteMgr},
+		{"manager without a connection", &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}},
+		{"no v2 manager", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
 			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
-			controller.Repo = tt.repo()
 			if tt.mgr != nil {
 				controller.V2Manager = tt.mgr
 			}
-			enableV2OnlyMode(t)
+			setV2OnlyMode(t, true)
 
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody), rec)
@@ -490,26 +579,54 @@ func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
 	}
 }
 
+// TestMysqlCleanupConn_RefusesUnusableManagers verifies the connection seam
+// refuses a missing manager, a non-MySQL manager and a manager without a
+// connection, so a SQLite database is never handed to the MySQL queries.
+func TestMysqlCleanupConn_RefusesUnusableManagers(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name       string
+		mgr        datastoreV2.Manager
+		wantReason string
+	}{
+		{"no manager", nil, reasonMySQLManagerUnavailable},
+		{"non-MySQL manager", newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0), reasonMySQLManagerUnavailable},
+		{"MySQL manager without a connection", &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}, reasonNoConnection},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, refusal := mysqlCleanupConn(t.Context(), tt.mgr)
+			assert.Nil(t, db)
+			require.NotNil(t, refusal)
+			assert.Equal(t, tt.wantReason, refusal.reason)
+			assert.Equal(t, notification.MsgErrCleanupAccessFailed, refusal.errorKey)
+		})
+	}
+}
+
 // TestStartLegacyCleanup_MySQL_Refuses verifies a POST that cannot be resolved is
 // refused synchronously and never schedules work.
 func TestStartLegacyCleanup_MySQL_Refuses(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
 	tests := []struct {
 		name string
-		repo func() datastore.DetectionRepository
+		mgr  datastoreV2.Manager
 	}{
-		{"repository without a connection", func() datastore.DetectionRepository { return nil }},
-		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }},
+		{"manager without a connection", &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}},
+		{"no v2 manager", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
 			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
-			controller.Repo = tt.repo()
-			enableV2OnlyMode(t)
+			if tt.mgr != nil {
+				controller.V2Manager = tt.mgr
+			}
+			setV2OnlyMode(t, true)
 
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody), rec)
@@ -595,4 +712,427 @@ func TestCleanupStatus_SetGetReset(t *testing.T) {
 	assert.Empty(t, errMsg)
 	assert.Nil(t, remaining)
 	assert.Equal(t, int64(0), reclaimed)
+}
+
+// legacyCleanupCall runs GET status and then POST cleanup against the handler and
+// waits for any scheduled work, returning both decoded responses and the POST code.
+func legacyCleanupCall(t *testing.T, c *Handler) (status LegacyStatusResponse, post CleanupActionResponse, postCode int) {
+	t.Helper()
+	e := c.Echo
+
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody), rec)
+	require.NoError(t, c.GetLegacyStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &status))
+
+	rec = httptest.NewRecorder()
+	ctx = e.NewContext(httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody), rec)
+	require.NoError(t, c.StartLegacyCleanup(ctx))
+	c.Wait()
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &post))
+	return status, post, rec.Code
+}
+
+// TestLegacyCleanup_BackendFollowsOpenedDatabase pins that the cleanup picks the
+// SQLite delete or the MySQL drop from the database the process opened, not from
+// the live settings, which only take effect after a restart.
+func TestLegacyCleanup_BackendFollowsOpenedDatabase(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	t.Run("manager MySQL, settings switched to SQLite", func(t *testing.T) {
+		legacyPath := filepath.Join(t.TempDir(), "birdnet.db")
+		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy"), 0o600))
+		c := createLegacyTestHandler(t, echo.New(), createTestSettings(legacyPath))
+		c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
+		setV2OnlyMode(t, true)
+
+		status, post, code := legacyCleanupCall(t, c)
+
+		assert.False(t, status.CanCleanup)
+		assert.Equal(t, notification.MsgErrCleanupAccessFailed, status.ErrorKey)
+		assert.Equal(t, http.StatusBadRequest, code)
+		assert.False(t, post.Success)
+		state, _, _, _ := c.cleanupStatus.Get()
+		assert.Equal(t, CleanupStateIdle, state)
+		assert.FileExists(t, legacyPath, "the settings switch must not make the SQLite delete reachable")
+	})
+
+	t.Run("manager SQLite, settings switched to MySQL", func(t *testing.T) {
+		fx := newSQLiteCleanupFixture(t, defaultSQLiteFixtureConfig())
+		legacyPath := fx.legacyPath
+		settings := createMySQLTestSettings()
+		settings.Output.SQLite.Path = legacyPath
+		c := createLegacyTestHandler(t, echo.New(), settings)
+		c.V2Manager = fx.mgr
+		setV2OnlyMode(t, true)
+
+		status, post, code := legacyCleanupCall(t, c)
+
+		assert.True(t, status.CanCleanup)
+		assert.Equal(t, legacyPath, status.Location)
+		assert.Equal(t, http.StatusOK, code)
+		assert.True(t, post.Success)
+		assert.NoFileExists(t, legacyPath)
+	})
+}
+
+// TestLegacyCleanup_SQLiteTargetRefusals pins every reason the SQLite delete
+// refuses before touching the file.
+func TestLegacyCleanup_SQLiteTargetRefusals(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name         string
+		noManager    bool
+		managerPath  func(dir string) string
+		settingsPath func(dir string) string
+		statusExists bool
+		statusKey    string
+		postKey      string
+	}{
+		{
+			name:         "no manager",
+			noManager:    true,
+			settingsPath: func(dir string) string { return filepath.Join(dir, "birdnet.db") },
+			statusExists: false,
+			statusKey:    notification.MsgErrCleanupAccessFailed,
+			postKey:      notification.MsgErrCleanupAccessFailed,
+		},
+		{
+			name:         "path changed since start",
+			managerPath:  func(dir string) string { return filepath.Join(dir, "boot_v2.db") },
+			settingsPath: func(dir string) string { return filepath.Join(dir, "other.db") },
+			statusExists: true,
+			statusKey:    notification.MsgErrCleanupRestartRequired,
+			postKey:      notification.MsgErrCleanupRestartNeeded,
+		},
+		{
+			name:         "path is the active database",
+			managerPath:  func(dir string) string { return filepath.Join(dir, "birdnet.db") },
+			settingsPath: func(dir string) string { return filepath.Join(dir, "birdnet.db") },
+			statusExists: true,
+			statusKey:    notification.MsgErrCleanupSafetyCheck,
+			postKey:      notification.MsgErrCleanupSafetyCheck,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			target := tt.settingsPath(dir)
+			// Plain bytes, so a schema probe alone would not stop the delete.
+			require.NoError(t, os.WriteFile(target, []byte("plain bytes"), 0o600))
+			c := createLegacyTestHandler(t, echo.New(), createTestSettings(target))
+			if tt.noManager {
+				c.V2Manager = nil
+			} else {
+				c.V2Manager = &fakeV2Manager{path: tt.managerPath(dir)}
+			}
+			setV2OnlyMode(t, true)
+
+			status, post, code := legacyCleanupCall(t, c)
+
+			assert.Equal(t, tt.statusExists, status.Exists)
+			assert.False(t, status.CanCleanup)
+			assert.Equal(t, tt.statusKey, status.ErrorKey)
+			assert.Equal(t, http.StatusBadRequest, code)
+			assert.False(t, post.Success)
+			assert.Equal(t, tt.postKey, post.ErrorKey)
+			state, _, _, _ := c.cleanupStatus.Get()
+			assert.Equal(t, CleanupStateIdle, state, "a refused POST must not enter in_progress")
+			assert.FileExists(t, target)
+		})
+	}
+}
+
+// TestCleanupSQLiteLegacy_RefusesUnownedPath pins the background recheck: a path
+// that is not the legacy companion of the opened database is never deleted, even
+// when the job is handed it directly.
+func TestCleanupSQLiteLegacy_RefusesUnownedPath(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	dir := t.TempDir()
+	otherPath := filepath.Join(dir, "other.db")
+	require.NoError(t, os.WriteFile(otherPath, []byte("plain bytes"), 0o600))
+	c := createLegacyTestHandler(t, echo.New(), createTestSettings(otherPath))
+	mgr := &fakeV2Manager{path: datastoreV2.V2MigrationPathFromConfigured(filepath.Join(dir, "boot.db"))}
+
+	err := c.cleanupSQLiteLegacy(t.Context(), mgr, otherPath)
+
+	require.Error(t, err)
+	assert.FileExists(t, otherPath)
+}
+
+// TestLegacyCleanup_SQLiteRequiresMigrationProof pins that the SQLite delete is
+// offered only when the migration state and the target prove the legacy data is in
+// v2. The status call checks the state only; the POST also reads the target.
+func TestLegacyCleanup_SQLiteRequiresMigrationProof(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name      string
+		configure func(cfg *sqliteFixtureConfig)
+		mutate    func(t *testing.T, fx *sqliteCleanupFixture)
+		// statusKey is the error key of the status refusal; empty means the card is offered.
+		statusKey string
+		// postKey is the error key of the POST refusal; empty means the delete runs.
+		postKey string
+	}{
+		{name: "migration proven"},
+		{
+			name:      "auxiliary failed",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.aux = entities.AuxiliaryDataStatusFailed },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name:      "auxiliary not recorded",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.aux = entities.AuxiliaryDataStatusUnknown },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name:      "auxiliary outcome belongs to an earlier attempt",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.staleAux = true },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name:      "related data copied by an older version",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.noRelatedMarker = true },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related sync recorded for an earlier attempt",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_sync_started_at": fixtureAttemptStart.Add(-time.Hour)}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related comments cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_comments_cursor": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related predictions note cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_predictions_note_id": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related predictions result cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_predictions_result_id": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name:      "dirty IDs pending sync to v2",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.dirtyIDs = true },
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "fresh install database",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.aux = entities.AuxiliaryDataStatusNotRequired
+				cfg.noRelatedMarker = true
+			},
+			statusKey: notification.MsgErrCleanupNoLegacyDB,
+			postKey:   notification.MsgErrCleanupNoLegacyDB,
+		},
+		{
+			name:      "migration not completed",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.state = entities.MigrationStatusMigrating },
+			statusKey: notification.MsgErrCleanupRestartRequired,
+			postKey:   notification.MsgErrCleanupRestartNeeded,
+		},
+		{
+			name:      "related data error",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.relatedErr = "reviews failed" },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name:      "target is not a legacy database",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.legacyTable = "other" },
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name:      "legacy tail missing from v2",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.legacyIDs = append(cfg.legacyIDs, fixtureTailID) },
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "legacy tail present in v2",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.legacyIDs = append(cfg.legacyIDs, fixtureTailID)
+				cfg.v2IDs = append(cfg.v2IDs, fixtureTailID)
+			},
+		},
+		{
+			name: "target unreadable",
+			mutate: func(t *testing.T, fx *sqliteCleanupFixture) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(fx.legacyPath, []byte("not a sqlite database"), 0o600))
+			},
+			postKey: notification.MsgErrCleanupAccessFailed,
+		},
+		{
+			name: "migration state unreadable",
+			mutate: func(t *testing.T, fx *sqliteCleanupFixture) {
+				t.Helper()
+				require.NoError(t, fx.mgr.db.Exec("DROP TABLE migration_states").Error)
+			},
+			statusKey: notification.MsgErrCleanupAccessFailed,
+			postKey:   notification.MsgErrCleanupAccessFailed,
+		},
+		{
+			name: "legacy file missing",
+			mutate: func(t *testing.T, fx *sqliteCleanupFixture) {
+				t.Helper()
+				require.NoError(t, os.Remove(fx.legacyPath))
+			},
+			statusKey: notification.MsgErrCleanupNoLegacyDB,
+			postKey:   notification.MsgErrCleanupNoLegacyDB,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaultSQLiteFixtureConfig()
+			if tt.configure != nil {
+				tt.configure(cfg)
+			}
+			fx := newSQLiteCleanupFixture(t, cfg)
+			if tt.mutate != nil {
+				tt.mutate(t, fx)
+			}
+			c := fx.handler(t)
+
+			status, post, code := legacyCleanupCall(t, c)
+
+			assert.Equal(t, tt.statusKey == "", status.CanCleanup)
+			assert.Equal(t, tt.statusKey, status.ErrorKey)
+			assert.Equal(t, tt.name != "legacy file missing", status.Exists, "the status reports the legacy file whenever it is on disk")
+			assert.Equal(t, tt.postKey, post.ErrorKey)
+			if tt.postKey == "" {
+				assert.Equal(t, http.StatusOK, code)
+				assert.True(t, post.Success)
+				assert.NoFileExists(t, fx.legacyPath)
+				return
+			}
+			assert.Equal(t, http.StatusBadRequest, code)
+			assert.False(t, post.Success)
+			state, _, _, _ := c.cleanupStatus.Get()
+			assert.Equal(t, CleanupStateIdle, state, "a refused POST must not enter in_progress")
+			if tt.name != "legacy file missing" {
+				assert.FileExists(t, fx.legacyPath)
+			}
+		})
+	}
+}
+
+// TestCleanupSQLiteLegacy_RechecksMigrationProof pins the drop-time recheck: a
+// legacy record that appears beyond the watermark after the POST was accepted
+// stops the delete.
+func TestCleanupSQLiteLegacy_RechecksMigrationProof(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	fx := newSQLiteCleanupFixture(t, defaultSQLiteFixtureConfig())
+	c := fx.handler(t)
+
+	db, err := sql.Open("sqlite3", fx.legacyPath)
+	require.NoError(t, err)
+	_, err = db.Exec("INSERT INTO notes (id) VALUES (?)", fixtureTailID)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	err = c.cleanupSQLiteLegacy(t.Context(), fx.mgr, fx.legacyPath)
+
+	require.Error(t, err)
+	assert.FileExists(t, fx.legacyPath)
+}
+
+// TestLegacyCleanup_MySQL_RequiresRecordedMigrationOutcome pins that the MySQL
+// resolver applies the auxiliary outcome and related sync gate before it lists
+// any table. The backing store is SQLite, so a passing gate ends at the table
+// listing.
+func TestLegacyCleanup_MySQL_RequiresRecordedMigrationOutcome(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name            string
+		aux             entities.AuxiliaryDataStatus
+		noRelatedMarker bool
+		wantKey         string
+		wantExists      bool
+		wantReason      string // the status reason, when set
+	}{
+		{name: "not recorded", aux: entities.AuxiliaryDataStatusUnknown, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true},
+		{name: "failed", aux: entities.AuxiliaryDataStatusFailed, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true},
+		{name: "succeeded without a related sync marker", aux: entities.AuxiliaryDataStatusSucceeded, noRelatedMarker: true, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true, wantReason: reasonRelatedSyncNotRecorded},
+		{name: "not required is a fresh install with no legacy database", aux: entities.AuxiliaryDataStatusNotRequired, noRelatedMarker: true, wantKey: notification.MsgErrCleanupNoLegacyDB},
+		{name: "succeeded passes the gate", aux: entities.AuxiliaryDataStatusSucceeded, wantKey: notification.MsgErrCleanupAccessFailed, wantReason: reasonListTablesFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaultSQLiteFixtureConfig()
+			cfg.aux = tt.aux
+			cfg.noRelatedMarker = tt.noRelatedMarker
+			db := newV2StateDB(t, cfg)
+			c := createLegacyTestHandler(t, echo.New(), createMySQLTestSettings())
+			c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_", db: db}
+			setV2OnlyMode(t, true)
+
+			status, post, code := legacyCleanupCall(t, c)
+
+			assert.False(t, status.CanCleanup)
+			assert.Equal(t, tt.wantExists, status.Exists)
+			assert.Equal(t, tt.wantKey, status.ErrorKey)
+			assert.Equal(t, http.StatusBadRequest, code)
+			assert.Equal(t, tt.wantKey, post.ErrorKey)
+			if tt.wantReason != "" {
+				assert.Equal(t, tt.wantReason, status.Reason)
+			}
+		})
+	}
+}
+
+// TestCleanupSQLiteLegacy_RefusesV2SchemaTarget pins the last guard before the
+// delete: a target that passes the migration proof (it has an empty notes table, so
+// no tail) but carries a completed v2 migration state is never removed.
+func TestCleanupSQLiteLegacy_RefusesV2SchemaTarget(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	cfg := defaultSQLiteFixtureConfig()
+	cfg.legacyIDs, cfg.v2IDs = nil, nil
+	fx := newSQLiteCleanupFixture(t, cfg)
+	c := fx.handler(t)
+	db, err := sql.Open("sqlite3", fx.legacyPath)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE migration_states (id INTEGER PRIMARY KEY, state TEXT NOT NULL DEFAULT 'completed');
+		INSERT INTO migration_states (id, state) VALUES (1, 'completed');`)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	err = c.cleanupSQLiteLegacy(t.Context(), fx.mgr, fx.legacyPath)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "V2 database")
+	assert.FileExists(t, fx.legacyPath)
 }

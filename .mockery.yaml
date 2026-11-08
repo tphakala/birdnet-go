@@ -60,3 +60,8 @@ packages:
         config:
           filename: "mock_AlertRuleRepository.go"
           mockname: "MockAlertRuleRepository"
+      # Model repository - used by the api/v2 imports migration worker tests
+      ModelRepository:
+        config:
+          filename: "mock_ModelRepository.go"
+          mockname: "MockModelRepository"

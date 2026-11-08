@@ -45,6 +45,7 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 
 	checkRange(&result, cfg.Sensitivity, 0, 1.5, "BirdNET sensitivity must be between 0 and 1.5")
 	checkRange(&result, cfg.Threshold, 0, 1, "BirdNET threshold must be between 0 and 1")
+	checkRange(&result, cfg.AlternateMinConfidence, minModelThreshold, maxModelThreshold, "BirdNET alternateminconfidence must be between 0 and 1")
 	checkRange(&result, cfg.Overlap, 0, 2.99, "BirdNET overlap value must be between 0 and 2.99 seconds")
 	checkRange(&result, cfg.Longitude, -180, 180, "BirdNET longitude must be between -180 and 180")
 	checkRange(&result, cfg.Latitude, -90, 90, "BirdNET latitude must be between -90 and 90")

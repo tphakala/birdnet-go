@@ -92,7 +92,7 @@ func groupPathsWithPartitions(paths []string, partitions []disk.PartitionStat) [
 				for _, p := range partitions {
 					mountpoints = append(mountpoints, privacy.AnonymizeStacktracePath(p.Mountpoint))
 				}
-				GetLogger().Debug("Mount point detection failed, monitoring path directly",
+				GetLogger().Trace("Mount point detection failed, monitoring path directly",
 					logger.String("path", path),
 					logger.Int("partition_count", len(partitions)),
 					logger.String("available_mountpoints", strings.Join(mountpoints, ", ")),

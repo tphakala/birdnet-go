@@ -238,8 +238,9 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	// The Publish() method returns a clear error if the client is disconnected.
 
 	// Check event frequency (supports scientific name lookup). Decided once per
-	// detection: queue retries of this action reuse the first verdict.
-	if !a.rateLimit.allow(func() bool {
+	// detection: queue retries of this action reuse the first verdict. Inside the
+	// database composite the database step has already decided.
+	if !a.gatedByDatabase && !a.rateLimit.allow(func() bool {
 		return a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, MQTTPublish)
 	}) {
 		return nil
@@ -590,8 +591,9 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 		return nil // Silently skip if no broadcaster is configured
 	}
 
-	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, SSEBroadcast) {
+	// Check event frequency (supports scientific name lookup). Inside the database
+	// composite the database step has already decided.
+	if !a.gatedByDatabase && !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, SSEBroadcast) {
 		return nil
 	}
 

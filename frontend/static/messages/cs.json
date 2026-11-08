@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Dokončete migraci databáze restartem",
         "legacyRestartRequiredMessage": "Migrace byla dokončena. Restartujte BirdNET-Go, aby se přepnulo na novou databázi. Pokud se tato zpráva zobrazuje i po restartu, zkontrolujte v protokolu chyby databáze."
       },
+      "database": {
+        "serverAttentionTitle": "Databázový server vyžaduje pozornost",
+        "serverAttentionMessage": "Server MySQL nebo MariaDB není podporovaná verze, nebo databáze nepoužívá znakovou sadu utf8mb4. Podrobnosti najdete v části Systém > Zdraví."
+      },
       "cleanup": {
         "completeTitle": "Vyčištění staré databáze dokončeno",
         "completeMessage": "Uvolněno {space} místa na disku.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime není k dispozici",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadován pro {modelName}, ale nebyl nalezen. Viz průvodce instalací: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} nebo novější je vyžadován pro {modelName}, ale nebyl nalezen. Viz průvodce instalací: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Oblast modelu může být zastaralá",
@@ -1542,6 +1546,8 @@
           "creating": "Vytváření...",
           "createBackup": "Vytvořit zálohu",
           "noBackups": "Zatím žádné zálohy",
+          "loadFailed": "Historii záloh se nepodařilo načíst",
+          "createFailed": "Zálohu se nepodařilo spustit",
           "download": "Stáhnout",
           "failed": "Selhalo",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Zahajuje se migrace...",
         "status": {
           "idle": "Připraveno ke spuštění",
+          "checking": "Kontrola předpokladů",
+          "notReady": "Nepřipraveno",
           "initializing": "Inicializace",
           "dual_write": "Duální zápis aktivní",
           "migrating": "Migrace primární",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Záznamy",
           "sizeLabel": "Velikost",
           "prerequisitesNotMet": "Předpoklady nesplněny - vyřešte kritické problémy níže",
+          "prerequisitesUnavailable": "Kontroly před migrací nebyly dokončeny. Viz Kontroly před migrací níže.",
+          "prerequisitesFailedList": "Nejdříve vyřešte tyto kontroly: {checks}",
           "validatingTitle": "Ověřování dat",
           "validatingBody": "Porovnávání {count} původních záznamů s databází V2...",
           "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamů - proběhne pokus o dodatečné srovnání",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} varování",
           "running": "Probíhají kontroly před migrací...",
           "checkingStep": "Krok {current} z {total}",
+          "currentCheck": "Kontroluje se {name} ({seconds} s)",
+          "slowHint": "Velké databáze mohou trvat několik minut.",
+          "runFailed": "Kontroly před migrací nebyly dokončeny: {error}",
           "passedCount": "{passed}/{total} úspěšných",
           "criticalCount": "{count} kritických",
           "warningCount": "{count} varování",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Integrita databáze"
+            },
+            "mysql_server_version": {
+              "name": "Verze databázového serveru"
+            },
+            "mysql_charset": {
+              "name": "Znaková sada databáze"
             },
             "mysql_table_health": {
               "name": "Stav tabulek"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migrace není nakonfigurována",
-      "preFlightFailed": "Předběžné kontroly selhaly",
+      "preFlightFailed": "Kontrola před migrací selhala: {check}",
+      "prerequisitesNotReady": "Spusťte kontroly před migrací a počkejte, až projdou, než migraci spustíte.",
       "invalidBody": "Neplatné tělo požadavku",
       "recordCountFailed": "Celkový počet záznamů se nepodařilo určit",
       "startFailed": "Migraci se nepodařilo spustit",

@@ -237,7 +237,9 @@ func mainWithExitCode() int {
 		settings.ValidationWarnings = nil
 	}
 
-	// Execute the root command
+	// Execute the root command. Cobra prints usage for flag and argument errors
+	// itself; errors a command's RunE returns do not print usage (see
+	// cmd.silenceUsageOnRunErrors) and are logged here.
 	rootCmd := cmd.RootCommand(settings)
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, analysis.ErrAnalysisCanceled) {

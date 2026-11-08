@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,6 +18,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// weekShortcutSpanDays is the number of days between the first and last date of the "week"
+// search shortcut, the last 7 local dates including today.
+const weekShortcutSpanDays = 6
 
 // TestBatchDeleteDetections tests the BatchDeleteDetections endpoint.
 func TestBatchDeleteDetections(t *testing.T) {
@@ -289,8 +294,8 @@ func TestBatchLockDetections(t *testing.T) {
 // TestBatchResolveDetections tests the BatchResolveDetections endpoint.
 func TestBatchResolveDetections(t *testing.T) {
 	mockNotes := []datastore.Note{
-		{ID: 1, ScientificName: "Turdus merula"},
-		{ID: 2, ScientificName: "Turdus merula"},
+		{ID: 1, Date: "2025-03-07", Time: "08:15:00", ScientificName: "Turdus merula"},
+		{ID: 2, Date: "2025-03-07", Time: "08:16:00", ScientificName: "Turdus merula"},
 	}
 
 	testCases := []struct {
@@ -317,10 +322,59 @@ func TestBatchResolveDetections(t *testing.T) {
 			},
 		},
 		{
+			name:           "refuses a malformed date on a species query before any lookup",
+			body:           BatchResolveRequest{QueryType: "species", Species: "Turdus merula", Date: "2025-3-7"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on an all query before any lookup",
+			body:           BatchResolveRequest{QueryType: "all", Date: "not-a-date"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on a search query before any lookup",
+			body:           BatchResolveRequest{QueryType: "search", Search: "robin", Date: "2025-3-7"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a shortcut on a species query before any lookup",
+			body:           BatchResolveRequest{QueryType: "species", Species: "Turdus merula", Date: "week"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on an hourly query before any lookup",
+			body:           BatchResolveRequest{QueryType: "hourly", Date: "yesterday", Hour: "8"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "an all query accepts a search box shortcut",
+			body: BatchResolveRequest{QueryType: "all", Date: "week"},
+			mockSetup: func(m *mocks.MockInterface) {
+				// "week" is the last 7 local dates including today, so the forwarded range spans
+				// 6 days between its first and last date.
+				m.EXPECT().SearchNotesAdvanced(mock.MatchedBy(func(f *datastore.AdvancedSearchFilters) bool {
+					return f.DateRange != nil &&
+						f.DateRange.End.Sub(f.DateRange.Start) == weekShortcutSpanDays*24*time.Hour
+				})).Return(mockNotes, int64(2), nil).Once()
+			},
+			expectedStatus: http.StatusOK,
+			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result BatchResolveResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.Equal(t, 2, result.Count)
+			},
+		},
+		{
 			name: "resolves all query to IDs",
 			body: BatchResolveRequest{QueryType: "all"},
 			mockSetup: func(m *mocks.MockInterface) {
-				m.EXPECT().SearchNotes("", false, maxBatchSize+1, 0).Return(mockNotes, int64(2), nil).Once()
+				m.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("", maxBatchSize+1, 0)).Return(mockNotes, int64(2), nil).Once()
 			},
 			expectedStatus: http.StatusOK,
 			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {

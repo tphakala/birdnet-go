@@ -325,14 +325,14 @@ func TestLeapYearHandling(t *testing.T) {
 			assert.Equal(t, 0, days1, "Initial detection should have 0 days")
 
 			// Test the day after
-			nextDay := testTime.Add(24 * time.Hour)
+			nextDay := testTime.AddDate(0, 0, 1)
 			status1 := tracker.GetSpeciesStatus(species1, nextDay)
 			assert.Equal(t, 1, status1.DaysSinceFirst, "Should be 1 day since first detection")
 
 			// Test leap year boundary crossing for February dates
 			if tt.testMonth == time.February {
 				// Test detection 7 days later (into March for short February)
-				weekLater := testTime.Add(7 * 24 * time.Hour)
+				weekLater := testTime.AddDate(0, 0, 7)
 				species2 := "Leap_Boundary_Species"
 
 				isNew2, days2 := tracker.CheckAndUpdateSpecies(species2, weekLater)

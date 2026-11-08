@@ -12,13 +12,17 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"gorm.io/gorm"
 )
 
 // setupWeatherTestEnvironment creates a test environment with Echo, a mock
@@ -225,31 +229,34 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 		// Check response content
 		assert.Len(t, response.Data, 2)
 
-		// Check first hour data
-		assert.Equal(t, "12:00:00", response.Data[0].Time)
-		assert.InDelta(t, 5.5, response.Data[0].Temperature, 0.01)
-		assert.InDelta(t, 4.0, response.Data[0].FeelsLike, 0.01)
-		assert.InDelta(t, 3.2, response.Data[0].TempMin, 0.01)
-		assert.InDelta(t, 6.8, response.Data[0].TempMax, 0.01)
-		assert.Equal(t, 1013, response.Data[0].Pressure)
-		assert.Equal(t, 75, response.Data[0].Humidity)
-		assert.Equal(t, 10000, response.Data[0].Visibility)
-		assert.InDelta(t, 4.5, response.Data[0].WindSpeed, 0.01)
-		assert.Equal(t, 270, response.Data[0].WindDeg)
-		assert.InDelta(t, 7.2, response.Data[0].WindGust, 0.01)
-		assert.Equal(t, 40, response.Data[0].Clouds)
-		assert.Equal(t, "Clouds", response.Data[0].WeatherMain)
-		assert.Equal(t, "scattered clouds", response.Data[0].WeatherDesc)
-		assert.Equal(t, "03d", response.Data[0].WeatherIcon)
-
-		// Check second hour data
-		assert.Equal(t, "13:00:00", response.Data[1].Time)
-		assert.InDelta(t, 6.0, response.Data[1].Temperature, 0.01)
-		assert.InDelta(t, 4.5, response.Data[1].FeelsLike, 0.01)
-		assert.Equal(t, 70, response.Data[1].Humidity)
-		assert.Equal(t, "Clouds", response.Data[1].WeatherMain)
-		assert.Equal(t, "broken clouds", response.Data[1].WeatherDesc)
-		assert.Equal(t, "04d", response.Data[1].WeatherIcon)
+		// The fixture's fields are mapped from the datastore row, so a dropped or swapped
+		// field changes the whole response entry; the precipitation fields have their own test.
+		assert.Equal(t, hourlyWeatherResponse{
+			Time:        "12:00:00",
+			Temperature: 5.5,
+			FeelsLike:   4.0,
+			TempMin:     3.2,
+			TempMax:     6.8,
+			Pressure:    1013,
+			Humidity:    75,
+			Visibility:  10000,
+			WindSpeed:   4.5,
+			WindDeg:     270,
+			WindGust:    7.2,
+			Clouds:      40,
+			WeatherMain: "Clouds",
+			WeatherDesc: "scattered clouds",
+			WeatherIcon: "03d",
+		}, response.Data[0])
+		assert.Equal(t, hourlyWeatherResponse{
+			Time:        "13:00:00",
+			Temperature: 6.0,
+			FeelsLike:   4.5,
+			Humidity:    70,
+			WeatherMain: "Clouds",
+			WeatherDesc: "broken clouds",
+			WeatherIcon: "04d",
+		}, response.Data[1])
 	}
 
 	// Verify mock expectations
@@ -703,12 +710,137 @@ func TestGetWeatherForDetection(t *testing.T) {
 		assert.InDelta(t, 4.0, response.Hourly.FeelsLike, 0.01)
 		assert.Equal(t, "Clouds", response.Hourly.WeatherMain)
 		assert.Equal(t, "scattered clouds", response.Hourly.WeatherDesc)
+
+		// Time of day is classified from the stored instant, 12:30 on a January day
+		assert.Equal(t, datastore.TimeOfDayDay, response.TimeOfDay)
 	}
 
 	// Verify mock expectations
 }
 
+// repeatedHourCase names a zone and the two UTC instants at which its clock reads
+// the same wall time at the end of DST (first the DST occurrence, then standard time).
+type repeatedHourCase struct {
+	name   string
+	zone   string
+	first  time.Time
+	second time.Time
+}
+
+// TestGetWeatherForDetection_RepeatedHourMatchesOwnInstant verifies that the
+// hourly weather of a detection in a repeated DST hour is the row at the
+// detection's own stored instant, for both occurrences. Rebuilding the instant
+// from the wall-clock text resolves one occurrence of each pair to the other.
+func TestGetWeatherForDetection_RepeatedHourMatchesOwnInstant(t *testing.T) {
+	t.Attr("component", "weather")
+	t.Attr("type", "integration")
+	t.Attr("feature", "repeated-hour-weather")
+
+	zones := []repeatedHourCase{
+		{
+			name: "New York", zone: "America/New_York",
+			first:  time.Date(2026, time.November, 1, 5, 30, 0, 0, time.UTC),
+			second: time.Date(2026, time.November, 1, 6, 30, 0, 0, time.UTC),
+		},
+		{
+			name: "Helsinki", zone: "Europe/Helsinki",
+			first:  time.Date(2026, time.October, 25, 0, 30, 0, 0, time.UTC),
+			second: time.Date(2026, time.October, 25, 1, 30, 0, 0, time.UTC),
+		},
+		{
+			// A 30 minute shift: an hour-only match would not pass.
+			name: "Lord Howe", zone: "Australia/Lord_Howe",
+			first:  time.Date(2026, time.April, 4, 14, 50, 0, 0, time.UTC),
+			second: time.Date(2026, time.April, 4, 15, 20, 0, 0, time.UTC),
+		},
+	}
+
+	const (
+		firstTemperature  = 11.0
+		secondTemperature = 22.0
+	)
+
+	for _, tc := range zones {
+		loc, err := time.LoadLocation(tc.zone)
+		require.NoError(t, err)
+
+		occurrences := []struct {
+			name        string
+			instant     time.Time
+			temperature float64
+		}{
+			{"first occurrence", tc.first, firstTemperature},
+			{"second occurrence", tc.second, secondTemperature},
+		}
+
+		for _, occ := range occurrences {
+			t.Run(tc.name+" "+occ.name, func(t *testing.T) {
+				e, mockDS, controller := setupWeatherTestEnvironment(t)
+				repo := mocks.NewMockDetectionRepository(t)
+				controller.Repo = repo
+
+				result := &detection.Result{ID: 7, Timestamp: occ.instant.In(loc)}
+				date := result.Date()
+				repo.EXPECT().Get(mock.Anything, "7").Return(result, nil)
+
+				mockDS.On("GetDailyEvents", date).Return(datastore.DailyEvents{Date: date}, nil)
+				mockDS.On("GetHourlyWeather", date).Return([]datastore.HourlyWeather{
+					{Time: tc.first, Temperature: firstTemperature},
+					{Time: tc.second, Temperature: secondTemperature},
+				}, nil)
+
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/detection/7", http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				c.SetPath("/api/v2/weather/detection/:id")
+				c.SetParamNames("id")
+				c.SetParamValues("7")
+
+				require.NoError(t, controller.GetWeatherForDetection(c))
+				require.Equal(t, http.StatusOK, rec.Code)
+
+				var response detectionWeatherResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				assert.InDelta(t, occ.temperature, response.Hourly.Temperature, 0.01,
+					"the weather row must be the one at the detection's own instant")
+			})
+		}
+	}
+}
+
 // TestGetWeatherForDetectionMissingID tests the weather for detection endpoint with missing ID
+// TestGetWeatherForDetection_NotFound checks that a detection missing from either store
+// answers 404: the legacy bridge reports gorm.ErrRecordNotFound and the v2 repository
+// reports repository.ErrDetectionNotFound.
+func TestGetWeatherForDetection_NotFound(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"legacy bridge", gorm.ErrRecordNotFound},
+		{"v2 repository", repository.ErrDetectionNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, controller := setupWeatherTestEnvironment(t)
+			repo := mocks.NewMockDetectionRepository(t)
+			controller.Repo = repo
+			repo.EXPECT().Get(mock.Anything, "404").Return(nil, tc.err)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/detection/404", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/weather/detection/:id")
+			c.SetParamNames("id")
+			c.SetParamValues("404")
+
+			require.NoError(t, controller.GetWeatherForDetection(c))
+			assert.Equal(t, http.StatusNotFound, rec.Code)
+		})
+	}
+}
+
 func TestGetWeatherForDetectionMissingID(t *testing.T) {
 	// Setup
 	e, _, controller := setupWeatherTestEnvironment(t)
@@ -807,41 +939,4 @@ func TestGetLatestWeather(t *testing.T) {
 	}
 
 	// Verify mock expectations
-}
-
-// TestFindHourlyWeatherByHourString verifies fallback correctly matches localized hour
-func TestFindHourlyWeatherByHourString(t *testing.T) {
-	// Go 1.25: Add test metadata
-	t.Attr("component", "weather")
-	t.Attr("type", "unit")
-	t.Attr("feature", "hourly-weather-fallback")
-
-	// Mock time.Local to a non-UTC offset (e.g., +03:00)
-	originalLocal := time.Local
-	defer func() { time.Local = originalLocal }()
-
-	loc := time.FixedZone("TestZone", 3*3600)
-	time.Local = loc
-
-	// Setup
-	_, _, controller := setupWeatherTestEnvironment(t)
-
-	// Provide hourlyWeatherList in UTC.
-	// In the local zone, 12:00 UTC is 15:00 local time.
-	hwList := []datastore.HourlyWeather{
-		{
-			Time:        time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-			Temperature: 15.0,
-		},
-	}
-
-	// Requesting 15:xx local time should match the 12:00 UTC record
-	resp := controller.findHourlyWeatherByHourString(hwList, "15:30:00", "test-id", "127.0.0.1", "/api")
-	assert.NotEmpty(t, resp.Time)
-	assert.Equal(t, "15:00:00", resp.Time)
-	assert.InDelta(t, 15.0, resp.Temperature, 0.01)
-
-	// Mismatch test: requesting 12:xx local time should fail to match 12:00 UTC
-	respMismatch := controller.findHourlyWeatherByHourString(hwList, "12:30:00", "test-id", "127.0.0.1", "/api")
-	assert.Empty(t, respMismatch.Time)
 }

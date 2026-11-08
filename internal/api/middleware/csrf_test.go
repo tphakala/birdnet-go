@@ -21,14 +21,14 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 		path     string
 		expected bool
 	}{
-		// Static assets — always skipped regardless of method
+		// Static assets: always skipped regardless of method
 		{"GET static asset", http.MethodGet, "/assets/style.css", true},
 		{"GET UI asset", http.MethodGet, "/ui/assets/app.js", true},
 
-		// Health check — always skipped
+		// Health check: always skipped
 		{"GET health", http.MethodGet, "/health", true},
 
-		// Media/streaming paths — skipped only for safe methods
+		// Media/streaming paths: skipped only for safe methods
 		{"GET media", http.MethodGet, "/api/v2/media/clip.mp3", true},
 		{"HEAD media", http.MethodHead, "/api/v2/media/clip.mp3", true},
 		{"OPTIONS media", http.MethodOptions, "/api/v2/media/clip.mp3", true},
@@ -46,25 +46,35 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 		{"GET audio", http.MethodGet, "/api/v2/audio/456", true},
 		{"DELETE audio", http.MethodDelete, "/api/v2/audio/456", false},
 
-		// Auth endpoints — always skipped (login/callback need to work before CSRF token exists)
+		// Auth endpoints: always skipped (login/callback need to work before CSRF token exists)
 		{"POST auth login", http.MethodPost, "/api/v2/auth/login", true},
 		{"GET auth callback", http.MethodGet, "/api/v2/auth/callback/google", true},
 		{"GET social OAuth", http.MethodGet, "/auth/google", true},
 
-		// Logout — skipped (must work even with expired CSRF tokens)
+		// Logout: skipped (must work even with expired CSRF tokens)
 		{"POST auth logout", http.MethodPost, "/api/v2/auth/logout", true},
 
-		// pprof — always skipped. go tool pprof POSTs to /symbol with no CSRF
-		// token, and the handlers are read-only and separately gated (auth
-		// middleware, or a secret query token a cross-site request cannot supply).
+		// pprof: skipped for safe methods and for the symbol POST. go tool pprof
+		// POSTs to /symbol with no CSRF token, and the handlers are read-only and
+		// separately gated (auth middleware, or a secret query token a cross-site
+		// request cannot supply).
 		{"GET pprof index", http.MethodGet, "/debug/pprof", true},
 		{"GET pprof heap", http.MethodGet, "/debug/pprof/heap", true},
 		{"POST pprof symbol", http.MethodPost, "/debug/pprof/symbol", true},
+		{"POST pprof heap", http.MethodPost, "/debug/pprof/heap", false},
 
 		// A path that merely starts with the same characters is not pprof.
 		{"POST debug lookalike", http.MethodPost, "/debug/pprofiler", false},
 
-		// Regular API paths — never skipped
+		// A traversal out of an exempt prefix resolves to a protected route and
+		// must not inherit the exemption.
+		{"POST traversal out of assets", http.MethodPost, "/assets/../api/v2/settings", false},
+		{"POST traversal out of ui assets", http.MethodPost, "/ui/assets/../../api/v2/settings", false},
+		{"GET traversal out of media", http.MethodGet, "/api/v2/media/../settings", false},
+		{"POST traversal out of auth", http.MethodPost, "/auth/../api/v2/settings", false},
+		{"GET traversal out of pprof", http.MethodGet, "/debug/pprof/../../api/v2/settings", false},
+
+		// Regular API paths: never skipped
 		{"GET detections", http.MethodGet, "/api/v2/detections/1", false},
 		{"POST settings", http.MethodPost, "/api/v2/settings", false},
 	}
@@ -75,31 +85,6 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 
 			c, _ := newTestContext(t, tt.method, tt.path)
 			assert.Equal(t, tt.expected, DefaultCSRFSkipper(c), "method: %s, path: %s", tt.method, tt.path)
-		})
-	}
-}
-
-func TestIsSafeHTTPMethod(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		method   string
-		expected bool
-	}{
-		{http.MethodGet, true},
-		{http.MethodHead, true},
-		{http.MethodOptions, true},
-		{http.MethodPost, false},
-		{http.MethodPut, false},
-		{http.MethodPatch, false},
-		{http.MethodDelete, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.expected, isSafeHTTPMethod(tt.method))
 		})
 	}
 }
@@ -256,12 +241,17 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 
 	tests := []struct {
 		name         string
+		method       string
 		secFetchSite string
 	}{
-		{"no Sec-Fetch-Site (control)", ""},
-		{"same-origin", "same-origin"},
-		{"none", "none"},
-		{"cross-site", "cross-site"},
+		{"no Sec-Fetch-Site (control)", http.MethodPost, ""},
+		{"same-origin", http.MethodPost, "same-origin"},
+		{"none", http.MethodPost, "none"},
+		{"cross-site", http.MethodPost, "cross-site"},
+		// The header strip is not specific to POST.
+		{"PUT with same-origin", http.MethodPut, "same-origin"},
+		{"PATCH with same-origin", http.MethodPatch, "same-origin"},
+		{"DELETE with same-origin", http.MethodDelete, "same-origin"},
 	}
 
 	for _, tt := range tests {
@@ -269,7 +259,7 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 			t.Parallel()
 
 			e := newCSRFTestServer()
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/settings", http.NoBody)
+			req := httptest.NewRequest(tt.method, "/api/v2/settings", http.NoBody)
 			if tt.secFetchSite != "" {
 				req.Header.Set(echo.HeaderSecFetchSite, tt.secFetchSite)
 			}
@@ -277,29 +267,7 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 			e.ServeHTTP(rec, req)
 
 			assert.Equal(t, http.StatusForbidden, rec.Code,
-				"state-changing request without a token must be rejected for Sec-Fetch-Site=%q", tt.secFetchSite)
-		})
-	}
-}
-
-// TestNewCSRF_BypassBlockedAcrossMethods confirms the strip is method-agnostic:
-// every unsafe method is forced through token validation under a forged
-// Sec-Fetch-Site: same-origin, not just POST.
-func TestNewCSRF_BypassBlockedAcrossMethods(t *testing.T) {
-	t.Parallel()
-
-	for _, method := range []string{http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		t.Run(method, func(t *testing.T) {
-			t.Parallel()
-
-			e := newCSRFTestServer()
-			req := httptest.NewRequest(method, "/api/v2/settings", http.NoBody)
-			req.Header.Set(echo.HeaderSecFetchSite, "same-origin")
-			rec := httptest.NewRecorder()
-			e.ServeHTTP(rec, req)
-
-			assert.Equal(t, http.StatusForbidden, rec.Code,
-				"%s without a token must be rejected under Sec-Fetch-Site: same-origin", method)
+				"%s without a token must be rejected for Sec-Fetch-Site=%q", tt.method, tt.secFetchSite)
 		})
 	}
 }

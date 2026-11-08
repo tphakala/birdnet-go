@@ -97,3 +97,13 @@ func setupValidReviewMock(m *mock.Mock, id string, noteID uint, withComment bool
 	}
 	m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 }
+
+// searchDefaultMatcher matches the advanced-search call that serves the plain text
+// search and the default (all) list: the given text, no scientific-name
+// alternatives, the page window, and the default sort.
+func searchDefaultMatcher(text string, limit, offset int) any {
+	return mock.MatchedBy(func(f *datastore.AdvancedSearchFilters) bool {
+		return f.TextQuery == text && len(f.SpeciesScientific) == 0 &&
+			f.Limit == limit && f.Offset == offset && f.SortBy == datastore.SortBySearchDefault
+	})
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -109,7 +110,8 @@ const (
 	// DecisionMixedSchemaRefused: MySQL/MariaDB holds bare v2 tables beside a legacy
 	// notes table and no side can be kept without losing rows (both sides hold data, the
 	// chosen side's startup would drop rows, the enhanced side is not a completed install,
-	// a table could not be read, or an empty table could not be removed). Startup drops
+	// a table could not be read, or an empty table could not be removed; a lost connection
+	// in either is not a refusal and gives DecisionStateUnknown). Startup drops
 	// no table with rows and refuses.
 	DecisionMixedSchemaRefused = "mixed_schema_refused"
 	// DecisionMixedSchemaKeptV2: bare v2 tables beside empty legacy tables on a completed
@@ -121,14 +123,15 @@ const (
 	// DecisionMixedSchemaKeptLegacy: legacy tables hold data and the bare v2 detection tables
 	// are empty. Startup kept the legacy database and dropped the empty bare v2 detection tables.
 	DecisionMixedSchemaKeptLegacy = "mixed_schema_kept_legacy"
+	// DecisionStateUnknown: the startup check could not read the database state (the
+	// server could not be reached). No mode was chosen.
+	DecisionStateUnknown = "state_unknown"
 	// DecisionMigrationPrefix prefixes a migration-state decision, e.g. "migration_completed".
 	DecisionMigrationPrefix = "migration_"
 )
 
 // Startup state checking errors.
 var (
-	// ErrV2DatabaseNotFound indicates the v2 database does not exist.
-	ErrV2DatabaseNotFound = errors.NewStd("v2 database not found")
 	// ErrV2DatabaseCorrupted indicates the v2 database is corrupted or unreadable.
 	ErrV2DatabaseCorrupted = errors.NewStd("v2 database corrupted or unreadable")
 	// ErrV2SchemaCorrupted indicates the v2 database has contaminated or invalid schema.
@@ -137,7 +140,8 @@ var (
 	// ErrMixedSchemaDatabase indicates the MySQL/MariaDB database holds bare v2 tables
 	// beside a legacy notes table and no side can be kept without losing rows (both sides
 	// hold data, the kept side's startup would drop rows, a table could not be read, or an
-	// empty table could not be removed). Callers must refuse to start (errors.Is), so that
+	// empty table could not be removed, for a reason other than a lost connection, which
+	// gives ErrStartupStateUnknown instead). Callers must refuse to start (errors.Is), so that
 	// no table with rows is dropped;
 	// StartupState.Error carries the tables with rows, or the failed step when an empty
 	// table could not be removed.
@@ -147,6 +151,11 @@ var (
 	// a database could not be opened or a probe failed. Callers must not consolidate or
 	// start in v2-only mode on it (errors.Is).
 	ErrLegacyTailUnverified = errors.NewStd("could not verify the legacy records beyond the migration watermark")
+	// ErrStartupStateUnknown indicates the startup check could not read the database state:
+	// the server could not be reached, or a probe the decision needs failed. Callers must
+	// not choose a mode or a table prefix on it (errors.Is). A cause that
+	// errors.IsConnectivityError recognises may heal, so callers may retry the read.
+	ErrStartupStateUnknown = errors.NewStd("database state at startup could not be read")
 )
 
 // StartupState represents the result of checking migration state at startup.
@@ -174,6 +183,8 @@ type StartupState struct {
 //   - StartupState with MigrationStatus=COMPLETED, LegacyRequired=false if migration is done
 //   - StartupState with LegacyRequired=true if legacy database is still needed
 //   - StartupState with Error set if v2 database check fails
+//   - StartupState with Decision=DecisionStateUnknown and Error wrapping ErrStartupStateUnknown
+//     if the MySQL/MariaDB server could not be reached; no mode may be chosen on it
 func CheckMigrationStateBeforeStartup(settings *conf.Settings) StartupState {
 	if settings.Output.MySQL.Enabled {
 		return checkMySQLMigrationState(settings)
@@ -424,7 +435,7 @@ func buildMySQLStartupDSN(settings *conf.Settings) string {
 		User:                 settings.Output.MySQL.Username,
 		Passwd:               settings.Output.MySQL.Password,
 		Net:                  "tcp",
-		Addr:                 fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		Addr:                 datastore.MySQLAddr(settings.Output.MySQL.Host, settings.Output.MySQL.Port),
 		DBName:               settings.Output.MySQL.Database,
 		AllowNativePasswords: true,
 		CheckConnLiveness:    true,
@@ -453,6 +464,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, tailStepOpenMySQL, err))
+		}
 		reportStartupError("mysql", "openDatabase", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -481,6 +495,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
 		settings.Output.MySQL.Database).Scan(&legacyCount).Error
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, tailStepLegacyTable, err))
+		}
 		reportStartupError("mysql", "checkLegacyTables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -500,13 +517,16 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?)",
 		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationCount).Error
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, stateStepV2MarkerTable, err))
+		}
 		reportStartupError("mysql", "checkV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
 			Decision:        DecisionV2Corrupted,
-			Error:           ErrV2DatabaseNotFound,
+			Error:           fmt.Errorf("failed to check v2 migration tables: %w", err),
 		}
 	}
 	v2MigrationExists := v2MigrationCount > 0
@@ -516,6 +536,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'detections'",
 		settings.Output.MySQL.Database).Scan(&freshV2Count).Error
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, stateStepBareDetections, err))
+		}
 		reportStartupError("mysql", "checkFreshV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -555,7 +578,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	// only the empty tables of the other, each verified empty under a lock; refuse when
 	// no side can be kept without losing rows. See resolveMixedSchema.
 	if freshV2Exists && !v2MigrationExists && legacyExists {
-		return resolveMixedSchema(db, settings.Output.MySQL.Database, mysqlHost, mysqlDB, mysqlUser)
+		return resolveMixedSchema(db, settings)
 	}
 
 	// No v2 tables at all but legacy exists = legacy mode
@@ -574,6 +597,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	var v2MigrationTableName string
 	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
 		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error
+	if errors.IsConnectivityError(err) {
+		return unknownStartupState(mysqlStateUnknown(settings, stateStepResolveMarker, err))
+	}
 	if err != nil || v2MigrationTableName == "" {
 		reportErr, stateErr := migrationTableResolveErrors(err)
 		reportStartupError("mysql", "resolveV2TableName", reportErr, mysqlHost, mysqlDB, mysqlUser)
@@ -587,6 +613,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 	var state entities.MigrationState
 	if err := db.Table(v2MigrationTableName).First(&state).Error; err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, tailStepReadState, err))
+		}
 		reportStartupError("mysql", "readMigrationState", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -656,6 +685,24 @@ const (
 	tailStepVerifyTail     = "verify legacy tail against v2"
 	tailStepOpenMySQL      = "open MySQL database"
 	tailStepMySQLHandle    = "get MySQL database handle"
+
+	tailStepCurrentDatabase = "read current database"
+	tailStepVerifyChildren  = "verify legacy child rows against v2"
+)
+
+// Steps of the MySQL state check and the bare schema probe, named in ErrStartupStateUnknown
+// wraps. Fixed strings, so an error never carries a host, database or user name.
+const (
+	stateStepV2MarkerTable  = "look up v2_ migration state table"
+	stateStepBareDetections = "look up bare detections table"
+	stateStepResolveMarker  = "resolve migration state table"
+	stateStepListTables     = "list tables"
+	stateStepBareSchema     = "check bare v2 schema"
+
+	stateStepMixedListTables    = "list tables for the mixed schema check"
+	stateStepMixedTableRows     = "check mixed schema table rows"
+	stateStepMixedSharedColumns = "read the label_id columns of shared tables"
+	stateStepMixedMarker        = "read the bare migration marker"
 )
 
 // tailUnverified wraps cause as an ErrLegacyTailUnverified for the named step.
@@ -667,12 +714,31 @@ func tailUnverified(step string, cause error) error {
 // its chain so the connectivity policy classifies it. Any other cause is flattened to a
 // scrubbed message: server errors can name the user and the database.
 func mysqlTailUnverified(settings *conf.Settings, step string, cause error) error {
+	return mysqlStartupError(settings, ErrLegacyTailUnverified, step, cause)
+}
+
+// mysqlStateUnknown wraps a MySQL cause as an ErrStartupStateUnknown for the named step,
+// with the same chain rules as mysqlTailUnverified.
+func mysqlStateUnknown(settings *conf.Settings, step string, cause error) error {
+	return mysqlStartupError(settings, ErrStartupStateUnknown, step, cause)
+}
+
+// mysqlStartupError wraps a MySQL cause under sentinel for the named step. A connectivity
+// failure keeps its chain so the connectivity policy classifies it. Any other cause is
+// flattened to a scrubbed message: server errors can name the user and the database.
+func mysqlStartupError(settings *conf.Settings, sentinel error, step string, cause error) error {
 	if errors.IsConnectivityError(cause) {
-		return tailUnverified(step, cause)
+		return fmt.Errorf("%w: %s: %w", sentinel, step, cause)
 	}
 	cfg := settings.Output.MySQL
 	scrubbed := scrubErrorWithPaths(cause.Error(), cfg.Host, cfg.Database, cfg.Username)
-	return fmt.Errorf("%w: %s: %s", ErrLegacyTailUnverified, step, scrubbed)
+	return fmt.Errorf("%w: %s: %s", sentinel, step, scrubbed)
+}
+
+// unknownStartupState is the StartupState for a read that could not tell. Every flag is
+// false, so a caller that ignores the error cannot land in v2-only or fresh-install mode.
+func unknownStartupState(err error) StartupState {
+	return StartupState{Decision: DecisionStateUnknown, Error: err}
 }
 
 // openReadOnlySQLite opens the SQLite database at path read-only and returns the handle
@@ -864,17 +930,12 @@ func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, note
 	// v2 and has not reconciled them yet. Tail sync can advance LastMigratedID past a
 	// record it failed to migrate, so the membership check below would not see those;
 	// the dirty-ID set catches them.
-	if dirtyTable != "" {
-		var dirty int64
-		if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
-			return false, fmt.Errorf("count dirty IDs: %w", err)
-		}
-		if dirty > 0 {
-			log.Warn("legacy tail not reconciled: dirty IDs pending sync to v2",
-				logger.Int64("dirty_ids", dirty),
-				logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
-			return false, nil
-		}
+	pending, err := pendingDirtyIDs(v2DB, dirtyTable, lastMigratedID, log)
+	if err != nil {
+		return false, err
+	}
+	if pending {
+		return false, nil
 	}
 
 	missing, err := legacyTailMissingFromV2(legacyDB, v2DB, lastMigratedID, notesTable, detectionsTable)
@@ -887,6 +948,27 @@ func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, note
 		return false, nil
 	}
 	return true, nil
+}
+
+// pendingDirtyIDs reports whether dirtyTable holds any row, which means the migration
+// worker has dirty IDs it has not reconciled. An empty dirtyTable (the table does not
+// exist) reports false. A read error is returned with a false result, never read as
+// "none pending".
+func pendingDirtyIDs(v2DB *gorm.DB, dirtyTable string, lastMigratedID uint, log logger.Logger) (bool, error) {
+	if dirtyTable == "" {
+		return false, nil
+	}
+	var dirty int64
+	if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
+		return false, fmt.Errorf("count dirty IDs: %w", err)
+	}
+	if dirty > 0 {
+		log.Warn("legacy tail not reconciled: dirty IDs pending sync to v2",
+			logger.Int64("dirty_ids", dirty),
+			logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
+		return true, nil
+	}
+	return false, nil
 }
 
 // legacyTailMissingFromV2 reports whether any legacy notesTable.id greater than
@@ -1161,23 +1243,41 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 // marker left by a backend switch (e.g. SQLite -> MySQL) or a partial/aborted init
 // from wedging the app in enhanced mode against a missing `detections` table
 // (GitHub #3575).
-func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
+//
+// An error (always an ErrStartupStateUnknown) means the probe could not tell, for
+// example because the server could not be reached; the bool must not be read then, and
+// the caller must not choose a table prefix on it. A false answer is returned only
+// with a nil error.
+func CheckMySQLHasFreshV2Schema(settings *conf.Settings) (bool, error) {
 	dsn := buildMySQLStartupDSN(settings)
 
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		return false
+		return false, mysqlStateUnknown(settings, tailStepOpenMySQL, err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return false
+		return false, mysqlStateUnknown(settings, tailStepMySQLHandle, err)
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	return hasCompleteFreshV2Schema(db)
+	// List with listTableNames, not GORM's Migrator: HasTable swallows the query error and
+	// reads it as "no table", and GetTables discards the error of its CurrentDatabase
+	// query on MySQL, so a failed lookup could read as an empty database. Base tables
+	// only, the scope of GORM's MySQL HasTable.
+	existing, err := listTableNames(db, settings.Output.MySQL.Database, true)
+	if err != nil {
+		return false, mysqlStateUnknown(settings, stateStepListTables, err)
+	}
+
+	fresh, err := hasCompleteFreshV2Schema(db, existing)
+	if err != nil {
+		return false, mysqlStateUnknown(settings, stateStepBareSchema, err)
+	}
+	return fresh, nil
 }
 
 // hasCompleteFreshV2Schema is the dialect-agnostic core behind CheckMySQLHasFreshV2Schema.
@@ -1186,29 +1286,35 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 // migration_state) row with state == COMPLETED AND a physical no-prefix `detections`
 // data table.
 //
-// It uses GORM's migrator for table existence so the same code path can be unit-tested
-// against SQLite (in CI, where MySQL is unavailable) while production calls it for MySQL.
-func hasCompleteFreshV2Schema(db *gorm.DB) bool {
+// existing is the set of lower-cased table names of the database, listed by the caller
+// with a probe that reports its errors. A false answer is definite only with a nil error;
+// any failed read returns an error, because "could not read" must not be taken for "not
+// a fresh schema" (that picks the v2_ prefix over a bare install).
+func hasCompleteFreshV2Schema(db *gorm.DB, existing map[string]struct{}) (bool, error) {
 	// Resolve the migration-state table name. Plural is current; the singular
 	// "migration_state" predates PR #2165 (which removed TableName() overrides).
 	migrationTable := ""
 	for _, name := range []string{"migration_states", "migration_state"} {
-		if db.Migrator().HasTable(name) {
+		if _, ok := existing[name]; ok {
 			migrationTable = name
 			break
 		}
 	}
 	if migrationTable == "" {
-		return false
+		return false, nil
 	}
 
-	// The migration must be marked COMPLETED.
+	// The migration must be marked COMPLETED. A table without its singleton row is a
+	// definite "not completed"; any other read error is unknown.
 	var state entities.MigrationState
 	if err := db.Table(migrationTable).First(&state).Error; err != nil {
-		return false
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read migration state: %w", err)
 	}
 	if state.State != entities.MigrationStatusCompleted {
-		return false
+		return false, nil
 	}
 
 	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
@@ -1226,11 +1332,17 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 	// legacy table is harmless residue that a fully migrated v2 database can still carry and
 	// must NOT disqualify the schema; keying on table existence alone (as PR #3926 first did)
 	// wrongly forced healthy v2 databases into legacy mode. Mirror the same row-based guard
-	// used by CheckSQLiteHasV2Schema, failing closed on a row-count probe error.
-	if hasLegacyData, err := legacyDataPresent(db); err != nil || hasLegacyData {
-		return false
+	// used by CheckSQLiteHasV2Schema. A row-count probe error is returned, not read as a
+	// verdict either way.
+	hasLegacyData, err := legacyRowsPresent(db, existing)
+	if err != nil {
+		return false, fmt.Errorf("check legacy data tables: %w", err)
 	}
-	return db.Migrator().HasTable("detections")
+	if hasLegacyData {
+		return false, nil
+	}
+	_, hasDetections := existing["detections"]
+	return hasDetections, nil
 }
 
 // legacyDataTables lists the v1 data tables. After a completed in-place migration these tables
@@ -1270,9 +1382,14 @@ func legacyDataPresent(db *gorm.DB) (bool, error) {
 	}
 	existing := make(map[string]struct{}, len(tables))
 	for _, t := range tables {
-		existing[t] = struct{}{}
+		existing[strings.ToLower(t)] = struct{}{}
 	}
+	return legacyRowsPresent(db, existing)
+}
 
+// legacyRowsPresent reports whether any legacy data table listed in existing (lower-cased
+// table names) holds at least one row. The bool is meaningful only when the error is nil.
+func legacyRowsPresent(db *gorm.DB, existing map[string]struct{}) (bool, error) {
 	for _, name := range legacyDataTables {
 		if _, ok := existing[name]; !ok {
 			continue
@@ -1390,7 +1507,7 @@ const (
 	hintCountsUnknown         = "Some tables could not be read. " + hintBackupFirst
 	hintBothHoldData          = "Both sides hold data. Back up the database before removing either side; removing a side loses the rows listed for it."
 	hintV2NotCompleted        = "The enhanced database holds detections but is not marked as a completed install. " + hintBackupFirst
-	hintSharedTablesHoldData  = "The tables %s hold rows that the startup of the other side would remove. " + hintBackupFirst
+	hintSharedTablesHoldData  = "The tables %s hold rows that the startup of the other side would refuse or remove. " + hintBackupFirst
 	hintDropFailed            = "No table with rows was dropped and the next start decides again from what the database holds. If it keeps failing with a lock or privilege error, check that the database user may lock, update and drop tables and that no other session is using them."
 	mixedSchemaDropFailedText = "database holds enhanced database (v2) tables beside a legacy notes table and BirdNET-Go could not remove the empty tables of one side: %s. %s"
 	mixedSchemaErrorFormat    = "database holds enhanced database (v2) tables beside a legacy notes table and BirdNET-Go cannot keep one side without losing data. v2 tables with rows: %s. Legacy tables with rows: %s. %s"
@@ -1412,11 +1529,19 @@ var bareDetectionTables = []string{
 // hasCompleteFreshV2Schema relies on with a different meaning.
 var legacyDetectionTables = []string{"note_locks", "note_comments", "note_reviews", "results", "notes"}
 
-// legacyRepairedSharedTables are the tables the legacy store drops, rows included, when
-// they have the v2 shape (repairV2ShapedLegacyTables drops those with a NOT NULL label_id,
-// validateAndFixSchema drops image_caches with any label_id). Mirror of
-// v2ShapedLegacyTables in internal/datastore/manage.go; keep in sync.
+// legacyRepairedSharedTables are the tables the legacy store repairs when they have the v2
+// shape. repairV2ShapedLegacyTables drops one with a NOT NULL label_id when it is empty,
+// drops the disposable ones (legacyDisposableSharedTables) with their rows, and refuses
+// to start when any other holds rows. validateAndFixSchema drops image_caches with any
+// label_id, rows included. Mirror of v2ShapedLegacyTables in
+// internal/datastore/manage.go; keep in sync.
 var legacyRepairedSharedTables = []string{"notification_histories", "dynamic_thresholds", "threshold_events", mixedSchemaImageCaches}
+
+// legacyDisposableSharedTables are the shared tables whose rows the legacy store drops
+// without refusing, because BirdNET-Go rebuilds them (see the exception in
+// internal/datastore/AGENTS.md). Mirror of disposableV2ShapedTables in
+// internal/datastore/manage.go; keep in sync.
+var legacyDisposableSharedTables = []string{"notification_histories", mixedSchemaImageCaches}
 
 // v2DroppedThresholdTables are the tables the v2 Initialize drops, rows included, when
 // they still have a label_id column (dropStaleThresholdTables in manager.go).
@@ -1457,13 +1582,27 @@ type mixedSchemaProbe struct {
 	v2Completed bool
 	// unknown is true when any input could not be read.
 	unknown bool
+	// retryStep and retryErr are the first read that failed with a connectivity error. When
+	// retryErr is set the read may heal, so the caller must not decide from this probe.
+	retryStep string
+	retryErr  error
+}
+
+// noteReadFailure marks the probe unknown and records the first connectivity failure.
+func (p *mixedSchemaProbe) noteReadFailure(step string, err error) {
+	p.unknown = true
+	if p.retryErr == nil && errors.IsConnectivityError(err) {
+		p.retryStep = step
+		p.retryErr = err
+	}
 }
 
 // mixedSchemaVerdict is the outcome of classifyMixedSchema. The zero value refuses.
 type mixedSchemaVerdict int
 
 const (
-	// verdictRefuseUnknown: an input could not be read.
+	// verdictRefuseUnknown: an input could not be read for a reason other than a lost
+	// connection.
 	verdictRefuseUnknown mixedSchemaVerdict = iota
 	// verdictKeepV2: legacy tables empty, enhanced install completed.
 	verdictKeepV2
@@ -1477,7 +1616,8 @@ const (
 	verdictRefuseV2NotCompleted
 	// verdictRefuseBothHoldData: both sides hold detections or legacy data.
 	verdictRefuseBothHoldData
-	// verdictRefuseSharedTables: keeping a side would let its startup drop rows of a shared table.
+	// verdictRefuseSharedTables: keeping a side would let its startup refuse over, or drop
+	// rows of, a shared table.
 	verdictRefuseSharedTables
 	// verdictRefuseDropFailed: an empty table could not be removed.
 	verdictRefuseDropFailed
@@ -1491,7 +1631,8 @@ type mixedSchemaError struct {
 	v2Tables []tableRowCount
 	// legacyTables are the existing legacy detection tables with their counts.
 	legacyTables []tableRowCount
-	// blocking are the shared tables with rows that the startup of the other side would drop.
+	// blocking are the shared tables with rows that the startup of the other side would
+	// refuse over or drop.
 	blocking []string
 	// failure says which reconcile step failed, for verdictRefuseDropFailed.
 	failure string
@@ -1502,7 +1643,7 @@ func newMixedSchemaError(p *mixedSchemaProbe, verdict mixedSchemaVerdict) *mixed
 	e := &mixedSchemaError{verdict: verdict, v2Tables: slices.Clone(p.v2Tables), legacyTables: p.legacyTables}
 	for _, s := range p.sharedTables {
 		e.v2Tables = append(e.v2Tables, s.tableRowCount)
-		if s.hasRows && (legacyDropsRows(s) || v2DropsRows(s)) {
+		if s.hasRows && (legacyRefusesRows(s) || v2DropsRows(s)) {
 			e.blocking = append(e.blocking, s.table)
 		}
 	}
@@ -1556,11 +1697,13 @@ func mixedSchemaHint(e *mixedSchemaError) string {
 	}
 }
 
-// legacyDropsRows reports whether the legacy store would drop the rows of s on its next
-// start: a NOT NULL label_id (repairV2ShapedLegacyTables), or any label_id on image_caches
-// (validateAndFixSchema).
-func legacyDropsRows(s sharedTableProbe) bool {
-	return slices.Contains(legacyRepairedSharedTables, s.table) && (s.labelNotNull || s.table == mixedSchemaImageCaches)
+// legacyRefusesRows reports whether the legacy startup would refuse to start over the
+// rows of s: a non-disposable shared table with a NOT NULL label_id
+// (repairV2ShapedLegacyTables). The disposable tables are dropped with their rows
+// instead, image_caches also with a nullable label_id (validateAndFixSchema).
+func legacyRefusesRows(s sharedTableProbe) bool {
+	return s.labelNotNull && slices.Contains(legacyRepairedSharedTables, s.table) &&
+		!slices.Contains(legacyDisposableSharedTables, s.table)
 }
 
 // v2DropsRows reports whether the v2 Initialize would drop the rows of s on its next
@@ -1590,7 +1733,7 @@ func anyRows(tables []tableRowCount) bool {
 //     uncompleted one is kept only when it holds no detections. Refuse if the v2
 //     startup would drop rows of a threshold table.
 //   - legacy tables hold data: keep the legacy database when the bare detection
-//     tables are empty and the legacy startup would drop no shared table rows.
+//     tables are empty and the legacy startup would not refuse over a shared table.
 func classifyMixedSchema(p *mixedSchemaProbe) mixedSchemaVerdict {
 	if p.unknown {
 		return verdictRefuseUnknown
@@ -1610,30 +1753,30 @@ func classifyMixedSchema(p *mixedSchemaProbe) mixedSchemaVerdict {
 	if detectionFamilyHasRows(p) {
 		return verdictRefuseBothHoldData
 	}
-	if slices.ContainsFunc(p.sharedTables, func(s sharedTableProbe) bool { return s.hasRows && legacyDropsRows(s) }) {
+	if slices.ContainsFunc(p.sharedTables, func(s sharedTableProbe) bool { return s.hasRows && legacyRefusesRows(s) }) {
 		return verdictRefuseSharedTables
 	}
 	return verdictKeepLegacy
 }
 
 // probeTableRows reads whether a table holds rows and, only when it does, how many. The
-// bool is false when the EXISTS probe failed; the entry then reports rows as unknown
+// error is the EXISTS probe failure; the entry then reports rows as unknown
 // so the table counts as non-empty. A COUNT failure never changes the verdict: an exact
 // COUNT of a large table can pass the startup read timeout, and the count is only
 // printed. The name comes from a fixed list (see tableHasAnyRow).
-func probeTableRows(db *gorm.DB, name string) (tableRowCount, bool) {
+func probeTableRows(db *gorm.DB, name string) (tableRowCount, error) {
 	hasRow, err := tableHasAnyRow(db, name)
 	if err != nil {
-		return tableRowCount{table: name, rows: mixedSchemaRowCountUnknown, hasRows: true}, false
+		return tableRowCount{table: name, rows: mixedSchemaRowCountUnknown, hasRows: true}, err
 	}
 	if !hasRow {
-		return tableRowCount{table: name}, true
+		return tableRowCount{table: name}, nil
 	}
 	var rows int64
 	if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&rows).Error; err != nil {
 		rows = mixedSchemaRowCountUnknown
 	}
-	return tableRowCount{table: name, rows: rows, hasRows: true}, true
+	return tableRowCount{table: name, rows: rows, hasRows: true}, nil
 }
 
 // probeTables reads the existing tables of a fixed list, in list order, and marks the
@@ -1644,9 +1787,9 @@ func (p *mixedSchemaProbe) probeTables(db *gorm.DB, existing map[string]struct{}
 		if _, ok := existing[name]; !ok {
 			continue
 		}
-		entry, ok := probeTableRows(db, name)
-		if !ok {
-			p.unknown = true
+		entry, err := probeTableRows(db, name)
+		if err != nil {
+			p.noteReadFailure(stateStepMixedTableRows, err)
 		}
 		probed = append(probed, entry)
 	}
@@ -1676,7 +1819,8 @@ func listTableNames(db *gorm.DB, database string, baseTablesOnly bool) (map[stri
 // lists the tables straight from information_schema (GORM's Migrator().GetTables()
 // swallows the errors of its CurrentDatabase query on MySQL) and fails closed: when the
 // listing fails or lacks detections or notes (which existed moments ago), or any
-// existence probe fails, the result is marked unknown. It never returns an error.
+// existence probe fails, the result is marked unknown. It never returns an error; it
+// records the first connectivity failure in retryErr instead.
 func probeMixedSchema(db *gorm.DB, database string) *mixedSchemaProbe {
 	p := &mixedSchemaProbe{}
 
@@ -1685,6 +1829,9 @@ func probeMixedSchema(db *gorm.DB, database string) *mixedSchemaProbe {
 	_, hasNotes := existing[mixedSchemaNotesTable]
 	if listErr != nil || !hasDetections || !hasNotes {
 		p.unknown = true
+		if listErr != nil {
+			p.noteReadFailure(stateStepMixedListTables, listErr)
+		}
 		p.v2Tables = []tableRowCount{{table: mixedSchemaDetectionsTable, rows: mixedSchemaRowCountUnknown, hasRows: true}}
 		p.legacyTables = []tableRowCount{{table: mixedSchemaNotesTable, rows: mixedSchemaRowCountUnknown, hasRows: true}}
 		return p
@@ -1708,14 +1855,14 @@ func (p *mixedSchemaProbe) probeSharedTables(db *gorm.DB, database string) {
 		"WHERE table_schema = ? AND column_name = ? AND table_name IN ?",
 		database, mixedSchemaLabelIDColumn, legacyRepairedSharedTables).Scan(&columns).Error
 	if err != nil {
-		p.unknown = true
+		p.noteReadFailure(stateStepMixedSharedColumns, err)
 		return
 	}
 	for _, col := range columns {
 		name := strings.ToLower(col.Name)
-		entry, ok := probeTableRows(db, name)
-		if !ok {
-			p.unknown = true
+		entry, rowsErr := probeTableRows(db, name)
+		if rowsErr != nil {
+			p.noteReadFailure(stateStepMixedTableRows, rowsErr)
 		}
 		p.sharedTables = append(p.sharedTables, sharedTableProbe{
 			tableRowCount: entry,
@@ -1735,7 +1882,7 @@ func (p *mixedSchemaProbe) probeMarker(db *gorm.DB, existing map[string]struct{}
 		p.markerTable = name
 		var states []string
 		if err := db.Raw("SELECT state FROM `" + name + "` LIMIT 1").Scan(&states).Error; err != nil {
-			p.unknown = true
+			p.noteReadFailure(stateStepMixedMarker, err)
 			return
 		}
 		if len(states) == 0 {
@@ -1924,15 +2071,34 @@ func describeStepFailure(step string, err error) string {
 // rows. A failed drop or marker write refuses the boot too. A marker already written
 // for the fresh shape stays; with no legacy rows the next start classifies the database
 // as keep-v2 and retries the drop. The table the branch keys on is always dropped last.
-func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupState {
+// A lost connection in a read or a step is not a refusal: it returns the unknown state,
+// which the caller retries, after zero or more drops of tables verified empty.
+func resolveMixedSchema(db *gorm.DB, settings *conf.Settings) StartupState {
+	database := settings.Output.MySQL.Database
+	redact := []string{settings.Output.MySQL.Host, database, settings.Output.MySQL.Username}
 	p := probeMixedSchema(db, database)
+	if p.retryErr != nil {
+		return unknownStartupState(mysqlStateUnknown(settings, p.retryStep, p.retryErr))
+	}
 	verdict := classifyMixedSchema(p)
 
 	refuse := func(v mixedSchemaVerdict) StartupState {
 		reportMixedSchemaRefused()
 		return mixedSchemaRefusedState(newMixedSchemaError(p, v))
 	}
-	failed := func(operation, step string, err error) StartupState {
+	failed := func(operation, step string, dropped []string, err error) StartupState {
+		if errors.IsConnectivityError(err) {
+			droppedText := mixedSchemaNone
+			if len(dropped) > 0 {
+				droppedText = strings.Join(dropped, ", ")
+			}
+			logger.Global().Module("datastore").Warn("lost the database connection while reconciling a mixed schema database, the startup check reads the database again",
+				logger.String("operation", operation),
+				logger.String("step", step),
+				logger.String("dropped_empty_tables", droppedText),
+				logger.Error(err))
+			return unknownStartupState(mysqlStateUnknown(settings, step, err))
+		}
 		reportStartupError("mysql", operation, err, redact...)
 		reportMixedSchemaRefused()
 		refusal := newMixedSchemaError(p, verdictRefuseDropFailed)
@@ -1944,7 +2110,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 	case verdictKeepV2:
 		dropped, err := dropVerifiedEmptyTables(db, database, legacyDetectionTables)
 		if err != nil {
-			return failed("mixedSchemaDropLegacy", stepDropLegacy, err)
+			return failed("mixedSchemaDropLegacy", stepDropLegacy, dropped, err)
 		}
 		logMixedSchemaReconciled("database held enhanced database (v2) tables beside empty legacy tables; kept the enhanced database and removed the empty legacy tables",
 			DecisionMixedSchemaKeptV2, p, dropped)
@@ -1953,7 +2119,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 	case verdictFreshV2:
 		marked, err := markEmptyBareSchemaCompleted(db, p.markerTable)
 		if err != nil {
-			return failed("mixedSchemaMarkCompleted", stepMarkCompleted, err)
+			return failed("mixedSchemaMarkCompleted", stepMarkCompleted, nil, err)
 		}
 		if !marked {
 			// No marker row to update: the fresh install path writes it. Dropping the
@@ -1966,7 +2132,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 		if err != nil {
 			// The completed marker stays. With no legacy rows the next start classifies this
 			// database as keep-v2 and retries the drop, so there is nothing to undo.
-			return failed("mixedSchemaDropLegacy", stepDropLegacy, err)
+			return failed("mixedSchemaDropLegacy", stepDropLegacy, dropped, err)
 		}
 		logMixedSchemaReconciled("database held empty enhanced database (v2) tables beside empty legacy tables; kept the enhanced database, marked it completed and removed the empty legacy tables",
 			DecisionMixedSchemaFreshV2, p, dropped, logger.Bool("marked_completed", true))
@@ -1975,7 +2141,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 	case verdictKeepLegacy:
 		dropped, err := dropVerifiedEmptyTables(db, database, bareDetectionTables)
 		if err != nil {
-			return failed("mixedSchemaDropDetections", stepDropDetections, err)
+			return failed("mixedSchemaDropDetections", stepDropDetections, dropped, err)
 		}
 		logMixedSchemaReconciled("database held legacy tables beside empty enhanced database (v2) detection tables; kept the legacy database and removed the empty detection tables, every other enhanced table was left in place",
 			DecisionMixedSchemaKeptLegacy, p, dropped)

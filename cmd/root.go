@@ -54,6 +54,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	}
 
 	rootCmd.AddCommand(subcommands...)
+	silenceUsageOnRunErrors(rootCmd)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		// Skip setup for informational and privileged primitive commands.
@@ -102,4 +103,22 @@ func setupFlags(rootCmd *cobra.Command, settings *conf.Settings) error {
 	}
 
 	return nil
+}
+
+// silenceUsageOnRunErrors stops cobra from printing the usage text for an error
+// that a RunE returns. Cobra validates flags, arguments and required flags
+// before it calls RunE, so those errors still print usage; a runtime failure is
+// not a usage mistake, and main logs it. The flag is set on the executing
+// command inside the wrapper, not on the root or in PersistentPreRunE, because
+// required-flag validation runs after PersistentPreRunE.
+func silenceUsageOnRunErrors(cmd *cobra.Command) {
+	if run := cmd.RunE; run != nil {
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			c.SilenceUsage = true
+			return run(c, args)
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		silenceUsageOnRunErrors(sub)
+	}
 }

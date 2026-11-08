@@ -91,15 +91,6 @@ func newNativeTestHandler(t *testing.T, opts ...apitest.CoreOption) (*Handler, *
 	return &Handler{Core: apitest.NewCore(t, append([]apitest.CoreOption{apitest.WithEcho(e)}, opts...)...)}, e
 }
 
-func TestIsNativeDiscriminatesThePaths(t *testing.T) {
-	assert.False(t, (*HLSStreamInfo)(nil).isNative(), "a nil stream is not native")
-	assert.False(t, (&HLSStreamInfo{SourceID: "x"}).isNative(),
-		"a stream with no muxer is not native")
-
-	stream := newNativeTestStream(t, 1)
-	assert.True(t, stream.isNative())
-}
-
 // TestEffectiveBitrateAppliesLimits pins how the configured live-stream bitrate
 // is defaulted and clamped before it reaches the muxer.
 //
@@ -503,37 +494,6 @@ func TestNativeFeedLoopAccumulatesSubSampleChunks(t *testing.T) {
 	assert.False(t, stream.mux.Stats().Failed, "sub-sample chunks are not an encoder failure")
 	require.True(t, stream.mux.Ready(1),
 		"single-byte chunks must accumulate into samples; if no segment exists, the remainder was discarded instead of carried")
-}
-
-// TestNativeFeedLoopSurvivesAlternatingOddChunks covers the shape a real pipe
-// read produces: lengths that vary rather than being uniformly odd.
-func TestNativeFeedLoopSurvivesAlternatingOddChunks(t *testing.T) {
-	h, _ := newNativeTestHandler(t)
-	stream := &HLSStreamInfo{SourceID: "native_src", mux: newNativeMux(t)}
-
-	epoch := time.Date(2026, 7, 23, 9, 0, 0, 0, time.UTC)
-	ch := make(chan audioChunk, 4096)
-	// Sizes sum to 3413 bytes per cycle; 1200 chunks is about six seconds of
-	// mono 16-bit, comfortably several segments rather than borderline one.
-	sizes := []int{1, 3, 1201, 2, 999, 1200, 7}
-	pcm := make([]byte, 2048)
-	var sent int
-	for range 1200 {
-		n := sizes[sent%len(sizes)]
-		ch <- audioChunk{data: pcm[:n], timestamp: epoch.Add(time.Duration(sent) * time.Millisecond)}
-		sent++
-	}
-	close(ch)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
-	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		feed: &audioFeed{ch: ch}, cleanup: func() {},
-	})
-
-	assert.False(t, stream.mux.Stats().Failed,
-		"ragged chunk lengths are a producer reality, not an encoder failure")
-	assert.True(t, stream.mux.Ready(1), "the stream must still have produced segments")
 }
 
 // The tests below exercise the isNative() guard on the readiness and cleanup

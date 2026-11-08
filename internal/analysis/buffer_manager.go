@@ -670,11 +670,6 @@ func (m *BufferManager) processMonitorTick(
 		return true
 	}
 
-	m.logger.Debug("buffer monitor dispatching to ProcessData",
-		logger.String("source_id", cfg.sourceID),
-		logger.String("model_id", cfg.modelID),
-		logger.Int("window_bytes", len(data)))
-
 	audioCapturedAt := time.Now()
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)

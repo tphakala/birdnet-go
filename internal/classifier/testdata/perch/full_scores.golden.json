@@ -1,0 +1,158 @@
+[
+  [
+    {
+      "species": "Species_10045",
+      "confidence": 0.009794527,
+      "bits": 1008761145
+    },
+    {
+      "species": "Species_13080",
+      "confidence": 0.009457631,
+      "bits": 1008399406
+    },
+    {
+      "species": "Species_10757",
+      "confidence": 0.009278252,
+      "bits": 1008206799
+    },
+    {
+      "species": "Species_01794",
+      "confidence": 0.0078411,
+      "bits": 1006663669
+    },
+    {
+      "species": "Species_10043",
+      "confidence": 0.006937654,
+      "bits": 1004754243
+    },
+    {
+      "species": "Species_13283",
+      "confidence": 0.006915568,
+      "bits": 1004706813
+    },
+    {
+      "species": "Species_13003",
+      "confidence": 0.005267835,
+      "bits": 1001168334
+    },
+    {
+      "species": "Species_04793",
+      "confidence": 0.005115189,
+      "bits": 1000840529
+    },
+    {
+      "species": "Species_05228",
+      "confidence": 0.005080014,
+      "bits": 1000764991
+    },
+    {
+      "species": "Species_01788",
+      "confidence": 0.0048816856,
+      "bits": 1000339084
+    }
+  ],
+  [
+    {
+      "species": "Species_13080",
+      "confidence": 0.064974315,
+      "bits": 1032130881
+    },
+    {
+      "species": "Species_03440",
+      "confidence": 0.035106063,
+      "bits": 1024445280
+    },
+    {
+      "species": "Species_04366",
+      "confidence": 0.028776126,
+      "bits": 1022082025
+    },
+    {
+      "species": "Species_11964",
+      "confidence": 0.02852787,
+      "bits": 1021948744
+    },
+    {
+      "species": "Species_04793",
+      "confidence": 0.019234003,
+      "bits": 1016959137
+    },
+    {
+      "species": "Species_01794",
+      "confidence": 0.01751352,
+      "bits": 1016035459
+    },
+    {
+      "species": "Species_14131",
+      "confidence": 0.01719465,
+      "bits": 1015864267
+    },
+    {
+      "species": "Species_01788",
+      "confidence": 0.016007448,
+      "bits": 1015226893
+    },
+    {
+      "species": "Species_01096",
+      "confidence": 0.01533546,
+      "bits": 1014710677
+    },
+    {
+      "species": "Species_11963",
+      "confidence": 0.01487223,
+      "bits": 1014213287
+    }
+  ],
+  [
+    {
+      "species": "Species_05378",
+      "confidence": 0.5901977,
+      "bits": 1058477874
+    },
+    {
+      "species": "Species_03440",
+      "confidence": 0.03672519,
+      "bits": 1024879911
+    },
+    {
+      "species": "Species_10291",
+      "confidence": 0.0233956,
+      "bits": 1019193377
+    },
+    {
+      "species": "Species_02265",
+      "confidence": 0.014439691,
+      "bits": 1013748852
+    },
+    {
+      "species": "Species_10397",
+      "confidence": 0.009748799,
+      "bits": 1008712045
+    },
+    {
+      "species": "Species_09719",
+      "confidence": 0.009672246,
+      "bits": 1008629847
+    },
+    {
+      "species": "Species_03439",
+      "confidence": 0.008933148,
+      "bits": 1007836247
+    },
+    {
+      "species": "Species_05228",
+      "confidence": 0.008321287,
+      "bits": 1007179266
+    },
+    {
+      "species": "Species_14114",
+      "confidence": 0.0071196794,
+      "bits": 1005145139
+    },
+    {
+      "species": "Species_13080",
+      "confidence": 0.006967747,
+      "bits": 1004818867
+    }
+  ]
+]

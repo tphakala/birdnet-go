@@ -59,11 +59,15 @@ func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.L
 
 	db := manager.DB()
 
+	// A prefixed manager (a MySQL install migrated from legacy) needs prefixed
+	// repositories, or they would address tables that do not exist.
+	useV2Prefix := manager.TablePrefix() != ""
+
 	// Create lookup table entries for tests
 	// The LabelType and TaxonomicClass tables should be created by Initialize()
-	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, false)
-	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, false)
-	modelRepo := repository.NewModelRepository(db, nil, false, isMySQL)
+	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, useV2Prefix)
+	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, useV2Prefix)
+	modelRepo := repository.NewModelRepository(db, nil, useV2Prefix, isMySQL)
 
 	ctx := t.Context()
 
@@ -81,15 +85,15 @@ func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.L
 
 	avesClassID := avesClass.ID
 
-	// Create repositories. useV2Prefix=false (fresh install / clean table names);
+	// Create repositories. useV2Prefix follows the manager's table prefix;
 	// isMySQL selects the dialect-specific SQL the repositories generate.
-	detectionRepo := repository.NewDetectionRepository(db, nil, false, isMySQL)
-	labelRepo := repository.NewLabelRepository(db, nil, false, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, isMySQL)
-	weatherRepo := repository.NewWeatherRepository(db, nil, false, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, false, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, isMySQL)
+	detectionRepo := repository.NewDetectionRepository(db, nil, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(db, nil, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(db, nil, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
 
 	return &Config{
 		Manager:            manager,
@@ -711,6 +715,29 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName(t *testing.T) {
 	all, err = ds.GetAllDynamicThresholds()
 	require.NoError(t, err)
 	assert.Empty(t, all, "threshold should be deleted when using common name")
+}
+
+// TestV2OnlyDatastore_DeleteDynamicThreshold_NotFoundSemantics verifies the
+// Interface contract: deleting a species with no stored threshold succeeds,
+// while genuine database failures are still returned.
+func TestV2OnlyDatastore_DeleteDynamicThreshold_NotFoundSemantics(t *testing.T) {
+	t.Run("MissingRowReturnsNil", func(t *testing.T) {
+		ds, cleanup := setupTestDatastore(t)
+		defer cleanup()
+
+		require.NoError(t, ds.DeleteDynamicThreshold("never saved"))
+	})
+
+	t.Run("GenuineDBErrorStillReturned", func(t *testing.T) {
+		ds, cleanup := setupTestDatastore(t)
+		defer cleanup()
+
+		require.NoError(t, ds.Close())
+
+		err := ds.DeleteDynamicThreshold("never saved")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, repository.ErrDynamicThresholdNotFound)
+	})
 }
 
 // TestV2OnlyDatastore_DynamicThreshold_GetByCommonName verifies case-insensitive
@@ -2360,6 +2387,9 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 				HitCount:      3,
 				MaxConfidence: 0.84,
 			},
+			"Bat": {
+				Model: detection.ModelInfo{Name: "BatNET", Version: "1", Variant: "default"},
+			},
 		},
 	}
 
@@ -2371,7 +2401,7 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 		Preload("Model").
 		Where("detection_id = ?", result.ID).
 		Find(&contribs).Error)
-	require.Len(t, contribs, 3, "all three contributing models must be saved in detection_model_contributions")
+	require.Len(t, contribs, 4, "hit models and the zero-hit model must be saved in detection_model_contributions")
 
 	byModel := make(map[string]entities.DetectionModelContribution, len(contribs))
 	for _, c := range contribs {
@@ -2414,6 +2444,15 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	assert.Nil(t, perch.ConfidenceSum)
 	assert.Nil(t, perch.FirstHitAt)
 	assert.Nil(t, perch.LastHitAt)
+
+	require.Contains(t, byModel, "BatNET_1_default")
+	bat := byModel["BatNET_1_default"]
+	assert.Zero(t, bat.HitCount, "a model active without a hit is stored with a hit count of 0")
+	assert.Zero(t, bat.MaxConfidence)
+	assert.Nil(t, bat.MinConfidence)
+	assert.Nil(t, bat.ConfidenceSum)
+	assert.Nil(t, bat.FirstHitAt)
+	assert.Nil(t, bat.LastHitAt)
 
 	// Also verify deduplication when two contribution entries resolve to the same AIModel row.
 	dupNote := &datastore.Note{
@@ -2500,6 +2539,90 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	assert.Nil(t, partialContribs[0].ConfidenceSum)
 	assert.Nil(t, partialContribs[0].FirstHitAt)
 	assert.Nil(t, partialContribs[0].LastHitAt)
+
+	// A zero-hit entry that resolves to the same model as a hit entry never takes
+	// its row: the stored row keeps the hit entry's count and statistics.
+	zeroHitNote := &datastore.Note{
+		ScientificName: "Spizella breweri",
+		CommonName:     "brewer's sparrow",
+		Date:           "2026-10-17",
+		Time:           "12:03:00",
+		Confidence:     0.8,
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"zero_hit": {Model: detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"}},
+			"with_hits": {
+				Model:         detection.ModelInfo{},
+				HitCount:      2,
+				MaxConfidence: 0.8,
+				MinConfidence: 0.7,
+				ConfidenceSum: 1.5,
+				FirstHitAt:    now,
+				LastHitAt:     now.Add(time.Second),
+			},
+		},
+	}
+	require.NoError(t, ds.Save(zeroHitNote, nil))
+
+	var zeroHitContribs []entities.DetectionModelContribution
+	require.NoError(t, ds.manager.DB().
+		Where("detection_id = ?", zeroHitNote.ID).
+		Find(&zeroHitContribs).Error)
+	require.Len(t, zeroHitContribs, 1)
+	assert.Equal(t, 2, zeroHitContribs[0].HitCount)
+	require.NotNil(t, zeroHitContribs[0].ConfidenceSum)
+	assert.InDelta(t, 1.5, *zeroHitContribs[0].ConfidenceSum, 1e-9)
+}
+
+// zeroHitKeyCount is how many zero-hit entries the order test puts next to its hit
+// entry. Each range over the map starts at a random position, so with this many
+// entries that resolve to the hit entry's model, a missing hits-first order puts a
+// zero-hit entry in front of the hit entry in nearly every call.
+const zeroHitKeyCount = 8
+
+// resolveOrderRuns is how many times the order test resolves the same map. Every
+// call ranges over the map afresh, so each one draws a new order.
+const resolveOrderRuns = 50
+
+// TestResolveModelContributions_HitEntryKeepsItsRowWhateverTheMapOrder pins that a
+// zero-hit entry resolving to the same model as a hit entry never takes the row of
+// the hit entry or clears its statistics. The hit count alone is the same in both
+// orders, so the test checks the statistics, which a zero-hit row in front of the
+// hit entry would clear.
+func TestResolveModelContributions_HitEntryKeepsItsRowWhateverTheMapOrder(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	contribs := map[string]detection.ResultModelContrib{
+		"with_hits": {
+			Model:         detection.ModelInfo{}, // resolves via WithDefaults() to BirdNET 2.4 default
+			HitCount:      2,
+			MaxConfidence: 0.8,
+			MinConfidence: 0.7,
+			ConfidenceSum: 1.5,
+			FirstHitAt:    now,
+			LastHitAt:     now.Add(time.Second),
+		},
+	}
+	for i := range zeroHitKeyCount {
+		contribs[fmt.Sprintf("zero_hit_%d", i)] = detection.ResultModelContrib{
+			Model: detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+		}
+	}
+
+	for run := range resolveOrderRuns {
+		rows := ds.resolveModelContributions(t.Context(), contribs)
+		require.Len(t, rows, 1, "run %d: entries resolving to one model must give one row", run)
+		row := rows[0]
+		require.Equal(t, 2, row.HitCount, "run %d", run)
+		require.NotNil(t, row.ConfidenceSum, "run %d: the hit entry's statistics must survive", run)
+		require.NotNil(t, row.MinConfidence, "run %d", run)
+		require.NotNil(t, row.FirstHitAt, "run %d", run)
+		require.NotNil(t, row.LastHitAt, "run %d", run)
+		assert.InDelta(t, 1.5, *row.ConfidenceSum, 1e-9, "run %d", run)
+	}
 }
 
 // TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail verifies that model

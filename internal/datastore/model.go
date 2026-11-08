@@ -72,7 +72,7 @@ type Note struct {
 	Unlikely       bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
 	Occurrence     float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
-	// not persisted. Used at Save time to classify non-bird sound classes correctly.
+	// not persisted. Used at Save time to classify sound-event classes correctly.
 	RawLabel string        `gorm:"-"`
 	Results  []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
 	Review   *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
@@ -91,7 +91,7 @@ type Results struct {
 	Species    string
 	Confidence float32
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
-	// not persisted. Used at Save time to classify non-bird sound classes correctly.
+	// not persisted. Used at Save time to classify sound-event classes correctly.
 	RawLabel string `gorm:"-"`
 }
 

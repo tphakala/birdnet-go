@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 func TestIsHuman(t *testing.T) {
@@ -178,16 +178,16 @@ func TestClassify(t *testing.T) {
 	}
 }
 
-// TestPerchHumanLabelsParityWithNonbird verifies that every AudioSet/FSD50K human
+// TestPerchHumanLabelsParityWithSoundEvent verifies that every AudioSet/FSD50K human
 // sound class the privacy filter relies on is classified as CategoryHuman by the
-// shared nonbird package. A failure here means a coverage regression: a label
+// shared soundevent package. A failure here means a coverage regression: a label
 // that used to engage the privacy filter would silently stop doing so.
-func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
+func TestPerchHumanLabelsParityWithSoundEvent(t *testing.T) {
 	t.Parallel()
 
 	// The complete AudioSet/FSD50K human-class key set. "homo sapiens" is
 	// excluded: it is an iNaturalist taxon, not an AudioSet/FSD50K sound class,
-	// so nonbird does not include it. It lives in perchHumanExtraLabels.
+	// so soundevent does not include it. It lives in perchHumanExtraLabels.
 	oldAudioSetKeys := []string{
 		"speech",
 		"speech_synthesizer",
@@ -231,16 +231,16 @@ func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
 	for _, key := range oldAudioSetKeys {
 		t.Run(key, func(t *testing.T) {
 			t.Parallel()
-			cat, ok := nonbird.CategoryOf(key)
-			assert.True(t, ok, "nonbird.CategoryOf(%q) must find the key", key)
-			assert.Equal(t, nonbird.CategoryHuman, cat,
-				"nonbird.CategoryOf(%q) must return CategoryHuman", key)
+			cat, ok := soundevent.CategoryOf(key)
+			assert.True(t, ok, "soundevent.CategoryOf(%q) must find the key", key)
+			assert.Equal(t, soundevent.CategoryHuman, cat,
+				"soundevent.CategoryOf(%q) must return CategoryHuman", key)
 		})
 	}
 }
 
 // TestIsHumanSound verifies the broad human-sound check that the processor's
-// detection-save filter uses: every nonbird.CategoryHuman class, the homo sapiens
+// detection-save filter uses: every soundevent.CategoryHuman class, the homo sapiens
 // taxon and BirdNET's "Human " prefix, including the classes the privacy filter
 // (IsHuman) excludes. Those must stay classified as human sounds so they are not
 // saved as bird detections.
@@ -273,8 +273,8 @@ func TestIsHumanSound(t *testing.T) {
 }
 
 // TestPrivacyExcludedLabels pins the exact set of human-category classes the
-// privacy filter ignores: each is still a nonbird human class and IsHumanSound,
-// but IsHuman and Classify report it as not human. Every other nonbird human
+// privacy filter ignores: each is still a soundevent human class and IsHumanSound,
+// but IsHuman and Classify report it as not human. Every other soundevent human
 // class must remain a privacy hit.
 func TestPrivacyExcludedLabels(t *testing.T) {
 	t.Parallel()
@@ -292,9 +292,9 @@ func TestPrivacyExcludedLabels(t *testing.T) {
 	for key := range excluded {
 		t.Run("excluded "+key, func(t *testing.T) {
 			t.Parallel()
-			cat, ok := nonbird.CategoryOf(key)
+			cat, ok := soundevent.CategoryOf(key)
 			require.True(t, ok)
-			assert.Equal(t, nonbird.CategoryHuman, cat)
+			assert.Equal(t, soundevent.CategoryHuman, cat)
 			assert.True(t, IsHumanSound(key))
 			assert.False(t, IsHuman(key))
 			human, _ := Classify(key)

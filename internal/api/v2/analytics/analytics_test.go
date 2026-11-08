@@ -100,10 +100,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody) // Corrected path
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary") // Ensure path is set for context
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -180,10 +177,7 @@ func TestGetSpeciesSummary_ZeroTimeOmitsHeardFields(t *testing.T) {
 	}
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
 	require.NoError(t, controller.GetSpeciesSummary(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -216,10 +210,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -367,10 +358,7 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
 
 	// Create a request with date parameters
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16")
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -427,10 +415,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 	mockDS.On("GetHourlyAnalyticsData", mock.Anything, date, species).Return(mockHourlyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly?date=2023-01-01&species=Turdus+migratorius", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/hourly")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/hourly?date=2023-01-01&species=Turdus+migratorius")
 	c.QueryParams().Set("date", date)
 	c.QueryParams().Set("species", species)
 
@@ -496,11 +481,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 	mockDS.On("GetDailyAnalyticsData", mock.Anything, startDate, endDate, species).Return(mockDailyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/daily")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius")
 	c.QueryParams().Set("start_date", startDate)
 	c.QueryParams().Set("end_date", endDate)
 	c.QueryParams().Set("species", species)
@@ -576,11 +557,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	mockDS.On("GetDailyAnalyticsData", mock.Anything, startDate, endDate, "").Return(mockDailyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/daily")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07")
 	c.QueryParams().Set("start_date", startDate)
 	c.QueryParams().Set("end_date", endDate)
 
@@ -986,177 +963,121 @@ func TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetDailySpeciesSummary_ThumbnailDefersToProxy is a regression test for #3806.
-// The dashboard daily summary must emit the media-proxy URL for every species with
-// detections, independent of the image cache, so the proxy resolves images through
-// the single-item fallback chain instead of the dashboard showing a placeholder when
-// the primary provider has a negative cache entry. A nil BirdImageCache proves the
-// thumbnail URL no longer depends on a cache-only lookup.
-func TestGetDailySpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "analytics")
-	t.Attr("type", "regression")
-	t.Attr("feature", "species-summary")
-
-	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-
-	const testDate = "2025-03-07"
-	const minConfidence = 0.0
-	const sciName = sciAmericanCrow
-
-	mockDS.On("GetTopBirdsData", mock.Anything, testDate, minConfidence, 0).Return([]datastore.Note{
-		{ID: 1, ScientificName: sciName, CommonName: "American Crow", Confidence: 0.9, Date: testDate, Time: "08:15:00"},
-	}, nil)
-
-	var hourly [24]int
-	hourly[8] = 1
-	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, testDate, mock.Anything, minConfidence).
-		Return(map[string][24]int{sciName: hourly}, nil)
-
-	// Deliberately no BirdImageCache: the thumbnail URL must not depend on it.
-	controller := newTestHandler(&apicore.Core{DS: mockDS})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	require.NoError(t, controller.GetDailySpeciesSummary(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response []SpeciesDailySummary
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response, 1)
-
-	assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[0].ThumbnailURL,
-		"daily summary must emit the media-proxy URL so the proxy applies the fallback chain (#3806)")
-	assert.Contains(t, response[0].ThumbnailURL, "/api/v2/media/image/Corvus%20brachyrhynchos")
-	assert.NotContains(t, response[0].ThumbnailURL, "bird-placeholder",
-		"dashboard thumbnail must not fall back to the static placeholder on the summary path")
-
-	mockDS.AssertExpectations(t)
-}
-
-// TestGetSpeciesSummary_ThumbnailDefersToProxy is a regression test for thumbnails that
-// bypassed the media proxy. The species summary endpoint must emit the media-proxy URL
-// for every species, independent of the image cache, so the proxy resolves images
-// through the single-item fallback chain instead of showing a placeholder when the
-// primary provider has a negative cache entry. A nil BirdImageCache proves the thumbnail
-// URL no longer depends on the (negative-blind) batch cache lookup.
-func TestGetSpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "analytics")
-	t.Attr("type", "regression")
-	t.Attr("feature", "species-summary")
-
-	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-
-	const sciName = sciAmericanCrow
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{
-		{ScientificName: sciName, CommonName: "American Crow", Count: 5},
-	}, nil)
-
-	// Deliberately no BirdImageCache: the thumbnail URL must not depend on it.
-	controller := newTestHandler(&apicore.Core{DS: mockDS})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	require.NoError(t, controller.GetSpeciesSummary(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response []SpeciesSummary
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response, 1)
-
-	assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[0].ThumbnailURL,
-		"species summary must emit the media-proxy URL so the proxy applies the fallback chain (#1311)")
-	assert.Contains(t, response[0].ThumbnailURL, "/api/v2/media/image/Corvus%20brachyrhynchos")
-	assert.NotContains(t, response[0].ThumbnailURL, "bird-placeholder",
-		"species summary thumbnail must not fall back to the static placeholder")
-
-	mockDS.AssertExpectations(t)
-}
-
-// TestGetNewSpeciesDetections_ThumbnailDefersToProxy is a regression test for
-// thumbnails that bypassed the media proxy. Like the species summary, the new-species
-// endpoint must emit the media-proxy URL for every species independent of the image
-// cache.
-func TestGetNewSpeciesDetections_ThumbnailDefersToProxy(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "analytics")
-	t.Attr("type", "regression")
-	t.Attr("feature", "new-species")
-
-	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-
-	const sciName = sciAmericanCrow
-	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{
-			{ScientificName: sciName, CommonName: "American Crow", FirstSeenDate: "2025-03-07", CountInPeriod: 3},
-		}, nil)
-
-	// Deliberately no BirdImageCache: the thumbnail URL must not depend on it.
-	controller := newTestHandler(&apicore.Core{DS: mockDS})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/detections/new", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	require.NoError(t, controller.GetNewSpeciesDetections(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response []NewSpeciesResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response, 1)
-
-	assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[0].ThumbnailURL,
-		"new species detections must emit the media-proxy URL so the proxy applies the fallback chain (#1311)")
-	assert.Contains(t, response[0].ThumbnailURL, "/api/v2/media/image/Corvus%20brachyrhynchos")
-	assert.NotContains(t, response[0].ThumbnailURL, "bird-placeholder",
-		"new species thumbnail must not fall back to the static placeholder")
-
-	mockDS.AssertExpectations(t)
-}
-
-// TestGetSpeciesThumbnails_DefersToProxy is a regression test for thumbnails that
-// bypassed the media proxy. The batch thumbnails endpoint previously returned the static
-// placeholder for a species with no positive cache entry (masking a fallback image); it
-// must now emit the media-proxy URL for every requested species, independent of the
-// image cache.
-func TestGetSpeciesThumbnails_DefersToProxy(t *testing.T) {
+// TestThumbnailsDeferToMediaProxy is a regression test for #3806. The daily summary,
+// species summary, new species and species thumbnails endpoints must emit the media-proxy
+// URL independent of the image cache, so the proxy resolves images through the single-item fallback chain instead of
+// the client showing a placeholder when the primary provider has a negative cache entry.
+// The handlers are built with a nil BirdImageCache, which proves the URL no longer
+// depends on a cache-only lookup. Each endpoint builds its own URLs, so each is its own row.
+func TestThumbnailsDeferToMediaProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
 	t.Attr("type", "regression")
 	t.Attr("feature", "species-thumbnails")
 
-	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
+	const thumbnailDate = "2025-03-07"
 
-	// Deliberately no BirdImageCache: buildThumbnailMap must not touch the cache.
-	controller := newTestHandler(&apicore.Core{DS: mockDS})
+	tests := []struct {
+		name string
+		// serve runs the endpoint against a handler without an image cache and returns the
+		// thumbnail URL it emitted for each scientific name.
+		serve func(t *testing.T) map[string]string
+	}{
+		{
+			name: "daily species summary",
+			serve: func(t *testing.T) map[string]string {
+				t.Helper()
+				mockDS := mocks.NewMockInterface(t)
+				mockDS.On("GetTopBirdsData", mock.Anything, thumbnailDate, 0.0, 0).Return([]datastore.Note{
+					{ID: 1, ScientificName: sciAmericanCrow, CommonName: "American Crow", Confidence: 0.9, Date: thumbnailDate, Time: "08:15:00"},
+				}, nil)
+				var hourly [24]int
+				hourly[8] = 1
+				mockDS.On("GetBatchHourlyOccurrences", mock.Anything, thumbnailDate, thumbnailDate, mock.Anything, 0.0).
+					Return(map[string][24]int{sciAmericanCrow: hourly}, nil)
 
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/species/thumbnails?species="+url.QueryEscape(sciAmericanCrow)+
-			"&species="+url.QueryEscape(sciRedBelliedWoodpecker), http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+				c, rec := newAnalyticsContext(echo.New(), "/api/v2/analytics/species/daily?date="+thumbnailDate)
+				require.NoError(t, newTestHandler(&apicore.Core{DS: mockDS}).GetDailySpeciesSummary(c))
+				require.Equal(t, http.StatusOK, rec.Code)
 
-	require.NoError(t, controller.GetSpeciesThumbnails(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
+				var response []SpeciesDailySummary
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				require.Len(t, response, 1)
+				return map[string]string{sciAmericanCrow: response[0].ThumbnailURL}
+			},
+		},
+		{
+			name: "species summary",
+			serve: func(t *testing.T) map[string]string {
+				t.Helper()
+				mockDS := mocks.NewMockInterface(t)
+				mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{
+					{ScientificName: sciAmericanCrow, CommonName: "American Crow", Count: 5},
+				}, nil)
 
-	var response map[string]string
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response, 2)
+				c, rec := newAnalyticsContext(echo.New(), "/api/v2/analytics/species/summary")
+				require.NoError(t, newTestHandler(&apicore.Core{DS: mockDS}).GetSpeciesSummary(c))
+				require.Equal(t, http.StatusOK, rec.Code)
 
-	for _, sciName := range []string{sciAmericanCrow, sciRedBelliedWoodpecker} {
-		assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[sciName],
-			"species thumbnails must emit the media-proxy URL so the proxy applies the fallback chain (#1311)")
-		assert.NotContains(t, response[sciName], "bird-placeholder",
-			"species thumbnails must not fall back to the static placeholder")
+				var response []SpeciesSummary
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				require.Len(t, response, 1)
+				return map[string]string{sciAmericanCrow: response[0].ThumbnailURL}
+			},
+		},
+		{
+			name: "new species detections",
+			serve: func(t *testing.T) map[string]string {
+				t.Helper()
+				mockDS := mocks.NewMockInterface(t)
+				mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]datastore.NewSpeciesData{
+						{ScientificName: sciAmericanCrow, CommonName: "American Crow", FirstSeenDate: thumbnailDate, CountInPeriod: 3},
+					}, nil)
+
+				c, rec := newAnalyticsContext(echo.New(), "/api/v2/analytics/species/detections/new")
+				require.NoError(t, newTestHandler(&apicore.Core{DS: mockDS}).GetNewSpeciesDetections(c))
+				require.Equal(t, http.StatusOK, rec.Code)
+
+				var response []NewSpeciesResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				require.Len(t, response, 1)
+				return map[string]string{sciAmericanCrow: response[0].ThumbnailURL}
+			},
+		},
+		{
+			name: "species thumbnails",
+			serve: func(t *testing.T) map[string]string {
+				t.Helper()
+				c, rec := newAnalyticsContext(echo.New(), "/api/v2/analytics/species/thumbnails?species="+
+					url.QueryEscape(sciAmericanCrow)+"&species="+url.QueryEscape(sciRedBelliedWoodpecker))
+				require.NoError(t, newTestHandler(&apicore.Core{DS: mocks.NewMockInterface(t)}).GetSpeciesThumbnails(c))
+				require.Equal(t, http.StatusOK, rec.Code)
+
+				var response map[string]string
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				require.Len(t, response, 2)
+				// The client looks each thumbnail up by the name it asked for.
+				urls := make(map[string]string, 2)
+				for _, name := range []string{sciAmericanCrow, sciRedBelliedWoodpecker} {
+					require.Contains(t, response, name)
+					urls[name] = response[name]
+				}
+				return urls
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for sciName, thumbnailURL := range tt.serve(t) {
+				assert.Equal(t, imageprovider.ProxyImageURL(sciName), thumbnailURL,
+					"the thumbnail must be the media-proxy URL so the proxy applies the fallback chain (#3806)")
+				assert.NotContains(t, thumbnailURL, "bird-placeholder",
+					"the thumbnail must not fall back to the static placeholder")
+			}
+		})
 	}
 }
 
@@ -1179,9 +1100,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1197,7 +1116,8 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	// Verify we got an empty result
+	// An empty result must serialize as [] (not null) so the client can read .length safely.
+	require.NotNil(t, response)
 	assert.Empty(t, response)
 
 	// Assert that all expectations were met
@@ -1261,9 +1181,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1348,9 +1266,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Test with a confidence threshold of "70"
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&min_confidence=70", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07&min_confidence=70")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1412,8 +1328,6 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	expectedAmcroLimitHourly[8] = 1
 	var expectedRbwoLimitHourly [24]int
 	expectedRbwoLimitHourly[10] = 1
-	var expectedBcchLimitHourly [24]int
-	expectedBcchLimitHourly[12] = 1
 
 	// Setup mock expectations
 	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", 0.0, 2).Return(mockNotesLimit, nil)
@@ -1427,9 +1341,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with a limit of 2
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&limit=2", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07&limit=2")
 	c.QueryParams().Set("limit", "2")
 
 	// Call the handler
@@ -1464,9 +1376,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.NewStd("database connection error"))
 
 	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1562,10 +1472,7 @@ func TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore(t *testing.T) {
 			return []datastore.HourlyAnalyticsData{}, nil
 		}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/analytics/time/hourly")
+	ctx, rec := newAnalyticsContext(e, "/api/v2/analytics/time/hourly")
 	ctx.QueryParams().Set("date", date)
 	ctx.QueryParams().Set("species", localizedName)
 
@@ -1605,10 +1512,7 @@ func TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies(t *testing.T) {
 			return []datastore.HourlyDistributionData{}, nil
 		}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/distribution/hourly", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/analytics/time/distribution/hourly")
+	ctx, rec := newAnalyticsContext(e, "/api/v2/analytics/time/distribution/hourly")
 	ctx.QueryParams().Set("start_date", startDate)
 	ctx.QueryParams().Set("end_date", endDate)
 	ctx.QueryParams().Set("species", localizedName)
@@ -1647,10 +1551,7 @@ func TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies(t *testing.T) {
 			return []datastore.DailyAnalyticsData{}, nil
 		}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/daily/batch", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/analytics/time/daily/batch")
+	ctx, rec := newAnalyticsContext(e, "/api/v2/analytics/time/daily/batch")
 	ctx.QueryParams().Set("start_date", startDate)
 	ctx.QueryParams().Set("end_date", endDate)
 	ctx.QueryParams()["species"] = []string{localizedName}

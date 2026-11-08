@@ -30,14 +30,14 @@ func TestResolveMySQLImage(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name:       "defaults to MySQL 8.0",
-			wantImage:  "mysql:8.0",
+			name:       "defaults to MySQL 8.4",
+			wantImage:  "mysql:8.4",
 			wantFlavor: FlavorMySQL,
 		},
 		{
-			name:       "default config selects MySQL 8.0",
+			name:       "default config selects MySQL 8.4",
 			cfg:        DefaultMySQLConfig(),
-			wantImage:  "mysql:8.0",
+			wantImage:  "mysql:8.4",
 			wantFlavor: FlavorMySQL,
 		},
 		{
@@ -54,7 +54,7 @@ func TestResolveMySQLImage(t *testing.T) {
 		},
 		{
 			name:       "env wins over a pinned config tag",
-			cfg:        MySQLConfig{ImageTag: "8.0"},
+			cfg:        MySQLConfig{ImageTag: "8.4"},
 			envImage:   "mariadb:11.8",
 			wantImage:  "mariadb:11.8",
 			wantFlavor: FlavorMariaDB,

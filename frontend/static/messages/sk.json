@@ -461,6 +461,10 @@
         "legacyRestartRequiredTitle": "Dokončite migráciu databázy reštartom",
         "legacyRestartRequiredMessage": "Migrácia bola dokončená. Reštartujte BirdNET-Go, aby sa prepol na novú databázu. Ak sa táto správa zobrazuje aj po reštarte, skontrolujte v zázname chyby databázy."
       },
+      "database": {
+        "serverAttentionTitle": "Databázový server vyžaduje pozornosť",
+        "serverAttentionMessage": "Server MySQL alebo MariaDB nie je podporovaná verzia, alebo databáza nepoužíva znakovú sadu utf8mb4. Podrobnosti nájdete v časti Systém > Zdravie."
+      },
       "cleanup": {
         "completeTitle": "Vyčistenie starej databázy dokončené",
         "completeMessage": "Uvoľnených {space} miesta na disku.",
@@ -473,7 +477,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nie je k dispozícii",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} alebo novší je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Región modelu môže byť zastaraný",
@@ -1542,6 +1546,8 @@
           "creating": "Vytváranie...",
           "createBackup": "Vytvoriť zálohu",
           "noBackups": "Zatiaľ žiadne zálohy",
+          "loadFailed": "Históriu záloh sa nepodarilo načítať",
+          "createFailed": "Zálohu sa nepodarilo spustiť",
           "download": "Stiahnuť",
           "failed": "Zlyhané",
           "columns": {
@@ -1569,6 +1575,8 @@
         "starting": "Spúšťa sa migrácia...",
         "status": {
           "idle": "Pripravené na spustenie",
+          "checking": "Kontrola predpokladov",
+          "notReady": "Nepripravené",
           "initializing": "Inicializuje sa",
           "dual_write": "Aktívny duálny zápis",
           "migrating": "Migruje sa primárna",
@@ -1600,6 +1608,8 @@
           "recordsLabel": "Záznamy",
           "sizeLabel": "Veľkosť",
           "prerequisitesNotMet": "Predpoklady nesplnené - vyriešte kritické problémy nižšie",
+          "prerequisitesUnavailable": "Kontroly pred migráciou sa nedokončili. Pozrite si Kontroly pred migráciou nižšie.",
+          "prerequisitesFailedList": "Najprv vyriešte tieto kontroly: {checks}",
           "validatingTitle": "Validácia dát",
           "validatingBody": "Porovnávanie {count} starých záznamov s databázou V2...",
           "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamov - bude sa pokúšať o dodatočnú rekonciliáciu",
@@ -1701,6 +1711,9 @@
           "warningsCount": "{count} varovaní",
           "running": "Prebiehajú kontroly pred migráciou...",
           "checkingStep": "Krok {current} z {total}",
+          "currentCheck": "Kontroluje sa {name} ({seconds} s)",
+          "slowHint": "Veľké databázy môžu trvať niekoľko minút.",
+          "runFailed": "Kontroly pred migráciou sa nedokončili: {error}",
           "passedCount": "{passed}/{total} úspešných",
           "criticalCount": "{count} kritických",
           "warningCount": "{count} upozornení",
@@ -1729,6 +1742,12 @@
             },
             "sqlite_integrity": {
               "name": "Integrita databázy"
+            },
+            "mysql_server_version": {
+              "name": "Verzia databázového servera"
+            },
+            "mysql_charset": {
+              "name": "Znaková sada databázy"
             },
             "mysql_table_health": {
               "name": "Stav tabuliek"
@@ -5431,7 +5450,8 @@
     },
     "migration": {
       "notConfigured": "Migrácia nie je nakonfigurovaná",
-      "preFlightFailed": "Predbežné kontroly zlyhali",
+      "preFlightFailed": "Kontrola pred migráciou zlyhala: {check}",
+      "prerequisitesNotReady": "Spustite kontroly pred migráciou a počkajte, kým prejdú, než migráciu spustíte.",
       "invalidBody": "Neplatné telo požiadavky",
       "recordCountFailed": "Nepodarilo sa zistiť celkový počet záznamov",
       "startFailed": "Nepodarilo sa spustiť migráciu",

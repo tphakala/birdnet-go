@@ -37,7 +37,7 @@ func (ds *Datastore) dateExpr(start, end int64) string {
 func (ds *Datastore) hourlyCountsByZone(ctx context.Context, start, end int64, labelIDs []uint) ([hoursPerDay]int, error) {
 	var counts [hoursPerDay]int
 	for _, seg := range ds.zoneSegments(start, end) {
-		part, err := ds.detection.GetHourlyDistribution(ctx, seg.Start, seg.End, seg.OffsetSeconds, labelIDs, nil)
+		part, err := ds.detection.GetHourlyDistribution(ctx, seg, labelIDs, nil)
 		if err != nil {
 			return counts, err
 		}
@@ -67,7 +67,7 @@ func hourlyRows(counts *[hoursPerDay]int) []datastore.HourlyDistributionData {
 func (ds *Datastore) batchHourlyByZone(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][hoursPerDay]int, error) {
 	hourlyByLabel := make(map[uint][hoursPerDay]int, len(labelIDs))
 	for _, seg := range ds.zoneSegments(start, end) {
-		part, err := ds.detection.GetBatchHourlyOccurrences(ctx, labelIDs, seg.Start, seg.End, seg.OffsetSeconds, minConfidence)
+		part, err := ds.detection.GetBatchHourlyOccurrences(ctx, labelIDs, seg, minConfidence)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +91,7 @@ func (ds *Datastore) batchHourlyByZone(ctx context.Context, labelIDs []uint, sta
 func (ds *Datastore) dailyCountsByZone(ctx context.Context, start, end int64, labelIDs []uint) ([]datastore.DailyAnalyticsData, error) {
 	counts := map[string]int{}
 	for _, seg := range ds.zoneSegments(start, end) {
-		part, err := ds.detection.GetDailyAnalytics(ctx, seg.Start, seg.End, seg.OffsetSeconds, labelIDs, nil)
+		part, err := ds.detection.GetDailyAnalytics(ctx, seg, labelIDs, nil)
 		if err != nil {
 			return nil, err
 		}

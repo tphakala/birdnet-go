@@ -26,14 +26,16 @@ type modelContributionReader interface {
 // or not at all: they are absent when the row has no recorded statistics (rows
 // recorded before they existed) or its stored values are unusable (non-positive
 // hit count, minimum above maximum, first hit after last hit), never reported as
-// zero.
+// zero. A HitCount of 0 means the model was active on the detection's source when
+// the detection was approved but recorded no hit; such an entry carries no
+// confidence fields (MaxConfidence is nil too).
 type ModelContributionResponse struct {
 	ModelName      string   `json:"modelName"`
 	ModelVersion   string   `json:"modelVersion"`
 	ModelVariant   string   `json:"modelVariant"`
 	ModelType      string   `json:"modelType"`
 	HitCount       int      `json:"hitCount"`
-	MaxConfidence  float64  `json:"maxConfidence"`
+	MaxConfidence  *float64 `json:"maxConfidence,omitempty"` // set only when HitCount > 0
 	MinConfidence  *float64 `json:"minConfidence,omitempty"`
 	MeanConfidence *float64 `json:"meanConfidence,omitempty"`
 	FirstHitAt     *string  `json:"firstHitAt,omitempty"` // RFC3339 in the server's time zone
@@ -50,8 +52,10 @@ func formatHitTime(ms int64) string {
 // consistent (min <= max, first <= last); the mean is clamped to [min, max].
 func newModelContributionResponse(row *entities.DetectionModelContribution) ModelContributionResponse {
 	resp := ModelContributionResponse{
-		HitCount:      row.HitCount,
-		MaxConfidence: row.MaxConfidence,
+		HitCount: row.HitCount,
+	}
+	if row.HitCount > 0 {
+		resp.MaxConfidence = new(row.MaxConfidence)
 	}
 	if row.Model != nil {
 		resp.ModelName = row.Model.Name

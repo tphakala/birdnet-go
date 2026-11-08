@@ -45,16 +45,20 @@ type Result struct {
 	ClipSampleRate int           // Sample rate in Hz of the saved clip file; 0 when unknown or without a clip
 	ProcessingTime time.Duration // How long analysis took
 
+	// SpectrogramClipName is the clip name a detection kept for its spectrogram image after
+	// retention removed its audio. Repository reads set it; Save ignores it.
+	SpectrogramClipName string
+
 	// Validation flags
 	Unlikely bool // Tagged by the ultrasonic validation filter when source audio lacks bat echolocation characteristics
 
 	// Runtime-only data (not persisted)
 	Occurrence            float64                       // Probability 0-1 based on location/time/season
-	ModelContributions    map[string]ResultModelContrib // Per-model detection data from cross-model consensus, keyed by model ID
+	ModelContributions    map[string]ResultModelContrib // Per-model data keyed by model ID: the models with hits (cross-model consensus) and the active models without one
 	UltrasonicCV          float64                       // US frame CV value from validation filter (for comment generation)
 	UltrasonicCVThreshold float64                       // CV threshold used by validation filter (for comment generation)
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
-	// used by the datastore to classify non-bird sound classes correctly.
+	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
 
 	// Review status (populated from DB relations when loaded)
@@ -63,11 +67,18 @@ type Result struct {
 	Comments []Comment
 }
 
+// IsSpectrogramOnly reports whether retention removed the detection's audio but a
+// spectrogram image was kept.
+func (r *Result) IsSpectrogramOnly() bool {
+	return r.ClipName == "" && r.SpectrogramClipName != ""
+}
+
 // ResultModelContrib records a single AI model's contribution to a detection.
 //
 // FirstHitAt, LastHitAt, MinConfidence and ConfidenceSum form one unit of extended
 // statistics, present only when HasHitStats reports true; otherwise the datastore
-// stores NULL for all four.
+// stores NULL for all four. A HitCount of 0 marks a model that was active on the
+// source when the detection was approved but recorded no hit.
 type ResultModelContrib struct {
 	Model         ModelInfo
 	HitCount      int
@@ -101,8 +112,11 @@ type AdditionalResult struct {
 	Species    Species
 	Confidence float64
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
-	// used by the datastore to classify non-bird sound classes correctly.
+	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
+	// OutOfRange marks an alternate that failed the range filter when the detection
+	// was created; runtime-only, never persisted. The save step drops tagged rows.
+	OutOfRange bool
 }
 
 // Date returns the detection date in YYYY-MM-DD format.

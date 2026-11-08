@@ -237,10 +237,8 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 				ExpiresIn: rateLimitWindow, // Rate limit window
 			},
 		),
-		IdentifierExtractor: func(ctx echo.Context) (string, error) {
-			// Use client IP as identifier
-			return ctx.RealIP(), nil
-		},
+		// One bucket per client address (per /64 for IPv6)
+		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return c.HandleErrorWithKey(context, err, "Too many notification stream connection attempts, please wait before trying again", http.StatusTooManyRequests, notification.MsgErrNotifRateLimit, nil)
 		},

@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,6 +137,9 @@ func FuzzParseHourFilter(f *testing.F) {
 	})
 }
 
+// fuzzDateNow is the fixed clock the date range fuzz target resolves shortcuts against.
+var fuzzDateNow = time.Date(2026, time.March, 8, 12, 0, 0, 0, time.UTC)
+
 // FuzzParseDateRangeFilter tests date range filter parsing.
 func FuzzParseDateRangeFilter(f *testing.F) {
 	type testCase struct {
@@ -149,6 +153,8 @@ func FuzzParseDateRangeFilter(f *testing.F) {
 		{"2024-01-15", "", ""},
 		{"today", "", ""},
 		{"yesterday", "", ""},
+		{"week", "", ""},
+		{"month", "", ""},
 		// Valid ranges
 		{"", "2024-01-01", "2024-01-31"},
 		{"", "2024-01-01", "2024-12-31"},
@@ -171,7 +177,7 @@ func FuzzParseDateRangeFilter(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, single, start, end string) {
 		// Should never panic
-		result := ParseDateRangeFilter(single, start, end)
+		result := ParseDateRangeFilter(single, start, end, fuzzDateNow, time.UTC)
 
 		if result != nil {
 			// Start must not be after End

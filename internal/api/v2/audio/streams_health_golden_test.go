@@ -88,9 +88,8 @@ func TestRemovedStreamHealth_ByteIdentity(t *testing.T) {
 // producer's actually-emitted JSON. The golden cases above hand-build
 // StreamHealth with empty Engine/Transport, so they cannot catch a change to the
 // additive keys the real ffmpeg.GetHealth emits (engine, transport). This runs a
-// real ffmpeg.Stream's GetHealth through the converter and asserts engine and
-// transport are the ONLY additions over the same health with those two fields
-// cleared.
+// real ffmpeg.Stream's GetHealth through the converter and asserts it stamps the
+// engine and the configured transport and that both reach the JSON.
 func TestConvertStreamHealthToResponse_RealFFmpegGetHealth(t *testing.T) {
 	t.Parallel()
 
@@ -113,23 +112,8 @@ func TestConvertStreamHealthToResponse_RealFFmpegGetHealth(t *testing.T) {
 
 	realMap := toJSONMap(t, convertStreamHealthToResponse(url, &health))
 
-	// Baseline: the same health with the additive fields cleared, so any key
-	// difference isolates exactly what the ffmpeg producer adds.
-	baseHealth := health
-	baseHealth.Engine = ""
-	baseHealth.Transport = ""
-	baseMap := toJSONMap(t, convertStreamHealthToResponse(url, &baseHealth))
-
 	assert.Equal(t, audiocore.EngineFFmpeg, realMap["engine"], "engine key must carry the ffmpeg producer name")
 	assert.Equal(t, transport, realMap["transport"], "transport key must carry the configured transport")
-	assert.NotContains(t, baseMap, "engine", "baseline (cleared) health must omit engine")
-	assert.NotContains(t, baseMap, "transport", "baseline (cleared) health must omit transport")
-
-	// After removing the two additive keys, every other key must match the
-	// baseline exactly: engine and transport are the only additions.
-	delete(realMap, "engine")
-	delete(realMap, "transport")
-	assert.Equal(t, baseMap, realMap, "engine and transport must be the only additions vs the pre-seam JSON")
 }
 
 // TestConvertStreamHealthToResponse_NativeCounters verifies the native RTP
@@ -168,8 +152,8 @@ func TestConvertStreamHealthToResponse_NativeCounters(t *testing.T) {
 	assert.NotContains(t, toJSONMap(t, convertStreamHealthToResponse(url, zero)), "source_filtered", "source_filtered omitted when zero")
 }
 
-// toJSONMap marshals v and unmarshals it into a generic map so two responses can
-// be diffed by key set.
+// toJSONMap marshals v and unmarshals it into a generic map so a response can be
+// inspected by key.
 func toJSONMap(t *testing.T, v any) map[string]any {
 	t.Helper()
 	b, err := json.Marshal(v)

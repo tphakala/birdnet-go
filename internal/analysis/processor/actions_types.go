@@ -35,6 +35,20 @@ const (
 	// ExecuteCommandTimeout is the timeout for external command execution
 	ExecuteCommandTimeout = 5 * time.Minute
 
+	// databaseSaveRetryWindow is how long a detection whose database save failed
+	// before anything was stored keeps being retried. The retry count is derived
+	// from it with the shared 1 s to 30 s backoff schedule; with queue jitter
+	// (plus or minus 10 percent) and up to one step timeout per attempt the real
+	// span is at least about this long.
+	databaseSaveRetryWindow = 5 * time.Minute
+
+	// databaseSaveRetryInitialDelay, databaseSaveRetryMaxDelay and
+	// databaseSaveRetryMultiplier are the backoff of a database save retry. They
+	// must match the schedule retriesForBackoffBudget assumes.
+	databaseSaveRetryInitialDelay = saveAudioDeferredInitialDelay
+	databaseSaveRetryMaxDelay     = saveAudioDeferredMaxDelay
+	databaseSaveRetryMultiplier   = saveAudioDeferredMultiplier
+
 	// speciesTimeQueryTimeout bounds the per-detection query for the first/last
 	// species detection times published in the MQTT payload. It is short because
 	// it runs on the MQTT hot path and a failure must degrade to null fields,
@@ -122,14 +136,27 @@ type DatabaseAction struct {
 	Ds                datastore.Interface           // Legacy - to be removed after migration
 	Repo              datastore.DetectionRepository // New - preferred for database operations
 	Result            detection.Result              // Domain model (single source of truth)
-	Results           []detection.AdditionalResult  // Secondary predictions (converted to legacy format at save time)
+	Results           []detection.AdditionalResult  // All finite alternates; storedAlternates trims them at save
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
 	DetectionCtx      *DetectionContext       // Shared context for downstream actions (MQTT, SSE, SaveAudio)
 	Description       string
-	CorrelationID     string     // Detection correlation ID for log tracking
-	mu                sync.Mutex // Protect concurrent access to Result and Results
+	CorrelationID     string // Detection correlation ID for log tracking
+
+	// Retry state. The zero value is ready to use; see ExecuteContext.
+	saveSlotOnce sync.Once
+	saveSlot     chan struct{} // one-slot semaphore: only one save attempt runs at a time
+	saveState    atomic.Int32  // saveStatePending, saveStateDone, saveStateTerminal or saveStateSkipped
+	attempts     atomic.Int32  // ExecuteContext calls, one per job attempt
+	maxAttempts  atomic.Int32  // job attempts allowed; 0 means retries are not configured
+	windowEnded  atomic.Bool   // the last job attempt ended while a save was still in flight
+	// Fields below are read and written only while holding saveSlot.
+	gated              bool                  // the event-tracker and new-species decisions are taken
+	isNewSpecies       bool                  // memoized new-species verdict of the gate
+	daysSinceFirstSeen int                   // memoized with isNewSpecies
+	novelty            species.NoveltyStatus // memoized with isNewSpecies
+	terminalErr        error                 // the failure reported by every call once saveStateTerminal
 }
 
 type SaveAudioAction struct {
@@ -293,6 +320,11 @@ type MqttAction struct {
 	CorrelationID string            // Detection correlation ID for log tracking
 	mu            sync.Mutex        // Protect concurrent access to Result
 	rateLimit     rateLimitDecision // Event-tracker verdict of the first attempt, reused by queue retries
+	// gatedByDatabase is set when the action runs as a step of the database
+	// composite. The composite runs it only for a detection the database step
+	// stored, and that step's event-tracker verdict is the detection's only one, so
+	// the action does not ask its own.
+	gatedByDatabase bool
 	// SpeciesTimeSource provides the species' first-ever and most-recent previous
 	// detection times for the MQTT payload. Nil when the database is disabled or
 	// the backend does not support the query; the payload then carries null fields.
@@ -356,6 +388,11 @@ type SSEAction struct {
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
 	mu             sync.Mutex // Protect concurrent access to Result
+	// gatedByDatabase is set when the action runs as a step of the database
+	// composite. The composite runs it only for a detection the database step
+	// stored, and that step's event-tracker verdict is the detection's only one, so
+	// the action does not ask its own.
+	gatedByDatabase bool
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
 	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error
@@ -393,7 +430,11 @@ type CompositeAction struct {
 	Description   string         // Human-readable description
 	Timeout       *time.Duration // Optional: per-action timeout override (nil = use default)
 	CorrelationID string         // Detection correlation ID for log tracking
-	mu            sync.Mutex     // Protects concurrent access to Actions
+	// RetryConfig is the queue retry policy of the composite job. The zero value
+	// disables retries. The database composite sets one that retries only while
+	// its database step reports a save that stored nothing.
+	RetryConfig jobqueue.RetryConfig
+	mu          sync.Mutex // Protects concurrent access to Actions
 }
 
 // GetDescription returns a human-readable description of the LogAction

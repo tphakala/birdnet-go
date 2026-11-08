@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import type { LegacyStatus } from '$lib/types/legacy';
   import { formatBytes, formatDate, formatNumber } from '$lib/utils/formatters';
 
@@ -73,29 +74,7 @@
       </div>
     {:else if isFailed}
       <!-- Error state -->
-      <div
-        class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-start gap-3"
-        role="alert"
-        aria-live="assertive"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5 shrink-0 stroke-current"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-        <div>
-          <p class="font-medium text-sm">{t('system.database.legacy.cleanup.failed')}</p>
-          <p class="text-sm opacity-80">{cleanupError}</p>
-        </div>
-      </div>
+      <ErrorAlert title={t('system.database.legacy.cleanup.failed')} message={cleanupError} />
     {:else if status?.exists && status?.can_cleanup}
       <!-- Normal state - show info and cleanup button -->
       <div class="space-y-4">

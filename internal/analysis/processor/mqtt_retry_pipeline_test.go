@@ -5,7 +5,10 @@ package processor
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -115,6 +118,29 @@ func TestDefaultActions_MQTTPublishRetriedThroughQueue(t *testing.T) {
 		assert.Equal(t, 2, mqttClient.GetPublishCalls())
 		assert.EqualValues(t, 1, sseCalls.Load())
 		assert.Contains(t, mqttClient.GetPublishedMessages()[0].payload, `"detectionId":0`)
+	})
+
+	t.Run("database_unreachable_then_recovers", func(t *testing.T) {
+		p, mockDs, mqttClient, sseCalls, settings := newMQTTPipelineProcessor(t, true)
+		mqttClient.FailNextPublishes(0, nil)
+		const outageSaves = 2
+		mockDs.FailNextSaves(outageSaves, fmt.Errorf("get/create model: %w",
+			&net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}))
+		enqueueDetectionActions(t, p, settings)
+
+		// The save lands on the third attempt (1 s and 2 s backoff), then MQTT
+		// and SSE run once.
+		require.Eventually(t, func() bool {
+			return len(mqttClient.GetPublishedMessages()) == 1
+		}, pipelineWaitTimeout, pipelineWaitTick, "MQTT publish should follow the save that lands")
+
+		assert.Equal(t, outageSaves+1, mockDs.GetSaveCalls(), "two refused saves and the one that lands")
+		saved := mockDs.GetSavedNotes()
+		require.Len(t, saved, 1, "exactly one database row per detection")
+		assert.Equal(t, 1, mqttClient.GetPublishCalls(), "exactly one MQTT publish")
+		assert.EqualValues(t, 1, sseCalls.Load(), "exactly one SSE broadcast")
+		assert.Contains(t, mqttClient.GetPublishedMessages()[0].payload, fmt.Sprintf(`"detectionId":%d`, saved[0].ID))
+		assert.Equal(t, outageSaves, p.JobQueue.GetStats().RetryAttempts, "composite retried once per refused save")
 	})
 
 	t.Run("database_save_fails", func(t *testing.T) {
