@@ -22,7 +22,12 @@
   import { playButtonLabelKey } from '$lib/utils/audio';
   import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
   import { formatTime } from '$lib/utils/formatters';
-  import { clampSeconds, seekTargetForKey, seekTimeFromPointer } from '$lib/utils/seek';
+  import {
+    clampSeconds,
+    seekKeyAction,
+    seekTimeFromPointer,
+    usableDuration,
+  } from '$lib/utils/seek';
 
   interface Props {
     // Playback state
@@ -126,23 +131,13 @@
   }
 
   // Usable clip length for the seek slider; 0 while the duration is unknown
-  let seekMax = $derived(Number.isFinite(duration) && duration > 0 ? duration : 0);
+  let seekMax = $derived(usableDuration(duration));
   let seekNow = $derived(clampSeconds(currentTime, seekMax));
 
   function handleSeekKeydown(e: KeyboardEvent) {
-    // Leave browser shortcuts such as Alt+Left alone
-    if (e.altKey || e.ctrlKey || e.metaKey) return;
-    // Space does not seek, but must not scroll the page from a focused slider either,
-    // whether or not the clip length is known yet
-    if (e.key === ' ') {
-      e.preventDefault();
-      return;
-    }
-    if (seekMax <= 0) return;
-    const target = seekTargetForKey(e.key, seekNow, seekMax);
-    if (target === null) return;
-    e.preventDefault();
-    onSeek(target);
+    const action = seekKeyAction(e, seekNow, seekMax);
+    if (action.preventDefault) e.preventDefault();
+    if (action.target !== null) onSeek(action.target);
   }
 
   function handleSeekClick(e: MouseEvent) {

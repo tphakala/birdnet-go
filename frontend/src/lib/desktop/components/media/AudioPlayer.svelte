@@ -55,7 +55,12 @@
     probeAudioSource,
   } from '$lib/utils/audio';
   import { formatTime } from '$lib/utils/formatters';
-  import { clampSeconds, seekTimeFromPointer } from '$lib/utils/seek';
+  import {
+    clampSeconds,
+    seekKeyAction,
+    seekTimeFromPointer,
+    usableDuration,
+  } from '$lib/utils/seek';
   import {
     getAudioContext,
     isAudioContextSupported,
@@ -1482,12 +1487,22 @@
     consumePendingPlay();
   };
 
+  // Usable clip length and position for seeking and the inline progress bar's slider semantics
+  const seekMax = $derived(usableDuration(duration));
+  const seekNow = $derived(clampSeconds(currentTime, seekMax));
+
   // Seek to an absolute position. The shown position is refreshed at once so a paused
   // player reflects the seek before the next key press computes its target from it.
   const seekTo = (seconds: number) => {
-    if (!audioElement || !isFinite(duration) || duration <= 0) return;
-    audioElement.currentTime = clampSeconds(seconds, duration);
+    if (!audioElement || seekMax <= 0) return;
+    audioElement.currentTime = clampSeconds(seconds, seekMax);
     updateProgress();
+  };
+
+  const handleProgressKeydown = (event: KeyboardEvent) => {
+    const action = seekKeyAction(event, seekNow, seekMax);
+    if (action.preventDefault) event.preventDefault();
+    if (action.target !== null) seekTo(action.target);
   };
 
   const handleProgressClick = (event: MouseEvent) => {
@@ -2850,21 +2865,19 @@
           bind:this={progressBar}
           id={progressId}
           class="grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
-          role="button"
+          role="slider"
           tabindex="0"
-          aria-label={t('media.audio.seekProgress', {
-            current: Math.floor(currentTime),
-            total: Math.floor(duration),
+          aria-label={t('media.audio.seek')}
+          aria-valuemin={0}
+          aria-valuemax={seekMax}
+          aria-valuenow={seekNow}
+          aria-valuetext={t('media.audio.seekValueText', {
+            current: formatTime(seekNow),
+            total: formatTime(seekMax),
           })}
+          aria-disabled={seekMax <= 0 ? 'true' : undefined}
           onclick={handleProgressClick}
-          onkeydown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              const rect = progressBar.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2;
-              handleProgressClick(new MouseEvent('click', { clientX: centerX }));
-            }
-          }}
+          onkeydown={handleProgressKeydown}
         >
           <div
             class="bg-primary h-1.5 rounded-full transition-all duration-100"

@@ -20,7 +20,6 @@ vi.mock('$lib/i18n', () => ({
       'media.audio.download': 'Download audio file',
       'media.audio.volume': 'Volume control',
       'media.audio.filterControl': 'Filter control',
-      'media.audio.seekProgress': 'Seek audio progress',
       'media.audio.volumeGain': `Volume gain: ${params?.value ?? 0} dB`,
       'media.audio.highPassFilter': `High-pass filter: ${params?.freq ?? 20} Hz`,
     };

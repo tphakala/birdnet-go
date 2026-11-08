@@ -113,7 +113,7 @@ describe('AudioPlayer Accessibility', () => {
   it('does not write the playback position from the inline bar until the duration is known', async () => {
     const { container } = mount({ enableClipExtraction: false });
     await settle();
-    const bar = container.querySelector<HTMLElement>('[role="button"][id^="progress"]');
+    const bar = container.querySelector<HTMLElement>('[role="slider"][id^="progress"]');
     if (!bar) throw new Error('inline progress bar not rendered');
     // Partial DOMRect: the player reads only left and width, and jsdom has no layout.
     const rect = { left: 0, width: WIDE_CONTAINER_PX } as unknown as DOMRect;
@@ -130,22 +130,104 @@ describe('AudioPlayer Accessibility', () => {
     expect(setCurrentTime).not.toHaveBeenCalled();
   });
 
-  it('seeks to the middle of the inline bar on Enter and Space', async () => {
-    const { container } = mount({ enableClipExtraction: false });
-    ctl.completeLoad();
-    await settle();
-    const bar = container.querySelector<HTMLElement>('[role="button"][id^="progress"]');
-    if (!bar) throw new Error('inline progress bar not rendered');
-    // Partial DOMRect: the player reads only left and width, and jsdom has no layout.
-    const rect = { left: 0, width: WIDE_CONTAINER_PX } as unknown as DOMRect;
-    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(rect);
+  describe('inline progress bar as a slider', () => {
+    function inlineBar(container: HTMLElement): HTMLElement {
+      const bar = container.querySelector<HTMLElement>('[role="slider"][id^="progress"]');
+      if (!bar) throw new Error('inline progress bar not rendered');
+      return bar;
+    }
 
-    await fireEvent.keyDown(bar, { key: 'Enter' });
-    expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS / 2);
+    it('names the bar and reports the position as value text', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
 
-    ctl.element.currentTime = 0;
-    await fireEvent.keyDown(bar, { key: ' ' });
-    expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS / 2);
+      expect(bar).toHaveAccessibleName('media.audio.seek');
+      expect(bar).toHaveAttribute('aria-valuemin', '0');
+      expect(bar).toHaveAttribute('aria-valuemax', String(FAKE_MEDIA_DURATION_SECONDS));
+      expect(bar).toHaveAttribute('aria-valuenow', '0');
+      expect(bar).toHaveAttribute('aria-valuetext', '0:00 of 2:00');
+      expect(bar).not.toHaveAttribute('aria-disabled');
+    });
+
+    it.each([
+      ['ArrowRight', 1],
+      ['ArrowUp', 1],
+      ['PageUp', 5],
+      ['End', FAKE_MEDIA_DURATION_SECONDS],
+    ])('seeks by time on %s and keeps the page from scrolling', async (key, expected) => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
+
+      const notPrevented = await fireEvent.keyDown(bar, { key });
+
+      expect(ctl.element.currentTime).toBe(expected);
+      expect(bar).toHaveAttribute('aria-valuenow', String(expected));
+      expect(notPrevented).toBe(false);
+    });
+
+    it('keeps each press moving while paused and clamps at the start', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
+
+      await fireEvent.keyDown(bar, { key: 'ArrowRight' });
+      await fireEvent.keyDown(bar, { key: 'ArrowRight' });
+      expect(ctl.element.currentTime).toBe(2);
+      await fireEvent.keyDown(bar, { key: 'Home' });
+      await fireEvent.keyDown(bar, { key: 'ArrowLeft' });
+      expect(ctl.element.currentTime).toBe(0);
+    });
+
+    it('does not seek on Enter, and on Space it does not seek or scroll the page', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
+      ctl.element.currentTime = 7;
+
+      const enterNotPrevented = await fireEvent.keyDown(bar, { key: 'Enter' });
+      const spaceNotPrevented = await fireEvent.keyDown(bar, { key: ' ' });
+
+      expect(ctl.element.currentTime).toBe(7);
+      expect(enterNotPrevented).toBe(true);
+      expect(spaceNotPrevented).toBe(false);
+    });
+
+    it('leaves a seek key held with a modifier to the browser', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
+
+      const notPrevented = await fireEvent.keyDown(bar, { key: 'ArrowRight', ctrlKey: true });
+
+      expect(ctl.element.currentTime).toBe(0);
+      expect(notPrevented).toBe(true);
+    });
+
+    it('is disabled and inert until the duration is known', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      await settle();
+      const bar = inlineBar(container);
+      const setCurrentTime = vi.fn();
+      Object.defineProperty(ctl.element, 'currentTime', {
+        configurable: true,
+        get: () => 0,
+        set: setCurrentTime,
+      });
+
+      const notPrevented = await fireEvent.keyDown(bar, { key: 'End' });
+
+      expect(bar).toHaveAttribute('aria-disabled', 'true');
+      expect(bar).toHaveAttribute('aria-valuemax', '0');
+      expect(setCurrentTime).not.toHaveBeenCalled();
+      expect(notPrevented).toBe(true);
+    });
   });
 
   describe('overlay controls', () => {

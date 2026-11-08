@@ -3,8 +3,10 @@ import {
   SEEK_PAGE_STEP_SECONDS,
   SEEK_STEP_SECONDS,
   clampSeconds,
+  seekKeyAction,
   seekTargetForKey,
   seekTimeFromPointer,
+  usableDuration,
 } from './seek';
 
 const CLIP_SECONDS = 29;
@@ -89,4 +91,77 @@ describe('seekTimeFromPointer', () => {
       expect(seekTimeFromPointer(BAR_LEFT_PX + 10, bar(), max)).toBeNull();
     }
   );
+});
+
+describe('usableDuration', () => {
+  it.each([
+    [CLIP_SECONDS, CLIP_SECONDS],
+    [0.5, 0.5],
+    [0, 0],
+    [-3, 0],
+    [Number.NaN, 0],
+    [Number.POSITIVE_INFINITY, 0],
+  ])('maps a duration of %s to %s', (duration, expected) => {
+    expect(usableDuration(duration)).toBe(expected);
+  });
+});
+
+describe('seekKeyAction', () => {
+  const key = (k: string, mods: Partial<KeyboardEvent> = {}) => ({
+    key: k,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    ...mods,
+  });
+
+  it('seeks and cancels the event for a seek key', () => {
+    expect(seekKeyAction(key('ArrowRight'), 10, CLIP_SECONDS)).toEqual({
+      target: 10 + SEEK_STEP_SECONDS,
+      preventDefault: true,
+    });
+  });
+
+  it.each([0, Number.NaN])('cancels Space without seeking for a clip length of %s', max => {
+    expect(seekKeyAction(key(' '), 0, max)).toEqual({ target: null, preventDefault: true });
+  });
+
+  it('cancels Space without seeking for a known clip too', () => {
+    expect(seekKeyAction(key(' '), 10, CLIP_SECONDS)).toEqual({
+      target: null,
+      preventDefault: true,
+    });
+  });
+
+  it.each(['altKey', 'ctrlKey', 'metaKey'] as const)(
+    'leaves a seek key held with %s to the browser',
+    modifier => {
+      expect(seekKeyAction(key('ArrowLeft', { [modifier]: true }), 10, CLIP_SECONDS)).toEqual({
+        target: null,
+        preventDefault: false,
+      });
+      expect(seekKeyAction(key(' ', { [modifier]: true }), 10, CLIP_SECONDS)).toEqual({
+        target: null,
+        preventDefault: false,
+      });
+    }
+  );
+
+  it('treats Shift as no modifier, so Shift+End still seeks', () => {
+    expect(seekKeyAction(key('End', { shiftKey: true }), 10, CLIP_SECONDS)).toEqual({
+      target: CLIP_SECONDS,
+      preventDefault: true,
+    });
+  });
+
+  it.each(['Enter', 'Escape', 'Tab', 'a'])('leaves %j to the browser', k => {
+    expect(seekKeyAction(key(k), 10, CLIP_SECONDS)).toEqual({
+      target: null,
+      preventDefault: false,
+    });
+  });
+
+  it('leaves a seek key alone while the clip length is unknown', () => {
+    expect(seekKeyAction(key('End'), 0, 0)).toEqual({ target: null, preventDefault: false });
+  });
 });

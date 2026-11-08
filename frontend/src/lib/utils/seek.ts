@@ -13,6 +13,11 @@ export const SEEK_STEP_SECONDS = 1;
 /** Seconds a seek moves for PageUp and PageDown. */
 export const SEEK_PAGE_STEP_SECONDS = 5;
 
+/** Length of a clip a slider can seek in, or 0 while the duration is unknown or unusable. */
+export function usableDuration(duration: number): number {
+  return Number.isFinite(duration) && duration > 0 ? duration : 0;
+}
+
 /** Clamp a time in seconds to the clip, from 0 to max. */
 export function clampSeconds(seconds: number, max: number): number {
   return Math.min(Math.max(seconds, 0), max);
@@ -57,4 +62,29 @@ export function seekTimeFromPointer(
 ): number | null {
   if (!Number.isFinite(max) || max <= 0 || bar.width <= 0) return null;
   return clampSeconds(((clientX - bar.left) / bar.width) * max, max);
+}
+
+/** What a slider does with one keydown: the time to seek to, and whether to cancel the event. */
+export interface SeekKeyAction {
+  target: number | null;
+  preventDefault: boolean;
+}
+
+/**
+ * Decide what a seek slider does for a keydown. Seek keys held with no Alt, Ctrl or
+ * Meta move to their target and cancel the event so the page does not scroll; Shift
+ * does not change the step. Space does not seek, but is cancelled for the same
+ * reason, whether or not the clip length is known. Everything else, including keys
+ * held with Alt, Ctrl or Meta, is left to the browser.
+ */
+export function seekKeyAction(
+  event: Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey'>,
+  current: number,
+  max: number
+): SeekKeyAction {
+  if (event.altKey || event.ctrlKey || event.metaKey)
+    return { target: null, preventDefault: false };
+  if (event.key === ' ') return { target: null, preventDefault: true };
+  const target = seekTargetForKey(event.key, current, max);
+  return { target, preventDefault: target !== null };
 }
