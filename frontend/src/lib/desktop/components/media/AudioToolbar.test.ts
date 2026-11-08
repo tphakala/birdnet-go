@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { ComponentProps } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import { fireEvent } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
@@ -119,7 +120,7 @@ describe('AudioToolbar Accessibility', () => {
   const BAR_LEFT_PX = 100;
   const BAR_WIDTH_PX = 200;
 
-  function renderToolbar(overrides: Record<string, unknown> = {}) {
+  function renderToolbar(overrides: Partial<ComponentProps<typeof AudioToolbar>> = {}) {
     const props = audioToolbarProps({ currentTime: CLIP_POSITION_SECONDS, ...overrides });
     const result = toolbarTest.render({ props });
     return { onSeek: props.onSeek, ...result };
@@ -331,8 +332,8 @@ describe('AudioToolbar Accessibility', () => {
   });
 
   // jsdom computes no cascade, so the real colours are checked in the browser-mode test
-  // audio-toolbar-active-hover.browser.test.ts, which CI does not run. This pins the two
-  // selectors that test relies on, so a revert cannot pass every automated check.
+  // audio-toolbar-active-hover.browser.test.ts, which CI does not run. This pins the active
+  // hover rule that test relies on, so a revert cannot pass every automated check.
   it('gives active buttons their own hover background instead of the grey one', () => {
     const css = toolbarSource.replace(/\/\*[\s\S]*?\*\//g, '');
 

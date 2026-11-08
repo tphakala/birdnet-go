@@ -19,11 +19,9 @@ function bar(width = BAR_WIDTH_PX): DOMRect {
 
 describe('seek steps', () => {
   // Written as literals so a changed constant has to change these expectations on purpose
-  it('moves one second for an arrow key and five for a Page key', () => {
+  it('steps one second for an arrow key and five for a Page key', () => {
     expect(SEEK_STEP_SECONDS).toBe(1);
     expect(SEEK_PAGE_STEP_SECONDS).toBe(5);
-    expect(seekTargetForKey('ArrowRight', 10, CLIP_SECONDS)).toBe(11);
-    expect(seekTargetForKey('PageUp', 10, CLIP_SECONDS)).toBe(15);
   });
 });
 

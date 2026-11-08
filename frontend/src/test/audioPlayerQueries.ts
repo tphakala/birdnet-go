@@ -1,7 +1,7 @@
 /**
- * Shared query options for the AudioPlayer tests.
+ * Shared queries and query options for the AudioPlayer and AudioToolbar tests.
  *
- * The player announces the spectrogram state twice: in a visually hidden role=status
+ * OVERLAY_ONLY: the player announces the spectrogram state twice: in a visually hidden role=status
  * region for screen readers and in a visible overlay. Pass this to getByText and
  * queryByText to assert on the overlay only.
  */

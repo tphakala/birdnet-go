@@ -44,6 +44,8 @@ const WIDE_CONTAINER_PX = 400;
 const PROGRESS_BAR_WIDTH_PX = 400;
 // A position that is neither the start nor the end of the fake clip
 const INITIAL_POSITION_SECONDS = 7;
+// How far past the end of the fake clip a stale position is in the clamping test
+const PAST_END_SECONDS = 30;
 
 describe('AudioPlayer Accessibility', () => {
   let ctl: FakeMediaController;
@@ -229,12 +231,12 @@ describe('AudioPlayer Accessibility', () => {
       ctl.completeLoad();
       await settle();
       const bar = inlineBar(container);
-      ctl.element.currentTime = 30;
+      ctl.element.currentTime = INITIAL_POSITION_SECONDS;
       vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 0, 0));
 
       await fireEvent.click(bar, { clientX: 0 });
 
-      expect(ctl.element.currentTime).toBe(30);
+      expect(ctl.element.currentTime).toBe(INITIAL_POSITION_SECONDS);
     });
 
     it('steps from the end of the clip when the position is past the duration', async () => {
@@ -242,7 +244,7 @@ describe('AudioPlayer Accessibility', () => {
       ctl.completeLoad();
       await settle();
       const bar = inlineBar(container);
-      ctl.element.currentTime = FAKE_MEDIA_DURATION_SECONDS + 30;
+      ctl.element.currentTime = FAKE_MEDIA_DURATION_SECONDS + PAST_END_SECONDS;
       await fireEvent(ctl.element, new Event('timeupdate'));
 
       expect(bar).toHaveAttribute('aria-valuenow', String(FAKE_MEDIA_DURATION_SECONDS));
@@ -250,6 +252,22 @@ describe('AudioPlayer Accessibility', () => {
       await fireEvent.keyDown(bar, { key: 'ArrowLeft' });
       expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS - SEEK_STEP_SECONDS);
     });
+
+    it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+      'reports an empty, disabled range when the media reports a duration of %s',
+      async reported => {
+        const { container } = mount({ enableClipExtraction: false });
+        ctl.completeLoad();
+        await settle();
+        const bar = inlineBar(container);
+        Object.defineProperty(ctl.element, 'duration', { configurable: true, get: () => reported });
+        await fireEvent(ctl.element, new Event('loadedmetadata'));
+
+        expect(bar).toHaveAttribute('aria-valuemax', '0');
+        expect(bar).toHaveAttribute('aria-disabled', 'true');
+        expect(bar).not.toHaveAttribute('aria-valuetext');
+      }
+    );
 
     it('is disabled and inert until the duration is known', async () => {
       const { container } = mount({ enableClipExtraction: false });
