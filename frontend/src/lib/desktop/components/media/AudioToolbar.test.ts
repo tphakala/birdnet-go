@@ -188,12 +188,13 @@ describe('AudioToolbar Accessibility', () => {
     const { onSeek } = renderToolbar({ currentTime: CLIP_DURATION_SECONDS + 11 });
 
     expect(seekSlider()).toHaveAttribute('aria-valuenow', String(CLIP_DURATION_SECONDS));
+    expect(seekSlider()).toHaveAttribute('aria-valuetext', '0:29 of 0:29');
     await fireEvent.keyDown(seekSlider(), { key: 'ArrowLeft' });
 
     expect(onSeek).toHaveBeenCalledWith(CLIP_DURATION_SECONDS - 1);
   });
 
-  it.each([0, Number.NaN])(
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
     'does not seek and reports an empty range while the duration is %s',
     async duration => {
       const { onSeek } = renderToolbar({ duration, currentTime: 0 });
@@ -211,7 +212,7 @@ describe('AudioToolbar Accessibility', () => {
     }
   );
 
-  it.each([0, Number.NaN])(
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
     'keeps Space from scrolling the page while the duration is %s',
     async duration => {
       const { onSeek } = renderToolbar({ duration, currentTime: 0 });
@@ -232,6 +233,14 @@ describe('AudioToolbar Accessibility', () => {
     renderToolbar(props);
 
     expect(document.querySelector('.playback-time')).toHaveTextContent(expected);
+  });
+
+  it('lets the seek slider take keyboard focus', () => {
+    renderToolbar();
+
+    seekSlider().focus();
+
+    expect(seekSlider()).toHaveFocus();
   });
 
   it('is not marked disabled while the duration is known', () => {
@@ -280,6 +289,7 @@ describe('AudioToolbar Accessibility', () => {
     const { rerender } = renderToolbar({ currentTime: 6.4, duration: 29.2 });
 
     const slider = screen.getByRole('slider', { name: 'media.audio.seek' });
+    expect(slider).toHaveAttribute('aria-valuemin', '0');
     expect(slider).toHaveAttribute('aria-valuetext', '0:06 of 0:29');
     expect(slider).toHaveAttribute('aria-valuenow', '6.4');
     expect(slider).toHaveAttribute('aria-valuemax', '29.2');

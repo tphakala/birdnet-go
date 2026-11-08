@@ -18,8 +18,9 @@ export function usableDuration(duration: number): number {
   return Number.isFinite(duration) && duration > 0 ? duration : 0;
 }
 
-/** Clamp a time in seconds to the clip, from 0 to max. */
+/** Clamp a time in seconds to the clip, from 0 to max. NaN has no position, so it maps to 0. */
 export function clampSeconds(seconds: number, max: number): number {
+  if (Number.isNaN(seconds)) return 0;
   return Math.min(Math.max(seconds, 0), max);
 }
 
@@ -71,11 +72,12 @@ export interface SeekKeyAction {
 }
 
 /**
- * Decide what a seek slider does for a keydown. Seek keys held with no Alt, Ctrl or
- * Meta move to their target and cancel the event so the page does not scroll; Shift
- * does not change the step. Space does not seek, but is cancelled for the same
- * reason, whether or not the clip length is known. Everything else, including keys
- * held with Alt, Ctrl or Meta, is left to the browser.
+ * Decide what a seek slider does for a keydown. Held with no Alt, Ctrl or Meta, a seek
+ * key moves to its target and is cancelled so the page does not scroll, as long as the
+ * clip has a usable length (Shift does not change the step). Space never seeks, and is
+ * cancelled for the same reason whether or not the clip length is known. Everything
+ * else is left to the browser: other keys, every key while the clip length is unknown
+ * except Space, and keys held with Alt, Ctrl or Meta.
  */
 export function seekKeyAction(
   event: Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey'>,

@@ -147,6 +147,8 @@ describe('AudioPlayer Accessibility', () => {
       await settle();
       const bar = inlineBar(container);
 
+      bar.focus();
+      expect(bar).toHaveFocus();
       expect(bar).toHaveAccessibleName('media.audio.seek');
       expect(bar).toHaveAttribute('aria-valuemin', '0');
       expect(bar).toHaveAttribute('aria-valuemax', String(FAKE_MEDIA_DURATION_SECONDS));
@@ -212,6 +214,33 @@ describe('AudioPlayer Accessibility', () => {
 
       expect(ctl.element.currentTime).toBe(0);
       expect(notPrevented).toBe(true);
+    });
+
+    it('does not seek on a click when the bar has no width', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
+      ctl.element.currentTime = 30;
+      vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 0, 0));
+
+      await fireEvent.click(bar, { clientX: 0 });
+
+      expect(ctl.element.currentTime).toBe(30);
+    });
+
+    it('steps from the end of the clip when the position is past the duration', async () => {
+      const { container } = mount({ enableClipExtraction: false });
+      ctl.completeLoad();
+      await settle();
+      const bar = inlineBar(container);
+      ctl.element.currentTime = FAKE_MEDIA_DURATION_SECONDS + 30;
+      await fireEvent(ctl.element, new Event('timeupdate'));
+
+      expect(bar).toHaveAttribute('aria-valuenow', String(FAKE_MEDIA_DURATION_SECONDS));
+      expect(bar).toHaveAttribute('aria-valuetext', '2:00 of 2:00');
+      await fireEvent.keyDown(bar, { key: 'ArrowLeft' });
+      expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS - SEEK_STEP_SECONDS);
     });
 
     it('is disabled and inert until the duration is known', async () => {

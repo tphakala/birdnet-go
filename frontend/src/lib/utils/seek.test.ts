@@ -17,7 +17,21 @@ function bar(width = BAR_WIDTH_PX): DOMRect {
   return new DOMRect(BAR_LEFT_PX, 0, width, 0);
 }
 
+describe('seek steps', () => {
+  // Written as literals so a changed constant has to change these expectations on purpose
+  it('moves one second for an arrow key and five for a Page key', () => {
+    expect(SEEK_STEP_SECONDS).toBe(1);
+    expect(SEEK_PAGE_STEP_SECONDS).toBe(5);
+    expect(seekTargetForKey('ArrowRight', 10, CLIP_SECONDS)).toBe(11);
+    expect(seekTargetForKey('PageUp', 10, CLIP_SECONDS)).toBe(15);
+  });
+});
+
 describe('clampSeconds', () => {
+  it('maps NaN to the start of the clip', () => {
+    expect(clampSeconds(Number.NaN, CLIP_SECONDS)).toBe(0);
+  });
+
   it.each([
     [-1, 0],
     [0, 0],
@@ -91,6 +105,17 @@ describe('seekTimeFromPointer', () => {
       expect(seekTimeFromPointer(BAR_LEFT_PX + 10, bar(), max)).toBeNull();
     }
   );
+});
+
+describe('NaN positions', () => {
+  it('treats a NaN current position as the start, and End still reaches the end', () => {
+    expect(seekTargetForKey('ArrowRight', Number.NaN, CLIP_SECONDS)).toBe(0);
+    expect(seekTargetForKey('End', Number.NaN, CLIP_SECONDS)).toBe(CLIP_SECONDS);
+  });
+
+  it('maps a NaN pointer position to the start of the clip', () => {
+    expect(seekTimeFromPointer(Number.NaN, bar(), CLIP_SECONDS)).toBe(0);
+  });
 });
 
 describe('usableDuration', () => {
