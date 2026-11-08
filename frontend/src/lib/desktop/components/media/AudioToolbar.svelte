@@ -282,11 +282,12 @@
         class:active={denoise !== ''}
         disabled={isProcessing}
         onclick={() => (showDenoiseMenu = !showDenoiseMenu)}
-        aria-label={t('components.audioPlayer.processing.denoise')}
         aria-expanded={showDenoiseMenu}
         aria-haspopup="true"
       >
         <AudioWaveform size={14} />
+        <!-- The name is "Denoise Light": the control, then the visible state it shows -->
+        <span class="sr-only">{t('components.audioPlayer.processing.denoise')}</span>
         <span>{denoiseLabel}</span>
         <ChevronDown size={10} />
       </button>

@@ -5,6 +5,11 @@ import { createComponentTestFactory, screen } from '../../../../test/render-help
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import AudioToolbar from './AudioToolbar.svelte';
 import toolbarSource from './AudioToolbar.svelte?raw';
+import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
+
+// The Denoise trigger is named by its control word and its current state, for example
+// "Denoise Light"; the options inside the menu start with the same key but no space.
+const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
 
 describe('AudioToolbar export menu', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
@@ -95,9 +100,7 @@ describe('AudioToolbar export menu', () => {
     const user = userEvent.setup();
     renderToolbar();
 
-    await user.click(
-      screen.getByRole('button', { name: 'components.audioPlayer.processing.denoise' })
-    );
+    await user.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
 
     const menu = document.querySelector('.denoise-menu');
     expect(menu).not.toBeNull();
@@ -118,9 +121,7 @@ describe('AudioToolbar export menu', () => {
     const onDenoiseChange = vi.fn();
     renderToolbar(vi.fn(), { isPlaying: false, isLoading: false }, onDenoiseChange);
 
-    await user.click(
-      screen.getByRole('button', { name: 'components.audioPlayer.processing.denoise' })
-    );
+    await user.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
     await user.click(
       screen.getByRole('button', { name: 'components.audioPlayer.processing.denoiseLightMedium' })
     );
@@ -372,6 +373,17 @@ describe('AudioToolbar Accessibility', () => {
       /\.toolbar-btn\.active:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--color-primary-hover\)/
     );
   });
+
+  it.each(DENOISE_OPTIONS.map(option => [option.id, option.labelKey] as const))(
+    'names the Denoise button with the state it shows when denoise is %j',
+    (id, labelKey) => {
+      renderToolbar({ denoise: id });
+
+      const button = screen.getByRole('button', { name: DENOISE_BUTTON_NAME });
+      expect(button).toHaveAccessibleName(`components.audioPlayer.processing.denoise ${labelKey}`);
+      expect(button).toHaveTextContent(labelKey);
+    }
+  );
 
   it('has no axe violations in the playback controls', async () => {
     const { container } = renderToolbar({ loop: true });

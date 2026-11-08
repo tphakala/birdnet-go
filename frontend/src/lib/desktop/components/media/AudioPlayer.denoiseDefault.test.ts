@@ -42,7 +42,8 @@ const DETECTION_ID = '4242';
 const STORED_URL = `/api/v2/audio/${DETECTION_ID}`;
 const DENOISED_URL = `${STORED_URL}?denoise=${PRESET}`;
 const PLAY_LABEL = 'media.audio.play';
-const DENOISE_LABEL = 'components.audioPlayer.processing.denoise';
+// The Denoise trigger is named by its control word and the state it shows.
+const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
 const NORMALIZE_LABEL = 'components.audioPlayer.processing.normalize';
 const DENOISE_LIGHT_MEDIUM_TEXT = 'components.audioPlayer.processing.denoiseLightMedium';
 const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';
@@ -87,7 +88,7 @@ describe('AudioPlayer playback denoise default', () => {
   }
 
   async function chooseDenoise(text: string) {
-    await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+    await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
     await fireEvent.click(screen.getByText(text));
     await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
     await settle();

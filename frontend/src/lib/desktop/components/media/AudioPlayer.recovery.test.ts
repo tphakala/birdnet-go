@@ -47,7 +47,8 @@ const PAUSE_LABEL = 'media.audio.pause';
 const LOADING_LABEL = 'media.audio.loading';
 const PLAY_ERROR_TEXT = 'media.audio.playError';
 const LOAD_ERROR_TEXT = 'media.audio.error';
-const DENOISE_LABEL = 'components.audioPlayer.processing.denoise';
+// The Denoise trigger is named by its control word and the state it shows.
+const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
 const DENOISE_LIGHT_TEXT = 'components.audioPlayer.processing.denoiseLight';
 const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';
 // Debounce before a processing request starts (PROCESS_DEBOUNCE_MS in AudioPlayer.svelte)
@@ -206,7 +207,7 @@ describe('AudioPlayer recovery', () => {
       await settle();
 
       // Switch denoise on and let the processed clip load.
-      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
       await fireEvent.click(screen.getByText(DENOISE_LIGHT_TEXT));
       await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
       await settle();
@@ -219,7 +220,7 @@ describe('AudioPlayer recovery', () => {
       expect(screen.getByLabelText(PAUSE_LABEL)).toBeInTheDocument();
 
       // Switch denoise off: the source resets to the original and playback stops.
-      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
       await fireEvent.click(screen.getByText(DENOISE_OFF_TEXT));
       await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
       await settle();
@@ -423,7 +424,7 @@ describe('AudioPlayer recovery', () => {
       ctl.dispatch('pause');
       const playsBefore = ctl.play.mock.calls.length;
 
-      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
       await fireEvent.click(screen.getByText(DENOISE_LIGHT_TEXT));
       await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
       await settle();
