@@ -2525,12 +2525,15 @@
   ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
 >
   <!-- Screen reader announcement for the spectrogram state (the rate resolve counts
-       as loading). Always rendered, so screen readers hear each change of its text. -->
+       as loading, a failed load reads as unavailable). Always rendered, so screen
+       readers hear each change of its text. -->
   <div class="sr-only" role="status">
     {#if spectrogramUrl || rateResolvePending}
       {spectrogramLoader.loading || rateResolvePending
         ? t('components.audio.spectrogramLoading')
-        : t('components.audio.spectrogramLoaded')}
+        : spectrogramLoader.error
+          ? t('components.audio.spectrogramUnavailable')
+          : t('components.audio.spectrogramLoaded')}
     {/if}
   </div>
 

@@ -496,7 +496,12 @@ describe('AudioPlayer', () => {
 
     // After all retries are exhausted, error state should be shown
     // The component shows i18n key when translation is not mocked for this key
-    expect(screen.getByText('components.audio.spectrogramUnavailable')).toBeInTheDocument();
+    expect(
+      screen.getByText('components.audio.spectrogramUnavailable', {
+        // The sr-only status region repeats the text; this asserts the overlay.
+        ignore: '[role="status"], script, style',
+      })
+    ).toBeInTheDocument();
   });
 
   it('shows controls when rendered', () => {
