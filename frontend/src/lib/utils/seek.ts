@@ -1,11 +1,13 @@
 /**
  * seek.ts
  *
- * Pure helpers for seeking an audio clip with a slider: the keyboard model of the
- * WAI-ARIA slider pattern and the conversion of a pointer position to a time. The
- * audio player's progress bars use them so they seek by time, not by pointer
- * geometry, and clamp to the clip in one place.
+ * Helpers for seeking an audio clip with a slider: the keyboard model of the WAI-ARIA
+ * slider pattern, the conversion of a pointer position to a time, and the value text a
+ * screen reader announces. The audio player's progress bars use them so they seek by
+ * time, not by pointer geometry, and share one set of edge cases.
  */
+import { t } from '$lib/i18n';
+import { formatTime } from '$lib/utils/formatters';
 
 /** Seconds a seek moves for an arrow key. */
 export const SEEK_STEP_SECONDS = 1;
@@ -89,4 +91,13 @@ export function seekKeyAction(
   if (event.key === ' ') return { target: null, preventDefault: true };
   const target = seekTargetForKey(event.key, current, max);
   return { target, preventDefault: target !== null };
+}
+
+/**
+ * Value text of a seek slider, such as "0:06 of 0:29", or undefined while the clip length
+ * is unknown, because "0:00 of 0:00" next to a disabled slider would mislead.
+ */
+export function seekSliderValueText(now: number, max: number): string | undefined {
+  if (max <= 0) return undefined;
+  return t('media.audio.seekValueText', { current: formatTime(now), total: formatTime(max) });
 }

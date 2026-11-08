@@ -58,6 +58,7 @@
   import {
     clampSeconds,
     seekKeyAction,
+    seekSliderValueText,
     seekTimeFromPointer,
     usableDuration,
   } from '$lib/utils/seek';
@@ -1490,15 +1491,7 @@
   // Usable clip length and position for seeking and the inline progress bar's slider semantics
   const seekMax = $derived(usableDuration(duration));
   const seekNow = $derived(clampSeconds(currentTime, seekMax));
-  // No value text while the length is unknown: "0:00 of 0:00" next to aria-disabled misleads
-  const seekValueText = $derived(
-    seekMax > 0
-      ? t('media.audio.seekValueText', {
-          current: formatTime(seekNow),
-          total: formatTime(seekMax),
-        })
-      : undefined
-  );
+  const seekValueText = $derived(seekSliderValueText(seekNow, seekMax));
 
   // What the screen reader status region says about the spectrogram. It follows the same
   // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and a

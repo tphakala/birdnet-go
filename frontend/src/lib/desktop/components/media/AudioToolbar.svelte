@@ -25,6 +25,7 @@
   import {
     clampSeconds,
     seekKeyAction,
+    seekSliderValueText,
     seekTimeFromPointer,
     usableDuration,
   } from '$lib/utils/seek';
@@ -133,15 +134,7 @@
   // Usable clip length for the seek slider; 0 while the duration is unknown
   let seekMax = $derived(usableDuration(duration));
   let seekNow = $derived(clampSeconds(currentTime, seekMax));
-  // No value text while the length is unknown: "0:00 of 0:00" next to aria-disabled misleads
-  let seekValueText = $derived(
-    seekMax > 0
-      ? t('media.audio.seekValueText', {
-          current: formatTime(seekNow),
-          total: formatTime(seekMax),
-        })
-      : undefined
-  );
+  let seekValueText = $derived(seekSliderValueText(seekNow, seekMax));
 
   function handleSeekKeydown(e: KeyboardEvent) {
     const action = seekKeyAction(e, seekNow, seekMax);

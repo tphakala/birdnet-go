@@ -4,6 +4,7 @@ import {
   SEEK_STEP_SECONDS,
   clampSeconds,
   seekKeyAction,
+  seekSliderValueText,
   seekTargetForKey,
   seekTimeFromPointer,
   usableDuration,
@@ -186,5 +187,20 @@ describe('seekKeyAction', () => {
 
   it('leaves a seek key alone while the clip length is unknown', () => {
     expect(seekKeyAction(key('End'), 0, 0)).toEqual({ target: null, preventDefault: false });
+  });
+});
+
+describe('seekSliderValueText', () => {
+  it.each([
+    [0, CLIP_SECONDS, '0:00 of 0:29'],
+    [6.4, CLIP_SECONDS, '0:06 of 0:29'],
+    [CLIP_SECONDS, CLIP_SECONDS, '0:29 of 0:29'],
+    [3725, 4500, '1:02:05 of 1:15:00'],
+  ])('reads %s of %s seconds as %s', (now, max, expected) => {
+    expect(seekSliderValueText(now, max)).toBe(expected);
+  });
+
+  it.each([0, -1])('has no value text for a clip length of %s', max => {
+    expect(seekSliderValueText(0, max)).toBeUndefined();
   });
 });
