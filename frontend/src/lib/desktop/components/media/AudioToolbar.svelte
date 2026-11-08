@@ -134,7 +134,7 @@
   }
 
   let seekMax = $derived(Number.isFinite(duration) && duration > 0 ? duration : 0);
-  let seekNow = $derived(Math.min(Math.max(currentTime, 0), seekMax));
+  let seekNow = $derived(clamp(currentTime, 0, seekMax));
 
   function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
