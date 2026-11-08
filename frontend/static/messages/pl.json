@@ -5104,6 +5104,8 @@
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",
       "seekProgress": "Szukaj postępu audio: {current} / {total} sekund",
+      "seek": "Pozycja odtwarzania",
+      "seekValueText": "{current} z {total}",
       "playbackSpeed": "Prędkość odtwarzania",
       "speed": "Prędkość",
       "loop": "Przełącz pętlę",

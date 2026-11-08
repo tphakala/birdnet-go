@@ -5104,6 +5104,8 @@
       "filterControl": "Filter bediening",
       "highPassFilter": "Hoog-doorlaat filter: {freq} Hz",
       "seekProgress": "Voortgang verder spoelen: {current} / {total} seconden",
+      "seek": "Afspeelpositie",
+      "seekValueText": "{current} van {total}",
       "playbackSpeed": "Afspeelsnelheid",
       "speed": "Snelheid",
       "loop": "Herhaling aan/uit",

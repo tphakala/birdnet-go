@@ -1483,21 +1483,19 @@
     consumePendingPlay();
   };
 
-  const handleProgressClick = (event: MouseEvent) => {
+  // Seek to an absolute position. The shown position is refreshed at once so a paused
+  // player reflects the seek before the next key press computes its target from it.
+  const seekTo = (seconds: number) => {
     if (!audioElement || !isFinite(duration) || duration <= 0) return;
+    audioElement.currentTime = Math.max(0, Math.min(seconds, duration));
+    updateProgress();
+  };
 
-    // Use the toolbar's own progress bar if the event target is inside one,
-    // otherwise fall back to playerContainer (always rendered).
-    const targetEl = (event.target as HTMLElement)?.closest('.progress-bar') as HTMLElement | null;
-    const refEl = targetEl ?? progressBar ?? playerContainer;
-    if (!refEl) return;
-
-    const rect = refEl.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const clickPercent = clickX / rect.width;
-    const newTime = clickPercent * duration;
-
-    audioElement.currentTime = Math.max(0, Math.min(newTime, duration));
+  const handleProgressClick = (event: MouseEvent) => {
+    if (!progressBar) return;
+    const rect = progressBar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    seekTo(((event.clientX - rect.left) / rect.width) * duration);
   };
 
   // Volume control
@@ -2898,7 +2896,7 @@
     {progress}
     loop={loopEnabled}
     onPlayPause={handlePlayPause}
-    onSeek={handleProgressClick}
+    onSeek={seekTo}
     onLoopToggle={() => (loopEnabled = !loopEnabled)}
     selectionStart={selectionStartSec !== null && selectionEndSec !== null
       ? Math.min(selectionStartSec, selectionEndSec)

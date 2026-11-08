@@ -5104,6 +5104,8 @@
       "filterControl": "Szűrő szabályozás",
       "highPassFilter": "Felül átengedő szűrő szabályozás: {freq} Hz",
       "seekProgress": "Hang előre-hátra tekerés: {current} / {total} másodperc",
+      "seek": "Lejátszási pozíció",
+      "seekValueText": "{current} / {total}",
       "playbackSpeed": "Lejátszási sebesség",
       "speed": "Sebesség",
       "loop": "Ismétlés be/ki",

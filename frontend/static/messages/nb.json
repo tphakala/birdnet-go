@@ -5104,6 +5104,8 @@
       "filterControl": "Filterkontroll",
       "highPassFilter": "Høypassfilterkontroll: {freq} Hz",
       "seekProgress": "Spol lydfremdrift: {current} / {total} sekunder",
+      "seek": "Avspillingsposisjon",
+      "seekValueText": "{current} av {total}",
       "playbackSpeed": "Avspillingshastighet",
       "speed": "Hastighet",
       "loop": "Veksle sløyfe",

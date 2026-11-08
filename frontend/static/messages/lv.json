@@ -5104,6 +5104,8 @@
       "filterControl": "Filtra vadība",
       "highPassFilter": "Augstfrekvences filtra vadība: {freq} Hz",
       "seekProgress": "Audio pārtīšanas progress: {current} / {total} sekundes",
+      "seek": "Atskaņošanas pozīcija",
+      "seekValueText": "{current} no {total}",
       "playbackSpeed": "Atskaņošanas ātrums",
       "speed": "Ātrums",
       "loop": "Pārslēgt cilpu",

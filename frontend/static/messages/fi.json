@@ -5104,6 +5104,8 @@
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
+      "seek": "Toistokohta",
+      "seekValueText": "{current} / {total}",
       "playbackSpeed": "Toistonopeus",
       "speed": "Nopeus",
       "loop": "Vaihda silmukka",

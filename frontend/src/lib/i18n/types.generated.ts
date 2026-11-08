@@ -3747,6 +3747,8 @@ export type TranslationKey =
   | 'media.audio.filterControl'
   | 'media.audio.highPassFilter' // params: freq
   | 'media.audio.seekProgress' // params: current, total
+  | 'media.audio.seek'
+  | 'media.audio.seekValueText' // params: current, total
   | 'media.audio.playbackSpeed'
   | 'media.audio.speed'
   | 'media.audio.loop'
@@ -4936,6 +4938,7 @@ export type TranslationParams = {
   'media.audio.volumeGain': { value: string | number };
   'media.audio.highPassFilter': { freq: string | number };
   'media.audio.seekProgress': { current: string | number; total: string | number };
+  'media.audio.seekValueText': { current: string | number; total: string | number };
   'media.audio.levelFor': { source: string | number };
   'media.audio.levelAnnouncement': { level: string | number };
   'media.audio.levelAnnouncementClipping': { level: string | number };

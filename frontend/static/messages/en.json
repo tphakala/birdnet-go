@@ -5104,6 +5104,8 @@
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",
       "seekProgress": "Seek audio progress: {current} / {total} seconds",
+      "seek": "Seek",
+      "seekValueText": "{current} of {total}",
       "playbackSpeed": "Playback speed",
       "speed": "Speed",
       "loop": "Toggle loop",

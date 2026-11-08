@@ -31,7 +31,8 @@
     progress: number;
     loop: boolean;
     onPlayPause: () => void;
-    onSeek: (_event: MouseEvent) => void;
+    // Seek to an absolute position, in seconds
+    onSeek: (_seconds: number) => void;
     onLoopToggle: () => void;
 
     // Selection state
@@ -91,6 +92,10 @@
     onExport,
   }: Props = $props();
 
+  // Keyboard seek steps for the seek slider
+  const SEEK_STEP_SECONDS = 1; // arrow keys
+  const SEEK_PAGE_STEP_SECONDS = 5; // PageUp and PageDown
+
   let progressBarEl: HTMLDivElement;
   let showExportMenu = $state(false);
   let showDenoiseMenu = $state(false);
@@ -126,6 +131,50 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  let seekMax = $derived(Number.isFinite(duration) && duration > 0 ? duration : 0);
+  let seekNow = $derived(Math.min(Math.max(currentTime, 0), seekMax));
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function seekTargetForKey(key: string): number | null {
+    switch (key) {
+      case 'ArrowRight':
+      case 'ArrowUp':
+        return seekNow + SEEK_STEP_SECONDS;
+      case 'ArrowLeft':
+      case 'ArrowDown':
+        return seekNow - SEEK_STEP_SECONDS;
+      case 'PageUp':
+        return seekNow + SEEK_PAGE_STEP_SECONDS;
+      case 'PageDown':
+        return seekNow - SEEK_PAGE_STEP_SECONDS;
+      case 'Home':
+        return 0;
+      case 'End':
+        return seekMax;
+      default:
+        return null;
+    }
+  }
+
+  function handleSeekKeydown(e: KeyboardEvent) {
+    // Leave browser shortcuts such as Alt+Left alone
+    if (seekMax <= 0 || e.altKey || e.ctrlKey || e.metaKey) return;
+    const target = seekTargetForKey(e.key);
+    if (target === null) return;
+    e.preventDefault();
+    onSeek(clamp(target, 0, seekMax));
+  }
+
+  function handleSeekClick(e: MouseEvent) {
+    if (seekMax <= 0) return;
+    const rect = progressBarEl.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    onSeek(clamp((e.clientX - rect.left) / rect.width, 0, 1) * seekMax);
   }
 
   function handleExport(format: string) {
@@ -210,22 +259,16 @@
       class="progress-bar"
       role="slider"
       tabindex="0"
-      aria-label={t('media.audio.seekProgress', {
-        current: Math.floor(currentTime),
-        total: Math.floor(duration),
-      })}
+      aria-label={t('media.audio.seek')}
       aria-valuemin={0}
-      aria-valuemax={Math.floor(duration)}
-      aria-valuenow={Math.floor(currentTime)}
-      onclick={onSeek}
-      onkeydown={e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const rect = progressBarEl.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          onSeek(new MouseEvent('click', { clientX: centerX }));
-        }
-      }}
+      aria-valuemax={seekMax}
+      aria-valuenow={seekNow}
+      aria-valuetext={t('media.audio.seekValueText', {
+        current: formatPlaybackTime(seekNow),
+        total: formatPlaybackTime(seekMax),
+      })}
+      onclick={handleSeekClick}
+      onkeydown={handleSeekKeydown}
     >
       <div class="progress-fill" style:width="{progress}%"></div>
     </div>

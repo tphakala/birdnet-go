@@ -5104,6 +5104,8 @@
       "filterControl": "Ovládání filtru",
       "highPassFilter": "Ovládání horní propusti: {freq} Hz",
       "seekProgress": "Posun v nahrávce: {current} / {total} sekund",
+      "seek": "Pozice přehrávání",
+      "seekValueText": "{current} z {total}",
       "playbackSpeed": "Rychlost přehrávání",
       "speed": "Rychlost",
       "loop": "Přepnout opakování",
