@@ -54,6 +54,8 @@
     playButtonLabelKey,
     probeAudioSource,
   } from '$lib/utils/audio';
+  import { formatTime } from '$lib/utils/formatters';
+  import { clampSeconds, seekTimeFromPointer } from '$lib/utils/seek';
   import {
     getAudioContext,
     isAudioContextSupported,
@@ -482,12 +484,6 @@
   const progressId = $derived(`progress-${detectionId}`);
 
   // Utility functions
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   // Convert mouse/touch X position to time in seconds
   const xToTime = (clientX: number): number => {
     if (!playerContainer || !isFinite(duration) || duration <= 0) return 0;
@@ -1490,15 +1486,18 @@
   // player reflects the seek before the next key press computes its target from it.
   const seekTo = (seconds: number) => {
     if (!audioElement || !isFinite(duration) || duration <= 0) return;
-    audioElement.currentTime = Math.max(0, Math.min(seconds, duration));
+    audioElement.currentTime = clampSeconds(seconds, duration);
     updateProgress();
   };
 
   const handleProgressClick = (event: MouseEvent) => {
     if (!progressBar) return;
-    const rect = progressBar.getBoundingClientRect();
-    if (rect.width <= 0) return;
-    seekTo(((event.clientX - rect.left) / rect.width) * duration);
+    const target = seekTimeFromPointer(
+      event.clientX,
+      progressBar.getBoundingClientRect(),
+      duration
+    );
+    if (target !== null) seekTo(target);
   };
 
   // Volume control

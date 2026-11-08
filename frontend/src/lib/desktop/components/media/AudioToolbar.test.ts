@@ -204,22 +204,39 @@ describe('AudioToolbar Accessibility', () => {
     }
   );
 
-  it('does not seek on Enter or Space', async () => {
+  it('does not seek on Enter, and on Space it does not seek or scroll the page', async () => {
     const { onSeek } = renderToolbar();
 
-    await fireEvent.keyDown(seekSlider(), { key: 'Enter' });
-    await fireEvent.keyDown(seekSlider(), { key: ' ' });
+    const enterNotPrevented = await fireEvent.keyDown(seekSlider(), { key: 'Enter' });
+    const spaceNotPrevented = await fireEvent.keyDown(seekSlider(), { key: ' ' });
 
     expect(onSeek).not.toHaveBeenCalled();
+    expect(enterNotPrevented).toBe(true);
+    expect(spaceNotPrevented).toBe(false);
   });
 
-  it('leaves modified arrow keys to the browser', async () => {
-    const { onSeek } = renderToolbar();
+  it.each(['altKey', 'ctrlKey', 'metaKey'])(
+    'leaves arrow keys held with %s to the browser',
+    async modifier => {
+      const { onSeek } = renderToolbar();
 
-    const notPrevented = await fireEvent.keyDown(seekSlider(), { key: 'ArrowLeft', altKey: true });
+      const notPrevented = await fireEvent.keyDown(seekSlider(), {
+        key: 'ArrowLeft',
+        [modifier]: true,
+      });
 
-    expect(onSeek).not.toHaveBeenCalled();
-    expect(notPrevented).toBe(true);
+      expect(onSeek).not.toHaveBeenCalled();
+      expect(notPrevented).toBe(true);
+    }
+  );
+
+  it('steps from the end of the clip when the position is past the duration', async () => {
+    const { onSeek } = renderToolbar({ currentTime: CLIP_DURATION_SECONDS + 11 });
+
+    expect(seekSlider()).toHaveAttribute('aria-valuenow', String(CLIP_DURATION_SECONDS));
+    await fireEvent.keyDown(seekSlider(), { key: 'ArrowLeft' });
+
+    expect(onSeek).toHaveBeenCalledWith(CLIP_DURATION_SECONDS - 1);
   });
 
   it.each([0, Number.NaN])(
@@ -236,8 +253,38 @@ describe('AudioToolbar Accessibility', () => {
       expect(onSeek).not.toHaveBeenCalled();
       expect(notPrevented).toBe(true);
       expect(seekSlider()).toHaveAttribute('aria-valuemax', '0');
+      expect(seekSlider()).toHaveAttribute('aria-disabled', 'true');
     }
   );
+
+  it.each([0, Number.NaN])(
+    'keeps Space from scrolling the page while the duration is %s',
+    async duration => {
+      const { onSeek } = renderToolbar({ duration, currentTime: 0 });
+
+      const notPrevented = await fireEvent.keyDown(seekSlider(), { key: ' ' });
+
+      expect(onSeek).not.toHaveBeenCalled();
+      expect(notPrevented).toBe(false);
+    }
+  );
+
+  it.each([
+    ['a known clip', { currentTime: 10, duration: 29 }, '0:10 / 0:29'],
+    ['an unknown duration', { currentTime: 3, duration: Number.NaN }, '0:03 / 0:00'],
+    ['an infinite duration', { currentTime: 3, duration: Number.POSITIVE_INFINITY }, '0:03 / 0:00'],
+    ['a clip over an hour', { currentTime: 3725, duration: 4500 }, '1:02:05 / 1:15:00'],
+  ])('shows the elapsed and total time for %s', (_name, props, expected) => {
+    renderToolbar(props);
+
+    expect(document.querySelector('.playback-time')).toHaveTextContent(expected);
+  });
+
+  it('is not marked disabled while the duration is known', () => {
+    renderToolbar();
+
+    expect(seekSlider()).not.toHaveAttribute('aria-disabled');
+  });
 
   it('seeks to the clicked fraction of the bar', async () => {
     const { onSeek } = renderToolbar();
@@ -250,6 +297,31 @@ describe('AudioToolbar Accessibility', () => {
     expect(onSeek).toHaveBeenCalledWith(CLIP_DURATION_SECONDS * 0.25);
   });
 
+  it.each([
+    ['left of the bar', BAR_LEFT_PX - 40, 0],
+    ['right of the bar', BAR_LEFT_PX + BAR_WIDTH_PX + 40, CLIP_DURATION_SECONDS],
+  ])('seeks to the clip edge when the click lands %s', async (_name, clientX, expected) => {
+    const { onSeek } = renderToolbar();
+    vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(BAR_LEFT_PX, 0, BAR_WIDTH_PX, 0)
+    );
+
+    await fireEvent.click(seekSlider(), { clientX });
+
+    expect(onSeek).toHaveBeenCalledWith(expected);
+  });
+
+  it('does not seek when the bar has no width', async () => {
+    const { onSeek } = renderToolbar();
+    vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(BAR_LEFT_PX, 0, 0, 0)
+    );
+
+    await fireEvent.click(seekSlider(), { clientX: BAR_LEFT_PX });
+
+    expect(onSeek).not.toHaveBeenCalled();
+  });
+
   it('names the seek slider statically and exposes the position as value text', async () => {
     const { rerender } = renderToolbar({ currentTime: 6.4, duration: 29.2 });
 
@@ -260,7 +332,9 @@ describe('AudioToolbar Accessibility', () => {
 
     await rerender({ currentTime: 12 });
 
-    expect(screen.getByRole('slider', { name: 'media.audio.seek' })).toBeInTheDocument();
+    const moved = screen.getByRole('slider', { name: 'media.audio.seek' });
+    expect(moved).toHaveAttribute('aria-valuetext', '0:12 of 0:29');
+    expect(moved).toHaveAttribute('aria-valuenow', '12');
   });
 
   it('reports the loop and normalize state with aria-pressed', async () => {

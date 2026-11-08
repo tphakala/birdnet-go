@@ -21,6 +21,8 @@
   import { t } from '$lib/i18n';
   import { playButtonLabelKey } from '$lib/utils/audio';
   import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
+  import { formatTime } from '$lib/utils/formatters';
+  import { clampSeconds, seekTargetForKey, seekTimeFromPointer } from '$lib/utils/seek';
 
   interface Props {
     // Playback state
@@ -92,10 +94,6 @@
     onExport,
   }: Props = $props();
 
-  // Keyboard seek steps for the seek slider
-  const SEEK_STEP_SECONDS = 1; // arrow keys
-  const SEEK_PAGE_STEP_SECONDS = 5; // PageUp and PageDown
-
   let progressBarEl: HTMLDivElement;
   let showExportMenu = $state(false);
   let showDenoiseMenu = $state(false);
@@ -127,54 +125,29 @@
     return seconds.toFixed(1) + 's';
   }
 
-  function formatPlaybackTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
+  // Usable clip length for the seek slider; 0 while the duration is unknown
   let seekMax = $derived(Number.isFinite(duration) && duration > 0 ? duration : 0);
-  let seekNow = $derived(clamp(currentTime, 0, seekMax));
-
-  function clamp(value: number, min: number, max: number): number {
-    return Math.min(Math.max(value, min), max);
-  }
-
-  function seekTargetForKey(key: string): number | null {
-    switch (key) {
-      case 'ArrowRight':
-      case 'ArrowUp':
-        return seekNow + SEEK_STEP_SECONDS;
-      case 'ArrowLeft':
-      case 'ArrowDown':
-        return seekNow - SEEK_STEP_SECONDS;
-      case 'PageUp':
-        return seekNow + SEEK_PAGE_STEP_SECONDS;
-      case 'PageDown':
-        return seekNow - SEEK_PAGE_STEP_SECONDS;
-      case 'Home':
-        return 0;
-      case 'End':
-        return seekMax;
-      default:
-        return null;
-    }
-  }
+  let seekNow = $derived(clampSeconds(currentTime, seekMax));
 
   function handleSeekKeydown(e: KeyboardEvent) {
     // Leave browser shortcuts such as Alt+Left alone
-    if (seekMax <= 0 || e.altKey || e.ctrlKey || e.metaKey) return;
-    const target = seekTargetForKey(e.key);
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    // Space does not seek, but must not scroll the page from a focused slider either,
+    // whether or not the clip length is known yet
+    if (e.key === ' ') {
+      e.preventDefault();
+      return;
+    }
+    if (seekMax <= 0) return;
+    const target = seekTargetForKey(e.key, seekNow, seekMax);
     if (target === null) return;
     e.preventDefault();
-    onSeek(clamp(target, 0, seekMax));
+    onSeek(target);
   }
 
   function handleSeekClick(e: MouseEvent) {
-    if (seekMax <= 0) return;
-    const rect = progressBarEl.getBoundingClientRect();
-    if (rect.width <= 0) return;
-    onSeek(clamp((e.clientX - rect.left) / rect.width, 0, 1) * seekMax);
+    const target = seekTimeFromPointer(e.clientX, progressBarEl.getBoundingClientRect(), seekMax);
+    if (target !== null) onSeek(target);
   }
 
   function handleExport(format: string) {
@@ -252,9 +225,7 @@
     >
       <Repeat size={14} />
     </button>
-    <span class="playback-time"
-      >{formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}</span
-    >
+    <span class="playback-time">{formatTime(currentTime)} / {formatTime(seekMax)}</span>
     <div
       bind:this={progressBarEl}
       class="progress-bar"
@@ -264,9 +235,10 @@
       aria-valuemin={0}
       aria-valuemax={seekMax}
       aria-valuenow={seekNow}
+      aria-disabled={seekMax <= 0 ? 'true' : undefined}
       aria-valuetext={t('media.audio.seekValueText', {
-        current: formatPlaybackTime(seekNow),
-        total: formatPlaybackTime(seekMax),
+        current: formatTime(seekNow),
+        total: formatTime(seekMax),
       })}
       onclick={handleSeekClick}
       onkeydown={handleSeekKeydown}
