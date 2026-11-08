@@ -49,6 +49,9 @@ type DetectionRepository interface {
 	// UPDATE changed the row. An empty clipName is a no-op. It reports
 	// ErrDetectionNotFound when no detection with the ID exists. Like the clip
 	// sample rate updates it ignores detection locks: the clip link is clip metadata.
+	// Attaching a clip clears clip_sample_rate (the rate of an earlier clip does
+	// not describe the new one). A row whose audio retention deleted, with
+	// spectrogram_clip_name set, is not changed.
 	SetClipName(ctx context.Context, id uint, clipName string) (bool, error)
 
 	// Delete removes a detection by ID.

@@ -98,3 +98,70 @@ func TestSetClipName_EmptyClipNameIsNoOp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got.ClipName)
 }
+
+// TestSetClipName_ClearsStaleSampleRate verifies that attaching a clip clears a
+// sample rate left on the clip-less row by an earlier clip, so the new clip is
+// never reported with a rate that describes a different file.
+func TestSetClipName_ClearsStaleSampleRate(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := NewDetectionRepository(db, nil, false, false)
+	staleRate := 48000
+	det := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: 1000, ClipSampleRate: &staleRate}
+	require.NoError(t, db.Table(tableDetections).Create(det).Error)
+
+	changed, err := repo.SetClipName(t.Context(), det.ID, "2025/06/new.mp3")
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	var stored entities.Detection
+	require.NoError(t, db.Table(tableDetections).First(&stored, det.ID).Error)
+	require.NotNil(t, stored.ClipName)
+	assert.Equal(t, "2025/06/new.mp3", *stored.ClipName)
+	assert.Nil(t, stored.ClipSampleRate, "the rate of an earlier clip must not survive the attach")
+}
+
+// TestSetClipName_AttachesToLockedDetection verifies that a lock does not stop
+// a clip from being attached (the clip link is clip metadata) and that the lock
+// is kept.
+func TestSetClipName_AttachesToLockedDetection(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := NewDetectionRepository(db, nil, false, false)
+	det := createTestDetection(t, db, 1000)
+	require.NoError(t, repo.Lock(t.Context(), det.ID))
+
+	const clipName = "2025/06/locked.mp3"
+	changed, err := repo.SetClipName(t.Context(), det.ID, clipName)
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	got, err := repo.Get(t.Context(), det.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.ClipName)
+	assert.Equal(t, clipName, *got.ClipName)
+
+	locked, err := repo.IsLocked(t.Context(), det.ID)
+	require.NoError(t, err)
+	assert.True(t, locked, "attaching a clip must keep the detection's lock")
+}
+
+// TestSetClipName_LeavesRetainedSpectrogramRowAlone verifies that a row whose
+// audio retention deleted (spectrogram_clip_name set, clip_name empty) does not
+// get a clip: the two columns are mutually exclusive and re-attaching would undo
+// retention.
+func TestSetClipName_LeavesRetainedSpectrogramRowAlone(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := NewDetectionRepository(db, nil, false, false)
+	retained := "2025/06/deleted_by_retention.mp3"
+	det := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: 1000, SpectrogramClipName: &retained}
+	require.NoError(t, db.Table(tableDetections).Create(det).Error)
+
+	changed, err := repo.SetClipName(t.Context(), det.ID, "2025/06/new.mp3")
+	require.NoError(t, err, "a retained-spectrogram row is a documented no-op, not an error")
+	assert.False(t, changed)
+
+	var stored entities.Detection
+	require.NoError(t, db.Table(tableDetections).First(&stored, det.ID).Error)
+	assert.Nil(t, stored.ClipName)
+	require.NotNil(t, stored.SpectrogramClipName)
+	assert.Equal(t, retained, *stored.SpectrogramClipName)
+}

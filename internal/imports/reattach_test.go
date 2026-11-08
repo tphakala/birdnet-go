@@ -336,16 +336,22 @@ func TestImport_ReattachTraversalIsMissNotEscape(t *testing.T) {
 	results, _, err := repo.Search(t.Context(), datastore.NewDetectionFilters().WithLimit(datastore.DefaultDetectionLimit))
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	emptyClips, attachedClip := 0, ""
+	// The rows are told apart by confidence: the crafted scientific name may be
+	// normalized when it is stored. The traversal-file-name row (0.85) must stay
+	// clip-less and the crafted-name row (0.86) must hold the copied clip.
+	traversalClip, attachedClip := "unset", ""
 	for _, r := range results {
-		if r.ClipName == "" {
-			emptyClips++
+		if r.Confidence < 0.855 {
+			traversalClip = r.ClipName
 		} else {
 			attachedClip = r.ClipName
 		}
 	}
-	assert.Equal(t, 1, emptyClips, "traversal file name must be a miss, not an attach")
-	require.NotEmpty(t, attachedClip)
+	assert.Empty(t, traversalClip, "traversal file name must be a miss, not an attach")
+	require.NotEmpty(t, attachedClip, "the crafted-name row must get the copied clip")
+	data, err := os.ReadFile(filepath.Join(exportDir, filepath.FromSlash(attachedClip)))
+	require.NoError(t, err)
+	assert.Equal(t, titClip, data, "the crafted-name row points to the copied tit clip")
 	assertWithinDir(t, exportDir, filepath.Join(exportDir, filepath.FromSlash(attachedClip)))
 }
 

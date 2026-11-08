@@ -112,8 +112,11 @@ type importProgress struct {
 	Processed int    `json:"processed"`
 	Inserted  int    `json:"inserted"`
 	Skipped   int    `json:"skipped"`
-	Errors    int    `json:"errors"`
-	Phase     string `json:"phase"`
+	// Reattached counts stored clip-less detections that got their clip
+	// attached in this db-audio run. Their source rows are also in Skipped.
+	Reattached int    `json:"reattached"`
+	Errors     int    `json:"errors"`
+	Phase      string `json:"phase"`
 }
 
 // importErrorPayload is the SSE payload for the error terminal event.
@@ -143,9 +146,10 @@ func toImportProgress(s imports.ImportStats) importProgress {
 		Total:     s.Total,
 		Processed: s.Processed,
 		Inserted:  s.Inserted,
-		Skipped:   s.Skipped,
-		Errors:    s.Errors,
-		Phase:     s.Phase,
+		Skipped:    s.Skipped,
+		Reattached: s.Reattached,
+		Errors:     s.Errors,
+		Phase:      s.Phase,
 	}
 }
 
