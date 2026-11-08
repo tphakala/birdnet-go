@@ -9,6 +9,7 @@ import type AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte
 /** Length of the clip the default props describe. */
 export const AUDIO_TOOLBAR_CLIP_SECONDS = 29;
 
+/** Props for an idle toolbar, with any of them replaced by `overrides`. */
 export function audioToolbarProps(
   overrides: Partial<ComponentProps<typeof AudioToolbar>> = {}
 ): ComponentProps<typeof AudioToolbar> {
