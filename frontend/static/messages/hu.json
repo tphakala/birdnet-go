@@ -1400,6 +1400,7 @@
         "interruptedDescription": "A szerverrel való kapcsolat megszakadt az importálás közben, ezért a végeredménye ismeretlen. Ellenőrizze az észleléseit, és szükség esetén indítsa újra az importálást.",
         "viewDetectionsLink": "Importált észlelések megtekintése",
         "partialInserted": "{count} észlelést importáltunk a megszakítás előtt.",
+        "reattachedNote": "{count, plural, one {# már tárolt észlelés megkapta a hangfelvételét.} other {# már tárolt észlelés megkapta a hangfelvételét.}}",
         "importAnother": "Újabb importálása"
       },
       "errors": {

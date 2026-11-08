@@ -1400,6 +1400,7 @@
         "interruptedDescription": "La connessione al server è stata persa durante l'importazione, quindi il suo risultato finale è sconosciuto. Controlla i tuoi rilevamenti e riavvia l'importazione se necessario.",
         "viewDetectionsLink": "Visualizza i rilevamenti importati",
         "partialInserted": "{count} rilevamenti sono stati importati prima dell'annullamento.",
+        "reattachedNote": "{count, plural, one {# rilevamento già salvato ha ricevuto la sua clip audio.} other {# rilevamenti già salvati hanno ricevuto le loro clip audio.}}",
         "importAnother": "Importa di nuovo"
       },
       "errors": {

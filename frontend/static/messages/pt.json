@@ -1400,6 +1400,7 @@
         "interruptedDescription": "A ligação ao servidor foi perdida durante a importação, pelo que o seu resultado final é desconhecido. Verifique as suas deteções e reinicie a importação se necessário.",
         "viewDetectionsLink": "Ver deteções importadas",
         "partialInserted": "{count} deteções foram importadas antes do cancelamento.",
+        "reattachedNote": "{count, plural, one {# deteção que já estava guardada recebeu o seu clipe de áudio.} other {# deteções que já estavam guardadas receberam os seus clipes de áudio.}}",
         "importAnother": "Importar outra"
       },
       "errors": {

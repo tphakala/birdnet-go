@@ -301,6 +301,11 @@
             tone="muted"
           />
         </div>
+        {#if (progress.reattached ?? 0) > 0}
+          <p class="text-sm text-[var(--color-base-content)]/70">
+            {t('system.importExport.done.reattachedNote', { count: progress.reattached ?? 0 })}
+          </p>
+        {/if}
       {/if}
       {#if finalKind === 'interrupted'}
         <p class="text-sm text-[var(--color-base-content)]/70">

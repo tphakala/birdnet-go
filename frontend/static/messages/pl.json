@@ -1400,6 +1400,7 @@
         "interruptedDescription": "Połączenie z serwerem zostało utracone podczas trwania importu, więc jego ostateczny wynik jest nieznany. Sprawdź swoje wykrycia i w razie potrzeby rozpocznij import ponownie.",
         "viewDetectionsLink": "Zobacz zaimportowane wykrycia",
         "partialInserted": "Przed anulowaniem zaimportowano {count} wykryć.",
+        "reattachedNote": "{count, plural, one {# zapisana już detekcja otrzymała swój klip audio.} few {# zapisane już detekcje otrzymały swoje klipy audio.} many {# zapisanych już detekcji otrzymało swoje klipy audio.} other {# zapisanej już detekcji otrzymało swoje klipy audio.}}",
         "importAnother": "Importuj kolejny"
       },
       "errors": {

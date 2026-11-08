@@ -1017,6 +1017,13 @@
                   size="lg"
                 />
               </div>
+              {#if (importProgress.reattached ?? 0) > 0}
+                <p class="text-sm text-[var(--color-base-content)]/70 text-left">
+                  {t('system.importExport.done.reattachedNote', {
+                    count: importProgress.reattached ?? 0,
+                  })}
+                </p>
+              {/if}
               <div class="mt-2">
                 <a
                   href={buildDetectionsFilterUrl()}

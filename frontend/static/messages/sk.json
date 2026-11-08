@@ -1400,6 +1400,7 @@
         "interruptedDescription": "Spojenie so serverom sa počas importu prerušilo, takže jeho konečný výsledok nie je známy. Skontrolujte svoje detekcie a v prípade potreby spustite import znova.",
         "viewDetectionsLink": "Zobraziť importované detekcie",
         "partialInserted": "Pred zrušením bolo importovaných {count} detekcií.",
+        "reattachedNote": "{count, plural, one {# už uložená detekcia dostala svoj zvukový záznam.} few {# už uložené detekcie dostali svoje zvukové záznamy.} many {# už uloženej detekcie dostalo svoje zvukové záznamy.} other {# už uložených detekcií dostalo svoje zvukové záznamy.}}",
         "importAnother": "Importovať ďalší"
       },
       "errors": {

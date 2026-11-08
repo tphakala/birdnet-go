@@ -135,6 +135,7 @@ export function connectImportProgressStream(
         processed: data.processed,
         inserted: data.inserted,
         skipped: data.skipped,
+        reattached: data.reattached,
         errors: data.errors,
         phase: data.phase,
       };

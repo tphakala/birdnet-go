@@ -255,6 +255,40 @@ describe('ImportActivityCard', () => {
     expect(MockReconnectingEventSource).not.toHaveBeenCalled();
   });
 
+  it('shows the re-attached count only when clips were attached to stored detections', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      running: false,
+      job_id: 'job-1',
+      status: 'done',
+      progress: {
+        ...runningProgress,
+        processed: 100,
+        inserted: 0,
+        skipped: 100,
+        reattached: 7,
+        phase: 'done',
+      },
+    } satisfies ImportStatusResponse);
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.reattachedNote')).toBeInTheDocument();
+    });
+  });
+
+  it('does not show the re-attached line when nothing was re-attached', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      running: false,
+      job_id: 'job-1',
+      status: 'done',
+      progress: { ...runningProgress, processed: 100, inserted: 90, reattached: 0, phase: 'done' },
+    } satisfies ImportStatusResponse);
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.done.reattachedNote')).not.toBeInTheDocument();
+  });
+
   it('shows the cancelled summary when status reports a cancelled run', async () => {
     vi.mocked(api.get).mockResolvedValue({
       running: false,

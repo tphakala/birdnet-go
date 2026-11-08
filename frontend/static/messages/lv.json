@@ -1400,6 +1400,7 @@
         "interruptedDescription": "Savienojums ar serveri tika zaudēts importēšanas laikā, tāpēc tās galīgais rezultāts nav zināms. Pārbaudiet savus konstatējumus un vajadzības gadījumā sāciet importēšanu vēlreiz.",
         "viewDetectionsLink": "Skatīt importētos konstatējumus",
         "partialInserted": "Pirms atcelšanas tika importēti {count} konstatējumi.",
+        "reattachedNote": "{count, plural, zero {# jau saglabātas noteikšanas saņēma savus audio ierakstus.} one {# jau saglabāta noteikšana saņēma savu audio ierakstu.} other {# jau saglabātas noteikšanas saņēma savus audio ierakstus.}}",
         "importAnother": "Importēt citu"
       },
       "errors": {
