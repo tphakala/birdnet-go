@@ -1,9 +1,10 @@
 /**
- * Browser Mode Test: an active toolbar button keeps its active colours on hover
+ * Browser Mode Test: an active toolbar button gets its own hover colour
  *
  * jsdom does not compute cascade specificity, so only a real browser shows
- * whether the hover rule outranks the active rule and leaves white text on the
- * grey hover background.
+ * whether the generic hover rule outranks the active rule and leaves white text
+ * on the grey hover background. The active button must hover to the primary
+ * hover colour instead.
  *
  * Usage:
  *   npm run test:browser
@@ -17,6 +18,7 @@ import AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte';
 
 const PRIMARY_COLOR = 'rgb(10, 20, 30)';
 const HOVER_COLOR = 'rgb(200, 200, 200)';
+const ACTIVE_HOVER_COLOR = 'rgb(40, 50, 60)';
 const CLIP_DURATION_SECONDS = 29;
 
 function toolbarProps(overrides: Record<string, unknown> = {}) {
@@ -62,6 +64,7 @@ describe('AudioToolbar hover styling in a real browser', () => {
   beforeEach(() => {
     document.documentElement.style.setProperty('--color-primary', PRIMARY_COLOR);
     document.documentElement.style.setProperty('--color-base-300', HOVER_COLOR);
+    document.documentElement.style.setProperty('--color-primary-hover', ACTIVE_HOVER_COLOR);
     // The buttons transition all properties; without this a read right after the
     // hover sees a mid-transition value and the test can pass on the bug.
     noTransitions = document.createElement('style');
@@ -73,16 +76,21 @@ describe('AudioToolbar hover styling in a real browser', () => {
     noTransitions.remove();
     document.documentElement.style.removeProperty('--color-primary');
     document.documentElement.style.removeProperty('--color-base-300');
+    document.documentElement.style.removeProperty('--color-primary-hover');
   });
 
-  it('keeps an active toolbar button on its active colours while hovered', async () => {
+  it('gives an active toolbar button its own hover colour, not the grey one', async () => {
     await render(AudioToolbar, { props: toolbarProps({ loop: true }) });
 
     const active = document.querySelector('[aria-pressed="true"]');
     if (!active) throw new Error('active toolbar button not rendered');
+    expect(backgroundOf(active)).toBe(PRIMARY_COLOR);
     await userEvent.hover(active);
 
-    expect(backgroundOf(active)).toBe(PRIMARY_COLOR);
+    // Hover must neither grey the active button (white text on grey was unreadable)
+    // nor leave it with no hover feedback at all.
+    expect(backgroundOf(active)).toBe(ACTIVE_HOVER_COLOR);
+    expect(backgroundOf(active)).not.toBe(HOVER_COLOR);
   });
 
   it('still greys an inactive toolbar button on hover', async () => {

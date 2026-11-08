@@ -4,6 +4,7 @@ import { fireEvent } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import AudioToolbar from './AudioToolbar.svelte';
+import toolbarSource from './AudioToolbar.svelte?raw';
 
 describe('AudioToolbar export menu', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
@@ -350,6 +351,26 @@ describe('AudioToolbar Accessibility', () => {
 
     expect(loop()).toHaveAttribute('aria-pressed', 'true');
     expect(normalize()).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps the loop and normalize toggles from submitting a surrounding form', () => {
+    renderToolbar();
+
+    for (const name of ['media.audio.loop', 'components.audioPlayer.processing.normalize']) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('type', 'button');
+    }
+  });
+
+  // jsdom computes no cascade, so the real colours are checked in the browser-mode test
+  // audio-toolbar-active-hover.browser.test.ts, which CI does not run. This pins the two
+  // selectors that test relies on, so a revert cannot pass every automated check.
+  it('keeps the generic hover rule off active buttons and gives them their own', () => {
+    expect(toolbarSource).toContain('.toolbar-btn:not(.active):hover:not(:disabled)');
+    // Any hover rule that names .toolbar-btn before :hover would also grey active buttons
+    expect(toolbarSource).not.toMatch(/\.toolbar-btn:hover/);
+    expect(toolbarSource).toMatch(
+      /\.toolbar-btn\.active:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--color-primary-hover\)/
+    );
   });
 
   it('has no axe violations in the playback controls', async () => {

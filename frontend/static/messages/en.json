@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} of {total}",
       "playbackSpeed": "Playback speed",
       "speed": "Speed",
-      "loop": "Toggle loop",
+      "loop": "Loop",
       "player": "Audio player",
       "autoplayBlocked": "Click to play (autoplay blocked)",
       "hlsLoadFailed": "Could not load the audio player, reload the page and try again",

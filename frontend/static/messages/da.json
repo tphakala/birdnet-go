@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} af {total}",
       "playbackSpeed": "Afspilningshastighed",
       "speed": "Hastighed",
-      "loop": "Skift gentag",
+      "loop": "Gentag",
       "player": "Lydafspiller",
       "autoplayBlocked": "Klik for at afspille (autoplay blokeret)",
       "hlsLoadFailed": "Lydafspilleren kunne ikke indlæses, genindlæs siden og prøv igen",

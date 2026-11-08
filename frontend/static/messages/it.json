@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} di {total}",
       "playbackSpeed": "Velocità riproduzione",
       "speed": "Velocità",
-      "loop": "Attiva/disattiva ripetizione",
+      "loop": "Ripetizione",
       "player": "Lettore audio",
       "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
       "hlsLoadFailed": "Impossibile caricare il lettore audio, ricarica la pagina e riprova",

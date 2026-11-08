@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} / {total}",
       "playbackSpeed": "Lejátszási sebesség",
       "speed": "Sebesség",
-      "loop": "Ismétlés be/ki",
+      "loop": "Ismétlés",
       "player": "Hang lejátszó",
       "autoplayBlocked": "Kattintson a lejátszáshoz (automatikus lejátszás letiltva)",
       "hlsLoadFailed": "A hanglejátszó betöltése sikertelen, kérjük, töltse újra az oldalt, és próbálja újra",

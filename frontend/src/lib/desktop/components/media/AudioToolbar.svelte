@@ -212,6 +212,7 @@
       <SkipBack size={14} />
     </button>
     <button
+      type="button"
       class="toolbar-btn"
       class:active={loop}
       aria-pressed={loop}
@@ -312,6 +313,7 @@
     </div>
 
     <button
+      type="button"
       class="toolbar-btn"
       class:active={normalize}
       aria-pressed={normalize}
@@ -478,6 +480,11 @@
     background: var(--color-primary);
     color: var(--color-primary-content, #fff);
     border-color: var(--color-primary);
+  }
+
+  .toolbar-btn.active:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
   }
 
   .toolbar-btn.error {

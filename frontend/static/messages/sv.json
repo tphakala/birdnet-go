@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} av {total}",
       "playbackSpeed": "Uppspelningshastighet",
       "speed": "Hastighet",
-      "loop": "Växla upprepning",
+      "loop": "Upprepning",
       "player": "Ljudspelare",
       "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
       "hlsLoadFailed": "Det gick inte att läsa in ljudspelaren, ladda om sidan och försök igen",

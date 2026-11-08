@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} z {total}",
       "playbackSpeed": "Rýchlosť prehrávania",
       "speed": "Rýchlosť",
-      "loop": "Prepnúť opakovanie",
+      "loop": "Opakovanie",
       "player": "Prehrávač zvuku",
       "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
       "hlsLoadFailed": "Prehrávač zvuku sa nepodarilo načítať, obnovte stránku a skúste to znova",

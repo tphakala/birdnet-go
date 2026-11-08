@@ -5108,7 +5108,7 @@
       "seekValueText": "{current} de {total}",
       "playbackSpeed": "Velocidade de reprodução",
       "speed": "Velocidade",
-      "loop": "Alternar repetição",
+      "loop": "Repetição",
       "player": "Reprodutor de áudio",
       "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
       "hlsLoadFailed": "Não foi possível carregar o reprodutor de áudio, recarregue a página e tente novamente",
