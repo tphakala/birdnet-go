@@ -133,6 +133,15 @@
   // Usable clip length for the seek slider; 0 while the duration is unknown
   let seekMax = $derived(usableDuration(duration));
   let seekNow = $derived(clampSeconds(currentTime, seekMax));
+  // No value text while the length is unknown: "0:00 of 0:00" next to aria-disabled misleads
+  let seekValueText = $derived(
+    seekMax > 0
+      ? t('media.audio.seekValueText', {
+          current: formatTime(seekNow),
+          total: formatTime(seekMax),
+        })
+      : undefined
+  );
 
   function handleSeekKeydown(e: KeyboardEvent) {
     const action = seekKeyAction(e, seekNow, seekMax);
@@ -232,10 +241,7 @@
       aria-valuemax={seekMax}
       aria-valuenow={seekNow}
       aria-disabled={seekMax <= 0 ? 'true' : undefined}
-      aria-valuetext={t('media.audio.seekValueText', {
-        current: formatTime(seekNow),
-        total: formatTime(seekMax),
-      })}
+      aria-valuetext={seekValueText}
       onclick={handleSeekClick}
       onkeydown={handleSeekKeydown}
     >
@@ -353,7 +359,7 @@
         <ChevronDown size={12} />
       </button>
       {#if extractionError}
-        <span class="export-error" role="alert" aria-live="assertive">{extractionError}</span>
+        <span class="export-error" role="alert">{extractionError}</span>
       {/if}
       {#if showExportMenu}
         <div

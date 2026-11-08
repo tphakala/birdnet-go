@@ -209,6 +209,7 @@ describe('AudioToolbar Accessibility', () => {
       expect(notPrevented).toBe(true);
       expect(seekSlider()).toHaveAttribute('aria-valuemax', '0');
       expect(seekSlider()).toHaveAttribute('aria-disabled', 'true');
+      expect(seekSlider()).not.toHaveAttribute('aria-valuetext');
     }
   );
 
@@ -346,6 +347,15 @@ describe('AudioToolbar Accessibility', () => {
       expect(button).toHaveTextContent(labelKey);
     }
   );
+
+  it('announces an export error through role=alert alone, without an extra aria-live', async () => {
+    renderToolbar({ extractionError: 'Export failed', hasSelection: true });
+
+    const alert = screen.getByRole('alert');
+
+    expect(alert).toHaveTextContent('Export failed');
+    expect(alert).not.toHaveAttribute('aria-live');
+  });
 
   it('has no axe violations in the playback controls', async () => {
     const { container } = renderToolbar({ loop: true });

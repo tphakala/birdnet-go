@@ -258,6 +258,7 @@ describe('AudioPlayer Accessibility', () => {
 
       expect(bar).toHaveAttribute('aria-disabled', 'true');
       expect(bar).toHaveAttribute('aria-valuemax', '0');
+      expect(bar).not.toHaveAttribute('aria-valuetext');
       expect(setCurrentTime).not.toHaveBeenCalled();
       expect(notPrevented).toBe(true);
     });

@@ -1490,10 +1490,20 @@
   // Usable clip length and position for seeking and the inline progress bar's slider semantics
   const seekMax = $derived(usableDuration(duration));
   const seekNow = $derived(clampSeconds(currentTime, seekMax));
+  // No value text while the length is unknown: "0:00 of 0:00" next to aria-disabled misleads
+  const seekValueText = $derived(
+    seekMax > 0
+      ? t('media.audio.seekValueText', {
+          current: formatTime(seekNow),
+          total: formatTime(seekMax),
+        })
+      : undefined
+  );
 
   // What the screen reader status region says about the spectrogram. It follows the same
-  // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and
-  // only a failed load that has stopped retrying reads as unavailable.
+  // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and a
+  // load that has given up (retries spent, a terminal status or the loader timeout) reads as
+  // unavailable.
   const spectrogramStatusText = $derived.by(() => {
     if (spectrogramLoader.loading || rateResolvePending) {
       return t('components.audio.spectrogramLoading');
@@ -2878,10 +2888,7 @@
           aria-valuemin={0}
           aria-valuemax={seekMax}
           aria-valuenow={seekNow}
-          aria-valuetext={t('media.audio.seekValueText', {
-            current: formatTime(seekNow),
-            total: formatTime(seekMax),
-          })}
+          aria-valuetext={seekValueText}
           aria-disabled={seekMax <= 0 ? 'true' : undefined}
           onclick={handleProgressClick}
           onkeydown={handleProgressKeydown}
@@ -2916,7 +2923,7 @@
       role="alert"
       class="pointer-events-none absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] rounded-md"
     >
-      <span class="text-[var(--color-error)] text-sm">{error}</span>
+      <span class="text-[color:var(--text-error)] text-sm">{error}</span>
     </div>
   {/if}
 </div>
