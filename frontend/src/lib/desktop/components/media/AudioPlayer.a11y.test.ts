@@ -29,6 +29,11 @@ vi.mock('$lib/utils/audioNodes', () => ({
 
 const DETECTION_ID = '4242';
 const SEEK_LABEL = 'media.audio.seek';
+const SETTINGS_LABEL = 'media.audio.settings';
+const BATS_LABEL = 'media.audio.audibleBats.title';
+const OVERLAY_TEST_ID = 'audio-overlay-controls';
+const HIDDEN_CLASS = 'opacity-0';
+const FOCUS_VISIBLE_CLASS = 'focus-within:opacity-100';
 const WIDE_CONTAINER_PX = 400;
 
 describe('AudioPlayer Accessibility', () => {
@@ -53,6 +58,9 @@ describe('AudioPlayer Accessibility', () => {
     return screen.getByRole('slider', { name: SEEK_LABEL });
   }
 
+  function overlayControls(): HTMLElement {
+    return screen.getByTestId(OVERLAY_TEST_ID);
+  }
   beforeEach(() => {
     vi.useFakeTimers();
     // jsdom reports touch support, which makes the player skip the hover-only fade.
@@ -98,5 +106,48 @@ describe('AudioPlayer Accessibility', () => {
 
     await fireEvent.keyDown(slider, { key: 'Home' });
     expect(ctl.element.currentTime).toBe(0);
+  });
+
+  describe('overlay controls', () => {
+    it('start hidden and are revealed by focus', async () => {
+      mount();
+      await settle();
+
+      expect(overlayControls()).toHaveClass(HIDDEN_CLASS);
+      // jsdom has no focus variant to evaluate; the class is what the browser acts on.
+      expect(overlayControls()).toHaveClass(FOCUS_VISIBLE_CLASS);
+    });
+
+    it.each([
+      ['audio settings', {}, SETTINGS_LABEL, []],
+      ['audible bats', { modelType: 'bat' }, BATS_LABEL, []],
+      ['audio settings, then audible bats', { modelType: 'bat' }, BATS_LABEL, [SETTINGS_LABEL]],
+      ['audible bats, then audio settings', { modelType: 'bat' }, SETTINGS_LABEL, [BATS_LABEL]],
+    ])(
+      'stay visible while %s is open and hide again after Escape',
+      async (_name, props, lastOpened, openedBefore) => {
+        mount(props);
+        await settle();
+
+        for (const label of [...openedBefore, lastOpened]) {
+          await fireEvent.click(screen.getByRole('button', { name: label }));
+        }
+        await settle();
+        expect(overlayControls()).not.toHaveClass(HIDDEN_CLASS);
+
+        await fireEvent.keyDown(document, { key: 'Escape' });
+        await settle();
+        expect(overlayControls()).toHaveClass(HIDDEN_CLASS);
+      }
+    );
+  });
+
+  it('reveals the inline controls when they hold focus', async () => {
+    const { container } = mount({ enableClipExtraction: false });
+    await settle();
+
+    const inline = container.querySelector('.rounded-b-md');
+    expect(inline).toHaveClass(HIDDEN_CLASS);
+    expect(inline).toHaveClass(FOCUS_VISIBLE_CLASS);
   });
 });

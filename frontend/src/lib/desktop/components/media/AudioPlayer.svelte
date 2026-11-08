@@ -195,6 +195,9 @@
   // Bats vs Audio Settings) closed, so only one is ever open at a time.
   let closeAudibleBatsSignal = $state(0);
   let closeAudioSettingsSignal = $state(0);
+  // Keep the hover-only overlay controls visible while one of their popovers is open
+  let audioSettingsMenuOpen = $state(false);
+  let audibleBatsMenuOpen = $state(false);
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -2660,8 +2663,9 @@
        it for bat detections. -->
   {#if showControls}
     <div
-      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200"
-      class:opacity-0={!isMobile}
+      data-testid="audio-overlay-controls"
+      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200 focus-within:opacity-100"
+      class:opacity-0={!isMobile && !audioSettingsMenuOpen && !audibleBatsMenuOpen}
       class:group-hover:opacity-100={!isMobile}
     >
       {#if isBatSpectrogram}
@@ -2673,7 +2677,11 @@
           closeSignal={closeAudibleBatsSignal}
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
-          onMenuOpen={() => closeAudioSettingsSignal++}
+          onMenuOpen={() => {
+            audibleBatsMenuOpen = true;
+            closeAudioSettingsSignal++;
+          }}
+          onMenuClose={() => (audibleBatsMenuOpen = false)}
         />
       {/if}
       <AudioSettingsButton
@@ -2686,7 +2694,11 @@
         onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
         closeSignal={closeAudioSettingsSignal}
-        onMenuOpen={() => closeAudibleBatsSignal++}
+        onMenuOpen={() => {
+          audioSettingsMenuOpen = true;
+          closeAudibleBatsSignal++;
+        }}
+        onMenuClose={() => (audioSettingsMenuOpen = false)}
       />
     </div>
   {/if}
@@ -2808,7 +2820,7 @@
   <!-- Bottom overlay controls (hidden when toolbar is used) -->
   {#if !enableClipExtraction}
     <div
-      class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300"
+      class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300 focus-within:opacity-100"
       class:opacity-0={!isMobile}
       class:group-hover:opacity-100={!isMobile}
       class:opacity-100={isMobile}
