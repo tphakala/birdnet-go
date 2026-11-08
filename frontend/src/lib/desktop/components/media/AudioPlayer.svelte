@@ -1528,11 +1528,7 @@
 
   const handleProgressClick = (event: MouseEvent) => {
     if (!progressBar) return;
-    const target = seekTimeFromPointer(
-      event.clientX,
-      progressBar.getBoundingClientRect(),
-      duration
-    );
+    const target = seekTimeFromPointer(event.clientX, progressBar.getBoundingClientRect(), seekMax);
     if (target !== null) seekTo(target);
   };
 
