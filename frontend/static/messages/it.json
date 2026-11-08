@@ -3790,9 +3790,10 @@
           "result": "Risultato del test",
           "error": "Test fallito",
           "batCompatible": "Compatibile con pipistrelli",
-          "batIncompatible": "Non compatibile con pipistrelli"
+          "batIncompatible": "Non compatibile con pipistrelli",
+          "minRateWarning": "I modelli selezionati richiedono una frequenza di acquisizione di almeno {rate} kHz. Questo flusso è al di sotto."
         },
-        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
+        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. BSG-BAT richiede almeno 192 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
         "codecWarning": {
           "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Livello picco reale massimo per prevenire clipping digitale (-10 a 0 dBTP). -2 dBTP fornisce margine sicurezza per la maggior parte dei sistemi riproduzione.",
         "noteTitle": "Standard EBU R128",
         "noteDescription": "La normalizzazione audio segue lo standard broadcast EBU R128, assicurando livelli riproduzione coerenti tra diversi dispositivi e prevenendo clipping."
+      },
+      "exportDenoise": {
+        "title": "Riduzione del rumore delle clip salvate",
+        "description": "Riduce il rumore di fondo nelle clip durante il salvataggio.",
+        "enable": "Riduci il rumore delle clip al salvataggio",
+        "enableHelp": "L'audio catturato viene ripulito dal rumore in memoria prima che il file della clip venga scritto. Il rilevamento usa sempre l'audio originale.",
+        "requiresRecording": "Abilita la registrazione delle clip nella scheda Registrazione per usare la riduzione del rumore delle clip.",
+        "strengthLabel": "Intensità della riduzione del rumore",
+        "strengthHelp": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
+        "strengthDisabledHelp": "Attiva sopra la riduzione del rumore delle clip per scegliere un'intensità.",
+        "warningTitle": "Le clip salvate non possono essere ripristinate",
+        "warningPermanent": "L'audio originale non viene conservato. Le clip vengono ripulite dal rumore in modo permanente al salvataggio, comprese le registrazioni di pipistrelli.",
+        "warningBats": "La riduzione del rumore può attenuare i richiami deboli dei pipistrelli; i richiami forti non sono interessati.",
+        "warningImported": "Le registrazioni importate non sono interessate.",
+        "lossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato.",
+        "warningPlayback": "La riduzione del rumore predefinita in riproduzione non viene applicata finché questa opzione è attiva. Se la disattivi in seguito e attivi l'impostazione predefinita di riproduzione, queste clip vengono ripulite dal rumore una seconda volta in riproduzione."
       },
       "audioClipRetention": {
         "title": "Conservazione Clip Audio",
@@ -4950,7 +4967,15 @@
         "description": "Impostazioni predefinite per la riproduzione delle registrazioni di uccelli.",
         "defaultGain": "Amplificazione volume predefinita",
         "defaultGainHelpText": "Guadagno iniziale applicato durante la riproduzione delle registrazioni. I suoni degli uccelli sono spesso deboli, quindi è consigliato un incremento di 6-12 dB.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Riduci il rumore delle clip in riproduzione",
+        "denoiseHelpText": "Riproduce e scarica una copia senza rumore di ogni clip. Le clip salvate restano invariate. I download diventano file WAV e sono più grandi. Le impostazioni audio di una clip permettono di scegliere un'altra intensità o di disattivare la riduzione del rumore.",
+        "denoiseStrengthLabel": "Intensità della riduzione del rumore",
+        "denoiseStrengthHelpText": "Leggero conserva più suono originale e forte rimuove più rumore. Leggero-medio va bene per la maggior parte delle registrazioni.",
+        "denoiseStrengthDisabledHelp": "Attiva sopra la riduzione del rumore in riproduzione per scegliere un'intensità.",
+        "denoiseExportPrecedence": "Non applicata finché «Riduzione del rumore delle clip salvate» è attiva (Impostazioni audio, scheda Elaborazione). Queste clip sono già ripulite dal rumore.",
+        "denoiseRedenoiseNote": "Le clip salvate mentre «Riduzione del rumore delle clip salvate» era attiva vengono ripulite dal rumore una seconda volta in riproduzione. Scegli Disattivato nelle impostazioni audio di una clip per ascoltarla come è stata salvata.",
+        "denoiseLossyNote": "La riduzione del rumore funziona meglio con clip FLAC o WAV. Sotto {minBitrate} kbps, gli artefatti del codec limitano la pulizia del risultato."
       },
       "speciesGuide": {
         "title": "Guida alle specie",
@@ -5186,9 +5211,11 @@
       "filterControl": "Controllo filtro",
       "highPassFilter": "Controllo filtro passa-alto: {freq} Hz",
       "seekProgress": "Avanzamento audio: {current} / {total} secondi",
+      "seek": "Posizione di riproduzione",
+      "seekValueText": "{current} di {total}",
       "playbackSpeed": "Velocità riproduzione",
       "speed": "Velocità",
-      "loop": "Attiva/disattiva ripetizione",
+      "loop": "Ripetizione",
       "player": "Lettore audio",
       "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
       "hlsLoadFailed": "Impossibile caricare il lettore audio, ricarica la pagina e riprova",
@@ -5326,6 +5353,7 @@
         "denoise": "Riduzione rumore",
         "denoiseOff": "Disattivato",
         "denoiseLight": "Leggero",
+        "denoiseLightMedium": "Leggero-medio",
         "denoiseMedium": "Medio",
         "denoiseHeavy": "Pesante",
         "normalize": "Normalizza audio",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Corpo della richiesta non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
     },
-    "speciesGuide": {
-      "rateLimit": "Troppe richieste alla guida delle specie. Attendere prima di riprovare."
-    },
     "streams": {
       "test": {
         "invalidBody": "Corpo della richiesta non valido",
@@ -5525,6 +5550,9 @@
       "conflictData": "Questa azione è in conflitto con dati esistenti.",
       "requestTimeout": "Timeout della richiesta.",
       "networkError": "Errore di rete. Controllare la connessione."
+    },
+    "speciesGuide": {
+      "rateLimit": "Troppe richieste alla guida delle specie. Attendere prima di riprovare."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Punteggio di confidenza minimo (0.0 - 1.0) richiesto affinché un rilevamento venga registrato."
       },
       "batThreshold": {
-        "label": "Soglia di rilevamento pipistrelli",
-        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli. Si applica solo ai modelli classificatori di pipistrelli."
+        "label": "Soglia di rilevamento pipistrelli (BattyBirdNET)",
+        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli di BattyBirdNET. BSG-BAT ha una propria soglia."
+      },
+      "bsgBatThreshold": {
+        "label": "Soglia di rilevamento pipistrelli (BSG-BAT)",
+        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli di BSG-BAT.",
+        "sampleRateWarning": "Le registrazioni a 192 kHz funzionano, ma le specie che emettono sopra i 96 kHz non possono essere identificate e i punteggi sono meno affidabili. Si consiglia una frequenza di acquisizione di 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "Passo di analisi BSG-BAT (frame)",
+        "helpText": "Frame da 2 ms tra le finestre di analisi di BSG-BAT, da 100 (0,2 s) a 512 (1,024 s, nessuna sovrapposizione). Il valore predefinito di 250 (0,5 s) è il passo di riferimento. Con 375 (0,75 s) si trova circa l'85% degli eventi con due terzi della CPU; con 512 circa il 70-75% con circa metà della CPU, per i dispositivi che non riescono a tenere il passo.",
+        "readout": "Passo: {seconds} s tra le finestre di analisi.",
+        "readoutWithFilter": "Passo: {seconds} s tra le finestre di analisi. Livello del filtro pipistrelli {level}: {count} conferme richieste.",
+        "restartNote": "Il salvataggio di un nuovo passo riavvia l'acquisizione audio."
       },
       "batFilter": {
         "label": "Filtro passa-alto audio pipistrelli",
@@ -5708,6 +5748,7 @@
           "strict": "Filtraggio massimo per la massima precisione."
         },
         "detectionCount": "{count} conferme richieste. {description}",
+        "detectionCountByModel": "{batty} conferme richieste per BattyBirdNET, {bsgBat} per BSG-BAT. {description}",
         "warningOff": "Senza filtraggio c'è un'alta probabilità di falsi positivi. L'attivazione del filtraggio migliora significativamente la precisione."
       },
       "locale": {

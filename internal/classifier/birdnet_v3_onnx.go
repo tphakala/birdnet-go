@@ -161,8 +161,8 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 // never make BirdNET v3.0 fail to load. Unlike Perch there is no model-variant filename
 // gate: the v3.0 GPU-native model has no STFT op, so it compiles on OpenVINO directly.
 func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inference.Classifier, device, precision string, ok bool) {
-	// openVINOPlanFor gates on the build tag, backend preference, and device
-	// availability without needing the output port, so run it first; only read the
+	// openVINOPlanFor gates on the build tag, backend preference, device
+	// availability and, on arm64 auto, ONNX Runtime preference without needing the output port, so run it first; only read the
 	// model metadata to resolve the predictions port once OpenVINO is actually in
 	// play. This avoids a wasted metadata read on the common non-OpenVINO build. The
 	// output index passed here is a placeholder, overwritten below once detected.

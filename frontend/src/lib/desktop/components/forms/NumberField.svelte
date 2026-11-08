@@ -29,6 +29,8 @@
     step?: number;
     placeholder?: string;
     helpText?: string;
+    /** Extra element IDs appended to the input's aria-describedby (see FormField). */
+    describedByExtra?: string;
     required?: boolean;
     disabled?: boolean;
     error?: string;
@@ -44,6 +46,7 @@
     step = 1,
     placeholder = '',
     helpText = '',
+    describedByExtra,
     required = false,
     disabled = false,
     error,
@@ -160,6 +163,7 @@
     {step}
     {placeholder}
     {helpText}
+    {describedByExtra}
     {required}
     {disabled}
     onChange={handleChange}

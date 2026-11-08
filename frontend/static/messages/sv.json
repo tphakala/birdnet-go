@@ -3790,9 +3790,10 @@
           "result": "Testresultat",
           "error": "Test misslyckades",
           "batCompatible": "Fladdermus-kompatibel",
-          "batIncompatible": "Inte fladdermus-kompatibel"
+          "batIncompatible": "Inte fladdermus-kompatibel",
+          "minRateWarning": "De valda modellerna kräver en inspelningsfrekvens på minst {rate} kHz. Den här strömmen ligger under."
         },
-        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. BSG-BAT kräver minst 192 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
         "codecWarning": {
           "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Ljudnormalisering följer EBU R128 sändningsstandard, vilket säkerställer konsekventa uppspelningsnivåer på olika enheter och förhindrar klippning."
+      },
+      "exportDenoise": {
+        "title": "Brusreducering av sparade klipp",
+        "description": "Minskar bakgrundsbrus i klipp när de sparas.",
+        "enable": "Brusreducera klipp vid sparande",
+        "enableHelp": "Det inspelade ljudet brusreduceras i minnet innan klippfilen skrivs. Detektionen körs alltid på originalljudet.",
+        "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda brusreducering av klipp.",
+        "strengthLabel": "Brusreduceringens styrka",
+        "strengthHelp": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "strengthDisabledHelp": "Slå på brusreducering av klipp ovan för att välja en styrka.",
+        "warningTitle": "Sparade klipp kan inte återställas",
+        "warningPermanent": "Originalljudet sparas inte. Klipp brusreduceras permanent när de sparas, även fladdermusinspelningar.",
+        "warningBats": "Brusreducering kan göra svaga fladdermusläten svagare; kraftiga läten påverkas inte.",
+        "warningImported": "Importerade inspelningar påverkas inte.",
+        "lossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir.",
+        "warningPlayback": "Standardbrusreduceringen vid uppspelning tillämpas inte medan detta är på. Om du senare stänger av detta och slår på standarden för uppspelning brusreduceras dessa klipp en andra gång vid uppspelning."
       },
       "audioClipRetention": {
         "title": "Lagring av ljudklipp",
@@ -4950,7 +4967,15 @@
         "description": "Standardinställningar för uppspelning av fågelinspelningar.",
         "defaultGain": "Standard volymförstärkning",
         "defaultGainHelpText": "Initial förstärkning vid uppspelning av inspelningar. Fågelljud är ofta svaga, så en förstärkning på 6-12 dB rekommenderas.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Brusreducera klipp vid uppspelning",
+        "denoiseHelpText": "Spelar upp och laddar ner en brusreducerad kopia av varje klipp. Sparade klipp förblir oförändrade. Nedladdningar blir WAV-filer och är större. Ett klipps ljudinställningar kan välja en annan styrka eller stänga av brusreducering.",
+        "denoiseStrengthLabel": "Brusreduceringens styrka",
+        "denoiseStrengthHelpText": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "denoiseStrengthDisabledHelp": "Slå på brusreducering vid uppspelning ovan för att välja en styrka.",
+        "denoiseExportPrecedence": "Tillämpas inte medan „Brusreducering av sparade klipp” är på (Ljudinställningar, fliken Bearbetning). Dessa klipp är redan brusreducerade.",
+        "denoiseRedenoiseNote": "Klipp som sparades medan „Brusreducering av sparade klipp” var på brusreduceras igen vid uppspelning. Välj Av i ett klipps ljudinställningar för att höra det som det sparades.",
+        "denoiseLossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir."
       },
       "speciesGuide": {
         "title": "Artguide",
@@ -5186,9 +5211,11 @@
       "filterControl": "Filterkontroll",
       "highPassFilter": "Högpassfilter: {freq} Hz",
       "seekProgress": "Sök i ljudet: {current} / {total} sekunder",
+      "seek": "Uppspelningsposition",
+      "seekValueText": "{current} av {total}",
       "playbackSpeed": "Uppspelningshastighet",
       "speed": "Hastighet",
-      "loop": "Växla upprepning",
+      "loop": "Upprepning",
       "player": "Ljudspelare",
       "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
       "hlsLoadFailed": "Det gick inte att läsa in ljudspelaren, ladda om sidan och försök igen",
@@ -5326,6 +5353,7 @@
         "denoise": "Brusreducering",
         "denoiseOff": "Av",
         "denoiseLight": "Lätt",
+        "denoiseLightMedium": "Lätt-medel",
         "denoiseMedium": "Medel",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normalisera ljud",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Ogiltig förfrågningstext",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
     },
-    "speciesGuide": {
-      "rateLimit": "För många förfrågningar till artguiden. Vänta innan du försöker igen."
-    },
     "streams": {
       "test": {
         "invalidBody": "Ogiltig begärandekropp",
@@ -5525,6 +5550,9 @@
       "conflictData": "Denna åtgärd står i konflikt med befintliga data.",
       "requestTimeout": "Förfrågan tog för lång tid.",
       "networkError": "Nätverksfel inträffade. Kontrollera din anslutning."
+    },
+    "speciesGuide": {
+      "rateLimit": "För många förfrågningar till artguiden. Vänta innan du försöker igen."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Lägsta konfidensvärde (0,0 - 1,0) som krävs för att en detektering ska registreras."
       },
       "batThreshold": {
-        "label": "Tröskel för fladdermöss-detektion",
-        "helpText": "Minsta konfidenspoäng för detektering av fladdermusarter. Gäller endast för klassificeringsmodeller för fladdermöss."
+        "label": "Tröskel för fladdermöss-detektion (BattyBirdNET)",
+        "helpText": "Minsta konfidenspoäng för BattyBirdNET:s detektering av fladdermusarter. BSG-BAT har en egen tröskel."
+      },
+      "bsgBatThreshold": {
+        "label": "Tröskel för fladdermöss-detektion (BSG-BAT)",
+        "helpText": "Minsta konfidenspoäng för BSG-BAT:s detektering av fladdermusarter.",
+        "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
+      },
+      "bsgBatStep": {
+        "label": "Analyssteg för BSG-BAT (ramar)",
+        "helpText": "Ramar på 2 ms mellan BSG-BAT:s analysfönster, från 100 (0,2 s) till 512 (1,024 s, ingen överlappning). Standardvärdet 250 (0,5 s) är referenssteget. Med 375 (0,75 s) hittas ungefär 85 % av händelserna med två tredjedelar av CPU:n; med 512 ungefär 70-75 % med ungefär hälften av CPU:n, för enheter som inte hänger med.",
+        "readout": "Steg: {seconds} s mellan analysfönstren.",
+        "readoutWithFilter": "Steg: {seconds} s mellan analysfönstren. Fladdermusfilter, nivå {level}: {count} bekräftelser krävs.",
+        "restartNote": "När ett nytt steg sparas startas ljudinspelningen om."
       },
       "batFilter": {
         "label": "Högpassfilter för fladdermöss-ljud",
@@ -5708,6 +5748,7 @@
           "strict": "Maximal filtrering för högsta noggrannhet."
         },
         "detectionCount": "{count} bekräftelser krävs. {description}",
+        "detectionCountByModel": "{batty} bekräftelser krävs för BattyBirdNET, {bsgBat} för BSG-BAT. {description}",
         "warningOff": "Utan filtrering finns det hög sannolikhet för falska positiva. Att aktivera filtrering förbättrar noggrannheten avsevärt."
       },
       "locale": {

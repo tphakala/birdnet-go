@@ -20,6 +20,15 @@
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { playButtonLabelKey } from '$lib/utils/audio';
+  import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
+  import { formatTime } from '$lib/utils/formatters';
+  import {
+    clampSeconds,
+    seekKeyAction,
+    seekSliderValueText,
+    seekTimeFromPointer,
+    usableDuration,
+  } from '$lib/utils/seek';
 
   interface Props {
     // Playback state
@@ -30,7 +39,8 @@
     progress: number;
     loop: boolean;
     onPlayPause: () => void;
-    onSeek: (_event: MouseEvent) => void;
+    // Seek to an absolute position, in seconds
+    onSeek: (_seconds: number) => void;
     onLoopToggle: () => void;
 
     // Selection state
@@ -94,16 +104,9 @@
   let showExportMenu = $state(false);
   let showDenoiseMenu = $state(false);
 
-  const denoiseOptions = [
-    { id: '', labelKey: 'components.audioPlayer.processing.denoiseOff' },
-    { id: 'light', labelKey: 'components.audioPlayer.processing.denoiseLight' },
-    { id: 'medium', labelKey: 'components.audioPlayer.processing.denoiseMedium' },
-    { id: 'heavy', labelKey: 'components.audioPlayer.processing.denoiseHeavy' },
-  ];
-
   let denoiseLabel = $derived(
     t(
-      denoiseOptions.find(o => o.id === denoise)?.labelKey ??
+      DENOISE_OPTIONS.find(o => o.id === denoise)?.labelKey ??
         'components.audioPlayer.processing.denoiseOff'
     )
   );
@@ -128,10 +131,20 @@
     return seconds.toFixed(1) + 's';
   }
 
-  function formatPlaybackTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  // Usable clip length for the seek slider; 0 while the duration is unknown
+  let seekMax = $derived(usableDuration(duration));
+  let seekNow = $derived(clampSeconds(currentTime, seekMax));
+  let seekValueText = $derived(seekSliderValueText(seekNow, seekMax));
+
+  function handleSeekKeydown(e: KeyboardEvent) {
+    const action = seekKeyAction(e, seekNow, seekMax);
+    if (action.preventDefault) e.preventDefault();
+    if (action.target !== null) onSeek(action.target);
+  }
+
+  function handleSeekClick(e: MouseEvent) {
+    const target = seekTimeFromPointer(e.clientX, progressBarEl.getBoundingClientRect(), seekMax);
+    if (target !== null) onSeek(target);
   }
 
   function handleExport(format: string) {
@@ -201,37 +214,29 @@
       <SkipBack size={14} />
     </button>
     <button
+      type="button"
       class="toolbar-btn"
       class:active={loop}
+      aria-pressed={loop}
       onclick={onLoopToggle}
       aria-label={t('media.audio.loop')}
     >
       <Repeat size={14} />
     </button>
-    <span class="playback-time"
-      >{formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}</span
-    >
+    <span class="playback-time">{formatTime(currentTime)} / {formatTime(seekMax)}</span>
     <div
       bind:this={progressBarEl}
       class="progress-bar"
       role="slider"
       tabindex="0"
-      aria-label={t('media.audio.seekProgress', {
-        current: Math.floor(currentTime),
-        total: Math.floor(duration),
-      })}
+      aria-label={t('media.audio.seek')}
       aria-valuemin={0}
-      aria-valuemax={Math.floor(duration)}
-      aria-valuenow={Math.floor(currentTime)}
-      onclick={onSeek}
-      onkeydown={e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const rect = progressBarEl.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          onSeek(new MouseEvent('click', { clientX: centerX }));
-        }
-      }}
+      aria-valuemax={seekMax}
+      aria-valuenow={seekNow}
+      aria-disabled={seekMax <= 0 ? 'true' : undefined}
+      aria-valuetext={seekValueText}
+      onclick={handleSeekClick}
+      onkeydown={handleSeekKeydown}
     >
       <div class="progress-fill" style:width="{progress}%"></div>
     </div>
@@ -276,11 +281,12 @@
         class:active={denoise !== ''}
         disabled={isProcessing}
         onclick={() => (showDenoiseMenu = !showDenoiseMenu)}
-        aria-label={t('components.audioPlayer.processing.denoise')}
         aria-expanded={showDenoiseMenu}
         aria-haspopup="true"
       >
         <AudioWaveform size={14} />
+        <!-- The name is "Denoise Light": the control, then the visible state it shows -->
+        <span class="sr-only">{t('components.audioPlayer.processing.denoise')}</span>
         <span>{denoiseLabel}</span>
         <ChevronDown size={10} />
       </button>
@@ -290,7 +296,7 @@
           in:dropdown={{ y: -4, duration: 120 }}
           out:dropdown={{ y: -4, duration: 80 }}
         >
-          {#each denoiseOptions as opt (opt.id)}
+          {#each DENOISE_OPTIONS as opt (opt.id)}
             <button
               class="denoise-option"
               class:selected={denoise === opt.id}
@@ -307,8 +313,10 @@
     </div>
 
     <button
+      type="button"
       class="toolbar-btn"
       class:active={normalize}
+      aria-pressed={normalize}
       onclick={onNormalizeToggle}
       disabled={isProcessing}
       aria-label={t('components.audioPlayer.processing.normalize')}
@@ -344,7 +352,7 @@
         <ChevronDown size={12} />
       </button>
       {#if extractionError}
-        <span class="export-error" role="alert" aria-live="assertive">{extractionError}</span>
+        <span class="export-error" role="alert">{extractionError}</span>
       {/if}
       {#if showExportMenu}
         <div
@@ -459,7 +467,7 @@
     transition: all 0.15s ease;
   }
 
-  .toolbar-btn:hover:not(:disabled) {
+  .toolbar-btn:not(.active):hover:not(:disabled) {
     background: var(--color-base-300);
   }
 
@@ -472,6 +480,11 @@
     background: var(--color-primary);
     color: var(--color-primary-content, #fff);
     border-color: var(--color-primary);
+  }
+
+  .toolbar-btn.active:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
   }
 
   .toolbar-btn.error {

@@ -3790,9 +3790,10 @@
           "result": "Resultado de la prueba",
           "error": "Prueba fallida",
           "batCompatible": "Compatible con murciélagos",
-          "batIncompatible": "No compatible con murciélagos"
+          "batIncompatible": "No compatible con murciélagos",
+          "minRateWarning": "Los modelos seleccionados necesitan una frecuencia de captura de al menos {rate} kHz. Esta transmisión está por debajo."
         },
-        "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
+        "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. BSG-BAT requiere al menos 192 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
         "codecWarning": {
           "lossy": "Los códecs con pérdida (AAC, Opus, MP3) destruyen las frecuencias ultrasónicas por encima de ~20 kHz, haciendo el stream inadecuado para la detección de murciélagos."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Nivel máximo de pico verdadero para evitar recorte digital (-10 a 0 dBTP). -2 dBTP proporciona margen seguro para la mayoría de sistemas de reproducción.",
         "noteTitle": "Estándar EBU R128",
         "noteDescription": "La normalización de audio sigue el estándar de transmisión EBU R128, asegurando niveles de reproducción consistentes en diferentes dispositivos y evitando recortes."
+      },
+      "exportDenoise": {
+        "title": "Reducción de ruido de los clips guardados",
+        "description": "Reduce el ruido de fondo de los clips al guardarlos.",
+        "enable": "Reducir el ruido de los clips al guardar",
+        "enableHelp": "El audio capturado se limpia de ruido en memoria antes de escribir el archivo del clip. La detección siempre trabaja con el audio original.",
+        "requiresRecording": "Habilite la grabación de clips en la pestaña Grabación para usar la reducción de ruido de clips.",
+        "strengthLabel": "Intensidad de la reducción de ruido",
+        "strengthHelp": "Suave conserva la mayor parte del sonido original y fuerte elimina más ruido. Suave-medio sirve para la mayoría de las grabaciones.",
+        "strengthDisabledHelp": "Active arriba la reducción de ruido de clips para elegir una intensidad.",
+        "warningTitle": "Los clips guardados no se pueden restaurar",
+        "warningPermanent": "El audio original no se conserva. Los clips se limpian de ruido de forma permanente al guardarse, incluidas las grabaciones de murciélagos.",
+        "warningBats": "La reducción de ruido puede atenuar las llamadas débiles de murciélagos; las llamadas fuertes no se ven afectadas.",
+        "warningImported": "Las grabaciones importadas no se ven afectadas.",
+        "lossyNote": "La reducción de ruido funciona mejor con clips FLAC o WAV. Por debajo de {minBitrate} kbps, los artefactos del códec limitan lo limpio que queda el resultado.",
+        "warningPlayback": "El valor predeterminado de reducción de ruido en la reproducción no se aplica mientras esto esté activado. Si lo desactiva más adelante y activa el valor predeterminado de reproducción, estos clips se limpiarán de ruido por segunda vez al reproducirlos."
       },
       "audioClipRetention": {
         "title": "Retención de clips de audio",
@@ -4950,7 +4967,15 @@
         "description": "Configuración predeterminada para reproducir grabaciones de aves.",
         "defaultGain": "Amplificación de volumen predeterminada",
         "defaultGainHelpText": "Ganancia inicial aplicada al reproducir grabaciones. Los sonidos de aves suelen ser suaves, por lo que se recomienda una amplificación de 6-12 dB.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Reducir el ruido de los clips al reproducirlos",
+        "denoiseHelpText": "Reproduce y descarga una copia sin ruido de cada clip. Los clips guardados no cambian. Las descargas pasan a ser archivos WAV y son más grandes. Los ajustes de audio de un clip permiten elegir otra intensidad o desactivar la reducción de ruido.",
+        "denoiseStrengthLabel": "Intensidad de la reducción de ruido",
+        "denoiseStrengthHelpText": "Suave conserva la mayor parte del sonido original y fuerte elimina más ruido. Suave-medio sirve para la mayoría de las grabaciones.",
+        "denoiseStrengthDisabledHelp": "Active arriba la reducción de ruido en la reproducción para elegir una intensidad.",
+        "denoiseExportPrecedence": "No se aplica mientras «Reducción de ruido de los clips guardados» esté activada (Ajustes de audio, pestaña Procesamiento). Esos clips ya están sin ruido.",
+        "denoiseRedenoiseNote": "Los clips guardados mientras «Reducción de ruido de los clips guardados» estaba activada se limpian de ruido de nuevo al reproducirlos. Elija Desactivado en los ajustes de audio de un clip para oírlo tal como se guardó.",
+        "denoiseLossyNote": "La reducción de ruido funciona mejor con clips FLAC o WAV. Por debajo de {minBitrate} kbps, los artefactos del códec limitan lo limpio que queda el resultado."
       },
       "speciesGuide": {
         "title": "Guía de especies",
@@ -5186,9 +5211,11 @@
       "filterControl": "Control de filtro",
       "highPassFilter": "Control de filtro paso alto: {freq} Hz",
       "seekProgress": "Progreso de búsqueda de audio: {current} / {total} segundos",
+      "seek": "Posición de reproducción",
+      "seekValueText": "{current} de {total}",
       "playbackSpeed": "Velocidad de reproducción",
       "speed": "Velocidad",
-      "loop": "Activar bucle",
+      "loop": "Bucle",
       "player": "Reproductor de audio",
       "autoplayBlocked": "Haz clic para reproducir (reproducción automática bloqueada)",
       "hlsLoadFailed": "No se pudo cargar el reproductor de audio, recarga la página e inténtalo de nuevo",
@@ -5326,6 +5353,7 @@
         "denoise": "Reducir ruido",
         "denoiseOff": "Desactivado",
         "denoiseLight": "Suave",
+        "denoiseLightMedium": "Suave-medio",
         "denoiseMedium": "Medio",
         "denoiseHeavy": "Fuerte",
         "normalize": "Normalizar audio",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Cuerpo de solicitud no válido",
       "rateLimit": "Demasiados intentos de conexión al flujo de notificaciones, espere un momento antes de intentar de nuevo"
     },
-    "speciesGuide": {
-      "rateLimit": "Demasiadas solicitudes a la guía de especies. Espere un momento antes de intentarlo de nuevo."
-    },
     "streams": {
       "test": {
         "invalidBody": "Cuerpo de solicitud no válido",
@@ -5525,6 +5550,9 @@
       "conflictData": "Esta acción entra en conflicto con datos existentes.",
       "requestTimeout": "Tiempo de espera agotado.",
       "networkError": "Error de red. Compruebe su conexión."
+    },
+    "speciesGuide": {
+      "rateLimit": "Demasiadas solicitudes a la guía de especies. Espere un momento antes de intentarlo de nuevo."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Puntuación mínima de confianza (0.0 - 1.0) requerida para registrar una detección."
       },
       "batThreshold": {
-        "label": "Umbral de detección de murciélagos",
-        "helpText": "Puntuación de confianza mínima para detecciones de especies de murciélagos. Solo se aplica a modelos clasificadores de murciélagos."
+        "label": "Umbral de detección de murciélagos (BattyBirdNET)",
+        "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BattyBirdNET. BSG-BAT tiene su propio umbral."
+      },
+      "bsgBatThreshold": {
+        "label": "Umbral de detección de murciélagos (BSG-BAT)",
+        "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BSG-BAT.",
+        "sampleRateWarning": "Las grabaciones a 192 kHz funcionan, pero las especies que emiten por encima de 96 kHz no se pueden identificar y las puntuaciones son menos fiables. Se recomienda una frecuencia de captura de 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "Paso de análisis de BSG-BAT (fotogramas)",
+        "helpText": "Fotogramas de 2 ms entre las ventanas de análisis de BSG-BAT, de 100 (0,2 s) a 512 (1,024 s, sin solapamiento). El valor predeterminado de 250 (0,5 s) es el paso de referencia. Con 375 (0,75 s) se encuentra cerca del 85 % de los eventos con dos tercios de la CPU; con 512 aproximadamente entre el 70 y el 75 % con cerca de la mitad de la CPU, para dispositivos que no pueden seguir el ritmo.",
+        "readout": "Paso: {seconds} s entre ventanas de análisis.",
+        "readoutWithFilter": "Paso: {seconds} s entre ventanas de análisis. Nivel del filtro de murciélagos {level}: se requieren {count} confirmaciones.",
+        "restartNote": "Al guardar un nuevo paso se reinicia la captura de audio."
       },
       "batFilter": {
         "label": "Filtro de paso alto para murciélagos",
@@ -5708,6 +5748,7 @@
           "strict": "Filtrado máximo para la mayor precisión."
         },
         "detectionCount": "{count} confirmaciones requeridas. {description}",
+        "detectionCountByModel": "Se requieren {batty} confirmaciones para BattyBirdNET y {bsgBat} para BSG-BAT. {description}",
         "warningOff": "Sin filtrado hay una alta probabilidad de falsos positivos. Activar el filtrado mejora significativamente la precisión."
       },
       "locale": {

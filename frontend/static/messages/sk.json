@@ -3790,9 +3790,10 @@
           "result": "Výsledok testu",
           "error": "Test zlyhal",
           "batCompatible": "Kompatibilný s netopiermi",
-          "batIncompatible": "Nekompatibilný s netopiermi"
+          "batIncompatible": "Nekompatibilný s netopiermi",
+          "minRateWarning": "Vybrané modely vyžadujú vzorkovaciu frekvenciu záznamu aspoň {rate} kHz. Tento stream je pod ňou."
         },
-        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
+        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. BSG-BAT vyžaduje aspoň 192 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
         "codecWarning": {
           "lossy": "Stratové kodeky (AAC, Opus, MP3) ničia ultrazvukové frekvencie nad ~20 kHz, čím sa stream stáva nevhodným na detekciu netopierov."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
         "noteTitle": "Štandard EBU R128",
         "noteDescription": "Normalizácia zvuku sa riadi vysielacím štandardom EBU R128, čo zabezpečuje konzistentné úrovne prehrávania na rôznych zariadeniach a zabraňuje orezaniu."
+      },
+      "exportDenoise": {
+        "title": "Odšumenie uložených klipov",
+        "description": "Potláča šum na pozadí v klipoch pri ich ukladaní.",
+        "enable": "Odšumiť klipy pri ukladaní",
+        "enableHelp": "Zachytený zvuk sa odšumí v pamäti skôr, než sa zapíše súbor klipu. Detekcia vždy pracuje s pôvodným zvukom.",
+        "requiresRecording": "Pre použitie odšumenia klipov povoľte nahrávanie klipov na karte Nahrávanie.",
+        "strengthLabel": "Sila odšumenia",
+        "strengthHelp": "Ľahké zachová najviac pôvodného zvuku, silné odstráni najviac šumu. Ľahký-stredný vyhovuje väčšine nahrávok.",
+        "strengthDisabledHelp": "Na výber sily zapnite vyššie odšumenie klipov.",
+        "warningTitle": "Uložené klipy nie je možné obnoviť",
+        "warningPermanent": "Pôvodný zvuk sa neuchováva. Klipy sa pri uložení odšumia natrvalo, vrátane nahrávok netopierov.",
+        "warningBats": "Odšumenie môže zoslabiť slabé volania netopierov; silné volania zostanú bez zmeny.",
+        "warningImported": "Importované nahrávky nie sú dotknuté.",
+        "lossyNote": "Odšumenie funguje najlepšie pri klipoch FLAC alebo WAV. Pod {minBitrate} kb/s obmedzujú čistotu výsledku artefakty kodeku.",
+        "warningPlayback": "Predvolené odšumenie pri prehrávaní sa nepoužije, kým je toto zapnuté. Ak to neskôr vypnete a zapnete predvolené odšumenie pri prehrávaní, tieto klipy sa pri prehrávaní odšumia druhýkrát."
       },
       "audioClipRetention": {
         "title": "Uchovávanie zvukových klipov",
@@ -4950,7 +4967,15 @@
         "description": "Predvolené nastavenia pre prehrávanie nahrávok vtákov.",
         "defaultGain": "Predvolené zosilnenie hlasitosti",
         "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Odšumiť klipy pri prehrávaní",
+        "denoiseHelpText": "Prehráva a sťahuje odšumenú kópiu každého klipu. Uložené klipy zostávajú nezmenené. Stiahnuté súbory sú vo formáte WAV a sú väčšie. V nastaveniach zvuku klipu možno zvoliť inú silu alebo odšumenie vypnúť.",
+        "denoiseStrengthLabel": "Sila odšumenia",
+        "denoiseStrengthHelpText": "Ľahké zachová najviac pôvodného zvuku, silné odstráni najviac šumu. Ľahký-stredný vyhovuje väčšine nahrávok.",
+        "denoiseStrengthDisabledHelp": "Na výber sily zapnite vyššie odšumenie pri prehrávaní.",
+        "denoiseExportPrecedence": "Nepoužije sa, kým je zapnuté „Odšumenie uložených klipov“ (Nastavenia zvuku, karta Spracovanie). Tieto klipy sú už odšumené.",
+        "denoiseRedenoiseNote": "Klipy uložené pri zapnutom „Odšumení uložených klipov“ sa pri prehrávaní odšumia znova. Ak chcete počuť klip tak, ako bol uložený, zvoľte v jeho nastaveniach zvuku Vypnuté.",
+        "denoiseLossyNote": "Odšumenie funguje najlepšie pri klipoch FLAC alebo WAV. Pod {minBitrate} kb/s obmedzujú čistotu výsledku artefakty kodeku."
       },
       "speciesGuide": {
         "title": "Sprievodca druhmi",
@@ -5186,9 +5211,11 @@
       "filterControl": "Ovládanie filtra",
       "highPassFilter": "Ovládanie hornopriepustného filtra: {freq} Hz",
       "seekProgress": "Posun v nahrávke: {current} / {total} sekúnd",
+      "seek": "Pozícia prehrávania",
+      "seekValueText": "{current} z {total}",
       "playbackSpeed": "Rýchlosť prehrávania",
       "speed": "Rýchlosť",
-      "loop": "Prepnúť opakovanie",
+      "loop": "Opakovanie",
       "player": "Prehrávač zvuku",
       "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
       "hlsLoadFailed": "Prehrávač zvuku sa nepodarilo načítať, obnovte stránku a skúste to znova",
@@ -5326,6 +5353,7 @@
         "denoise": "Odšumenie",
         "denoiseOff": "Vypnuté",
         "denoiseLight": "Ľahký",
+        "denoiseLightMedium": "Ľahký-stredný",
         "denoiseMedium": "Stredný",
         "denoiseHeavy": "Ťažký",
         "normalize": "Normalizovať zvuk",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Neplatné telo požiadavky",
       "rateLimit": "Príliš veľa pokusov o pripojenie k prúdu oznámení, počkajte chvíľu pred ďalším pokusom"
     },
-    "speciesGuide": {
-      "rateLimit": "Príliš veľa požiadaviek na sprievodcu druhmi. Počkajte chvíľu a skúste to znova."
-    },
     "streams": {
       "test": {
         "invalidBody": "Neplatné telo požiadavky",
@@ -5525,6 +5550,9 @@
       "conflictData": "Táto akcia je v rozpore s existujúcimi údajmi.",
       "requestTimeout": "Časový limit požiadavky vypršal.",
       "networkError": "Chyba siete. Skontrolujte pripojenie."
+    },
+    "speciesGuide": {
+      "rateLimit": "Príliš veľa požiadaviek na sprievodcu druhmi. Počkajte chvíľu a skúste to znova."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Minimálne skóre spoľahlivosti (0.0 - 1.0) potrebné pre zaznamenanie detekcie."
       },
       "batThreshold": {
-        "label": "Prah detekcie netopierov",
-        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov. Platí len pre klasifikačné modely netopierov."
+        "label": "Prah detekcie netopierov (BattyBirdNET)",
+        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov modelom BattyBirdNET. BSG-BAT má vlastný prah."
+      },
+      "bsgBatThreshold": {
+        "label": "Prah detekcie netopierov (BSG-BAT)",
+        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov modelom BSG-BAT.",
+        "sampleRateWarning": "Záznamy pri 192 kHz fungujú, ale druhy, ktoré sa ozývajú nad 96 kHz, nemožno identifikovať a skóre sú menej spoľahlivé. Odporúča sa vzorkovacia frekvencia záznamu 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "Krok analýzy BSG-BAT (snímky)",
+        "helpText": "Snímky po 2 ms medzi analyzovanými oknami BSG-BAT, od 100 (0,2 s) do 512 (1,024 s, bez prekrytia). Predvolená hodnota 250 (0,5 s) je referenčný krok. Pri 375 (0,75 s) sa nájde asi 85 % udalostí za dve tretiny výkonu procesora; pri 512 zhruba 70-75 % pri približne polovici výkonu, pre zariadenia, ktoré nestíhajú.",
+        "readout": "Krok: {seconds} s medzi analyzovanými oknami.",
+        "readoutWithFilter": "Krok: {seconds} s medzi analyzovanými oknami. Úroveň filtra netopierov {level}: požadované potvrdenia: {count}.",
+        "restartNote": "Uloženie nového kroku reštartuje zachytávanie zvuku."
       },
       "batFilter": {
         "label": "Horný priepustný filter pre netopiere",
@@ -5708,6 +5748,7 @@
           "strict": "Maximálne filtrovanie pre najvyššiu presnosť."
         },
         "detectionCount": "Vyžaduje sa {count} potvrdení. {description}",
+        "detectionCountByModel": "BattyBirdNET vyžaduje {batty} potvrdení, BSG-BAT {bsgBat}. {description}",
         "warningOff": "Bez filtrovania je vysoká pravdepodobnosť falošných pozitív. Zapnutie filtrovania výrazne zlepšuje presnosť."
       },
       "locale": {

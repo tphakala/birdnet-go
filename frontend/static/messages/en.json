@@ -3790,9 +3790,10 @@
           "result": "Test Result",
           "error": "Test failed",
           "batCompatible": "Bat compatible",
-          "batIncompatible": "Not bat compatible"
+          "batIncompatible": "Not bat compatible",
+          "minRateWarning": "The selected models need a capture rate of at least {rate} kHz. This stream is below it."
         },
-        "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. Use the Test Stream button above to verify compatibility.",
+        "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. BSG-BAT needs at least 192 kHz. Use the Test Stream button above to verify compatibility.",
         "codecWarning": {
           "lossy": "Lossy codecs (AAC, Opus, MP3) destroy ultrasonic frequencies above ~20 kHz, making the stream unsuitable for bat detection."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
         "noteTitle": "EBU R128 Standard",
         "noteDescription": "Audio normalization follows the EBU R128 broadcast standard, ensuring consistent playback levels across different devices and preventing clipping."
+      },
+      "exportDenoise": {
+        "title": "Denoise Saved Clips",
+        "description": "Reduce background noise in clips as they are saved.",
+        "enable": "Denoise clips when saving",
+        "enableHelp": "The captured audio is denoised in memory before the clip file is written. Detection always runs on the original audio.",
+        "requiresRecording": "Enable clip recording in the Recording tab to use clip denoising.",
+        "strengthLabel": "Denoise Strength",
+        "strengthHelp": "Light keeps most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
+        "strengthDisabledHelp": "Turn on clip denoising above to choose a strength.",
+        "warningTitle": "Saved clips cannot be restored",
+        "warningPermanent": "The original audio is not kept. Clips are denoised permanently when they are saved, including bat recordings.",
+        "warningBats": "Denoising can make faint bat calls quieter; strong calls are unaffected.",
+        "warningImported": "Imported recordings are not affected.",
+        "lossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets.",
+        "warningPlayback": "The playback denoise default is not applied while this is on. If you turn this off later and switch the playback default on, these clips are denoised a second time when played."
       },
       "audioClipRetention": {
         "title": "Audio Clip Retention",
@@ -4950,7 +4967,15 @@
         "description": "Default settings for playing bird recordings.",
         "defaultGain": "Default Volume Boost",
         "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Denoise clips when played",
+        "denoiseHelpText": "Plays and downloads a denoised copy of every clip. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",
+        "denoiseStrengthLabel": "Denoise Strength",
+        "denoiseStrengthHelpText": "Light keeps most of the original sound and heavy removes the most noise. Light-medium suits most recordings.",
+        "denoiseStrengthDisabledHelp": "Turn on playback denoising above to choose a strength.",
+        "denoiseExportPrecedence": "Not applied while Denoise Saved Clips is on (Audio settings, Processing tab). Those clips are already denoised.",
+        "denoiseRedenoiseNote": "Clips saved while Denoise Saved Clips was on are denoised again when played. Choose Off in the audio settings of a clip to hear it as saved.",
+        "denoiseLossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets."
       },
       "speciesGuide": {
         "title": "Species Guide",
@@ -5186,9 +5211,11 @@
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",
       "seekProgress": "Seek audio progress: {current} / {total} seconds",
+      "seek": "Playback position",
+      "seekValueText": "{current} of {total}",
       "playbackSpeed": "Playback speed",
       "speed": "Speed",
-      "loop": "Toggle loop",
+      "loop": "Loop",
       "player": "Audio player",
       "autoplayBlocked": "Click to play (autoplay blocked)",
       "hlsLoadFailed": "Could not load the audio player, reload the page and try again",
@@ -5326,6 +5353,7 @@
         "denoise": "Denoise",
         "denoiseOff": "Off",
         "denoiseLight": "Light",
+        "denoiseLightMedium": "Light-medium",
         "denoiseMedium": "Medium",
         "denoiseHeavy": "Heavy",
         "normalize": "Normalize audio",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Invalid request body",
       "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
     },
-    "speciesGuide": {
-      "rateLimit": "Too many species guide requests. Please wait before trying again."
-    },
     "streams": {
       "test": {
         "invalidBody": "Invalid request body",
@@ -5525,6 +5550,9 @@
       "conflictData": "This action conflicts with existing data.",
       "requestTimeout": "Request timeout.",
       "networkError": "Network error occurred. Please check your connection."
+    },
+    "speciesGuide": {
+      "rateLimit": "Too many species guide requests. Please wait before trying again."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Bat Detection Threshold (BattyBirdNET)",
+        "helpText": "Minimum confidence score for BattyBirdNET bat species detections. BSG-BAT has its own threshold."
+      },
+      "bsgBatThreshold": {
+        "label": "Bat Detection Threshold (BSG-BAT)",
+        "helpText": "Minimum confidence score for BSG-BAT bat species detections.",
+        "sampleRateWarning": "Captures at 192 kHz work, but species that call above 96 kHz cannot be identified and scores are less reliable. A capture rate of 384 kHz is recommended."
+      },
+      "bsgBatStep": {
+        "label": "BSG-BAT Analysis Step (frames)",
+        "helpText": "Frames of 2 ms between BSG-BAT analysis windows, from 100 (0.2 s) to 512 (1.024 s, no overlap). The default of 250 (0.5 s) is the reference step. 375 (0.75 s) finds about 85% of the events at two thirds of the CPU; 512 finds roughly 70 to 75% at about half the CPU, for devices that cannot keep up.",
+        "readout": "Step: {seconds} s between analysis windows.",
+        "readoutWithFilter": "Step: {seconds} s between analysis windows. Bat filter level {level}: {count} confirmations required.",
+        "restartNote": "Saving a new step restarts audio capture."
       },
       "batFilter": {
         "label": "Bat Audio High-Pass Filter",
@@ -5708,6 +5748,7 @@
           "strict": "Maximum filtering for highest accuracy."
         },
         "detectionCount": "{count} confirmations required. {description}",
+        "detectionCountByModel": "{batty} confirmations required for BattyBirdNET, {bsgBat} for BSG-BAT. {description}",
         "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy."
       },
       "locale": {

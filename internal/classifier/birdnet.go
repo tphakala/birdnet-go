@@ -375,7 +375,7 @@ func (bn *BirdNET) usesONNXBackend() bool {
 }
 
 // initializeModel loads and initializes the primary BirdNET model.
-// Dispatches to OpenVINO (A76 image, gated), ONNX, or TFLite (see
+// Dispatches to OpenVINO (gated per host and settings, see openVINOPlanFor), ONNX, or TFLite (see
 // usesONNXBackend / openVINOPlan). OpenVINO failures fall back to ONNX, and a
 // declined OpenVINO attempt is logged with the reason (see logOpenVINODeclined),
 // so the chosen backend is never silent in the journal.
@@ -1103,7 +1103,7 @@ func (bn *BirdNET) setRuntimeInfo(device, backend, precision string) {
 // which inference holds for the full native call (issue #3336). device is "CPU"
 // for TFLite/ONNX or the OpenVINO device for the OV path; backend is
 // BackendTFLite/BackendONNX/BackendOpenVINO; precision is "INT8"/"FP16"/"FP32"
-// (an FP32 ONNX model runs at FP16 on OpenVINO CPU). Returns deviceUnknown with
+// (BirdNET v2.4 runs at FP32 on every OpenVINO device). Returns deviceUnknown with
 // empty backend/precision before the first triplet is published. Implements
 // ModelInstance.
 func (bn *BirdNET) RuntimeInfo() (device, backend, precision string) {

@@ -29,6 +29,7 @@ import {
   isSpectrogramSourceKnownMissing,
   markSpectrogramSourceMissing,
 } from '$lib/utils/spectrogramStatus';
+import { DENOISE_BUTTON_NAME, OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -47,7 +48,6 @@ const PAUSE_LABEL = 'media.audio.pause';
 const LOADING_LABEL = 'media.audio.loading';
 const PLAY_ERROR_TEXT = 'media.audio.playError';
 const LOAD_ERROR_TEXT = 'media.audio.error';
-const DENOISE_LABEL = 'components.audioPlayer.processing.denoise';
 const DENOISE_LIGHT_TEXT = 'components.audioPlayer.processing.denoiseLight';
 const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';
 // Debounce before a processing request starts (PROCESS_DEBOUNCE_MS in AudioPlayer.svelte)
@@ -206,7 +206,7 @@ describe('AudioPlayer recovery', () => {
       await settle();
 
       // Switch denoise on and let the processed clip load.
-      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
       await fireEvent.click(screen.getByText(DENOISE_LIGHT_TEXT));
       await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
       await settle();
@@ -219,7 +219,7 @@ describe('AudioPlayer recovery', () => {
       expect(screen.getByLabelText(PAUSE_LABEL)).toBeInTheDocument();
 
       // Switch denoise off: the source resets to the original and playback stops.
-      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
       await fireEvent.click(screen.getByText(DENOISE_OFF_TEXT));
       await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
       await settle();
@@ -423,7 +423,7 @@ describe('AudioPlayer recovery', () => {
       ctl.dispatch('pause');
       const playsBefore = ctl.play.mock.calls.length;
 
-      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByRole('button', { name: DENOISE_BUTTON_NAME }));
       await fireEvent.click(screen.getByText(DENOISE_LIGHT_TEXT));
       await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
       await settle();
@@ -468,6 +468,10 @@ describe('AudioPlayer recovery', () => {
   describe('spectrogram retry and error state', () => {
     const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
     const SPECTROGRAM_UNAVAILABLE_TEXT = 'components.audio.spectrogramUnavailable';
+    const SPECTROGRAM_LOADING_TEXT = 'components.audio.spectrogramLoading';
+    const SPECTROGRAM_LOADED_TEXT = 'components.audio.spectrogramLoaded';
+    // MAX_SPECTROGRAM_RETRIES in AudioPlayer.svelte: image errors retried before giving up
+    const MAX_SPECTROGRAM_RETRIES = 4;
     // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
     const PAST_ALL_BACKOFFS_MS = 10_000;
     // First entry of SPECTROGRAM_RETRY_DELAYS in AudioPlayer.svelte
@@ -526,7 +530,7 @@ describe('AudioPlayer recovery', () => {
           await fireEvent.error(spectrogramImg());
           await vi.advanceTimersByTimeAsync(0);
 
-          expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+          expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
           await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS + MAX_POLL_DURATION_MS);
           expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
           expect(stub).toHaveBeenCalledTimes(1);
@@ -543,7 +547,9 @@ describe('AudioPlayer recovery', () => {
           await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
 
           expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
-          expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+          expect(
+            screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)
+          ).not.toBeInTheDocument();
           expect(stub).toHaveBeenCalledTimes(1);
         }
       );
@@ -587,7 +593,7 @@ describe('AudioPlayer recovery', () => {
         await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
         await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
 
-        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
         expect(spectrogramImg().getAttribute('src')).not.toContain('retry=2');
       });
 
@@ -601,7 +607,9 @@ describe('AudioPlayer recovery', () => {
           await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
 
           expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
-          expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+          expect(
+            screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)
+          ).not.toBeInTheDocument();
         }
       );
     });
@@ -614,19 +622,44 @@ describe('AudioPlayer recovery', () => {
       await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
 
       expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
     });
 
-    it('clears the unavailable overlay when the image loads after a failure', async () => {
+    it('announces loading while a retry is in flight and unavailable only once the retries are spent', async () => {
+      stubStatusFetch([statusResponse('not_started')]);
+      const { container } = mount();
+      const statusText = () =>
+        container.querySelector('.sr-only[role="status"]')?.textContent.trim();
+
+      // The first error plus every retry up to the limit still announces loading
+      for (let round = 0; round < MAX_SPECTROGRAM_RETRIES; round++) {
+        await fireEvent.error(spectrogramImg());
+        expect(statusText()).toBe(SPECTROGRAM_LOADING_TEXT);
+        await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+      }
+      // The error after the last retry gives up
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+      expect(statusText()).toBe(SPECTROGRAM_UNAVAILABLE_TEXT);
+    });
+
+    it('clears the unavailable overlay and status when the image loads after a failure', async () => {
       stubStatusFetch([statusResponse('failed')]);
-      mount();
+      const { container } = mount();
+      const statusText = () =>
+        container.querySelector('.sr-only[role="status"]')?.textContent.trim();
       await fireEvent.error(spectrogramImg());
       await vi.advanceTimersByTimeAsync(0);
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
+      expect(statusText()).toBe(SPECTROGRAM_UNAVAILABLE_TEXT);
 
       await fireEvent.load(spectrogramImg());
 
-      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)
+      ).not.toBeInTheDocument();
+      expect(statusText()).toBe(SPECTROGRAM_LOADED_TEXT);
       expect(spectrogramImg().classList.contains('invisible')).toBe(false);
     });
 
@@ -638,7 +671,7 @@ describe('AudioPlayer recovery', () => {
         await fireEvent.error(spectrogramImg());
         await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
       }
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
       expect(spectrogramImg().getAttribute('src')).toContain('retry=');
 
       await rerender({ audioUrl: '/audio/next.mp3', detectionId: 'next-456' });
@@ -646,7 +679,9 @@ describe('AudioPlayer recovery', () => {
       const src = spectrogramImg().getAttribute('src') ?? '';
       expect(src).toContain('/api/v2/spectrogram/next-456');
       expect(src).not.toContain('retry=');
-      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)
+      ).not.toBeInTheDocument();
     });
 
     it('stops polling after the maximum poll duration when every status request fails', async () => {
@@ -676,7 +711,7 @@ describe('AudioPlayer recovery', () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
 
       expect(stub).toHaveBeenCalledTimes(2);
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
     });
 
     it('does not restart the image retries when failed arrives while a retry is in flight', async () => {
@@ -701,7 +736,7 @@ describe('AudioPlayer recovery', () => {
 
       expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
       expect(spectrogramImg().getAttribute('src')).not.toContain('retry=2');
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
     });
 
     it('retries again after a failed status once a later attempt starts', async () => {
@@ -742,7 +777,7 @@ describe('AudioPlayer recovery', () => {
         await vi.advanceTimersByTimeAsync(backoffMs);
         await fireEvent.error(spectrogramImg());
       }
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
       // The status endpoint has not recovered yet, so the poll is still running
       expect(stub.mock.calls.length).toBeLessThan(STATUS_ERRORS_BEFORE_RECOVERY);
 

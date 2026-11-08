@@ -49,7 +49,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -90,10 +90,6 @@ type Controller struct {
 	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
 	// error/log helpers) all promote from the shared *apicore.Core.
 	integrations *integrations.Handler
-
-	// proxyTrust caches the checker the connection check builds from
-	// Security.TrustedProxies, rebuilt only when the list changes.
-	proxyTrust proxytrust.Cache
 
 	// detections serves the /api/v2/detections/* CRUD/review/lock/ignore/batch
 	// endpoints and POST /api/v2/search. Besides the shared *apicore.Core it holds
@@ -558,7 +554,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// SecureFS in mediaapi.New). It is constructed BEFORE the species handler
 	// because species injects c.media.ServeSpeciesImageProxy (a method value on
 	// the media handler) for its thumbnail endpoint.
-	c.media = mediaapi.New(c.Core)
+	c.media = mediaapi.New(c.Core, c.isClientAuthenticated)
 	// The species handler delegates to two dependencies: loadNameMaps (the shared
 	// species-index snapshot read accessor, facade-owned in name_maps.go) and the
 	// media domain's species-image proxy handler
@@ -872,22 +868,21 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// c.DS may be nil in the "datastore disabled" mode (see NewWithOptions); report
 	// that instead of dereferencing a nil datastore.
 	dbStatus := "connected"
-	var dbError string
 
 	if c.DS == nil {
 		dbStatus = "unavailable"
 	} else if _, dbErr := c.DS.GetLastDetections(1); dbErr != nil {
 		// Try a simple database operation to check connectivity
 		dbStatus = "disconnected"
-		dbError = dbErr.Error()
+		// Log the failure instead of returning it: this endpoint is reachable
+		// without credentials and raw driver text can carry host names, ports and paths.
+		c.log().Warn("Health check database probe failed",
+			logger.String("error", privacy.ScrubMessage(dbErr.Error())))
 		// If database is critical, we might want to change the overall status
 		// response["status"] = "degraded"
 	}
 
 	response["database_status"] = dbStatus
-	if dbError != "" {
-		response["database_error"] = dbError
-	}
 
 	// Add uptime if available
 	if c.startTime != nil {

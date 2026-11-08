@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
@@ -129,6 +130,50 @@ func TestModelSpec_BufferInterval(t *testing.T) {
 			assert.Equal(t, tt.expected, spec.BufferInterval(tt.overlap))
 		})
 	}
+
+	t.Run("fixed step ignores the overlap argument", func(t *testing.T) {
+		t.Parallel()
+		spec := sampleWindowSpec()
+		assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(0))
+		assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(time.Second))
+	})
+
+	t.Run("step longer than the clip is read as the clip", func(t *testing.T) {
+		t.Parallel()
+		spec := sampleWindowSpec()
+		spec.StepSamples = spec.ClipSamples + sampleWindowStep
+		// BufferDimensions reads a whole clip per window for such a spec.
+		_, _, read := spec.BufferDimensions(0)
+		assert.Equal(t, spec.ClipSizeBytes(), read)
+		assert.Equal(t, time.Duration(sampleWindowClip)*time.Second/sampleWindowRate, spec.BufferInterval(0))
+	})
+}
+
+// Sample-count spec used by the fixed-step tests: 384 kHz, a 393472 sample
+// window (not a whole number of nanoseconds) and a 192000 sample step (0.5 s).
+const (
+	sampleWindowRate    = 384000
+	sampleWindowClip    = 393472
+	sampleWindowStep    = 192000
+	sampleWindowClipLen = 1024666666 * time.Nanosecond // 393472 / 384000 s, truncated
+)
+
+func sampleWindowSpec() ModelSpec {
+	return ModelSpec{
+		SampleRate:    sampleWindowRate,
+		RawSampleRate: sampleWindowRate,
+		ClipLength:    sampleWindowClipLen,
+		ClipSamples:   sampleWindowClip,
+		StepSamples:   sampleWindowStep,
+	}
+}
+
+func TestModelSpec_ClipSampleCount(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 144000, ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}.ClipSampleCount(),
+		"without ClipSamples the SampleRate x ClipLength rule applies")
+	assert.Equal(t, sampleWindowClip, sampleWindowSpec().ClipSampleCount())
 }
 
 func TestModelSpec_BufferDimensions(t *testing.T) {
@@ -176,6 +221,35 @@ func TestModelSpec_BufferDimensions(t *testing.T) {
 		_, overlap, _ := spec.BufferDimensions(2400 * time.Millisecond)
 		assert.Equal(t, 0, overlap%frame)
 	})
+
+	t.Run("sample-count spec with fixed step ignores the overlap argument", func(t *testing.T) {
+		t.Parallel()
+		fixed := sampleWindowSpec()
+		for _, overlapArg := range []time.Duration{0, 500 * time.Millisecond, 5 * time.Second} {
+			clip, overlap, read := fixed.BufferDimensions(overlapArg)
+			assert.Equal(t, 786944, clip)
+			assert.Equal(t, 786944-384000, overlap)
+			assert.Equal(t, 384000, read)
+		}
+	})
+
+	t.Run("sample-count spec without a step keeps the overlap rule", func(t *testing.T) {
+		t.Parallel()
+		clipOnly := sampleWindowSpec()
+		clipOnly.StepSamples = 0
+		clip, _, read := clipOnly.BufferDimensions(0)
+		assert.Equal(t, 786944, clip)
+		assert.Equal(t, 786944, read)
+	})
+
+	t.Run("step at or above the clip keeps read size positive", func(t *testing.T) {
+		t.Parallel()
+		degenerate := sampleWindowSpec()
+		degenerate.StepSamples = degenerate.ClipSamples + 1
+		_, overlap, read := degenerate.BufferDimensions(0)
+		assert.Equal(t, 0, overlap)
+		assert.Equal(t, 786944, read)
+	})
 }
 
 func TestModelSpec_EffectiveSampleRate(t *testing.T) {
@@ -192,4 +266,68 @@ func TestModelSpec_EffectiveSampleRate(t *testing.T) {
 		spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000}
 		assert.Equal(t, 256000, spec.EffectiveSampleRate())
 	})
+}
+
+// TestModelSpec_AnalysisRingCapacity checks the ring rule itself: a spec that
+// requires a contiguous window gets a ring of two windows (room for a whole
+// window plus a fresh step), any other spec keeps one window, and BSG-BAT is the only registry entry
+// that requires one. The per-entry values are pinned in
+// TestModelSpec_RegistryBufferGeometry.
+func TestModelSpec_AnalysisRingCapacity(t *testing.T) {
+	t.Parallel()
+
+	flagged := 0
+	for id := range ModelRegistry {
+		if ModelRegistry[id].Spec.RequireContiguousWindow {
+			flagged++
+			assert.Equal(t, RegistryIDBSGBat, id)
+		}
+	}
+	assert.Equal(t, 1, flagged, "BSG-BAT is the only contiguous-window model")
+
+	plain := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+	contiguous := plain
+	contiguous.RequireContiguousWindow = true
+	assert.Equal(t, plain.ClipSizeBytes(), plain.AnalysisRingCapacity())
+	assert.Equal(t, 2*contiguous.ClipSizeBytes(), contiguous.AnalysisRingCapacity())
+
+	bsgBat := ModelRegistry[RegistryIDBSGBat].Spec
+	_, _, readSize := bsgBat.BufferDimensions(0)
+	assert.GreaterOrEqual(t, bsgBat.AnalysisRingCapacity(), bsgBat.ClipSizeBytes()+readSize,
+		"the ring holds a readable window plus a whole fresh step")
+}
+
+// TestModelSpec_RegistryBufferGeometry pins, as literals, the analysis buffer
+// geometry of every registry entry: the window, the ring capacity, the overlap
+// and read size at overlap 0 and 1.5 s, and the step at overlap 0. Only BSG-BAT
+// has a ring larger than one window.
+func TestModelSpec_RegistryBufferGeometry(t *testing.T) {
+	t.Parallel()
+
+	want := []struct {
+		id                                   string
+		clipBytes, ringBytes                 int
+		overlap0, read0, overlapMid, readMid int
+		stepAtOverlap0                       time.Duration
+	}{
+		{"BSG", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
+		{"BSG_BAT", 786944, 1573888, 402944, 384000, 402944, 384000, 500 * time.Millisecond},
+		{"Bat", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
+		{"BirdNET_V2.4", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
+		{"BirdNET_V3.0", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
+		{"Perch_V2", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
+	}
+	require.Len(t, ModelRegistry, len(want), "a registry entry was added or removed: add its geometry here")
+	for _, w := range want {
+		spec := ModelRegistry[w.id].Spec
+		clipBytes, overlap0, read0 := spec.BufferDimensions(0)
+		_, overlapMid, readMid := spec.BufferDimensions(1500 * time.Millisecond)
+		assert.Equal(t, w.clipBytes, clipBytes, "%s clip bytes", w.id)
+		assert.Equal(t, w.ringBytes, spec.AnalysisRingCapacity(), "%s ring capacity", w.id)
+		assert.Equal(t, w.overlap0, overlap0, "%s overlap at 0", w.id)
+		assert.Equal(t, w.read0, read0, "%s read size at 0", w.id)
+		assert.Equal(t, w.overlapMid, overlapMid, "%s overlap at 1.5s", w.id)
+		assert.Equal(t, w.readMid, readMid, "%s read size at 1.5s", w.id)
+		assert.Equal(t, w.stepAtOverlap0, spec.BufferInterval(0), "%s step at overlap 0", w.id)
+	}
 }

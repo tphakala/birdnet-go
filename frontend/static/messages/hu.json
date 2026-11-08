@@ -3790,9 +3790,10 @@
           "result": "Teszt eredménye",
           "error": "Teszt sikertelen",
           "batCompatible": "Denevér-kompatibilis",
-          "batIncompatible": "Nem denevér-kompatibilis"
+          "batIncompatible": "Nem denevér-kompatibilis",
+          "minRateWarning": "A kiválasztott modellekhez legalább {rate} kHz-es felvételi frekvencia szükséges. Ez az adatfolyam ez alatt van."
         },
-        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
+        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. A BSG-BAT legalább 192 kHz-et igényel. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
         "codecWarning": {
           "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maximális valós csúcsszint a digitális levágás megelőzéséhez (-10 és 0 dBTP között). A -2 dBTP biztonságos tartalékot biztosít a legtöbb lejátszó rendszerhez.",
         "noteTitle": "EBU R128 szabvány",
         "noteDescription": "A hang normalizáció az EBU R128 broadcast szabványt követi, biztosítva a konzisztens lejátszási szinteket a különböző eszközökön és megelőzve a vágást."
+      },
+      "exportDenoise": {
+        "title": "Mentett minták zajszűrése",
+        "description": "Csökkenti a háttérzajt a mintákban mentés közben.",
+        "enable": "Minták zajszűrése mentéskor",
+        "enableHelp": "A rögzített hang a memóriában zajszűrésen esik át, mielőtt a mintafájl kiírásra kerül. Az észlelés mindig az eredeti hangon fut.",
+        "requiresRecording": "Engedélyezze a minta rögzítést a Rögzítés lapon a minták zajszűrésének használatához.",
+        "strengthLabel": "Zajszűrés erőssége",
+        "strengthHelp": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
+        "strengthDisabledHelp": "Az erősség kiválasztásához kapcsolja be fent a minták zajszűrését.",
+        "warningTitle": "A mentett minták nem állíthatók vissza",
+        "warningPermanent": "Az eredeti hang nem marad meg. A minták mentéskor véglegesen zajszűrésen esnek át, a denevérfelvételeket is beleértve.",
+        "warningBats": "A zajszűrés halkabbá teheti a gyenge denevérhívásokat; az erős hívásokat nem érinti.",
+        "warningImported": "Az importált felvételeket ez nem érinti.",
+        "lossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát.",
+        "warningPlayback": "A lejátszás alapértelmezett zajszűrése nem érvényesül, amíg ez be van kapcsolva. Ha ezt később kikapcsolja, és bekapcsolja a lejátszás alapértelmezését, ezek a minták lejátszáskor másodszor is zajszűrésen esnek át."
       },
       "audioClipRetention": {
         "title": "Hangminták megőrzése",
@@ -4950,7 +4967,15 @@
         "description": "Alapértelmezett beállítások a madár hangfelvételek lejátszásához.",
         "defaultGain": "Alapértelmezett hangerő növelés",
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Minták zajszűrése lejátszáskor",
+        "denoiseHelpText": "Minden minta zajszűrt másolatát játssza le és tölti le. A mentett minták változatlanok maradnak. A letöltések WAV fájlok lesznek, és nagyobbak. Egy minta hangbeállításaiban másik erősség választható, vagy a zajszűrés kikapcsolható.",
+        "denoiseStrengthLabel": "Zajszűrés erőssége",
+        "denoiseStrengthHelpText": "Az enyhe őrzi meg a legtöbbet az eredeti hangból, az erős távolítja el a legtöbb zajt. Az enyhe-közepes a legtöbb felvételhez megfelel.",
+        "denoiseStrengthDisabledHelp": "Az erősség kiválasztásához kapcsolja be fent a lejátszás zajszűrését.",
+        "denoiseExportPrecedence": "Nem érvényesül, amíg a „Mentett minták zajszűrése” be van kapcsolva (Hangbeállítások, Feldolgozás lap). Ezek a minták már zajszűrtek.",
+        "denoiseRedenoiseNote": "A „Mentett minták zajszűrése” bekapcsolt állapotában mentett minták lejátszáskor újra zajszűrésen esnek át. Válassza a Ki lehetőséget egy minta hangbeállításaiban, hogy úgy hallja, ahogyan mentették.",
+        "denoiseLossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
       },
       "speciesGuide": {
         "title": "Fajútmutató",
@@ -5186,9 +5211,11 @@
       "filterControl": "Szűrő szabályozás",
       "highPassFilter": "Felül átengedő szűrő szabályozás: {freq} Hz",
       "seekProgress": "Hang előre-hátra tekerés: {current} / {total} másodperc",
+      "seek": "Lejátszási pozíció",
+      "seekValueText": "{current} / {total}",
       "playbackSpeed": "Lejátszási sebesség",
       "speed": "Sebesség",
-      "loop": "Ismétlés be/ki",
+      "loop": "Ismétlés",
       "player": "Hang lejátszó",
       "autoplayBlocked": "Kattintson a lejátszáshoz (automatikus lejátszás letiltva)",
       "hlsLoadFailed": "A hanglejátszó betöltése sikertelen, kérjük, töltse újra az oldalt, és próbálja újra",
@@ -5326,6 +5353,7 @@
         "denoise": "Zajcsökkentés",
         "denoiseOff": "Ki",
         "denoiseLight": "Enyhe",
+        "denoiseLightMedium": "Enyhe-közepes",
         "denoiseMedium": "Közepes",
         "denoiseHeavy": "Erős",
         "normalize": "Hang normalizálása",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Érvénytelen kéréstörzs",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
     },
-    "speciesGuide": {
-      "rateLimit": "Túl sok kérés a fajútmutatóhoz. Kérjük, várjon, mielőtt újra próbálkozik."
-    },
     "streams": {
       "test": {
         "invalidBody": "Érvénytelen kéréstörzs",
@@ -5525,6 +5550,9 @@
       "conflictData": "Ez a művelet ütközik a meglévő adatokkal.",
       "requestTimeout": "A kérés időtúllépés.",
       "networkError": "Hálózati hiba történt. Kérjük, ellenőrizze a kapcsolatát."
+    },
+    "speciesGuide": {
+      "rateLimit": "Túl sok kérés a fajútmutatóhoz. Kérjük, várjon, mielőtt újra próbálkozik."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Az észlelés rögzítéséhez szükséges minimális megbízhatósági pontszám (0.0 - 1.0)."
       },
       "batThreshold": {
-        "label": "Denevér-észlelési küszöb",
-        "helpText": "Minimális megbízhatósági pontszám a denevérfajok észleléséhez. Csak a denevérosztályozó modellekre vonatkozik."
+        "label": "Denevér-észlelési küszöb (BattyBirdNET)",
+        "helpText": "Minimális megbízhatósági pontszám a BattyBirdNET denevérfaj-észleléseihez. A BSG-BAT saját küszöbértékkel rendelkezik."
+      },
+      "bsgBatThreshold": {
+        "label": "Denevér-észlelési küszöb (BSG-BAT)",
+        "helpText": "Minimális megbízhatósági pontszám a BSG-BAT denevérfaj-észleléseihez.",
+        "sampleRateWarning": "A 192 kHz-es felvételek működnek, de a 96 kHz felett hívó fajok nem azonosíthatók, és a pontszámok kevésbé megbízhatók. 384 kHz-es mintavételi frekvencia ajánlott."
+      },
+      "bsgBatStep": {
+        "label": "BSG-BAT elemzési lépés (képkocka)",
+        "helpText": "2 ms-os képkockák száma a BSG-BAT elemzési ablakai között, 100-tól (0,2 s) 512-ig (1,024 s, átfedés nélkül). Az alapértelmezett 250 (0,5 s) a referencialépés. 375 (0,75 s) mellett az események kb. 85%-a található meg a processzorterhelés kétharmadával; 512 mellett nagyjából 70-75% a terhelés felével, a lépést tartani nem tudó eszközökhöz.",
+        "readout": "Lépés: {seconds} s az elemzési ablakok között.",
+        "readoutWithFilter": "Lépés: {seconds} s az elemzési ablakok között. Denevérszűrő szintje {level}: {count} megerősítés szükséges.",
+        "restartNote": "Új lépés mentése újraindítja a hangrögzítést."
       },
       "batFilter": {
         "label": "Denevér hang felüláteresztő szűrő",
@@ -5708,6 +5748,7 @@
           "strict": "Maximális szűrés a legmagasabb pontosság érdekében."
         },
         "detectionCount": "{count} megerősítés szükséges. {description}",
+        "detectionCountByModel": "BattyBirdNET esetén {batty}, BSG-BAT esetén {bsgBat} megerősítés szükséges. {description}",
         "warningOff": "Szűrés nélkül nagy a hamis pozitívak valószínűsége. A szűrés engedélyezése jelentősen javítja a pontosságot."
       },
       "locale": {

@@ -115,6 +115,29 @@
       "type": "object",
       "description": "AudioSourceConfig represents a single audio capture device with per-source settings."
     },
+    "BSGBatConfig": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BSG-BAT ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BSG-BAT label file"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for BSG-BAT detections"
+        },
+        "stepframes": {
+          "type": "integer",
+          "description": "StepFrames is the analysis step between successive BSG-BAT windows, in mel\nframes of 768 samples (2 ms at 384 kHz). Accepted values are 100 to 512; 0\nuses the default of 250. The bat false positive filter count follows it as\nceil(6 / step seconds * level fraction). A change restarts audio capture."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BSGBatConfig holds configuration for the BSG-BAT bat classifier."
+    },
     "BSGConfig": {
       "properties": {
         "modelpath": {
@@ -666,6 +689,10 @@
         "speciesguide": {
           "$ref": "#/$defs/SpeciesGuideConfig",
           "description": "species guide settings (offline OpenFauna; optional Wikipedia descriptions)"
+        },
+        "playbackdenoise": {
+          "$ref": "#/$defs/DenoiseSettings",
+          "description": "denoise clips when they are played or downloaded; stored clips stay unchanged"
         }
       },
       "additionalProperties": false,
@@ -749,6 +776,21 @@
       "additionalProperties": false,
       "type": "object",
       "description": "DaylightFilterSettings contains settings for the daylight species filter."
+    },
+    "DenoiseSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to apply the denoise"
+        },
+        "strength": {
+          "type": "string",
+          "description": "preset name, see the DenoisePreset constants"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DenoiseSettings is a denoise on/off switch with a strength preset."
     },
     "DetectionsGridConfig": {
       "properties": {},
@@ -966,6 +1008,10 @@
         "normalization": {
           "$ref": "#/$defs/NormalizationSettings",
           "description": "audio normalization settings (EBU R128)"
+        },
+        "denoise": {
+          "$ref": "#/$defs/DenoiseSettings",
+          "description": "denoise the captured audio before it is saved"
         }
       },
       "additionalProperties": false,
@@ -2180,7 +2226,7 @@
             "type": "string"
           },
           "type": "array",
-          "description": "TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose\nforwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)\nmay be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always\ntrusted in addition to these, so a default port-forwarded install and the\ncommon local cloudflared topology work without configuration. When the\nimmediate peer is not trusted, forwarded headers are ignored and the real\nconnection address is used, preventing source-IP spoofing on a directly\nexposed instance. The reserved value \"cloudflare\" (TrustedProxyCloudflarePreset)\nexpands to Cloudflare's published edge ranges. The same trust decides whether\nX-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme)\nis honored when deciding whether to send the HSTS header, so a proxy on a\npublic or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here\nfor HSTS to be sent. Other HTTPS checks, such as the COOP header and the\nCSRF cookie Secure flag, do not consult this list. The subnet bypass\n(AllowSubnetBypass) is stricter: it honors a forwarded client address only\nfrom a proxy listed here, even one on a private or loopback address, and a\nrequest that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass.\nFor the bypass, list each proxy's own address rather than a range that also\nholds clients: a client inside a listed range is trusted as a proxy, so its\nown forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite\nX-Real-IP; the client-IP headers it forwards must all name the same client,\nand a Forwarded header is not accepted. Hot-reloadable."
+          "description": "TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose\nforwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)\nmay be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always\ntrusted in addition to these, so a default port-forwarded install and the\ncommon local cloudflared topology work without configuration. When the\nimmediate peer is not trusted, forwarded headers are ignored and the real\nconnection address is used, preventing source-IP spoofing on a directly\nexposed instance. The reserved value \"cloudflare\" (TrustedProxyCloudflarePreset)\nexpands to Cloudflare's published edge ranges. The same trust decides whether\nX-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme)\nis honored when deciding whether to send the HSTS header, so a proxy on a\npublic or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here\nfor HSTS to be sent. Other HTTPS checks, such as the COOP header and the\nCSRF cookie Secure flag, do not consult this list. The subnet bypass\n(AllowSubnetBypass) is stricter: it honors a forwarded client address only\nfrom a proxy listed here, even one on a private or loopback address, and a\nrequest that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass.\nFor the bypass, list each proxy's own address rather than a range that also\nholds clients: a client inside a listed range is trusted as a proxy, so its\nown forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite\nX-Real-IP; the client-IP headers it forwards must all name the same client,\nand a Forwarded header is not accepted. The API rate limiters follow the\nsame rule: listing a proxy by its own address gives each verified client its\nown limits, while all requests of a listed proxy whose headers do not verify\nshare one bucket. On the login and import elevation routes, which also\nlimit the connection peer as a whole, a proxy listed by its own address (a\nbare IP, a /32 or a /128, not inside a wider listed range) is exempt from\nthat shared peer limit for the clients it verifies, unless a Cloudflare edge\naddress is in the request's chain; the clients a listed range or a listed\nproxy behind a Cloudflare edge verifies, and the visitors an unlisted proxy\nnames, keep it. A request that arrives directly has no shared peer limit\nand keeps its own per-address count. A proxy behind Cloudflare whose\nheaders name a Cloudflare edge hop verifies only when the \"cloudflare\"\npreset is listed as well. An unlisted proxy on a loopback, link-local or\nprivate address gets per-client limits only while the headers it forwards\nagree on one client; a host that can reach that proxy directly can still\nname any of its clients, and an unlisted local host can name any client\nunder its own address. An unlisted proxy on a public or 100.64.0.0/10\n(CGNAT, Tailscale IPv4) address is treated as the client and its headers\nare ignored, so list it.\nThe client address that logs and the tunnel label record comes from the same\nresolution as the rate limiters. Forwarded headers that disagree, or that a\nlisted proxy cannot verify, are not recorded: the peer's own address is\nlogged instead. A client that an unlisted loopback, link-local or private\nhost names consistently is recorded as named, so such a host can choose the\naddress that appears in logs. Hot-reloadable."
         },
         "publicaccess": {
           "$ref": "#/$defs/PublicAccess",
@@ -2292,6 +2338,10 @@
         "bat": {
           "$ref": "#/$defs/BatConfig",
           "description": "Bat detection configuration"
+        },
+        "bsgbat": {
+          "$ref": "#/$defs/BSGBatConfig",
+          "description": "BSG-BAT bat classifier configuration"
         },
         "bsg": {
           "$ref": "#/$defs/BSGConfig",

@@ -28,6 +28,7 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
@@ -710,7 +711,7 @@
       {#if det.clipName}
         <div class="meta-section">
           <a
-            href={buildAppUrl(`/api/v2/audio/${det.id}`)}
+            href={audioUrlFor(det.id, getPlaybackDenoiseDefault())}
             download
             class="meta-download"
             aria-label={t('detections.detail.aria.downloadAudioClip', { name: displayName })}
@@ -947,6 +948,7 @@
                   clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
                   modelType={detection.modelType}
                   clipSampleRate={detection.clipSampleRate}
+                  spectrogramFollowsDenoise={true}
                 />
               {:else}
                 <SpectrogramImage

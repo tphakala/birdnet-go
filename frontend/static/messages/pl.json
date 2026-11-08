@@ -3790,9 +3790,10 @@
           "result": "Wynik testu",
           "error": "Test nieudany",
           "batCompatible": "Kompatybilny z nietoperzami",
-          "batIncompatible": "Niekompatybilny z nietoperzami"
+          "batIncompatible": "Niekompatybilny z nietoperzami",
+          "minRateWarning": "Wybrane modele wymagają częstotliwości nagrywania co najmniej {rate} kHz. Ten strumień jest poniżej."
         },
-        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
+        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. BSG-BAT wymaga co najmniej 192 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
         "codecWarning": {
           "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maksymalny poziom true peak, aby zapobiec cyfrowej kompresji (-10 do 0 dBTP). -2 dBTP zapewnia bezpieczną rezerwę dla większości systemów odtwarzania.",
         "noteTitle": "Standard EBU R128",
         "noteDescription": "Normalizacja audio przestrzega standardu nadawczego EBU R128, zapewniając spójne poziomy odtwarzania na różnych urządzeniach i zapobiegając kompresji."
+      },
+      "exportDenoise": {
+        "title": "Redukcja szumów zapisanych klipów",
+        "description": "Zmniejsza szum tła w klipach podczas ich zapisywania.",
+        "enable": "Redukuj szum klipów przy zapisie",
+        "enableHelp": "Przechwycony dźwięk jest odszumiany w pamięci, zanim zostanie zapisany plik klipu. Detekcja zawsze działa na oryginalnym dźwięku.",
+        "requiresRecording": "Włącz nagrywanie klipów na karcie Nagrywanie, aby używać redukcji szumów klipów.",
+        "strengthLabel": "Siła redukcji szumów",
+        "strengthHelp": "Lekka zachowuje najwięcej oryginalnego dźwięku, a silna usuwa najwięcej szumu. Lekki-średni pasuje do większości nagrań.",
+        "strengthDisabledHelp": "Aby wybrać siłę, włącz powyżej redukcję szumów klipów.",
+        "warningTitle": "Zapisanych klipów nie można przywrócić",
+        "warningPermanent": "Oryginalny dźwięk nie jest przechowywany. Klipy są trwale odszumiane przy zapisie, także nagrania nietoperzy.",
+        "warningBats": "Redukcja szumów może wyciszyć słabe wołania nietoperzy; silne wołania pozostają bez zmian.",
+        "warningImported": "Zaimportowane nagrania nie są objęte.",
+        "lossyNote": "Redukcja szumów działa najlepiej na klipach FLAC lub WAV. Poniżej {minBitrate} kb/s artefakty kodeka ograniczają czystość wyniku.",
+        "warningPlayback": "Domyślna redukcja szumów podczas odtwarzania nie jest stosowana, gdy ta opcja jest włączona. Jeśli później ją wyłączysz i włączysz domyślną redukcję podczas odtwarzania, te klipy będą odszumiane po raz drugi podczas odtwarzania."
       },
       "audioClipRetention": {
         "title": "Retencja Klipów Audio",
@@ -4950,7 +4967,15 @@
         "description": "Domyślne ustawienia odtwarzania nagrań ptaków.",
         "defaultGain": "Domyślne wzmocnienie głośności",
         "defaultGainHelpText": "Początkowe wzmocnienie stosowane podczas odtwarzania nagrań. Dźwięki ptaków są często ciche, dlatego zalecane jest wzmocnienie 6-12 dB.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Redukuj szum klipów podczas odtwarzania",
+        "denoiseHelpText": "Odtwarza i pobiera kopię każdego klipu z usuniętym szumem. Zapisane klipy pozostają bez zmian. Pobrane pliki mają format WAV i są większe. W ustawieniach dźwięku klipu można wybrać inną siłę lub wyłączyć redukcję szumów.",
+        "denoiseStrengthLabel": "Siła redukcji szumów",
+        "denoiseStrengthHelpText": "Lekka zachowuje najwięcej oryginalnego dźwięku, a silna usuwa najwięcej szumu. Lekki-średni pasuje do większości nagrań.",
+        "denoiseStrengthDisabledHelp": "Aby wybrać siłę, włącz powyżej redukcję szumów podczas odtwarzania.",
+        "denoiseExportPrecedence": "Nie jest stosowana, gdy włączona jest „Redukcja szumów zapisanych klipów” (Ustawienia dźwięku, karta Przetwarzanie). Te klipy mają już usunięty szum.",
+        "denoiseRedenoiseNote": "Klipy zapisane, gdy „Redukcja szumów zapisanych klipów” była włączona, są odszumiane ponownie podczas odtwarzania. Wybierz Wyłączone w ustawieniach dźwięku klipu, aby usłyszeć go tak, jak został zapisany.",
+        "denoiseLossyNote": "Redukcja szumów działa najlepiej na klipach FLAC lub WAV. Poniżej {minBitrate} kb/s artefakty kodeka ograniczają czystość wyniku."
       },
       "speciesGuide": {
         "title": "Przewodnik po gatunkach",
@@ -5186,9 +5211,11 @@
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",
       "seekProgress": "Szukaj postępu audio: {current} / {total} sekund",
+      "seek": "Pozycja odtwarzania",
+      "seekValueText": "{current} z {total}",
       "playbackSpeed": "Prędkość odtwarzania",
       "speed": "Prędkość",
-      "loop": "Przełącz pętlę",
+      "loop": "Pętla",
       "player": "Odtwarzacz audio",
       "autoplayBlocked": "Kliknij, aby odtworzyć (autoodtwarzanie zablokowane)",
       "hlsLoadFailed": "Nie udało się załadować odtwarzacza audio, odśwież stronę i spróbuj ponownie",
@@ -5326,6 +5353,7 @@
         "denoise": "Odszumianie",
         "denoiseOff": "Wyłączony",
         "denoiseLight": "Lekki",
+        "denoiseLightMedium": "Lekki-średni",
         "denoiseMedium": "Średni",
         "denoiseHeavy": "Ciężki",
         "normalize": "Normalizuj audio",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Nieprawidłowa treść żądania",
       "rateLimit": "Zbyt wiele prób połączenia ze strumieniem powiadomień, poczekaj chwilę przed ponowną próbą"
     },
-    "speciesGuide": {
-      "rateLimit": "Zbyt wiele żądań do przewodnika po gatunkach. Poczekaj chwilę przed ponowną próbą."
-    },
     "streams": {
       "test": {
         "invalidBody": "Nieprawidłowa treść żądania",
@@ -5525,6 +5550,9 @@
       "conflictData": "Ta akcja jest w konflikcie z istniejącymi danymi.",
       "requestTimeout": "Przekroczono limit czasu żądania.",
       "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
+    },
+    "speciesGuide": {
+      "rateLimit": "Zbyt wiele żądań do przewodnika po gatunkach. Poczekaj chwilę przed ponowną próbą."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Minimalny wynik pewności (0.0 - 1.0) wymagany do zarejestrowania detekcji."
       },
       "batThreshold": {
-        "label": "Próg wykrywania nietoperzy",
-        "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy. Dotyczy tylko modeli klasyfikatora nietoperzy."
+        "label": "Próg wykrywania nietoperzy (BattyBirdNET)",
+        "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy przez BattyBirdNET. BSG-BAT ma własny próg."
+      },
+      "bsgBatThreshold": {
+        "label": "Próg wykrywania nietoperzy (BSG-BAT)",
+        "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy przez BSG-BAT.",
+        "sampleRateWarning": "Nagrania przy 192 kHz działają, ale gatunków wołających powyżej 96 kHz nie można zidentyfikować, a oceny są mniej wiarygodne. Zalecana częstotliwość nagrywania to 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "Krok analizy BSG-BAT (ramki)",
+        "helpText": "Ramki po 2 ms między oknami analizy BSG-BAT, od 100 (0,2 s) do 512 (1,024 s, bez nakładania). Wartość domyślna 250 (0,5 s) to krok referencyjny. Przy 375 (0,75 s) wykrywa się około 85% zdarzeń przy dwóch trzecich obciążenia procesora; przy 512 około 70-75% przy mniej więcej połowie obciążenia, dla urządzeń, które nie nadążają.",
+        "readout": "Krok: {seconds} s między oknami analizy.",
+        "readoutWithFilter": "Krok: {seconds} s między oknami analizy. Poziom filtra nietoperzy {level}: wymagane potwierdzenia: {count}.",
+        "restartNote": "Zapisanie nowego kroku restartuje przechwytywanie dźwięku."
       },
       "batFilter": {
         "label": "Filtr górnoprzepustowy dla nietoperzy",
@@ -5708,6 +5748,7 @@
           "strict": "Maksymalne filtrowanie dla najwyższej dokładności."
         },
         "detectionCount": "Wymagane {count} potwierdzeń. {description}",
+        "detectionCountByModel": "BattyBirdNET wymaga {batty} potwierdzeń, BSG-BAT {bsgBat}. {description}",
         "warningOff": "Bez filtrowania istnieje duże prawdopodobieństwo fałszywych trafień. Włączenie filtrowania znacznie poprawia dokładność."
       },
       "locale": {

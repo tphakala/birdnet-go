@@ -208,7 +208,7 @@ func TestApplyModelValidation_AcceptsCatalogAliases(t *testing.T) {
 	// the early-load path without an "unknown model ID" warning. Regression for
 	// Sentry BIRDNET-GO-2FZ.
 	settings := &Settings{}
-	settings.Models.Enabled = []string{"birdnet", "perch-v2", "birdnet-v3.0", "birdnet-v2.4"}
+	settings.Models.Enabled = []string{"birdnet", "perch-v2", "birdnet-v3.0", "birdnet-v2.4", "bsg-bat"}
 
 	err := settings.applyModelValidation()
 	require.NoError(t, err)
@@ -222,15 +222,17 @@ func TestValidAudioModels_AcceptsCatalogAliases(t *testing.T) {
 	assert.True(t, ValidAudioModels["perch-v2"])
 	assert.True(t, ValidAudioModels["birdnet-v3.0"])
 	assert.True(t, ValidAudioModels["birdnet-v2.4"])
+	assert.True(t, ValidAudioModels["bsg-bat"])
+	assert.True(t, ValidAudioModels["bsg_bat"])
 }
 
 func TestMigrateModelIDAliases_CanonicalizesCatalogIDs(t *testing.T) {
 	t.Parallel()
 
 	settings := &Settings{}
-	settings.Models.Enabled = []string{"birdnet", "perch-v2", "birdnet-v3.0"}
+	settings.Models.Enabled = []string{"birdnet", "perch-v2", "birdnet-v3.0", "bsg-bat"}
 	settings.Realtime.Audio.Sources = []AudioSourceConfig{
-		{Name: "Mic1", Model: "perch-v2", Models: []string{"birdnet-v2.4", "bsg-finland"}},
+		{Name: "Mic1", Model: "perch-v2", Models: []string{"birdnet-v2.4", "bsg-finland", "BSG-BAT"}},
 	}
 	settings.Realtime.RTSP.Streams = []StreamConfig{
 		{URL: "rtsp://x", Models: []string{"perch-v2"}},
@@ -239,9 +241,9 @@ func TestMigrateModelIDAliases_CanonicalizesCatalogIDs(t *testing.T) {
 	changed := settings.MigrateModelIDAliases()
 	require.True(t, changed, "catalog-style IDs should be normalized")
 
-	assert.Equal(t, []string{"birdnet", "perch_v2", "birdnet_v3.0"}, settings.Models.Enabled)
+	assert.Equal(t, []string{"birdnet", "perch_v2", "birdnet_v3.0", "bsg_bat"}, settings.Models.Enabled)
 	assert.Equal(t, "perch_v2", settings.Realtime.Audio.Sources[0].Model)
-	assert.Equal(t, []string{"birdnet", "bsg"}, settings.Realtime.Audio.Sources[0].Models)
+	assert.Equal(t, []string{"birdnet", "bsg", "bsg_bat"}, settings.Realtime.Audio.Sources[0].Models)
 	assert.Equal(t, []string{"perch_v2"}, settings.Realtime.RTSP.Streams[0].Models)
 
 	// Idempotent: a second pass over already-canonical config changes nothing.

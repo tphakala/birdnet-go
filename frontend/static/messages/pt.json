@@ -3790,9 +3790,10 @@
           "result": "Resultado do teste",
           "error": "Teste falhou",
           "batCompatible": "Compatível com morcegos",
-          "batIncompatible": "Não compatível com morcegos"
+          "batIncompatible": "Não compatível com morcegos",
+          "minRateWarning": "Os modelos selecionados precisam de uma taxa de captura de pelo menos {rate} kHz. Este stream está abaixo."
         },
-        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. O BSG-BAT requer pelo menos 192 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
         "codecWarning": {
           "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Nível máximo de pico verdadeiro para evitar distorção digital (-10 a 0 dBTP). -2 dBTP fornece margem segura para a maioria dos sistemas de reprodução.",
         "noteTitle": "Padrão EBU R128",
         "noteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção."
+      },
+      "exportDenoise": {
+        "title": "Redução de ruído dos clipes guardados",
+        "description": "Reduz o ruído de fundo nos clipes quando são guardados.",
+        "enable": "Reduzir o ruído dos clipes ao guardar",
+        "enableHelp": "O áudio capturado é limpo de ruído em memória antes de o ficheiro do clipe ser escrito. A deteção usa sempre o áudio original.",
+        "requiresRecording": "Ative a gravação de clipes na aba Gravação para usar a redução de ruído dos clipes.",
+        "strengthLabel": "Intensidade da redução de ruído",
+        "strengthHelp": "Ligeiro mantém mais do som original e forte remove mais ruído. Ligeiro-médio serve para a maioria das gravações.",
+        "strengthDisabledHelp": "Ative acima a redução de ruído dos clipes para escolher uma intensidade.",
+        "warningTitle": "Os clipes guardados não podem ser restaurados",
+        "warningPermanent": "O áudio original não é mantido. Os clipes são limpos de ruído de forma permanente ao serem guardados, incluindo gravações de morcegos.",
+        "warningBats": "A redução de ruído pode atenuar chamadas fracas de morcegos; as chamadas fortes não são afetadas.",
+        "warningImported": "As gravações importadas não são afetadas.",
+        "lossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado.",
+        "warningPlayback": "A redução de ruído predefinida na reprodução não é aplicada enquanto isto estiver ativo. Se o desativar mais tarde e ativar a predefinição de reprodução, estes clipes serão limpos de ruído uma segunda vez ao reproduzir."
       },
       "audioClipRetention": {
         "title": "Retenção de clipes de áudio",
@@ -4950,7 +4967,15 @@
         "description": "Definições padrão para reprodução de gravações de aves.",
         "defaultGain": "Amplificação de Volume Padrão",
         "defaultGainHelpText": "Ganho inicial aplicado ao reproduzir gravações. Os sons de aves são frequentemente baixos, pelo que um reforço de 6-12 dB é recomendado.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Reduzir o ruído dos clipes ao reproduzir",
+        "denoiseHelpText": "Reproduz e transfere uma cópia sem ruído de cada clipe. Os clipes guardados não mudam. As transferências passam a ser ficheiros WAV e são maiores. As definições de áudio de um clipe permitem escolher outra intensidade ou desativar a redução de ruído.",
+        "denoiseStrengthLabel": "Intensidade da redução de ruído",
+        "denoiseStrengthHelpText": "Ligeiro mantém mais do som original e forte remove mais ruído. Ligeiro-médio serve para a maioria das gravações.",
+        "denoiseStrengthDisabledHelp": "Ative acima a redução de ruído na reprodução para escolher uma intensidade.",
+        "denoiseExportPrecedence": "Não é aplicada enquanto «Redução de ruído dos clipes guardados» estiver ativa (Definições de áudio, separador Processamento). Esses clipes já estão sem ruído.",
+        "denoiseRedenoiseNote": "Os clipes guardados enquanto «Redução de ruído dos clipes guardados» estava ativa são limpos de ruído de novo ao reproduzir. Escolha Desativado nas definições de áudio de um clipe para o ouvir tal como foi guardado.",
+        "denoiseLossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado."
       },
       "speciesGuide": {
         "title": "Guia de espécies",
@@ -5186,9 +5211,11 @@
       "filterControl": "Controle de filtro",
       "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",
       "seekProgress": "Progresso de busca de áudio: {current} / {total} segundos",
+      "seek": "Posição de reprodução",
+      "seekValueText": "{current} de {total}",
       "playbackSpeed": "Velocidade de reprodução",
       "speed": "Velocidade",
-      "loop": "Alternar repetição",
+      "loop": "Repetição",
       "player": "Reprodutor de áudio",
       "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
       "hlsLoadFailed": "Não foi possível carregar o reprodutor de áudio, recarregue a página e tente novamente",
@@ -5326,6 +5353,7 @@
         "denoise": "Remover ruído",
         "denoiseOff": "Desligado",
         "denoiseLight": "Ligeiro",
+        "denoiseLightMedium": "Ligeiro-médio",
         "denoiseMedium": "Médio",
         "denoiseHeavy": "Intenso",
         "normalize": "Normalizar áudio",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Corpo da solicitação inválido",
       "rateLimit": "Demasiadas tentativas de ligação ao fluxo de notificações, aguarde antes de tentar novamente"
     },
-    "speciesGuide": {
-      "rateLimit": "Demasiados pedidos ao guia de espécies. Aguarde antes de tentar novamente."
-    },
     "streams": {
       "test": {
         "invalidBody": "Corpo do pedido inválido",
@@ -5525,6 +5550,9 @@
       "conflictData": "Esta ação entra em conflito com dados existentes.",
       "requestTimeout": "Tempo limite da solicitação esgotado.",
       "networkError": "Erro de rede. Verifique a sua ligação."
+    },
+    "speciesGuide": {
+      "rateLimit": "Demasiados pedidos ao guia de espécies. Aguarde antes de tentar novamente."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Pontuação mínima de confiança (0.0 - 1.0) necessária para que uma detecção seja registrada."
       },
       "batThreshold": {
-        "label": "Limiar de deteção de morcegos",
-        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos. Aplica-se apenas a modelos classificadores de morcegos."
+        "label": "Limiar de deteção de morcegos (BattyBirdNET)",
+        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos do BattyBirdNET. O BSG-BAT tem o seu próprio limiar."
+      },
+      "bsgBatThreshold": {
+        "label": "Limiar de deteção de morcegos (BSG-BAT)",
+        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos do BSG-BAT.",
+        "sampleRateWarning": "As capturas a 192 kHz funcionam, mas as espécies que emitem acima de 96 kHz não podem ser identificadas e as pontuações são menos fiáveis. Recomenda-se uma taxa de captura de 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "Passo de análise do BSG-BAT (quadros)",
+        "helpText": "Quadros de 2 ms entre as janelas de análise do BSG-BAT, de 100 (0,2 s) a 512 (1,024 s, sem sobreposição). O valor predefinido de 250 (0,5 s) é o passo de referência. Com 375 (0,75 s) encontra-se cerca de 85% dos eventos com dois terços da CPU; com 512 cerca de 70-75% com cerca de metade da CPU, para dispositivos que não conseguem acompanhar.",
+        "readout": "Passo: {seconds} s entre as janelas de análise.",
+        "readoutWithFilter": "Passo: {seconds} s entre as janelas de análise. Nível do filtro de morcegos {level}: {count} confirmações necessárias.",
+        "restartNote": "Guardar um novo passo reinicia a captura de áudio."
       },
       "batFilter": {
         "label": "Filtro passa-altas para morcegos",
@@ -5708,6 +5748,7 @@
           "strict": "Filtragem máxima para a maior precisão."
         },
         "detectionCount": "{count} confirmações necessárias. {description}",
+        "detectionCountByModel": "{batty} confirmações necessárias para o BattyBirdNET, {bsgBat} para o BSG-BAT. {description}",
         "warningOff": "Sem filtragem existe uma alta probabilidade de falsos positivos. Ativar a filtragem melhora significativamente a precisão."
       },
       "locale": {

@@ -586,6 +586,12 @@ func familyFields(s *conf.Settings, registryID string) (familyFieldSet, bool) {
 			Labels: &s.BSG.LabelPath,
 			Locale: &s.BSG.Locale,
 		}, true
+	case RegistryIDBSGBat:
+		return familyFieldSet{
+			Model:     &s.BSGBat.ModelPath,
+			Labels:    &s.BSGBat.LabelPath,
+			Threshold: &s.BSGBat.Threshold,
+		}, true
 	case RegistryIDBat:
 		return familyFieldSet{
 			Model:      &s.Bat.ClassifierModel,

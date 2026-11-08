@@ -188,11 +188,21 @@ describe('acousticModels store', () => {
           {
             id: 'BirdNET_V2.4',
             name: 'BirdNET v2.4',
+            taxonGroup: 'bird',
             clipMs: 3000,
             stepMs: 1200,
             probeLatencyMs: 166,
             confirmations: 4,
             windowsInReference: 5,
+          },
+          {
+            id: 'BSG_BAT',
+            name: 'BSG-BAT',
+            taxonGroup: 'bat',
+            clipMs: 1025,
+            stepMs: 500,
+            confirmations: 5,
+            windowsInReference: 12,
           },
         ],
       };
@@ -212,10 +222,20 @@ describe('acousticModels store', () => {
           {
             id: 'BirdNET_V2.4',
             name: 'BirdNET v2.4',
+            taxonGroup: 'bird',
             clipMs: 3000,
             stepMs: 1200,
             confirmations: 4,
             windowsInReference: 5,
+          },
+          {
+            id: 'BSG_BAT',
+            name: 'BSG-BAT',
+            taxonGroup: 'bat',
+            clipMs: 1025,
+            stepMs: 500,
+            confirmations: 5,
+            windowsInReference: 12,
           },
         ],
       });

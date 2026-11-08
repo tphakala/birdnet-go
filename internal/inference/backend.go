@@ -50,6 +50,25 @@ type CustomClassifier interface {
 	Close()
 }
 
+// TensorModel runs a model that takes one float32 tensor of any rank and
+// returns raw float32 outputs with no activation applied. Implementations are
+// safe for concurrent use.
+type TensorModel interface {
+	// Run feeds input, whose length must equal the product of InputShape, and
+	// returns one raw output slice per bound output.
+	Run(input []float32) ([][]float32, error)
+
+	// InputShape returns the resolved input tensor shape. A dynamic batch
+	// dimension is pinned to 1.
+	InputShape() []int64
+
+	// OutputSizes returns the element count of each output, in order.
+	OutputSizes() []int
+
+	// Close releases all runtime resources.
+	Close()
+}
+
 // RangeFilter abstracts the ML runtime for geographic range filtering.
 // Implementations are NOT goroutine-safe; callers must synchronize access.
 type RangeFilter interface {

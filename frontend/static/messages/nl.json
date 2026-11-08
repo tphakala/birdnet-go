@@ -3790,9 +3790,10 @@
           "result": "Testresultaat",
           "error": "Test mislukt",
           "batCompatible": "Vleermuis-compatibel",
-          "batIncompatible": "Niet vleermuis-compatibel"
+          "batIncompatible": "Niet vleermuis-compatibel",
+          "minRateWarning": "De geselecteerde modellen hebben een opnamefrequentie van minimaal {rate} kHz nodig. Deze stream ligt eronder."
         },
-        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
+        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. BSG-BAT vereist minimaal 192 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
         "codecWarning": {
           "lossy": "Codecs met verlies (AAC, Opus, MP3) vernietigen ultrasone frequenties boven ~20 kHz, waardoor de stream ongeschikt wordt voor vleermuisdetectie."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
         "noteTitle": "EBU R128 Standaard",
         "noteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping."
+      },
+      "exportDenoise": {
+        "title": "Ruisonderdrukking voor opgeslagen clips",
+        "description": "Vermindert achtergrondruis in clips wanneer ze worden opgeslagen.",
+        "enable": "Ruis uit clips verwijderen bij opslaan",
+        "enableHelp": "De opgenomen audio wordt in het geheugen ontdaan van ruis voordat het clipbestand wordt geschreven. Detectie gebruikt altijd de originele audio.",
+        "requiresRecording": "Schakel clip opname in op het Opname tabblad om ruisonderdrukking voor clips te gebruiken.",
+        "strengthLabel": "Sterkte van de ruisonderdrukking",
+        "strengthHelp": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
+        "strengthDisabledHelp": "Schakel hierboven ruisonderdrukking voor clips in om een sterkte te kiezen.",
+        "warningTitle": "Opgeslagen clips kunnen niet worden hersteld",
+        "warningPermanent": "De originele audio wordt niet bewaard. Clips worden bij het opslaan definitief ontdaan van ruis, ook vleermuisopnames.",
+        "warningBats": "Ruisonderdrukking kan zwakke vleermuisroepen zachter maken; sterke roepen worden niet beïnvloed.",
+        "warningImported": "Geïmporteerde opnames worden niet beïnvloed.",
+        "lossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt.",
+        "warningPlayback": "De standaard ruisonderdrukking bij afspelen wordt niet toegepast zolang dit aan staat. Als u dit later uitschakelt en de standaard voor afspelen inschakelt, worden deze clips bij het afspelen een tweede keer ontdaan van ruis."
       },
       "audioClipRetention": {
         "title": "Audio Clip Bewaring",
@@ -4950,7 +4967,15 @@
         "description": "Standaardinstellingen voor het afspelen van vogelopnames.",
         "defaultGain": "Standaard volumeversterking",
         "defaultGainHelpText": "Initiële versterking bij het afspelen van opnames. Vogelgeluiden zijn vaak zacht, dus een versterking van 6-12 dB wordt aanbevolen.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Ruis uit clips verwijderen bij afspelen",
+        "denoiseHelpText": "Speelt een ruisvrije kopie van elke clip af en downloadt die. Opgeslagen clips blijven ongewijzigd. Downloads worden WAV-bestanden en zijn groter. In de audio-instellingen van een clip kan een andere sterkte worden gekozen of ruisonderdrukking worden uitgeschakeld.",
+        "denoiseStrengthLabel": "Sterkte van de ruisonderdrukking",
+        "denoiseStrengthHelpText": "Licht behoudt het meeste van het originele geluid en zwaar verwijdert de meeste ruis. Licht-gemiddeld past bij de meeste opnames.",
+        "denoiseStrengthDisabledHelp": "Schakel hierboven ruisonderdrukking bij afspelen in om een sterkte te kiezen.",
+        "denoiseExportPrecedence": "Niet toegepast zolang „Ruisonderdrukking voor opgeslagen clips” aan staat (Audio-instellingen, tabblad Verwerking). Die clips zijn al ontdaan van ruis.",
+        "denoiseRedenoiseNote": "Clips die zijn opgeslagen terwijl „Ruisonderdrukking voor opgeslagen clips” aan stond, worden bij het afspelen opnieuw ontdaan van ruis. Kies Uit in de audio-instellingen van een clip om hem te horen zoals hij is opgeslagen.",
+        "denoiseLossyNote": "Ruisonderdrukking werkt het best op FLAC- of WAV-clips. Onder {minBitrate} kbps beperken codec-artefacten hoe schoon het resultaat wordt."
       },
       "speciesGuide": {
         "title": "Soortengids",
@@ -5186,9 +5211,11 @@
       "filterControl": "Filter bediening",
       "highPassFilter": "Hoog-doorlaat filter: {freq} Hz",
       "seekProgress": "Voortgang verder spoelen: {current} / {total} seconden",
+      "seek": "Afspeelpositie",
+      "seekValueText": "{current} van {total}",
       "playbackSpeed": "Afspeelsnelheid",
       "speed": "Snelheid",
-      "loop": "Herhaling aan/uit",
+      "loop": "Herhaling",
       "player": "Audiospeler",
       "autoplayBlocked": "Klik om af te spelen (autoplay geblokkeerd)",
       "hlsLoadFailed": "De audiospeler kon niet worden geladen, laad de pagina opnieuw en probeer het nogmaals",
@@ -5326,6 +5353,7 @@
         "denoise": "Ruisonderdrukking",
         "denoiseOff": "Uit",
         "denoiseLight": "Licht",
+        "denoiseLightMedium": "Licht-gemiddeld",
         "denoiseMedium": "Gemiddeld",
         "denoiseHeavy": "Zwaar",
         "normalize": "Audio normaliseren",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Ongeldige aanvraaginhoud",
       "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
     },
-    "speciesGuide": {
-      "rateLimit": "Te veel aanvragen voor de soortengids. Wacht even voordat u het opnieuw probeert."
-    },
     "streams": {
       "test": {
         "invalidBody": "Ongeldige aanvraagtekst",
@@ -5525,6 +5550,9 @@
       "conflictData": "Deze actie is in strijd met bestaande gegevens.",
       "requestTimeout": "Time-out van het verzoek.",
       "networkError": "Netwerkfout opgetreden. Controleer uw verbinding."
+    },
+    "speciesGuide": {
+      "rateLimit": "Te veel aanvragen voor de soortengids. Wacht even voordat u het opnieuw probeert."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Minimale betrouwbaarheidsscore (0.0 - 1.0) vereist om een detectie vast te leggen."
       },
       "batThreshold": {
-        "label": "Vleermuis-detectiedrempel",
-        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties. Geldt alleen voor vleermuisclassificatiemodellen."
+        "label": "Vleermuis-detectiedrempel (BattyBirdNET)",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BattyBirdNET. BSG-BAT heeft een eigen drempel."
+      },
+      "bsgBatThreshold": {
+        "label": "Vleermuis-detectiedrempel (BSG-BAT)",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BSG-BAT.",
+        "sampleRateWarning": "Opnamen op 192 kHz werken, maar soorten die boven 96 kHz roepen kunnen niet worden herkend en de scores zijn minder betrouwbaar. Een opnamefrequentie van 384 kHz wordt aanbevolen."
+      },
+      "bsgBatStep": {
+        "label": "BSG-BAT-analysestap (frames)",
+        "helpText": "Frames van 2 ms tussen de BSG-BAT-analysevensters, van 100 (0,2 s) tot 512 (1,024 s, geen overlap). De standaardwaarde van 250 (0,5 s) is de referentiestap. Met 375 (0,75 s) vind je ongeveer 85% van de gebeurtenissen met twee derde van de CPU; met 512 ongeveer 70-75% met circa de helft van de CPU, voor apparaten die het niet bijhouden.",
+        "readout": "Stap: {seconds} s tussen de analysevensters.",
+        "readoutWithFilter": "Stap: {seconds} s tussen de analysevensters. Vleermuisfilterniveau {level}: {count} bevestigingen vereist.",
+        "restartNote": "Het opslaan van een nieuwe stap start de audio-opname opnieuw."
       },
       "batFilter": {
         "label": "Vleermuis audio hoogdoorlaatfilter",
@@ -5708,6 +5748,7 @@
           "strict": "Maximale filtering voor de hoogste nauwkeurigheid."
         },
         "detectionCount": "{count} bevestigingen vereist. {description}",
+        "detectionCountByModel": "{batty} bevestigingen vereist voor BattyBirdNET, {bsgBat} voor BSG-BAT. {description}",
         "warningOff": "Zonder filtering is er een grote kans op vals-positieven. Het inschakelen van filtering verbetert de nauwkeurigheid aanzienlijk."
       },
       "locale": {

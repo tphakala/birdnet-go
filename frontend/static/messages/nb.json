@@ -3790,9 +3790,10 @@
           "result": "Testresultat",
           "error": "Test mislyktes",
           "batCompatible": "Flaggermus-kompatibel",
-          "batIncompatible": "Ikke flaggermus-kompatibel"
+          "batIncompatible": "Ikke flaggermus-kompatibel",
+          "minRateWarning": "De valgte modellene trenger en opptaksfrekvens på minst {rate} kHz. Denne strømmen ligger under."
         },
-        "batWarning": "Flaggermusmodeller krever strømmer med tapsfri kodek (PCM) og en samplingshastighet på minst 96 kHz. Bruk Test strøm-knappen ovenfor for å verifisere kompatibilitet.",
+        "batWarning": "Flaggermusmodeller krever strømmer med tapsfri kodek (PCM) og en samplingshastighet på minst 96 kHz. BSG-BAT krever minst 192 kHz. Bruk Test strøm-knappen ovenfor for å verifisere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tapsbringende kodeker (AAC, Opus, MP3) ødelegger ultrasoniske frekvenser over ~20 kHz, noe som gjør strømmen uegnet for flaggermusdeteksjon."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maksimalt sann toppnivå for å forhindre digital klipping (-10 til 0 dBTP). -2 dBTP gir trygg hodrom for de fleste avspillingssystemer.",
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Lydnormalisering følger EBU R128 kringkastingsstandarden, som sikrer konsistente avspillingsnivåer på tvers av forskjellige enheter og forhindrer klipping."
+      },
+      "exportDenoise": {
+        "title": "Støyreduksjon for lagrede klipp",
+        "description": "Reduserer bakgrunnsstøy i klipp når de lagres.",
+        "enable": "Fjern støy fra klipp ved lagring",
+        "enableHelp": "Den innspilte lyden får fjernet støy i minnet før klippfilen skrives. Deteksjon kjører alltid på den opprinnelige lyden.",
+        "requiresRecording": "Aktiver klippopptak i Opptak-fanen for å bruke støyreduksjon for klipp.",
+        "strengthLabel": "Støyreduksjonsstyrke",
+        "strengthHelp": "Lett beholder mest av den opprinnelige lyden, og kraftig fjerner mest støy. Lett-middels passer for de fleste opptak.",
+        "strengthDisabledHelp": "Slå på støyreduksjon for klipp ovenfor for å velge en styrke.",
+        "warningTitle": "Lagrede klipp kan ikke gjenopprettes",
+        "warningPermanent": "Den opprinnelige lyden beholdes ikke. Klipp får permanent fjernet støy når de lagres, også flaggermusopptak.",
+        "warningBats": "Støyreduksjon kan gjøre svake flaggermuslyder svakere; kraftige lyder påvirkes ikke.",
+        "warningImported": "Importerte opptak påvirkes ikke.",
+        "lossyNote": "Støyreduksjon fungerer best på FLAC- eller WAV-klipp. Under {minBitrate} kbps begrenser kodekartefakter hvor rent resultatet blir.",
+        "warningPlayback": "Standard støyreduksjon ved avspilling brukes ikke mens dette er slått på. Hvis du senere slår dette av og slår på standarden for avspilling, får disse klippene fjernet støy en gang til når de spilles av."
       },
       "audioClipRetention": {
         "title": "Oppbevaring av lydklipp",
@@ -4950,7 +4967,15 @@
         "description": "Standardinnstillinger for avspilling av fugleopptak.",
         "defaultGain": "Standard volumforsterkning",
         "defaultGainHelpText": "Startforsterkning ved avspilling av opptak. Fuglelyder er ofte stille, så en forsterkning på 6-12 dB anbefales.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Fjern støy fra klipp ved avspilling",
+        "denoiseHelpText": "Spiller av og laster ned en kopi uten støy av hvert klipp. Lagrede klipp forblir uendret. Nedlastinger blir WAV-filer og er større. Lydinnstillingene for et klipp kan velge en annen styrke eller slå av støyreduksjon.",
+        "denoiseStrengthLabel": "Støyreduksjonsstyrke",
+        "denoiseStrengthHelpText": "Lett beholder mest av den opprinnelige lyden, og kraftig fjerner mest støy. Lett-middels passer for de fleste opptak.",
+        "denoiseStrengthDisabledHelp": "Slå på støyreduksjon ved avspilling ovenfor for å velge en styrke.",
+        "denoiseExportPrecedence": "Brukes ikke mens «Støyreduksjon for lagrede klipp» er slått på (Lydinnstillinger, fanen Behandling). Disse klippene har allerede fått fjernet støy.",
+        "denoiseRedenoiseNote": "Klipp som ble lagret mens «Støyreduksjon for lagrede klipp» var slått på, får fjernet støy en gang til ved avspilling. Velg Av i lydinnstillingene for et klipp for å høre det slik det ble lagret.",
+        "denoiseLossyNote": "Støyreduksjon fungerer best på FLAC- eller WAV-klipp. Under {minBitrate} kbps begrenser kodekartefakter hvor rent resultatet blir."
       },
       "speciesGuide": {
         "title": "Artsguide",
@@ -5186,9 +5211,11 @@
       "filterControl": "Filterkontroll",
       "highPassFilter": "Høypassfilterkontroll: {freq} Hz",
       "seekProgress": "Spol lydfremdrift: {current} / {total} sekunder",
+      "seek": "Avspillingsposisjon",
+      "seekValueText": "{current} av {total}",
       "playbackSpeed": "Avspillingshastighet",
       "speed": "Hastighet",
-      "loop": "Veksle sløyfe",
+      "loop": "Sløyfe",
       "player": "Lydspiller",
       "autoplayBlocked": "Klikk for å spille av (autoavspilling blokkert)",
       "hlsLoadFailed": "Kunne ikke laste lydspilleren, last siden på nytt og prøv igjen",
@@ -5326,6 +5353,7 @@
         "denoise": "Støyreduksjon",
         "denoiseOff": "Av",
         "denoiseLight": "Lett",
+        "denoiseLightMedium": "Lett-middels",
         "denoiseMedium": "Middels",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normaliser lyd",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Ugyldig forespørselstekst",
       "rateLimit": "For mange forsøk på å koble til varselstrøm, vent litt før du prøver igjen"
     },
-    "speciesGuide": {
-      "rateLimit": "For mange forespørsler til artsguiden. Vent litt før du prøver igjen."
-    },
     "streams": {
       "test": {
         "invalidBody": "Ugyldig forespørselskropp",
@@ -5525,6 +5550,9 @@
       "conflictData": "Denne handlingen er i konflikt med eksisterende data.",
       "requestTimeout": "Forespørselen tok for lang tid.",
       "networkError": "Nettverksfeil oppstod. Sjekk tilkoblingen din."
+    },
+    "speciesGuide": {
+      "rateLimit": "For mange forespørsler til artsguiden. Vent litt før du prøver igjen."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Minimum sikkerhetscore (0,0-1,0) kreves for at en registrering skal lagres."
       },
       "batThreshold": {
-        "label": "Flaggermusdeteksjonsterskel",
-        "helpText": "Minimum sikkerhetscore for flaggermusartsregistreringer. Gjelder kun for flaggermusklassifikatormodeller."
+        "label": "Flaggermusdeteksjonsterskel (BattyBirdNET)",
+        "helpText": "Minimum sikkerhetscore for BattyBirdNETs flaggermusartsregistreringer. BSG-BAT har sin egen terskel."
+      },
+      "bsgBatThreshold": {
+        "label": "Flaggermusdeteksjonsterskel (BSG-BAT)",
+        "helpText": "Minimum sikkerhetscore for BSG-BATs flaggermusartsregistreringer.",
+        "sampleRateWarning": "Opptak med 192 kHz fungerer, men arter som kaller over 96 kHz kan ikke identifiseres, og skårene er mindre pålitelige. En opptaksfrekvens på 384 kHz anbefales."
+      },
+      "bsgBatStep": {
+        "label": "BSG-BAT-analysesteg (rammer)",
+        "helpText": "Rammer på 2 ms mellom BSG-BAT-analysevinduene, fra 100 (0,2 s) til 512 (1,024 s, ingen overlapping). Standardverdien 250 (0,5 s) er referansesteget. 375 (0,75 s) finner omtrent 85 % av hendelsene med to tredjedeler av CPU-bruken; 512 finner omtrent 70-75 % med omtrent halvparten av CPU-bruken, for enheter som ikke henger med.",
+        "readout": "Steg: {seconds} s mellom analysevinduene.",
+        "readoutWithFilter": "Steg: {seconds} s mellom analysevinduene. Flaggermusfilter, nivå {level}: {count} bekreftelser kreves.",
+        "restartNote": "Lagring av et nytt steg starter lydopptaket på nytt."
       },
       "batFilter": {
         "label": "Høypassfilter for flaggermuslyd",
@@ -5708,6 +5748,7 @@
           "strict": "Maksimal filtrering for høyest nøyaktighet."
         },
         "detectionCount": "{count} bekreftelser kreves. {description}",
+        "detectionCountByModel": "{batty} bekreftelser kreves for BattyBirdNET, {bsgBat} for BSG-BAT. {description}",
         "warningOff": "Uten filtrering er det høy sannsynlighet for falske positive. Aktivering av filtrering forbedrer nøyaktigheten betydelig."
       },
       "locale": {

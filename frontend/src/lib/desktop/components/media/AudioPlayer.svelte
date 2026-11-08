@@ -54,6 +54,14 @@
     playButtonLabelKey,
     probeAudioSource,
   } from '$lib/utils/audio';
+  import { formatTime } from '$lib/utils/formatters';
+  import {
+    clampSeconds,
+    seekKeyAction,
+    seekSliderValueText,
+    seekTimeFromPointer,
+    usableDuration,
+  } from '$lib/utils/seek';
   import {
     getAudioContext,
     isAudioContextSupported,
@@ -84,6 +92,11 @@
   import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
+  import {
+    audioUrlFor,
+    getPlaybackDenoiseDefault,
+    swapSourceKeepingPosition,
+  } from '$lib/utils/playbackDenoise';
 
   const logger = loggers.audio;
 
@@ -141,6 +154,13 @@
      * when it is missing the player asks the detection endpoint for it once.
      */
     clipSampleRate?: number;
+    /**
+     * Render the spectrogram from the denoised clip at the strength the toolbar is on
+     * (the playback default at first), so spectrogram and audio move together. Only
+     * the single-detection review page sets it: lists and cards keep the stored
+     * spectrogram, so rendering them never starts a denoise.
+     */
+    spectrogramFollowsDenoise?: boolean;
   }
 
   let {
@@ -161,6 +181,7 @@
     clipLabel = '',
     modelType = '',
     clipSampleRate,
+    spectrogramFollowsDenoise = false,
   }: Props = $props();
 
   // Audio and UI elements
@@ -169,7 +190,7 @@
   // svelte-ignore non_reactive_update
   let playPauseButton!: HTMLButtonElement; // Template-only binding
   // svelte-ignore non_reactive_update
-  let progressBar: HTMLDivElement; // Template-only binding
+  let progressBar: HTMLDivElement; // Bound in the template, read by handleProgressClick
   // svelte-ignore non_reactive_update
   let spectrogramImage: HTMLImageElement; // Template-only binding
 
@@ -182,6 +203,9 @@
   // Bats vs Audio Settings) closed, so only one is ever open at a time.
   let closeAudibleBatsSignal = $state(0);
   let closeAudioSettingsSignal = $state(0);
+  // Keep the hover-only overlay controls visible while one of their popovers is open
+  let audioSettingsMenuOpen = $state(false);
+  let audibleBatsMenuOpen = $state(false);
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -290,13 +314,39 @@
   let loopEnabled = $state(false);
 
   // Processing state
-  let processingDenoise = $state('');
+  // The playback denoise default, read once when the player mounts like the default
+  // gain. The toolbar starts on it, and it is what the first play loads.
+  const defaultDenoise = getPlaybackDenoiseDefault();
+  let processingDenoise = $state(defaultDenoise);
   let processingNormalize = $state(false);
   let isProcessing = $state(false);
   let processedAudioUrl = $state<string | null>(null);
   let processedSpectrogramUrl = $state<string | null>(null);
   let isSpectrogramProcessing = $state(false);
   let processingActive = $derived(processingDenoise !== '' || processingNormalize);
+  // The badge reports processing the user chose; the playback default is not shown as one.
+  // The toolbar is exactly on the playback default (denoise at the default, no
+  // normalize). It then plays the GET denoise URL instead of a /process blob.
+  const isDefaultState = $derived(
+    defaultDenoise !== '' && processingDenoise === defaultDenoise && !processingNormalize
+  );
+  // The default applies to what is loaded: the toolbar state is the default and
+  // no processed blob replaces it.
+  const defaultApplied = $derived(isDefaultState && processedAudioUrl === null);
+  // Whether a play was started, which is what switches the element from the
+  // stored clip (loaded for metadata) to the denoised one. Plain: the switch is
+  // made by hand in ensurePlaybackSource.
+  let playUnlocked = false;
+  // The detection whose denoised spectrogram failed for good (an answer a retry cannot
+  // fix, or the retries ran out): the stored one is shown instead for that detection,
+  // and a different detection starts on the denoised one again.
+  let spectrogramFellBackId = $state<string | null>(null);
+  const spectrogramFellBack = $derived(spectrogramFellBackId === detectionId);
+  // Set when the default's denoised clip failed for a reason a retry cannot fix: the
+  // stored clip plays instead for the rest of this mount. An explicit toolbar choice
+  // is a processed blob and keeps its own error handling. Reactive: the download link
+  // follows it.
+  let denoiseFailed = $state(false);
   let processAbortController: AbortController | null = null;
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -309,8 +359,13 @@
   // source swap (so position is preserved across the duration change).
   const audibleBats = useAudibleBats({
     getDetectionId: () => detectionId,
+    // The audible copy carries the toolbar's denoise, except while the toolbar is
+    // still on the default whose denoised clip failed: the stored clip plays then.
+    getDenoise: () =>
+      denoiseFailed && processingDenoise === defaultDenoise ? '' : processingDenoise,
     onActivate: url => swapAudioSource(url),
-    onDeactivate: () => swapAudioSource(processedAudioUrl ?? audioUrl),
+    // audibleBats.active is already false here, so this is the plain source.
+    onDeactivate: () => swapAudioSource(currentSource()),
   });
   // Proportional position (0-1) to restore after an audio source swap, applied
   // once the new source's metadata (and therefore its duration) is available.
@@ -340,6 +395,7 @@
   // 404 from that path still arrives in time.
   const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
   const HTTP_STATUS_NOT_FOUND = 404;
+  const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
   const HTTP_STATUS_REQUEST_TIMEOUT = 408;
   const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
   const HTTP_STATUS_SERVER_ERROR_MIN = 500;
@@ -387,13 +443,25 @@
   // Spinner delay is now handled by useDelayedLoading utility
 
   // Computed values
+  // The denoise strength the spectrogram is rendered at, or '' for the stored
+  // spectrogram. Normalize keeps the processed-spectrogram POST, and a denoised clip
+  // that failed returns the spectrogram to the stored one with the audio.
+  const spectrogramDenoise = $derived(
+    spectrogramFollowsDenoise && !denoiseFailed && !spectrogramFellBack ? processingDenoise : ''
+  );
+  // The denoised spectrogram is loaded by URL. With normalize on the processed
+  // spectrogram replaces it once made, and the denoised one stays up until then.
+  const spectrogramByUrl = $derived(spectrogramDenoise !== '' && !processingNormalize);
+  // The image on screen is the denoised URL, not a processed blob.
+  const showingDenoisedUrl = $derived(spectrogramDenoise !== '' && !processedSpectrogramUrl);
+
   // Base URL without cache-busting parameters. It stays null while a bat rate
   // is being resolved, so an image cached under a URL without the rate is never
   // shown first under an axis it does not match.
   const spectrogramBaseUrl = $derived(
     showSpectrogram && !rateResolvePending
       ? buildAppUrl(
-          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}${overlayRate !== undefined ? `&${SPECTROGRAM_RATE_PARAM}=${overlayRate}` : ''}`
+          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}${overlayRate !== undefined ? `&${SPECTROGRAM_RATE_PARAM}=${overlayRate}` : ''}${spectrogramDenoise !== '' ? `&denoise=${encodeURIComponent(spectrogramDenoise)}` : ''}`
         )
       : null
   );
@@ -422,12 +490,6 @@
   const progressId = $derived(`progress-${detectionId}`);
 
   // Utility functions
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   // Convert mouse/touch X position to time in seconds
   const xToTime = (clientX: number): number => {
     if (!playerContainer || !isFinite(duration) || duration <= 0) return 0;
@@ -731,6 +793,7 @@
 
   const playSelection = () => {
     if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
+    ensurePlaybackSource();
 
     const start = Math.min(selectionStartSec, selectionEndSec);
     const end = Math.max(selectionStartSec, selectionEndSec);
@@ -870,10 +933,25 @@
   // --- Audio processing (denoise / normalize preview) ---
 
   function triggerProcessing() {
+    // The audible-bats copy is a time-expanded clip in the state it was made in, and
+    // processing replaces the source with a non-expanded one. Turn audible bats off
+    // first so its stale copy never sits beside the new source. A copy that is still
+    // being generated carries the old toolbar state too, so its request is aborted.
+    if (audibleBats.active || audibleBats.generating) audibleBats.disable();
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();
     }, PROCESS_DEBOUNCE_MS);
+  }
+
+  // Loads a processing result into the element at the same position. An active
+  // audible copy keeps the element: the result is stored and takes over when audible
+  // bats is turned off (currentSource).
+  function swapProcessedSource(url: string) {
+    if (!audioElement || audibleBats.active) return;
+    const pos = audioElement.currentTime;
+    replaceSource(url);
+    audioElement.currentTime = pos;
   }
 
   async function processAudio() {
@@ -895,12 +973,31 @@
         URL.revokeObjectURL(processedSpectrogramUrl);
         processedSpectrogramUrl = null;
       }
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(audioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(audioUrl);
       return;
+    }
+
+    if (isDefaultState) {
+      // Back on the playback default (for example normalize toggled on and off):
+      // drop the blobs and play the GET denoise URL instead of posting /process.
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+        processedAudioUrl = null;
+      }
+      if (processedSpectrogramUrl) {
+        URL.revokeObjectURL(processedSpectrogramUrl);
+        processedSpectrogramUrl = null;
+      }
+      playUnlocked = true;
+      swapProcessedSource(currentSource());
+      return;
+    }
+
+    // A denoise-only state on a player that follows denoise shows the denoised URL:
+    // drop a processed spectrogram left from normalize.
+    if (spectrogramByUrl && processedSpectrogramUrl) {
+      URL.revokeObjectURL(processedSpectrogramUrl);
+      processedSpectrogramUrl = null;
     }
 
     isProcessing = true;
@@ -943,14 +1040,11 @@
 
       processedAudioUrl = URL.createObjectURL(blob);
 
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(processedAudioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(processedAudioUrl);
 
-      // Update spectrogram to reflect processed audio
-      if (enableClipExtraction) {
+      // Update spectrogram to reflect processed audio. A denoise-only state on a
+      // player that follows denoise loads the denoised spectrogram by URL instead.
+      if (enableClipExtraction && !spectrogramByUrl) {
         updateProcessedSpectrogram(controller.signal);
       }
     } catch (err) {
@@ -972,11 +1066,7 @@
         URL.revokeObjectURL(processedSpectrogramUrl);
         processedSpectrogramUrl = null;
       }
-      if (audioElement) {
-        const pos = audioElement.currentTime;
-        replaceSource(audioUrl);
-        audioElement.currentTime = pos;
-      }
+      swapProcessedSource(audioUrl);
     } finally {
       // Only clear state if this is still the active request (avoid stale finally)
       if (processAbortController === controller) {
@@ -1086,10 +1176,43 @@
     }
   };
 
+  // The URL of the playback default's denoised clip.
+  const defaultDenoiseUrl = () => audioUrlFor(detectionId, defaultDenoise);
+
   // The source the element should currently load: the audible-bats clip or the
-  // processed clip when active, otherwise the original.
-  const currentSource = () =>
-    audibleBats.active && audibleBats.url ? audibleBats.url : (processedAudioUrl ?? audioUrl);
+  // processed clip when active, otherwise the denoised clip once a play started
+  // on the playback default, otherwise the original.
+  const currentSource = () => {
+    if (audibleBats.active && audibleBats.url) return audibleBats.url;
+    if (processedAudioUrl) return processedAudioUrl;
+    return onDefaultDenoiseClip() ? defaultDenoiseUrl() : audioUrl;
+  };
+
+  // Whether the element is on the default's GET denoise URL.
+  const onDefaultDenoiseClip = () =>
+    playUnlocked && defaultApplied && !denoiseFailed && !(audibleBats.active && audibleBats.url);
+
+  // Whether src is a clip the server serves (the stored clip or the default's
+  // denoised one), as opposed to a local blob. Only those are probed and checked
+  // against the known-missing clips.
+  const isServerClip = (src: string) =>
+    src === audioUrl || (defaultDenoise !== '' && src === defaultDenoiseUrl());
+
+  // Switch from the stored clip (loaded for metadata) to the denoised default on
+  // the first play, keeping the position. Runs synchronously in the play entry
+  // point, before its first await, so the click keeps its user gesture.
+  function ensurePlaybackSource() {
+    if (playUnlocked) return;
+    playUnlocked = true;
+    if (!audioElement || !onDefaultDenoiseClip()) return;
+    const src = currentSource();
+    if (src === audioUrl) return;
+    markPlaybackStopped();
+    // A retry of the stored clip must not reload or spend the denoised clip's budget.
+    clearAudioRetryTimer();
+    audioRetryCount = 0;
+    swapSourceKeepingPosition(audioElement, src);
+  }
 
   // Also ends the probe: it only matters while the retry it may cancel is pending.
   function clearAudioRetryTimer() {
@@ -1107,6 +1230,40 @@
     if (isPlaying) handlePause();
   }
 
+  // The default's denoised clip failed for a reason a retry cannot fix: play the
+  // stored clip from the same position instead, and do not ask for it again.
+  function fallbackToStoredClip() {
+    if (!audioElement) return;
+    logger.warn('Denoised clip failed, playing the stored clip', { detectionId });
+    const resume = playRequestedAfterRetry || isPlaying;
+    denoiseFailed = true;
+    resetRetryState();
+    markPlaybackStopped();
+    error = null;
+    swapSourceKeepingPosition(audioElement, audioUrl);
+    if (resume) void audioElement.play().catch(handlePlayRejection);
+  }
+
+  // On the first failure of the denoised clip, ask the server why beside the
+  // scheduled retry: a 503 moves that retry to its Retry-After, a 404 ends it, and
+  // anything else is a failure a retry cannot fix.
+  function probeDenoisedLoad() {
+    const controller = new AbortController();
+    audioProbeController = controller;
+    const probedUrl = currentSource();
+    void probeAudioSource(probedUrl, controller.signal).then(outcome => {
+      if (controller.signal.aborted || probedUrl !== currentSource()) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      } else {
+        fallbackToStoredClip();
+      }
+    });
+  }
+
   // Resume playback the user asked for during a retry, at most once.
   function consumePendingPlay() {
     if (!playRequestedAfterRetry) return;
@@ -1119,7 +1276,7 @@
   // Handle a rejected play(). While a retry timer is pending the retry can
   // still succeed, so only remember the play intent.
   function handlePlayRejection(err: unknown) {
-    if (audioRetryTimer !== undefined) {
+    if (audioRetryTimer !== undefined || audioProbeController !== undefined) {
       playRequestedAfterRetry = true;
       return;
     }
@@ -1176,13 +1333,13 @@
   // any other answer leaves the scheduled blind retry in place. Only the original clip is
   // probed: a processed or audible-bats source is a local blob URL.
   function probeFailedLoad() {
-    if (currentSource() !== audioUrl) return;
+    const probedUrl = currentSource();
+    if (!isServerClip(probedUrl)) return;
     const controller = new AbortController();
     audioProbeController = controller;
-    const probedUrl = audioUrl;
     void probeAudioSource(probedUrl, controller.signal).then(outcome => {
       // An answer for a clip that is no longer the current source says nothing about it
-      if (controller.signal.aborted || probedUrl !== audioUrl) return;
+      if (controller.signal.aborted || probedUrl !== currentSource()) return;
       audioProbeController = undefined;
       if (outcome.kind === 'missing') {
         debugLog('Audio probe: clip is gone, not retrying');
@@ -1220,6 +1377,7 @@
     }
 
     error = null;
+    ensurePlaybackSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
     // reload it now instead of swallowing the click.
     if (audioElement.error) reloadAfterFailure();
@@ -1330,21 +1488,41 @@
     consumePendingPlay();
   };
 
+  // Usable clip length and position for seeking and the inline progress bar's slider semantics
+  const seekMax = $derived(usableDuration(duration));
+  const seekNow = $derived(clampSeconds(currentTime, seekMax));
+  const seekValueText = $derived(seekSliderValueText(seekNow, seekMax));
+
+  // What the screen reader status region says about the spectrogram. It follows the same
+  // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and a
+  // load that has given up (retries spent, a terminal status or the loader timeout) reads as
+  // unavailable.
+  const spectrogramStatusText = $derived.by(() => {
+    if (spectrogramLoader.loading || rateResolvePending) {
+      return t('components.audio.spectrogramLoading');
+    }
+    if (spectrogramLoader.error) return t('components.audio.spectrogramUnavailable');
+    return t('components.audio.spectrogramLoaded');
+  });
+
+  // Seek to an absolute position. The shown position is refreshed at once so a paused
+  // player reflects the seek before the next key press computes its target from it.
+  const seekTo = (seconds: number) => {
+    if (!audioElement || seekMax <= 0) return;
+    audioElement.currentTime = clampSeconds(seconds, seekMax);
+    updateProgress();
+  };
+
+  const handleProgressKeydown = (event: KeyboardEvent) => {
+    const action = seekKeyAction(event, seekNow, seekMax);
+    if (action.preventDefault) event.preventDefault();
+    if (action.target !== null) seekTo(action.target);
+  };
+
   const handleProgressClick = (event: MouseEvent) => {
-    if (!audioElement || !isFinite(duration) || duration <= 0) return;
-
-    // Use the toolbar's own progress bar if the event target is inside one,
-    // otherwise fall back to playerContainer (always rendered).
-    const targetEl = (event.target as HTMLElement)?.closest('.progress-bar') as HTMLElement | null;
-    const refEl = targetEl ?? progressBar ?? playerContainer;
-    if (!refEl) return;
-
-    const rect = refEl.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const clickPercent = clickX / rect.width;
-    const newTime = clickPercent * duration;
-
-    audioElement.currentTime = Math.max(0, Math.min(newTime, duration));
+    if (!progressBar) return;
+    const target = seekTimeFromPointer(event.clientX, progressBar.getBoundingClientRect(), seekMax);
+    if (target !== null) seekTo(target);
   };
 
   // Volume control
@@ -1677,6 +1855,39 @@
     }
   };
 
+  // Shows the stored spectrogram instead of the denoised one for the rest of this
+  // detection. The URL change resets the loader and the retries.
+  const fallBackToStoredSpectrogram = () => {
+    debugLog('fallBackToStoredSpectrogram: denoised spectrogram unavailable');
+    spectrogramFellBackId = detectionId;
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer();
+    clearSpectrogramProbe();
+  };
+
+  // An <img> cannot read the response status, so the failed denoised URL is
+  // requested once more with fetch. Any status but 503 (busy, which the retries
+  // wait out) is final: the stored spectrogram is shown at once.
+  const probeDenoisedSpectrogram = async (url: string) => {
+    clearSpectrogramProbe();
+    const controller = new AbortController();
+    spectrogramProbeAbortController = controller;
+    const probedBaseUrl = spectrogramBaseUrl;
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      void response.body?.cancel();
+      if (controller.signal.aborted || spectrogramBaseUrl !== probedBaseUrl) return;
+      if (response.ok || response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) return;
+      fallBackToStoredSpectrogram();
+    } catch {
+      // Aborted or failed: the retries carry on and end in the fallback.
+    } finally {
+      if (spectrogramProbeAbortController === controller) {
+        spectrogramProbeAbortController = undefined;
+      }
+    }
+  };
+
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
@@ -1713,13 +1924,23 @@
       return;
     }
 
-    // Start polling for generation status on first error
+    // Start polling for generation status on first error. The status describes the
+    // stored render, not the denoised variant, which answers 200 or 503 directly.
     if (spectrogramRetryCount === 0 && !spectrogramStatusFailed) {
       debugLog('handleSpectrogramError: first error, starting status polling');
-      statusPollStartTime = Date.now();
-      pollSpectrogramStatus();
+      if (!showingDenoisedUrl) {
+        statusPollStartTime = Date.now();
+        pollSpectrogramStatus();
+      } else if (spectrogramUrl) {
+        void probeDenoisedSpectrogram(spectrogramUrl);
+      }
       // An image requested with the clip rate: ask the server why it failed.
-      if (overlayRate !== undefined && !processedSpectrogramUrl && spectrogramUrl) {
+      if (
+        overlayRate !== undefined &&
+        !processedSpectrogramUrl &&
+        spectrogramUrl &&
+        !showingDenoisedUrl
+      ) {
         void probeExactRateRender(spectrogramUrl);
       }
     }
@@ -1755,6 +1976,13 @@
       }, retryDelay);
 
       return; // Don't set error state yet
+    }
+
+    // Max retries exceeded: a denoised spectrogram that never came is replaced by
+    // the stored one rather than ending on the unavailable state.
+    if (showingDenoisedUrl) {
+      fallBackToStoredSpectrogram();
+      return;
     }
 
     // Max retries exceeded - but keep polling if generation is in progress
@@ -1984,9 +2212,13 @@
           URL.revokeObjectURL(processedAudioUrl);
           processedAudioUrl = null;
         }
-        processingDenoise = '';
+        processingDenoise = defaultDenoise;
         processingNormalize = false;
         isProcessing = false;
+        // The new detection starts from its stored clip: its first play switches to
+        // the denoised default again.
+        playUnlocked = false;
+        denoiseFailed = false;
         // Reset audible-bats derived playback for the new detection (the source
         // is reset to audioUrl above; this just clears the derived-copy state).
         audibleBats.reset();
@@ -2119,7 +2351,7 @@
 
         // The original clip, already reported gone for good, is not retried or probed. A
         // processed or audible-bats source is a local blob and keeps its retries.
-        if (currentSource() === audioUrl && isSpectrogramSourceKnownMissing(detectionId)) {
+        if (isServerClip(currentSource()) && isSpectrogramSourceKnownMissing(detectionId)) {
           failLoadPermanently();
           return;
         }
@@ -2132,7 +2364,16 @@
           audioRetryCount++;
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
-          if (isFirstFailure) probeFailedLoad();
+          // The probe runs beside the scheduled retry, so a slow answer never stalls recovery.
+          if (isFirstFailure) {
+            if (onDefaultDenoiseClip()) probeDenoisedLoad();
+            else probeFailedLoad();
+          }
+          return;
+        }
+
+        if (onDefaultDenoiseClip()) {
+          fallbackToStoredClip();
           return;
         }
 
@@ -2311,12 +2552,11 @@
   ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
 >
   <!-- Screen reader announcement for the spectrogram state (the rate resolve counts
-       as loading). Always rendered, so screen readers hear each change of its text. -->
+       as loading, a failed load reads as unavailable). Always rendered, so screen
+       readers hear each change of its text. -->
   <div class="sr-only" role="status">
     {#if spectrogramUrl || rateResolvePending}
-      {spectrogramLoader.loading || rateResolvePending
-        ? t('components.audio.spectrogramLoading')
-        : t('components.audio.spectrogramLoaded')}
+      {spectrogramStatusText}
     {/if}
   </div>
 
@@ -2369,7 +2609,7 @@
             class="size-6 sm:size-8 mx-auto mb-1 text-[var(--color-base-content)]/30"
             aria-hidden="true"
           />
-          <span class="text-xs sm:text-sm text-[var(--color-base-content)]/50"
+          <span class="text-xs sm:text-sm text-[color:var(--text-muted)]"
             >{t('components.audio.spectrogramUnavailable')}</span
           >
         </div>
@@ -2443,8 +2683,9 @@
        it for bat detections. -->
   {#if showControls}
     <div
-      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200"
-      class:opacity-0={!isMobile}
+      data-testid="audio-overlay-controls"
+      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200 has-[:focus-visible]:opacity-100"
+      class:opacity-0={!isMobile && !audioSettingsMenuOpen && !audibleBatsMenuOpen}
       class:group-hover:opacity-100={!isMobile}
     >
       {#if isBatSpectrogram}
@@ -2456,7 +2697,11 @@
           closeSignal={closeAudibleBatsSignal}
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
-          onMenuOpen={() => closeAudioSettingsSignal++}
+          onMenuOpen={() => {
+            audibleBatsMenuOpen = true;
+            closeAudioSettingsSignal++;
+          }}
+          onMenuClose={() => (audibleBatsMenuOpen = false)}
         />
       {/if}
       <AudioSettingsButton
@@ -2469,7 +2714,11 @@
         onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
         closeSignal={closeAudioSettingsSignal}
-        onMenuOpen={() => closeAudibleBatsSignal++}
+        onMenuOpen={() => {
+          audioSettingsMenuOpen = true;
+          closeAudibleBatsSignal++;
+        }}
+        onMenuClose={() => (audioSettingsMenuOpen = false)}
       />
     </div>
   {/if}
@@ -2582,7 +2831,7 @@
   {/if}
 
   <!-- Processing active badge (only shown when toolbar is not used) -->
-  {#if processingActive && !enableClipExtraction}
+  {#if processingActive && !isDefaultState && !enableClipExtraction}
     <div class="processing-badge" role="status">
       {t('components.audioPlayer.processing.processingActive')}
     </div>
@@ -2591,7 +2840,7 @@
   <!-- Bottom overlay controls (hidden when toolbar is used) -->
   {#if !enableClipExtraction}
     <div
-      class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300"
+      class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300 has-[:focus-visible]:opacity-100"
       class:opacity-0={!isMobile}
       class:group-hover:opacity-100={!isMobile}
       class:opacity-100={isMobile}
@@ -2622,21 +2871,16 @@
           bind:this={progressBar}
           id={progressId}
           class="grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
-          role="button"
+          role="slider"
           tabindex="0"
-          aria-label={t('media.audio.seekProgress', {
-            current: Math.floor(currentTime),
-            total: Math.floor(duration),
-          })}
+          aria-label={t('media.audio.seek')}
+          aria-valuemin={0}
+          aria-valuemax={seekMax}
+          aria-valuenow={seekNow}
+          aria-valuetext={seekValueText}
+          aria-disabled={seekMax <= 0 ? 'true' : undefined}
           onclick={handleProgressClick}
-          onkeydown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              const rect = progressBar.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2;
-              handleProgressClick(new MouseEvent('click', { clientX: centerX }));
-            }
-          }}
+          onkeydown={handleProgressKeydown}
         >
           <div
             class="bg-primary h-1.5 rounded-full transition-all duration-100"
@@ -2650,7 +2894,7 @@
         <!-- Download button -->
         {#if showDownload}
           <a
-            href={audioUrl}
+            href={defaultApplied && !denoiseFailed ? defaultDenoiseUrl() : audioUrl}
             download
             class="text-white p-1 rounded-full hover:bg-white/20 ml-2 shrink-0"
             aria-label={t('media.audio.download')}
@@ -2682,7 +2926,7 @@
     {progress}
     loop={loopEnabled}
     onPlayPause={handlePlayPause}
-    onSeek={handleProgressClick}
+    onSeek={seekTo}
     onLoopToggle={() => (loopEnabled = !loopEnabled)}
     selectionStart={selectionStartSec !== null && selectionEndSec !== null
       ? Math.min(selectionStartSec, selectionEndSec)

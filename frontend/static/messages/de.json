@@ -3790,9 +3790,10 @@
           "result": "Testergebnis",
           "error": "Test fehlgeschlagen",
           "batCompatible": "Fledermaus-kompatibel",
-          "batIncompatible": "Nicht fledermaus-kompatibel"
+          "batIncompatible": "Nicht fledermaus-kompatibel",
+          "minRateWarning": "Die gewählten Modelle benötigen eine Aufnahmerate von mindestens {rate} kHz. Dieser Stream liegt darunter."
         },
-        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
+        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. BSG-BAT erfordert mindestens 192 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
         "codecWarning": {
           "lossy": "Verlustbehaftete Codecs (AAC, Opus, MP3) zerstören Ultraschallfrequenzen über ~20 kHz und machen den Stream für die Fledermauserkennung ungeeignet."
         },
@@ -3968,6 +3969,22 @@
         "truePeakHelp": "Maximaler True Peak-Pegel zur Vermeidung digitaler Übersteuerung (-10 bis 0 dBTP). -2 dBTP bietet sicheren Headroom für die meisten Wiedergabesysteme.",
         "noteTitle": "EBU R128-Standard",
         "noteDescription": "Die Audio-Normalisierung folgt dem EBU R128 Broadcast-Standard und gewährleistet konsistente Wiedergabepegel über verschiedene Geräte und verhindert Übersteuerung."
+      },
+      "exportDenoise": {
+        "title": "Rauschunterdrückung für gespeicherte Clips",
+        "description": "Verringert Hintergrundrauschen in Clips, während sie gespeichert werden.",
+        "enable": "Clips beim Speichern entrauschen",
+        "enableHelp": "Das aufgenommene Audio wird im Speicher entrauscht, bevor die Clip-Datei geschrieben wird. Die Erkennung arbeitet immer mit dem Originalaudio.",
+        "requiresRecording": "Aktivieren Sie die Clip-Aufnahme im Aufnahme-Tab, um die Rauschunterdrückung für Clips zu verwenden.",
+        "strengthLabel": "Stärke der Rauschunterdrückung",
+        "strengthHelp": "Leicht bewahrt am meisten vom Originalklang, stark entfernt am meisten Rauschen. Leicht-mittel passt zu den meisten Aufnahmen.",
+        "strengthDisabledHelp": "Aktivieren Sie oben die Rauschunterdrückung für Clips, um eine Stärke zu wählen.",
+        "warningTitle": "Gespeicherte Clips lassen sich nicht wiederherstellen",
+        "warningPermanent": "Das Originalaudio wird nicht aufbewahrt. Clips werden beim Speichern dauerhaft entrauscht, auch Fledermausaufnahmen.",
+        "warningBats": "Die Rauschunterdrückung kann leise Fledermausrufe leiser machen; starke Rufe bleiben unverändert.",
+        "warningImported": "Importierte Aufnahmen sind nicht betroffen.",
+        "lossyNote": "Die Rauschunterdrückung funktioniert am besten bei FLAC- oder WAV-Clips. Unter {minBitrate} kbps begrenzen Codec-Artefakte, wie sauber das Ergebnis wird.",
+        "warningPlayback": "Die Standard-Rauschunterdrückung bei der Wiedergabe wird nicht angewendet, solange dies aktiv ist. Wenn Sie dies später ausschalten und die Standardeinstellung für die Wiedergabe einschalten, werden diese Clips bei der Wiedergabe ein zweites Mal entrauscht."
       },
       "audioClipRetention": {
         "title": "Audioclip-Aufbewahrung",
@@ -4950,7 +4967,15 @@
         "description": "Standardeinstellungen für die Wiedergabe von Vogelaufnahmen.",
         "defaultGain": "Standard-Lautstärkeverstärkung",
         "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Clips bei der Wiedergabe entrauschen",
+        "denoiseHelpText": "Gibt von jedem Clip eine entrauschte Kopie wieder und lädt sie herunter. Gespeicherte Clips bleiben unverändert. Downloads werden WAV-Dateien und sind größer. In den Audioeinstellungen eines Clips lässt sich eine andere Stärke wählen oder die Rauschunterdrückung ausschalten.",
+        "denoiseStrengthLabel": "Stärke der Rauschunterdrückung",
+        "denoiseStrengthHelpText": "Leicht bewahrt am meisten vom Originalklang, stark entfernt am meisten Rauschen. Leicht-mittel passt zu den meisten Aufnahmen.",
+        "denoiseStrengthDisabledHelp": "Aktivieren Sie oben die Rauschunterdrückung bei der Wiedergabe, um eine Stärke zu wählen.",
+        "denoiseExportPrecedence": "Wird nicht angewendet, solange „Rauschunterdrückung für gespeicherte Clips“ aktiv ist (Audioeinstellungen, Registerkarte Verarbeitung). Diese Clips sind bereits entrauscht.",
+        "denoiseRedenoiseNote": "Clips, die bei aktiver „Rauschunterdrückung für gespeicherte Clips“ gespeichert wurden, werden bei der Wiedergabe erneut entrauscht. Wählen Sie in den Audioeinstellungen eines Clips Aus, um ihn so zu hören, wie er gespeichert wurde.",
+        "denoiseLossyNote": "Die Rauschunterdrückung funktioniert am besten bei FLAC- oder WAV-Clips. Unter {minBitrate} kbps begrenzen Codec-Artefakte, wie sauber das Ergebnis wird."
       },
       "speciesGuide": {
         "title": "Artensteckbrief",
@@ -5186,9 +5211,11 @@
       "filterControl": "Filtersteuerung",
       "highPassFilter": "Hochpassfilter-Steuerung: {freq} Hz",
       "seekProgress": "Audio-Fortschritt: {current} / {total} Sekunden",
+      "seek": "Wiedergabeposition",
+      "seekValueText": "{current} von {total}",
       "playbackSpeed": "Wiedergabegeschwindigkeit",
       "speed": "Tempo",
-      "loop": "Wiederholung umschalten",
+      "loop": "Wiederholung",
       "player": "Audioplayer",
       "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
       "hlsLoadFailed": "Der Audioplayer konnte nicht geladen werden, bitte die Seite neu laden und erneut versuchen",
@@ -5326,6 +5353,7 @@
         "denoise": "Entrauschen",
         "denoiseOff": "Aus",
         "denoiseLight": "Leicht",
+        "denoiseLightMedium": "Leicht-mittel",
         "denoiseMedium": "Mittel",
         "denoiseHeavy": "Stark",
         "normalize": "Audio normalisieren",
@@ -5490,9 +5518,6 @@
       "invalidBody": "Ungültiger Anfragetext",
       "rateLimit": "Zu viele Verbindungsversuche zum Benachrichtigungsstream, bitte warten Sie einen Moment"
     },
-    "speciesGuide": {
-      "rateLimit": "Zu viele Anfragen an den Artensteckbrief. Bitte warten Sie einen Moment, bevor Sie es erneut versuchen."
-    },
     "streams": {
       "test": {
         "invalidBody": "Ungültiger Anfragekörper",
@@ -5525,6 +5550,9 @@
       "conflictData": "Diese Aktion steht im Konflikt mit vorhandenen Daten.",
       "requestTimeout": "Zeitüberschreitung der Anfrage.",
       "networkError": "Netzwerkfehler aufgetreten. Bitte überprüfen Sie Ihre Verbindung."
+    },
+    "speciesGuide": {
+      "rateLimit": "Zu viele Anfragen an den Artensteckbrief. Bitte warten Sie einen Moment, bevor Sie es erneut versuchen."
     }
   },
   "weather": {
@@ -5684,8 +5712,20 @@
         "helpText": "Mindest-Konfidenzwert (0.0 - 1.0), ab dem eine Erkennung aufgezeichnet wird."
       },
       "batThreshold": {
-        "label": "Fledermaus-Erkennungsschwelle",
-        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen. Gilt nur für Fledermaus-Klassifikatormodelle."
+        "label": "Fledermaus-Erkennungsschwelle (BattyBirdNET)",
+        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BattyBirdNET. BSG-BAT hat eine eigene Schwelle."
+      },
+      "bsgBatThreshold": {
+        "label": "Fledermaus-Erkennungsschwelle (BSG-BAT)",
+        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BSG-BAT.",
+        "sampleRateWarning": "Aufnahmen mit 192 kHz funktionieren, aber Arten, die oberhalb von 96 kHz rufen, können nicht erkannt werden, und die Bewertungen sind weniger zuverlässig. Empfohlen wird eine Abtastrate von 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "BSG-BAT-Analyseschritt (Frames)",
+        "helpText": "Frames à 2 ms zwischen den BSG-BAT-Analysefenstern, von 100 (0,2 s) bis 512 (1,024 s, keine Überlappung). Der Standard von 250 (0,5 s) ist der Referenzschritt. Mit 375 (0,75 s) werden etwa 85 % der Ereignisse bei zwei Dritteln der CPU-Last gefunden; mit 512 grob 70 bis 75 % bei etwa der halben CPU-Last, für Geräte, die nicht mithalten können.",
+        "readout": "Schritt: {seconds} s zwischen den Analysefenstern.",
+        "readoutWithFilter": "Schritt: {seconds} s zwischen den Analysefenstern. Fledermausfilter-Stufe {level}: {count} Bestätigungen erforderlich.",
+        "restartNote": "Das Speichern eines neuen Schritts startet die Audioaufnahme neu."
       },
       "batFilter": {
         "label": "Fledermaus-Audio-Hochpassfilter",
@@ -5708,6 +5748,7 @@
           "strict": "Maximale Filterung für höchste Genauigkeit."
         },
         "detectionCount": "{count} Bestätigungen erforderlich. {description}",
+        "detectionCountByModel": "{batty} Bestätigungen erforderlich für BattyBirdNET, {bsgBat} für BSG-BAT. {description}",
         "warningOff": "Ohne Filterung besteht eine hohe Wahrscheinlichkeit für Fehlerkennungen. Die Aktivierung der Filterung verbessert die Genauigkeit erheblich."
       },
       "locale": {

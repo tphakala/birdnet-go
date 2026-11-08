@@ -202,6 +202,41 @@ func TestGetAppConfig_AudioExportEnabled(t *testing.T) {
 	}
 }
 
+// TestGetAppConfig_PlaybackDenoise verifies the response carries the effective
+// playback denoise preset: the configured strength when the setting is on, and
+// an empty string (always present, never omitted) when it is off or export-stage
+// denoise is on.
+func TestGetAppConfig_PlaybackDenoise(t *testing.T) {
+	tests := []struct {
+		name           string
+		enabled        bool
+		strength       string
+		exportDenoised bool
+		want           string
+	}{
+		{name: "off", enabled: false, strength: conf.DenoisePresetLightMedium, want: ""},
+		{name: "on", enabled: true, strength: conf.DenoisePresetHeavy, want: conf.DenoisePresetHeavy},
+		{name: "export denoise takes precedence", enabled: true, strength: conf.DenoisePresetHeavy, exportDenoised: true, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			settings := &conf.Settings{Version: "1.0.0-test"}
+			settings.Realtime.Dashboard.PlaybackDenoise = conf.DenoiseSettings{Enabled: tt.enabled, Strength: tt.strength}
+			settings.Realtime.Audio.Export.Denoise.Enabled = tt.exportDenoised
+			controller := newAppHandler(t, e, settings)
+
+			rec := requestAppConfig(t, e, controller)
+
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+			require.Contains(t, raw, "playbackDenoise", "the key must be present even when empty")
+			assert.Equal(t, tt.want, raw["playbackDenoise"])
+		})
+	}
+}
+
 // TestGetAppConfig_ProjectLinks verifies the response always carries the
 // project identity/links (independent of telemetry), defaulting to the upstream
 // values with correctly derived issue URLs when nothing is overridden.
@@ -414,7 +449,7 @@ func TestGetAppConfig_ResponseShape(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{
 		"csrfToken", "security", "version", "speciesDictVersion", "basePath",
-		"liveSpectrogram", "audioExportEnabled", "freshInstall", "newVersion", "projectLinks",
+		"liveSpectrogram", "audioExportEnabled", "playbackDenoise", "freshInstall", "newVersion", "projectLinks",
 	}, keys(raw))
 
 	securityObj := object(raw, "security")

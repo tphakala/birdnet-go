@@ -241,8 +241,9 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // authClientIP returns the client address to use for authentication decisions,
 // such as the allowed-subnet bypass, or nil when it cannot be verified (callers
 // must then grant no address-based access). Unlike echo.Context.RealIP, which
-// serves attribution and honors forwarded headers from any private peer, it
-// honors them only from proxies listed in settings' Security.TrustedProxies; see
+// serves attribution and records a client that any private peer names
+// consistently, it honors forwarded headers only from proxies listed in
+// settings' Security.TrustedProxies; see
 // proxytrust.Checker.AuthClientIP. Callers pass the snapshot they loaded once
 // for the whole decision, so changes take effect on the next request without a
 // restart and one decision never mixes two configurations. When the subnet

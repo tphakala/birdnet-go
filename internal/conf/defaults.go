@@ -111,6 +111,11 @@ func setDefaultConfig() {
 	viper.SetDefault("bat.ultrasonicfilter.hopsize", DefaultUltrasonicHopSize)
 	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", DefaultUltrasonicSplitHz)
 
+	// BSG-BAT model configuration. Its schedule, false positive filter and
+	// ultrasonic filter come from the bat section above.
+	viper.SetDefault("bsgbat.threshold", 0.5)
+	viper.SetDefault("bsgbat.stepframes", DefaultBSGBatStepFrames)
+
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
 
@@ -146,6 +151,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0)                         // typical range for broadcast
 	viper.SetDefault("realtime.audio.export.normalization.truePeak", DefaultNormalizationTruePeak)     // headroom to prevent clipping
 
+	// Export-stage denoise: off by default, and when switched on without a
+	// strength the default preset applies.
+	viper.SetDefault("realtime.audio.export.denoise.enabled", false)
+	viper.SetDefault("realtime.audio.export.denoise.strength", DefaultDenoisePreset)
+
 	// Quiet hours configuration (sound card)
 	viper.SetDefault("realtime.audio.quiethours.enabled", false)
 	viper.SetDefault("realtime.audio.quiethours.mode", QuietHoursModeFixed)
@@ -180,10 +190,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "avicommons")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
-	viper.SetDefault("realtime.dashboard.locale", "en")               // Default UI locale
-	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius") // Temperature display unit: "celsius" or "fahrenheit"
-	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)      // Default playback gain in dB (no boost)
-	viper.SetDefault("realtime.dashboard.livespectrogram", false)     // Auto-start live spectrogram on dashboard
+	viper.SetDefault("realtime.dashboard.locale", "en")                                   // Default UI locale
+	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius")                     // Temperature display unit: "celsius" or "fahrenheit"
+	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)                          // Default playback gain in dB (no boost)
+	viper.SetDefault("realtime.dashboard.livespectrogram", false)                         // Auto-start live spectrogram on dashboard
+	viper.SetDefault("realtime.dashboard.playbackdenoise.enabled", false)                 // Playback denoise off by default
+	viper.SetDefault("realtime.dashboard.playbackdenoise.strength", DefaultDenoisePreset) // Strength used when it is switched on
 
 	// Species guide configuration (disabled by default). Taxonomy/common names/links
 	// come from the offline OpenFauna dataset; online Wikipedia descriptions are

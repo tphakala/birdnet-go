@@ -12,6 +12,8 @@
   - audioUrl: URL of the audio file to play
   - detectionId: Unique ID for the detection
   - spectrogramSize: Spectrogram display size - md/lg/xl (default: md)
+  - denoisePreset: Playback denoise default. The player loads audioUrl for metadata and
+    switches to the denoised clip on the first play (default: none)
   - onPlayStart: Callback when audio starts playing
   - onPlayEnd: Callback when audio stops playing
 -->
@@ -21,6 +23,7 @@
   import { useAudioPlayback } from '$lib/utils/useAudioPlayback.svelte';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { audioUrlFor } from '$lib/utils/playbackDenoise';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
@@ -41,11 +44,22 @@
     audioUrl: string;
     detectionId: string;
     spectrogramSize?: SpectrogramSize;
+    denoisePreset?: string;
     onPlayStart?: () => void;
     onPlayEnd?: () => void;
   }
 
-  let { audioUrl, detectionId, spectrogramSize = 'md', onPlayStart, onPlayEnd }: Props = $props();
+  let {
+    audioUrl,
+    detectionId,
+    spectrogramSize = 'md',
+    denoisePreset = '',
+    onPlayStart,
+    onPlayEnd,
+  }: Props = $props();
+
+  // The clip the first play switches to; '' keeps the stored clip.
+  const playUrl = $derived(denoisePreset ? audioUrlFor(detectionId, denoisePreset) : '');
 
   // --- Audio engine (shared composable) ---
   // Initial values are intentionally captured here; audioUrl reactivity is
@@ -53,6 +67,8 @@
   // reads detectionId once, for logging and the known-missing check, and callbacks are stable references.
   // svelte-ignore state_referenced_locally
   const initialAudioUrl = audioUrl;
+  // svelte-ignore state_referenced_locally
+  const initialPlayUrl = playUrl;
   // svelte-ignore state_referenced_locally
   const initialDetectionId = detectionId;
   // svelte-ignore state_referenced_locally
@@ -62,6 +78,7 @@
   const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
   const audio = useAudioPlayback({
     audioUrl: initialAudioUrl,
+    playUrl: initialPlayUrl,
     detectionId: initialDetectionId,
     defaultGainDb,
     onPlayStart: initialOnPlayStart,
@@ -70,7 +87,7 @@
 
   // React to prop changes
   $effect(() => {
-    audio.setAudioUrl(audioUrl);
+    audio.setAudioUrl(audioUrl, playUrl);
   });
 
   // --- Spectrogram loading ---

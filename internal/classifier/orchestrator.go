@@ -203,7 +203,7 @@ type Orchestrator struct {
 	runtimeSnaps  atomic.Pointer[map[string]*publishedModel]
 	modelsDirSnap atomic.Pointer[string]
 
-	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
+	// Nighttime scheduling for the bat models. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
 
@@ -543,7 +543,7 @@ func (o *Orchestrator) setV24LabelResolver(labels []string) {
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
-// the bat nighttime scheduler if the bat model is loaded. Called during
+// the nighttime scheduler if a schedule-gated model (the bat models, Bat and BSG-BAT) is loaded. Called during
 // pipeline startup after the suncalc instance is available.
 func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	o.mu.Lock()
@@ -556,18 +556,30 @@ func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	s := newNighttimeScheduler(sc)
 	o.scheduler.Store(s)
 
-	// Only start the scheduler if the bat model is actually loaded.
-	if _, hasBat := o.models[RegistryIDBat]; hasBat {
+	// Only start the scheduler if a schedule-gated model is actually loaded.
+	if o.hasScheduleGatedModelLocked("") {
 		o.startBatScheduler(s)
 	}
 }
 
+// hasScheduleGatedModelLocked reports whether a schedule-gated model other than
+// excludeID is loaded; pass "" to consider every loaded model. The caller must
+// hold o.mu (it reads o.models).
+func (o *Orchestrator) hasScheduleGatedModelLocked(excludeID string) bool {
+	for id := range o.models {
+		if id != excludeID && isScheduleGated(id) {
+			return true
+		}
+	}
+	return false
+}
+
 // scheduleReasonNight is the human-readable reason ModelScheduleStatus returns
-// when a model is paused by the nighttime schedule (currently only the bat model).
+// when a model is paused by the nighttime schedule (the bat models, Bat and BSG-BAT).
 const scheduleReasonNight = "Night schedule"
 
 // isScheduleGated reports whether registryID runs only inside a schedule (today
-// the bat model's nighttime scheduler). It is the single predicate behind
+// the nighttime scheduler of the bat models). It is the single predicate behind
 // IsModelActive, ModelScheduleStatus and DefaultTargets, read from the registry
 // table so adding a gated model is a one-line registry change. An unknown ID is
 // never gated: the zero-value ModelInfo has scheduleGated false.
@@ -576,7 +588,7 @@ func isScheduleGated(registryID string) bool {
 }
 
 // IsModelActive returns whether a model should currently run inference. A
-// schedule-gated model (isScheduleGated, today only the bat model) runs only
+// schedule-gated model (isScheduleGated, the bat models Bat and BSG-BAT) runs only
 // while the nighttime scheduler has it active; every other model is always active.
 func (o *Orchestrator) IsModelActive(modelID string) bool {
 	if !isScheduleGated(modelID) {
@@ -592,7 +604,7 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 // ModelScheduleStatus reports whether a model is currently allowed to run and,
 // when paused, a human-readable reason. It is the reason-carrying sibling of
 // IsModelActive (which stays bool-only because it is on the hot monitor-tick
-// path). Only the bat model is schedule-gated today: it returns
+// path). Only the bat models (Bat and BSG-BAT) are schedule-gated today: they return
 // (false, scheduleReasonNight) when the nighttime scheduler has it paused, and
 // (true, "") otherwise. Every other model returns (true, ""). The design is
 // general so a future gated model can return its own reason.
@@ -663,7 +675,7 @@ func (o *Orchestrator) ModelSpecFor(modelID string) (ModelSpec, bool) {
 	if entry.instance == nil {
 		return ModelSpec{}, false
 	}
-	return entry.instance.Spec(), true
+	return ConfiguredSpec(modelID, entry.instance.Spec(), o.CurrentSettings()), true
 }
 
 // startBatScheduler creates a fresh scheduler (preserving the suncalc
@@ -1170,15 +1182,27 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
 	scores = append(scores, rfs.uncoveredParticipantSpecies(rfState, settings, geo, excluder, seenSci)...)
 
-	// The bat model is intentionally skipped by the range-filter loop above: it
-	// has no geomodel, so its species can never be location-filtered. Include
-	// them all here as always-active (score 1.0), deduped by scientific name and
-	// honoring the exclude list, so multi-model (BattyBirdNET) setups see their
-	// bat species in the active/probable list instead of a bird-only view.
+	// Bat-group models are intentionally not location-filtered: the Bat entry
+	// reports rangeFilterCompatNone, so the range-filter loop
+	// above skips it. Include every loaded bat-group model here as always-active
+	// (score 1.0), deduped by scientific name and honoring the exclude list, so
+	// multi-model (BattyBirdNET) setups see their bat species in the active/probable
+	// list instead of a bird-only view.
+	// Entries are walked in sorted-by-ID order so the append order is deterministic.
 	o.mu.RLock()
-	batEntry, hasBat := o.models[RegistryIDBat]
+	batIDs := make([]string, 0, len(o.models))
+	for id := range o.models {
+		if TaxonGroupFor(id) == TaxonGroupBat {
+			batIDs = append(batIDs, id)
+		}
+	}
+	slices.Sort(batIDs)
+	batEntries := make([]*modelEntry, len(batIDs))
+	for i, id := range batIDs {
+		batEntries[i] = o.models[id]
+	}
 	o.mu.RUnlock()
-	if hasBat {
+	for _, batEntry := range batEntries {
 		batEntry.mu.Lock()
 		var batLabels []string
 		if batEntry.instance != nil {
@@ -1906,6 +1930,7 @@ var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
 	RegistryIDBirdNETV3:  (*Orchestrator).loadBirdNETV3,
 	RegistryIDPerchV2:    (*Orchestrator).loadPerch,
 	RegistryIDBat:        (*Orchestrator).loadBat,
+	RegistryIDBSGBat:     (*Orchestrator).loadBSGBat,
 }
 
 // entryBuilder constructs (but does not register) a fresh model instance from a
@@ -1950,6 +1975,18 @@ var openvinoCapableSecondaryBuilders = map[string]entryBuilder{
 		// nil *Bat wrapped in a non-nil ModelInstance).
 		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
 		b, _, err := o.buildBat(settings, threads)
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
+	},
+	RegistryIDBSGBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Explicit nil-on-error return avoids the typed-nil interface trap (a
+		// nil *BSGBat wrapped in a non-nil ModelInstance).
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
+		// BSG-BAT runs on ONNX Runtime only and ignores the OpenVINO preference; it
+		// is listed here so a thread-count change rebuilds it.
+		b, _, err := o.buildBSGBat(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -2053,10 +2090,11 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		log.Info("Model loaded dynamically",
 			logger.String("registry_id", registryID))
 
-		// Start nighttime scheduler if bat model was just loaded and suncalc is available.
-		// Create a fresh scheduler to handle the unload/reload case where the
-		// previous scheduler's stopChan was closed.
-		if registryID == RegistryIDBat {
+		// Start the nighttime scheduler when the first schedule-gated model was just
+		// loaded and suncalc is available. Create a fresh scheduler to handle the
+		// unload/reload case where the previous scheduler's stopChan was closed. A
+		// scheduler already running for another loaded gated model is kept.
+		if isScheduleGated(registryID) && !o.hasScheduleGatedModelLocked(registryID) {
 			if old := o.scheduler.Load(); old != nil && old.sunCalc != nil {
 				old.stop()
 				s := newNighttimeScheduler(old.sunCalc)
@@ -2355,7 +2393,8 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	// teardown (the topology-reconfigure debounce window) is diagnosed as
 	// "unloaded" rather than a bare unknown model. Cleared on the next load.
 	o.modelUnloaded.Store(registryID, struct{}{})
-	if registryID == RegistryIDBat {
+	// Stop the nighttime scheduler only when the last schedule-gated model unloads.
+	if isScheduleGated(registryID) && !o.hasScheduleGatedModelLocked(registryID) {
 		if s := o.scheduler.Load(); s != nil {
 			s.stop()
 		}
@@ -2545,7 +2584,7 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 
 // DefaultTargets returns the models a source with an empty model list analyzes
 // with: every loaded model that is not schedule-gated (isScheduleGated, today the
-// bat model), the BirdNET v2.4 entry first when it is loaded and the rest byte
+// bat models Bat and BSG-BAT), the BirdNET v2.4 entry first when it is loaded and the rest byte
 // ordered by registry ID, each carrying the live Backend/Quantization/NumSpecies
 // and effective overlap ModelInfos stamps. Nil when nothing qualifies (N = 0, or
 // only gated models loaded). v2.4 leads so the first entry is stable: a source with
@@ -2638,6 +2677,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	// overlap), so every returned ModelInfo carries the effective overlap used for
 	// buffer allocation and cadence.
 	base := o.EffectiveBaseOverlap()
+	settings := o.CurrentSettings()
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
@@ -2678,6 +2718,8 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		// carries the stock catalog count, so source it from the live instance to
 		// report what is actually loaded.
 		info.NumSpecies = instance.NumSpecies()
+		// info is a copy, so applying the settings does not touch the registry.
+		info.Spec = ConfiguredSpec(info.ID, info.Spec, settings)
 		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, base)
 		infos = append(infos, info)
 	}

@@ -2,6 +2,11 @@ package detection
 
 import "github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 
+// ModelNameBSGBat is the detection model name of the BSG-BAT bat classifier. The
+// classifier registry's DetectionName for it is this constant, so the model type
+// resolved here and the name stored with the model row cannot drift apart.
+const ModelNameBSGBat = "BSG-BAT"
+
 // Default model constants.
 const (
 	DefaultModelName    = "BirdNET"
@@ -43,11 +48,11 @@ func DefaultModelInfo() ModelInfo {
 }
 
 // ResolveModelType determines the entity ModelType from a model's name and version.
-// BattyBirdNET models are bat, BirdNET v3.0+ and Perch are multi-taxa wildlife,
+// BattyBirdNET and BSG-BAT models are bat, BirdNET v3.0+ and Perch are multi-taxa wildlife,
 // and everything else (BirdNET v2.4, BSG, unknown) is bird.
 func ResolveModelType(name, version string) entities.ModelType {
 	switch {
-	case name == "BattyBirdNET":
+	case name == "BattyBirdNET", name == ModelNameBSGBat:
 		return entities.ModelTypeBat
 	case name == "Perch":
 		return entities.ModelTypeMulti

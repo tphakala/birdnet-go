@@ -15,9 +15,10 @@ import (
 const AnalysisBaseClipLength = 3 * time.Second
 
 // minAnalysisStep is the smallest analysis step, in the DURATION domain, that a
-// resolved overlap may leave (ClipLength - overlap). It floors BufferInterval and
-// caps ResolveModelOverlap so the derived read size cannot reach zero and stall
-// the buffer manager. The separate one-sample-frame floor on the byte read size
+// resolved overlap may leave (ClipLength - overlap). It floors the overlap-derived
+// BufferInterval and caps the overlap-derived ResolveModelOverlap (a fixed
+// StepSamples step is neither floored nor capped) so the derived read size cannot
+// reach zero and stall the buffer manager. The separate one-sample-frame floor on the byte read size
 // is enforced in BufferDimensions.
 const minAnalysisStep = time.Millisecond
 
@@ -65,13 +66,18 @@ func ConfiguredBaseOverlap(s *conf.Settings) time.Duration {
 }
 
 // ResolveModelOverlap returns the effective analysis-window overlap for a model
-// given the effective base overlap (see Orchestrator.EffectiveBaseOverlap). The
-// bat model always uses a fixed 50% overlap (ClipLength/2), matching its
-// historically fixed buffer cadence; every other model uses baseOverlap,
-// ratio-scaled to the model's clip length. The result is clamped to
-// [0, ClipLength - minAnalysisStep] so the derived read size is always
-// strictly positive.
+// given the effective base overlap (see Orchestrator.EffectiveBaseOverlap). A
+// spec with a fixed StepSamples returns ClipLength minus that step, whatever the
+// base overlap (not clamped, so the spec must keep ClipLength consistent with
+// ClipSamples). The bat model always uses a fixed 50% overlap (ClipLength/2),
+// matching its historically fixed buffer cadence; every other model uses
+// baseOverlap, ratio-scaled to the model's clip length. Apart from the
+// fixed-step case, the result is clamped to [0, ClipLength - minAnalysisStep]
+// so the derived read size is always strictly positive.
 func ResolveModelOverlap(modelID string, spec ModelSpec, baseOverlap time.Duration) time.Duration {
+	if spec.StepSamples > 0 {
+		return spec.ClipLength - spec.BufferInterval(0)
+	}
 	if modelID == RegistryIDBat {
 		return spec.ClipLength / 2
 	}

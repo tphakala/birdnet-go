@@ -2,6 +2,10 @@ module github.com/tphakala/birdnet-go
 
 go 1.27.2
 
+// Default net listeners and dialers to plain TCP. Since Go 1.24 listeners use
+// Multipath TCP on Linux by default, and BirdNET-Go does not use it.
+godebug multipathtcp=0
+
 require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/creack/pty v1.1.24
@@ -38,7 +42,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0
 	github.com/tphakala/go-aac v0.7.1
-	github.com/tphakala/go-audio-dsp v0.10.1
+	github.com/tphakala/go-audio-dsp v0.12.0
 	github.com/tphakala/go-audio-resampler v1.9.0
 	github.com/tphakala/go-audio-stream v0.6.0
 	github.com/tphakala/go-flac v1.4.0
@@ -148,7 +152,7 @@ require (
 	github.com/tidwall/rtree v1.11.1 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
-	github.com/tphakala/simd v1.14.0 // indirect
+	github.com/tphakala/simd v1.15.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

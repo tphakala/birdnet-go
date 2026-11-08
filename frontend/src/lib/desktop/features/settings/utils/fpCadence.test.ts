@@ -9,9 +9,17 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import type { AnalysisCadenceInfo } from '$lib/desktop/features/system/inference.types';
+import type {
+  AnalysisCadenceInfo,
+  AnalysisCadenceModel,
+} from '$lib/desktop/features/system/inference.types';
 import {
-  BAT_MODEL_ID,
+  BATTYBIRDNET_STEP_SECONDS,
+  BSG_BAT_STEP_DEFAULT_FRAMES,
+  BSG_BAT_STEP_MAX_FRAMES,
+  BSG_BAT_STEP_MIN_FRAMES,
+  bsgBatStepSeconds,
+  hasBirdCadenceModels,
   minDetectionsForStep,
   modelStepSeconds,
   baseClipMinDetections,
@@ -19,12 +27,15 @@ import {
   planLagsSettings,
   previewEffectiveOverlapSeconds,
   previewReadout,
+  resolveBsgBatStepFrames,
   savedReadout,
 } from './fpCadence';
 
 interface ParityRow {
   modelId: string;
   clipMs: number;
+  /** BSG-BAT analysis step in frames; absent or 0 means the default. */
+  stepFrames?: number;
   overlapSec: number;
   level: number;
   confirmations: number;
@@ -44,6 +55,7 @@ function loadFixture(): ParityRow[] {
       r !== null &&
       typeof r.modelId === 'string' &&
       typeof r.clipMs === 'number' &&
+      (r.stepFrames === undefined || typeof r.stepFrames === 'number') &&
       typeof r.overlapSec === 'number' &&
       typeof r.level === 'number' &&
       typeof r.confirmations === 'number'
@@ -64,6 +76,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'BirdNET_V2.4',
         name: 'BirdNET v2.4',
+        taxonGroup: 'bird',
         clipMs: 3000,
         stepMs: 1200,
         probeLatencyMs: 166,
@@ -71,8 +84,9 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
         windowsInReference: 5,
       },
       {
-        id: BAT_MODEL_ID,
+        id: 'Bat',
         name: 'Bat',
+        taxonGroup: 'bat',
         clipMs: 3000,
         stepMs: 1500,
         confirmations: 4,
@@ -81,6 +95,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'BirdNET_V3.0',
         name: 'BirdNET v3.0',
+        taxonGroup: 'bird',
         clipMs: 5000,
         stepMs: 2000,
         probeLatencyMs: 874,
@@ -92,7 +107,53 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
   };
 }
 
+const BSG_BAT_MODEL: AnalysisCadenceModel = {
+  id: 'BSG_BAT',
+  name: 'BSG-BAT',
+  taxonGroup: 'bat',
+  clipMs: 1024,
+  stepMs: 500,
+  confirmations: 5,
+  windowsInReference: 12,
+};
+
 describe('fpCadence', () => {
+  describe('taxon group classification', () => {
+    const [birdV24, bat, birdV3] = cadence().models;
+    const withModels = (models: AnalysisCadenceModel[]) => cadence({ models });
+
+    it('treats Bat only as no bird models', () => {
+      const info = withModels([bat]);
+      expect(hasBirdCadenceModels(info)).toBe(false);
+      expect(savedReadout(info)).toEqual([]);
+      expect(previewReadout(info, 2.8, 5)).toEqual([]);
+    });
+
+    it('treats BSG-BAT only as no bird models', () => {
+      const info = withModels([BSG_BAT_MODEL]);
+      expect(hasBirdCadenceModels(info)).toBe(false);
+      expect(savedReadout(info)).toEqual([]);
+      expect(previewReadout(info, 2.8, 5)).toEqual([]);
+    });
+
+    it('leaves out both bat-group models next to a bird model', () => {
+      const info = withModels([birdV24, bat, BSG_BAT_MODEL]);
+      expect(hasBirdCadenceModels(info)).toBe(true);
+      expect(savedReadout(info).map(r => r.id)).toEqual(['BirdNET_V2.4']);
+      expect(previewReadout(info, 2.8, 5).map(r => r.id)).toEqual(['BirdNET_V2.4']);
+    });
+
+    it('keeps every bird model when no bat model runs', () => {
+      const info = withModels([birdV24, birdV3]);
+      expect(hasBirdCadenceModels(info)).toBe(true);
+      expect(savedReadout(info).map(r => r.id)).toEqual(['BirdNET_V2.4', 'BirdNET_V3.0']);
+    });
+
+    it('treats a model without a taxon group as a bird model', () => {
+      expect(hasBirdCadenceModels(withModels([{ ...birdV24, taxonGroup: undefined }]))).toBe(true);
+    });
+  });
+
   describe('parity with the backend', () => {
     const rows = loadFixture();
 
@@ -100,12 +161,67 @@ describe('fpCadence', () => {
       expect(rows.length).toBeGreaterThan(100);
     });
 
+    /** The step the page uses for a row: the bat-group models have their own, bird models follow the overlap. */
+    function rowStepSeconds(row: ParityRow): number {
+      if (row.modelId === 'BSG_BAT') {
+        return bsgBatStepSeconds(resolveBsgBatStepFrames(row.stepFrames));
+      }
+      if (row.modelId === 'Bat') return BATTYBIRDNET_STEP_SECONDS;
+      return modelStepSeconds(row.clipMs, overlapSecondsToNs(row.overlapSec));
+    }
+
     it('matches every backend confirmation count in the fixture', () => {
-      const mismatches = rows.filter(row => {
-        const step = modelStepSeconds(row.clipMs, overlapSecondsToNs(row.overlapSec));
-        return minDetectionsForStep(step, row.level) !== row.confirmations;
-      });
+      const mismatches = rows.filter(
+        row => minDetectionsForStep(rowStepSeconds(row), row.level) !== row.confirmations
+      );
       expect(mismatches).toEqual([]);
+    });
+
+    it('covers BSG-BAT at the range ends and the default, and BattyBirdNET', () => {
+      const bsgFrames = new Set(
+        rows.filter(r => r.modelId === 'BSG_BAT').map(r => r.stepFrames ?? 0)
+      );
+      expect([...bsgFrames].sort((a, b) => a - b)).toEqual([
+        0,
+        BSG_BAT_STEP_MIN_FRAMES,
+        BSG_BAT_STEP_DEFAULT_FRAMES,
+        BSG_BAT_STEP_MAX_FRAMES,
+      ]);
+      expect(rows.some(r => r.modelId === 'Bat')).toBe(true);
+    });
+  });
+
+  describe('BSG-BAT step', () => {
+    it('keeps the backend range and default', () => {
+      // conf.MinBSGBatStepFrames, MaxBSGBatStepFrames and DefaultBSGBatStepFrames
+      expect([
+        BSG_BAT_STEP_MIN_FRAMES,
+        BSG_BAT_STEP_MAX_FRAMES,
+        BSG_BAT_STEP_DEFAULT_FRAMES,
+      ]).toEqual([100, 512, 250]);
+    });
+
+    it.each([
+      { stored: undefined, frames: BSG_BAT_STEP_DEFAULT_FRAMES },
+      { stored: 0, frames: BSG_BAT_STEP_DEFAULT_FRAMES },
+      { stored: 99, frames: BSG_BAT_STEP_DEFAULT_FRAMES },
+      { stored: 513, frames: BSG_BAT_STEP_DEFAULT_FRAMES },
+      { stored: Number.NaN, frames: BSG_BAT_STEP_DEFAULT_FRAMES },
+      { stored: 300.5, frames: BSG_BAT_STEP_DEFAULT_FRAMES },
+      { stored: 100, frames: 100 },
+      { stored: 333, frames: 333 },
+      { stored: 512, frames: 512 },
+    ])('resolves a stored $stored to $frames frames', ({ stored, frames }) => {
+      expect(resolveBsgBatStepFrames(stored)).toBe(frames);
+    });
+
+    it.each([
+      { frames: 100, seconds: 0.2 },
+      { frames: 250, seconds: 0.5 },
+      { frames: 375, seconds: 0.75 },
+      { frames: 512, seconds: 1.024 },
+    ])('turns $frames frames into $seconds s', ({ frames, seconds }) => {
+      expect(bsgBatStepSeconds(frames)).toBeCloseTo(seconds, 12);
     });
   });
 
