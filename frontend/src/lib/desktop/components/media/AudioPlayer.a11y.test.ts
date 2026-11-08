@@ -109,7 +109,7 @@ describe('AudioPlayer Accessibility', () => {
   });
 
   describe('overlay controls', () => {
-    it('start hidden and are revealed by focus', async () => {
+    it('start hidden and carry the focus-within reveal class', async () => {
       mount();
       await settle();
 
@@ -142,7 +142,7 @@ describe('AudioPlayer Accessibility', () => {
     );
   });
 
-  it('reveals the inline controls when they hold focus', async () => {
+  it('gives the inline controls the focus-within reveal class', async () => {
     const { container } = mount({ enableClipExtraction: false });
     await settle();
 

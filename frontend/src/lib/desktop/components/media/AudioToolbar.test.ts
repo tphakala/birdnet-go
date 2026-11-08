@@ -224,6 +224,7 @@ describe('AudioToolbar Accessibility', () => {
 
   it('seeks to the clicked fraction of the bar', async () => {
     const { onSeek } = renderToolbar();
+    // Partial DOMRect: the toolbar reads only left and width, and jsdom has no layout.
     const rect = { left: BAR_LEFT_PX, width: BAR_WIDTH_PX } as unknown as DOMRect;
     vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(rect);
 
