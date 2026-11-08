@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
+	"github.com/tphakala/birdnet-go/internal/imports/discovery"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 
@@ -469,7 +470,7 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 	}
 	if mode == importModeDBaudio {
 		opts.IncludeAudio = true
-		opts.AudioSourceDir = filepath.Dir(resolvedPath)
+		opts.AudioSourceDir = c.resolveAudioSourceDir(resolvedPath)
 		opts.ClipExportPath = clipExportPath
 	}
 	eng := imports.NewEngine(c.Repo)
@@ -496,6 +497,31 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 	})
 
 	return id, nil
+}
+
+// resolveAudioSourceDir returns the directory that holds the BirdNET-Pi audio
+// tree of the source database. It is the root the importer looks the clips up
+// under: "Extracted/By_Date/<date>/<common name>/<file>".
+//
+// BirdNET-Pi does not keep the audio tree next to the database: the database
+// lives in ~/BirdNET-Pi/scripts and the clips in ~/BirdSongs, so the database
+// directory alone does not find them. The search is bounded
+// (discovery.ResolveAudioRoot) and falls back to the database directory when no
+// audio tree is found, which keeps the engine's existing "audio source
+// directory unavailable" and "source clip not found" behaviour.
+func (c *Handler) resolveAudioSourceDir(dbPath string) string {
+	dbDir := filepath.Dir(dbPath)
+	audioRoot, found := discovery.ResolveAudioRoot(dbPath)
+	if !found {
+		c.LogWarnIfEnabled("import: no BirdNET-Pi audio tree found next to the source database, its clips will be missing",
+			logger.String("source_db", dbPath),
+			logger.String("audio_source_dir", dbDir))
+		return dbDir
+	}
+	c.LogInfoIfEnabled("import: using the BirdNET-Pi audio tree of the source database",
+		logger.String("source_db", dbPath),
+		logger.String("audio_source_dir", audioRoot))
+	return audioRoot
 }
 
 // cleanupStagingDir best-effort removes a per-import staging directory. It only
