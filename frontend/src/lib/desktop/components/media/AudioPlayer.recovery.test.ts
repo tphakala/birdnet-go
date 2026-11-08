@@ -469,10 +469,13 @@ describe('AudioPlayer recovery', () => {
   describe('spectrogram retry and error state', () => {
     const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
     const SPECTROGRAM_UNAVAILABLE_TEXT = 'components.audio.spectrogramUnavailable';
+    const SPECTROGRAM_LOADING_TEXT = 'components.audio.spectrogramLoading';
     const SPECTROGRAM_LOADED_TEXT = 'components.audio.spectrogramLoaded';
     // The sr-only status region repeats the text; assertions here are about the overlay.
     const OVERLAY_ONLY = { ignore: '[role="status"], script, style' };
     // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
+    // MAX_SPECTROGRAM_RETRIES in AudioPlayer.svelte: image errors retried before giving up
+    const MAX_SPECTROGRAM_RETRIES = 4;
     const PAST_ALL_BACKOFFS_MS = 10_000;
     // First entry of SPECTROGRAM_RETRY_DELAYS in AudioPlayer.svelte
     const SPECTROGRAM_FIRST_RETRY_DELAY_MS = 500;
@@ -623,6 +626,25 @@ describe('AudioPlayer recovery', () => {
 
       expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
       expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT, OVERLAY_ONLY)).toBeInTheDocument();
+    });
+
+    it('announces loading while a retry is in flight and unavailable only once the retries are spent', async () => {
+      stubStatusFetch([statusResponse('not_started')]);
+      const { container } = mount();
+      const statusText = () =>
+        container.querySelector('.sr-only[role="status"]')?.textContent.trim();
+
+      // The first error plus every retry up to the limit still announces loading
+      for (let round = 0; round < MAX_SPECTROGRAM_RETRIES; round++) {
+        await fireEvent.error(spectrogramImg());
+        expect(statusText()).toBe(SPECTROGRAM_LOADING_TEXT);
+        await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+      }
+      // The error after the last retry gives up
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+      expect(statusText()).toBe(SPECTROGRAM_UNAVAILABLE_TEXT);
     });
 
     it('clears the unavailable overlay and status when the image loads after a failure', async () => {

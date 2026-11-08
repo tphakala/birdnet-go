@@ -1491,6 +1491,17 @@
   const seekMax = $derived(usableDuration(duration));
   const seekNow = $derived(clampSeconds(currentTime, seekMax));
 
+  // What the screen reader status region says about the spectrogram. It follows the same
+  // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and
+  // only a failed load that has stopped retrying reads as unavailable.
+  const spectrogramStatusText = $derived.by(() => {
+    if (spectrogramLoader.loading || rateResolvePending) {
+      return t('components.audio.spectrogramLoading');
+    }
+    if (spectrogramLoader.error) return t('components.audio.spectrogramUnavailable');
+    return t('components.audio.spectrogramLoaded');
+  });
+
   // Seek to an absolute position. The shown position is refreshed at once so a paused
   // player reflects the seek before the next key press computes its target from it.
   const seekTo = (seconds: number) => {
@@ -2546,11 +2557,7 @@
        readers hear each change of its text. -->
   <div class="sr-only" role="status">
     {#if spectrogramUrl || rateResolvePending}
-      {spectrogramLoader.loading || rateResolvePending
-        ? t('components.audio.spectrogramLoading')
-        : spectrogramLoader.error
-          ? t('components.audio.spectrogramUnavailable')
-          : t('components.audio.spectrogramLoaded')}
+      {spectrogramStatusText}
     {/if}
   </div>
 
@@ -2603,7 +2610,7 @@
             class="size-6 sm:size-8 mx-auto mb-1 text-[var(--color-base-content)]/30"
             aria-hidden="true"
           />
-          <span class="text-xs sm:text-sm text-[var(--color-base-content)]/50"
+          <span class="text-xs sm:text-sm text-[color:var(--text-muted)]"
             >{t('components.audio.spectrogramUnavailable')}</span
           >
         </div>
