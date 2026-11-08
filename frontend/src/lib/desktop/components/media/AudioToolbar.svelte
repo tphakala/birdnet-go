@@ -246,6 +246,7 @@
     <button
       class="toolbar-btn"
       class:active={loop}
+      aria-pressed={loop}
       onclick={onLoopToggle}
       aria-label={t('media.audio.loop')}
     >
@@ -346,6 +347,7 @@
     <button
       class="toolbar-btn"
       class:active={normalize}
+      aria-pressed={normalize}
       onclick={onNormalizeToggle}
       disabled={isProcessing}
       aria-label={t('components.audioPlayer.processing.normalize')}
@@ -496,7 +498,7 @@
     transition: all 0.15s ease;
   }
 
-  .toolbar-btn:hover:not(:disabled) {
+  .toolbar-btn:not(.active):hover:not(:disabled) {
     background: var(--color-base-300);
   }
 

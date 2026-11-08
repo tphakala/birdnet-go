@@ -245,6 +245,21 @@ describe('AudioToolbar Accessibility', () => {
     expect(screen.getByRole('slider', { name: 'media.audio.seek' })).toBeInTheDocument();
   });
 
+  it('reports the loop and normalize state with aria-pressed', async () => {
+    const { rerender } = renderToolbar();
+    const loop = () => screen.getByRole('button', { name: 'media.audio.loop' });
+    const normalize = () =>
+      screen.getByRole('button', { name: 'components.audioPlayer.processing.normalize' });
+
+    expect(loop()).toHaveAttribute('aria-pressed', 'false');
+    expect(normalize()).toHaveAttribute('aria-pressed', 'false');
+
+    await rerender({ loop: true, normalize: true });
+
+    expect(loop()).toHaveAttribute('aria-pressed', 'true');
+    expect(normalize()).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('has no axe violations in the playback controls', async () => {
     const { container } = renderToolbar({ loop: true });
     const group = container.querySelector('.playback-controls');
