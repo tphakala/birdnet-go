@@ -4,6 +4,7 @@ package importsapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
@@ -81,13 +84,16 @@ func TestStartBirdNETPiImport_ModeDBAudio_AudioRoot(t *testing.T) {
 
 	tests := []struct {
 		name string
+		// mountRel is the mount root relative to the temporary home directory,
+		// or "" when the home directory itself is the mount root.
+		mountRel string
 		// dbRelPath is the database path relative to the mount root.
 		dbRelPath string
-		// clipRelPath is the clip path relative to the mount root, or "" when
-		// the source has no audio tree at all.
+		// clipRelPath is the clip path relative to the home directory, or ""
+		// when the source has no audio tree at all.
 		clipRelPath string
-		// linkRelPath is a symbolic link relative to the mount root, or "" when
-		// the source has no symbolic link.
+		// linkRelPath is a symbolic link relative to the home directory, or ""
+		// when the source has no symbolic link.
 		linkRelPath string
 		// linkTarget is the target of that link, relative to the directory
 		// that holds the link.
@@ -120,6 +126,16 @@ func TestStartBirdNETPiImport_ModeDBAudio_AudioRoot(t *testing.T) {
 			dbRelPath: "scripts/birds.db",
 			wantClip:  false,
 		},
+		{
+			// The clip tree sits above the mount root. The search must stay
+			// inside the mount, so the clip is not copied even though an
+			// unbounded search would find it.
+			name:        "clips above the mount root are not read",
+			mountRel:    "mount",
+			dbRelPath:   "birds.db",
+			clipRelPath: "BirdSongs/Extracted/By_Date/2024-01-01/Great Spotted Woodpecker/woodpecker.mp3",
+			wantClip:    false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -132,13 +148,21 @@ func TestStartBirdNETPiImport_ModeDBAudio_AudioRoot(t *testing.T) {
 			mockRepo := mocks.NewMockDetectionRepository(t)
 			mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
 				Return(nil, int64(0), nil).Maybe()
-			mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			// The one source row is saved exactly once; its ClipName is checked
+			// below against the exported clip.
+			var savedClipName string
+			mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).
+				RunAndReturn(func(_ context.Context, r *detection.Result, _ []detection.AdditionalResult) error {
+					savedClipName = r.ClipName
+					return nil
+				}).Once()
 			c.Repo = mockRepo
 
 			// The mount root plays the role of the home directory of the
-			// BirdNET-Pi installation.
+			// BirdNET-Pi installation, unless the case puts it one level down.
 			home := t.TempDir()
-			makeBirdsDBAt(t, filepath.Join(home, filepath.FromSlash(tt.dbRelPath)),
+			mountRoot := filepath.Join(home, filepath.FromSlash(tt.mountRel))
+			makeBirdsDBAt(t, filepath.Join(mountRoot, filepath.FromSlash(tt.dbRelPath)),
 				audioRootTestDate, audioRootTestComName, audioRootTestFileName)
 			if tt.clipRelPath != "" {
 				clipPath := filepath.Join(home, filepath.FromSlash(tt.clipRelPath))
@@ -151,7 +175,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_AudioRoot(t *testing.T) {
 					t.Skipf("cannot create symlink: %v", err)
 				}
 			}
-			c.importSourceRoot = home
+			c.importSourceRoot = mountRoot
 
 			exportDir := t.TempDir()
 			settings := apitest.NewValidTestSettings()
@@ -179,14 +203,47 @@ func TestStartBirdNETPiImport_ModeDBAudio_AudioRoot(t *testing.T) {
 
 			// The relative layout of the exported clip mirrors buildClipPath:
 			// YYYY/MM/<sci>_<conf>p_<timestamp>.<ext>.
-			destAbs := filepath.Join(exportDir, "2024", "01", "dendrocopos_major_74p_20240101T100000Z.mp3")
+			destRel := "2024/01/dendrocopos_major_74p_20240101T100000Z.mp3"
+			destAbs := filepath.Join(exportDir, filepath.FromSlash(destRel))
 			if !tt.wantClip {
-				assert.NoFileExists(t, destAbs, "no clip is copied when the source has no audio tree")
+				assert.NoFileExists(t, destAbs, "no clip is copied when the source has no readable audio tree")
+				assert.Empty(t, savedClipName, "a detection without a copied clip is saved without a clip name")
 				return
 			}
+			assert.Equal(t, destRel, savedClipName, "the saved detection points to the exported clip")
 			copied, readErr := os.ReadFile(destAbs)
 			require.NoError(t, readErr, "db-audio import must copy the source clip to %s", destAbs)
 			assert.Equal(t, clipContent, copied, "copied clip content must match the source")
 		})
 	}
+}
+
+// TestAudioSearchBound verifies which directory bounds the audio-root search
+// of each kind of import.
+func TestAudioSearchBound(t *testing.T) {
+	t.Parallel()
+
+	inContainer := func() bool { return true }
+	native := func() bool { return false }
+
+	t.Run("staged import is bounded by its staging directory", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{isContainerEnv: native, importSourceRoot: "/srv/import"}
+		assert.Equal(t, "/staging/abc", c.audioSearchBound("/staging/abc"))
+	})
+	t.Run("container import is bounded by the import source root", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{isContainerEnv: inContainer, importSourceRoot: "/srv/import"}
+		assert.Equal(t, "/srv/import", c.audioSearchBound(""))
+	})
+	t.Run("container import without a root uses the default mount", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{isContainerEnv: inContainer}
+		assert.Equal(t, sysinfo.DefaultExternalMountPath, c.audioSearchBound(""))
+	})
+	t.Run("native import is unbounded", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{isContainerEnv: native, importSourceRoot: "/srv/import"}
+		assert.Empty(t, c.audioSearchBound(""))
+	})
 }

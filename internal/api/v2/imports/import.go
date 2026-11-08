@@ -357,11 +357,7 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		err          error
 	)
 	if c.isContainerEnv == nil || c.isContainerEnv() {
-		root := c.importSourceRoot
-		if root == "" {
-			root = sysinfo.DefaultExternalMountPath
-		}
-		resolvedPath, err = resolveImportSourcePath(root, req.SourcePath)
+		resolvedPath, err = resolveImportSourcePath(c.containerImportRoot(), req.SourcePath)
 		if err != nil {
 			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
 		}
@@ -470,7 +466,7 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 	}
 	if mode == importModeDBaudio {
 		opts.IncludeAudio = true
-		opts.AudioSourceDir = c.resolveAudioSourceDir(resolvedPath)
+		opts.AudioSourceDir = c.resolveAudioSourceDir(resolvedPath, c.audioSearchBound(stagingCleanupDir))
 		opts.ClipExportPath = clipExportPath
 	}
 	eng := imports.NewEngine(c.Repo)
@@ -509,9 +505,12 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 // (discovery.ResolveAudioRoot) and falls back to the database directory when no
 // audio tree is found, which keeps the engine's existing "audio source
 // directory unavailable" and "source clip not found" behaviour.
-func (c *Handler) resolveAudioSourceDir(dbPath string) string {
+//
+// bound is the directory the search must stay inside (see audioSearchBound);
+// the database directory itself is always inside it, so the fallback is too.
+func (c *Handler) resolveAudioSourceDir(dbPath, bound string) string {
 	dbDir := filepath.Dir(dbPath)
-	audioRoot, found := discovery.ResolveAudioRoot(dbPath)
+	audioRoot, found := discovery.ResolveAudioRoot(dbPath, bound)
 	if !found {
 		c.LogWarnIfEnabled("import: no BirdNET-Pi audio tree found next to the source database, its clips will be missing",
 			logger.String("source_db", dbPath),
@@ -522,6 +521,34 @@ func (c *Handler) resolveAudioSourceDir(dbPath string) string {
 		logger.String("source_db", dbPath),
 		logger.String("audio_source_dir", audioRoot))
 	return audioRoot
+}
+
+// containerImportRoot returns the directory a container install accepts import
+// source paths under: the configured import source root, or the default
+// external mount path when none is set.
+func (c *Handler) containerImportRoot() string {
+	if c.importSourceRoot != "" {
+		return c.importSourceRoot
+	}
+	return sysinfo.DefaultExternalMountPath
+}
+
+// audioSearchBound returns the directory the BirdNET-Pi audio-root search of an
+// import must stay inside, so a db-audio import never copies clips from outside
+// the source the user was allowed to import:
+//   - a staged import (stagingDir != "") is bounded by its staging directory;
+//   - a container install is bounded by the import source root, the same root
+//     resolveImportSourcePath contains the database path in;
+//   - a native install returns "" (unbounded), because a native source path is
+//     any absolute path the service user can read.
+func (c *Handler) audioSearchBound(stagingDir string) string {
+	if stagingDir != "" {
+		return stagingDir
+	}
+	if c.isContainerEnv == nil || c.isContainerEnv() {
+		return c.containerImportRoot()
+	}
+	return ""
 }
 
 // cleanupStagingDir best-effort removes a per-import staging directory. It only

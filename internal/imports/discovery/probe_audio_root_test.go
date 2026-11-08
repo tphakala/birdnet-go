@@ -127,15 +127,19 @@ func TestResolveAudioRoot(t *testing.T) {
 				}
 			}
 
-			got, found := ResolveAudioRoot(dbPath)
-			if tt.want == "" {
-				assert.False(t, found, "no audio tree is expected for %q", tt.name)
-				assert.Empty(t, got, "no audio root is expected for %q", tt.name)
-				return
+			// Every fixture lives inside home, so bounding the search by home
+			// must give the same answer as the unbounded search.
+			for _, bound := range []string{"", home} {
+				got, found := ResolveAudioRoot(dbPath, bound)
+				if tt.want == "" {
+					assert.False(t, found, "no audio tree is expected for %q (bound %q)", tt.name, bound)
+					assert.Empty(t, got, "no audio root is expected for %q (bound %q)", tt.name, bound)
+					continue
+				}
+				require.True(t, found, "an audio tree is expected for %q (bound %q)", tt.name, bound)
+				assert.Equal(t, filepath.Join(home, filepath.FromSlash(tt.want)), got,
+					"the audio root of %q (bound %q)", tt.name, bound)
 			}
-			require.True(t, found, "an audio tree is expected for %q", tt.name)
-			assert.Equal(t, filepath.Join(home, filepath.FromSlash(tt.want)), got,
-				"the audio root of %q", tt.name)
 		})
 	}
 }
@@ -170,7 +174,7 @@ func TestResolveAudioRoot_SymlinkedBirdSongs(t *testing.T) {
 	dbPath := filepath.Join(dbDir, "birds.db")
 	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
 
-	got, found := ResolveAudioRoot(dbPath)
+	got, found := ResolveAudioRoot(dbPath, "")
 	require.True(t, found, "the symlinked audio tree must be found")
 	assert.Equal(t, link, got, "the symlink path is the audio root: it is not resolved and not copied")
 
@@ -191,4 +195,118 @@ func TestResolveAudioRoot_SymlinkedBirdSongs(t *testing.T) {
 
 	_, err = root.Stat(filepath.Join("..", "secret.txt"))
 	require.Error(t, err, "os.Root must refuse a lookup that leaves the root")
+}
+
+// TestResolveAudioRoot_Bound verifies that a bounded search never selects an
+// audio tree outside the bound: the import source root of a container install
+// or the staging directory of a staged import. Without that bound a database
+// at <root>/birds.db would make <root>/../BirdSongs a candidate, and a
+// db-audio import could copy clips from outside the mount the user is allowed
+// to import from.
+func TestResolveAudioRoot_Bound(t *testing.T) {
+	t.Parallel()
+
+	mkTree := func(t *testing.T, dir string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, extractedDirName, byDateDirName,
+			audioRootTestDate, audioRootTestComName), 0o755))
+	}
+	mkDB := func(t *testing.T, path string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte("birds.db"), 0o600))
+	}
+
+	t.Run("a tree above the bound is not found", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		mount := filepath.Join(home, "mount")
+		mkTree(t, filepath.Join(home, birdSongsDirName))
+		dbPath := filepath.Join(mount, "birds.db")
+		mkDB(t, dbPath)
+
+		// The unbounded search climbs out of the mount and finds the tree,
+		// which proves the fixture would be found without the bound.
+		got, found := ResolveAudioRoot(dbPath, "")
+		require.True(t, found, "the unbounded search reaches the tree above the mount")
+		assert.Equal(t, filepath.Join(home, birdSongsDirName), got)
+
+		got, found = ResolveAudioRoot(dbPath, mount)
+		assert.False(t, found, "the bounded search must not leave the mount")
+		assert.Empty(t, got)
+	})
+
+	t.Run("a BirdSongs link that leaves the bound is skipped", func(t *testing.T) {
+		t.Parallel()
+		mount := t.TempDir()
+		outside := t.TempDir()
+		mkTree(t, filepath.Join(outside, birdSongsDirName))
+		if err := os.Symlink(filepath.Join(outside, birdSongsDirName),
+			filepath.Join(mount, birdSongsDirName)); err != nil {
+			t.Skipf("cannot create symlink: %v", err)
+		}
+		dbPath := filepath.Join(mount, "scripts", "birds.db")
+		mkDB(t, dbPath)
+
+		got, found := ResolveAudioRoot(dbPath, mount)
+		assert.False(t, found, "a candidate that resolves outside the bound must be skipped")
+		assert.Empty(t, got)
+	})
+
+	t.Run("a tree inside the bound is found through a symlinked bound", func(t *testing.T) {
+		t.Parallel()
+		base := t.TempDir()
+		realDir := filepath.Join(base, "real")
+		mkTree(t, filepath.Join(realDir, birdSongsDirName))
+		dbPath := filepath.Join(realDir, "BirdNET-Pi", "scripts", "birds.db")
+		mkDB(t, dbPath)
+		boundLink := filepath.Join(base, "external")
+		if err := os.Symlink(realDir, boundLink); err != nil {
+			t.Skipf("cannot create symlink: %v", err)
+		}
+
+		got, found := ResolveAudioRoot(dbPath, boundLink)
+		require.True(t, found, "the bound is compared after its symlinks are resolved")
+		assert.Equal(t, filepath.Join(realDir, birdSongsDirName), got)
+	})
+
+	t.Run("a bound that does not exist finds nothing", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		mkTree(t, home)
+		dbPath := filepath.Join(home, "birds.db")
+		mkDB(t, dbPath)
+
+		got, found := ResolveAudioRoot(dbPath, filepath.Join(home, "missing"))
+		assert.False(t, found, "an unresolvable bound trusts no candidate")
+		assert.Empty(t, got)
+	})
+}
+
+// TestResolveAudioRoot_SkipsUnreadableTree verifies that a tree the service
+// user cannot traverse is not selected: the search goes on to the next
+// candidate, here the BirdSongs directory next to the installation.
+func TestResolveAudioRoot_SkipsUnreadableTree(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+
+	home := t.TempDir()
+	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
+	locked := filepath.Join(dbDir, extractedDirName, byDateDirName)
+	require.NoError(t, os.MkdirAll(filepath.Join(locked, audioRootTestDate), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
+		audioRootTestDate, audioRootTestComName), 0o755))
+	dbPath := filepath.Join(dbDir, "birds.db")
+	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
+
+	// Read but no search permission: the entries can be listed but not entered.
+	require.NoError(t, os.Chmod(locked, 0o600))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	got, found := ResolveAudioRoot(dbPath, home)
+	require.True(t, found, "the readable tree must be found")
+	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
+		"an untraversable tree next to the database must be skipped")
 }
