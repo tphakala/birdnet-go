@@ -108,6 +108,44 @@ describe('AudioPlayer Accessibility', () => {
     expect(ctl.element.currentTime).toBe(0);
   });
 
+  it('does not write the playback position from the inline bar until the duration is known', async () => {
+    const { container } = mount({ enableClipExtraction: false });
+    await settle();
+    const bar = container.querySelector<HTMLElement>('[role="button"][id^="progress"]');
+    if (!bar) throw new Error('inline progress bar not rendered');
+    // Partial DOMRect: the player reads only left and width, and jsdom has no layout.
+    const rect = { left: 0, width: WIDE_CONTAINER_PX } as unknown as DOMRect;
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(rect);
+    const setCurrentTime = vi.fn();
+    Object.defineProperty(ctl.element, 'currentTime', {
+      configurable: true,
+      get: () => 0,
+      set: setCurrentTime,
+    });
+
+    await fireEvent.click(bar, { clientX: WIDE_CONTAINER_PX / 2 });
+
+    expect(setCurrentTime).not.toHaveBeenCalled();
+  });
+
+  it('seeks to the middle of the inline bar on Enter and Space', async () => {
+    const { container } = mount({ enableClipExtraction: false });
+    ctl.completeLoad();
+    await settle();
+    const bar = container.querySelector<HTMLElement>('[role="button"][id^="progress"]');
+    if (!bar) throw new Error('inline progress bar not rendered');
+    // Partial DOMRect: the player reads only left and width, and jsdom has no layout.
+    const rect = { left: 0, width: WIDE_CONTAINER_PX } as unknown as DOMRect;
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(rect);
+
+    await fireEvent.keyDown(bar, { key: 'Enter' });
+    expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS / 2);
+
+    ctl.element.currentTime = 0;
+    await fireEvent.keyDown(bar, { key: ' ' });
+    expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS / 2);
+  });
+
   describe('overlay controls', () => {
     it('start hidden and carry the focus-within reveal class', async () => {
       mount();

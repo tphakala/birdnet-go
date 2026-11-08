@@ -222,6 +222,23 @@ describe('AudioToolbar Accessibility', () => {
     expect(notPrevented).toBe(true);
   });
 
+  it.each([0, Number.NaN])(
+    'does not seek and reports an empty range while the duration is %s',
+    async duration => {
+      const { onSeek } = renderToolbar({ duration, currentTime: 0 });
+      // Partial DOMRect: the toolbar reads only left and width, and jsdom has no layout.
+      const rect = { left: BAR_LEFT_PX, width: BAR_WIDTH_PX } as unknown as DOMRect;
+      vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(rect);
+
+      const notPrevented = await fireEvent.keyDown(seekSlider(), { key: 'ArrowRight' });
+      await fireEvent.click(seekSlider(), { clientX: BAR_LEFT_PX + BAR_WIDTH_PX / 2 });
+
+      expect(onSeek).not.toHaveBeenCalled();
+      expect(notPrevented).toBe(true);
+      expect(seekSlider()).toHaveAttribute('aria-valuemax', '0');
+    }
+  );
+
   it('seeks to the clicked fraction of the bar', async () => {
     const { onSeek } = renderToolbar();
     // Partial DOMRect: the toolbar reads only left and width, and jsdom has no layout.
