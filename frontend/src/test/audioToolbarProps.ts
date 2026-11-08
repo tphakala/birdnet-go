@@ -2,12 +2,16 @@
  * Shared props for rendering AudioToolbar in tests: an idle toolbar on a clip of
  * AUDIO_TOOLBAR_CLIP_SECONDS with no selection and every callback a spy.
  */
+import type { ComponentProps } from 'svelte';
 import { vi } from 'vitest';
+import type AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte';
 
 /** Length of the clip the default props describe. */
 export const AUDIO_TOOLBAR_CLIP_SECONDS = 29;
 
-export function audioToolbarProps(overrides: Record<string, unknown> = {}) {
+export function audioToolbarProps(
+  overrides: Partial<ComponentProps<typeof AudioToolbar>> = {}
+): ComponentProps<typeof AudioToolbar> {
   return {
     isPlaying: false,
     isLoading: false,

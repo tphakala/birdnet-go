@@ -1,7 +1,8 @@
 /**
  * Keyboard and screen reader behaviour of the large AudioPlayer: seeking from the
- * toolbar slider by key, and keeping the overlay controls visible while they hold
- * focus or a popover is open. Uses the fake media element.
+ * toolbar slider and from the inline progress bar (a slider as well) by key, and
+ * showing the overlay controls on keyboard focus or while a popover is open. Uses the
+ * fake media element.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -41,6 +42,8 @@ const ANY_FOCUS_CLASS = 'focus-within:opacity-100';
 const WIDE_CONTAINER_PX = 400;
 // Width the inline progress bar's rect reports in the click tests
 const PROGRESS_BAR_WIDTH_PX = 400;
+// A position that is neither the start nor the end of the fake clip
+const INITIAL_POSITION_SECONDS = 7;
 
 describe('AudioPlayer Accessibility', () => {
   let ctl: FakeMediaController;
@@ -58,6 +61,23 @@ describe('AudioPlayer Accessibility', () => {
         ...props,
       },
     });
+  }
+
+  function inlineBar(container: HTMLElement): HTMLElement {
+    const bar = container.querySelector<HTMLElement>('[role="slider"][id^="progress"]');
+    if (!bar) throw new Error('inline progress bar not rendered');
+    return bar;
+  }
+
+  /** Replace the element's currentTime with a getter that reads 0 and a spy for writes. */
+  function spyOnCurrentTimeWrites() {
+    const setCurrentTime = vi.fn();
+    Object.defineProperty(ctl.element, 'currentTime', {
+      configurable: true,
+      get: () => 0,
+      set: setCurrentTime,
+    });
+    return setCurrentTime;
   }
 
   function seekSlider(): HTMLElement {
@@ -117,17 +137,11 @@ describe('AudioPlayer Accessibility', () => {
   it('does not write the playback position from the inline bar until the duration is known', async () => {
     const { container } = mount({ enableClipExtraction: false });
     await settle();
-    const bar = container.querySelector<HTMLElement>('[role="slider"][id^="progress"]');
-    if (!bar) throw new Error('inline progress bar not rendered');
+    const bar = inlineBar(container);
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(
       new DOMRect(0, 0, PROGRESS_BAR_WIDTH_PX, 0)
     );
-    const setCurrentTime = vi.fn();
-    Object.defineProperty(ctl.element, 'currentTime', {
-      configurable: true,
-      get: () => 0,
-      set: setCurrentTime,
-    });
+    const setCurrentTime = spyOnCurrentTimeWrites();
 
     await fireEvent.click(bar, { clientX: PROGRESS_BAR_WIDTH_PX / 2 });
 
@@ -135,12 +149,6 @@ describe('AudioPlayer Accessibility', () => {
   });
 
   describe('inline progress bar as a slider', () => {
-    function inlineBar(container: HTMLElement): HTMLElement {
-      const bar = container.querySelector<HTMLElement>('[role="slider"][id^="progress"]');
-      if (!bar) throw new Error('inline progress bar not rendered');
-      return bar;
-    }
-
     it('names the bar and reports the position as value text', async () => {
       const { container } = mount({ enableClipExtraction: false });
       ctl.completeLoad();
@@ -194,12 +202,12 @@ describe('AudioPlayer Accessibility', () => {
       ctl.completeLoad();
       await settle();
       const bar = inlineBar(container);
-      ctl.element.currentTime = 7;
+      ctl.element.currentTime = INITIAL_POSITION_SECONDS;
 
       const enterNotPrevented = await fireEvent.keyDown(bar, { key: 'Enter' });
       const spaceNotPrevented = await fireEvent.keyDown(bar, { key: ' ' });
 
-      expect(ctl.element.currentTime).toBe(7);
+      expect(ctl.element.currentTime).toBe(INITIAL_POSITION_SECONDS);
       expect(enterNotPrevented).toBe(true);
       expect(spaceNotPrevented).toBe(false);
     });
@@ -247,12 +255,7 @@ describe('AudioPlayer Accessibility', () => {
       const { container } = mount({ enableClipExtraction: false });
       await settle();
       const bar = inlineBar(container);
-      const setCurrentTime = vi.fn();
-      Object.defineProperty(ctl.element, 'currentTime', {
-        configurable: true,
-        get: () => 0,
-        set: setCurrentTime,
-      });
+      const setCurrentTime = spyOnCurrentTimeWrites();
 
       const notPrevented = await fireEvent.keyDown(bar, { key: 'End' });
 

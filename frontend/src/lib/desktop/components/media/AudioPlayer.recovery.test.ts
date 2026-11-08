@@ -29,7 +29,7 @@ import {
   isSpectrogramSourceKnownMissing,
   markSpectrogramSourceMissing,
 } from '$lib/utils/spectrogramStatus';
-import { OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
+import { DENOISE_BUTTON_NAME, OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -48,8 +48,6 @@ const PAUSE_LABEL = 'media.audio.pause';
 const LOADING_LABEL = 'media.audio.loading';
 const PLAY_ERROR_TEXT = 'media.audio.playError';
 const LOAD_ERROR_TEXT = 'media.audio.error';
-// The Denoise trigger is named by its control word and the state it shows.
-const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
 const DENOISE_LIGHT_TEXT = 'components.audioPlayer.processing.denoiseLight';
 const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';
 // Debounce before a processing request starts (PROCESS_DEBOUNCE_MS in AudioPlayer.svelte)
@@ -472,10 +470,9 @@ describe('AudioPlayer recovery', () => {
     const SPECTROGRAM_UNAVAILABLE_TEXT = 'components.audio.spectrogramUnavailable';
     const SPECTROGRAM_LOADING_TEXT = 'components.audio.spectrogramLoading';
     const SPECTROGRAM_LOADED_TEXT = 'components.audio.spectrogramLoaded';
-    // The sr-only status region repeats the text; assertions here are about the overlay.
-    // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
     // MAX_SPECTROGRAM_RETRIES in AudioPlayer.svelte: image errors retried before giving up
     const MAX_SPECTROGRAM_RETRIES = 4;
+    // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
     const PAST_ALL_BACKOFFS_MS = 10_000;
     // First entry of SPECTROGRAM_RETRY_DELAYS in AudioPlayer.svelte
     const SPECTROGRAM_FIRST_RETRY_DELAY_MS = 500;

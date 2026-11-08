@@ -32,7 +32,6 @@ vi.mock('$lib/utils/audioNodes', () => ({
 
 const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
 const SPECTROGRAM_UNAVAILABLE = 'components.audio.spectrogramUnavailable';
-// The sr-only status region repeats the text; assertions here are about the overlay.
 const DETECTION_ENDPOINT = '/api/v2/detections/';
 const SPECTROGRAM_ENDPOINT = '/api/v2/spectrogram/';
 // SPECTROGRAM_PROBE_TIMEOUT_MS in AudioPlayer.svelte

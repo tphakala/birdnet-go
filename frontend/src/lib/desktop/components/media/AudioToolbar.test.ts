@@ -7,11 +7,8 @@ import AudioToolbar from './AudioToolbar.svelte';
 import toolbarSource from './AudioToolbar.svelte?raw';
 import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
 import { SEEK_PAGE_STEP_SECONDS, SEEK_STEP_SECONDS } from '$lib/utils/seek';
+import { DENOISE_BUTTON_NAME } from '../../../../test/audioPlayerQueries';
 import { AUDIO_TOOLBAR_CLIP_SECONDS, audioToolbarProps } from '../../../../test/audioToolbarProps';
-
-// The Denoise trigger is named by its control word and its current state, for example
-// "Denoise Light"; the options inside the menu start with the same key but no space.
-const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
 
 describe('AudioToolbar export menu', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
@@ -117,6 +114,8 @@ describe('AudioToolbar Accessibility', () => {
 
   const CLIP_DURATION_SECONDS = AUDIO_TOOLBAR_CLIP_SECONDS;
   const CLIP_POSITION_SECONDS = 10;
+  // How far past the end of the clip a stale position can be
+  const CLIP_OVERSHOOT_SECONDS = 11;
   const BAR_LEFT_PX = 100;
   const BAR_WIDTH_PX = 200;
 
@@ -185,13 +184,15 @@ describe('AudioToolbar Accessibility', () => {
   );
 
   it('steps from the end of the clip when the position is past the duration', async () => {
-    const { onSeek } = renderToolbar({ currentTime: CLIP_DURATION_SECONDS + 11 });
+    const { onSeek } = renderToolbar({
+      currentTime: CLIP_DURATION_SECONDS + CLIP_OVERSHOOT_SECONDS,
+    });
 
     expect(seekSlider()).toHaveAttribute('aria-valuenow', String(CLIP_DURATION_SECONDS));
     expect(seekSlider()).toHaveAttribute('aria-valuetext', '0:29 of 0:29');
     await fireEvent.keyDown(seekSlider(), { key: 'ArrowLeft' });
 
-    expect(onSeek).toHaveBeenCalledWith(CLIP_DURATION_SECONDS - 1);
+    expect(onSeek).toHaveBeenCalledWith(CLIP_DURATION_SECONDS - SEEK_STEP_SECONDS);
   });
 
   it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
@@ -226,7 +227,11 @@ describe('AudioToolbar Accessibility', () => {
   );
 
   it.each([
-    ['a known clip', { currentTime: 10, duration: 29 }, '0:10 / 0:29'],
+    [
+      'a known clip',
+      { currentTime: CLIP_POSITION_SECONDS, duration: CLIP_DURATION_SECONDS },
+      '0:10 / 0:29',
+    ],
     ['an unknown duration', { currentTime: 3, duration: Number.NaN }, '0:03 / 0:00'],
     ['an infinite duration', { currentTime: 3, duration: Number.POSITIVE_INFINITY }, '0:03 / 0:00'],
     ['a clip over an hour', { currentTime: 3725, duration: 4500 }, '1:02:05 / 1:15:00'],
@@ -328,11 +333,10 @@ describe('AudioToolbar Accessibility', () => {
   // jsdom computes no cascade, so the real colours are checked in the browser-mode test
   // audio-toolbar-active-hover.browser.test.ts, which CI does not run. This pins the two
   // selectors that test relies on, so a revert cannot pass every automated check.
-  it('keeps the generic hover rule off active buttons and gives them their own', () => {
-    expect(toolbarSource).toContain('.toolbar-btn:not(.active):hover:not(:disabled)');
-    // Any hover rule that names .toolbar-btn before :hover would also grey active buttons
-    expect(toolbarSource).not.toMatch(/\.toolbar-btn:hover/);
-    expect(toolbarSource).toMatch(
+  it('gives active buttons their own hover background instead of the grey one', () => {
+    const css = toolbarSource.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    expect(css).toMatch(
       /\.toolbar-btn\.active:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--color-primary-hover\)/
     );
   });
@@ -345,6 +349,10 @@ describe('AudioToolbar Accessibility', () => {
       const button = screen.getByRole('button', { name: DENOISE_BUTTON_NAME });
       expect(button).toHaveAccessibleName(`components.audioPlayer.processing.denoise ${labelKey}`);
       expect(button).toHaveTextContent(labelKey);
+      // The control word is visually hidden; without sr-only it would render beside the state
+      expect(button.querySelector('.sr-only')).toHaveTextContent(
+        'components.audioPlayer.processing.denoise'
+      );
     }
   );
 

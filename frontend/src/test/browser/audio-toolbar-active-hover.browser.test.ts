@@ -58,6 +58,7 @@ describe('AudioToolbar hover styling in a real browser', () => {
     // nor leave it with no hover feedback at all.
     expect(backgroundOf(active)).toBe(ACTIVE_HOVER_COLOR);
     expect(backgroundOf(active)).not.toBe(HOVER_COLOR);
+    expect(getComputedStyle(active).borderColor).toBe(ACTIVE_HOVER_COLOR);
   });
 
   it('still greys an inactive toolbar button on hover', async () => {

@@ -17,6 +17,7 @@ import {
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import { mockAudioProbe } from '../../../../test/audioProbeMock';
 import { AUDIO_RETRY_DELAY_MS, MAX_AUDIO_LOAD_RETRIES } from '$lib/utils/audio';
+import { DENOISE_BUTTON_NAME } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -42,8 +43,6 @@ const DETECTION_ID = '4242';
 const STORED_URL = `/api/v2/audio/${DETECTION_ID}`;
 const DENOISED_URL = `${STORED_URL}?denoise=${PRESET}`;
 const PLAY_LABEL = 'media.audio.play';
-// The Denoise trigger is named by its control word and the state it shows.
-const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
 const NORMALIZE_LABEL = 'components.audioPlayer.processing.normalize';
 const DENOISE_LIGHT_MEDIUM_TEXT = 'components.audioPlayer.processing.denoiseLightMedium';
 const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';

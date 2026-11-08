@@ -6,3 +6,10 @@
  * queryByText to assert on the overlay only.
  */
 export const OVERLAY_ONLY = { ignore: '[role="status"], script, style' };
+
+/**
+ * Matches the accessible name of the Denoise trigger in the toolbar: the control word,
+ * a space, then the state it shows ("Denoise Light"). The options inside its menu start
+ * with the same key but have no space after it, so they do not match.
+ */
+export const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
