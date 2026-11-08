@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -283,7 +282,7 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 		// Second pass: copy audio clips when requested. Pending (new) rows and
 		// re-attach rows go through the same copyAudioBatch path, so both get the
 		// same os.Root containment and disk-space check.
-		clipNames, created, err := e.copyClipsForBatch(ctx, opts, pending, reattach)
+		clipNames, err := e.copyClipsForBatch(ctx, opts, pending, reattach)
 		if err != nil {
 			return err
 		}
@@ -295,7 +294,7 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 
 		// Fourth pass: attach the copied clips to the existing clip-less
 		// detections whose source row matched; no new row is created.
-		if err := e.attachClips(ctx, opts, setter, reattach, clipNames, created, len(pending), &stats); err != nil {
+		if err := e.attachClips(ctx, setter, reattach, clipNames, len(pending), &stats); err != nil {
 			return err
 		}
 
@@ -423,12 +422,21 @@ func (e *Engine) queueReattach(key string, row *SourceDetection, ts time.Time, c
 	}
 	delete(clipLess, key)
 	remaining := make([]uint, 0, len(ids))
+	var claimedElsewhere []uint
 	for _, id := range ids {
 		if _, alreadyQueued := queued[id]; alreadyQueued {
+			claimedElsewhere = append(claimedElsewhere, id)
 			continue
 		}
 		queued[id] = struct{}{}
 		remaining = append(remaining, id)
+	}
+	// An ID already claimed under its other dedup key (a stored row has a
+	// station-time and an import-zone key) stays listed under this key too, so
+	// if that claim misses and is released, a later row matching this key can
+	// still fill it.
+	if len(claimedElsewhere) > 0 {
+		clipLess[key] = claimedElsewhere
 	}
 	if len(remaining) == 0 {
 		return reattachRow{}, false
@@ -459,15 +467,13 @@ func releaseMissedReattach(reattach []reattachRow, clipNames []string, pendingCo
 // copyClipsForBatch runs the second pass over one batch: when audio is
 // requested it copies the clips of the pending (new) and re-attach rows through
 // the same copyAudioBatch path and returns their clip names, with the pending
-// rows' names in the first len(pending) slots. created reports, per slot,
-// whether this run wrote the clip file (it did not exist before). A re-attach
-// whose clip is a miss tries its alternate candidates in turn. Without audio
-// the returned slices are zero-filled.
-func (e *Engine) copyClipsForBatch(ctx context.Context, opts *ImportOptions, pending []pendingRow, reattach []reattachRow) (clipNames []string, created []bool, err error) {
-	clipNames = make([]string, len(pending)+len(reattach))
-	created = make([]bool, len(clipNames))
+// rows' names in the first len(pending) slots. A re-attach whose clip is a
+// miss tries its alternate candidates in turn. Without audio the returned
+// slice is zero-filled.
+func (e *Engine) copyClipsForBatch(ctx context.Context, opts *ImportOptions, pending []pendingRow, reattach []reattachRow) ([]string, error) {
+	clipNames := make([]string, len(pending)+len(reattach))
 	if !opts.IncludeAudio || opts.ClipExportPath == "" || len(clipNames) == 0 {
-		return clipNames, created, nil
+		return clipNames, nil
 	}
 	rows := make([]SourceDetection, len(clipNames))
 	tss := make([]time.Time, len(clipNames))
@@ -479,20 +485,20 @@ func (e *Engine) copyClipsForBatch(ctx context.Context, opts *ImportOptions, pen
 		rows[len(pending)+j] = *r.row
 		tss[len(pending)+j] = r.ts
 	}
-	if err := e.copyAudioBatch(ctx, opts, rows, tss, clipNames, created); err != nil {
-		return nil, nil, err
+	if err := e.copyAudioBatch(ctx, opts, rows, tss, clipNames); err != nil {
+		return nil, err
 	}
-	if err := e.copyAlternateClips(ctx, opts, reattach, clipNames[len(pending):], created[len(pending):]); err != nil {
-		return nil, nil, err
+	if err := e.copyAlternateClips(ctx, opts, reattach, clipNames[len(pending):]); err != nil {
+		return nil, err
 	}
-	return clipNames, created, nil
+	return clipNames, nil
 }
 
 // copyAlternateClips retries every re-attach whose clip was a miss with its
 // alternate candidates, one candidate per re-attach per round, through the
 // same copyAudioBatch path, until each re-attach has a clip or no candidate is
-// left. clipNames and created are the re-attach slots only.
-func (e *Engine) copyAlternateClips(ctx context.Context, opts *ImportOptions, reattach []reattachRow, clipNames []string, created []bool) error {
+// left. clipNames holds the re-attach slots only.
+func (e *Engine) copyAlternateClips(ctx context.Context, opts *ImportOptions, reattach []reattachRow, clipNames []string) error {
 	next := make([]int, len(reattach))
 	for {
 		if err := ctx.Err(); err != nil {
@@ -515,13 +521,11 @@ func (e *Engine) copyAlternateClips(ctx context.Context, opts *ImportOptions, re
 			return nil
 		}
 		names := make([]string, len(slots))
-		made := make([]bool, len(slots))
-		if err := e.copyAudioBatch(ctx, opts, rows, tss, names, made); err != nil {
+		if err := e.copyAudioBatch(ctx, opts, rows, tss, names); err != nil {
 			return err
 		}
 		for k, j := range slots {
 			clipNames[j] = names[k]
-			created[j] = made[k]
 		}
 	}
 }
@@ -564,11 +568,12 @@ func (e *Engine) savePending(ctx context.Context, opts *ImportOptions, pending [
 // boundaries. No new detection row is created; a clip miss leaves the stored
 // row untouched.
 //
-// A clip file this run created for a re-attach that no stored row took (every
-// guarded update was a no-op or failed) is removed again, unless another slot
-// of the batch uses the same clip name, so a re-import leaves no unreferenced
-// copies behind. A file that existed before the run is never removed.
-func (e *Engine) attachClips(ctx context.Context, opts *ImportOptions, setter clipNameSetter, reattach []reattachRow, clipNames []string, created []bool, pendingCount int, stats *ImportStats) error {
+// A clip copied for a re-attach that no stored row took (every guarded update
+// was a no-op or failed) is left in place, like a clip of a new row whose save
+// failed: a no-op means another writer set the clip name, possibly to this
+// same file, so removing it could break a reference. The next run reuses the
+// file through the copy step's idempotency guard.
+func (e *Engine) attachClips(ctx context.Context, setter clipNameSetter, reattach []reattachRow, clipNames []string, pendingCount int, stats *ImportStats) error {
 	if setter == nil {
 		return nil
 	}
@@ -581,7 +586,6 @@ func (e *Engine) attachClips(ctx context.Context, opts *ImportOptions, setter cl
 			// The clip was a miss; leave the stored row untouched.
 			continue
 		}
-		attached := false
 		for _, id := range r.ids {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -602,48 +606,17 @@ func (e *Engine) attachClips(ctx context.Context, opts *ImportOptions, setter cl
 			}
 			if changed {
 				stats.Reattached++
-				attached = true
 			}
 			// A successful no-op means another writer filled the clip name
 			// between the preload and this update; nothing to count.
-		}
-		if !attached && created[pendingCount+j] && !clipNameUsedElsewhere(clipNames, pendingCount+j) {
-			e.reclaimUnattachedClip(opts, clipName)
 		}
 	}
 	return nil
 }
 
-// clipNameUsedElsewhere reports whether a slot other than skip holds name.
-func clipNameUsedElsewhere(clipNames []string, skip int) bool {
-	for i, n := range clipNames {
-		if i != skip && n == clipNames[skip] {
-			return true
-		}
-	}
-	return false
-}
-
-// reclaimUnattachedClip removes a clip file this run copied for a re-attach that
-// no stored detection took. The path is rebuilt under ClipExportPath and checked
-// to stay inside it, like the copy path; a failure is logged and ignored.
-func (e *Engine) reclaimUnattachedClip(opts *ImportOptions, clipName string) {
-	destAbs := filepath.Join(opts.ClipExportPath, filepath.FromSlash(clipName))
-	if !isWithinDir(opts.ClipExportPath, destAbs) {
-		return
-	}
-	if err := os.Remove(destAbs); err != nil && !os.IsNotExist(err) {
-		e.log.Warn("could not remove unattached re-import clip",
-			logger.String("clip", destAbs),
-			logger.Error(err))
-	}
-}
-
 // copyAudioBatch creates the export directory, checks disk space, and copies all
-// audio clips for one pending batch. clipNames is updated in-place, and so is
-// created (same length), which reports the slots whose clip file this call
-// wrote rather than found already in place.
-func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows []SourceDetection, tss []time.Time, clipNames []string, created []bool) error {
+// audio clips for one pending batch. clipNames is updated in-place.
+func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows []SourceDetection, tss []time.Time, clipNames []string) error {
 	// Ensure export directory exists before the disk-space check so that
 	// GetAvailableSpace does not error on a freshly configured path.
 	if mkErr := os.MkdirAll(opts.ClipExportPath, 0o755); mkErr != nil {
@@ -665,7 +638,7 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 	}
 
 	missCount := 0
-	e.copyCandidateClips(ctx, opts, rows, tss, clipNames, created, &missCount)
+	e.copyCandidateClips(ctx, opts, rows, tss, clipNames, &missCount)
 	// Only report the miss count for a batch that ran to completion. On cancellation
 	// copyCandidateClips stops launching copies early and the batch is discarded before
 	// any detection is saved, so a partial miss count would understate reality and
@@ -700,7 +673,8 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 // When collectClipLess is true, the second return value maps each dedup key to
 // the IDs of the stored detections with an empty ClipName under that key (a row
 // appears under both of its keys), so a matching source row can have its clip
-// re-attached to those rows.
+// re-attached to those rows. Rows whose audio retention deleted (spectrogram
+// only) are left out, matching the guard in SetClipName.
 //
 // Known limits, accepted: when loc differs from the station zone, a row in the
 // station zone's skipped DST hour (a gap wall time that reads back shifted) can be
@@ -743,7 +717,10 @@ func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location, colle
 			keyInLoc := detectionKey(r.Timestamp.In(loc), r.Species.ScientificName, r.Confidence)
 			seen[key] = struct{}{}
 			seen[keyInLoc] = struct{}{}
-			if collectClipLess && r.ClipName == "" {
+			// A row whose audio retention deleted (spectrogram only) is not a
+			// re-attach candidate: SetClipName leaves such rows alone, so
+			// copying its clip would only cost disk space and I/O.
+			if collectClipLess && r.ClipName == "" && !r.IsSpectrogramOnly() {
 				clipLess[key] = append(clipLess[key], r.ID)
 				clipLess[keyInLoc] = append(clipLess[keyInLoc], r.ID)
 			}

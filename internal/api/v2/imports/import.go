@@ -108,10 +108,10 @@ type cancelImportResponse struct {
 
 // importProgress is the SSE payload carrying live import stats.
 type importProgress struct {
-	Total     int    `json:"total"`
-	Processed int    `json:"processed"`
-	Inserted  int    `json:"inserted"`
-	Skipped   int    `json:"skipped"`
+	Total     int `json:"total"`
+	Processed int `json:"processed"`
+	Inserted  int `json:"inserted"`
+	Skipped   int `json:"skipped"`
 	// Reattached counts stored clip-less detections that got their clip
 	// attached in this db-audio run. Their source rows are also in Skipped.
 	Reattached int    `json:"reattached"`
@@ -143,9 +143,9 @@ type importStatusResponse struct {
 // toImportProgress converts engine stats to the API DTO.
 func toImportProgress(s imports.ImportStats) importProgress {
 	return importProgress{
-		Total:     s.Total,
-		Processed: s.Processed,
-		Inserted:  s.Inserted,
+		Total:      s.Total,
+		Processed:  s.Processed,
+		Inserted:   s.Inserted,
 		Skipped:    s.Skipped,
 		Reattached: s.Reattached,
 		Errors:     s.Errors,

@@ -317,16 +317,17 @@ const columnClipName = "clip_name"
 const columnSpectrogramClipName = "spectrogram_clip_name"
 
 // SetClipName sets the clip name of the detection with the given ID while its
-// clip_name is still empty (NULL or ''), so it never overwrites an existing
-// clip, and reports whether the guarded UPDATE changed the row. A single-row
-// UPDATE with a WHERE guard is atomic on SQLite and MySQL, so it needs no
-// transaction or lock. An empty clipName is a no-op. It ignores detection locks
-// (the clip link is clip metadata). When no row changed and the detection
-// exists, its clip_name was already set and the call is a no-op; when the
-// detection does not exist it reports ErrDetectionNotFound. Attaching a clip
-// also clears clip_sample_rate, so a rate left by an earlier clip is never
-// reported for the new one. A row whose audio retention deleted (its
-// spectrogram_clip_name is set) is left alone, like a row that has a clip.
+// clip_name is still empty (NULL or the empty string), so it never overwrites
+// an existing clip, and reports whether the guarded UPDATE changed the row. A
+// single-row UPDATE with a WHERE guard is atomic on SQLite and MySQL, so it
+// needs no transaction or lock. An empty clipName is a no-op. It ignores
+// detection locks (the clip link is clip metadata). When no row changed and
+// the detection exists, its clip_name was already set and the call is a
+// no-op; when the detection does not exist it reports ErrDetectionNotFound.
+// Attaching a clip also clears clip_sample_rate, so a rate left by an earlier
+// clip is never reported for the new one. A row whose audio retention deleted
+// (its spectrogram_clip_name is set) is left alone, like a row that has a clip;
+// an empty spectrogram_clip_name counts as unset and is cleared to NULL.
 func (r *detectionRepository) SetClipName(ctx context.Context, id uint, clipName string) (bool, error) {
 	if clipName == "" {
 		return false, nil
@@ -339,12 +340,14 @@ func (r *detectionRepository) SetClipName(ctx context.Context, id uint, clipName
 			// spectrogram_clip_name, which is mutually exclusive with clip_name;
 			// re-attaching a clip to it would undo retention and break that
 			// invariant, so such a row is left alone.
-			Where(columnSpectrogramClipName + " IS NULL").
+			Where("(" + columnSpectrogramClipName + " IS NULL OR " + columnSpectrogramClipName + " = '')").
 			// Clear the sample rate in the same UPDATE: a clip-less row can still
 			// carry the rate of a clip that was removed earlier, and it must not
 			// be reported for the newly attached clip. The rate is filled again
 			// for the new clip by FillClipSampleRate.
-			Updates(map[string]any{columnClipName: clipName, columnClipSampleRate: nil})
+			// spectrogram_clip_name is normalized to NULL in the same UPDATE, so
+			// an empty string left by an older writer never sits next to a clip.
+			Updates(map[string]any{columnClipName: clipName, columnClipSampleRate: nil, columnSpectrogramClipName: nil})
 		if res.Error != nil {
 			return res.Error
 		}

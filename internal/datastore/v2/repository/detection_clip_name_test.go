@@ -99,27 +99,6 @@ func TestSetClipName_EmptyClipNameIsNoOp(t *testing.T) {
 	assert.Nil(t, got.ClipName)
 }
 
-// TestSetClipName_ClearsStaleSampleRate verifies that attaching a clip clears a
-// sample rate left on the clip-less row by an earlier clip, so the new clip is
-// never reported with a rate that describes a different file.
-func TestSetClipName_ClearsStaleSampleRate(t *testing.T) {
-	db := setupDetectionTestDB(t)
-	repo := NewDetectionRepository(db, nil, false, false)
-	staleRate := 48000
-	det := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: 1000, ClipSampleRate: &staleRate}
-	require.NoError(t, db.Table(tableDetections).Create(det).Error)
-
-	changed, err := repo.SetClipName(t.Context(), det.ID, "2025/06/new.mp3")
-	require.NoError(t, err)
-	assert.True(t, changed)
-
-	var stored entities.Detection
-	require.NoError(t, db.Table(tableDetections).First(&stored, det.ID).Error)
-	require.NotNil(t, stored.ClipName)
-	assert.Equal(t, "2025/06/new.mp3", *stored.ClipName)
-	assert.Nil(t, stored.ClipSampleRate, "the rate of an earlier clip must not survive the attach")
-}
-
 // TestSetClipName_AttachesToLockedDetection verifies that a lock does not stop
 // a clip from being attached (the clip link is clip metadata) and that the lock
 // is kept.
@@ -164,4 +143,41 @@ func TestSetClipName_LeavesRetainedSpectrogramRowAlone(t *testing.T) {
 	assert.Nil(t, stored.ClipName)
 	require.NotNil(t, stored.SpectrogramClipName)
 	assert.Equal(t, retained, *stored.SpectrogramClipName)
+}
+
+// TestSetClipName_NormalizesAttachedRow verifies the columns the attach writes
+// besides clip_name: a sample rate left on the clip-less row by an earlier clip
+// is cleared, so the new clip is never reported with the rate of a different
+// file, and an empty spectrogram_clip_name (not a retention-pruned row) still
+// gets the clip and is normalized to NULL.
+func TestSetClipName_NormalizesAttachedRow(t *testing.T) {
+	staleRate := 48000
+	empty := ""
+	tests := []struct {
+		name string
+		det  entities.Detection
+	}{
+		{name: "stale sample rate is cleared", det: entities.Detection{ClipSampleRate: &staleRate}},
+		{name: "empty spectrogram clip name counts as unset", det: entities.Detection{SpectrogramClipName: &empty}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupDetectionTestDB(t)
+			repo := NewDetectionRepository(db, nil, false, false)
+			det := tt.det
+			det.LabelID, det.ModelID, det.Confidence, det.DetectedAt = 1, 1, 0.9, 1000
+			require.NoError(t, db.Table(tableDetections).Create(&det).Error)
+
+			changed, err := repo.SetClipName(t.Context(), det.ID, "2025/06/new.mp3")
+			require.NoError(t, err)
+			assert.True(t, changed)
+
+			var stored entities.Detection
+			require.NoError(t, db.Table(tableDetections).First(&stored, det.ID).Error)
+			require.NotNil(t, stored.ClipName)
+			assert.Equal(t, "2025/06/new.mp3", *stored.ClipName)
+			assert.Nil(t, stored.ClipSampleRate, "the rate of an earlier clip must not survive the attach")
+			assert.Nil(t, stored.SpectrogramClipName, "spectrogram_clip_name is NULL after the attach")
+		})
+	}
 }

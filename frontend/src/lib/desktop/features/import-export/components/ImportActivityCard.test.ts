@@ -86,6 +86,7 @@ function dispatchPlainEvent(type: string) {
 
 import ImportActivityCard from './ImportActivityCard.svelte';
 import { api } from '$lib/utils/api';
+import { t } from '$lib/i18n';
 import { STREAM_STALL_THRESHOLD } from '../utils';
 import type { ImportProgress, ImportStatusResponse } from '../types';
 
@@ -273,6 +274,7 @@ describe('ImportActivityCard', () => {
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.reattachedNote')).toBeInTheDocument();
     });
+    expect(t).toHaveBeenCalledWith('system.importExport.done.reattachedNote', { count: 7 });
   });
 
   it('does not show the re-attached line when nothing was re-attached', async () => {

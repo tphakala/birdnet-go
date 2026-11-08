@@ -269,8 +269,6 @@ func checkDiskSpace(exportPath string, requiredBytes uint64, freeSpaceFn func(st
 
 // copyCandidateClips concurrently copies audio clips for a set of to-import detections.
 // clipNames is pre-allocated with length len(toImport); each slot is set by its worker.
-// created has the same length; a worker sets its slot to true when it wrote the clip
-// file, and leaves it false when the file was already in place or the clip is a miss.
 // Missing or failed clips result in an empty string at that slot and increment missCount.
 // All goroutines complete before this function returns.
 func (e *Engine) copyCandidateClips(
@@ -279,7 +277,6 @@ func (e *Engine) copyCandidateClips(
 	toImport []SourceDetection,
 	timestamps []time.Time,
 	clipNames []string,
-	created []bool,
 	missCount *int,
 ) {
 	sem := semaphore.NewWeighted(audioWorkerLimit)
@@ -372,11 +369,9 @@ func (e *Engine) copyCandidateClips(
 				return
 			}
 
-			// clipNames[capturedIdx] and created[capturedIdx] need no mutex: each
-			// index is owned by exactly one worker and is written before wg.Wait()
-			// ensures visibility.
+			// clipNames[capturedIdx] needs no mutex: each index is owned by exactly one
+			// worker and is written before wg.Wait() ensures visibility.
 			clipNames[capturedIdx] = relPath
-			created[capturedIdx] = true
 		})
 	}
 
