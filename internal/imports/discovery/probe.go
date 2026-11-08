@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -240,7 +241,48 @@ func hasExtractedTree(dir string) bool {
 	if err != nil || !info.IsDir() {
 		return false
 	}
-	return isTraversable(root, byDate)
+	return isTraversable(root, byDate) && hasReachableDateDir(root, byDate)
+}
+
+// dateDirProbeBatch is how many By_Date entries are read at a time while
+// looking for a reachable date directory.
+const dateDirProbeBatch = 64
+
+// hasReachableDateDir reports whether the By_Date directory rel inside root is
+// empty or holds at least one date directory the importer can enter. Clips
+// live one level further down (By_Date/<date>/<species>/<clip>), so a tree
+// whose date directories are all closed to the service user, such as a copy
+// that kept another user's 0700 modes, would make every clip a miss; such a
+// tree is rejected and the search continues with the next candidate.
+//
+// One reachable date directory is enough. A single closed directory in an
+// otherwise readable tree costs only the clips inside it, which the import
+// reports as misses, while rejecting the whole tree for it would lose every
+// clip. Entries that are not directories (a stray file, a broken symlink) are
+// ignored, and the scan stops at the first reachable date directory.
+func hasReachableDateDir(root *os.Root, rel string) bool {
+	dir, err := root.Open(rel)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = dir.Close() }()
+	empty := true
+	for {
+		entries, readErr := dir.ReadDir(dateDirProbeBatch)
+		for _, entry := range entries {
+			empty = false
+			dateRel := filepath.Join(rel, entry.Name())
+			info, statErr := root.Stat(dateRel)
+			if statErr == nil && info.IsDir() && isTraversable(root, dateRel) {
+				return true
+			}
+		}
+		if readErr != nil {
+			// io.EOF ends the listing. Any other error means the importer
+			// could not list the tree either.
+			return empty && errors.Is(readErr, io.EOF)
+		}
+	}
 }
 
 // traversalProbeName is a child name no clip tree contains. Looking it up

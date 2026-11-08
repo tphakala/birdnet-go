@@ -304,6 +304,7 @@ func TestResolveAudioRoot_SkipsUnreadableTree(t *testing.T) {
 	// Read but no search permission: the entries can be listed but not entered.
 	require.NoError(t, os.Chmod(locked, 0o600))
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate))
 
 	got, found := ResolveAudioRoot(dbPath, home)
 	require.True(t, found, "the readable tree must be found")
@@ -335,13 +336,7 @@ func TestResolveAudioRoot_SearchOnlyTreeIsRejected(t *testing.T) {
 	require.NoError(t, os.Chmod(byDate, 0o311))
 	t.Cleanup(func() { _ = os.Chmod(byDate, 0o755) })
 
-	// Prove the premise: the importer's own os.Root cannot reach a path
-	// inside the search-only directory.
-	root, err := os.OpenRoot(dbDir)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = root.Close() })
-	_, err = root.Stat(filepath.Join(extractedDirName, byDateDirName, audioRootTestDate))
-	require.Error(t, err, "os.Root cannot traverse a search-only directory")
+	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate))
 
 	got, found := ResolveAudioRoot(dbPath, home)
 	require.True(t, found, "the next, readable tree must be found")
@@ -370,4 +365,84 @@ func TestResolveAudioRoot_BrokenEntryDoesNotRejectTree(t *testing.T) {
 	got, found := ResolveAudioRoot(dbPath, home)
 	require.True(t, found, "a broken entry must not reject the tree")
 	assert.Equal(t, dbDir, got)
+}
+
+// skipIfReachable skips the test when the importer's own os.Root can still
+// reach rel inside dir after the test removed permission bits on the way: the
+// platform or filesystem ignores directory permission bits (Windows only maps
+// the write bit to the read-only attribute), so the fixture cannot model a
+// tree the service user is locked out of.
+func skipIfReachable(t *testing.T, dir, rel string) {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	require.NoError(t, err)
+	defer func() { _ = root.Close() }()
+	if _, err := root.Stat(rel); err == nil {
+		t.Skip("directory permission bits are not enforced here")
+	}
+}
+
+// TestResolveAudioRoot_ClosedDateDirsRejectTree verifies that a tree whose
+// By_Date directory is readable but whose every date directory is closed to
+// the service user is skipped: every clip read there would fail, so the search
+// moves on to the next candidate.
+func TestResolveAudioRoot_ClosedDateDirsRejectTree(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+
+	home := t.TempDir()
+	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
+	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
+	closedDates := []string{audioRootTestDate, "2024-05-02"}
+	for _, date := range closedDates {
+		require.NoError(t, os.MkdirAll(filepath.Join(byDate, date, audioRootTestComName), 0o755))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
+		audioRootTestDate, audioRootTestComName), 0o755))
+	dbPath := filepath.Join(dbDir, "birds.db")
+	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
+
+	for _, date := range closedDates {
+		closed := filepath.Join(byDate, date)
+		require.NoError(t, os.Chmod(closed, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
+	}
+	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate, audioRootTestComName))
+
+	got, found := ResolveAudioRoot(dbPath, home)
+	require.True(t, found, "the next, readable tree must be found")
+	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
+		"a tree whose date directories are all closed is skipped")
+}
+
+// TestResolveAudioRoot_OneClosedDateDirKeepsTree verifies that a single closed
+// date directory does not reject an otherwise readable tree: only its clips
+// are lost, while skipping the tree would lose all of them.
+func TestResolveAudioRoot_OneClosedDateDirKeepsTree(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+
+	home := t.TempDir()
+	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
+	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
+	closed := filepath.Join(byDate, audioRootTestDate)
+	require.NoError(t, os.MkdirAll(filepath.Join(closed, audioRootTestComName), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(byDate, "2024-05-02", audioRootTestComName), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(byDate, "notes.txt"), []byte("x"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
+		audioRootTestDate, audioRootTestComName), 0o755))
+	dbPath := filepath.Join(dbDir, "birds.db")
+	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
+
+	require.NoError(t, os.Chmod(closed, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
+	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate, audioRootTestComName))
+
+	got, found := ResolveAudioRoot(dbPath, home)
+	require.True(t, found)
+	assert.Equal(t, dbDir, got, "one closed date directory does not reject the tree")
 }
