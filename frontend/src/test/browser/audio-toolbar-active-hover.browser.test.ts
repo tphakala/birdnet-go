@@ -10,49 +10,16 @@
  *   npm run test:browser
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { userEvent } from 'vitest/browser';
 
 import AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte';
+import { audioToolbarProps } from '../audioToolbarProps';
 
 const PRIMARY_COLOR = 'rgb(10, 20, 30)';
 const HOVER_COLOR = 'rgb(200, 200, 200)';
 const ACTIVE_HOVER_COLOR = 'rgb(40, 50, 60)';
-const CLIP_DURATION_SECONDS = 29;
-
-function toolbarProps(overrides: Record<string, unknown> = {}) {
-  return {
-    isPlaying: false,
-    isLoading: false,
-    currentTime: 0,
-    duration: CLIP_DURATION_SECONDS,
-    progress: 0,
-    loop: false,
-    onPlayPause: vi.fn(),
-    onSeek: vi.fn(),
-    onLoopToggle: vi.fn(),
-    selectionStart: null,
-    selectionEnd: null,
-    hasSelection: false,
-    gainDb: 0,
-    denoise: '',
-    normalize: false,
-    isProcessing: false,
-    isPlayingSelection: false,
-    isExtracting: false,
-    extractionError: null,
-    onPlaySelection: vi.fn(),
-    onStopSelection: vi.fn(),
-    onSkipToSelection: vi.fn(),
-    onClearSelection: vi.fn(),
-    onGainChange: vi.fn(),
-    onDenoiseChange: vi.fn(),
-    onNormalizeToggle: vi.fn(),
-    onExport: vi.fn(),
-    ...overrides,
-  };
-}
 
 function backgroundOf(element: Element): string {
   return getComputedStyle(element).backgroundColor;
@@ -80,7 +47,7 @@ describe('AudioToolbar hover styling in a real browser', () => {
   });
 
   it('gives an active toolbar button its own hover colour, not the grey one', async () => {
-    await render(AudioToolbar, { props: toolbarProps({ loop: true }) });
+    await render(AudioToolbar, { props: audioToolbarProps({ loop: true }) });
 
     const active = document.querySelector('[aria-pressed="true"]');
     if (!active) throw new Error('active toolbar button not rendered');
@@ -94,7 +61,7 @@ describe('AudioToolbar hover styling in a real browser', () => {
   });
 
   it('still greys an inactive toolbar button on hover', async () => {
-    await render(AudioToolbar, { props: toolbarProps() });
+    await render(AudioToolbar, { props: audioToolbarProps() });
 
     const inactive = document.querySelector('[aria-pressed="false"]:not(:disabled)');
     if (!inactive) throw new Error('inactive toolbar button not rendered');

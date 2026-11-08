@@ -29,6 +29,7 @@ import {
   isSpectrogramSourceKnownMissing,
   markSpectrogramSourceMissing,
 } from '$lib/utils/spectrogramStatus';
+import { OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -472,7 +473,6 @@ describe('AudioPlayer recovery', () => {
     const SPECTROGRAM_LOADING_TEXT = 'components.audio.spectrogramLoading';
     const SPECTROGRAM_LOADED_TEXT = 'components.audio.spectrogramLoaded';
     // The sr-only status region repeats the text; assertions here are about the overlay.
-    const OVERLAY_ONLY = { ignore: '[role="status"], script, style' };
     // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
     // MAX_SPECTROGRAM_RETRIES in AudioPlayer.svelte: image errors retried before giving up
     const MAX_SPECTROGRAM_RETRIES = 4;

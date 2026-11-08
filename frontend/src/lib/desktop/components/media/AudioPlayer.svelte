@@ -189,7 +189,7 @@
   // svelte-ignore non_reactive_update
   let playPauseButton!: HTMLButtonElement; // Template-only binding
   // svelte-ignore non_reactive_update
-  let progressBar: HTMLDivElement; // Template-only binding
+  let progressBar: HTMLDivElement; // Bound in the template, read by handleProgressClick
   // svelte-ignore non_reactive_update
   let spectrogramImage: HTMLImageElement; // Template-only binding
 

@@ -8,6 +8,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import { safeGet } from '$lib/utils/security';
 import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS } from '$lib/utils/audio';
+import { OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 // Mock the i18n function
@@ -496,10 +497,7 @@ describe('AudioPlayer', () => {
     // After all retries are exhausted, error state should be shown
     // The component shows i18n key when translation is not mocked for this key
     expect(
-      screen.getByText('components.audio.spectrogramUnavailable', {
-        // The sr-only status region repeats the text; this asserts the overlay.
-        ignore: '[role="status"], script, style',
-      })
+      screen.getByText('components.audio.spectrogramUnavailable', OVERLAY_ONLY)
     ).toBeInTheDocument();
   });
 

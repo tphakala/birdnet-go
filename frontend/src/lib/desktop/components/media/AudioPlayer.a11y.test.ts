@@ -15,6 +15,7 @@ import {
 } from '../../../../test/fakeMediaElement';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import AudioPlayer from './AudioPlayer.svelte';
+import { SEEK_PAGE_STEP_SECONDS, SEEK_STEP_SECONDS } from '$lib/utils/seek';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
   getAudioContext: vi.fn().mockResolvedValue({ state: 'running' }),
@@ -36,7 +37,10 @@ const HIDDEN_CLASS = 'opacity-0';
 const FOCUS_VISIBLE_CLASS = 'has-[:focus-visible]:opacity-100';
 // The old reveal matched any focus, so a mouse click left the controls on screen.
 const ANY_FOCUS_CLASS = 'focus-within:opacity-100';
+// offsetWidth the player container reports, wide enough to show every control
 const WIDE_CONTAINER_PX = 400;
+// Width the inline progress bar's rect reports in the click tests
+const PROGRESS_BAR_WIDTH_PX = 400;
 
 describe('AudioPlayer Accessibility', () => {
   let ctl: FakeMediaController;
@@ -100,8 +104,8 @@ describe('AudioPlayer Accessibility', () => {
 
     await fireEvent.keyDown(slider, { key: 'ArrowRight' });
     await fireEvent.keyDown(slider, { key: 'ArrowRight' });
-    expect(ctl.element.currentTime).toBe(2);
-    expect(seekSlider()).toHaveAttribute('aria-valuenow', '2');
+    expect(ctl.element.currentTime).toBe(2 * SEEK_STEP_SECONDS);
+    expect(seekSlider()).toHaveAttribute('aria-valuenow', String(2 * SEEK_STEP_SECONDS));
 
     await fireEvent.keyDown(slider, { key: 'End' });
     expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS);
@@ -115,9 +119,9 @@ describe('AudioPlayer Accessibility', () => {
     await settle();
     const bar = container.querySelector<HTMLElement>('[role="slider"][id^="progress"]');
     if (!bar) throw new Error('inline progress bar not rendered');
-    // Partial DOMRect: the player reads only left and width, and jsdom has no layout.
-    const rect = { left: 0, width: WIDE_CONTAINER_PX } as unknown as DOMRect;
-    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(rect);
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, PROGRESS_BAR_WIDTH_PX, 0)
+    );
     const setCurrentTime = vi.fn();
     Object.defineProperty(ctl.element, 'currentTime', {
       configurable: true,
@@ -125,7 +129,7 @@ describe('AudioPlayer Accessibility', () => {
       set: setCurrentTime,
     });
 
-    await fireEvent.click(bar, { clientX: WIDE_CONTAINER_PX / 2 });
+    await fireEvent.click(bar, { clientX: PROGRESS_BAR_WIDTH_PX / 2 });
 
     expect(setCurrentTime).not.toHaveBeenCalled();
   });
@@ -152,9 +156,9 @@ describe('AudioPlayer Accessibility', () => {
     });
 
     it.each([
-      ['ArrowRight', 1],
-      ['ArrowUp', 1],
-      ['PageUp', 5],
+      ['ArrowRight', SEEK_STEP_SECONDS],
+      ['ArrowUp', SEEK_STEP_SECONDS],
+      ['PageUp', SEEK_PAGE_STEP_SECONDS],
       ['End', FAKE_MEDIA_DURATION_SECONDS],
     ])('seeks by time on %s and keeps the page from scrolling', async (key, expected) => {
       const { container } = mount({ enableClipExtraction: false });
@@ -177,7 +181,7 @@ describe('AudioPlayer Accessibility', () => {
 
       await fireEvent.keyDown(bar, { key: 'ArrowRight' });
       await fireEvent.keyDown(bar, { key: 'ArrowRight' });
-      expect(ctl.element.currentTime).toBe(2);
+      expect(ctl.element.currentTime).toBe(2 * SEEK_STEP_SECONDS);
       await fireEvent.keyDown(bar, { key: 'Home' });
       await fireEvent.keyDown(bar, { key: 'ArrowLeft' });
       expect(ctl.element.currentTime).toBe(0);

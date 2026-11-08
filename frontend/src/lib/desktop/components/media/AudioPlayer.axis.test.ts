@@ -16,6 +16,7 @@ import {
   type FakeMediaController,
 } from '../../../../test/fakeMediaElement';
 import { clearClipSampleRateCache } from '$lib/utils/clipSampleRateLookup';
+import { OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -32,7 +33,6 @@ vi.mock('$lib/utils/audioNodes', () => ({
 const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
 const SPECTROGRAM_UNAVAILABLE = 'components.audio.spectrogramUnavailable';
 // The sr-only status region repeats the text; assertions here are about the overlay.
-const OVERLAY_ONLY = { ignore: '[role="status"], script, style' };
 const DETECTION_ENDPOINT = '/api/v2/detections/';
 const SPECTROGRAM_ENDPOINT = '/api/v2/spectrogram/';
 // SPECTROGRAM_PROBE_TIMEOUT_MS in AudioPlayer.svelte

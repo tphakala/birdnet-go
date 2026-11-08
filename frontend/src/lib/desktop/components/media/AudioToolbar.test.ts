@@ -6,6 +6,8 @@ import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import AudioToolbar from './AudioToolbar.svelte';
 import toolbarSource from './AudioToolbar.svelte?raw';
 import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
+import { SEEK_PAGE_STEP_SECONDS, SEEK_STEP_SECONDS } from '$lib/utils/seek';
+import { AUDIO_TOOLBAR_CLIP_SECONDS, audioToolbarProps } from '../../../../test/audioToolbarProps';
 
 // The Denoise trigger is named by its control word and its current state, for example
 // "Denoise Light"; the options inside the menu start with the same key but no space.
@@ -20,35 +22,15 @@ describe('AudioToolbar export menu', () => {
     onDenoiseChange = vi.fn()
   ) {
     toolbarTest.render({
-      props: {
-        isPlaying: playback.isPlaying,
-        isLoading: playback.isLoading,
-        currentTime: 0,
+      props: audioToolbarProps({
+        ...playback,
         duration: 10,
-        progress: 0,
-        loop: false,
-        onPlayPause: vi.fn(),
-        onSeek: vi.fn(),
-        onLoopToggle: vi.fn(),
         selectionStart: 1,
         selectionEnd: 3,
         hasSelection: true,
-        gainDb: 0,
-        denoise: '',
-        normalize: false,
-        isProcessing: false,
-        isPlayingSelection: false,
-        isExtracting: false,
-        extractionError: null,
-        onPlaySelection: vi.fn(),
-        onStopSelection: vi.fn(),
-        onSkipToSelection: vi.fn(),
-        onClearSelection: vi.fn(),
-        onGainChange: vi.fn(),
         onDenoiseChange,
-        onNormalizeToggle: vi.fn(),
         onExport,
-      },
+      }),
     });
   }
 
@@ -133,46 +115,15 @@ describe('AudioToolbar export menu', () => {
 describe('AudioToolbar Accessibility', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
 
-  const CLIP_DURATION_SECONDS = 29;
+  const CLIP_DURATION_SECONDS = AUDIO_TOOLBAR_CLIP_SECONDS;
   const CLIP_POSITION_SECONDS = 10;
   const BAR_LEFT_PX = 100;
   const BAR_WIDTH_PX = 200;
 
   function renderToolbar(overrides: Record<string, unknown> = {}) {
-    const onSeek = vi.fn();
-    const result = toolbarTest.render({
-      props: {
-        isPlaying: false,
-        isLoading: false,
-        currentTime: CLIP_POSITION_SECONDS,
-        duration: CLIP_DURATION_SECONDS,
-        progress: 0,
-        loop: false,
-        onPlayPause: vi.fn(),
-        onSeek,
-        onLoopToggle: vi.fn(),
-        selectionStart: null,
-        selectionEnd: null,
-        hasSelection: false,
-        gainDb: 0,
-        denoise: '',
-        normalize: false,
-        isProcessing: false,
-        isPlayingSelection: false,
-        isExtracting: false,
-        extractionError: null,
-        onPlaySelection: vi.fn(),
-        onStopSelection: vi.fn(),
-        onSkipToSelection: vi.fn(),
-        onClearSelection: vi.fn(),
-        onGainChange: vi.fn(),
-        onDenoiseChange: vi.fn(),
-        onNormalizeToggle: vi.fn(),
-        onExport: vi.fn(),
-        ...overrides,
-      },
-    });
-    return { onSeek, ...result };
+    const props = audioToolbarProps({ currentTime: CLIP_POSITION_SECONDS, ...overrides });
+    const result = toolbarTest.render({ props });
+    return { onSeek: props.onSeek, ...result };
   }
 
   function seekSlider(): HTMLElement {
@@ -183,16 +134,17 @@ describe('AudioToolbar Accessibility', () => {
   }
 
   it.each([
-    ['ArrowRight', 10, 11],
-    ['ArrowUp', 10, 11],
-    ['ArrowLeft', 10, 9],
-    ['ArrowDown', 10, 9],
-    ['PageUp', 10, 15],
-    ['PageDown', 10, 5],
-    ['Home', 10, 0],
-    ['End', 10, CLIP_DURATION_SECONDS],
-    ['ArrowLeft', 0.4, 0],
-    ['PageUp', 27, CLIP_DURATION_SECONDS],
+    ['ArrowRight', CLIP_POSITION_SECONDS, CLIP_POSITION_SECONDS + SEEK_STEP_SECONDS],
+    ['ArrowUp', CLIP_POSITION_SECONDS, CLIP_POSITION_SECONDS + SEEK_STEP_SECONDS],
+    ['ArrowLeft', CLIP_POSITION_SECONDS, CLIP_POSITION_SECONDS - SEEK_STEP_SECONDS],
+    ['ArrowDown', CLIP_POSITION_SECONDS, CLIP_POSITION_SECONDS - SEEK_STEP_SECONDS],
+    ['PageUp', CLIP_POSITION_SECONDS, CLIP_POSITION_SECONDS + SEEK_PAGE_STEP_SECONDS],
+    ['PageDown', CLIP_POSITION_SECONDS, CLIP_POSITION_SECONDS - SEEK_PAGE_STEP_SECONDS],
+    ['Home', CLIP_POSITION_SECONDS, 0],
+    ['End', CLIP_POSITION_SECONDS, CLIP_DURATION_SECONDS],
+    // Within one step of the clip edges, the target stops at the edge
+    ['ArrowLeft', SEEK_STEP_SECONDS / 2, 0],
+    ['PageUp', CLIP_DURATION_SECONDS - SEEK_STEP_SECONDS, CLIP_DURATION_SECONDS],
   ])(
     'moves the seek slider on %s from %s s to %s s and keeps the page from scrolling',
     async (key, currentTime, expected) => {
@@ -245,9 +197,9 @@ describe('AudioToolbar Accessibility', () => {
     'does not seek and reports an empty range while the duration is %s',
     async duration => {
       const { onSeek } = renderToolbar({ duration, currentTime: 0 });
-      // Partial DOMRect: the toolbar reads only left and width, and jsdom has no layout.
-      const rect = { left: BAR_LEFT_PX, width: BAR_WIDTH_PX } as unknown as DOMRect;
-      vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(rect);
+      vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(BAR_LEFT_PX, 0, BAR_WIDTH_PX, 0)
+      );
 
       const notPrevented = await fireEvent.keyDown(seekSlider(), { key: 'ArrowRight' });
       await fireEvent.click(seekSlider(), { clientX: BAR_LEFT_PX + BAR_WIDTH_PX / 2 });
@@ -290,9 +242,9 @@ describe('AudioToolbar Accessibility', () => {
 
   it('seeks to the clicked fraction of the bar', async () => {
     const { onSeek } = renderToolbar();
-    // Partial DOMRect: the toolbar reads only left and width, and jsdom has no layout.
-    const rect = { left: BAR_LEFT_PX, width: BAR_WIDTH_PX } as unknown as DOMRect;
-    vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(rect);
+    vi.spyOn(seekSlider(), 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(BAR_LEFT_PX, 0, BAR_WIDTH_PX, 0)
+    );
 
     await fireEvent.click(seekSlider(), { clientX: BAR_LEFT_PX + BAR_WIDTH_PX / 4 });
 
