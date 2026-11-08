@@ -59,8 +59,13 @@ type ImportStats struct {
 	Processed int
 	Inserted  int
 	Skipped   int
-	Errors    int
-	Phase     string
+	// Reattached counts existing detections that were stored clip-less (for
+	// example by a db-only import) and got a clip attached during this db-audio
+	// run. Their source rows are also counted in Skipped: no new detection row
+	// is inserted for them.
+	Reattached int
+	Errors     int
+	Phase      string
 }
 
 // ProgressReporter receives periodic ImportStats updates from the engine.
@@ -118,15 +123,48 @@ func (o *ImportOptions) withDefaults() {
 type Engine struct {
 	repo datastore.DetectionRepository
 	log  logger.Logger
+	// sumClipSizes estimates the source bytes a batch's clips need; the
+	// disk-space guard in copyAudioBatch charges exactly its result. It is a
+	// field so tests can observe the estimate's input without depending on
+	// free disk space.
+	sumClipSizes func(audioSourceDir string, rows []SourceDetection) uint64
 }
 
 // NewEngine creates a new Engine.
 // repo is used both for saving new detections and for querying existing ones.
 func NewEngine(repo datastore.DetectionRepository) *Engine {
 	return &Engine{
-		repo: repo,
-		log:  logger.Global().Module("imports"),
+		repo:         repo,
+		log:          logger.Global().Module("imports"),
+		sumClipSizes: sumSourceClipSizes,
 	}
+}
+
+// clipNameSetter is the narrow repository capability the engine needs to
+// re-attach audio clips to detections that a previous db-only import already
+// stored: it sets the clip name of an existing detection whose clip name is
+// still empty and reports whether it changed the row, so an existing clip is
+// never overwritten. The v2-only production adapter implements it by forwarding
+// to the v2 detection repository (internal/datastore/v2only); a repository
+// without it (the legacy-store bridge) gets no clip re-attach, and the engine
+// logs that once per run.
+type clipNameSetter interface {
+	SetClipName(ctx context.Context, id uint, clipName string) (bool, error)
+}
+
+// pendingRow is a source row that is not stored yet and will be inserted.
+type pendingRow struct {
+	row *SourceDetection
+	ts  time.Time
+}
+
+// reattachRow is a source row that matches an already stored clip-less
+// detection: its clip is copied and attached to that stored row instead of
+// inserting a duplicate.
+type reattachRow struct {
+	row *SourceDetection
+	ts  time.Time
+	ids []uint
 }
 
 // detectionKey returns a stable composite key for duplicate detection: the
@@ -142,6 +180,10 @@ func detectionKey(ts time.Time, scientificName string, confidence float64) strin
 // Run imports all detections from src that are not already present in the store.
 // It returns a final ImportStats summary. Partial results are consistent because
 // the dedup set makes a re-run safe.
+// When opts.IncludeAudio is true, a source row that matches an already stored
+// detection whose ClipName is still empty (a db-only import leaves it empty)
+// additionally gets its audio clip copied and attached to that stored row
+// through the repository's SetClipName; no duplicate row is inserted.
 // opts may be nil; a nil pointer is replaced with a zero-value ImportOptions so
 // callers are not required to allocate one.
 func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, reporter ProgressReporter) (ImportStats, error) {
@@ -185,8 +227,10 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 	stats.Phase = "dedup"
 	e.report(reporter, stats)
 
-	// Pre-load the keys of every stored detection to avoid per-row queries.
-	seen, err := e.loadExistingKeys(ctx, opts.Location)
+	// Pre-load the keys of every stored detection to avoid per-row queries. When
+	// audio is requested, also collect the stored clip-less detections per key,
+	// so a matching source row can have its clip re-attached.
+	seen, clipLess, err := e.loadExistingKeys(ctx, opts.Location, opts.IncludeAudio)
 	if err != nil {
 		return stats, errors.New(err).
 			Component("imports").
@@ -194,6 +238,17 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 			Context("phase", "dedup").
 			Build()
 	}
+
+	// Re-attaching clips to existing rows needs a repository that can set a clip
+	// name on them; without that capability (the legacy store) the run continues
+	// and simply attaches nothing.
+	setter := e.resolveClipNameSetter(opts.IncludeAudio)
+	// queued holds the stored detection IDs a re-attach candidate was queued for
+	// during this run. An ID is claimed at queue time, so no other candidate for
+	// that same ID is queued or copied in this run — within one batch or across
+	// batches — and a stored row reachable under several dedup keys is copied
+	// and counted once whatever the batch boundaries.
+	queued := make(map[uint]struct{})
 
 	e.log.Info("starting import",
 		logger.String("source_node", opts.SourceNode),
@@ -204,76 +259,30 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 	e.report(reporter, stats)
 
 	iterErr := src.Iterate(ctx, opts.BatchSize, func(batch []SourceDetection) error {
-		// First pass: classify rows into pending (new) vs. skipped/errored.
-		// Keys are added to seen eagerly so within-batch duplicates are caught here.
-		type pendingRow struct {
-			row *SourceDetection
-			ts  time.Time
-		}
-		pending := make([]pendingRow, 0, len(batch))
-
-		for i := range batch {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			row := &batch[i]
-			ts, parseErr := parseTimestamp(row.Date, row.Time, opts.Location)
-			if parseErr != nil {
-				e.log.Debug("skipping row with unparseable timestamp",
-					logger.String("date", row.Date),
-					logger.String("time", row.Time),
-					logger.Error(parseErr))
-				stats.Errors++
-				stats.Processed++
-				continue
-			}
-			key := detectionKey(ts, row.ScientificName, row.Confidence)
-			if _, ok := seen[key]; ok {
-				stats.Skipped++
-				stats.Processed++
-				continue
-			}
-			// Mark seen eagerly to deduplicate within-batch duplicates.
-			seen[key] = struct{}{}
-			pending = append(pending, pendingRow{row: row, ts: ts})
+		// First pass: classify rows into pending (new) vs. skipped/errored, and
+		// queue clip re-attach for stored clip-less rows.
+		pending, reattach, err := e.classifyBatch(ctx, batch, opts.Location, seen, clipLess, setter, queued, &stats)
+		if err != nil {
+			return err
 		}
 
-		// Second pass: copy audio clips when requested.
-		clipNames := make([]string, len(pending))
-		if opts.IncludeAudio && opts.ClipExportPath != "" && len(pending) > 0 {
-			rows := make([]SourceDetection, len(pending))
-			tss := make([]time.Time, len(pending))
-			for i, p := range pending {
-				rows[i] = *p.row
-				tss[i] = p.ts
-			}
-			if err := e.copyAudioBatch(ctx, opts, rows, tss, clipNames); err != nil {
-				return err
-			}
+		// Second pass: copy audio clips when requested. Pending (new) rows and
+		// re-attach rows go through the same copyAudioBatch path, so both get the
+		// same os.Root containment and disk-space check.
+		clipNames, err := e.copyClipsForBatch(ctx, opts, pending, reattach)
+		if err != nil {
+			return err
 		}
 
 		// Third pass: save detections with clip names resolved above.
-		for i, p := range pending {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			result := mapToResult(p.row, p.ts, opts.SourceNode)
-			result.ClipName = clipNames[i]
-			if saveErr := e.repo.Save(ctx, result, nil); saveErr != nil {
-				if ctx.Err() != nil {
-					// Context was cancelled or timed out during Save; propagate
-					// the context error so the caller gets a clean abort signal.
-					return ctx.Err()
-				}
-				e.log.Error("failed to save detection",
-					logger.String("scientific_name", p.row.ScientificName),
-					logger.Error(saveErr))
-				stats.Errors++
-				stats.Processed++
-				continue
-			}
-			stats.Inserted++
-			stats.Processed++
+		if err := e.savePending(ctx, opts, pending, clipNames, &stats); err != nil {
+			return err
+		}
+
+		// Fourth pass: attach the copied clips to the existing clip-less
+		// detections whose source row matched; no new row is created.
+		if err := e.attachClips(ctx, setter, reattach, clipNames, len(pending), &stats); err != nil {
+			return err
 		}
 
 		e.report(reporter, stats)
@@ -307,9 +316,198 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 		logger.Int("total", stats.Total),
 		logger.Int("inserted", stats.Inserted),
 		logger.Int("skipped", stats.Skipped),
+		logger.Int("reattached", stats.Reattached),
 		logger.Int("errors", stats.Errors))
 
 	return stats, nil
+}
+
+// resolveClipNameSetter returns the repository's clip-name capability when audio
+// is requested, or nil when the repository does not have it (the legacy store):
+// the run then continues without re-attaching clips and the gap is logged once
+// per run.
+func (e *Engine) resolveClipNameSetter(includeAudio bool) clipNameSetter {
+	if !includeAudio {
+		return nil
+	}
+	if setter, ok := e.repo.(clipNameSetter); ok {
+		return setter
+	}
+	e.log.Warn("detection repository cannot set clip names on existing detections, skipping clip re-attach",
+		logger.String("repository_type", fmt.Sprintf("%T", e.repo)))
+	return nil
+}
+
+// classifyBatch runs the first pass over one source batch: rows whose key is
+// already stored are counted Skipped (and queue a clip re-attach when audio is
+// requested and the stored row is clip-less), all other rows become pending.
+// Keys are added to seen eagerly so within-batch duplicates are caught here.
+func (e *Engine) classifyBatch(ctx context.Context, batch []SourceDetection, loc *time.Location, seen map[string]struct{}, clipLess map[string][]uint, setter clipNameSetter, queued map[uint]struct{}, stats *ImportStats) ([]pendingRow, []reattachRow, error) {
+	pending := make([]pendingRow, 0, len(batch))
+	var reattach []reattachRow
+
+	for i := range batch {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		row := &batch[i]
+		ts, parseErr := parseTimestamp(row.Date, row.Time, loc)
+		if parseErr != nil {
+			e.log.Debug("skipping row with unparseable timestamp",
+				logger.String("date", row.Date),
+				logger.String("time", row.Time),
+				logger.Error(parseErr))
+			stats.Errors++
+			stats.Processed++
+			continue
+		}
+		key := detectionKey(ts, row.ScientificName, row.Confidence)
+		if _, ok := seen[key]; ok {
+			stats.Skipped++
+			stats.Processed++
+			// A stored clip-less detection with this key can get its clip
+			// re-attached; queue it at most once per key and never for an ID
+			// already queued in this run, in this batch or an earlier one.
+			if r, ok := e.queueReattach(key, row, ts, clipLess, setter, queued); ok {
+				reattach = append(reattach, r)
+			}
+			continue
+		}
+		// Mark seen eagerly to deduplicate within-batch duplicates.
+		seen[key] = struct{}{}
+		pending = append(pending, pendingRow{row: row, ts: ts})
+	}
+	return pending, reattach, nil
+}
+
+// queueReattach queues a clip re-attach for the stored clip-less detections
+// recorded under key, if the repository can set clip names and none of the IDs
+// is already queued in this run. The IDs are claimed at queue time, so no other
+// candidate for the same ID is queued or copied later in this run, within the
+// same batch or a later one. The key's entry is consumed either way, so a
+// duplicate source row later in the run does not queue it again.
+func (e *Engine) queueReattach(key string, row *SourceDetection, ts time.Time, clipLess map[string][]uint, setter clipNameSetter, queued map[uint]struct{}) (reattachRow, bool) {
+	if setter == nil {
+		return reattachRow{}, false
+	}
+	ids, ok := clipLess[key]
+	if !ok {
+		return reattachRow{}, false
+	}
+	delete(clipLess, key)
+	remaining := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if _, alreadyQueued := queued[id]; alreadyQueued {
+			continue
+		}
+		queued[id] = struct{}{}
+		remaining = append(remaining, id)
+	}
+	if len(remaining) == 0 {
+		return reattachRow{}, false
+	}
+	return reattachRow{row: row, ts: ts, ids: remaining}, true
+}
+
+// copyClipsForBatch runs the second pass over one batch: when audio is
+// requested it copies the clips of the pending (new) and re-attach rows through
+// the same copyAudioBatch path and returns their clip names, with the pending
+// rows' names in the first len(pending) slots. Without audio the returned slice
+// is zero-filled.
+func (e *Engine) copyClipsForBatch(ctx context.Context, opts *ImportOptions, pending []pendingRow, reattach []reattachRow) ([]string, error) {
+	clipNames := make([]string, len(pending)+len(reattach))
+	if !opts.IncludeAudio || opts.ClipExportPath == "" || len(clipNames) == 0 {
+		return clipNames, nil
+	}
+	rows := make([]SourceDetection, len(clipNames))
+	tss := make([]time.Time, len(clipNames))
+	for i, p := range pending {
+		rows[i] = *p.row
+		tss[i] = p.ts
+	}
+	for j, r := range reattach {
+		rows[len(pending)+j] = *r.row
+		tss[len(pending)+j] = r.ts
+	}
+	if err := e.copyAudioBatch(ctx, opts, rows, tss, clipNames); err != nil {
+		return nil, err
+	}
+	return clipNames, nil
+}
+
+// savePending runs the third pass: it saves every pending row with the clip
+// name resolved for it and counts the outcome in stats.
+func (e *Engine) savePending(ctx context.Context, opts *ImportOptions, pending []pendingRow, clipNames []string, stats *ImportStats) error {
+	for i, p := range pending {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		result := mapToResult(p.row, p.ts, opts.SourceNode)
+		result.ClipName = clipNames[i]
+		if saveErr := e.repo.Save(ctx, result, nil); saveErr != nil {
+			if ctx.Err() != nil {
+				// Context was cancelled or timed out during Save; propagate
+				// the context error so the caller gets a clean abort signal.
+				return ctx.Err()
+			}
+			e.log.Error("failed to save detection",
+				logger.String("scientific_name", p.row.ScientificName),
+				logger.Error(saveErr))
+			stats.Errors++
+			stats.Processed++
+			continue
+		}
+		stats.Inserted++
+		stats.Processed++
+	}
+	return nil
+}
+
+// attachClips runs the fourth pass: it attaches the copied clips to the existing
+// clip-less detections collected in reattach, through the repository's
+// SetClipName. clipNames holds the copied clip paths, with the pending rows'
+// names in its first pendingCount slots. Only rows the guarded update actually
+// changed are counted as re-attached. Because queueReattach claims each target
+// ID at queue time, every ID appears in at most one reattach row of the whole
+// run, so it is attached and counted at most once whatever the batch
+// boundaries. No new detection row is created; a clip miss leaves the stored
+// row untouched.
+func (e *Engine) attachClips(ctx context.Context, setter clipNameSetter, reattach []reattachRow, clipNames []string, pendingCount int, stats *ImportStats) error {
+	if setter == nil {
+		return nil
+	}
+	for j, r := range reattach {
+		clipName := clipNames[pendingCount+j]
+		if clipName == "" {
+			// The clip was a miss; leave the stored row untouched.
+			continue
+		}
+		for _, id := range r.ids {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			changed, err := setter.SetClipName(ctx, id, clipName)
+			if err != nil {
+				if ctx.Err() != nil {
+					// Context was cancelled or timed out during the update;
+					// propagate the context error for a clean abort signal.
+					return ctx.Err()
+				}
+				e.log.Error("failed to attach clip to existing detection",
+					logger.Uint64("detection_id", uint64(id)),
+					logger.String("clip_name", clipName),
+					logger.Error(err))
+				stats.Errors++
+				continue
+			}
+			if changed {
+				stats.Reattached++
+			}
+			// A successful no-op means another writer filled the clip name
+			// between the preload and this update; nothing to count.
+		}
+	}
+	return nil
 }
 
 // copyAudioBatch creates the export directory, checks disk space, and copies all
@@ -328,7 +526,7 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 
 	// Disk-space guard: ensure the export volume can hold this batch's clips
 	// before copying any of them.
-	requiredBytes := sumSourceClipSizes(opts.AudioSourceDir, rows)
+	requiredBytes := e.sumClipSizes(opts.AudioSourceDir, rows)
 	if requiredBytes > 0 {
 		if spaceErr := checkDiskSpace(opts.ClipExportPath, requiredBytes, opts.DiskSpaceFunc); spaceErr != nil {
 			return spaceErr
@@ -368,6 +566,11 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 //
 // When loc is the station zone the two keys are equal.
 //
+// When collectClipLess is true, the second return value maps each dedup key to
+// the IDs of the stored detections with an empty ClipName under that key (a row
+// appears under both of its keys), so a matching source row can have its clip
+// re-attached to those rows.
+//
 // Known limits, accepted: when loc differs from the station zone, a row in the
 // station zone's skipped DST hour (a gap wall time that reads back shifted) can be
 // imported again on the legacy store and for v2 rows imported before the detection's
@@ -375,25 +578,29 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 // the first import. A source row can also
 // be skipped as a duplicate of a different stored row that has the same wall
 // second, species and confidence.
-func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location) (map[string]struct{}, error) {
+func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location, collectClipLess bool) (seen map[string]struct{}, clipLess map[string][]uint, err error) {
 	// TestImport_ReimportV2_LoadsEveryPage stores pageSize+1 rows; keep its
 	// row count above this value.
 	const pageSize = 1000
-	seen := make(map[string]struct{})
+	seen = make(map[string]struct{})
+	if collectClipLess {
+		clipLess = make(map[string][]uint)
+	}
 	var minID uint
 
 	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, nil, ctxErr
 		}
 
 		filters := datastore.NewDetectionFilters().
 			WithMinID(minID).
 			WithLimit(pageSize)
 
-		results, _, err := e.repo.Search(ctx, filters)
+		var results []*detection.Result
+		results, _, err = e.repo.Search(ctx, filters)
 		if err != nil {
-			return nil, errors.New(err).
+			return nil, nil, errors.New(err).
 				Component("imports").
 				Category(errors.CategoryDatabase).
 				Context("operation", "load_existing_keys").
@@ -401,8 +608,14 @@ func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location) (map[
 		}
 
 		for _, r := range results {
-			seen[detectionKey(r.Timestamp, r.Species.ScientificName, r.Confidence)] = struct{}{}
-			seen[detectionKey(r.Timestamp.In(loc), r.Species.ScientificName, r.Confidence)] = struct{}{}
+			key := detectionKey(r.Timestamp, r.Species.ScientificName, r.Confidence)
+			keyInLoc := detectionKey(r.Timestamp.In(loc), r.Species.ScientificName, r.Confidence)
+			seen[key] = struct{}{}
+			seen[keyInLoc] = struct{}{}
+			if collectClipLess && r.ClipName == "" {
+				clipLess[key] = append(clipLess[key], r.ID)
+				clipLess[keyInLoc] = append(clipLess[keyInLoc], r.ID)
+			}
 			if r.ID > minID {
 				minID = r.ID
 			}
@@ -413,7 +626,7 @@ func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location) (map[
 		}
 	}
 
-	return seen, nil
+	return seen, clipLess, nil
 }
 
 // parseTimestamp parses "YYYY-MM-DD HH:MM:SS" in loc.
@@ -437,8 +650,9 @@ func parseTimestamp(date, timeStr string, loc *time.Location) (time.Time, error)
 //   - BeginTime and EndTime are left as zero values: BirdNET-Pi stores detections
 //     as point-in-time events without clip offsets, so there is no timing data to map.
 //   - ClipName: DB-only imports leave ClipName empty; DB+audio imports set it before
-//     Save when a matching source clip is found. An empty ClipName avoids broken
-//     "audio not available" links.
+//     Save when a matching source clip is found, and re-attach it to an already
+//     stored clip-less row through the repository's SetClipName. An empty ClipName
+//     avoids broken "audio not available" links.
 //   - Model is set to a synthetic marker so imported rows are distinguishable from
 //     live detections in queries or analytics.
 //   - Provenance: SourceNode is set, but only the legacy store persists it (the

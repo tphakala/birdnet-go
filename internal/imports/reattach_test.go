@@ -231,9 +231,9 @@ func TestImport_DBOnlyRunDoesNotTouchExistingRows(t *testing.T) {
 	assert.Equal(t, 0, stats2.Errors)
 
 	assert.Empty(t, clipNamesBySci(t, repo)["Parus major"], "ClipName must stay empty on a db-only run")
-	if entries, err := os.ReadDir(exportDir); err == nil {
-		assert.Empty(t, entries, "no clip may be copied on a db-only run")
-	}
+	entries, err := os.ReadDir(exportDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "no clip may be copied on a db-only run")
 }
 
 // TestImport_ReattachTraversalIsMissNotEscape verifies the re-attach half goes
@@ -403,4 +403,161 @@ func TestImport_ReattachUnsupportedRepoSkipsGracefully(t *testing.T) {
 	entries, err := os.ReadDir(exportDir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "no clip may be copied when the repository cannot set clip names")
+}
+
+// The two tests below use the ImportStats.Reattached counter added by the fix
+// commit, so they live in that commit and cannot build at the pin.
+
+// TestImport_ReattachCountsReattachedInStats verifies the new counter: a
+// db-audio re-import over two clip-less stored rows counts exactly two
+// re-attached clips while inserting nothing.
+func TestImport_ReattachCountsReattachedInStats(t *testing.T) {
+	audioSrc := t.TempDir()
+	exportDir := t.TempDir()
+
+	rows := reattachRows()
+	reattachAudioTree(t, audioSrc)
+
+	dbPath := newFixtureDB(t, rows)
+	repo, _ := newV2DetectionRepo(t, time.UTC)
+
+	src1, err := newBirdNetPiSource(t, dbPath)
+	require.NoError(t, err)
+	stats1, err := imports.NewEngine(repo).Run(t.Context(), src1,
+		&imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: time.UTC}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 2, stats1.Inserted)
+	assert.Zero(t, stats1.Reattached)
+
+	src2, err := newBirdNetPiSource(t, dbPath)
+	require.NoError(t, err)
+	opts := imports.ImportOptions{
+		SourceNode:     imports.DefaultSourceNode,
+		Location:       time.UTC,
+		IncludeAudio:   true,
+		AudioSourceDir: audioSrc,
+		ClipExportPath: exportDir,
+	}
+	stats2, err := imports.NewEngine(repo).Run(t.Context(), src2, &opts, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, stats2.Inserted)
+	assert.Equal(t, 2, stats2.Skipped)
+	assert.Equal(t, 2, stats2.Reattached, "both existing detections must be counted as re-attached")
+	assert.Equal(t, 0, stats2.Errors)
+}
+
+// TestImport_ReattachCountsEachDetectionOnceAcrossBatches verifies the
+// re-attach dedup holds whatever the batch boundaries when the station zone
+// differs from the import zone: one stored clip-less detection is reachable
+// under two dedup keys (its station-zone wall time and its import-zone wall
+// time), and two source rows matching those two keys must still attach, copy
+// and count its clip exactly once — whether the two rows land in one batch
+// (batch sizes 2 and the default) or in two batches (batch size 1).
+func TestImport_ReattachCountsEachDetectionOnceAcrossBatches(t *testing.T) {
+	stationZone := time.FixedZone("station", 2*3600)
+	importZone := time.UTC
+
+	const (
+		sciName    = "Parus major"
+		confidence = 0.85
+	)
+	// The stored row is 08:00 UTC; read back in the station zone (UTC+2) it
+	// carries the wall time 10:00, so with the import in UTC it is reachable
+	// under the keys 08:00 and 10:00.
+	stored := birdnetPiRow{
+		Date: "2025-06-01", Time: "08:00:00",
+		SciName: sciName, ComName: comGreatTit,
+		Confidence: confidence, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+		FileName: "tit.mp3",
+	}
+	// The second import lists two source rows matching the two alias keys of
+	// that one stored row.
+	aliasRows := []birdnetPiRow{
+		stored,
+		{
+			Date: "2025-06-01", Time: "10:00:00",
+			SciName: sciName, ComName: comGreatTit,
+			Confidence: confidence, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+			FileName: "tit.mp3",
+		},
+	}
+	titClip := []byte("tit audio")
+
+	for _, tc := range []struct {
+		name      string
+		batchSize int
+	}{
+		{name: "batch size 1 (alias keys in separate batches)", batchSize: 1},
+		{name: "batch size 2 (alias keys in one batch)", batchSize: 2},
+		{name: "default batch size (alias keys in one batch)", batchSize: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			audioSrc := t.TempDir()
+			exportDir := t.TempDir()
+			makeAudioTree(t, audioSrc, "2025-06-01", comGreatTit, "tit.mp3", titClip)
+
+			repo, _ := newV2DetectionRepo(t, stationZone)
+
+			// First run: db-only over a source holding only the stored row.
+			src1, err := newBirdNetPiSource(t, newFixtureDB(t, []birdnetPiRow{stored}))
+			require.NoError(t, err)
+			dbOnlyOpts := imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: importZone}
+			stats1, err := imports.NewEngine(repo).Run(t.Context(), src1, &dbOnlyOpts, nil)
+			require.NoError(t, err)
+			require.Equal(t, 1, stats1.Inserted, "the db-only run stores the one row")
+			assert.Zero(t, stats1.Reattached)
+
+			// Second run: db-audio over both alias rows at this batch size.
+			// Capture the disk-space estimate's input — the candidate rows whose
+			// clip sizes the run charges before copying — a test of the
+			// estimate's input, not of free disk space.
+			var estimateCalls []int
+			var chargedBytes uint64
+			eng := imports.NewEngine(repo)
+			restore := imports.SetSumClipSizesForTest(eng, func(audioSourceDir string, rows []imports.SourceDetection) uint64 {
+				estimateCalls = append(estimateCalls, len(rows))
+				n := imports.SumSourceClipSizesForTest(audioSourceDir, rows)
+				chargedBytes += n
+				return n
+			})
+			defer restore()
+
+			src2, err := newBirdNetPiSource(t, newFixtureDB(t, aliasRows))
+			require.NoError(t, err)
+			audioOpts := imports.ImportOptions{
+				SourceNode:     imports.DefaultSourceNode,
+				Location:       importZone,
+				BatchSize:      tc.batchSize, // 0 means the default batch size
+				IncludeAudio:   true,
+				AudioSourceDir: audioSrc,
+				ClipExportPath: exportDir,
+			}
+			stats2, err := eng.Run(t.Context(), src2, &audioOpts, nil)
+			require.NoError(t, err)
+			assert.Equal(t, 0, stats2.Inserted)
+			assert.Equal(t, 2, stats2.Skipped)
+			assert.Equal(t, 1, stats2.Reattached, "the one stored detection is attached and counted exactly once")
+			assert.Equal(t, 0, stats2.Errors)
+
+			// The disk-space estimate was charged for exactly one candidate
+			// clip, not one per alias row.
+			assert.Equal(t, []int{1}, estimateCalls, "the estimate input must hold exactly one candidate row")
+			assert.Equal(t, uint64(len(titClip)), chargedBytes, "the estimate must charge the one clip's size once")
+
+			// Its clip was copied exactly once, inside the export root.
+			files := walkFiles(t, exportDir)
+			require.Len(t, files, 1, "only one clip may be written for one stored detection")
+			assertWithinDir(t, exportDir, files[0])
+			data, err := os.ReadFile(files[0])
+			require.NoError(t, err)
+			assert.Equal(t, titClip, data)
+
+			_, total, err := repo.Search(t.Context(), datastore.NewDetectionFilters().WithLimit(datastore.DefaultDetectionLimit))
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), total, "re-attach must not add detection rows")
+			rel, err := filepath.Rel(exportDir, files[0])
+			require.NoError(t, err)
+			assert.Equal(t, filepath.ToSlash(rel), clipNamesBySci(t, repo)[sciName], "the stored ClipName must be set to the copied clip")
+		})
+	}
 }
