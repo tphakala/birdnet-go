@@ -95,9 +95,10 @@ export function seekKeyAction(
 
 /**
  * Value text of a seek slider, such as "0:06 of 0:29", or undefined while the clip length
- * is unknown, because "0:00 of 0:00" next to a disabled slider would mislead.
+ * is unknown (zero, negative or not a finite number), because "0:00 of 0:00" next to a
+ * disabled slider would mislead.
  */
 export function seekSliderValueText(now: number, max: number): string | undefined {
-  if (max <= 0) return undefined;
+  if (!Number.isFinite(max) || max <= 0) return undefined;
   return t('media.audio.seekValueText', { current: formatTime(now), total: formatTime(max) });
 }

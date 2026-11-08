@@ -200,7 +200,10 @@ describe('seekSliderValueText', () => {
     expect(seekSliderValueText(now, max)).toBe(expected);
   });
 
-  it.each([0, -1])('has no value text for a clip length of %s', max => {
-    expect(seekSliderValueText(0, max)).toBeUndefined();
-  });
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'has no value text for a clip length of %s',
+    max => {
+      expect(seekSliderValueText(0, max)).toBeUndefined();
+    }
+  );
 });
