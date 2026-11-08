@@ -8,6 +8,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import { safeGet } from '$lib/utils/security';
 import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS } from '$lib/utils/audio';
+import { OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 // Mock the i18n function
@@ -20,7 +21,6 @@ vi.mock('$lib/i18n', () => ({
       'media.audio.download': 'Download audio file',
       'media.audio.volume': 'Volume control',
       'media.audio.filterControl': 'Filter control',
-      'media.audio.seekProgress': 'Seek audio progress',
       'media.audio.volumeGain': `Volume gain: ${params?.value ?? 0} dB`,
       'media.audio.highPassFilter': `High-pass filter: ${params?.freq ?? 20} Hz`,
     };
@@ -496,7 +496,9 @@ describe('AudioPlayer', () => {
 
     // After all retries are exhausted, error state should be shown
     // The component shows i18n key when translation is not mocked for this key
-    expect(screen.getByText('components.audio.spectrogramUnavailable')).toBeInTheDocument();
+    expect(
+      screen.getByText('components.audio.spectrogramUnavailable', OVERLAY_ONLY)
+    ).toBeInTheDocument();
   });
 
   it('shows controls when rendered', () => {
