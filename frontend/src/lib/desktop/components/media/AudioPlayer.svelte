@@ -2664,7 +2664,7 @@
   {#if showControls}
     <div
       data-testid="audio-overlay-controls"
-      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200 focus-within:opacity-100"
+      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200 has-[:focus-visible]:opacity-100"
       class:opacity-0={!isMobile && !audioSettingsMenuOpen && !audibleBatsMenuOpen}
       class:group-hover:opacity-100={!isMobile}
     >
@@ -2820,7 +2820,7 @@
   <!-- Bottom overlay controls (hidden when toolbar is used) -->
   {#if !enableClipExtraction}
     <div
-      class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300 focus-within:opacity-100"
+      class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300 has-[:focus-visible]:opacity-100"
       class:opacity-0={!isMobile}
       class:group-hover:opacity-100={!isMobile}
       class:opacity-100={isMobile}

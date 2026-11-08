@@ -33,7 +33,9 @@ const SETTINGS_LABEL = 'media.audio.settings';
 const BATS_LABEL = 'media.audio.audibleBats.title';
 const OVERLAY_TEST_ID = 'audio-overlay-controls';
 const HIDDEN_CLASS = 'opacity-0';
-const FOCUS_VISIBLE_CLASS = 'focus-within:opacity-100';
+const FOCUS_VISIBLE_CLASS = 'has-[:focus-visible]:opacity-100';
+// The old reveal matched any focus, so a mouse click left the controls on screen.
+const ANY_FOCUS_CLASS = 'focus-within:opacity-100';
 const WIDE_CONTAINER_PX = 400;
 
 describe('AudioPlayer Accessibility', () => {
@@ -147,13 +149,14 @@ describe('AudioPlayer Accessibility', () => {
   });
 
   describe('overlay controls', () => {
-    it('start hidden and carry the focus-within reveal class', async () => {
+    it('start hidden and reveal on keyboard focus only', async () => {
       mount();
       await settle();
 
       expect(overlayControls()).toHaveClass(HIDDEN_CLASS);
-      // jsdom has no focus variant to evaluate; the class is what the browser acts on.
+      // jsdom evaluates no focus variant; the class is what the browser acts on.
       expect(overlayControls()).toHaveClass(FOCUS_VISIBLE_CLASS);
+      expect(overlayControls()).not.toHaveClass(ANY_FOCUS_CLASS);
     });
 
     it.each([
@@ -162,7 +165,7 @@ describe('AudioPlayer Accessibility', () => {
       ['audio settings, then audible bats', { modelType: 'bat' }, BATS_LABEL, [SETTINGS_LABEL]],
       ['audible bats, then audio settings', { modelType: 'bat' }, SETTINGS_LABEL, [BATS_LABEL]],
     ])(
-      'stay visible while %s is open and hide again after Escape',
+      'stay visible while %s is open and drop the open reveal after Escape',
       async (_name, props, lastOpened, openedBefore) => {
         mount(props);
         await settle();
@@ -180,12 +183,13 @@ describe('AudioPlayer Accessibility', () => {
     );
   });
 
-  it('gives the inline controls the focus-within reveal class', async () => {
+  it('reveals the inline controls on keyboard focus only', async () => {
     const { container } = mount({ enableClipExtraction: false });
     await settle();
 
     const inline = container.querySelector('.rounded-b-md');
     expect(inline).toHaveClass(HIDDEN_CLASS);
     expect(inline).toHaveClass(FOCUS_VISIBLE_CLASS);
+    expect(inline).not.toHaveClass(ANY_FOCUS_CLASS);
   });
 });
