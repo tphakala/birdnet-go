@@ -11,8 +11,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -246,4 +248,89 @@ func TestAudioSearchBound(t *testing.T) {
 		c := &Handler{isContainerEnv: native, importSourceRoot: "/srv/import"}
 		assert.Empty(t, c.audioSearchBound(""))
 	})
+}
+
+// TestLaunchImport_StagedAudioSearchStaysInStagingDir verifies the staging
+// bound end to end through launchImport: a staged db-audio import reads the
+// clip tree that was staged next to the database, and never a tree that sits
+// next to the staging directory, outside it.
+func TestLaunchImport_StagedAudioSearchStaysInStagingDir(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("native import staging is unix-only")
+	}
+	clipContent := []byte("staged clip")
+	outsideContent := []byte("clip outside the staging dir")
+	clipRel := "Extracted/By_Date/2024-01-01/Great Spotted Woodpecker/woodpecker.mp3"
+
+	tests := []struct {
+		name string
+		// stagedTree places the clip tree inside the staging directory.
+		stagedTree bool
+		wantClip   []byte
+	}{
+		{name: "the staged tree is read", stagedTree: true, wantClip: clipContent},
+		{name: "a tree next to the staging dir is not read", stagedTree: false, wantClip: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testutil.VerifyNoLeaks(t)
+
+			base := t.TempDir()
+			stagingDir := filepath.Join(base, "birdnet-go-import-staging")
+			db := filepath.Join(stagingDir, "birds.db")
+			makeBirdsDBAt(t, db, audioRootTestDate, audioRootTestComName, audioRootTestFileName)
+
+			// A BirdSongs tree right next to the staging dir: the walk up from
+			// the staged database would reach it without the bound.
+			outside := filepath.Join(base, "BirdSongs", filepath.FromSlash(clipRel))
+			require.NoError(t, os.MkdirAll(filepath.Dir(outside), 0o755))
+			require.NoError(t, os.WriteFile(outside, outsideContent, 0o644))
+			if tt.stagedTree {
+				staged := filepath.Join(stagingDir, filepath.FromSlash(clipRel))
+				require.NoError(t, os.MkdirAll(filepath.Dir(staged), 0o755))
+				require.NoError(t, os.WriteFile(staged, clipContent, 0o644))
+			}
+
+			_, c := newImportHandler(t)
+			c.DS = mocks.NewMockInterface(t)
+			mockRepo := mocks.NewMockDetectionRepository(t)
+			mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+			var savedClipName string
+			mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).
+				RunAndReturn(func(_ context.Context, r *detection.Result, _ []detection.AdditionalResult) error {
+					savedClipName = r.ClipName
+					return nil
+				}).Once()
+			c.Repo = mockRepo
+			c.isContainerEnv = func() bool { return false }
+			c.stagingBase = base
+
+			exportDir := t.TempDir()
+			settings := apitest.NewValidTestSettings()
+			settings.Realtime.Audio.Export.Path = exportDir
+			c.Settings.Store(settings)
+
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+			ctx := e.NewContext(req, httptest.NewRecorder())
+			id, launchErr := c.launchImport(ctx, db, importModeDBaudio, nil, stagingDir)
+			require.NoError(t, launchErr)
+			require.NotEmpty(t, id)
+
+			finalStatus := waitImportDone(t, c)
+			require.Equal(t, importStatusDone, finalStatus.Status)
+
+			destRel := "2024/01/dendrocopos_major_74p_20240101T100000Z.mp3"
+			destAbs := filepath.Join(exportDir, filepath.FromSlash(destRel))
+			if tt.wantClip == nil {
+				assert.NoFileExists(t, destAbs, "a clip tree outside the staging dir must not be read")
+				assert.Empty(t, savedClipName)
+				return
+			}
+			copied, err := os.ReadFile(destAbs)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantClip, copied, "the staged clip is the one copied")
+			assert.Equal(t, destRel, savedClipName)
+		})
+	}
 }

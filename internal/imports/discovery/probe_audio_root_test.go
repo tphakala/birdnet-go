@@ -310,3 +310,64 @@ func TestResolveAudioRoot_SkipsUnreadableTree(t *testing.T) {
 	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
 		"an untraversable tree next to the database must be skipped")
 }
+
+// TestResolveAudioRoot_SearchOnlyTreeIsRejected verifies that a By_Date
+// directory the service user can enter but not list is rejected, and the
+// search moves on to the next candidate. The importer opens clips through an
+// os.Root, which opens every directory on the path and so needs read
+// permission: in a search-only tree every clip read would fail.
+func TestResolveAudioRoot_SearchOnlyTreeIsRejected(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+
+	home := t.TempDir()
+	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
+	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
+	require.NoError(t, os.MkdirAll(filepath.Join(byDate, audioRootTestDate, audioRootTestComName), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
+		audioRootTestDate, audioRootTestComName), 0o755))
+	dbPath := filepath.Join(dbDir, "birds.db")
+	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
+
+	// Search but no read permission: entries cannot be listed, only entered.
+	require.NoError(t, os.Chmod(byDate, 0o311))
+	t.Cleanup(func() { _ = os.Chmod(byDate, 0o755) })
+
+	// Prove the premise: the importer's own os.Root cannot reach a path
+	// inside the search-only directory.
+	root, err := os.OpenRoot(dbDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	_, err = root.Stat(filepath.Join(extractedDirName, byDateDirName, audioRootTestDate))
+	require.Error(t, err, "os.Root cannot traverse a search-only directory")
+
+	got, found := ResolveAudioRoot(dbPath, home)
+	require.True(t, found, "the next, readable tree must be found")
+	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
+		"a search-only tree the importer cannot read is skipped")
+}
+
+// TestResolveAudioRoot_BrokenEntryDoesNotRejectTree verifies that a dangling
+// symlink inside By_Date does not make an otherwise usable tree look
+// unreadable.
+func TestResolveAudioRoot_BrokenEntryDoesNotRejectTree(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
+	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
+	require.NoError(t, os.MkdirAll(filepath.Join(byDate, audioRootTestDate, audioRootTestComName), 0o755))
+	// "0000" sorts before the date directory, so a check that looks at the
+	// first entry would hit the broken link.
+	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(byDate, "0000")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	dbPath := filepath.Join(dbDir, "birds.db")
+	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
+
+	got, found := ResolveAudioRoot(dbPath, home)
+	require.True(t, found, "a broken entry must not reject the tree")
+	assert.Equal(t, dbDir, got)
+}

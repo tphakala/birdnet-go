@@ -2,7 +2,7 @@ package discovery
 
 import (
 	"context"
-	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -226,10 +226,9 @@ func resolvesWithin(resolvedBound, path string) bool {
 // search continues with the next candidate.
 //
 // The tree must also be usable, not only present: the By_Date directory must
-// be listable, and its first entry must be reachable, so a tree the service
-// user can see but not read (missing read or search permission) is rejected
-// and the search continues with the next candidate instead of selecting a
-// root whose every clip would then be a miss.
+// be searchable (isTraversable), so a tree the service user can see but not
+// enter is rejected and the search continues with the next candidate instead
+// of selecting a root whose every clip would then be a miss.
 func hasExtractedTree(dir string) bool {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
@@ -244,22 +243,20 @@ func hasExtractedTree(dir string) bool {
 	return isTraversable(root, byDate)
 }
 
-// isTraversable reports whether the directory rel inside root can be listed
-// and entered: it reads one entry and stats it through root. An empty
-// directory is traversable.
+// traversalProbeName is a child name no clip tree contains. Looking it up
+// tells whether a directory can be searched without listing it or touching
+// any of its real entries.
+const traversalProbeName = ".birdnet-go-traversal-probe"
+
+// isTraversable reports whether the clips under the directory rel inside root
+// can be reached. It looks up a child name that does not exist through root,
+// the same os.Root the importer opens clips with: "not found" means the lookup
+// got inside the directory, anything else (permission denied) means the
+// importer could not open a clip there either. os.Root opens every directory
+// on a path, so this needs the same read and search permission the clip reads
+// need, no more. The result does not depend on any real entry, so a broken
+// symlink among the clips cannot reject the tree.
 func isTraversable(root *os.Root, rel string) bool {
-	d, err := root.Open(rel)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = d.Close() }()
-	entries, err := d.ReadDir(1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return false
-	}
-	if len(entries) == 0 {
-		return true
-	}
-	_, err = root.Stat(filepath.Join(rel, entries[0].Name()))
-	return err == nil
+	_, err := root.Lstat(filepath.Join(rel, traversalProbeName))
+	return errors.Is(err, fs.ErrNotExist)
 }
