@@ -677,6 +677,41 @@ describe('BirdNetPiImportWizard', () => {
     expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
+  // The re-attach note must survive on both interrupted terminal screens, and
+  // stay hidden when nothing was re-attached.
+  it.each([
+    { event: 'cancelled', title: 'system.importExport.done.cancelledTitle', reattached: 4 },
+    { event: 'cancelled', title: 'system.importExport.done.cancelledTitle', reattached: 0 },
+    { event: 'error', title: 'system.importExport.done.errorTitle', reattached: 4 },
+    { event: 'error', title: 'system.importExport.done.errorTitle', reattached: 0 },
+  ])(
+    '$event event with $reattached re-attached clips shows the note only when positive',
+    async ({ event, title, reattached }) => {
+      render(BirdNetPiImportWizard, { props: { onClose } });
+
+      await navigatePastSource();
+      await waitFor(() => screen.getByText('system.importExport.mode.label'));
+      await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+      await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+      await fireEvent.click(
+        screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+      );
+      await waitFor(() => {
+        expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+      });
+
+      flushSync(() => {
+        dispatchMockEvent(event, { message: 'stopped', ...defaultProgress, reattached });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(title)).toBeInTheDocument();
+      });
+      const note = screen.queryByText('system.importExport.done.reattachedNote');
+      expect(note !== null).toBe(reattached > 0);
+    }
+  );
+
   // ---- SSE stall reconcile (server restart mid-import) ----
 
   it('stall with an empty job manager shows the interrupted state and closes the stream', async () => {

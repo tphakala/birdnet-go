@@ -338,8 +338,18 @@ func (e *Engine) copyCandidateClips(
 				return
 			}
 
-			// Skip copy if target already exists (idempotency guard).
-			if _, statErr := os.Stat(destAbs); statErr == nil {
+			// Skip copy if target already exists (idempotency guard). Only a regular
+			// file there is a clip: anything else (a directory, a device) is a miss,
+			// so no detection gets a clip name that cannot be played.
+			if info, statErr := os.Stat(destAbs); statErr == nil {
+				if !info.Mode().IsRegular() {
+					e.log.Warn("target clip path is not a regular file, importing detection without audio",
+						logger.String("dest", destAbs))
+					mu.Lock()
+					*missCount++
+					mu.Unlock()
+					return
+				}
 				// clipNames[capturedIdx] needs no mutex: each index is owned by exactly one
 				// worker and is written before wg.Wait() ensures visibility.
 				clipNames[capturedIdx] = relPath

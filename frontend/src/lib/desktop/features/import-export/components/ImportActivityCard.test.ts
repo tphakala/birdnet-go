@@ -275,6 +275,10 @@ describe('ImportActivityCard', () => {
       expect(screen.getByText('system.importExport.done.reattachedNote')).toBeInTheDocument();
     });
     expect(t).toHaveBeenCalledWith('system.importExport.done.reattachedNote', { count: 7 });
+    // A run that only re-attached clips still links to the detections it changed.
+    expect(
+      screen.getByRole('link', { name: /system.importExport.done.viewDetectionsLink/ })
+    ).toBeInTheDocument();
   });
 
   it('does not show the re-attached line when nothing was re-attached', async () => {

@@ -312,7 +312,7 @@
           {t('system.importExport.done.interruptedDescription')}
         </p>
       {/if}
-      {#if (finalKind === 'success' && (progress?.inserted ?? 0) > 0) || finalKind === 'interrupted'}
+      {#if (finalKind === 'success' && ((progress?.inserted ?? 0) > 0 || (progress?.reattached ?? 0) > 0)) || finalKind === 'interrupted'}
         <a
           href={buildDetectionsFilterUrl()}
           class="inline-flex items-center gap-1 text-sm font-medium underline text-[var(--color-primary)] hover:opacity-80"

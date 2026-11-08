@@ -422,6 +422,61 @@ func TestImport_WithAudio_Idempotent_ClipNotCopiedTwice(t *testing.T) {
 	assert.Len(t, files, 1, "the idempotent re-run must not create a second clip file")
 }
 
+// TestImport_WithAudio_NonRegularDestinationIsMiss verifies that a directory
+// sitting at a clip's destination path is not taken as an already-copied clip:
+// the detection is imported without a clip name and the directory is left
+// alone.
+func TestImport_WithAudio_NonRegularDestinationIsMiss(t *testing.T) {
+	audioSrc := t.TempDir()
+	exportDir := t.TempDir()
+	date := "2025-06-01"
+	comName := "Common Blackbird"
+	fileName := "blackbird.mp3"
+	makeAudioTree(t, audioSrc, date, comName, fileName, []byte("blackbird song"))
+
+	rows := []birdnetPiRow{
+		{
+			Date: date, Time: "07:00:00",
+			SciName: "Turdus merula", ComName: comName,
+			Confidence: 0.92, Lat: 60.0, Lon: 24.0,
+			Cutoff: 0.5, Sens: 1.0, FileName: fileName,
+		},
+	}
+	dbPath := newFixtureDB(t, rows)
+
+	ts := time.Date(2025, 6, 1, 7, 0, 0, 0, time.UTC)
+	relPath := imports.TargetClipRelPathForTest("Turdus merula", 0.92, ts, "mp3")
+	destAbs := filepath.Join(exportDir, filepath.FromSlash(relPath))
+	require.NoError(t, os.MkdirAll(destAbs, 0o755))
+
+	opts := imports.ImportOptions{
+		SourceNode:     imports.DefaultSourceNode,
+		Location:       time.UTC,
+		IncludeAudio:   true,
+		AudioSourceDir: audioSrc,
+		ClipExportPath: exportDir,
+	}
+	store := newTestStore(t)
+	repo := newDetectionRepo(t, store)
+	src, err := newBirdNetPiSource(t, dbPath)
+	require.NoError(t, err)
+	stats, err := imports.NewEngine(repo).Run(t.Context(), src, &opts, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.Inserted)
+
+	results, _, searchErr := repo.Search(t.Context(), &datastore.DetectionFilters{
+		Location: []string{imports.DefaultSourceNode},
+		Limit:    10,
+	})
+	require.NoError(t, searchErr)
+	require.Len(t, results, 1)
+	assert.Empty(t, results[0].ClipName, "a directory at the clip path is not a clip")
+
+	info, statErr := os.Stat(destAbs)
+	require.NoError(t, statErr)
+	assert.True(t, info.IsDir(), "the directory at the clip path is left alone")
+}
+
 func TestCheckDiskSpace_Sufficient(t *testing.T) {
 	called := false
 	freeFn := func(_ string) (uint64, error) {
