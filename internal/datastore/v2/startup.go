@@ -55,8 +55,7 @@ func migrationTableResolveErrors(queryErr error) (reportErr, stateErr error) {
 // reportStartupError reports a startup state check failure to Sentry telemetry.
 // The paths parameter lists file paths that should be anonymized in the error message.
 // Connectivity failures (the database host could not be reached) are not sent:
-// they are not code defects, and the open attempt that follows in the same boot
-// reports them once through the rate-limited telemetry filter.
+// they are not code defects, and the telemetry filter drops them as well.
 func reportStartupError(dbType, operation string, err error, paths ...string) {
 	if errors.IsConnectivityError(err) {
 		return

@@ -7,7 +7,7 @@ The notification package includes comprehensive privacy-first telemetry integrat
 ## Features
 
 - **Circuit Breaker Monitoring** - Track provider health and recovery
-- **Webhook Error Reporting** - HTTP failures, timeouts, network issues
+- **Webhook Error Reporting** - HTTP status failures
 - **Initialization Errors** - Configuration and setup problems
 - **Worker Panic Recovery** - Catch and report crashes
 - **Rate Limiting Alerts** - Detect configuration issues or spam
@@ -144,7 +144,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 
 ### 2. Webhook Request Errors
 
-**When:** HTTP request fails (network error, timeout, 4xx/5xx status)
+**When:** HTTP request fails with a 4xx/5xx status. Connection errors and timeouts are not reported: they are the user's network or service, not code defects.
 
 **Data Reported:**
 
@@ -153,11 +153,9 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 - Endpoint hash (URL anonymized)
 - Method (POST/PUT/PATCH)
 - Auth type (bearer/basic/custom - never credentials)
-- Error classification (timeout, cancellation)
 
 **Severity:**
 
-- `critical` - Timeouts (network/provider issues)
 - `error` - 5xx server errors
 - `warning` - 4xx client errors (config issues)
 - `info` - Context cancellation (filtered out, not reported)
@@ -172,17 +170,16 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 
 ```json
 {
-  "message": "Webhook request timed out",
-  "level": "critical",
+  "message": "Webhook request failed: webhook returned status 500",
+  "level": "error",
   "tags": {
     "component": "notification",
     "provider": "webhook-primary",
     "provider_type": "webhook",
-    "status_code": "0",
+    "status_code": "500",
     "method": "POST",
     "auth_type": "bearer",
-    "endpoint_hash": "webhook_a1b2c3d4",
-    "is_timeout": "true"
+    "endpoint_hash": "webhook_a1b2c3d4"
   }
 }
 ```
@@ -386,7 +383,6 @@ Telemetry is designed to be quiet during normal operation:
 If seeing too many events, check for:
 
 - Misconfigured providers (causing repeated failures)
-- Network issues (causing timeouts)
 - Rate limits too low (causing drops)
 
 ## Implementation Status

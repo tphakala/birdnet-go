@@ -163,7 +163,8 @@ func NewNoopTelemetryReporter() TelemetryReporter {
 
 // isConnectionError checks if the error is a network/connection-level error
 // that indicates user configuration issues rather than code quality problems.
-// These include: connection refused, DNS failures, network unreachable, etc.
+// These include: connection refused, DNS failures, network unreachable, lost
+// HTTP/2 connections and HTTP client timeouts.
 func isConnectionError(err error) bool {
 	if err == nil {
 		return false
@@ -187,6 +188,10 @@ func isConnectionError(err error) bool {
 		"i/o timeout",          // Network timeout at socket level
 		"broken pipe",          // Connection broken
 		"connection timed out", // TCP connection timeout
+
+		// net/http transport and client failures.
+		"http2: client connection lost",
+		"client.timeout", // "Client.Timeout exceeded while awaiting headers"
 	}
 
 	for _, pattern := range connectionPatterns {
@@ -219,13 +224,14 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		return
 	}
 
-	// Don't report connection-level errors to Sentry - these are user
-	// configuration issues (service not running, wrong URL, DNS
-	// misconfiguration, firewall, etc.) not code quality problems.
-	// We still call RecordFailure so the sample error is captured, but we
-	// intentionally avoid ShouldReport which would increment
-	// consecutiveFailures and suppress the next real (non-connection) error.
-	if isConnectionError(err) {
+	// Don't report connection-level errors or transport timeouts to Sentry:
+	// these are user configuration or network issues (service not running,
+	// wrong URL, DNS misconfiguration, firewall, slow service) not code
+	// quality problems.
+	// A request that never produced an HTTP status (statusCode 0) failed at the
+	// transport level: TLS and certificate problems belong to the endpoint
+	// setup, so only responses with a 4xx or 5xx status are reported.
+	if statusCode == 0 || isTimeout || isConnectionError(err) {
 		// Connection errors are not tracked by the error suppressor to avoid
 		// interfering with the suppression logic for reportable errors.
 		// Recording them would set sampleError, causing misleading recovery
@@ -250,29 +256,18 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		}
 	}
 
-	// Determine severity based on error type
-	var level string
-	switch {
-	case isTimeout:
-		level = SeverityWarning // Timeouts often indicate user's network/service issues
-	case statusCode >= 400 && statusCode < 500:
-		level = SeverityWarning // Client errors likely config issues
-	default:
-		level = SeverityError
+	// 4xx client errors likely config issues, everything else is an error
+	level := SeverityError
+	if statusCode >= 400 && statusCode < 500 {
+		level = SeverityWarning
 	}
 
 	// Anonymize URL for privacy
 	anonymizedURL := privacy.AnonymizeURL(endpoint)
 
-	// Build message - check timeout first, then err != nil to avoid panic
-	var message string
-	switch {
-	case isTimeout:
-		message = "Webhook request timed out"
-	case err != nil:
+	message := "Webhook request failed"
+	if err != nil {
 		message = fmt.Sprintf("Webhook request failed: %s", err.Error())
-	default:
-		message = "Webhook request failed"
 	}
 
 	// Scrub error message for privacy
@@ -287,7 +282,6 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		"method":        method,
 		"auth_type":     authType,
 		"endpoint_hash": anonymizedURL,
-		"is_timeout":    fmt.Sprintf("%t", isTimeout),
 	}
 
 	// Build contexts
@@ -295,7 +289,6 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		"method":        method,
 		"endpoint_hash": anonymizedURL,
 		"auth_type":     authType, // Type only, never token/credentials
-		"is_timeout":    isTimeout,
 		"is_cancelled":  isCancelled,
 	}
 
