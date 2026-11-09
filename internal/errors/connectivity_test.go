@@ -131,6 +131,9 @@ func TestShouldReportToSentry_DropsDatabaseConnectivity(t *testing.T) {
 	refused := refusedDialError(syscall.ECONNREFUSED)
 	dialDeadline := &net.OpError{Op: "dial", Net: "tcp", Err: context.DeadlineExceeded}
 	require.True(t, isContextCancellation(dialDeadline), "the real dial timeout is also a context deadline")
+	// The udp network keeps the message from matching the flattened tcp dial
+	// text, so only the typed timeout check can recognise it.
+	udpDialTimeout := &net.OpError{Op: "dial", Net: "udp", Err: os.ErrDeadlineExceeded}
 	server1364 := &mysql.MySQLError{Number: 1364, Message: "Field 'x' doesn't have a default value"}
 
 	tests := []struct {
@@ -139,6 +142,8 @@ func TestShouldReportToSentry_DropsDatabaseConnectivity(t *testing.T) {
 		wantReport bool
 	}{
 		{"dial timeout in database", build(CategoryDatabase, dialDeadline), false},
+		{"udp dial timeout in state", build(CategoryState, udpDialTimeout), false},
+		{"udp dial timeout in image cache", build(CategoryImageCache, udpDialTimeout), false},
 		{"refused dial in database", build(CategoryDatabase, refused), false},
 		{"invalid connection in state", build(CategoryState, mysql.ErrInvalidConn), false},
 		{"wrapped dial in system", build(CategorySystem, build(CategoryDatabase, refused)), false},
