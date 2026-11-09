@@ -147,6 +147,7 @@ func TestShouldReportToSentry_DropsDatabaseConnectivity(t *testing.T) {
 		{"bare context deadline", build(CategoryDatabase, context.DeadlineExceeded), false},
 		{"mysql server error joined with a connection error", build(CategoryDatabase, gormJoin(refused, server1364)), true},
 		{"mysql server error", build(CategoryDatabase, server1364), true},
+		{"refused dial in an ungated category", build(CategoryIntegration, refused), true},
 	}
 
 	for _, tt := range tests {

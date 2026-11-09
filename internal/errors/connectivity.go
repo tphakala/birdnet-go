@@ -233,6 +233,24 @@ var connectivitySignatures = []string{
 	"wikipedia rate limit exceeded",      // diagnostic rate-limit error
 }
 
+// isConnectivityCategory reports whether errors of c are checked for typed
+// connectivity failures. Network categories use the text signatures instead
+// (see isNetworkCategory) and CategoryIntegration stays excluded.
+func isConnectivityCategory(c ErrorCategory) bool {
+	switch c { //nolint:exhaustive // only these four categories are gated
+	case CategoryDatabase, CategoryState, CategorySystem, CategoryImageCache:
+		return true
+	default:
+		return false
+	}
+}
+
+// isGatedConnectivity reports whether ee is a typed connectivity failure in a
+// gated category.
+func isGatedConnectivity(ee *EnhancedError) bool {
+	return isConnectivityCategory(ee.Category) && IsConnectivityError(ee.Err)
+}
+
 // isNetworkCategory reports whether c is a category whose errors are checked
 // against connectivitySignatures. CategoryIntegration is deliberately
 // excluded to avoid suppressing legitimate non-transient integration errors;
@@ -249,12 +267,14 @@ func isNetworkCategory(c ErrorCategory) bool {
 // isConnectivityNoise reports whether ee is a connectivity failure. These are
 // environment problems, not code defects, so telemetry never reports them. The
 // typed check (IsConnectivityError: dial, DNS, driver.ErrBadConn and the MySQL
-// "invalid connection" sentinel) applies in every category. The text
+// "invalid connection" sentinel) applies to the database, state, system and
+// image-cache categories only: a dial error under another category can be a
+// configuration problem such as a permission or missing socket error. The text
 // signatures apply only to network categories, so a code error that happens to
 // mention a timeout elsewhere keeps reporting. lowerMsg is the lowercased
 // message of ee.Err.
 func isConnectivityNoise(ee *EnhancedError, lowerMsg string) bool {
-	if IsConnectivityError(ee.Err) {
+	if isGatedConnectivity(ee) {
 		return true
 	}
 	return isNetworkCategory(ee.Category) && containsAny(lowerMsg, connectivitySignatures)

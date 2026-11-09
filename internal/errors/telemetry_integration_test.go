@@ -159,7 +159,6 @@ func TestShouldReportToSentry_ConnectivityNoise(t *testing.T) {
 			fmt.Errorf("%s[tcp @ 0x5581] Connection to tcp://[REDACTED]:8554?timeout=0 failed: Host is down", ffmpegStartup), false},
 		{"rtsp network unreachable", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("%sNetwork unreachable", ffmpegStartup), false},
 		{"rtsp connection timed out", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("%sConnection timed out", ffmpegStartup), false},
-		{"typed dial outside the database categories", "birdweather", CategoryIntegration, refusedDialError(syscall.ECONNREFUSED), false},
 
 		// Reported.
 		{"network code bug", "imageprovider", CategoryNetwork, fmt.Errorf("unexpected status code 500 from API"), true},
@@ -171,6 +170,7 @@ func TestShouldReportToSentry_ConnectivityNoise(t *testing.T) {
 		{"openweather key missing", "weather", CategoryConfiguration, fmt.Errorf("OpenWeather API key not configured"), true},
 		{"sqlite start failure", "datastore", CategoryDatabase,
 			fmt.Errorf("open_database: database file cannot be created: %w", &os.PathError{Op: "mkdir", Path: "/data", Err: syscall.EACCES}), true},
+		{"typed refused dial in an ungated category", "birdweather", CategoryIntegration, refusedDialError(syscall.ECONNREFUSED), true},
 		{"job queue deadline", "analysis.jobqueue", CategoryTimeout, context.DeadlineExceeded, true},
 		{"composite action timeout", "analysis.processor", CategoryTimeout, fmt.Errorf("action timed out after %v", 10*time.Second), true},
 	}

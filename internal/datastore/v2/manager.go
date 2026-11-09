@@ -109,8 +109,13 @@ func scrubErrorWithPaths(errMsg string, paths ...string) string {
 
 // reportInitFailure reports a schema initialization failure to Sentry telemetry.
 // This covers AutoMigrate, seeding, and trigger creation failures.
+// Connectivity failures (a lost database connection) are not reported.
 // The paths parameter lists values (file paths, hostnames, database names) to scrub from error messages.
 func reportInitFailure(dbType, operation string, err error, paths ...string) {
+	// A lost database connection is an environment problem, not a schema defect.
+	if errors.IsConnectivityError(err) {
+		return
+	}
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", "datastore-init")
 		scope.SetTag("db_type", dbType)

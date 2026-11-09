@@ -97,20 +97,26 @@ describe('API utilities', () => {
     });
 
     it.each([
-      { message: 'Failed to fetch', isNetworkError: true },
-      { message: 'Load failed', isNetworkError: true },
-      { message: 'NetworkError when attempting to fetch resource.', isNetworkError: true },
-      { message: 'Some other failure', isNetworkError: false },
+      { rejection: new TypeError('Failed to fetch'), isNetworkError: true },
+      { rejection: new TypeError('Load failed'), isNetworkError: true },
+      {
+        rejection: new TypeError('NetworkError when attempting to fetch resource.'),
+        isNetworkError: true,
+      },
+      { rejection: new TypeError('Some other failure'), isNetworkError: false },
+      // The Safari text only counts on a TypeError.
+      { rejection: new Error('Load failed'), isNetworkError: false },
     ])(
-      'maps a fetch rejection "$message" to isNetworkError=$isNetworkError',
-      async ({ message, isNetworkError }) => {
-        mockFetch.mockRejectedValueOnce(new TypeError(message));
+      'maps a fetch rejection "$rejection" to isNetworkError=$isNetworkError',
+      async ({ rejection, isNetworkError }) => {
+        mockFetch.mockRejectedValueOnce(rejection);
 
         const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
 
         expect(err).toBeInstanceOf(ApiError);
-        expect((err as ApiError).status).toBe(0);
-        expect((err as ApiError).isNetworkError).toBe(isNetworkError);
+        if (!(err instanceof ApiError)) return;
+        expect(err.status).toBe(0);
+        expect(err.isNetworkError).toBe(isNetworkError);
       }
     );
 

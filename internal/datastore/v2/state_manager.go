@@ -614,6 +614,10 @@ func (m *StateManager) SetPhaseWithProgress(phase entities.MigrationPhase, phase
 
 // reportStateTransitionError reports a migration state transition failure to Sentry.
 func reportStateTransitionError(from, to string, err error) {
+	// A lost database connection is an environment problem, not a state defect.
+	if errors.IsConnectivityError(err) {
+		return
+	}
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", "migration-state")
 		scope.SetTag("transition", from+"->"+to)
