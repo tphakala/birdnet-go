@@ -256,25 +256,18 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		}
 	}
 
-	// Determine severity based on error type
-	var level string
-	switch {
-	case statusCode >= 400 && statusCode < 500:
-		level = SeverityWarning // Client errors likely config issues
-	default:
-		level = SeverityError
+	// 4xx client errors likely config issues, everything else is an error
+	level := SeverityError
+	if statusCode >= 400 && statusCode < 500 {
+		level = SeverityWarning
 	}
 
 	// Anonymize URL for privacy
 	anonymizedURL := privacy.AnonymizeURL(endpoint)
 
-	// Build message, checking err != nil to avoid panic
-	var message string
-	switch {
-	case err != nil:
+	message := "Webhook request failed"
+	if err != nil {
 		message = fmt.Sprintf("Webhook request failed: %s", err.Error())
-	default:
-		message = "Webhook request failed"
 	}
 
 	// Scrub error message for privacy

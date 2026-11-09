@@ -934,7 +934,7 @@ func TestWebhookRequestError_ConnectionErrorDoesNotSuppressSubsequentErrors(t *t
 	)
 	assert.Empty(t, reporter.capturedEvents, "timeout should not generate a telemetry event")
 
-	// Step 2: Send a non-connection error (SHOULD be reported , this is the first real error)
+	// Step 2: Send a non-connection error (SHOULD be reported, this is the first real error)
 	telemetry.WebhookRequestError(
 		"webhook-test",
 		errors.NewStd("server returned 500: internal server error"),
