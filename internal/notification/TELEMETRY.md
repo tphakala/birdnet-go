@@ -170,7 +170,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 
 ```json
 {
-  "message": "Webhook request failed: server returned 500",
+  "message": "Webhook request failed: webhook returned status 500",
   "level": "error",
   "tags": {
     "component": "notification",
