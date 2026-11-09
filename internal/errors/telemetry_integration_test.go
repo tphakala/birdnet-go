@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -78,33 +80,6 @@ func TestReportError_IncludesStacktrace(t *testing.T) {
 	assert.NotEmpty(t, event.Exception[0].Stacktrace.Frames, "stacktrace should have frames")
 }
 
-func TestShouldReportToSentry_FiltersNoRouteToHost(t *testing.T) {
-	t.Parallel()
-	ee := New(fmt.Errorf("dial tcp 192.168.1.1:1883: connect: no route to host")).
-		Component("mqtt").
-		Category(CategoryMQTTConnection).
-		Build()
-	assert.False(t, shouldReportToSentry(ee))
-}
-
-func TestShouldReportToSentry_FiltersDNSErrors(t *testing.T) {
-	t.Parallel()
-	ee := New(fmt.Errorf("dial tcp: lookup en.wikipedia.org: server misbehaving")).
-		Component("imageprovider").
-		Category(CategoryNetwork).
-		Build()
-	assert.False(t, shouldReportToSentry(ee))
-}
-
-func TestShouldReportToSentry_FiltersConnectionRefused(t *testing.T) {
-	t.Parallel()
-	ee := New(fmt.Errorf("dial tcp 10.0.0.1:8080: connection refused")).
-		Component("weather").
-		Category(CategoryHTTP).
-		Build()
-	assert.False(t, shouldReportToSentry(ee))
-}
-
 func TestShouldReportToSentry_AllowsCodeErrors(t *testing.T) {
 	t.Parallel()
 	ee := New(fmt.Errorf("species not found in taxonomy")).
@@ -146,14 +121,67 @@ func TestShouldReportToSentry_FiltersDynamicThresholdNotFound(t *testing.T) {
 	assert.False(t, shouldReportToSentry(ee))
 }
 
-func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
+// TestShouldReportToSentry_ConnectivityNoise pins which failures are treated
+// as connectivity noise and dropped, and which near neighbours (HTTP statuses,
+// config errors, circuit breakers, job timeouts) keep reporting. Each message
+// is built in the shape the producer emits.
+func TestShouldReportToSentry_ConnectivityNoise(t *testing.T) {
 	t.Parallel()
-	// Network category error that is NOT environmental noise should still report
-	ee := New(fmt.Errorf("unexpected status code 500 from API")).
-		Component("imageprovider").
-		Category(CategoryNetwork).
-		Build()
-	assert.True(t, shouldReportToSentry(ee))
+
+	const (
+		birdweatherURL = "https://app.birdweather.com/api/v1/stations/x/detections"
+		ffmpegStartup  = "FFmpeg process failed to start properly: "
+	)
+
+	tests := []struct {
+		name       string
+		component  string
+		category   ErrorCategory
+		err        error
+		wantReport bool
+	}{
+		// Dropped.
+		{"mqtt no route to host", "mqtt", CategoryMQTTConnection, fmt.Errorf("dial tcp 192.168.1.1:1883: connect: no route to host"), false},
+		{"network dns server misbehaving", "imageprovider", CategoryNetwork, fmt.Errorf("dial tcp: lookup en.wikipedia.org: server misbehaving"), false},
+		{"http connection refused", "weather", CategoryHTTP, fmt.Errorf("dial tcp 10.0.0.1:8080: connection refused"), false},
+		{"birdweather http2 connection lost", "birdweather", CategoryNetwork,
+			fmt.Errorf("BirdWeather detection post network error: %w",
+				&url.Error{Op: "Post", URL: birdweatherURL, Err: NewStd("http2: client connection lost")}), false},
+		{"birdweather client timeout", "birdweather", CategoryNetwork,
+			fmt.Errorf("BirdWeather soundscape upload timeout: %w",
+				&url.Error{Op: "Post", URL: birdweatherURL, Err: NewStd("net/http: request canceled (Client.Timeout exceeded while awaiting headers)")}), false},
+		{"mqtt not connected after wait", "mqtt", CategoryMQTTConnection, fmt.Errorf("mqtt connection failed post-wait, client not connected"), false},
+		{"mqtt connect attempt timed out", "mqtt", CategoryMQTTConnection, fmt.Errorf("mqtt connection attempt actively timed out"), false},
+		{"mqtt connection lost before publish", "mqtt", CategoryMQTTPublish, fmt.Errorf("connection lost before Publish completed"), false},
+		{"mqtt publish timeout", "mqtt", CategoryMQTTPublish, fmt.Errorf("publish timeout after %v", 10*time.Second), false},
+		{"sound level publish deadline", "analysis.soundlevel", CategoryMQTTPublish, context.DeadlineExceeded, false},
+		{"rtsp host is down", "ffmpeg-stream", CategoryRTSP,
+			fmt.Errorf("%s[tcp @ 0x5581] Connection to tcp://[REDACTED]:8554?timeout=0 failed: Host is down", ffmpegStartup), false},
+		{"rtsp network unreachable", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("%sNetwork unreachable", ffmpegStartup), false},
+		{"rtsp connection timed out", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("%sConnection timed out", ffmpegStartup), false},
+		{"typed dial outside the database categories", "birdweather", CategoryIntegration, refusedDialError(syscall.ECONNREFUSED), false},
+
+		// Reported.
+		{"network code bug", "imageprovider", CategoryNetwork, fmt.Errorf("unexpected status code 500 from API"), true},
+		{"weather upstream 502 after retries", "weather", CategoryNetwork, fmt.Errorf("received non-OK response (%d) after %d retries", 502, 3), true},
+		{"rtsp stream not found", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("%sRTSP stream not found", ffmpegStartup), true},
+		{"rtsp circuit breaker", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("stream circuit breaker activated: immediate connection failures"), true},
+		{"rtsp code bug", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("ffmpeg produced invalid frame header at offset 42"), true},
+		{"mqtt short timeout config", "mqtt", CategoryMQTTConnection, fmt.Errorf("mqtt connection timeout - connection failed with short timeout (500ms)"), true},
+		{"openweather key missing", "weather", CategoryConfiguration, fmt.Errorf("OpenWeather API key not configured"), true},
+		{"sqlite start failure", "datastore", CategoryDatabase,
+			fmt.Errorf("open_database: database file cannot be created: %w", &os.PathError{Op: "mkdir", Path: "/data", Err: syscall.EACCES}), true},
+		{"job queue deadline", "analysis.jobqueue", CategoryTimeout, context.DeadlineExceeded, true},
+		{"composite action timeout", "analysis.processor", CategoryTimeout, fmt.Errorf("action timed out after %v", 10*time.Second), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ee := New(tt.err).Component(tt.component).Category(tt.category).Build()
+			assert.Equal(t, tt.wantReport, shouldReportToSentry(ee))
+		})
+	}
 }
 
 // TestShouldReportToSentry_FiltersWikipediaRateLimitNoise verifies that the
@@ -343,20 +371,6 @@ func TestShouldReportToSentry_FiltersRTSPSilenceTimeout(t *testing.T) {
 				"shouldReportToSentry(%q) = %v, want %v", tt.errMsg, got, tt.wantReport)
 		})
 	}
-}
-
-// TestShouldReportToSentry_AllowsRTSPCodeBugs is a positive control that
-// pins the behavior for RTSP category errors that do NOT match the
-// known-noisy patterns. These must still reach Sentry so real bugs in the
-// RTSP stack remain visible.
-func TestShouldReportToSentry_AllowsRTSPCodeBugs(t *testing.T) {
-	t.Parallel()
-	ee := New(fmt.Errorf("ffmpeg produced invalid frame header at offset 42")).
-		Component("ffmpeg-stream").
-		Category(CategoryRTSP).
-		Build()
-	assert.True(t, shouldReportToSentry(ee),
-		"non-noise RTSP errors must still be forwarded to Sentry")
 }
 
 func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
@@ -573,40 +587,6 @@ func TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions(t *testing.T
 	}
 }
 
-func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
-	resetConnectivityWindow(t)
-
-	transport := bindMockTransport(t)
-
-	reporter := NewSentryReporter(alwaysAllowed)
-	reporter.ReportError(New(mysql.ErrInvalidConn).
-		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
-	reporter.ReportError(New(fmt.Errorf("state row is inconsistent")).
-		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
-	// A dial failure outside the gated categories keeps its category's level,
-	// origin and fingerprint.
-	reporter.ReportError(New(refusedDialError(syscall.ECONNREFUSED)).
-		Component("birdweather").Category(CategoryIntegration).Context("operation", "upload").Build())
-	sentry.Flush(time.Second)
-
-	events := transport.Events()
-	require.Len(t, events, 3)
-
-	assert.Equal(t, sentry.LevelWarning, events[0].Level)
-	assert.Equal(t, "environment", events[0].Tags["error_origin"])
-	assert.Equal(t, []string{"connectivity", "state", "invalid_connection"}, events[0].Fingerprint)
-
-	assert.Equal(t, sentry.LevelError, events[1].Level)
-	assert.Equal(t, "code", events[1].Tags["error_origin"])
-	require.GreaterOrEqual(t, len(events[1].Fingerprint), 4)
-	assert.Equal(t, []string{"datastore", "state", "read_state", "error"}, events[1].Fingerprint[:4])
-
-	assert.Equal(t, getErrorLevel(CategoryIntegration), events[2].Level)
-	assert.Equal(t, GetErrorOrigin(CategoryIntegration), events[2].Tags["error_origin"])
-	require.NotEmpty(t, events[2].Fingerprint)
-	assert.NotEqual(t, connectivityFingerprintPrefix, events[2].Fingerprint[0])
-}
-
 // dialTimeoutError mimics the timeout error the net package returns from a
 // dial: it reads "i/o timeout" and is also context.DeadlineExceeded.
 type dialTimeoutError struct{}
@@ -616,22 +596,36 @@ func (dialTimeoutError) Timeout() bool        { return true }
 func (dialTimeoutError) Temporary() bool      { return true }
 func (dialTimeoutError) Is(target error) bool { return target == context.DeadlineExceeded }
 
-func TestReportError_DatabaseDialTimeoutIsReported(t *testing.T) {
-	resetConnectivityWindow(t)
+// TestReportError_DropsConnectivityAndMarksReported pins that connectivity
+// failures never become events, that the drop marks the error reported so a
+// re-wrap is not evaluated again, and that code errors keep their own level,
+// origin and fingerprint.
+func TestReportError_DropsConnectivityAndMarksReported(t *testing.T) {
 	transport := bindMockTransport(t)
 
 	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: dialTimeoutError{}}
 	require.ErrorIs(t, dialErr, context.DeadlineExceeded, "the fixture is a context deadline like a real dial timeout")
 
+	dial := New(dialErr).Component("datastore").Category(CategoryDatabase).Context("operation", "mysql_open").Build()
+	invalidConn := New(mysql.ErrInvalidConn).Component("datastore").Category(CategoryState).Context("operation", "read_state").Build()
+	codeErr := New(fmt.Errorf("state row is inconsistent")).
+		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build()
+
 	reporter := NewSentryReporter(alwaysAllowed)
-	reporter.ReportError(New(dialErr).Component("datastore").Category(CategoryDatabase).Context("operation", "mysql_open").Build())
+	reporter.ReportError(dial)
+	reporter.ReportError(invalidConn)
+	reporter.ReportError(codeErr)
 	sentry.Flush(time.Second)
 
+	assert.True(t, dial.IsReported(), "a dropped dial timeout is marked reported")
+	assert.True(t, invalidConn.IsReported(), "a dropped invalid connection is marked reported")
+
 	events := transport.Events()
-	require.Len(t, events, 1, "an unreachable database host must produce an event")
-	assert.Equal(t, sentry.LevelWarning, events[0].Level)
-	assert.Equal(t, "environment", events[0].Tags["error_origin"])
-	assert.Equal(t, []string{"connectivity", "database", "io_timeout"}, events[0].Fingerprint)
+	require.Len(t, events, 1, "only the code error is sent")
+	assert.Equal(t, getErrorLevel(CategoryState), events[0].Level)
+	assert.Equal(t, "code", events[0].Tags["error_origin"])
+	require.GreaterOrEqual(t, len(events[0].Fingerprint), 4)
+	assert.Equal(t, []string{"datastore", "state", "read_state", "error"}, events[0].Fingerprint[:4])
 }
 
 // TestBuildReportsOnlyWhileGateAllows pins that the reporter consults its gate

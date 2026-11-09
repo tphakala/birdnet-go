@@ -52,44 +52,31 @@ const rtspSilenceTimeoutSignature = "stream stopped producing data for 90 second
 // diskFullCooldown is the minimum time between disk-full reports.
 const diskFullCooldown = 5 * time.Minute
 
-var (
-	diskFullLimiter = reportCooldown{window: diskFullCooldown} // disk-full reports
+// errorOriginEnvironment is the error_origin tag of errors caused by the
+// user's environment.
+const errorOriginEnvironment = "environment"
 
-	// networkNoisePatterns are environmental network errors that indicate
-	// user infrastructure issues, not code bugs.
-	networkNoisePatterns = []string{
-		"no route to host",
-		"connection refused",
-		"connection reset by peer",
-		"server misbehaving",    // DNS failure
-		"no such host",          // DNS failure
-		"dns resolution failed", // DNS failure (BirdWeather wrapper)
-		"network is unreachable",
-		"i/o timeout",
-		"context deadline exceeded", // Upload/request timeout
-		"tls handshake timeout",
-		"eof", // Connection lost (e.g., MQTT broker disconnect)
+// diskFullLimiter holds the window of the last disk-full report.
+var diskFullLimiter = reportCooldown{window: diskFullCooldown}
 
-		// imageprovider Wikipedia rate-limit / circuit-breaker noise.
-		// Wikipedia rate-limits the image fetcher (HTTP 429) and the circuit
-		// breaker then throttles further calls, so forwarding a Sentry event for
-		// each rejected request is pure noise. These are built with CategoryNetwork
-		// in internal/imageprovider/wikipedia.go. The patterns are Wikipedia-specific
-		// full signatures (not loose substrings like "rate limit exceeded") so
-		// network-category errors from other components are never collaterally
-		// suppressed, matching the rtspSilenceTimeoutSignature approach above.
-		// HTTP 429 is purely environmental throttling so every occurrence is
-		// suppressed; 403/500/503 still report at least the first event because
-		// those can indicate a real problem (policy violation, server fault).
-		// Lowercase substrings of the real messages produced there:
-		//   - handleHTTPStatusError: "Wikipedia API returned status 429: <body>"
-		//   - checkCircuitBreaker:   "Wikipedia API circuit breaker open: <reason>"
-		//   - diagnostic path:       "Wikipedia rate limit exceeded: <message>"
-		"wikipedia api returned status 429",  // direct HTTP 429 from the API
-		"wikipedia api circuit breaker open", // repeated rejection while breaker is open
-		"wikipedia rate limit exceeded",      // diagnostic rate-limit error
+// reportCooldown lets one event through per window. It is used by the
+// disk-full limiter.
+type reportCooldown struct {
+	last   atomic.Int64 // Unix time of the last allowed event
+	window time.Duration
+}
+
+// Allow reports whether an event at now may be sent and, if so, starts a new
+// window. CompareAndSwap keeps concurrent errors from bypassing the window
+// (TOCTOU race): the loser of the swap is suppressed.
+func (c *reportCooldown) Allow(now time.Time) bool {
+	nowUnix := now.Unix()
+	last := c.last.Load()
+	if nowUnix-last < int64(c.window/time.Second) {
+		return false
 	}
-)
+	return c.last.CompareAndSwap(last, nowUnix)
+}
 
 // categoryOriginMap classifies error categories by their origin for telemetry tagging.
 var categoryOriginMap = map[ErrorCategory]string{
@@ -235,14 +222,8 @@ func IsSuppressibleOperationalError(ee *EnhancedError) bool {
 
 // shouldReportToSentry determines if an error should be sent to Sentry
 // It filters out operational/configuration errors that aren't code bugs and
-// rate limits connectivity failures to one event per cooldown window.
+// drops connectivity failures (see isConnectivityNoise).
 func shouldReportToSentry(ee *EnhancedError) bool {
-	return shouldReport(ee, isGatedConnectivity(ee))
-}
-
-// shouldReport is shouldReportToSentry with the connectivity verdict of ee
-// already computed, so one report evaluates it once.
-func shouldReport(ee *EnhancedError, connectivity bool) bool {
 	if ee.Err == nil {
 		return true
 	}
@@ -251,9 +232,8 @@ func shouldReport(ee *EnhancedError, connectivity bool) bool {
 	// (graceful shutdown, client disconnect, request timeout). These are not code
 	// bugs; suppressing prevents hundreds of duplicate events per day from drowning
 	// legitimate errors. See isSuppressibleOperationalError for why PriorityLow is
-	// honored alongside the context sentinels. A dial timeout is also a context
-	// deadline but is an unreachable host, so it goes on to the connectivity window.
-	if isSuppressibleOperationalError(ee) && !isDialDeadlineConnectivity(ee, connectivity) {
+	// honored alongside the context sentinels.
+	if isSuppressibleOperationalError(ee) {
 		return false
 	}
 
@@ -326,17 +306,11 @@ func shouldReport(ee *EnhancedError, connectivity bool) bool {
 		}
 	}
 
-	// Filter out network infrastructure errors (user's network/DNS issues).
-	// Filter network infrastructure noise. CategoryIntegration is deliberately excluded
-	// to avoid suppressing legitimate non-transient integration errors; transient network
-	// failures in integrations should use CategoryNetwork instead.
-	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
-	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP:
-		for _, pattern := range networkNoisePatterns {
-			if strings.Contains(errorMsg, pattern) {
-				return false
-			}
-		}
+	// Drop connectivity failures (user's network, DNS, broker or database host
+	// problems). CategoryIntegration is excluded from the text rule; see
+	// isNetworkCategory.
+	if isConnectivityNoise(ee, errorMsg) {
+		return false
 	}
 
 	// RTSP silence timeouts are most often transient network glitches
@@ -349,13 +323,6 @@ func shouldReport(ee *EnhancedError, connectivity bool) bool {
 	// RTSP failures worded similarly are not accidentally suppressed.
 	if ee.Category == CategoryRTSP && strings.Contains(errorMsg, rtspSilenceTimeoutSignature) {
 		return false
-	}
-
-	// Connectivity failures (database host unreachable, dropped connections)
-	// are environment problems, not code defects. Let one through per cooldown
-	// window so an outage stays visible without one event per failed statement.
-	if connectivity {
-		return allowConnectivityReport()
 	}
 
 	// Rate-limit disk-full errors: a single root cause creates cascading
@@ -377,10 +344,8 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		return
 	}
 
-	connectivity := isGatedConnectivity(ee)
-
 	// Skip operational/configuration errors that aren't code bugs
-	if !shouldReport(ee, connectivity) {
+	if !shouldReportToSentry(ee) {
 		ee.MarkReported() // Mark as reported to prevent retry
 		return
 	}
@@ -403,11 +368,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetTag("error_title", errorTitle)
 		scope.SetTag("component", ee.GetComponent())
 		scope.SetTag("category", string(ee.Category))
-		errorOrigin := GetErrorOrigin(ee.Category)
-		if connectivity {
-			errorOrigin = errorOriginEnvironment
-		}
-		scope.SetTag("error_origin", errorOrigin)
+		scope.SetTag("error_origin", GetErrorOrigin(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
 		// Add context data with privacy scrubbing
@@ -427,13 +388,10 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 		// Set error level based on category
 		level := getErrorLevel(ee.Category)
-		if connectivity {
-			level = sentry.LevelWarning
-		}
 		scope.SetLevel(level)
 
 		// Set custom fingerprint for better grouping using structured fields
-		scope.SetFingerprint(buildFingerprint(ee, connectivity))
+		scope.SetFingerprint(buildFingerprint(ee))
 
 		// Use the error title as the exception type by creating a custom exception
 		event := sentry.NewEvent()
@@ -457,8 +415,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 }
 
 // buildFingerprint creates a structured fingerprint for Sentry issue grouping.
-// connectivity is the isGatedConnectivity verdict for ee.
-func buildFingerprint(ee *EnhancedError, connectivity bool) []string {
+func buildFingerprint(ee *EnhancedError) []string {
 	component := ee.GetComponent()
 	category := string(ee.Category)
 	operation, _ := ee.Context["operation"].(string)
@@ -467,12 +424,6 @@ func buildFingerprint(ee *EnhancedError, connectivity bool) []string {
 		errMsg = ee.Err.Error()
 	}
 	normalizedType := NormalizeErrorType(errMsg)
-
-	// Connectivity failures group by category and type only: with one event per
-	// window the operation that happens to go first is arbitrary.
-	if connectivity {
-		return []string{connectivityFingerprintPrefix, category, normalizedType}
-	}
 
 	fp := make([]string, 0, 5)
 	if component != "" && component != ComponentUnknown {

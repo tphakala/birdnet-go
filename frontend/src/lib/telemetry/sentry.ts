@@ -97,6 +97,20 @@ function isNetworkTypeError(err: unknown): boolean {
   );
 }
 
+/** Check whether an unknown value looks like an ApiError flagged as a network failure. */
+function isNetworkApiError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  return (err as Record<string, unknown>).isNetworkError === true;
+}
+
+/**
+ * Check whether an error is a connectivity failure (offline, DNS, the
+ * client-side request timeout). These are infrastructure problems, not app bugs.
+ */
+function isConnectivityFailure(err: unknown): boolean {
+  return isNetworkTypeError(err) || isNetworkApiError(err);
+}
+
 /** Check whether a normalized message matches known noise patterns. */
 function isNoiseMessage(raw: string): boolean {
   const msg = raw.trim().toLowerCase();
@@ -224,7 +238,8 @@ export function shutdownSentry(): Promise<void> {
 
 /**
  * Capture an API error with structured context.
- * Skips expected-flow errors (401/403/409/412) as they are not bugs.
+ * Skips expected-flow errors (401/403/409/412), gateway errors and connectivity
+ * failures as they are not bugs.
  */
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
   // Skip expected-flow errors - auth (401/403), conflict (409, e.g. v2 database not available) and stale If-Match (412)
@@ -233,8 +248,8 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
   // Skip gateway errors - 502/503/504 are proxy/infrastructure issues, not app bugs
   if (isGatewayError(error)) return;
 
-  // Skip network errors - connectivity issues are infrastructure noise, not app bugs
-  if (error.isNetworkError) return;
+  // Skip connectivity failures - infrastructure noise, not app bugs
+  if (isConnectivityFailure(error)) return;
 
   const severity = error.status >= HTTP_SERVER_ERROR_MIN ? 'error' : 'warning';
 
@@ -265,6 +280,8 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
 /**
  * Capture a non-API error from logger.error() calls.
  * Used via dependency injection from logger.ts to avoid circular imports.
+ * Skips expected-flow errors and connectivity failures (network TypeErrors and
+ * ApiErrors flagged isNetworkError, including the client-side request timeout).
  */
 export function captureError(
   error: Error,
@@ -273,8 +290,8 @@ export function captureError(
   // Skip expected-flow errors - 401/403/409/412 are not bugs
   if (isExpectedApiError(error)) return;
 
-  // Skip network TypeErrors - connectivity issues are infrastructure noise, not app bugs
-  if (isNetworkTypeError(error)) return;
+  // Skip connectivity failures - infrastructure noise, not app bugs
+  if (isConnectivityFailure(error)) return;
 
   Sentry.withScope(scope => {
     scope.setLevel('error');
@@ -337,7 +354,8 @@ function scrubUrl(raw: string): string {
 
 /**
  * Privacy-first event filtering. Scrubs PII before events leave the browser.
- * Also drops auth errors (401/403) which are expected when users aren't logged in.
+ * Also drops auth errors (401/403) which are expected when users aren't logged in,
+ * and connectivity failures (see isConnectivityFailure).
  */
 function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
   // Drop expected-flow errors - 401/403/409/412 can arrive via unhandled rejections or logger.error().
@@ -346,8 +364,8 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
   // Drop gateway errors - 502/503/504 from reverse proxies during backend restarts
   if (isGatewayError(hint.originalException)) return null;
 
-  // Drop network TypeErrors (connectivity issues are infrastructure noise, not app bugs)
-  if (isNetworkTypeError(hint.originalException)) return null;
+  // Drop connectivity failures (infrastructure noise, not app bugs)
+  if (isConnectivityFailure(hint.originalException)) return null;
 
   // Drop chunk/asset loading failures from lazy-loaded routes (stale manifests, transient network)
   if (isAssetLoadingError(hint.originalException)) return null;

@@ -7,6 +7,7 @@
 package analysis
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // makeValidSoundLevelData returns a well-formed SoundLevelData value suitable
@@ -87,7 +89,7 @@ func TestPublishSoundLevelToMQTT_ClientNotReady_Idempotent(t *testing.T) {
 		Settings: settings,
 	}
 
-	// Simulate many sound-level intervals — each call must remain a silent
+	// Simulate many sound-level intervals, each call must remain a silent
 	// no-op at the publisher level regardless of how many have come before.
 	for i := range 500 {
 		err := publishSoundLevelToMQTT(makeValidSoundLevelData(), proc)
@@ -113,4 +115,33 @@ func TestPublishSoundLevelToMQTT_MQTTDisabled_StillNoError(t *testing.T) {
 	err := publishSoundLevelToMQTT(makeValidSoundLevelData(), proc)
 	require.NoError(t, err,
 		"when MQTT is disabled the publisher returns nil (pre-existing behavior)")
+}
+
+// TestPublishSoundLevelToMQTT_PublishFailureIsMQTTPublishLowPriority verifies
+// that a failed publish is categorised as an MQTT publish failure, so telemetry
+// classifies a broker timeout by its cause, and that the explicit low priority
+// keeps the notification behaviour the sound-level category had.
+func TestPublishSoundLevelToMQTT_PublishFailureIsMQTTPublishLowPriority(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global state.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = "birdnet/test"
+	conftest.SetTestSettings(settings)
+
+	proc := createMockProcessor(func(context.Context, string, string) error {
+		return context.DeadlineExceeded
+	})
+	proc.Settings = settings
+
+	err := publishSoundLevelToMQTT(makeValidSoundLevelData(), proc)
+	require.Error(t, err)
+
+	assert.True(t, errors.IsCategory(err, errors.CategoryMQTTPublish))
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	ee, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "the failure is an enhanced error")
+	assert.Equal(t, errors.PriorityLow, ee.GetPriority())
 }

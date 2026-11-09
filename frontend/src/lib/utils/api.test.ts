@@ -96,6 +96,24 @@ describe('API utilities', () => {
       expect(result).toEqual({ data: 'test' });
     });
 
+    it.each([
+      { message: 'Failed to fetch', isNetworkError: true },
+      { message: 'Load failed', isNetworkError: true },
+      { message: 'NetworkError when attempting to fetch resource.', isNetworkError: true },
+      { message: 'Some other failure', isNetworkError: false },
+    ])(
+      'maps a fetch rejection "$message" to isNetworkError=$isNetworkError',
+      async ({ message, isNetworkError }) => {
+        mockFetch.mockRejectedValueOnce(new TypeError(message));
+
+        const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(0);
+        expect((err as ApiError).isNetworkError).toBe(isNetworkError);
+      }
+    );
+
     it('includes CSRF token in headers', async () => {
       // Set a specific test token via mock
       mockCsrfToken = 'test-csrf-token-specific';

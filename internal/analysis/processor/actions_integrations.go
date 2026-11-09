@@ -163,7 +163,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 				logger.Float64("confidence", a.Result.Confidence),
 				logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 				logger.String("operation", "birdweather_upload_transient"))
-			// Return error to trigger retry, but use CategoryNetwork to avoid Sentry reporting
+			// Return error to trigger retry, but use CategoryNetwork so the telemetry connectivity filter drops transport failures
 			return errors.New(err).
 				Component("analysis.processor").
 				Category(errors.CategoryNetwork).
