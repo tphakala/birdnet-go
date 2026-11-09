@@ -228,9 +228,6 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	// these are user configuration or network issues (service not running,
 	// wrong URL, DNS misconfiguration, firewall, slow service) not code
 	// quality problems.
-	// We still call RecordFailure so the sample error is captured, but we
-	// intentionally avoid ShouldReport which would increment
-	// consecutiveFailures and suppress the next real (non-connection) error.
 	if isTimeout || isConnectionError(err) {
 		// Connection errors are not tracked by the error suppressor to avoid
 		// interfering with the suppression logic for reportable errors.
