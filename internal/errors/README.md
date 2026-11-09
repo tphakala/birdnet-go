@@ -382,7 +382,7 @@ Errors are automatically assigned appropriate Sentry levels:
 - `CategoryValidation`, `CategoryDatabase`: Error level
 - `CategoryNetwork`, `CategoryFileIO`: Warning level
 - `CategoryModelInit`, `CategoryModelLoad`: Error level (critical)
-- Connectivity failures (unreachable host, dropped connection, DNS, transport timeouts) are not reported
+- Connectivity failures are not reported: dial, DNS and bad-connection errors (including the MySQL invalid connection error) in the database, state, system and image-cache categories unless a MySQL server error is attached, and transport failure texts (unreachable host, dropped connection, DNS, timeouts) in the network, HTTP, MQTT connection, MQTT publish and RTSP categories
 
 ### Context Data
 
