@@ -31,6 +31,12 @@ var (
 	// reportable.
 	mysqlServerErrorRegex = regexp.MustCompile(`(?i)\berror \d{4}\b`)
 
+	// eofTokenRegex matches EOF as a whole word in a lowercased message, the
+	// text of a connection closed by the peer (for example an MQTT broker
+	// disconnect). A plain substring would also match words such as "geoffroy"
+	// and "typeof".
+	eofTokenRegex = regexp.MustCompile(`\beof\b`)
+
 	// connectSyscalls are the syscall names net reports for a failed connect.
 	connectSyscalls = []string{"connect", "connectex"}
 
@@ -188,7 +194,6 @@ var connectivitySignatures = []string{
 	"i/o timeout",
 	"context deadline exceeded", // Upload/request timeout
 	"tls handshake timeout",
-	"eof", // Connection lost (e.g., MQTT broker disconnect)
 
 	// net/http transport and client failures. The http2 text is the transport's
 	// "client connection lost"; "client.timeout" ends the "net/http: request
@@ -212,6 +217,7 @@ var connectivitySignatures = []string{
 	"publish timeout after",
 	"mqtt connection failed post-wait",
 	"mqtt connection attempt actively timed out",
+	"not connected to mqtt broker", // publish attempted while the broker link is down
 
 	// imageprovider Wikipedia rate-limit / circuit-breaker noise.
 	// Wikipedia rate-limits the image fetcher (HTTP 429) and the circuit
@@ -270,12 +276,15 @@ func isNetworkCategory(c ErrorCategory) bool {
 // "invalid connection" sentinel) applies to the database, state, system and
 // image-cache categories only: a dial error under another category can be a
 // configuration problem such as a permission or missing socket error. The text
-// signatures apply only to network categories, so a code error that happens to
-// mention a timeout elsewhere keeps reporting. lowerMsg is the lowercased
-// message of ee.Err.
+// signatures (connectivitySignatures plus a whole-word EOF match) apply only to
+// network categories, so a code error that happens to mention a timeout
+// elsewhere keeps reporting. lowerMsg is the lowercased message of ee.Err.
 func isConnectivityNoise(ee *EnhancedError, lowerMsg string) bool {
 	if isGatedConnectivity(ee) {
 		return true
 	}
-	return isNetworkCategory(ee.Category) && containsAny(lowerMsg, connectivitySignatures)
+	if !isNetworkCategory(ee.Category) {
+		return false
+	}
+	return containsAny(lowerMsg, connectivitySignatures) || eofTokenRegex.MatchString(lowerMsg)
 }

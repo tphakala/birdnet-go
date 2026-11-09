@@ -577,6 +577,28 @@ func TestWebhookRequestError_NetworkTimeout(t *testing.T) {
 	assert.Empty(t, reporter.capturedEvents, "a timeout should not generate a telemetry event")
 }
 
+// TestWebhookRequestError_TransportFailureWithoutStatus verifies that a request
+// that never produced an HTTP status is not reported, whatever its cause: TLS
+// and certificate failures are the user's endpoint setup, not code defects.
+func TestWebhookRequestError_TransportFailureWithoutStatus(t *testing.T) {
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	telemetry.WebhookRequestError(
+		"webhook-primary",
+		fmt.Errorf("Post \"https://hooks.example.com\": tls: failed to verify certificate: x509: certificate signed by unknown authority"),
+		0, // No status code for transport errors
+		"https://hooks.example.com/services/T00/B00/xyz",
+		"POST",
+		"bearer",
+		false, // isTimeout
+		false, // isCancelled
+	)
+
+	assert.Empty(t, reporter.capturedEvents, "a transport failure without a status should not generate a telemetry event")
+}
+
 // TestWebhookRequestError_HTTPServerError tests 5xx error reporting
 func TestWebhookRequestError_HTTPServerError(t *testing.T) {
 	reporter := &mockTelemetryReporter{enabled: true}

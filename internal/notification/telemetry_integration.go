@@ -228,7 +228,10 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	// these are user configuration or network issues (service not running,
 	// wrong URL, DNS misconfiguration, firewall, slow service) not code
 	// quality problems.
-	if isTimeout || isConnectionError(err) {
+	// A request that never produced an HTTP status (statusCode 0) failed at the
+	// transport level: TLS and certificate problems belong to the endpoint
+	// setup, so only responses with a 4xx or 5xx status are reported.
+	if statusCode == 0 || isTimeout || isConnectionError(err) {
 		// Connection errors are not tracked by the error suppressor to avoid
 		// interfering with the suppression logic for reportable errors.
 		// Recording them would set sampleError, causing misleading recovery

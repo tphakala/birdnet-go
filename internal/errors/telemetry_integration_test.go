@@ -153,6 +153,8 @@ func TestShouldReportToSentry_ConnectivityNoise(t *testing.T) {
 		{"mqtt not connected after wait", "mqtt", CategoryMQTTConnection, fmt.Errorf("mqtt connection failed post-wait, client not connected"), false},
 		{"mqtt connect attempt timed out", "mqtt", CategoryMQTTConnection, fmt.Errorf("mqtt connection attempt actively timed out"), false},
 		{"mqtt connection lost before publish", "mqtt", CategoryMQTTPublish, fmt.Errorf("connection lost before Publish completed"), false},
+		{"mqtt publish while disconnected", "mqtt", CategoryMQTTPublish, fmt.Errorf("not connected to MQTT broker"), false},
+		{"mqtt broker closed the connection", "mqtt", CategoryMQTTConnection, fmt.Errorf("read tcp 10.0.0.2:41234->10.0.0.9:1883: EOF"), false},
 		{"mqtt publish timeout", "mqtt", CategoryMQTTPublish, fmt.Errorf("publish timeout after %v", 10*time.Second), false},
 		{"sound level publish deadline", "analysis.soundlevel", CategoryMQTTPublish, context.DeadlineExceeded, false},
 		{"rtsp host is down", "ffmpeg-stream", CategoryRTSP,
@@ -163,6 +165,8 @@ func TestShouldReportToSentry_ConnectivityNoise(t *testing.T) {
 		// Reported.
 		{"network code bug", "imageprovider", CategoryNetwork, fmt.Errorf("unexpected status code 500 from API"), true},
 		{"weather upstream 502 after retries", "weather", CategoryNetwork, fmt.Errorf("received non-OK response (%d) after %d retries", 502, 3), true},
+		{"http error text that merely contains eof", "weather", CategoryHTTP, fmt.Errorf("station lookup failed for Geoffroy: unexpected response shape"), true},
+		{"network error text with typeof", "imageprovider", CategoryNetwork, fmt.Errorf("provider returned typeof mismatch in payload"), true},
 		{"rtsp stream not found", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("%sRTSP stream not found", ffmpegStartup), true},
 		{"rtsp circuit breaker", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("stream circuit breaker activated: immediate connection failures"), true},
 		{"rtsp code bug", "ffmpeg-stream", CategoryRTSP, fmt.Errorf("ffmpeg produced invalid frame header at offset 42"), true},
