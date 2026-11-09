@@ -193,7 +193,7 @@ func TestShouldReportToSentry_ConnectivityNoise(t *testing.T) {
 // a Sentry event for every rejected request is pure noise. The exact wordings
 // asserted here are real substrings of the messages those code paths produce,
 // lowercased to match how shouldReportToSentry compares against
-// networkNoisePatterns.
+// connectivitySignatures.
 func TestShouldReportToSentry_FiltersWikipediaRateLimitNoise(t *testing.T) {
 	t.Parallel()
 
