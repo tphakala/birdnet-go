@@ -5629,6 +5629,10 @@
         "label": "Ověření po detekci",
         "helpText": "Pokud je zapnuto, detekce netopýrů se ověřují analýzou vzorů ultrazvukové energie ve zdrojovém zvuku. Detekce bez charakteristik echolokace netopýrů jsou označeny jako nepravděpodobné."
       },
+      "batDiscardUnlikely": {
+        "label": "Zahazovat nepravděpodobné detekce",
+        "helpText": "Pokud je zapnuto, detekce netopýrů, které ověření po detekci označí jako nepravděpodobné, se zahazují: neukládají se, nevzniká k nim zvukový klip ani oznámení a nelze je obnovit. Pokud je vypnuto (výchozí stav), ukládají se a jsou označeny jako nepravděpodobné. Již uložené detekce se nemění."
+      },
       "batFalsePositiveFilter": {
         "label": "Filtr falešných detekcí netopýrů",
         "helpText": "Vyžaduje více potvrzení detekce netopýra v rámci posuvného okna před jejím přijetím. Vyšší úrovně vyžadují více potvrzení, čímž se snižuje počet falešných detekcí. Model netopýrů používá pevné 50% překrytí, takže úprava překrytí není potřeba.",

@@ -2754,6 +2754,10 @@
           "type": "boolean",
           "description": "enable ultrasonic validation filter"
         },
+        "discardunlikely": {
+          "type": "boolean",
+          "description": "discard detections tagged unlikely instead of saving them; applies only while enabled"
+        },
         "cvthreshold": {
           "type": "number",
           "description": "detections with US frame CV below this are tagged unlikely"

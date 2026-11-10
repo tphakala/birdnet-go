@@ -5629,6 +5629,10 @@
         "label": "Utólagos érzékelés-ellenőrzés",
         "helpText": "Bekapcsolva a denevérészleléseket az ultrahang-energiaminták elemzésével ellenőrzi a forrásanyagban. Az echolokációs jellemzőkkel nem rendelkező észleléseket valószínűtlenként jelöli meg."
       },
+      "batDiscardUnlikely": {
+        "label": "Valószínűtlen észlelések elvetése",
+        "helpText": "Bekapcsolva az utólagos érzékelés-ellenőrzés által valószínűtlennek jelölt denevérészleléseket elveti: nem menti el őket, nem készül hozzájuk hangklip vagy értesítés, és nem állíthatók vissza. Kikapcsolva (alapértelmezett) elmenti őket valószínűtlenként megjelölve. A már mentett észleléseken nem változtat."
+      },
       "batFalsePositiveFilter": {
         "label": "Denevér hamis pozitív szűrő",
         "helpText": "Több megerősítést igényel egy denevérészleléshez egy csúszó ablakon belül, mielőtt elfogadná. A magasabb szintek több megerősítést igényelnek, csökkentve a hamis pozitívokat. A denevérmodell fix 50%-os átfedést használ, így átfedés-beállítás nem szükséges.",

@@ -5629,6 +5629,10 @@
         "label": "Etterdeteksjonsvalidering",
         "helpText": "Når aktivert, valideres flaggermusregistreringer ved å analysere ultrasoniske energimønstre i kildelyden. Registreringer som mangler flaggermus-ekkololokasjonskjennetegn merkes som usannsynlige."
       },
+      "batDiscardUnlikely": {
+        "label": "Forkast usannsynlige registreringer",
+        "helpText": "Når aktivert, forkastes flaggermusregistreringer som etterdeteksjonsvalideringen merker som usannsynlige: de lagres ikke, får ingen lydklipp eller varsling og kan ikke gjenopprettes. Når deaktivert (standard), lagres de og merkes som usannsynlige. Registreringer som allerede er lagret, endres ikke."
+      },
       "batFalsePositiveFilter": {
         "label": "Falsk positiv-filter for flaggermus",
         "helpText": "Krever flere bekreftelser av en flaggermusregistrering innenfor et glidende vindu før den godtas. Høyere nivåer krever flere bekreftelser og reduserer falske positive. Flaggermusmodellen bruker fast 50% overlapping, så ingen overlappjustering er nødvendig.",

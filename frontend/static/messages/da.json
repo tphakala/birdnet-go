@@ -5629,6 +5629,10 @@
         "label": "Validering efter detektion",
         "helpText": "Når aktiveret, valideres flagermusdetektioner ved at analysere ultralydsmønstre i kildeoptagelsen. Detektioner uden typiske flagermus-ekkolokationskarakteristika markeres som usandsynlige."
       },
+      "batDiscardUnlikely": {
+        "label": "Kassér usandsynlige detektioner",
+        "helpText": "Når aktiveret, kasseres flagermusdetektioner, som validering efter detektion markerer som usandsynlige: de gemmes ikke, får ingen lydklip eller notifikation og kan ikke gendannes. Når deaktiveret (standard), gemmes de og markeres som usandsynlige. Detektioner, der allerede er gemt, ændres ikke."
+      },
       "batFalsePositiveFilter": {
         "label": "Flagermus falsk-positiv filter",
         "helpText": "Kræver flere bekræftelser af en flagermusdetektion inden for et glidende vindue, før den accepteres. Højere niveauer kræver flere bekræftelser, hvilket reducerer falske positiver. Flagermusmodellen bruger et fast 50% overlap, så ingen overlapjustering er nødvendig.",

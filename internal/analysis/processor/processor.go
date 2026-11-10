@@ -1052,6 +1052,12 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 	return detections
 }
 
+// reasonUltrasonicFilter is the discard reason of the ultrasonic filter when
+// discardunlikely drops a detection still tagged unlikely. The text is fixed
+// because discard reasons are aggregated by their exact string (see
+// reasonModelConsensus).
+const reasonUltrasonicFilter = "ultrasonic filter"
+
 // bytesPerPCM16Sample is the size of one 16-bit PCM sample in bytes.
 const bytesPerPCM16Sample = 2
 
@@ -1805,9 +1811,11 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // privacyfilter.debug on, a summary of the detectors that counted hits
 // reaching the clip (priv.contributions, which is listed whenever the latest hit
 // reaches the clip); the counts are lower bounds once the attribution list has
-// dropped a reaching hit at its cap (priv.hitCountsLowerBound). The model
-// consensus filter runs last so the other filters keep their discard attribution;
-// cons is the tick's model view (see prepareModelConsensus) and nil skips it.
+// dropped a reaching hit at its cap (priv.hitCountsLowerBound). The ultrasonic
+// filter discards a detection still tagged unlikely when discardunlikely is on,
+// after those checks and before model consensus. The model consensus filter runs
+// last so the other filters keep their discard attribution; cons is the tick's
+// model view (see prepareModelConsensus) and nil skips it.
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck, cons *consensusTick) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -1919,6 +1927,17 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.String("operation", "daylight_filter"))
 			return true, reasonDaylightFilter
 		}
+	}
+
+	if f := &settings.Bat.UltrasonicFilter; f.Enabled && f.DiscardUnlikely && item.Detection.Result.Unlikely {
+		GetLogger().Debug("Detection discarded by ultrasonic filter",
+			logger.String("species", item.Detection.Result.Species.CommonName),
+			logger.Time("detection_time", item.FirstDetected),
+			logger.Float64("us_frame_cv", item.Detection.Result.UltrasonicCV),
+			logger.Float64("threshold", item.Detection.Result.UltrasonicCVThreshold),
+			logger.String("source", p.getDisplayNameForSource(item.Source)),
+			logger.String("operation", "ultrasonic_filter"))
+		return true, reasonUltrasonicFilter
 	}
 
 	if cons != nil && p.discardForModelConsensus(item, settings, cons) {

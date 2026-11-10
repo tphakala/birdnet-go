@@ -5629,6 +5629,10 @@
         "label": "Validatie na detectie",
         "helpText": "Indien ingeschakeld worden vleermuisdetecties gevalideerd door analyse van ultrasone energiepatronen in de bronaudio. Detecties zonder echolocatiekenmerken worden gemarkeerd als onwaarschijnlijk."
       },
+      "batDiscardUnlikely": {
+        "label": "Onwaarschijnlijke detecties verwerpen",
+        "helpText": "Indien ingeschakeld worden vleermuisdetecties die de validatie na detectie als onwaarschijnlijk markeert, verworpen: ze worden niet opgeslagen, krijgen geen audioclip of melding en kunnen niet worden hersteld. Indien uitgeschakeld (standaard) worden ze opgeslagen en als onwaarschijnlijk gemarkeerd. Al opgeslagen detecties worden niet gewijzigd."
+      },
       "batFalsePositiveFilter": {
         "label": "Vleermuis vals-positief filter",
         "helpText": "Vereist meerdere bevestigingen van een vleermuisdetectie binnen een schuifvenster voordat deze wordt geaccepteerd. Hogere niveaus vereisen meer bevestigingen, waardoor valse positieven worden verminderd. Het vleermuismodel gebruikt een vaste overlap van 50%, dus er is geen overlapaanpassing nodig.",

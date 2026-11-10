@@ -521,7 +521,11 @@ func TestShouldDiscardDetection_PrivacyBeforeConsensus(t *testing.T) {
 	p := &Processor{LastHumanDetection: map[string]HumanDetection{}}
 	settings := consensusSettings(2, false)
 	settings.Realtime.PrivacyFilter.Enabled = true
+	// The ultrasonic filter would discard the tagged item too, so the privacy reason
+	// proves the privacy check runs first.
+	settings.Bat.UltrasonicFilter = conf.UltrasonicFilterConfig{Enabled: true, DiscardUnlikely: true}
 	item := consensusItem(consensusStubBirdA)
+	item.Detection.Result.Unlikely = true
 	item.FirstDetected = consensusAt(10)
 	p.LastHumanDetection[item.Source] = HumanDetection{Time: consensusAt(10)}
 	tick := &consensusTick{
@@ -535,6 +539,7 @@ func TestShouldDiscardDetection_PrivacyBeforeConsensus(t *testing.T) {
 	assert.Equal(t, reasonPrivacyFilter, reason)
 
 	settings.Realtime.PrivacyFilter.Enabled = false
+	settings.Bat.UltrasonicFilter.DiscardUnlikely = false
 	priv = p.checkPrivacy(settings, item, time.Now())
 	discard, reason = p.shouldDiscardDetection(item, settings, 1, &priv, tick)
 	assert.True(t, discard)
@@ -545,8 +550,9 @@ func TestShouldDiscardDetection_PrivacyBeforeConsensus(t *testing.T) {
 }
 
 // TestShouldDiscardDetection_OtherChecksBeforeConsensus pins that the minimum count,
-// dog bark and daylight checks run before consensus, so each keeps its own discard
-// reason when the consensus tick would discard the same detection.
+// dog bark and daylight checks run before the ultrasonic filter, and the ultrasonic
+// filter runs before consensus, so each keeps its own discard reason when a later
+// check would discard the same detection.
 func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 	const minDetections = 5
 	sunTimes, err := newTestSunCalc().GetSunEventTimes(referenceDate())
@@ -596,6 +602,15 @@ func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 				assert.Equal(t, reasonDaylightFilter, reason)
 			},
 		},
+		{
+			name:   "ultrasonic filter",
+			count:  minDetections,
+			enable: func(*Processor, *conf.Settings, bool) {}, // the loop turns the ultrasonic filter on for every row
+			wantReason: func(t *testing.T, reason string) {
+				t.Helper()
+				assert.Equal(t, reasonUltrasonicFilter, reason)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -603,6 +618,7 @@ func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 			settings := consensusSettings(2, false)
 			item := consensusItem(consensusStubBirdA)
 			item.Count = tt.count
+			item.Detection.Result.Unlikely = true
 			item.FirstDetected = sunTimes.CivilDawn.Add(3 * time.Hour)
 			tick := &consensusTick{
 				models: stubConsensusModels(consensusStubBirdA, consensusStubBirdB),
@@ -615,23 +631,26 @@ func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 				return p.shouldDiscardDetection(item, settings, minDetections, &priv, tick)
 			}
 
-			tt.enable(p, settings, true)
+			// Every row also has the ultrasonic filter discarding the tagged item, so a
+			// row's own reason proves its check runs before the ultrasonic one.
+			setFilters := func(on bool) {
+				tt.enable(p, settings, on)
+				settings.Bat.UltrasonicFilter = conf.UltrasonicFilterConfig{Enabled: true, DiscardUnlikely: on}
+			}
+
+			setFilters(true)
 			discarded, reason := discard()
 			require.True(t, discarded)
 			tt.wantReason(t, reason)
 
-			// Control: with the other filter off, the same item is discarded by consensus.
-			if tt.name != "minimum count" {
-				tt.enable(p, settings, false)
-				discarded, reason = discard()
-				assert.True(t, discarded)
-				assert.Equal(t, reasonModelConsensus, reason)
-			} else {
+			// Control: with the other filters off, the same item is discarded by consensus.
+			setFilters(false)
+			if tt.name == "minimum count" {
 				item.Count = minDetections
-				discarded, reason = discard()
-				assert.True(t, discarded)
-				assert.Equal(t, reasonModelConsensus, reason)
 			}
+			discarded, reason = discard()
+			assert.True(t, discarded)
+			assert.Equal(t, reasonModelConsensus, reason)
 		})
 	}
 }

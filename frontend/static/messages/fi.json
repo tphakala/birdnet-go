@@ -5629,6 +5629,10 @@
         "label": "Tunnistuksen jälkitarkistus",
         "helpText": "Kun käytössä, lepakkotunnistukset validoidaan analysoimalla ultraäänienergiakuvioita lähdeäänitteestä. Tunnistukset, joista puuttuvat kaikuluotausominaisuudet, merkitään epätodennäköisiksi."
       },
+      "batDiscardUnlikely": {
+        "label": "Hylkää epätodennäköiset tunnistukset",
+        "helpText": "Kun käytössä, lepakkotunnistukset, jotka tunnistuksen jälkitarkistus merkitsee epätodennäköisiksi, hylätään: niitä ei tallenneta, niille ei synny äänileikettä eikä ilmoitusta, eikä niitä voi palauttaa. Kun pois käytöstä (oletus), ne tallennetaan ja merkitään epätodennäköisiksi. Jo tallennettuja tunnistuksia ei muuteta."
+      },
       "batFalsePositiveFilter": {
         "label": "Lepakon väärien positiivisten suodatin",
         "helpText": "Vaatii useita vahvistuksia lepakkotunnistuksesta liukuvan ikkunan sisällä ennen kuin se hyväksytään. Korkeammat tasot vaativat enemmän vahvistuksia, mikä vähentää vääriä positiivisia. Lepakkomalli käyttää kiinteää 50 % päällekkäisyyttä, joten päällekkäisyyden säätöä ei tarvita.",

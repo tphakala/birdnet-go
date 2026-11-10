@@ -371,7 +371,7 @@
       filterEnabled: false,
       nighttimeOnly: true,
       falsePositiveFilter: { level: 0 },
-      ultrasonicFilter: { enabled: true },
+      ultrasonicFilter: { enabled: true, discardUnlikely: false },
     }
   );
 
@@ -443,6 +443,7 @@
       batThreshold: store.originalData.bat?.threshold,
       batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
+      batDiscardUnlikely: store.originalData.bat?.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
       bsgBatThreshold: hasBsgBatModel
         ? (store.originalData.bsgbat?.threshold ?? BSG_BAT_DEFAULT_THRESHOLD)
@@ -453,6 +454,7 @@
       batThreshold: bat.threshold,
       batNighttimeOnly: bat.nighttimeOnly,
       batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
+      batDiscardUnlikely: bat.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: batFPLevel,
       bsgBatThreshold: hasBsgBatModel ? bsgBat.threshold : undefined,
       bsgBatStepFrames: hasBsgBatModel ? bsgBatStepFrames : undefined,
@@ -1244,6 +1246,16 @@
   function updateBatUltrasonicFilter(value: boolean) {
     settingsActions.updateSection('bat', {
       ultrasonicFilter: { ...bat.ultrasonicFilter, enabled: value },
+    });
+  }
+
+  function updateBatDiscardUnlikely(value: boolean) {
+    settingsActions.updateSection('bat', {
+      ultrasonicFilter: {
+        ...bat.ultrasonicFilter,
+        enabled: bat.ultrasonicFilter?.enabled ?? true,
+        discardUnlikely: value,
+      },
     });
   }
 
@@ -2080,13 +2092,25 @@
             disabled={store.isLoading || store.isSaving}
             onchange={updateBatNighttimeOnly}
           />
-          <Checkbox
-            checked={bat.ultrasonicFilter?.enabled ?? true}
-            label={t('analysis.detection.batUltrasonicFilter.label')}
-            helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateBatUltrasonicFilter}
-          />
+          <!-- One grid cell, so the dependent checkbox sits under the filter it belongs to -->
+          <div class="flex flex-col gap-6">
+            <Checkbox
+              checked={bat.ultrasonicFilter?.enabled ?? true}
+              label={t('analysis.detection.batUltrasonicFilter.label')}
+              helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={updateBatUltrasonicFilter}
+            />
+            {#if bat.ultrasonicFilter?.enabled ?? true}
+              <Checkbox
+                checked={bat.ultrasonicFilter?.discardUnlikely ?? false}
+                label={t('analysis.detection.batDiscardUnlikely.label')}
+                helpText={t('analysis.detection.batDiscardUnlikely.helpText')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={updateBatDiscardUnlikely}
+              />
+            {/if}
+          </div>
         </div>
 
         <!-- Bat False Positive Filter -->

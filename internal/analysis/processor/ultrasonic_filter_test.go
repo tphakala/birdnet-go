@@ -6,10 +6,12 @@ import (
 	"math"
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -245,4 +247,52 @@ func TestApplyUltrasonicFilter_UnknownModelIsNotFiltered(t *testing.T) {
 
 	assert.False(t, runUltrasonicFilterForModel(p, settings, "", pcm), "an empty model ID must not filter")
 	assert.False(t, runUltrasonicFilterForModel(p, settings, "NoSuchModel", pcm), "an unknown model must not filter")
+}
+
+// TestFlushPendingDetections_DiscardUnlikely pins the optional discard of a bat
+// detection still tagged unlikely at flush: it needs the filter, the setting and
+// the tag. Each step publishes its settings after the item is already pending, so
+// a change applies to pending items. The steps run in order on one processor.
+func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
+	p := mergeTestProcessor(t)
+	// An approved detection enqueues its actions; the queue is never started, so it
+	// rejects them and none run.
+	p.JobQueue = jobqueue.NewJobQueue()
+
+	steps := []struct {
+		name            string
+		filterEnabled   bool
+		discardUnlikely bool
+		unlikely        bool
+		wantFlushed     int
+	}{
+		{"gate on, tagged", true, true, true, 0},
+		{"gate off, tagged", true, false, true, 1},
+		{"gate on, not tagged", true, true, false, 1},
+		{"filter off, gate on, tagged", false, true, true, 1},
+		{"gate on again, tagged", true, true, true, 0},
+	}
+	for _, step := range steps {
+		now := time.Now()
+		item := PendingDetection{
+			Source:        mergeTestSource,
+			Count:         1,
+			FirstDetected: now.Add(-10 * time.Second),
+			FlushDeadline: now.Add(-time.Second),
+		}
+		item.Detection.Result.Species = detection.Species{ScientificName: mergeTestScientific, CommonName: mergeTestCommon}
+		item.Detection.Result.Unlikely = step.unlikely
+		p.pendingDetections[pendingDetectionKey(mergeTestSource, "great tit")] = item
+
+		// Published after the item is pending: the flush must follow the new settings.
+		conf.StoreSettings(&conf.Settings{Bat: conf.BatConfig{UltrasonicFilter: conf.UltrasonicFilterConfig{
+			Enabled:         step.filterEnabled,
+			DiscardUnlikely: step.discardUnlikely,
+		}}})
+
+		pending, flushed := p.flushPendingDetections()
+		assert.Equal(t, 1, pending, step.name)
+		assert.Equal(t, step.wantFlushed, flushed, step.name)
+		assert.Empty(t, p.pendingDetections, step.name)
+	}
 }
