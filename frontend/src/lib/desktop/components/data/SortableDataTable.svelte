@@ -149,7 +149,7 @@
     const col = columns.find(c => c.key === sortColumn);
     if (!col) return filteredData;
     // A column without a sortValue sorts by its raw field value, so a sortable
-    // header never shows a sort that does nothing.
+    // header sorts by the field it is keyed on.
     const sortValue = col.sortValue ?? ((item: T) => rawValue(item, col));
     const direction = sortDirection === 'asc' ? 1 : -1;
     return [...filteredData].sort((a, b) => {

@@ -4,8 +4,8 @@
   A reusable sortable table header cell. Renders a <th> with click-to-sort
   behavior and visual sort direction indicators.
 
-  ChevronUp/ChevronDown icons only when actively sorted, empty w-4 spacer when
-  inactive.
+  Draws ChevronUp or ChevronDown on the sorted column and a ChevronsUpDown
+  icon on the others.
 
   The unsorted indicator is drawn at 80% of the header text color: header text
   at 4.5:1 or more leaves it at 3:1 or more, so it stays visible without
