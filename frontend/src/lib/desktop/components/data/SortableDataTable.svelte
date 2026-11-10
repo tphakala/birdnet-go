@@ -11,6 +11,13 @@
   - ResizableContainer.svelte for the sticky-header scroll body
   - EmptyState.svelte      for the empty state
 
+  Body modes: the default is a resizable box (ResizableContainer). With
+  `resizable={false}` the table takes its natural height, and `bodyMaxHeight`
+  caps it so a long list scrolls under a sticky header while a short list
+  stays compact. The `notice` snippet renders between the header bar and the
+  body in every state (an error above rows that are still shown), and the
+  `empty` snippet replaces the default empty state.
+
   This component sorts and filters internally. Consumers declare columns with a
   `sortValue` accessor, a `searchAccessor`, and a `renderCell` snippet for custom
   cell content (bars, badges, buttons).
@@ -54,6 +61,10 @@
     defaultSortKey?: string;
 
     // States
+    /** Rendered between the header bar and the body in every state, e.g. an ErrorAlert. */
+    notice?: Snippet;
+    /** Replaces the default EmptyState when `data` is empty; may render nothing. */
+    empty?: Snippet;
     emptyTitle?: string;
     emptyDescription?: string;
     emptyIcon?: Snippet;
@@ -64,6 +75,11 @@
     defaultHeight?: number;
     minHeight?: number;
     maxHeight?: number;
+    /**
+     * CSS length that caps the body height when `resizable` is false, e.g.
+     * `min(70vh, 40rem)`. The body then scrolls under the sticky header.
+     */
+    bodyMaxHeight?: string;
 
     // Rows
     keyFn?: (_item: T, _index: number) => string | number;
@@ -85,6 +101,8 @@
     searchPlaceholder,
     searchAccessor,
     defaultSortKey,
+    notice,
+    empty,
     emptyTitle,
     emptyDescription,
     emptyIcon,
@@ -93,6 +111,7 @@
     defaultHeight = 512,
     minHeight = 200,
     maxHeight = 800,
+    bodyMaxHeight,
     keyFn,
     rowClass,
     renderCell,
@@ -128,8 +147,10 @@
 
   let sortedData = $derived.by(() => {
     const col = columns.find(c => c.key === sortColumn);
-    if (!col?.sortValue) return filteredData;
-    const sortValue = col.sortValue;
+    if (!col) return filteredData;
+    // A column without a sortValue sorts by its raw field value, so a sortable
+    // header never shows a sort that does nothing.
+    const sortValue = col.sortValue ?? ((item: T) => rawSortValue(item, col));
     const direction = sortDirection === 'asc' ? 1 : -1;
     return [...filteredData].sort((a, b) => {
       const av = sortValue(a);
@@ -152,9 +173,19 @@
     return keyFn ? keyFn(item, index) : item;
   }
 
+  function fieldValue(item: T, column: Column<T>): unknown {
+    return (item as Record<string, unknown>)[column.key];
+  }
+
+  function rawSortValue(item: T, column: Column<T>): string | number {
+    const value = fieldValue(item, column);
+    if (typeof value === 'number') return value;
+    return value == null ? '' : String(value);
+  }
+
   function cellValue(column: Column<T>, item: T, index: number): string | number {
     if (column.render) return column.render(item, index);
-    const value = (item as Record<string, unknown>)[column.key];
+    const value = fieldValue(item, column);
     return value == null ? '' : String(value);
   }
 
@@ -196,7 +227,7 @@
         </div>
       {/if}
       <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted shrink-0"
+        class="badge-status-neutral inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-medium tabular-nums shrink-0"
       >
         {displayCount}
       </span>
@@ -218,7 +249,7 @@
             data-1p-ignore
             data-lpignore="true"
             data-form-type="other"
-            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/40"
           />
         </div>
       {/if}
@@ -227,6 +258,12 @@
       {/if}
     </div>
   </div>
+
+  {#if notice}
+    <div class="px-4 py-3">
+      {@render notice()}
+    </div>
+  {/if}
 
   <!-- Body -->
   {#if loading}
@@ -238,7 +275,11 @@
       ></div>
     </div>
   {:else if data.length === 0}
-    <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />
+    {#if empty}
+      {@render empty()}
+    {:else}
+      <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />
+    {/if}
   {:else if sortedData.length === 0}
     <div class="text-center py-8 text-muted">
       <p class="text-sm">{noResultsMessage ?? t('dataDisplay.table.noData')}</p>
@@ -247,7 +288,7 @@
     {#snippet tableMarkup()}
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
-          <tr class="border-b border-[var(--border-100)]">
+          <tr>
             {#each columns as column (column.key)}
               {#if column.sortable}
                 <SortableHeader
@@ -256,7 +297,8 @@
                   activeField={sortColumn}
                   direction={sortDirection}
                   onSort={handleSort}
-                  className={cn(headerCellClass, alignClass(column.align), column.className)}
+                  align={column.align ?? 'left'}
+                  className={cn(headerCellClass, column.className)}
                   width={column.width}
                 />
               {:else}
@@ -275,12 +317,19 @@
           {#each sortedData as item, index (rowKey(item, index))}
             <tr
               class={cn(
-                'border-b last:border-b-0 border-[var(--border-100)]/50 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]',
+                'border-b last:border-b-0 border-[var(--border-100)]/50 transition-colors hover:bg-[var(--hover-overlay)]',
                 rowClass?.(item)
               )}
             >
               {#each columns as column (column.key)}
-                <td class={cn('py-2 px-3', alignClass(column.align), column.className)}>
+                <td
+                  class={cn(
+                    'py-2 px-3',
+                    alignClass(column.align),
+                    column.align === 'right' && 'tabular-nums',
+                    column.className
+                  )}
+                >
                   {#if renderCell}
                     {@render renderCell({ column, item, index })}
                   {:else}
@@ -299,9 +348,27 @@
         {@render tableMarkup()}
       </ResizableContainer>
     {:else}
-      <div class="overflow-x-auto">
+      <div
+        class={cn('overflow-x-auto', bodyMaxHeight && 'bounded-body scroll-shadow-y')}
+        style:--table-body-max-height={bodyMaxHeight}
+      >
         {@render tableMarkup()}
       </div>
     {/if}
   {/if}
 </div>
+
+<style>
+  /* A collapsed table border belongs to the table, not to the sticky header
+     cells, so it scrolls away with the rows. An inset shadow on each header cell
+     travels with the cell instead. :global reaches the th elements that
+     SortableHeader renders, which a scoped th rule would miss. */
+  thead :global(th) {
+    box-shadow: inset 0 -1px 0 var(--border-100);
+  }
+
+  .bounded-body {
+    max-height: var(--table-body-max-height);
+    overflow-y: auto;
+  }
+</style>

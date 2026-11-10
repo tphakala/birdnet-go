@@ -13,6 +13,9 @@ export interface Column<T> {
    * given column: mixing string and number across rows falls back to string
    * comparison and yields undefined ordering. Used by SortableDataTable, which
    * sorts internally.
+   * When omitted, SortableDataTable sorts by the raw `item[key]` value (numbers
+   * numerically, anything else as a string), so set it whenever the displayed
+   * value differs from the field.
    */
   sortValue?: (_item: T) => string | number;
   /**

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createRawSnippet } from 'svelte';
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import SortableDataTable from './SortableDataTable.svelte';
@@ -33,6 +34,10 @@ function renderTable(props: Record<string, unknown>) {
   return render(SortableDataTable as any, {
     props: { columns, data, resizable: false, ...props },
   });
+}
+
+function textSnippet(html: string) {
+  return createRawSnippet(() => ({ render: () => html }));
 }
 
 function rowNames(): string[] {
@@ -147,5 +152,64 @@ describe('SortableDataTable', () => {
     const { container } = renderTable({ count: 99 });
     const badge = container.querySelector('span.rounded-full');
     expect((badge?.textContent ?? '').trim()).toBe('99');
+  });
+
+  it('sorts a sortable column that has no sortValue by its raw value', () => {
+    const rawColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name', sortable: true },
+      { key: 'score', header: 'Score', sortable: true, defaultDirection: 'desc' },
+    ];
+    renderTable({ columns: rawColumns, defaultSortKey: 'score' });
+    // Numbers compare numerically: 30, 20, 10.
+    expect(rowNames()).toEqual(['alpha', 'Bravo', 'Charlie']);
+  });
+
+  it('bounds the body height when bodyMaxHeight is set and resizable is off', () => {
+    const { container } = renderTable({ bodyMaxHeight: 'min(70vh, 40rem)' });
+    const table = container.querySelector('table');
+    const body = table?.parentElement;
+    expect(body?.style.getPropertyValue('--table-body-max-height')).toBe('min(70vh, 40rem)');
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+  });
+
+  it('right-aligned columns align header and cells', () => {
+    const alignedColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name', sortable: true, sortValue: r => r.name },
+      { key: 'score', header: 'Score', sortable: true, sortValue: r => r.score, align: 'right' },
+    ];
+    const { container } = renderTable({ columns: alignedColumns });
+    const scoreHeader = screen.getByTestId('sort-score');
+    expect(scoreHeader.closest('th')).toHaveClass('text-right');
+    // The indicator leads, so the label's right edge meets the cell values' edge.
+    expect(scoreHeader.firstElementChild?.getAttribute('aria-hidden')).toBe('true');
+    const scoreCells = [...container.querySelectorAll('tbody tr')].map(tr => tr.children[1]);
+    for (const cell of scoreCells) {
+      expect(cell).toHaveClass('text-right', 'tabular-nums');
+    }
+  });
+
+  it('renders the notice above the rows and above the empty state', () => {
+    const notice = textSnippet('<div data-testid="notice">Load failed</div>');
+    const { unmount } = renderTable({ notice });
+    const noticeEl = screen.getByTestId('notice');
+    const table = document.querySelector('table');
+    expect(table).not.toBeNull();
+    expect(noticeEl.compareDocumentPosition(table ?? noticeEl)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    unmount();
+
+    renderTable({ data: [], emptyTitle: 'Nothing here', notice });
+    const emptyTitle = screen.getByText('Nothing here');
+    expect(screen.getByTestId('notice').compareDocumentPosition(emptyTitle)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it('the empty snippet replaces the default empty state', () => {
+    const empty = textSnippet('<p>No backups yet</p>');
+    renderTable({ data: [], emptyTitle: 'Nothing here', empty });
+    expect(screen.getByText('No backups yet')).toBeInTheDocument();
+    expect(screen.queryByText('Nothing here')).not.toBeInTheDocument();
   });
 });
