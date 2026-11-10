@@ -288,6 +288,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// The model consensus species list is matched like the exclude list, so store
 		// it in the same canonical form.
 		updated.Realtime.ModelConsensus.Species = c.canonicalizeExcludeList(updated.Realtime.ModelConsensus.Species)
+		updated.Realtime.FirstDailyConsensus.Whitelist = c.canonicalizeExcludeList(updated.Realtime.FirstDailyConsensus.Whitelist)
 
 		// Ensure LocationConfigured is set when birdnet coordinates are present.
 		// Backward compatibility with older frontends that don't send the flag.
@@ -494,9 +495,11 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
 		}
 
-		// The model consensus species list lives in the realtime section only.
+		// The model consensus species list and the first-daily consensus whitelist
+		// live in the realtime section only.
 		if strings.EqualFold(section, SettingsSectionRealtime) {
 			updated.Realtime.ModelConsensus.Species = c.canonicalizeExcludeList(updated.Realtime.ModelConsensus.Species)
+			updated.Realtime.FirstDailyConsensus.Whitelist = c.canonicalizeExcludeList(updated.Realtime.FirstDailyConsensus.Whitelist)
 		}
 
 		// Validate the clone before publishing. No rollback needed on validation

@@ -348,6 +348,9 @@ realtime:
     minmodels: 2          # agreeing models required, 2 to 4 (capped at the number of eligible models)
     alleligible: false    # true to require every eligible model instead of minmodels
     debug: false          # true to log each discard at info level, with the agreeing and eligible models
+  firstdailyconsensus:
+    enabled: false        # true to require two models to confirm a species' first detection of the day
+    whitelist: []         # species exempt from the rule (common or scientific names)
 
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
