@@ -145,7 +145,7 @@ func openFLAC(f *os.File) (*source, error) {
 // pre-skip and trims the end itself, so skipFrames is 0 and Length is in the
 // index space the forward path discards in. Length gives the total; a stream
 // go-opus cannot index keeps an unknown length. The source has no seek:
-// go-opus's SeekToSample (v1.3.0, oggopus/seek.go) re-primes the decoder with
+// go-opus's SeekToSample (oggopus/seek.go) re-primes the decoder with
 // 1.28 s of pre-roll, which is not guaranteed bit-exact, so windows are
 // positioned by discarding to stay equal to the linear decode.
 func openOpus(f *os.File) (*source, error) {
