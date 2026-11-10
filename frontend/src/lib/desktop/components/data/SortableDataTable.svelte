@@ -11,8 +11,7 @@
   - ResizableContainer.svelte for the sticky-header scroll body
   - EmptyState.svelte      for the empty state
 
-  Unlike the controlled DataTable.svelte (which delegates sorting to the parent),
-  this component sorts and filters internally. Consumers declare columns with a
+  This component sorts and filters internally. Consumers declare columns with a
   `sortValue` accessor, a `searchAccessor`, and a `renderCell` snippet for custom
   cell content (bars, badges, buttons).
 

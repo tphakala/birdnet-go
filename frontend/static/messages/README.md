@@ -277,7 +277,6 @@ Always include translations for aria-labels and screen reader text:
    - EmptyState.svelte
    - ErrorAlert.svelte
    - Pagination.svelte
-   - DataTable.svelte
 
 2. **Medium Priority** (Form components):
    - All form field components

@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "System Information",
-      "os": "Operating System",
-      "hostname": "Hostname",
-      "uptime": "Uptime",
-      "cpus": "CPUs",
-      "model": "System Model",
-      "timezone": "Time Zone",
-      "temperature": "CPU Temperature",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperature data unavailable",
       "cpuCores": "CPU cores",
@@ -1229,15 +1222,7 @@
         "process": "Process"
       },
       "showAll": "Show All Processes",
-      "showBirdnetOnly": "Show BirdNET Only",
-      "table": {
-        "process": "Process",
-        "status": "Status",
-        "cpu": "CPU",
-        "memory": "Memory",
-        "uptime": "Uptime",
-        "showAllProcesses": "Show all processes"
-      }
+      "showBirdnetOnly": "Show BirdNET Only"
     },
     "errors": {
       "systemInfo": "Failed to load system information: {error}",

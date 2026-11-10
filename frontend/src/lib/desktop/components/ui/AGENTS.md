@@ -13,7 +13,7 @@ prefer composition or a non-breaking extension over a near-duplicate.
 - Forms: `Input`, `Select`, `DatePicker`, `RadioCardGroup` (settings controls live in `../forms/`)
 - Feedback: `Badge`, `ProgressBar`, `LoadingSpinner`, `ErrorAlert`, `EmptyState`
 - Navigation and overlays: `Modal`, `Pagination`, `ActionMenu`
-- Data display: `ProcessTable`, `SystemInfoCard`
+- Data display: `StatusPill`
 - Media and status: `AudioLevelIndicator`, `ThemeToggle`, `TimeOfDayIcon`
 - Advanced: `MultiStageOperation`, `NotificationBell`, `SearchBox`
 

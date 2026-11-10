@@ -920,13 +920,6 @@ export type TranslationKey =
   | 'system.aria.refreshData'
   | 'system.aria.dashboard'
   | 'system.systemInfo.title'
-  | 'system.systemInfo.os'
-  | 'system.systemInfo.hostname'
-  | 'system.systemInfo.uptime'
-  | 'system.systemInfo.cpus'
-  | 'system.systemInfo.model'
-  | 'system.systemInfo.timezone'
-  | 'system.systemInfo.temperature'
   | 'system.systemInfo.temperatureValue' // params: temp
   | 'system.systemInfo.temperatureUnavailable'
   | 'system.systemInfo.cpuCores'
@@ -953,12 +946,6 @@ export type TranslationKey =
   | 'system.processInfo.headers.process'
   | 'system.processInfo.showAll'
   | 'system.processInfo.showBirdnetOnly'
-  | 'system.processInfo.table.process'
-  | 'system.processInfo.table.status'
-  | 'system.processInfo.table.cpu'
-  | 'system.processInfo.table.memory'
-  | 'system.processInfo.table.uptime'
-  | 'system.processInfo.table.showAllProcesses'
   | 'system.errors.systemInfo' // params: error
   | 'system.errors.diskUsage' // params: error
   | 'system.errors.memoryUsage' // params: error

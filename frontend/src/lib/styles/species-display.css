@@ -1,13 +1,14 @@
 /* ========================================================================
    Species Display Shared Styles
    
-   Shared CSS for species listing components across dashboard and detections
-   features. Uses 'sp-' prefix to avoid conflicts with existing custom.css.
+   Shared CSS for the species listing components of the detections list. Uses 'sp-' prefix to avoid conflicts with existing custom.css.
    
    Used by:
-   - DetectionCardGrid.svelte (dashboard)
-   - DetectionRow.svelte (detections)
-   - DetectionsCard.svelte (detections)
+   - DetectionsList.svelte (detections list table)
+   - DetectionRow.svelte (detections list rows)
+
+   Imported app-wide and unlayered: every table rule below must stay scoped
+   to the detections list table (.detections-table), never a bare element.
    
    FILE ORGANIZATION:
    1. CSS Custom Properties & Theming (lines 13-35)
@@ -258,64 +259,22 @@
 }
 
 /* ========================================================================
-   Custom Detection Grid Layouts
+   Detection List Table Layout
    ======================================================================== */
 
-/* Dashboard grid layout (Recent Detections Card) */
-.detection-grid-dashboard {
-  display: grid;
-  grid-template-columns:
-    minmax(120px, 1.5fr) /* Date & Time */
-    minmax(200px, 2.5fr) /* Species (larger for thumbnails) */
-    80px /* Confidence (fixed circle size) */
-    minmax(100px, 1.2fr) /* Status */
-    minmax(200px, 2fr) /* Recording/Audio */
-    48px; /* Actions (fixed narrow) */
-
-  gap: 1rem;
-  align-items: center;
-  padding: 0.25rem 1rem;
-  transition: background-color 0.15s ease-in-out;
-}
-
-.detection-grid-dashboard:hover {
-  background-color: color-mix(in srgb, var(--color-base-200) 30%, transparent);
-}
-
-/* Detection list table layout */
 /* Table row styles for detection list */
-tbody tr {
+:where(.detections-table) tbody tr {
   transition: background-color 0.15s ease-in-out;
 }
 
-tbody tr:hover {
+:where(.detections-table) tbody tr:hover {
   background-color: color-mix(in srgb, var(--color-base-200) 20%, transparent);
 }
 
 /* Table cell alignment and padding */
-tbody td {
+:where(.detections-table) tbody td {
   padding: 0.25rem 1rem;
   vertical-align: middle;
-}
-
-/* Header grid layouts matching their respective row layouts */
-.detection-header-dashboard {
-  display: grid;
-  grid-template-columns:
-    minmax(120px, 1.5fr) /* Date & Time */
-    minmax(200px, 2.5fr) /* Species */
-    80px /* Confidence */
-    minmax(100px, 1.2fr) /* Status */
-    minmax(200px, 2fr) /* Recording */
-    48px; /* Actions */
-
-  gap: 1rem;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 10%, transparent);
 }
 
 /* Table header styles */
@@ -328,15 +287,13 @@ tbody td {
   border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 20%, transparent);
 }
 
-/* Actions column content alignment for all types */
-.detection-grid-dashboard > :last-child,
-tbody td:last-child,
-.detection-header-dashboard > :last-child,
+/* Actions column content alignment */
+:where(.detections-table) tbody td:last-child,
 .detection-header-list th:last-child {
   text-align: right;
 }
 
-tbody td:last-child > * {
+:where(.detections-table) tbody td:last-child > * {
   display: flex;
   justify-content: flex-end;
 }
@@ -365,88 +322,29 @@ tbody td:last-child > * {
 
 /* Tablet adjustments (max-width: 1024px) */
 @media (max-width: 1024px) {
-  .detection-grid-dashboard {
-    grid-template-columns:
-      minmax(100px, 1fr) /* Date & Time (smaller) */
-      minmax(160px, 1.8fr) /* Species (reduced) */
-      70px /* Confidence (smaller) */
-      minmax(80px, 1fr) /* Status */
-      minmax(130px, 1.3fr) /* Recording (reduced) */
-      40px; /* Actions (smaller) */
-
-    gap: 0.75rem;
-  }
-
   /* Table layout adjustments for tablet */
-  table {
+  table:where(.detections-table) {
     table-layout: fixed;
     width: 100%;
   }
 
-  tbody td,
+  :where(.detections-table) tbody td,
   .detection-header-list th {
     padding: 0.25rem 0.75rem;
   }
-
-  /* Removed - no longer using .with-thumbnails variant with table structure */
-
-  /* Update headers to match */
-  .detection-header-dashboard {
-    grid-template-columns:
-      minmax(100px, 1fr) /* Date & Time */
-      minmax(180px, 2fr) /* Species */
-      70px /* Confidence */
-      minmax(80px, 1fr) /* Status */
-      minmax(150px, 1.5fr) /* Recording */
-      40px; /* Actions */
-
-    gap: 0.75rem;
-  }
-
-  /* Header adjustments handled by general table styles above */
-
-  /* Removed - no longer using .with-thumbnails variant with table structure */
 }
 
 /* Mobile adjustments (max-width: 768px) */
 @media (max-width: 768px) {
   /* Table layout for mobile */
-  tbody td,
+  :where(.detections-table) tbody td,
   .detection-header-list th {
     padding: 0.75rem 0.5rem;
     min-height: 60px;
   }
 
-  /* Mobile layout: Focus on readable content with proper spacing */
-  /* Switch to simplified 5-column layout: Date/Time, Species, Confidence, Status, Actions */
-  .detection-grid-dashboard {
-    grid-template-columns:
-      minmax(80px, 1fr) /* Date & Time (flexible) */
-      minmax(120px, 3fr) /* Species (main content, min width for readability) */
-      50px /* Confidence (smaller but readable) */
-      minmax(70px, 1fr) /* Status (visible, compact) */
-      36px; /* Actions (compact) */
-
-    gap: 0.5rem;
-    padding: 0.75rem 0.5rem;
-    min-height: 60px; /* Ensure adequate row height */
-  }
-
-  .detection-header-dashboard {
-    grid-template-columns:
-      minmax(80px, 1fr) /* Date & Time */
-      minmax(120px, 3fr) /* Species */
-      50px /* Confidence */
-      minmax(70px, 1fr) /* Status */
-      36px; /* Actions */
-
-    gap: 0.5rem;
-    padding: 0.75rem 0.5rem;
-  }
-
   /* Species text wrapping for mobile in table context */
-  tbody .sp-species-names,
-  .detection-grid-dashboard .sp-species-names {
+  :where(.detections-table) tbody .sp-species-names {
     word-break: normal;
     overflow-wrap: break-word;
     hyphens: auto;
@@ -455,10 +353,8 @@ tbody td:last-child > * {
     max-width: 100%;
   }
 
-  tbody .sp-species-common-name,
-  tbody .sp-species-scientific-name,
-  .detection-grid-dashboard .sp-species-common-name,
-  .detection-grid-dashboard .sp-species-scientific-name {
+  :where(.detections-table) tbody .sp-species-common-name,
+  :where(.detections-table) tbody .sp-species-scientific-name {
     word-break: normal;
     overflow-wrap: break-word;
     hyphens: auto;
@@ -468,44 +364,6 @@ tbody td:last-child > * {
     max-width: 100%;
     width: auto;
   }
-}
-
-/* Extra small mobile (max-width: 480px) */
-@media (max-width: 480px) {
-  /* Table layout for extra small screens */
-  tbody td,
-  .detection-header-list th {
-    padding: 0.5rem 0.25rem;
-  }
-
-  .detection-grid-dashboard {
-    grid-template-columns:
-      70px /* Date & Time (more compact) */
-      1fr /* Species (flexible, main content) */
-      45px /* Confidence (smaller) */
-      60px /* Status (compact) */
-      32px; /* Actions (smaller) */
-
-    gap: 0.25rem;
-    padding: 0.5rem 0.25rem;
-  }
-
-  .detection-header-dashboard {
-    grid-template-columns:
-      70px /* Date & Time */
-      1fr /* Species */
-      45px /* Confidence */
-      60px /* Status */
-      32px; /* Actions */
-
-    gap: 0.25rem;
-    padding: 0.5rem 0.25rem;
-  }
-
-  /* Reuse text wrapping styles from mobile breakpoint */
-  /* Note: These rules are identical to the ones at max-width: 768px */
-  /* but need to be repeated due to CSS cascade specificity. */
-  /* Consider using CSS custom properties or PostCSS mixins to reduce duplication. */
 }
 
 /* ========================================================================

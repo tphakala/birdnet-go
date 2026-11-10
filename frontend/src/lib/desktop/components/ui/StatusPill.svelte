@@ -9,7 +9,9 @@
   - Optional leading dot indicator
   - Size variants (xs, sm, md)
   - Supports custom labels or i18n keys
-  - Accessible with proper color contrast
+  - Text uses the --text-<variant> tokens; the tint, border and dot use the --color-<variant>
+    fills. success, warning and info text is 4.5:1 or more on its tint over base-100/200/300;
+    error text is verified on base-100 only (see color-contrast.test.ts)
 
   @component
 -->
@@ -51,7 +53,7 @@
     className = '',
   }: Props = $props();
 
-  // CSS variable names for each variant
+  // Fill variable for each variant: tint, border and dot
   const cssVarNames: Record<StatusVariant, string> = {
     success: '--color-success',
     warning: '--color-warning',
@@ -60,7 +62,7 @@
     neutral: '--color-base-content',
   };
 
-  // Get inline styles for the pill using CSS color-mix
+  // Get inline styles for the pill: tinted fill, text from the --text-<variant> token
   const getPillStyles = (variant: StatusVariant) => {
     const varName = safeGet(cssVarNames, variant, '--color-base-content');
     return variant === 'neutral'
@@ -68,7 +70,7 @@
           `color: color-mix(in srgb, var(${varName}) 70%, transparent); ` +
           `border-color: color-mix(in srgb, var(${varName}) 15%, transparent);`
       : `background-color: color-mix(in srgb, var(${varName}) 15%, transparent); ` +
-          `color: color-mix(in srgb, var(${varName}) 70%, black); ` +
+          `color: var(--text-${variant}); ` +
           `border-color: color-mix(in srgb, var(${varName}) 30%, transparent);`;
   };
 

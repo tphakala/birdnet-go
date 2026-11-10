@@ -585,7 +585,7 @@
       <!-- Desktop/tablet: table or card view -->
       <div class="hidden md:block">
         {#if viewMode === 'table'}
-          <table class="w-full">
+          <table class="detections-table w-full">
             <caption class="sr-only">{t('detections.table.caption')}</caption>
             <thead>
               <tr class="detection-header-list">
