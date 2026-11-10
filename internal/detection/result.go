@@ -50,12 +50,12 @@ type Result struct {
 	SpectrogramClipName string
 
 	// Validation flags
-	Unlikely bool // Tagged by the ultrasonic validation filter when source audio lacks bat echolocation characteristics
+	Unlikely bool // Tagged by the ultrasonic validation filter when every hit window lacked bat echolocation characteristics
 
 	// Runtime-only data (not persisted)
 	Occurrence            float64                       // Probability 0-1 based on location/time/season
 	ModelContributions    map[string]ResultModelContrib // Per-model data keyed by model ID: the models with hits (cross-model consensus) and the active models without one
-	UltrasonicCV          float64                       // US frame CV value from validation filter (for comment generation)
+	UltrasonicCV          float64                       // US frame CV from validation filter, highest among the hit windows (for comment generation)
 	UltrasonicCVThreshold float64                       // CV threshold used by validation filter (for comment generation)
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// used by the datastore to classify sound-event classes correctly.
