@@ -17,10 +17,10 @@
   - activeField: string - Currently active sort field
   - direction: 'asc' | 'desc' - Current sort direction
   - onSort: (field: string) => void - Sort toggle callback
-  - align?: 'left' | 'center' | 'right' - Text alignment of the cell; omit it to
-    leave alignment to className or the table's own styles. Right-aligned
-    headers draw the indicator before the label, so the label's right edge
-    lines up with right-aligned cell values.
+  - align?: 'left' | 'center' | 'right' - Text alignment of the cell, left by
+    default. Set alignment here, not through className: cn() does not resolve
+    conflicting utilities. Right-aligned headers draw the indicator before the
+    label, so the label's right edge lines up with right-aligned cell values.
   - className?: string - Additional CSS classes on <th>
   - srOnly?: string - Screen reader text override
   - width?: string - Optional fixed column width (applied as inline style on <th>)
@@ -59,20 +59,18 @@
     activeField,
     direction,
     onSort,
-    align,
+    align = 'left',
     className = '',
     srOnly,
     width,
   }: Props = $props();
-
-  const alignClass = $derived(align && textAlignClass(align));
 
   const isActive = $derived(field === activeField);
 </script>
 
 <th
   scope="col"
-  class={cn(alignClass, className)}
+  class={cn(textAlignClass(align), className)}
   style:width
   aria-sort={isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
 >

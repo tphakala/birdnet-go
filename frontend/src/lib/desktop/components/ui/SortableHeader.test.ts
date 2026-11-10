@@ -66,6 +66,11 @@ describe('SortableHeader', () => {
     expect(header()).toHaveClass('text-right');
   });
 
+  it('left-aligns the header cell when align is omitted', () => {
+    renderHeader();
+    expect(header()).toHaveClass('text-left');
+  });
+
   it('puts the indicator after the label by default', () => {
     renderHeader();
     const { indicator, label } = parts();
