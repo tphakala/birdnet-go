@@ -1,0 +1,236 @@
+package ultrasonic
+
+import (
+	"math"
+	"math/rand/v2"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+const (
+	// Seeds and amplitudes of the synthetic windows. Everything is deterministic.
+	noiseSigma       = 0.002
+	noiseSeed        = 11
+	clickSeed        = 21
+	guardSeed        = 31
+	clickAmplitude   = 0.02
+	clickLengthSec   = 0.0015
+	clickEverySec    = 0.060
+	burstAmplitude   = 0.02
+	burstLengthSec   = 0.004
+	burstHz          = 45000
+	burstEverySec    = 0.060
+	weakBurstAmp     = 0.006
+	weakBurstHz      = 30000
+	weakBurstLenSec  = 0.006
+	weakBurstEvery   = 0.090
+	guardTones       = 48
+	guardAmplitude   = 0.004
+	guardDepth       = 0.3
+	guardEnvelopeHz  = 23
+	guardLowHz       = 11000
+	guardSpanHz      = 6000
+	batRate          = 256000
+	batSamples       = 144000
+	bsgBatRate       = 384000
+	bsgBatSamples    = 393472
+	silenceBurstAmp  = 0.5
+	keptShareOfRaw   = 0.9
+	clickRawCVFloor  = 0.5
+	lowerBoundMargin = 0.5
+)
+
+// whiteNoise returns a seeded Gaussian floor.
+func whiteNoise(n int, sigma float64, seed uint64) []float64 {
+	rng := rand.New(rand.NewPCG(seed, seed))
+	out := make([]float64, n)
+	for i := range out {
+		out[i] = sigma * rng.NormFloat64()
+	}
+	return out
+}
+
+// hann returns the raised-cosine envelope value at sample i of n.
+func hann(i, n int) float64 {
+	return 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(n-1)))
+}
+
+// addClicks adds short Hann-shaped white noise bursts, which have energy from DC to Nyquist.
+func addClicks(x []float64, rate int, every, lenSec, amp float64, seed uint64) {
+	rng := rand.New(rand.NewPCG(seed, seed+1))
+	clickLen := int(lenSec * float64(rate))
+	step := int(every * float64(rate))
+	for start := step / 2; start+clickLen < len(x); start += step {
+		for i := range clickLen {
+			x[start+i] += amp * hann(i, clickLen) * rng.NormFloat64()
+		}
+	}
+}
+
+// addToneBursts adds Hann-shaped tone bursts at hz.
+func addToneBursts(x []float64, rate int, hz, every, lenSec, amp float64) {
+	burstLen := int(lenSec * float64(rate))
+	step := int(every * float64(rate))
+	for start := step / 2; start+burstLen < len(x); start += step {
+		for i := range burstLen {
+			x[start+i] += amp * hann(i, burstLen) * math.Sin(2*math.Pi*hz*float64(i)/float64(rate))
+		}
+	}
+}
+
+// addGuardFluctuation adds audible tones between 11 and 17 kHz whose power
+// swings with a slow envelope.
+func addGuardFluctuation(x []float64, rate int, seed uint64) {
+	rng := rand.New(rand.NewPCG(seed, seed+2))
+	freq := make([]float64, guardTones)
+	phase := make([]float64, guardTones)
+	for k := range guardTones {
+		freq[k] = guardLowHz + guardSpanHz*rng.Float64()
+		phase[k] = 2 * math.Pi * rng.Float64()
+	}
+	for i := range x {
+		t := float64(i) / float64(rate)
+		var s float64
+		for k := range guardTones {
+			s += math.Sin(2*math.Pi*freq[k]*t + phase[k])
+		}
+		x[i] += guardAmplitude * (1 + guardDepth*math.Sin(2*math.Pi*guardEnvelopeHz*t)) * s / math.Sqrt(guardTones)
+	}
+}
+
+func quantizeAll(x []float64) []float32 {
+	out := make([]float32, len(x))
+	for i, v := range x {
+		out[i] = quantize(v)
+	}
+	return out
+}
+
+// clickWindow is the broadband click train over a low noise floor.
+func clickWindow(rate, n int) []float32 {
+	x := whiteNoise(n, noiseSigma, noiseSeed)
+	addClicks(x, rate, clickEverySec, clickLengthSec, clickAmplitude, clickSeed)
+	return quantizeAll(x)
+}
+
+func TestBroadbandAdjustedCV_ClickTrainIsLowered(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	tests := []struct {
+		name    string
+		rate, n int
+	}{
+		{"Bat", batRate, batSamples},
+		{"BSG-BAT", bsgBatRate, bsgBatSamples},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			samples := clickWindow(tt.rate, tt.n)
+			cv, ok := ComputeUSFrameCV(samples, tt.rate, cfg)
+			require.True(t, ok)
+			require.Greater(t, cv, clickRawCVFloor, "the raw CV must pass the current check")
+
+			got := BroadbandAdjustedCV(samples, tt.rate, cfg, cv)
+			assert.Less(t, got, cfg.CVThreshold*lowerBoundMargin)
+			assert.True(t, IsUnlikely(got, cfg))
+		})
+	}
+}
+
+func TestBroadbandAdjustedCV_BandLimitedBurstsKeepCV(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	x := whiteNoise(batSamples, noiseSigma, noiseSeed)
+	addToneBursts(x, batRate, burstHz, burstEverySec, burstLengthSec, burstAmplitude)
+	samples := quantizeAll(x)
+	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg))
+
+	assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), 0)
+}
+
+func TestBroadbandAdjustedCV_WeakBurstsOverGuardFluctuationStayActive(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	x := whiteNoise(batSamples, noiseSigma, noiseSeed)
+	addGuardFluctuation(x, batRate, guardSeed)
+	addToneBursts(x, batRate, weakBurstHz, weakBurstEvery, weakBurstLenSec, weakBurstAmp)
+	samples := quantizeAll(x)
+	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg))
+
+	got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
+	assert.GreaterOrEqual(t, got, keptShareOfRaw*cv)
+	assert.False(t, IsUnlikely(got, cfg))
+}
+
+func TestBroadbandAdjustedCV_FlatWindowIsNotExamined(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	samples := clickWindow(batRate, batSamples)
+
+	flat := math.Nextafter(cfg.CVThreshold, 0)
+	assert.InDelta(t, flat, BroadbandAdjustedCV(samples, batRate, cfg, flat), 0)
+	assert.Less(t, BroadbandAdjustedCV(samples, batRate, cfg, cfg.CVThreshold), cfg.CVThreshold)
+}
+
+func TestBroadbandAdjustedCV_DegenerateSetupKeepsCV(t *testing.T) {
+	t.Parallel()
+	const inputCV = 1.0
+	withConfig := func(fft, split int) conf.UltrasonicFilterConfig {
+		cfg := defaultFilterConfig()
+		cfg.FFTSize, cfg.HopSize, cfg.FrequencySplitHz = fft, fft/2, split
+		return cfg
+	}
+	tests := []struct {
+		name    string
+		cfg     conf.UltrasonicFilterConfig
+		samples int
+	}{
+		{"fft 8 has no sub-frame hop", withConfig(8, 20000), batSamples},
+		{"fft 128 guard starts at the DC bin", withConfig(128, 20000), batSamples},
+		{"split 500 Hz guard is narrower than one bin", withConfig(8192, 500), batSamples},
+		{"fewer than two sub-frames", withConfig(8192, 20000), 1535},
+		{"split above the band", withConfig(8192, batRate*5/8), batSamples},
+		{"invalid STFT size", withConfig(6000, 20000), batSamples},
+	}
+	click := clickWindow(batRate, batSamples)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.InDelta(t, inputCV, BroadbandAdjustedCV(click[:tt.samples], batRate, tt.cfg, inputCV), 0)
+		})
+	}
+
+	// Without a rule for a zero guard median, digital silence with one
+	// ultrasonic burst would be treated as broadband and tagged.
+	t.Run("zero guard median", func(t *testing.T) {
+		t.Parallel()
+		cfg := defaultFilterConfig()
+		silence := make([]float32, batSamples)
+		for i := batSamples / 3; i < 2*batSamples/3; i++ {
+			silence[i] = float32(silenceBurstAmp * math.Sin(2*math.Pi*burstHz*float64(i)/batRate))
+		}
+		cv, ok := ComputeUSFrameCV(silence, batRate, cfg)
+		require.True(t, ok)
+		assert.InDelta(t, cv, BroadbandAdjustedCV(silence, batRate, cfg, cv), 0)
+	})
+}
+
+func BenchmarkBroadbandAdjustedCV(b *testing.B) {
+	cfg := defaultFilterConfig()
+	samples := clickWindow(batRate, batSamples)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		BroadbandAdjustedCV(samples, batRate, cfg, 1.0)
+	}
+}

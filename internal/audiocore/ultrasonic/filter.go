@@ -1,6 +1,8 @@
 // Package ultrasonic provides a post-detection validation filter for bat detections.
 // It measures temporal variability of ultrasonic energy (US frame CV) in audio at a given sample rate
 // to distinguish real bat echolocation (high CV) from false positives (low CV).
+// A window that passes the CV check is then checked for broadband events such as
+// clicks (see BroadbandAdjustedCV).
 package ultrasonic
 
 import (
