@@ -89,23 +89,30 @@
   let range = $derived(Math.max(finite(max), 0));
   let current = $derived(clamp(value, range));
 
-  let currentTone = $derived(
-    thresholds
-      .filter(threshold => current >= threshold.value)
-      .reduce<MeterThreshold | null>(
-        (best, threshold) => (best === null || threshold.value > best.value ? threshold : best),
-        null
-      )?.tone ?? tone
-  );
+  let currentTone = $derived.by(() => {
+    let best: MeterThreshold | undefined;
+    for (const threshold of thresholds) {
+      if (current >= threshold.value && (!best || threshold.value > best.value)) {
+        best = threshold;
+      }
+    }
+    return best?.tone ?? tone;
+  });
+
+  interface Fill {
+    tone: MeterTone;
+    pattern: NonNullable<MeterSegment['pattern']>;
+    basis: string;
+  }
 
   // Parts in order, each cut so the stack never runs past max; empty parts draw nothing, so no
   // stray gap appears.
-  let fills = $derived.by(() => {
+  let fills = $derived.by((): Fill[] => {
     if (!segments) {
       return [{ tone: currentTone, pattern: 'solid', basis: percent(current) }];
     }
     let used = 0;
-    const parts: { tone: MeterTone; pattern: string; basis: string }[] = [];
+    const parts: Fill[] = [];
     for (const segment of segments) {
       const part = clamp(segment.value, range - used);
       used += part;
@@ -119,6 +126,10 @@
     }
     return parts;
   });
+
+  /** Token for a tone, following the naming of the --viz-* tokens in styles/tailwind.css. */
+  const toneToken = (fillTone: MeterTone): string =>
+    `var(--viz-${fillTone.replace('series-', '')})`;
 </script>
 
 <div
@@ -136,30 +147,27 @@
       class="meter-fill"
       data-tone={fill.tone}
       data-pattern={fill.pattern}
+      style:--meter-fill={toneToken(fill.tone)}
       style:flex-basis={fill.basis}
     ></div>
   {/each}
 </div>
 
 <style>
-  /* Component CSS rather than utilities: the tone-to-token map, the hatch pattern, the segment
-     gap that flex-shrink keeps inside the track, and the forced-colors fallback have no
-     utility-class equivalent that stays readable. */
-
-  /* Full width by default, in Tailwind's components layer so a width utility passed in
-     className (w-12 in a table cell) still wins; the unlayered rules below would beat it. */
+  /* Component CSS rather than utilities: the hatch pattern, the segment gap that flex-shrink
+     keeps inside the track, and the forced-colors fallback have no readable utility form.
+     The track sits in Tailwind's components layer, so utilities passed in className (w-12 in a
+     table cell) still win over it. */
   @layer components {
     .meter {
+      display: flex;
+      gap: 2px;
       width: 100%;
+      overflow: hidden;
+      border-radius: 9999px;
+      background-color: var(--viz-track);
+      contain: layout paint;
     }
-  }
-
-  .meter {
-    display: flex;
-    gap: 2px;
-    overflow: hidden;
-    border-radius: 9999px;
-    background-color: var(--viz-track);
   }
 
   .meter-fill {
@@ -178,50 +186,6 @@
 
   .meter-fill[data-pattern='hatched'] {
     background: repeating-linear-gradient(135deg, var(--meter-fill) 0 2px, transparent 2px 4px);
-  }
-
-  .meter-fill[data-tone='series-1'] {
-    --meter-fill: var(--viz-1);
-  }
-
-  .meter-fill[data-tone='series-2'] {
-    --meter-fill: var(--viz-2);
-  }
-
-  .meter-fill[data-tone='series-3'] {
-    --meter-fill: var(--viz-3);
-  }
-
-  .meter-fill[data-tone='series-4'] {
-    --meter-fill: var(--viz-4);
-  }
-
-  .meter-fill[data-tone='series-5'] {
-    --meter-fill: var(--viz-5);
-  }
-
-  .meter-fill[data-tone='series-6'] {
-    --meter-fill: var(--viz-6);
-  }
-
-  .meter-fill[data-tone='series-7'] {
-    --meter-fill: var(--viz-7);
-  }
-
-  .meter-fill[data-tone='series-8'] {
-    --meter-fill: var(--viz-8);
-  }
-
-  .meter-fill[data-tone='success'] {
-    --meter-fill: var(--viz-success);
-  }
-
-  .meter-fill[data-tone='warning'] {
-    --meter-fill: var(--viz-warning);
-  }
-
-  .meter-fill[data-tone='error'] {
-    --meter-fill: var(--viz-error);
   }
 
   @media (prefers-reduced-motion: reduce) {
