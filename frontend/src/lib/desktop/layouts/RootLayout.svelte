@@ -133,6 +133,7 @@
           {securityEnabled}
           {accessAllowed}
           showSidebarToggle={true}
+          sidebarOpen={drawerOpen}
           showSearch={currentPage === 'dashboard' || currentPage === 'detections'}
           onSidebarToggle={handleSidebarToggle}
           onSearch={handleSearch}

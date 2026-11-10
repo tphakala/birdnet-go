@@ -13,6 +13,7 @@
     title?: string;
     currentPage?: string;
     showSidebarToggle?: boolean;
+    sidebarOpen?: boolean;
     showSearch?: boolean;
     showAudioLevel?: boolean;
     showNotifications?: boolean;
@@ -29,6 +30,7 @@
     title = 'Dashboard',
     currentPage = 'dashboard',
     showSidebarToggle = true,
+    sidebarOpen = false,
     showSearch = true,
     showAudioLevel = true,
     showNotifications = true,
@@ -85,6 +87,7 @@
         onclick={handleSidebarToggle}
         class="inline-flex items-center justify-center rounded-lg p-0 sm:p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10 lg:hidden"
         aria-label={t('navigation.toggleSidebar')}
+        aria-expanded={sidebarOpen}
       >
         <Menu class="size-6" />
       </button>
