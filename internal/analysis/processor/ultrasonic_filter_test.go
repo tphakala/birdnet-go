@@ -251,8 +251,8 @@ func TestApplyUltrasonicFilter_UnknownModelIsNotFiltered(t *testing.T) {
 
 // TestFlushPendingDetections_DiscardUnlikely pins the optional discard of a bat
 // detection still tagged unlikely at flush: it needs the filter, the setting and
-// the tag, and each flush reads the setting from the current snapshot, so a change
-// applies to items already pending. The steps run in order on one processor.
+// the tag. Each step publishes its settings after the item is already pending, so
+// a change applies to pending items. The steps run in order on one processor.
 func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 	p := mergeTestProcessor(t)
 	// An approved detection enqueues its actions; the queue is never started, so it
@@ -273,11 +273,6 @@ func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 		{"gate on again, tagged", true, true, true, 0},
 	}
 	for _, step := range steps {
-		conf.StoreSettings(&conf.Settings{Bat: conf.BatConfig{UltrasonicFilter: conf.UltrasonicFilterConfig{
-			Enabled:         step.filterEnabled,
-			DiscardUnlikely: step.discardUnlikely,
-		}}})
-
 		now := time.Now()
 		item := PendingDetection{
 			Source:        mergeTestSource,
@@ -288,6 +283,12 @@ func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 		item.Detection.Result.Species = detection.Species{ScientificName: mergeTestScientific, CommonName: mergeTestCommon}
 		item.Detection.Result.Unlikely = step.unlikely
 		p.pendingDetections[pendingDetectionKey(mergeTestSource, "great tit")] = item
+
+		// Published after the item is pending: the flush must follow the new settings.
+		conf.StoreSettings(&conf.Settings{Bat: conf.BatConfig{UltrasonicFilter: conf.UltrasonicFilterConfig{
+			Enabled:         step.filterEnabled,
+			DiscardUnlikely: step.discardUnlikely,
+		}}})
 
 		pending, flushed := p.flushPendingDetections()
 		assert.Equal(t, 1, pending, step.name)
