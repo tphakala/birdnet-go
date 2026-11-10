@@ -545,8 +545,9 @@ func TestShouldDiscardDetection_PrivacyBeforeConsensus(t *testing.T) {
 }
 
 // TestShouldDiscardDetection_OtherChecksBeforeConsensus pins that the minimum count,
-// dog bark and daylight checks run before consensus, so each keeps its own discard
-// reason when the consensus tick would discard the same detection.
+// dog bark, daylight and ultrasonic filter checks run before consensus, so each
+// keeps its own discard reason when the consensus tick would discard the same
+// detection.
 func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 	const minDetections = 5
 	sunTimes, err := newTestSunCalc().GetSunEventTimes(referenceDate())
@@ -596,6 +597,17 @@ func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 				assert.Equal(t, reasonDaylightFilter, reason)
 			},
 		},
+		{
+			name:  "ultrasonic filter",
+			count: minDetections,
+			enable: func(_ *Processor, s *conf.Settings, on bool) {
+				s.Bat.UltrasonicFilter = conf.UltrasonicFilterConfig{Enabled: true, DiscardUnlikely: on}
+			},
+			wantReason: func(t *testing.T, reason string) {
+				t.Helper()
+				assert.Equal(t, reasonUltrasonicFilter, reason)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -603,6 +615,7 @@ func TestShouldDiscardDetection_OtherChecksBeforeConsensus(t *testing.T) {
 			settings := consensusSettings(2, false)
 			item := consensusItem(consensusStubBirdA)
 			item.Count = tt.count
+			item.Detection.Result.Unlikely = true
 			item.FirstDetected = sunTimes.CivilDawn.Add(3 * time.Hour)
 			tick := &consensusTick{
 				models: stubConsensusModels(consensusStubBirdA, consensusStubBirdB),

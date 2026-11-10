@@ -356,6 +356,21 @@ describe('AnalysisSettingsPage tab change dots', () => {
           vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [batCatalogEntry()] });
         },
       },
+      {
+        name: 'bat discard unlikely',
+        section: 'bat',
+        saved: {
+          enabled: true,
+          threshold: 0.5,
+          nighttimeOnly: true,
+          ultrasonicFilter: { enabled: true, discardUnlikely: false },
+        },
+        edit: { ultrasonicFilter: { enabled: true, discardUnlikely: true } },
+        titleKey: SETTINGS_SECTION_TITLE.bat,
+        install: () => {
+          vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [batCatalogEntry()] });
+        },
+      },
     ];
 
     it.each(modelCases)(
@@ -493,5 +508,42 @@ describe('AnalysisSettingsPage bat thresholds', () => {
     expect(
       vi.mocked(settingsActions.updateSection).mock.calls.map(([section]) => section)
     ).not.toContain('bat');
+  });
+  describe('discard unlikely toggle', () => {
+    const DISCARD_LABEL = 'analysis.detection.batDiscardUnlikely.label';
+    const FILTER_FIELDS = {
+      cvThreshold: 0.15,
+      fftSize: 8192,
+      hopSize: 4096,
+      frequencySplitHz: 20000,
+    };
+
+    function seedBat(ultrasonicFilter: Record<string, unknown>) {
+      seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true, ultrasonicFilter });
+    }
+
+    it('shows the toggle only while post detection validation is on', async () => {
+      seedBat({ enabled: false });
+      await renderWithCatalog(BAT_CATALOG_ID);
+      expect(screen.queryByText(DISCARD_LABEL)).toBeNull();
+
+      cleanup();
+      seedBat({ enabled: true });
+      await renderWithCatalog(BAT_CATALOG_ID);
+      expect(screen.getByText(DISCARD_LABEL)).toBeInTheDocument();
+    });
+
+    it('saves the toggle without dropping the other filter fields', async () => {
+      const seeded = { enabled: true, ...FILTER_FIELDS };
+      seedBat(seeded);
+      await renderWithCatalog(BAT_CATALOG_ID);
+
+      await userEvent.setup().click(screen.getByLabelText(DISCARD_LABEL));
+
+      const { settingsActions } = await import('$lib/stores/settings');
+      expect(settingsActions.updateSection).toHaveBeenLastCalledWith('bat', {
+        ultrasonicFilter: { ...seeded, discardUnlikely: true },
+      });
+    });
   });
 });

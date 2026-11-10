@@ -5629,6 +5629,10 @@
         "label": "Pēcnoteikšanas validācija",
         "helpText": "Kad iespējots, sikspārņu noteikšana tiek pārbaudīta, analizējot ultraskaņas enerģijas modeļus avota ierakstā. Noteikšanas bez eholokācijas pazīmēm tiek atzīmētas kā maz ticamas."
       },
+      "batDiscardUnlikely": {
+        "label": "Atmest maz ticamas noteikšanas",
+        "helpText": "Kad iespējots, sikspārņu noteikšanas, ko pēcnoteikšanas validācija atzīmē kā maz ticamas, tiek atmestas: tās netiek saglabātas, tām netiek izveidots audio klips vai paziņojums, un tās nevar atjaunot. Kad atspējots (noklusējums), tās tiek saglabātas un atzīmētas kā maz ticamas. Jau saglabātās noteikšanas netiek mainītas."
+      },
       "batFalsePositiveFilter": {
         "label": "Sikspārņu viltus pozitīvo filtrs",
         "helpText": "Pieprasa vairākus apstiprinājumus sikspārņu noteikšanai slīdošajā logā pirms tā pieņemšanas. Augstāki līmeņi pieprasa vairāk apstiprinājumu, samazinot viltus pozitīvos. Sikspārņu modelis izmanto fiksētu 50% pārklāšanos, tāpēc pārklāšanās pielāgošana nav nepieciešama.",

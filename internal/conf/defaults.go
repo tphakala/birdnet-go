@@ -106,6 +106,7 @@ func setDefaultConfig() {
 	viper.SetDefault("bat.nighttimeonly", true)
 	viper.SetDefault("bat.falsepositivefilter.level", 2)
 	viper.SetDefault("bat.ultrasonicfilter.enabled", true)
+	viper.SetDefault("bat.ultrasonicfilter.discardunlikely", false)
 	viper.SetDefault("bat.ultrasonicfilter.cvthreshold", 0.15)
 	viper.SetDefault("bat.ultrasonicfilter.fftsize", DefaultUltrasonicFFTSize)
 	viper.SetDefault("bat.ultrasonicfilter.hopsize", DefaultUltrasonicHopSize)

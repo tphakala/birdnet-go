@@ -5629,6 +5629,10 @@
         "label": "Validazione post-rilevamento",
         "helpText": "Quando abilitato, i rilevamenti di pipistrelli vengono validati analizzando i pattern di energia ultrasonica nell'audio sorgente. I rilevamenti privi di caratteristiche di ecolocalizzazione vengono contrassegnati come improbabili."
       },
+      "batDiscardUnlikely": {
+        "label": "Scarta i rilevamenti improbabili",
+        "helpText": "Quando abilitato, i rilevamenti di pipistrelli che la validazione post-rilevamento contrassegna come improbabili vengono scartati: non vengono salvati, non hanno clip audio né notifica e non possono essere recuperati. Quando disabilitato (predefinito), vengono salvati e contrassegnati come improbabili. I rilevamenti già salvati non vengono modificati."
+      },
       "batFalsePositiveFilter": {
         "label": "Filtro falsi positivi pipistrelli",
         "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento.",

@@ -18,6 +18,14 @@ func TestImportElevationDefaultsOn(t *testing.T) {
 		"in-app elevation must default to enabled")
 }
 
+func TestBatDiscardUnlikelyDefaultsOff(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	setDefaultConfig()
+	require.False(t, viper.GetBool("bat.ultrasonicfilter.discardunlikely"),
+		"discarding unlikely bat detections must be opt-in")
+}
+
 func TestEqualizerDefaultsShipBypassed(t *testing.T) {
 	t.Cleanup(viper.Reset)
 	viper.Reset()

@@ -5629,6 +5629,10 @@
         "label": "Validação pós-deteção",
         "helpText": "Quando ativado, as deteções de morcegos são validadas pela análise dos padrões de energia ultrassónica no áudio de origem. Deteções sem características de ecolocalização são marcadas como improváveis."
       },
+      "batDiscardUnlikely": {
+        "label": "Descartar deteções improváveis",
+        "helpText": "Quando ativado, as deteções de morcegos que a validação pós-deteção marca como improváveis são descartadas: não são guardadas, não geram clipe de áudio nem notificação e não podem ser recuperadas. Quando desativado (predefinição), são guardadas e marcadas como improváveis. As deteções já guardadas não são alteradas."
+      },
       "batFalsePositiveFilter": {
         "label": "Filtro de falsos positivos de morcegos",
         "helpText": "Requer múltiplas confirmações de uma deteção de morcego dentro de uma janela deslizante antes de a aceitar. Níveis mais altos requerem mais confirmações, reduzindo falsos positivos. O modelo de morcegos usa uma sobreposição fixa de 50%, portanto não é necessário ajuste de sobreposição.",
