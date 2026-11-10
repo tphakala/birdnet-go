@@ -1062,10 +1062,11 @@ const reasonUltrasonicFilter = "ultrasonic filter"
 const bytesPerPCM16Sample = 2
 
 // applyUltrasonicFilter runs the ultrasonic validation filter on a batch of bat detections.
-// It computes the US frame CV once from the shared PCM audio and tags all detections
-// as unlikely when the CV falls below the configured threshold. The PCM data is the
-// model's analysis window, at the model's effective sample rate (Bat 256 kHz,
-// BSG-BAT 384 kHz), whatever the source rate is: the source audio is resampled to
+// It computes the US frame CV once from the shared PCM audio, takes the share of
+// broadband events (clicks, rustling) out of it, and tags all detections as
+// unlikely when the resulting CV, which is the one reported, falls below the
+// configured threshold. The PCM data is the model's analysis window, at the
+// model's effective sample rate (Bat 256 kHz, BSG-BAT 384 kHz), whatever the source rate is: the source audio is resampled to
 // that rate for the model.
 // It does nothing when the filter is disabled, when the model is unknown (its
 // window rate cannot be known), when the model rate or the source rate leaves no
@@ -1121,7 +1122,7 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 			logger.Error(err))
 		return
 	}
-	cv, ok := ultrasonic.ComputeUSFrameCV(samples, windowRate, filterCfg)
+	frameCV, ok := ultrasonic.ComputeUSFrameCV(samples, windowRate, filterCfg)
 	if !ok {
 		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
 			logger.String("source", sourceName),
@@ -1130,9 +1131,13 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
+	// A click or a rustle reaches above the split too; take its share out before the verdict.
+	cv := ultrasonic.BroadbandAdjustedCV(samples, windowRate, filterCfg, frameCV)
+
 	unlikely := ultrasonic.IsUnlikely(cv, filterCfg)
 	logFields := []logger.Field{
 		logger.Float64("us_frame_cv", cv),
+		logger.Float64("us_frame_cv_unadjusted", frameCV),
 		logger.Float64("threshold", filterCfg.CVThreshold),
 		logger.Bool("unlikely", unlikely),
 		logger.String("source", sourceName),
