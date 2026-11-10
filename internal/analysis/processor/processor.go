@@ -856,19 +856,25 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 // mergeUnlikelyVerdict sets the ultrasonic verdict of a pending detection after a
 // later hit window was merged into it. merged is the pending result (already
-// replaced by hit when that window won on confidence); wasUnlikely and previousCV
-// are its verdict before the merge. The detection stays unlikely only while every
-// hit window was judged flat, with the highest CV among them; one window that was
-// not judged flat clears the tag and both CV fields. AND and max do not depend on
-// arrival order or on which window had the highest confidence.
-func mergeUnlikelyVerdict(merged *detection.Result, wasUnlikely bool, previousCV float64, hit *detection.Result) {
+// replaced by hit when that window won on confidence); wasUnlikely, previousCV and
+// previousThreshold are its verdict before the merge. The detection stays unlikely
+// only while every hit window was judged flat, reporting the highest CV among them
+// with the threshold that judged that window; one window that was not judged flat
+// clears the tag and both CV fields. AND and max do not depend on arrival order or
+// on which window had the highest confidence.
+func mergeUnlikelyVerdict(merged *detection.Result, wasUnlikely bool, previousCV, previousThreshold float64, hit *detection.Result) {
 	merged.Unlikely = wasUnlikely && hit.Unlikely
 	if !merged.Unlikely {
 		merged.UltrasonicCV = 0
 		merged.UltrasonicCVThreshold = 0
 		return
 	}
-	merged.UltrasonicCV = max(previousCV, hit.UltrasonicCV)
+	if previousCV > hit.UltrasonicCV {
+		merged.UltrasonicCV = previousCV
+		merged.UltrasonicCVThreshold = previousThreshold
+		return
+	}
+	merged.UltrasonicCV = hit.UltrasonicCV
 	merged.UltrasonicCVThreshold = hit.UltrasonicCVThreshold
 }
 
@@ -895,6 +901,7 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 		oldConfidence := existing.Confidence
 		wasUnlikely := existing.Detection.Result.Unlikely
 		previousCV := existing.Detection.Result.UltrasonicCV
+		previousThreshold := existing.Detection.Result.UltrasonicCVThreshold
 		existing.LastUpdated = now
 		existing.AudioCapturedAt = item.AudioCapturedAt
 		if confidence > existing.Confidence {
@@ -910,7 +917,7 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 				logger.Int("count", existing.Count+1),
 				logger.String("operation", "update_pending_detection"))
 		}
-		mergeUnlikelyVerdict(&existing.Detection.Result, wasUnlikely, previousCV, &det.Result)
+		mergeUnlikelyVerdict(&existing.Detection.Result, wasUnlikely, previousCV, previousThreshold, &det.Result)
 		existing.Count++
 
 		// Track per-model contribution

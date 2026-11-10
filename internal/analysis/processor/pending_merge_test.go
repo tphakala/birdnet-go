@@ -237,24 +237,29 @@ func TestMergePendingHit_UnlikelyOnlyWhenEveryHitIsFlat(t *testing.T) {
 		confidence float64
 		unlikely   bool
 		cv         float64
+		threshold  float64
 	}
-	flat := func(confidence, cv float64) hit { return hit{confidence, true, cv} }
-	active := func(confidence float64) hit { return hit{confidence, false, 0} }
+	flat := func(confidence, cv float64) hit { return hit{confidence, true, cv, threshold} }
+	flatAt := func(confidence, cv, judgedAt float64) hit { return hit{confidence, true, cv, judgedAt} }
+	active := func(confidence float64) hit { return hit{confidence, false, 0, 0} }
 
 	tests := []struct {
 		name         string
 		hits         []hit
 		wantUnlikely bool
 		wantCV       float64
+		wantThresh   float64
 	}{
-		{"flat high then active low", []hit{flat(0.95, 0.03), active(0.80)}, false, 0},
-		{"active low then flat high", []hit{active(0.80), flat(0.95, 0.03)}, false, 0},
-		{"flat then active tie", []hit{flat(0.90, 0.03), active(0.90)}, false, 0},
-		{"active then flat tie", []hit{active(0.90), flat(0.90, 0.03)}, false, 0},
-		{"flat CV rises on a lower confidence hit", []hit{flat(0.95, 0.03), flat(0.80, 0.08)}, true, 0.08},
-		{"flat CV rises on a higher confidence hit", []hit{flat(0.80, 0.08), flat(0.95, 0.03)}, true, 0.08},
-		{"single flat hit", []hit{flat(0.90, 0.04)}, true, 0.04},
-		{"tag does not come back after an active hit", []hit{flat(0.70, 0.03), flat(0.80, 0.04), active(0.85), flat(0.95, 0.05)}, false, 0},
+		{"flat high then active low", []hit{flat(0.95, 0.03), active(0.80)}, false, 0, 0},
+		{"active low then flat high", []hit{active(0.80), flat(0.95, 0.03)}, false, 0, 0},
+		{"flat then active tie", []hit{flat(0.90, 0.03), active(0.90)}, false, 0, 0},
+		{"active then flat tie", []hit{active(0.90), flat(0.90, 0.03)}, false, 0, 0},
+		{"flat CV rises on a lower confidence hit", []hit{flat(0.95, 0.03), flat(0.80, 0.08)}, true, 0.08, 0.15},
+		{"flat CV rises on a higher confidence hit", []hit{flat(0.80, 0.08), flat(0.95, 0.03)}, true, 0.08, 0.15},
+		{"single flat hit", []hit{flat(0.90, 0.04)}, true, 0.04, 0.15},
+		{"tag does not come back after an active hit", []hit{flat(0.70, 0.03), flat(0.80, 0.04), active(0.85), flat(0.95, 0.05)}, false, 0, 0},
+		{"max CV keeps the threshold that judged it, lower confidence hit later", []hit{flatAt(0.95, 0.12, 0.15), flatAt(0.80, 0.05, 0.10)}, true, 0.12, 0.15},
+		{"max CV keeps the threshold that judged it, higher confidence hit later", []hit{flatAt(0.80, 0.12, 0.15), flatAt(0.95, 0.05, 0.10)}, true, 0.12, 0.15},
 	}
 
 	for _, tt := range tests {
@@ -272,20 +277,14 @@ func TestMergePendingHit_UnlikelyOnlyWhenEveryHitIsFlat(t *testing.T) {
 				det.Result.Confidence = h.confidence
 				det.Result.Unlikely = h.unlikely
 				det.Result.UltrasonicCV = h.cv
-				if h.unlikely {
-					det.Result.UltrasonicCVThreshold = threshold
-				}
+				det.Result.UltrasonicCVThreshold = h.threshold
 				p.mergePendingHit(&item, det, endAt, mergeTestWindow)
 			}
 
 			got := onlyPending(t, p).Detection.Result
 			assert.Equal(t, tt.wantUnlikely, got.Unlikely)
 			assert.InDelta(t, tt.wantCV, got.UltrasonicCV, mergeTestEpsilon)
-			if tt.wantUnlikely {
-				assert.InDelta(t, threshold, got.UltrasonicCVThreshold, mergeTestEpsilon)
-			} else {
-				assert.Zero(t, got.UltrasonicCVThreshold)
-			}
+			assert.InDelta(t, tt.wantThresh, got.UltrasonicCVThreshold, mergeTestEpsilon)
 		})
 	}
 }
