@@ -257,7 +257,7 @@
   </div>
 
   {#if notice}
-    <div class="px-4 py-3">
+    <div class="px-4 has-[*]:py-3">
       {@render notice()}
     </div>
   {/if}

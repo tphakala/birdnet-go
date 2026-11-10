@@ -226,6 +226,17 @@ describe('SortableDataTable', () => {
     );
   });
 
+  it('pads the notice wrapper only while the snippet renders an element', () => {
+    // A notice snippet whose content is all behind {#if} still renders its
+    // wrapper (comment anchors, and whitespace between blocks); the wrapper must
+    // take no space then. jsdom loads no Tailwind CSS, so this checks the class
+    // that adds the vertical padding only when an element is present.
+    renderTable({ notice: textSnippet('<span data-testid="notice"></span>') });
+    const wrapper = screen.getByTestId('notice').parentElement;
+    expect(wrapper).toHaveClass('has-[*]:py-3');
+    expect(wrapper).not.toHaveClass('py-3');
+  });
+
   it('the empty snippet replaces the default empty state', () => {
     const empty = textSnippet('<p>No backups yet</p>');
     renderTable({ data: [], emptyTitle: 'Nothing here', empty });
