@@ -25,6 +25,17 @@
   - srOnly?: string - Screen reader text override
   - width?: string - Optional fixed column width (applied as inline style on <th>)
 -->
+<script lang="ts" module>
+  export type ColumnAlign = 'left' | 'center' | 'right';
+
+  /** Tailwind text-align class for a column alignment; unset means left. */
+  export function textAlignClass(align?: ColumnAlign): string {
+    if (align === 'right') return 'text-right';
+    if (align === 'center') return 'text-center';
+    return 'text-left';
+  }
+</script>
+
 <script lang="ts">
   import { ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
@@ -36,7 +47,7 @@
     activeField: string;
     direction: 'asc' | 'desc';
     onSort: (_field: string) => void;
-    align?: 'left' | 'center' | 'right';
+    align?: ColumnAlign;
     className?: string;
     srOnly?: string;
     width?: string;
@@ -54,9 +65,7 @@
     width,
   }: Props = $props();
 
-  const alignClass = $derived(
-    align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : align && 'text-left'
-  );
+  const alignClass = $derived(align && textAlignClass(align));
 
   const isActive = $derived(field === activeField);
 </script>

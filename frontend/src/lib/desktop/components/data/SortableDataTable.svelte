@@ -33,7 +33,7 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import type { Column } from './DataTable.types';
-  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import SortableHeader, { textAlignClass } from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
 
@@ -150,7 +150,7 @@
     if (!col) return filteredData;
     // A column without a sortValue sorts by its raw field value, so a sortable
     // header never shows a sort that does nothing.
-    const sortValue = col.sortValue ?? ((item: T) => rawSortValue(item, col));
+    const sortValue = col.sortValue ?? ((item: T) => rawValue(item, col));
     const direction = sortDirection === 'asc' ? 1 : -1;
     return [...filteredData].sort((a, b) => {
       const av = sortValue(a);
@@ -173,31 +173,15 @@
     return keyFn ? keyFn(item, index) : item;
   }
 
-  function fieldValue(item: T, column: Column<T>): unknown {
-    return (item as Record<string, unknown>)[column.key];
-  }
-
-  function rawSortValue(item: T, column: Column<T>): string | number {
-    const value = fieldValue(item, column);
+  /** The item's own field for a column: numbers kept, null shown as ''. */
+  function rawValue(item: T, column: Column<T>): string | number {
+    const value = (item as Record<string, unknown>)[column.key];
     if (typeof value === 'number') return value;
     return value == null ? '' : String(value);
   }
 
   function cellValue(column: Column<T>, item: T, index: number): string | number {
-    if (column.render) return column.render(item, index);
-    const value = fieldValue(item, column);
-    return value == null ? '' : String(value);
-  }
-
-  function alignClass(align?: string): string {
-    switch (align) {
-      case 'center':
-        return 'text-center';
-      case 'right':
-        return 'text-right';
-      default:
-        return 'text-left';
-    }
+    return column.render ? column.render(item, index) : rawValue(item, column);
   }
 
   const headerCellClass = 'py-2 px-3 text-xs font-medium text-muted';
@@ -304,7 +288,7 @@
               {:else}
                 <th
                   scope="col"
-                  class={cn(headerCellClass, alignClass(column.align), column.className)}
+                  class={cn(headerCellClass, textAlignClass(column.align), column.className)}
                   style:width={column.width}
                 >
                   {column.header}
@@ -325,7 +309,7 @@
                 <td
                   class={cn(
                     'py-2 px-3',
-                    alignClass(column.align),
+                    textAlignClass(column.align),
                     column.align === 'right' && 'tabular-nums',
                     column.className
                   )}
@@ -349,7 +333,10 @@
       </ResizableContainer>
     {:else}
       <div
-        class={cn('overflow-x-auto', bodyMaxHeight && 'bounded-body scroll-shadow-y')}
+        class={cn(
+          'overflow-x-auto',
+          bodyMaxHeight && 'max-h-(--table-body-max-height) overflow-y-auto scroll-shadow-y'
+        )}
         style:--table-body-max-height={bodyMaxHeight}
       >
         {@render tableMarkup()}
@@ -365,10 +352,5 @@
      SortableHeader renders, which a scoped th rule would miss. */
   thead :global(th) {
     box-shadow: inset 0 -1px 0 var(--border-100);
-  }
-
-  .bounded-body {
-    max-height: var(--table-body-max-height);
-    overflow-y: auto;
   }
 </style>
