@@ -9,6 +9,7 @@ import "fmt"
 //
 //nolint:misspell // Foreign language translations; false positives from English spell checker.
 var unlikelyCommentTemplates = map[string]string{
+	"cs": "Ultrazvukové ověření: zvuková okna, ze kterých tato detekce vznikla, nevykazují echolokační aktivitu netopýrů (nejvyšší ultrazvukové CV: %.3f, práh: %.2f). Hlasy netopýrů jinde v nahrávce nebyly určeny jako tento druh.",
 	"da": "Ultralydsvalidering: lydvinduerne, der gav denne detektion, viser ingen flagermusekkolokalisering (højeste ultralyds-CV: %.3f, tærskel: %.2f). Flagermuskald andre steder i optagelsen blev ikke identificeret som denne art.",
 	"de": "Ultraschallvalidierung: Die Audiofenster, die diese Erkennung ausgelöst haben, zeigen keine Fledermaus-Echoortung (höchster Ultraschall-CV: %.3f, Schwellenwert: %.2f). Fledermausrufe an anderer Stelle der Aufnahme wurden nicht als diese Art identifiziert.",
 	"en": "Ultrasonic validation: the audio windows that produced this detection show no bat echolocation activity (highest ultrasonic CV: %.3f, threshold: %.2f). Any bat calls elsewhere in the recording were not identified as this species.",
@@ -18,6 +19,7 @@ var unlikelyCommentTemplates = map[string]string{
 	"hu": "Ultrahangos validáció: az észlelést eredményező hangablakokban nincs denevér-echolokációs tevékenység (legmagasabb ultrahang-CV: %.3f, küszöb: %.2f). A felvétel más részein hallható denevérhangokat nem azonosították erre a fajra.",
 	"it": "Validazione ultrasonica: le finestre audio che hanno prodotto questo rilevamento non mostrano attività di ecolocalizzazione di pipistrelli (CV ultrasonico più alto: %.3f, soglia: %.2f). I richiami di pipistrelli in altri punti della registrazione non sono stati identificati come questa specie.",
 	"lv": "Ultraskaņas validācija: audio logos, kas radīja šo konstatējumu, nav sikspārņu eholokācijas aktivitātes (augstākais ultraskaņas CV: %.3f, slieksnis: %.2f). Sikspārņu saucieni citur ierakstā netika identificēti kā šī suga.",
+	"nb": "Ultralydvalidering: lydvinduene som ga denne deteksjonen, viser ingen ekkolokalisering fra flaggermus (høyeste ultralyd-CV: %.3f, terskel: %.2f). Flaggermuslyder andre steder i opptaket ble ikke identifisert som denne arten.",
 	"nl": "Ultrasone validatie: de audiovensters die deze detectie opleverden tonen geen echolocatie-activiteit van vleermuizen (hoogste ultrasone CV: %.3f, drempel: %.2f). Vleermuisroepen elders in de opname zijn niet als deze soort geïdentificeerd.",
 	"pl": "Walidacja ultradźwiękowa: okna audio, które dały to wykrycie, nie wykazują echolokacji nietoperzy (najwyższe ultradźwiękowe CV: %.3f, próg: %.2f). Odgłosy nietoperzy w innych miejscach nagrania nie zostały zidentyfikowane jako ten gatunek.",
 	"pt": "Validação ultrassônica: as janelas de áudio que produziram esta detecção não mostram atividade de ecolocalização de morcegos (CV ultrassônico mais alto: %.3f, limiar: %.2f). Chamados de morcegos em outras partes da gravação não foram identificados como esta espécie.",
