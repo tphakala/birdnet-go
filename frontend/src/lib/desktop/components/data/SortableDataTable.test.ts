@@ -159,9 +159,14 @@ describe('SortableDataTable', () => {
       { key: 'name', header: 'Name', sortable: true },
       { key: 'score', header: 'Score', sortable: true, defaultDirection: 'desc' },
     ];
-    renderTable({ columns: rawColumns, defaultSortKey: 'score' });
-    // Numbers compare numerically: 30, 20, 10.
-    expect(rowNames()).toEqual(['alpha', 'Bravo', 'Charlie']);
+    const rows: Row[] = [
+      { id: 1, name: 'nine', score: 9 },
+      { id: 2, name: 'hundred', score: 100 },
+      { id: 3, name: 'ten', score: 10 },
+    ];
+    renderTable({ columns: rawColumns, data: rows, defaultSortKey: 'score' });
+    // Numerically 100, 10, 9; compared as strings it would be 9, 100, 10.
+    expect(rowNames()).toEqual(['hundred', 'ten', 'nine']);
   });
 
   it('sorts a Date field without sortValue chronologically', () => {
@@ -186,10 +191,17 @@ describe('SortableDataTable', () => {
 
   it('bounds the body height when bodyMaxHeight is set and resizable is off', () => {
     const { container } = renderTable({ bodyMaxHeight: 'min(70vh, 40rem)' });
-    const table = container.querySelector('table');
-    const body = table?.parentElement;
+    const body = container.querySelector('table')?.parentElement;
+    // jsdom loads no Tailwind CSS: check the cap value and the classes that use it.
     expect(body?.style.getPropertyValue('--table-body-max-height')).toBe('min(70vh, 40rem)');
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(body).toHaveClass('max-h-(--table-body-max-height)', 'overflow-y-auto');
+  });
+
+  it('ignores bodyMaxHeight when the body is resizable', () => {
+    const { container } = renderTable({ resizable: true, bodyMaxHeight: 'min(70vh, 40rem)' });
+    expect(screen.getByRole('separator')).toBeInTheDocument();
+    const body = container.querySelector('table')?.parentElement;
+    expect(body?.style.getPropertyValue('--table-body-max-height')).toBe('');
   });
 
   it('right-aligned columns align header and cells', () => {
@@ -208,22 +220,49 @@ describe('SortableDataTable', () => {
     }
   });
 
-  it('renders the notice above the rows and above the empty state', () => {
+  describe('notice', () => {
     const notice = textSnippet('<div data-testid="notice">Load failed</div>');
-    const { unmount } = renderTable({ notice });
-    const noticeEl = screen.getByTestId('notice');
-    const table = document.querySelector('table');
-    expect(table).not.toBeNull();
-    expect(noticeEl.compareDocumentPosition(table ?? noticeEl)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    unmount();
 
-    renderTable({ data: [], emptyTitle: 'Nothing here', notice });
-    const emptyTitle = screen.getByText('Nothing here');
-    expect(screen.getByTestId('notice').compareDocumentPosition(emptyTitle)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
+    /** Whether the notice follows the header bar and precedes `body` in document order. */
+    function noticeIsBetweenHeaderAnd(body: Element): boolean {
+      const noticeEl = screen.getByTestId('notice');
+      const heading = screen.getByRole('heading', { name: 'Things' });
+      return (
+        heading.compareDocumentPosition(noticeEl) === Node.DOCUMENT_POSITION_FOLLOWING &&
+        noticeEl.compareDocumentPosition(body) === Node.DOCUMENT_POSITION_FOLLOWING
+      );
+    }
+
+    it('renders between the header bar and the rows', () => {
+      renderTable({ title: 'Things', notice });
+      const table = document.querySelector('table');
+      expect(table).not.toBeNull();
+      expect(table && noticeIsBetweenHeaderAnd(table)).toBe(true);
+    });
+
+    it('renders between the header bar and the empty state', () => {
+      renderTable({ title: 'Things', data: [], emptyTitle: 'Nothing here', notice });
+      expect(noticeIsBetweenHeaderAnd(screen.getByText('Nothing here'))).toBe(true);
+    });
+
+    it('renders between the header bar and the loading indicator', () => {
+      renderTable({ title: 'Things', loading: true, notice });
+      expect(noticeIsBetweenHeaderAnd(screen.getByRole('status'))).toBe(true);
+    });
+
+    it('renders between the header bar and the no-results message', async () => {
+      const user = userEvent.setup();
+      renderTable({
+        title: 'Things',
+        notice,
+        searchable: true,
+        searchAccessor: (r: Row) => r.name,
+        searchPlaceholder: 'Search',
+        noResultsMessage: 'No matches',
+      });
+      await user.type(screen.getByPlaceholderText('Search'), 'zzz');
+      expect(noticeIsBetweenHeaderAnd(screen.getByText('No matches'))).toBe(true);
+    });
   });
 
   it('pads the notice wrapper only while the snippet renders an element', () => {
@@ -237,10 +276,33 @@ describe('SortableDataTable', () => {
     expect(wrapper).not.toHaveClass('py-3');
   });
 
-  it('the empty snippet replaces the default empty state', () => {
+  describe('empty snippet', () => {
     const empty = textSnippet('<p>No backups yet</p>');
-    renderTable({ data: [], emptyTitle: 'Nothing here', empty });
-    expect(screen.getByText('No backups yet')).toBeInTheDocument();
-    expect(screen.queryByText('Nothing here')).not.toBeInTheDocument();
+
+    it('replaces the default empty state', () => {
+      renderTable({ data: [], emptyTitle: 'Nothing here', empty });
+      expect(screen.getByText('No backups yet')).toBeInTheDocument();
+      expect(screen.queryByText('Nothing here')).not.toBeInTheDocument();
+    });
+
+    it('is not shown while loading', () => {
+      renderTable({ data: [], loading: true, empty });
+      expect(screen.getByRole('status')).toBeInTheDocument();
+      expect(screen.queryByText('No backups yet')).not.toBeInTheDocument();
+    });
+
+    it('is not shown when a search matches no rows', async () => {
+      const user = userEvent.setup();
+      renderTable({
+        empty,
+        searchable: true,
+        searchAccessor: (r: Row) => r.name,
+        searchPlaceholder: 'Search',
+        noResultsMessage: 'No matches',
+      });
+      await user.type(screen.getByPlaceholderText('Search'), 'zzz');
+      expect(screen.getByText('No matches')).toBeInTheDocument();
+      expect(screen.queryByText('No backups yet')).not.toBeInTheDocument();
+    });
   });
 });
