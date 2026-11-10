@@ -4,25 +4,25 @@ import "fmt"
 
 // unlikelyCommentTemplates maps UI locale codes to format strings for the
 // automatic comment added when the ultrasonic validation filter tags a bat
-// detection as unlikely. The two format verbs are CV value (%.3f) and
+// detection as unlikely (every hit window judged flat). The two format verbs are CV value (%.3f) and
 // threshold (%.2f).
 //
 //nolint:misspell // Foreign language translations; false positives from English spell checker.
 var unlikelyCommentTemplates = map[string]string{
-	"da": "Ultralydsvalidering: lav tidsmæssig variation i ultralydsfrekvensområdet (CV: %.3f, tærskel: %.2f). Ingen signifikant flagermusekkolokalisering detekteret i lyden.",
-	"de": "Ultraschallvalidierung: geringe zeitliche Variabilität im Ultraschallfrequenzbereich (CV: %.3f, Schwellenwert: %.2f). Keine signifikante Fledermaus-Echoortung im Audio erkannt.",
-	"en": "Ultrasonic validation: low temporal variability in ultrasonic frequency range (CV: %.3f, threshold: %.2f). No significant bat echolocation activity detected in the audio.",
-	"es": "Validación ultrasónica: baja variabilidad temporal en el rango de frecuencia ultrasónica (CV: %.3f, umbral: %.2f). No se detectó actividad significativa de ecolocalización de murciélagos en el audio.",
-	"fi": "Ultraäänivalidointi: matala ajallinen vaihtelu ultraäänitaajuusalueella (CV: %.3f, kynnys: %.2f). Merkittävää lepakon kaikuluotaustoimintaa ei havaittu äänessä.",
-	"fr": "Validation ultrasonique : faible variabilité temporelle dans la plage de fréquences ultrasoniques (CV : %.3f, seuil : %.2f). Aucune activité significative d'écholocalisation de chauve-souris détectée dans l'audio.",
-	"hu": "Ultrahangos validáció: alacsony időbeli variabilitás az ultrahang-frekvenciatartományban (CV: %.3f, küszöb: %.2f). Nem észlelhető jelentős denevér-echolokációs tevékenység a hangfelvételben.",
-	"it": "Validazione ultrasonica: bassa variabilità temporale nella gamma di frequenze ultrasoniche (CV: %.3f, soglia: %.2f). Nessuna attività significativa di ecolocalizzazione di pipistrelli rilevata nell'audio.",
-	"lv": "Ultraskaņas validācija: zema laiciskā mainība ultraskaņas frekvenču diapazonā (CV: %.3f, slieksnis: %.2f). Audio nav konstatēta nozīmīga sikspārņu eholokācijas aktivitāte.",
-	"nl": "Ultrasone validatie: lage temporele variabiliteit in het ultrasone frequentiebereik (CV: %.3f, drempel: %.2f). Geen significante echolocatie-activiteit van vleermuizen gedetecteerd in de audio.",
-	"pl": "Walidacja ultradźwiękowa: niska zmienność czasowa w zakresie częstotliwości ultradźwiękowych (CV: %.3f, próg: %.2f). Nie wykryto znaczącej aktywności echolokacyjnej nietoperzy w nagraniu.",
-	"pt": "Validação ultrassônica: baixa variabilidade temporal na faixa de frequência ultrassônica (CV: %.3f, limiar: %.2f). Nenhuma atividade significativa de ecolocalização de morcegos detectada no áudio.",
-	"sk": "Ultrazvuková validácia: nízka časová variabilita v ultrazvukovom frekvenčnom rozsahu (CV: %.3f, prah: %.2f). V zvukovom zázname nebola zistená žiadna významná echolokačná aktivita netopierov.",
-	"sv": "Ultraljudsvalidering: låg tidsmässig variabilitet i ultraljudsfrekvensområdet (CV: %.3f, tröskel: %.2f). Ingen signifikant ekolokaliseringsaktivitet från fladdermöss detekterad i ljudet.",
+	"da": "Ultralydsvalidering: lydvinduerne, der gav denne detektion, viser ingen flagermusekkolokalisering (højeste ultralyds-CV: %.3f, tærskel: %.2f). Flagermuskald andre steder i optagelsen blev ikke identificeret som denne art.",
+	"de": "Ultraschallvalidierung: Die Audiofenster, die diese Erkennung ausgelöst haben, zeigen keine Fledermaus-Echoortung (höchster Ultraschall-CV: %.3f, Schwellenwert: %.2f). Fledermausrufe an anderer Stelle der Aufnahme wurden nicht als diese Art identifiziert.",
+	"en": "Ultrasonic validation: the audio windows that produced this detection show no bat echolocation activity (highest ultrasonic CV: %.3f, threshold: %.2f). Any bat calls elsewhere in the recording were not identified as this species.",
+	"es": "Validación ultrasónica: las ventanas de audio que produjeron esta detección no muestran actividad de ecolocalización de murciélagos (CV ultrasónico más alto: %.3f, umbral: %.2f). Las llamadas de murciélagos en otras partes de la grabación no se identificaron como esta especie.",
+	"fi": "Ultraäänivalidointi: tämän havainnon tuottaneissa ääni-ikkunoissa ei ole lepakoiden kaikuluotausta (korkein ultraääni-CV: %.3f, kynnys: %.2f). Muualla tallenteessa olevia lepakon ääniä ei tunnistettu tähän lajiin.",
+	"fr": "Validation ultrasonique : les fenêtres audio à l'origine de cette détection ne montrent aucune activité d'écholocalisation de chauve-souris (CV ultrasonique le plus élevé : %.3f, seuil : %.2f). Les cris de chauve-souris ailleurs dans l'enregistrement n'ont pas été identifiés comme cette espèce.",
+	"hu": "Ultrahangos validáció: az észlelést eredményező hangablakokban nincs denevér-echolokációs tevékenység (legmagasabb ultrahang-CV: %.3f, küszöb: %.2f). A felvétel más részein hallható denevérhangokat nem azonosították erre a fajra.",
+	"it": "Validazione ultrasonica: le finestre audio che hanno prodotto questo rilevamento non mostrano attività di ecolocalizzazione di pipistrelli (CV ultrasonico più alto: %.3f, soglia: %.2f). I richiami di pipistrelli in altri punti della registrazione non sono stati identificati come questa specie.",
+	"lv": "Ultraskaņas validācija: audio logos, kas radīja šo konstatējumu, nav sikspārņu eholokācijas aktivitātes (augstākais ultraskaņas CV: %.3f, slieksnis: %.2f). Sikspārņu saucieni citur ierakstā netika identificēti kā šī suga.",
+	"nl": "Ultrasone validatie: de audiovensters die deze detectie opleverden tonen geen echolocatie-activiteit van vleermuizen (hoogste ultrasone CV: %.3f, drempel: %.2f). Vleermuisroepen elders in de opname zijn niet als deze soort geïdentificeerd.",
+	"pl": "Walidacja ultradźwiękowa: okna audio, które dały to wykrycie, nie wykazują echolokacji nietoperzy (najwyższe ultradźwiękowe CV: %.3f, próg: %.2f). Odgłosy nietoperzy w innych miejscach nagrania nie zostały zidentyfikowane jako ten gatunek.",
+	"pt": "Validação ultrassônica: as janelas de áudio que produziram esta detecção não mostram atividade de ecolocalização de morcegos (CV ultrassônico mais alto: %.3f, limiar: %.2f). Chamados de morcegos em outras partes da gravação não foram identificados como esta espécie.",
+	"sk": "Ultrazvuková validácia: zvukové okná, ktoré vytvorili túto detekciu, nevykazujú echolokačnú aktivitu netopierov (najvyššie ultrazvukové CV: %.3f, prah: %.2f). Volania netopierov inde v zázname neboli identifikované ako tento druh.",
+	"sv": "Ultraljudsvalidering: ljudfönstren som gav denna detektion visar ingen ekolokaliseringsaktivitet från fladdermöss (högsta ultraljuds-CV: %.3f, tröskel: %.2f). Fladdermusläten på andra ställen i inspelningen identifierades inte som denna art.",
 }
 
 // defaultUnlikelyCommentLocale is the fallback locale when the configured
