@@ -388,6 +388,107 @@ describe('Accessibility: status text tokens', () => {
   }
 });
 
+/** Data visualization fills: chart series and meter tones. */
+const VIZ_FILL_TOKENS = [
+  ...Array.from({ length: 8 }, (_, i) => `--viz-${i + 1}`),
+  '--viz-success',
+  '--viz-warning',
+  '--viz-error',
+];
+
+describe('Accessibility: data visualization tokens', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+
+  const themes = [
+    { name: 'light', block: blockBody(css, ":root,\n[data-theme='light']") },
+    { name: 'dark', block: blockBody(css, "[data-theme='dark']") },
+  ];
+
+  // The meter track is a decorative groove (Meter callers print the value as text beside it), so
+  // only the fills are held to the 3:1 non-text rule, against the card and against the track.
+  for (const { name, block } of themes) {
+    for (const token of VIZ_FILL_TOKENS) {
+      for (const surface of ['--surface-100', '--viz-track']) {
+        it(`${token} reaches 3:1 on ${surface} in the ${name} theme`, () => {
+          const ratio = getContrastRatio(readVar(block, token), readVar(block, surface));
+          expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_LARGE);
+        });
+      }
+    }
+  }
+
+  // Series 2 to 7 are the slots meant to share one chart (one per model), so every pair must
+  // stay apart for full color vision and under the two common red-green deficiencies.
+  // Distance is OKLab x100; deficiencies are simulated with Machado, Oliveira and Fernandes
+  // (2009) at full severity. 15 and 8 are the usual floors for telling two marks apart.
+  const MIN_NORMAL_DISTANCE = 15;
+  const MIN_CVD_DISTANCE = 8;
+  const SHARED_SERIES = [2, 3, 4, 5, 6, 7].map(n => `--viz-${n}`);
+  const CVD_MATRICES = {
+    protanopia: [
+      [0.152286, 1.052583, -0.204868],
+      [0.114503, 0.786281, 0.099216],
+      [-0.003882, -0.048116, 1.051998],
+    ],
+    deuteranopia: [
+      [0.367322, 0.860646, -0.227968],
+      [0.280085, 0.672501, 0.047413],
+      [-0.01182, 0.04294, 0.968881],
+    ],
+  };
+
+  /** OKLab coordinates of a hex color, optionally seen through a CVD matrix (linear RGB). */
+  function oklab(hex: string, matrix?: number[][]): number[] {
+    const { r, g, b } = hexToRgb(hex);
+    let rgb = [r, g, b].map(c => {
+      const s = c / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    if (matrix) {
+      rgb = matrix.map(row =>
+        Math.min(1, Math.max(0, row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2]))
+      );
+    }
+    const [lr, lg, lb] = rgb;
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+    const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+    ];
+  }
+
+  function distance(a: string, b: string, matrix?: number[][]): number {
+    const [p, q] = [oklab(a, matrix), oklab(b, matrix)];
+    return 100 * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  }
+
+  for (const { name, block } of themes) {
+    it(`series 2 to 7 stay apart in the ${name} theme, with and without red-green deficiency`, () => {
+      const colors = SHARED_SERIES.map(token => [token, readVar(block, token)] as const);
+      for (const [i, [tokenA, a]] of colors.entries()) {
+        for (const [tokenB, b] of colors.slice(i + 1)) {
+          const pair = `${tokenA} vs ${tokenB}`;
+          expect(distance(a, b), `${pair}`).toBeGreaterThanOrEqual(MIN_NORMAL_DISTANCE);
+          for (const [kind, matrix] of Object.entries(CVD_MATRICES)) {
+            expect(distance(a, b, matrix), `${pair} (${kind})`).toBeGreaterThanOrEqual(
+              MIN_CVD_DISTANCE
+            );
+          }
+        }
+      }
+    });
+  }
+
+  it('no color scheme overrides a visualization token', () => {
+    // Schemes change only primary and accent; the viz tokens must hold under every scheme.
+    expect(readFileSync(join(stylesDir, 'schemes.css'), 'utf8')).not.toMatch(/--viz-/);
+  });
+});
+
 describe('Status text rules', () => {
   const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
   const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');

@@ -117,12 +117,13 @@ This folder contains **shared components** used across the application. Feature-
 - `Input.svelte` - Generic input field
 - `LanguageSelector.svelte` - Language selection dropdown
 - `LoadingSpinner.svelte` - Loading animation
+- `Meter.svelte` - Static measurement bar (disk, CPU, table size) on the `--viz-*` tokens
 - `Modal.svelte` - Generic modal container
 - `MultiStageOperation.svelte` - Multi-step operation UI
 - `NotificationBell.svelte` - Notification bell icon
 - `NotificationToast.svelte` - Toast notification
 - `Pagination.svelte` - Pagination controls
-- `ProgressBar.svelte` - Progress bar indicator
+- `ProgressBar.svelte` - Progress bar indicator for running tasks
 - `RadioCardGroup.svelte` - Card-style radio group with one Tab stop and arrow-key selection (WAI-ARIA radio pattern)
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
