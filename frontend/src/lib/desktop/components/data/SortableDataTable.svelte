@@ -150,7 +150,7 @@
     if (!col) return filteredData;
     // A column without a sortValue sorts by its raw field value, so a sortable
     // header sorts by the field it is keyed on.
-    const sortValue = col.sortValue ?? ((item: T) => rawValue(item, col));
+    const sortValue = col.sortValue ?? ((item: T) => sortKey(fieldValue(item, col)));
     const direction = sortDirection === 'asc' ? 1 : -1;
     return [...filteredData].sort((a, b) => {
       const av = sortValue(a);
@@ -173,15 +173,28 @@
     return keyFn ? keyFn(item, index) : item;
   }
 
-  /** The item's own field for a column: numbers kept, null shown as ''. */
-  function rawValue(item: T, column: Column<T>): string | number {
-    const value = (item as Record<string, unknown>)[column.key];
+  /** The item's own field for a column, or undefined when the item is not an object. */
+  function fieldValue(item: T, column: Column<T>): unknown {
+    return typeof item === 'object' && item !== null ? Reflect.get(item, column.key) : undefined;
+  }
+
+  /** Display form of a field: numbers kept, null shown as ''. */
+  function displayValue(value: unknown): string | number {
     if (typeof value === 'number') return value;
     return value == null ? '' : String(value);
   }
 
+  /** Sort form of a field: dates by time (an invalid date as ''), the rest as displayed. */
+  function sortKey(value: unknown): string | number {
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isNaN(time) ? '' : time;
+    }
+    return displayValue(value);
+  }
+
   function cellValue(column: Column<T>, item: T, index: number): string | number {
-    return column.render ? column.render(item, index) : rawValue(item, column);
+    return column.render ? column.render(item, index) : displayValue(fieldValue(item, column));
   }
 
   const headerCellClass = 'py-2 px-3 text-xs font-medium text-muted';

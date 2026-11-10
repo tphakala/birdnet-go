@@ -14,8 +14,8 @@ export interface Column<T> {
    * comparison and yields undefined ordering. Used by SortableDataTable, which
    * sorts internally.
    * When omitted, SortableDataTable sorts by the raw `item[key]` value (numbers
-   * numerically, anything else as a string), so set it whenever the displayed
-   * value differs from the field.
+   * numerically, dates by time, anything else as a string), so set it whenever
+   * the displayed value differs from the field.
    */
   sortValue?: (_item: T) => string | number;
   /**

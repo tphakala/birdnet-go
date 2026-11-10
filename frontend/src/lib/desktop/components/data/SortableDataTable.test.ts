@@ -164,6 +164,26 @@ describe('SortableDataTable', () => {
     expect(rowNames()).toEqual(['alpha', 'Bravo', 'Charlie']);
   });
 
+  it('sorts a Date field without sortValue chronologically', () => {
+    interface Event {
+      id: number;
+      label: string;
+      at: Date;
+    }
+    const events: Event[] = [
+      { id: 1, label: 'Mon', at: new Date(2026, 10, 9) },
+      { id: 2, label: 'Sun', at: new Date(2026, 10, 8) },
+      { id: 3, label: 'Tue', at: new Date(2026, 10, 10) },
+    ];
+    const eventColumns: Column<Event>[] = [
+      { key: 'label', header: 'Label' },
+      { key: 'at', header: 'At', sortable: true },
+    ];
+    renderTable({ columns: eventColumns, data: events, defaultSortKey: 'at' });
+    // As strings these would order Mon, Sun, Tue (by weekday name).
+    expect(rowNames()).toEqual(['Sun', 'Mon', 'Tue']);
+  });
+
   it('bounds the body height when bodyMaxHeight is set and resizable is off', () => {
     const { container } = renderTable({ bodyMaxHeight: 'min(70vh, 40rem)' });
     const table = container.querySelector('table');
