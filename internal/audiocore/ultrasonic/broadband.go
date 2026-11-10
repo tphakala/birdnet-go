@@ -41,8 +41,8 @@ const (
 // The step only lowers a CV. cv is returned unchanged when it is already below
 // the threshold, when the settings or the window leave no usable sub-frame
 // layout, when the guard band or the ultrasonic variability is empty (a guard
-// median of zero, as in gated or zero filled audio), and when no sub-frame is
-// broadband.
+// median of zero, as in gated or zero filled audio), and, because the ratio is
+// then exactly 1, when no sub-frame is broadband.
 func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicFilterConfig, cv float64) float64 {
 	if IsUnlikely(cv, cfg) || cfg.ValidateSTFT() != nil || !HasUltrasonicBand(sampleRate, cfg.FrequencySplitHz) {
 		return cv
@@ -65,7 +65,6 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 		return cv
 	}
 
-	nyquistBin := subSize / 2
 	numSub := 1 + (len(samples)-subSize)/subHop
 	us := make([]float64, numSub)
 	guard := make([]float64, numSub)
@@ -75,8 +74,8 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 		offset := f * subHop
 		removeMean(frame, samples[offset:offset+subSize])
 		plan.PowerInto(power, frame, stft.NoPad)
-		us[f] = bandPower(power, splitBin, nyquistBin+1, nyquistBin)
-		guard[f] = bandPower(power, guardLo, guardHi, nyquistBin)
+		us[f] = bandPower(power, splitBin, len(power))
+		guard[f] = bandPower(power, guardLo, guardHi)
 	}
 
 	before := coefficientOfVariation(us)
@@ -84,26 +83,24 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 	if before <= 0 || medianGuard <= 0 {
 		return cv
 	}
-	flagged := 0
 	for f := range us {
 		if guard[f] > broadbandGuardThreshold*medianGuard && us[f] > medianUS {
 			us[f] = medianUS
-			flagged++
 		}
 	}
-	if flagged == 0 {
-		return cv
-	}
+	// With no broadband sub-frame us is unchanged and the ratio is exactly 1.
 	return cv * min(1, coefficientOfVariation(us)/before)
 }
 
-// bandPower sums the one-sided power of bins [from, to): bins other than DC
-// and Nyquist count twice, as in ComputeUSFrameCV.
-func bandPower(power []float32, from, to, nyquistBin int) float64 {
+// bandPower sums the one-sided power of bins [from, to), where from is above
+// the DC bin: every bin but the last one of power (Nyquist) counts twice, the
+// weighting ComputeUSFrameCV applies inline.
+func bandPower(power []float32, from, to int) float64 {
+	nyquistBin := len(power) - 1
 	var sum float64
 	for bin := from; bin < to; bin++ {
 		p := float64(power[bin])
-		if bin > 0 && bin < nyquistBin {
+		if bin < nyquistBin {
 			p *= 2
 		}
 		sum += p
