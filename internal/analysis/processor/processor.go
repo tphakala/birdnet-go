@@ -861,7 +861,8 @@ func (p *Processor) processDetections(item classifier.Results) {
 // only while every hit window was judged flat, reporting the highest CV among them
 // with the threshold that judged that window; one window that was not judged flat
 // clears the tag and both CV fields. AND and max do not depend on arrival order or
-// on which window had the highest confidence.
+// on which window had the highest confidence; when two windows have the same CV,
+// the later one's threshold is reported.
 func mergeUnlikelyVerdict(merged *detection.Result, wasUnlikely bool, previousCV, previousThreshold float64, hit *detection.Result) {
 	merged.Unlikely = wasUnlikely && hit.Unlikely
 	if !merged.Unlikely {

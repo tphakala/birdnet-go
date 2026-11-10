@@ -255,7 +255,7 @@ func TestMergePendingHit_UnlikelyOnlyWhenEveryHitIsFlat(t *testing.T) {
 		{"flat then active tie", []hit{flat(0.90, 0.03), active(0.90)}, false, 0, 0},
 		{"active then flat tie", []hit{active(0.90), flat(0.90, 0.03)}, false, 0, 0},
 		{"flat CV rises on a lower confidence hit", []hit{flat(0.95, 0.03), flat(0.80, 0.08)}, true, 0.08, 0.15},
-		{"flat CV rises on a higher confidence hit", []hit{flat(0.80, 0.08), flat(0.95, 0.03)}, true, 0.08, 0.15},
+		{"highest CV kept when a higher confidence hit has a lower CV", []hit{flat(0.80, 0.08), flat(0.95, 0.03)}, true, 0.08, 0.15},
 		{"single flat hit", []hit{flat(0.90, 0.04)}, true, 0.04, 0.15},
 		{"tag does not come back after an active hit", []hit{flat(0.70, 0.03), flat(0.80, 0.04), active(0.85), flat(0.95, 0.05)}, false, 0, 0},
 		{"max CV keeps the threshold that judged it, lower confidence hit later", []hit{flatAt(0.95, 0.12, 0.15), flatAt(0.80, 0.05, 0.10)}, true, 0.12, 0.15},
