@@ -348,7 +348,8 @@
       <div
         class={cn(
           'overflow-x-auto',
-          bodyMaxHeight && 'max-h-(--table-body-max-height) overflow-y-auto scroll-shadow-y'
+          bodyMaxHeight &&
+            'max-h-(--table-body-max-height) overflow-y-auto rounded-b-xl scroll-shadow-y'
         )}
         style:--table-body-max-height={bodyMaxHeight}
       >
