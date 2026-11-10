@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "Järjestelmätiedot",
-      "os": "Käyttöjärjestelmä",
-      "hostname": "Isäntänimi",
-      "uptime": "Käynnissäoloaika",
-      "cpus": "Prosessorit",
-      "model": "Järjestelmämalli",
-      "timezone": "Aikavyöhyke",
-      "temperature": "Prosessorin lämpötila",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Lämpötilatiedot eivät ole saatavilla",
       "cpuCores": "CPU-ytimet",
@@ -1229,15 +1222,7 @@
         "process": "Prosessi"
       },
       "showAll": "Näytä kaikki prosessit",
-      "showBirdnetOnly": "Näytä vain BirdNET",
-      "table": {
-        "process": "Prosessi",
-        "status": "Tila",
-        "cpu": "CPU",
-        "memory": "Muisti",
-        "uptime": "Käyntiaika",
-        "showAllProcesses": "Näytä kaikki prosessit"
-      }
+      "showBirdnetOnly": "Näytä vain BirdNET"
     },
     "errors": {
       "systemInfo": "Järjestelmätietojen lataus epäonnistui: {error}",

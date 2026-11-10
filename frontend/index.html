@@ -7,7 +7,14 @@
       // Immediately set the theme before any content loads to prevent flash
       (function () {
         try {
-          const theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+          // Same order as getInitialTheme in stores/theme.ts: stored choice, then the OS, then light
+          const stored = localStorage.getItem('theme');
+          const theme =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
           document.documentElement.setAttribute('data-theme', theme);
           document.documentElement.setAttribute('data-theme-controller', theme);
         } catch (e) {

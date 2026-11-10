@@ -110,7 +110,7 @@ type DiskInfo struct {
 type ProcessInfo struct {
 	PID    int32   `json:"pid"`
 	Name   string  `json:"name"`
-	Status string  `json:"status"` // e.g., "running", "sleeping", "zombie"
+	Status string  `json:"status"` // e.g., "running", "sleep", "zombie"
 	CPU    float64 `json:"cpu"`    // CPU usage percentage
 	Memory uint64  `json:"memory"` // Memory usage in bytes (RSS)
 	Uptime int64   `json:"uptime"` // Uptime in seconds
@@ -822,7 +822,7 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		c.LogWarnIfEnabled("Failed to get process status", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 	case len(statusList) > 0:
 		// Use the first status code returned
-		status = mapProcessStatus(statusList[0])
+		status = normalizeProcessStatus(statusList[0])
 	default:
 		status = valueUnknown
 	}
@@ -882,27 +882,16 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 	}, nil
 }
 
-// mapProcessStatus converts OS-specific process status codes to readable strings.
-func mapProcessStatus(statusCode string) string {
-	switch statusCode {
-	case "R": // Running or Runnable (Linux/macOS)
-		return "running"
-	case "S": // Sleeping (Linux/macOS)
-		return "sleeping"
-	case "D": // Disk Sleep (Linux)
-		return "disk sleep"
-	case "Z": // Zombie (Linux/macOS)
-		return "zombie"
-	case "T": // Stopped (Linux/macOS)
-		return "stopped"
-	case "W": // Paging (Linux)
-		return "paging"
-	case "I": // Idle (macOS/FreeBSD)
-		return "idle"
-	// Add more specific codes if needed, or default
-	default:
-		return strings.ToLower(statusCode) // Use the code itself if not recognized
+// normalizeProcessStatus converts a gopsutil process status into the value the API reports.
+// gopsutil already translates OS state letters into words, so the value is only lowercased.
+// On Linux and the BSDs it is one of: running, sleep, idle, stop, blocked, wait, lock, zombie;
+// Solaris adds daemon, detached, system and orphan. An empty value, which gopsutil returns for
+// an unrecognized state letter, is reported as "unknown".
+func normalizeProcessStatus(status string) string {
+	if status == "" {
+		return valueUnknown
 	}
+	return strings.ToLower(status)
 }
 
 // GetProcessInfo returns a list of running processes and their basic information

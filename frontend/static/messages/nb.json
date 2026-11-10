@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "Systeminformasjon",
-      "os": "Operativsystem",
-      "hostname": "Vertsnavn",
-      "uptime": "Oppetid",
-      "cpus": "CPU-er",
-      "model": "Systemmodell",
-      "timezone": "Tidssone",
-      "temperature": "CPU-temperatur",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperaturdata utilgjengelig",
       "cpuCores": "CPU-kjerner",
@@ -1229,15 +1222,7 @@
         "process": "Prosess"
       },
       "showAll": "Vis alle prosesser",
-      "showBirdnetOnly": "Vis kun BirdNET",
-      "table": {
-        "process": "Prosess",
-        "status": "Status",
-        "cpu": "CPU",
-        "memory": "Minne",
-        "uptime": "Oppetid",
-        "showAllProcesses": "Vis alle prosesser"
-      }
+      "showBirdnetOnly": "Vis kun BirdNET"
     },
     "errors": {
       "systemInfo": "Innlasting av systeminformasjon mislyktes: {error}",

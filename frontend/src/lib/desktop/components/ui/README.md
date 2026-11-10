@@ -43,8 +43,6 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 ### Data Display
 
-- [ProcessTable](#processtable) - System process information
-- [SystemInfoCard](#systeminfocard) - System information display
 - [SettingsCard](#settingscard) - Configuration settings card
 - [SettingsSection](#settingssection) - Settings organization
 
@@ -117,14 +115,27 @@ interface Props {
 
 **File**: `Card.svelte`
 
-Flexible container component with header, body, and footer sections.
+Container with an optional header row, a body, and a footer. Two variants share
+the same structure:
+
+- `default`: the roomy content card (About, Help, Import/Export).
+- `panel`: the dense bordered panel for data views such as the System pages:
+  `surface-100` background, `border-100` border, `rounded-xl`, 1rem padding, and
+  a small uppercase muted title. The panel is a flex column whose body fills the
+  remaining height, so panels stretched to one grid row keep their footers
+  aligned. It does not clip its content, so sticky table headers and popovers
+  inside it are not cut off.
 
 ```typescript
-interface Props {
+interface Props extends HTMLAttributes<HTMLDivElement> {
   title?: string;
-  padding?: boolean;
-  className?: string;
-  header?: Snippet;
+  description?: string;
+  variant?: 'default' | 'panel'; // default: 'default'
+  padding?: boolean; // default: true; false leaves the body flush (tables)
+  className?: string; // root
+  bodyClassName?: string; // body wrapper, e.g. 'flex flex-col gap-3'
+  header?: Snippet; // replaces the title and description
+  headerActions?: Snippet; // trailing end of the title row
   children?: Snippet;
   footer?: Snippet;
 }
@@ -141,13 +152,29 @@ interface Props {
     <Button variant="primary" onclick={handleAction}>{t('common.save')}</Button>
   {/snippet}
 </Card>
+
+<Card variant="panel" title={t('health.diagnostics')} bodyClassName="flex flex-col gap-3">
+  {#snippet headerActions()}
+    <button type="button" aria-label={t('health.refresh')} onclick={refresh}>
+      <RefreshCw class="size-4" />
+    </button>
+  {/snippet}
+  <p class="text-sm">{summary}</p>
+</Card>
 ```
 
 **Features:**
 
-- Optional title or custom header
-- Configurable padding
-- Three content sections
+- Optional title or custom header, with trailing `headerActions` in both
+  variants. The title side wraps; when the row is too narrow, the actions move
+  below the title instead of squeezing it.
+- `bodyClassName` lays out the body itself; in the panel the body is already
+  `flex-1 min-h-0`, so a `flex flex-col` body can push a footer row down with
+  `mt-auto`.
+- `padding={false}` keeps the header padded and leaves the body flush.
+- `tabindex`, `data-testid` and other attributes pass through to the root.
+- Choose the look with `variant`, not with `className`: `cn()` does not resolve
+  conflicting utilities, so overriding the shell classes is unreliable.
 
 ---
 

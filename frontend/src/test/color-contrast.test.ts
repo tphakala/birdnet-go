@@ -347,7 +347,15 @@ describe('Color Contrast Tests', () => {
   });
 });
 
-describe('Accessibility: error text token', () => {
+const STATUSES = ['error', 'success', 'warning', 'info'] as const;
+
+/** Status text tokens and the fill token each one is drawn over (as a 15% tint). */
+const TEXT_TOKENS = STATUSES.map(status => ({
+  token: `--text-${status}`,
+  fill: `--color-${status}`,
+}));
+
+describe('Accessibility: status text tokens', () => {
   const css = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
     'utf8'
@@ -367,19 +375,18 @@ describe('Accessibility: error text token', () => {
   ];
 
   for (const theme of themes) {
-    for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
-      it(`--text-error passes AA on ${surface} in the ${theme.name} theme`, () => {
-        const ratio = getContrastRatio(
-          readVar(theme.text, '--text-error'),
-          readVar(theme.base, surface)
-        );
-        expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-      });
+    for (const { token } of TEXT_TOKENS) {
+      for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
+        it(`${token} passes AA on ${surface} in the ${theme.name} theme`, () => {
+          const ratio = getContrastRatio(readVar(theme.text, token), readVar(theme.base, surface));
+          expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
     }
   }
 });
 
-describe('Error text rules', () => {
+describe('Status text rules', () => {
   const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
   const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
 
@@ -406,27 +413,33 @@ describe('Error text rules', () => {
     }
   }
 
-  for (const selector of ['.text-error', '.alert-error', '.badge-status-error']) {
-    it(`rule body of ${selector} is color: var(--text-error)`, () => {
-      const bodies = ruleBodies(css, selector);
-      expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
-      for (const body of bodies) {
-        expect(body).toMatch(/(^|[\s;])color:\s*var\(--text-error\);/);
-        expect(body).not.toMatch(/(^|[\s;])color:\s*var\(--color-error\)/);
-      }
-    });
-  }
+  for (const status of STATUSES) {
+    const token = `--text-${status}`;
+    const fill = `--color-${status}`;
+    const tintedSelectors = [`.alert-${status}`, `.badge-status-${status}`];
 
-  // The tint under .alert-error and .badge-status-error stays the fill token, at the share the
-  // contrast tests below assume.
-  for (const selector of ['.alert-error', '.badge-status-error']) {
-    it(`${selector} keeps its 15% --color-error tint`, () => {
-      const bodies = ruleBodies(css, selector);
-      expect(bodies.length).toBeGreaterThan(0);
-      for (const body of bodies) {
-        expect(body).toContain('color-mix(in srgb, var(--color-error) 15%, transparent)');
-      }
-    });
+    for (const selector of [`.text-${status}`, ...tintedSelectors]) {
+      it(`rule body of ${selector} is color: var(${token})`, () => {
+        const bodies = ruleBodies(css, selector);
+        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+        for (const body of bodies) {
+          expect(body).toContain(`color: var(${token});`);
+          expect(body).not.toMatch(/(^|[\s;])color:\s*(var\(--color-|#)/);
+        }
+      });
+    }
+
+    // The tint under the alert and the badge stays the fill token, at the share the contrast
+    // tests below assume.
+    for (const selector of tintedSelectors) {
+      it(`${selector} keeps its 15% ${fill} tint`, () => {
+        const bodies = ruleBodies(css, selector);
+        expect(bodies.length).toBeGreaterThan(0);
+        for (const body of bodies) {
+          expect(body).toContain(`color-mix(in srgb, var(${fill}) 15%, transparent)`);
+        }
+      });
+    }
   }
 
   const desktopDir = join(stylesDir, '..', 'lib', 'desktop');
@@ -500,17 +513,22 @@ describe('Error text rules', () => {
     ['light', lightBase, blockBody(css, ":root,\n[data-theme='light']")],
     ['dark', darkBlock, darkBlock],
   ] as const) {
-    it(`--text-error passes AA on a 15% error tint over base-100 in the ${name} theme`, () => {
-      // .alert-error and .badge-status-error draw a 15% --color-error tint under --text-error
-      const tint = applyOpacity(
-        readVar(block, '--color-error'),
-        readVar(block, '--color-base-100'),
-        0.15
-      );
-      expect(getContrastRatio(readVar(textBlock, '--text-error'), tint)).toBeGreaterThanOrEqual(
-        WCAG_AA_NORMAL
-      );
-    });
+    // .alert-* and .badge-status-* draw a 15% fill tint under their text token. --text-error is
+    // checked on base-100 only: its base-200 and base-300 tints are below AA today.
+    for (const { token, fill } of TEXT_TOKENS) {
+      const surfaces =
+        token === '--text-error'
+          ? ['--color-base-100']
+          : ['--color-base-100', '--color-base-200', '--color-base-300'];
+      for (const surface of surfaces) {
+        it(`${token} passes AA on a 15% ${fill} tint over ${surface} in the ${name} theme`, () => {
+          const tint = applyOpacity(readVar(block, fill), readVar(block, surface), 0.15);
+          expect(getContrastRatio(readVar(textBlock, token), tint)).toBeGreaterThanOrEqual(
+            WCAG_AA_NORMAL
+          );
+        });
+      }
+    }
   }
 });
 

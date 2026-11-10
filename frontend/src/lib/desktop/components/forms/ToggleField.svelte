@@ -14,9 +14,12 @@
     /**
      * 'default' is a row with the switch on the right. 'card' draws a bordered card that is
      * itself the click target (the whole card toggles), with the icon turning primary while
-     * on and the keyboard focus ring around the card instead of the switch.
+     * on and the keyboard focus ring around the card instead of the switch. 'inline' is a
+     * compact control for toolbars and header bars: small muted label text, then the switch,
+     * both inside one label so the text toggles too. Its hit area reaches 0.375rem above and
+     * below the label, so the host leaves that space free of other controls.
      */
-    variant?: 'default' | 'card';
+    variant?: 'default' | 'card' | 'inline';
     value: boolean;
     disabled?: boolean;
     error?: string;
@@ -92,6 +95,21 @@
   // Only an unchecked, enabled card reacts to hover, so a checked card keeps its primary border
   const CARD_HOVER_CLASS = 'hover:border-[var(--border-300)]';
 
+  // The inline label is 2rem tall to sit in a toolbar row. Its transparent ::after layer
+  // stretches the hit area to 2.75rem (44 px, a comfortable touch target) into the padding
+  // above and below without making the row taller. It does not extend sideways, so it stays
+  // off controls beside it. isolate and -z-10 keep the layer behind the text and the switch,
+  // so pointer hits on them land on them.
+  const INLINE_LABEL_CLASS =
+    "relative isolate inline-flex min-h-8 items-center gap-2 after:absolute after:inset-x-0 after:-inset-y-1.5 after:-z-10 after:content-['']";
+
+  let labelCursorClass = $derived(disabled ? 'cursor-not-allowed' : 'cursor-pointer');
+  // The inline variant uses the error text token (4.5:1 on every base surface); the default
+  // and card variants keep their original colour
+  let errorTextClass = $derived(
+    variant === 'inline' ? 'text-[var(--text-error)]' : 'text-[var(--color-error)]'
+  );
+
   let cardClasses = $derived(
     cn(
       CARD_BASE_CLASS,
@@ -115,7 +133,13 @@
   );
 </script>
 
-<!-- The switch is the same in both variants; only its extra classes differ -->
+{#snippet requiredMark()}
+  {#if required}
+    <span class={errorTextClass}>*</span>
+  {/if}
+{/snippet}
+
+<!-- The switch is the same in every variant; only its extra classes differ -->
 {#snippet switchInput(variantClasses: string)}
   <input
     id={fieldId}
@@ -131,7 +155,9 @@
   />
 {/snippet}
 
-<div class={cn('min-w-0', className)} {...rest}>
+<!-- The inline variant sets regular weight so a semibold toolbar or table header does not
+     make its text bold -->
+<div class={cn('min-w-0', variant === 'inline' && 'font-normal', className)} {...rest}>
   {#if variant === 'card'}
     <label for={fieldId} class={cardClasses}>
       {#if icon}
@@ -141,9 +167,7 @@
       <span class="block min-w-0 flex-1">
         <span id={labelId} class="block text-sm font-medium text-[var(--color-base-content)]">
           {label}
-          {#if required}
-            <span class="text-[var(--color-error)]">*</span>
-          {/if}
+          {@render requiredMark()}
         </span>
         {#if description}
           <span
@@ -156,16 +180,25 @@
       </span>
       {@render switchInput(cn(toggleCardClasses, 'mt-0.5 shrink-0'))}
     </label>
+  {:else if variant === 'inline'}
+    <label for={fieldId} class={cn(INLINE_LABEL_CLASS, labelCursorClass)}>
+      {#if icon}
+        {@const Icon = icon}
+        <Icon class="size-3.5 shrink-0 text-muted" />
+      {/if}
+      <span id={labelId} class="text-xs text-muted">
+        {label}
+        {@render requiredMark()}
+      </span>
+      {@render switchInput(cn(toggleDefaultClasses, 'shrink-0'))}
+    </label>
+    {#if description}
+      <div id={descriptionId} class="help-text">{description}</div>
+    {/if}
   {:else}
     <div class="flex items-center justify-between">
       <div class="flex-1">
-        <label
-          for={fieldId}
-          class={cn(
-            'flex items-start gap-2 p-0',
-            disabled ? 'cursor-not-allowed' : 'cursor-pointer'
-          )}
-        >
+        <label for={fieldId} class={cn('flex items-start gap-2 p-0', labelCursorClass)}>
           {#if icon}
             {@const Icon = icon}
             <Icon class="size-4 text-[var(--color-base-content)] opacity-60 mt-0.5 shrink-0" />
@@ -173,9 +206,7 @@
           <div>
             <div id={labelId} class="text-sm font-medium text-[var(--color-base-content)]">
               {label}
-              {#if required}
-                <span class="text-[var(--color-error)]">*</span>
-              {/if}
+              {@render requiredMark()}
             </div>
             {#if description}
               <div id={descriptionId} class="help-text mt-1">
@@ -194,7 +225,7 @@
 
   {#if error}
     <div id="{fieldId}-error" class="py-1">
-      <span class="text-xs text-[var(--color-error)]">{error}</span>
+      <span class={cn('text-xs', errorTextClass)}>{error}</span>
     </div>
   {/if}
 </div>

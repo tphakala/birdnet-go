@@ -4,8 +4,8 @@
   A reusable sortable table header cell. Renders a <th> with click-to-sort
   behavior and visual sort direction indicators.
 
-  Matches the sort UI pattern from DataTable.svelte: ChevronUp/ChevronDown
-  icons only when actively sorted, empty w-4 spacer when inactive.
+  ChevronUp/ChevronDown icons only when actively sorted, empty w-4 spacer when
+  inactive.
 
   Props:
   - label: string - Column header text

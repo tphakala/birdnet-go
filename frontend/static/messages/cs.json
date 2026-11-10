@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "Informace o systému",
-      "os": "Operační systém",
-      "hostname": "Název hostitele",
-      "uptime": "Doba provozu",
-      "cpus": "Procesory (CPU)",
-      "model": "Model systému",
-      "timezone": "Časové pásmo",
-      "temperature": "Teplota CPU",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Údaje o teplotě nejsou k dispozici",
       "cpuCores": "Jádra CPU",
@@ -1229,15 +1222,7 @@
         "process": "Proces"
       },
       "showAll": "Zobrazit všechny procesy",
-      "showBirdnetOnly": "Zobrazit pouze BirdNET",
-      "table": {
-        "process": "Proces",
-        "status": "Stav",
-        "cpu": "CPU",
-        "memory": "Paměť",
-        "uptime": "Doba provozu",
-        "showAllProcesses": "Zobrazit všechny procesy"
-      }
+      "showBirdnetOnly": "Zobrazit pouze BirdNET"
     },
     "errors": {
       "systemInfo": "Nepodařilo se načíst informace o systému: {error}",

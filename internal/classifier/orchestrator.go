@@ -2592,6 +2592,7 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 // (fallbackTargets), which must stay v2.4 so an upgrade never swaps a misconfigured
 // source onto a different model, and the species_count startup read keys on element
 // 0; past the first entry the order only fixes what the status API and logs report.
+// ModelInfos already returns that order (compareModelOrder) and filtering keeps it.
 func (o *Orchestrator) DefaultTargets() []ModelInfo {
 	infos := o.ModelInfos()
 	targets := make([]ModelInfo, 0, len(infos))
@@ -2604,13 +2605,17 @@ func (o *Orchestrator) DefaultTargets() []ModelInfo {
 	if len(targets) == 0 {
 		return nil
 	}
-	slices.SortFunc(targets, func(a, b ModelInfo) int {
-		if ra, rb := defaultTargetRank(a.ID), defaultTargetRank(b.ID); ra != rb {
-			return ra - rb
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
 	return targets
+}
+
+// compareModelOrder is the one model order the orchestrator reports: the BirdNET
+// v2.4 entry first, then byte order by registry ID. ModelInfos and DefaultTargets
+// share it so every list of loaded models reads the same way.
+func compareModelOrder(aID, bID string) int {
+	if ra, rb := defaultTargetRank(aID), defaultTargetRank(bID); ra != rb {
+		return ra - rb
+	}
+	return strings.Compare(aID, bID)
 }
 
 // defaultTargetRank orders the BirdNET v2.4 entry ahead of every other default
@@ -2653,7 +2658,9 @@ func (o *Orchestrator) ResolvedModelPathForID(registryID string) string {
 // implements it; secondaries fall through to the registry template.
 type liveModelInfoProvider interface{ LiveModelInfo() ModelInfo }
 
-// ModelInfos returns ModelInfo for all registered models. Thread-safe.
+// ModelInfos returns ModelInfo for all registered models, in a stable order: the
+// BirdNET v2.4 entry first, then byte order by registry ID (compareModelOrder), so
+// repeated calls list the same models the same way. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
 // For an instance that reports a live identity (liveModelInfoProvider), that live
 // ModelInfo is returned rather than the static registry template, so the reported
@@ -2672,6 +2679,8 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
 	o.mu.RUnlock()
+	// The models live in a map, whose iteration order is randomized per call.
+	slices.SortFunc(refs, func(a, b entryRef) int { return compareModelOrder(a.id, b.id) })
 
 	// Resolve overlap against the published cadence plan (else the configured
 	// overlap), so every returned ModelInfo carries the effective overlap used for

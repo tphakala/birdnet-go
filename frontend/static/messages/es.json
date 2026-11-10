@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "Información del sistema",
-      "os": "Sistema operativo",
-      "hostname": "Nombre del host",
-      "uptime": "Tiempo de actividad",
-      "cpus": "CPUs",
-      "model": "Modelo del sistema",
-      "timezone": "Zona horaria",
-      "temperature": "Temperatura del CPU",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Datos de temperatura no disponibles",
       "cpuCores": "Núcleos de CPU",
@@ -1229,15 +1222,7 @@
         "process": "Proceso"
       },
       "showAll": "Mostrar todos los procesos",
-      "showBirdnetOnly": "Mostrar solo BirdNET",
-      "table": {
-        "process": "Proceso",
-        "status": "Estado",
-        "cpu": "CPU",
-        "memory": "Memoria",
-        "uptime": "Tiempo activo",
-        "showAllProcesses": "Mostrar todos los procesos"
-      }
+      "showBirdnetOnly": "Mostrar solo BirdNET"
     },
     "errors": {
       "systemInfo": "Error al cargar la información del sistema: {error}",

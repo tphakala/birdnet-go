@@ -4,6 +4,9 @@
 
 @import 'tailwindcss';
 
+/* The app theme (html[data-theme]), not the OS, drives dark: utilities */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 /* Custom text utilities */
 @utility text-muted {
   color: var(--text-muted);
@@ -129,6 +132,9 @@
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
   --text-error: #b91c1c; /* red-700 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
+  --text-warning: #92400e; /* amber-800 - warning text, same rule */
+  --text-info: #075985; /* sky-800 - info text, same rule */
 
   /* Component tokens */
   --radius-box: 0.5rem;
@@ -206,6 +212,9 @@
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
   --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
+  --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
+  --text-info: #38bdf8; /* sky-400 - info text, same rule */
 
   /* Shadows (darker for dark mode) */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
@@ -462,12 +471,12 @@
      ---------------------------------------- */
   .badge-status-success {
     background: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .badge-status-warning {
     background: color-mix(in srgb, var(--color-warning) 15%, transparent);
-    color: var(--color-warning);
+    color: var(--text-warning);
   }
 
   .badge-status-error {
@@ -477,7 +486,7 @@
 
   .badge-status-info {
     background: color-mix(in srgb, var(--color-info) 15%, transparent);
-    color: var(--color-info);
+    color: var(--text-info);
   }
 
   .badge-status-neutral {
@@ -1255,21 +1264,17 @@
 
   .alert-info {
     background-color: color-mix(in srgb, var(--color-info) 15%, transparent);
-    color: var(--color-info);
+    color: var(--text-info);
   }
 
   .alert-success {
     background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .alert-warning {
     background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
-    color: #92400e; /* amber-800 for better contrast */
-  }
-
-  [data-theme='dark'] .alert-warning {
-    color: var(--color-warning);
+    color: var(--text-warning);
   }
 
   .alert-error {
@@ -2438,7 +2443,7 @@
     background-color: var(--color-error);
   }
 
-  /* Error text uses --text-error; --color-error is for fills and borders */
+  /* Status text uses --text-<status>; --color-<status> is for fills and borders */
   .text-error {
     color: var(--text-error);
   }
@@ -2452,7 +2457,7 @@
   }
 
   .text-warning {
-    color: var(--color-warning);
+    color: var(--text-warning);
   }
 
   .text-warning-content {
@@ -2464,7 +2469,7 @@
   }
 
   .text-success {
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .text-success-content {
@@ -2476,7 +2481,7 @@
   }
 
   .text-info {
-    color: var(--color-info);
+    color: var(--text-info);
   }
 
   .text-info-content {

@@ -257,7 +257,6 @@
     "system.metrics.online",
     "system.metrics.system",
     "system.processInfo.headers.status",
-    "system.processInfo.table.status",
     "system.sections.database",
     "system.sections.terminal",
     "system.systemInfo.temperatureValue",
@@ -419,7 +418,6 @@
     "system.metrics.system",
     "system.processInfo.headers.name",
     "system.processInfo.headers.status",
-    "system.processInfo.table.status",
     "system.sections.importExport",
     "system.sections.terminal",
     "system.systemInfo.temperatureValue",
@@ -1070,7 +1068,6 @@
     "system.inference.backendTflite",
     "system.inference.vad.title",
     "system.processInfo.headers.process",
-    "system.processInfo.table.process",
     "system.systemInfo.temperatureValue"
   ],
   "nb": [
@@ -1185,7 +1182,6 @@
     "system.inference.vad.title",
     "system.metrics.system",
     "system.processInfo.headers.status",
-    "system.processInfo.table.status",
     "system.sections.database",
     "system.sections.terminal",
     "system.systemInfo.temperatureValue",
@@ -1355,8 +1351,6 @@
     "system.metrics.samples",
     "system.metrics.uptime",
     "system.processInfo.headers.status",
-    "system.processInfo.table.status",
-    "system.processInfo.table.uptime",
     "system.sections.database",
     "system.sections.terminal",
     "system.systemInfo.temperatureValue",
@@ -1471,7 +1465,6 @@
     "system.metrics.online",
     "system.metrics.system",
     "system.processInfo.headers.status",
-    "system.processInfo.table.status",
     "system.sections.terminal",
     "system.systemInfo.temperatureValue",
     "terminal.title"
@@ -1813,8 +1806,6 @@
     "system.metrics.system",
     "system.processInfo.headers.process",
     "system.processInfo.headers.status",
-    "system.processInfo.table.process",
-    "system.processInfo.table.status",
     "system.sections.terminal",
     "system.systemInfo.temperatureValue",
     "terminal.title"

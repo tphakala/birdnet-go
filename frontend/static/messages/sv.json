@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "Systeminformation",
-      "os": "Operativsystem",
-      "hostname": "Värdnamn",
-      "uptime": "Drifttid",
-      "cpus": "Processorer",
-      "model": "Systemmodell",
-      "timezone": "Tidszon",
-      "temperature": "CPU-temperatur",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperaturdata ej tillgänglig",
       "cpuCores": "CPU-kärnor",
@@ -1229,15 +1222,7 @@
         "process": "Process"
       },
       "showAll": "Visa alla processer",
-      "showBirdnetOnly": "Visa endast BirdNET",
-      "table": {
-        "process": "Process",
-        "status": "Status",
-        "cpu": "CPU",
-        "memory": "Minne",
-        "uptime": "Drifttid",
-        "showAllProcesses": "Visa alla processer"
-      }
+      "showBirdnetOnly": "Visa endast BirdNET"
     },
     "errors": {
       "systemInfo": "Kunde inte ladda systeminformation: {error}",

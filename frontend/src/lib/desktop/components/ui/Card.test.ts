@@ -69,4 +69,57 @@ describe('Card', () => {
     expect(screen.getByText('Custom Header')).toBeInTheDocument();
     expect(screen.queryByText('Title Prop')).not.toBeInTheDocument();
   });
+
+  it.each([
+    ['panel', false],
+    ['default', true],
+  ] as const)('%s variant renders the section title and header actions', (variant, clips) => {
+    const { container } = renderTyped(CardTestWrapper, {
+      props: { title: 'Storage', variant, actionLabel: 'Refresh' },
+    });
+
+    const heading = screen.getByRole('heading', { level: 3, name: 'Storage' });
+    const action = screen.getByRole('button', { name: 'Refresh' });
+    const body = screen.getByText('Card content');
+    // Reading order is title, then actions, then body.
+    expect(heading.compareDocumentPosition(action)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(action.compareDocumentPosition(body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(body).not.toContainElement(action);
+    // Only the default card clips; the panel must not cut off sticky headers or popovers.
+    const overflowClasses = [...(container.firstElementChild?.classList ?? [])].filter(c =>
+      c.startsWith('overflow-')
+    );
+    expect(overflowClasses).toEqual(clips ? ['overflow-hidden'] : []);
+  });
+
+  it('renders header actions next to a custom header', () => {
+    renderTyped(CardTestWrapper, {
+      props: { variant: 'panel', showHeader: true, actionLabel: 'Refresh' },
+    });
+
+    const header = screen.getByText('Custom Header');
+    const action = screen.getByRole('button', { name: 'Refresh' });
+    expect(header.compareDocumentPosition(action)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(action.compareDocumentPosition(screen.getByText('Card content'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it('panel title and description break long unbroken words', () => {
+    const longWord = 'x'.repeat(200);
+    renderCard({ variant: 'panel', title: `T${longWord}`, description: `D${longWord}` });
+
+    // The panel does not clip, so text that cannot wrap would run out of it.
+    expect(screen.getByRole('heading', { level: 3 })).toHaveClass('wrap-anywhere');
+    expect(screen.getByText(`D${longWord}`)).toHaveClass('wrap-anywhere');
+  });
+
+  it('renders header actions without a title', () => {
+    renderTyped(CardTestWrapper, {
+      props: { variant: 'panel', actionLabel: 'Create backup' },
+    });
+
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create backup' })).toBeInTheDocument();
+  });
 });

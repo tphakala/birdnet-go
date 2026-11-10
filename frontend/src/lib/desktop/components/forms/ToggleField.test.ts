@@ -5,7 +5,7 @@ import { ShieldCheck } from '@lucide/svelte';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ToggleField from './ToggleField.svelte';
 
-const VARIANTS = ['default', 'card'] as const;
+const VARIANTS = ['default', 'card', 'inline'] as const;
 
 describe('ToggleField', () => {
   it('renders with basic props', () => {
@@ -161,15 +161,18 @@ describe('ToggleField', () => {
     expect(screen.getByText('This is an error message')).toBeInTheDocument();
   });
 
-  it('shows the not-allowed cursor on the default label when disabled', () => {
-    render(ToggleField, {
-      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
-    });
+  it.each(['default', 'inline'] as const)(
+    'shows the not-allowed cursor on the %s label when disabled',
+    variant => {
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true, variant },
+      });
 
-    const label = screen.getByText('Test Toggle').closest('label');
-    expect(label).toHaveClass('cursor-not-allowed');
-    expect(label).not.toHaveClass('cursor-pointer');
-  });
+      const label = screen.getByText('Test Toggle').closest('label');
+      expect(label).toHaveClass('cursor-not-allowed');
+      expect(label).not.toHaveClass('cursor-pointer');
+    }
+  );
 
   it('applies error styling when error is present', () => {
     render(ToggleField, {
@@ -451,16 +454,19 @@ describe('ToggleField disabled, required and error state', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it('the default variant dims its own switch when disabled', () => {
-    render(ToggleField, {
-      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
-    });
+  it.each(['default', 'inline'] as const)(
+    'the %s variant dims its own switch when disabled',
+    variant => {
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true, variant },
+      });
 
-    expect(screen.getByRole('checkbox')).toHaveClass(
-      'disabled:opacity-50',
-      'disabled:cursor-not-allowed'
-    );
-  });
+      expect(screen.getByRole('checkbox')).toHaveClass(
+        'disabled:opacity-50',
+        'disabled:cursor-not-allowed'
+      );
+    }
+  );
 
   it.each(VARIANTS)('marks the switch required and shows the asterisk (%s)', variant => {
     render(ToggleField, {
@@ -604,11 +610,119 @@ describe('ToggleField card variant', () => {
     expect(card).not.toHaveClass('hover:border-[var(--border-300)]');
   });
 
-  it('keeps the default variant ring on the switch itself', () => {
-    render(ToggleField, { props: { label: 'Test Toggle', value: false, onUpdate: vi.fn() } });
+  it.each(['default', 'inline'] as const)(
+    'keeps the %s variant ring on the switch itself',
+    variant => {
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), variant },
+      });
 
-    expect(screen.getByRole('checkbox')).toHaveClass('focus-visible:outline-2');
+      expect(screen.getByRole('checkbox')).toHaveClass('focus-visible:outline-2');
+    }
+  );
+});
+
+describe('ToggleField inline variant', () => {
+  it('inline variant: clicking the label text toggles', async () => {
+    const onUpdate = vi.fn();
+    const props = { label: 'Show all', variant: 'inline' as const, onUpdate };
+    const { rerender } = render(ToggleField, { props: { ...props, value: false } });
+    const toggle = screen.getByRole('checkbox');
+
+    // The text and the switch share one label, so the gap between them is clickable too
+    expect(toggle.closest('label')).toContainElement(screen.getByText('Show all'));
+
+    await fireEvent.click(screen.getByText('Show all'));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenLastCalledWith(true);
+
+    // A click on the switch inside the label toggles once, not twice
+    await rerender({ ...props, value: true });
+    await fireEvent.click(toggle);
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    expect(onUpdate).toHaveBeenLastCalledWith(false);
   });
+
+  it('inline variant draws the required mark and error text in the error text token', () => {
+    render(ToggleField, {
+      props: {
+        label: 'Show all',
+        value: false,
+        onUpdate: vi.fn(),
+        required: true,
+        error: 'Toggle error',
+        variant: 'inline',
+      },
+    });
+
+    // --text-error holds 4.5:1 on base-100, 200 and 300; --color-error is for fills
+    expect(screen.getByText('*')).toHaveClass('text-[var(--text-error)]');
+    expect(screen.getByText('Toggle error')).toHaveClass('text-[var(--text-error)]');
+  });
+
+  it('inline variant sets regular weight on its label, description and error text', () => {
+    render(ToggleField, {
+      props: {
+        label: 'Show all',
+        description: 'Toggle description',
+        error: 'Toggle error',
+        value: false,
+        onUpdate: vi.fn(),
+        variant: 'inline',
+      },
+    });
+
+    // Set explicitly so a semibold toolbar or table header does not make the text bold
+    const regular = screen.getByText('Show all').closest('.font-normal');
+    expect(regular).toContainElement(screen.getByText('Toggle description'));
+    expect(regular).toContainElement(screen.getByText('Toggle error'));
+  });
+
+  it('inline variant label is a touch target taller than its row', () => {
+    render(ToggleField, {
+      props: { label: 'Show all', value: false, onUpdate: vi.fn(), variant: 'inline' },
+    });
+
+    // 2rem box plus a 0.375rem layer above and below: 2.75rem to touch, never sideways
+    expect(screen.getByRole('checkbox').closest('label')).toHaveClass(
+      'relative',
+      'min-h-8',
+      'after:absolute',
+      'after:inset-x-0',
+      'after:-inset-y-1.5',
+      'cursor-pointer'
+    );
+  });
+
+  it('inline variant keeps its hit layer under the label content', () => {
+    render(ToggleField, {
+      props: { label: 'Show all', value: false, onUpdate: vi.fn(), variant: 'inline' },
+    });
+
+    // The layer sits behind the text and the switch inside the label's own stacking context,
+    // so pointer hits on them reach them and not the layer
+    expect(screen.getByRole('checkbox').closest('label')).toHaveClass('isolate', 'after:-z-10');
+  });
+
+  it.each(['default', 'card'] as const)(
+    'the %s variant keeps its original error colour and inherited weight',
+    variant => {
+      render(ToggleField, {
+        props: {
+          label: 'Test Toggle',
+          value: false,
+          onUpdate: vi.fn(),
+          required: true,
+          error: 'Toggle error',
+          variant,
+        },
+      });
+
+      expect(screen.getByText('*')).toHaveClass('text-[var(--color-error)]');
+      expect(screen.getByText('Toggle error')).toHaveClass('text-[var(--color-error)]');
+      expect(screen.getByText('Toggle error').closest('.font-normal')).toBeNull();
+    }
+  );
 });
 
 describe('ToggleField Accessibility', () => {

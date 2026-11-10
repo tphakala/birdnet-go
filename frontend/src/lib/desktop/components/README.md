@@ -23,7 +23,6 @@ This folder contains **shared components** used across the application. Feature-
 ## Data
 
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
-- `DataTable.svelte` - Generic data table with controlled (parent-driven) sorting
 - `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, and EmptyState
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
@@ -79,7 +78,7 @@ This folder contains **shared components** used across the application. Feature-
 - `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `TextInput.svelte` - Text input field; `error` shows an alert and marks the input invalid, `reserveErrorSpace` keeps two lines for that alert so nothing below moves
-- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on)
+- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on); `variant="inline"` is a compact label-then-switch control for toolbars and table header bars, where the label text toggles too; its hit area reaches 0.375rem above and below the label, so keep that space free of other controls
 
 ## Media
 
@@ -105,7 +104,7 @@ This folder contains **shared components** used across the application. Feature-
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
 - `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support, a bindable `ref` to the `<button>`, aria-disabled styling that keeps the button focusable, and a shared keyboard focus ring
-- `Card.svelte` - Generic card container
+- `Card.svelte` - Generic card container; `variant="panel"` is the dense bordered panel for data views, with `headerActions` and `bodyClassName`
 - `CollapsibleCard.svelte` - Collapsible card container
 - `CollapsibleSection.svelte` - Collapsible content section
 - `DatePicker.svelte` - Date picker input
@@ -119,16 +118,13 @@ This folder contains **shared components** used across the application. Feature-
 - `NotificationBell.svelte` - Notification bell icon
 - `NotificationToast.svelte` - Toast notification
 - `Pagination.svelte` - Pagination controls
-- `ProcessTable.svelte` - Process status table
 - `ProgressBar.svelte` - Progress bar indicator
-- `ProgressCard.svelte` - Progress display card
 - `RadioCardGroup.svelte` - Card-style radio group with one Tab stop and arrow-key selection (WAI-ARIA radio pattern)
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
 - `SelectionToolbar.svelte` - Sticky toolbar for multiselect list views (selection count, select-all banner, action slot)
 - `SkeletonDailySummary.svelte` - Loading skeleton for daily summary cards
 - `StatusPill.svelte` - Status pill indicator
-- `SystemInfoCard.svelte` - System information display
 - `TestSuccessNote.svelte` - Test success notification component
 - `ThemeToggle.svelte` - Theme switching toggle
 - `TimeOfDayIcon.svelte` - Time-based icons (day/night)

@@ -439,35 +439,30 @@ func TestSkipFilesystem(t *testing.T) {
 	}
 }
 
-// TestMapProcessStatus tests the mapProcessStatus helper function
-func TestMapProcessStatus(t *testing.T) {
+// TestNormalizeProcessStatus tests the normalizeProcessStatus helper function
+func TestNormalizeProcessStatus(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "system")
 	t.Attr("type", "unit")
 	t.Attr("feature", "process-status")
 
 	tests := []struct {
-		name       string
-		statusCode string
-		expected   string
+		name   string
+		status string
+		want   string
 	}{
-		{name: "Running", statusCode: "R", expected: "running"},
-		{name: "Sleeping", statusCode: "S", expected: "sleeping"},
-		{name: "Disk Sleep", statusCode: "D", expected: "disk sleep"},
-		{name: "Zombie", statusCode: "Z", expected: "zombie"},
-		{name: "Stopped", statusCode: "T", expected: "stopped"},
-		{name: "Paging", statusCode: "W", expected: "paging"},
-		{name: "Idle", statusCode: "I", expected: "idle"},
-		{name: "Unknown code", statusCode: "X", expected: "x"},
-		{name: "Empty", statusCode: "", expected: ""},
-		{name: "Multi-char", statusCode: "RS", expected: "rs"},
+		{name: "running", status: "running", want: "running"},
+		{name: "sleep", status: "sleep", want: "sleep"},
+		{name: "idle", status: "idle", want: "idle"},
+		{name: "zombie", status: "zombie", want: "zombie"},
+		{name: "empty reports unknown", status: "", want: "unknown"},
+		{name: "mixed case is lowercased", status: "Sleep", want: "sleep"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := mapProcessStatus(tt.statusCode)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.want, normalizeProcessStatus(tt.status))
 		})
 	}
 }

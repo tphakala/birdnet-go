@@ -1183,13 +1183,6 @@
     },
     "systemInfo": {
       "title": "Rendszer információ",
-      "os": "Operációs rendszer",
-      "hostname": "Gépnév",
-      "uptime": "Üzemidő",
-      "cpus": "CPU-k",
-      "model": "Rendszer modell",
-      "timezone": "Időzóna",
-      "temperature": "CPU hőmérséklet",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Hőmérséklet adat nem elérhető",
       "cpuCores": "CPU magok",
@@ -1229,15 +1222,7 @@
         "process": "Folyamat"
       },
       "showAll": "Összes folyamat megjelenítése",
-      "showBirdnetOnly": "Csak BirdNET megjelenítése",
-      "table": {
-        "process": "Folyamat",
-        "status": "Állapot",
-        "cpu": "CPU",
-        "memory": "Memória",
-        "uptime": "Üzemidő",
-        "showAllProcesses": "Összes folyamat megjelenítése"
-      }
+      "showBirdnetOnly": "Csak BirdNET megjelenítése"
     },
     "errors": {
       "systemInfo": "A rendszer információ betöltése sikertelen: {error}",
