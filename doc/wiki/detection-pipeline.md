@@ -203,7 +203,7 @@ A single goroutine reads from `ResultsQueue` and processes each batch of results
 2. **Species exclusion**: Skips species on the user's ignore list
 3. **Confidence threshold**: Per-species custom thresholds, or global minimum. Dynamic threshold learning adjusts over time per model.
 4. **Range filter**: Location-based species filtering (see below)
-5. **Ultrasonic validation** (bat only): Computes temporal variability of ultrasonic energy via STFT. Low variability flags detections as "unlikely" (ambient noise, not echolocation). Variability that comes from broadband events (clicks and rustling: short frames where the energy just below the 20 kHz split jumps together with the ultrasonic band) is discounted first. With `bat.ultrasonicfilter.discardunlikely` on, a detection still tagged unlikely at flush is discarded instead of saved
+5. **Ultrasonic validation** (bat only): Computes temporal variability of ultrasonic energy via STFT. Low variability flags detections as "unlikely" (ambient noise, not echolocation). Variability that comes from broadband events (clicks and rustling: short frames where the energy from 0.6 to 0.8 of the split (12 to 16 kHz by default) jumps together with the ultrasonic band) is discounted first. With `bat.ultrasonicfilter.discardunlikely` on, a detection still tagged unlikely at flush is discarded instead of saved
 
 ### Cross-Model Detection Consensus
 
