@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/analysis/noisebank"
 	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -120,6 +121,11 @@ type Processor struct {
 	// (SetClipDenoiseRecorder) and never written again, so it needs no lock; nil on
 	// the legacy store leaves the marker unwritten.
 	clipMarks clipDenoiseRecorder
+	// noiseBank holds the noise examples the user marked. It is set once before
+	// Start (SetNoiseBank) and never written again; its content is swapped inside
+	// the bank, so changes to the examples need no lock here. nil disables the
+	// noise example gate.
+	noiseBank *noisebank.Bank
 	// privacyRollup receives privacy filter activity for the hourly rollup. It is
 	// set once before Start (SetPrivacyRollup) and never written again, so it needs
 	// no lock; nil leaves every hit site a no-op.
@@ -860,21 +866,23 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 // unlikelyVerdict is the part of a detection result that records whether and why
 // validators tagged it unlikely: the tag, the validators that judged, and the
-// diagnostics of the CV filter.
+// diagnostics of each validator.
 type unlikelyVerdict struct {
-	unlikely    bool
-	sources     detection.UnlikelySource
-	cv          float64
-	cvThreshold float64
+	unlikely        bool
+	sources         detection.UnlikelySource
+	cv              float64
+	cvThreshold     float64
+	noiseSimilarity float64
 }
 
 // verdictOf reads the unlikely verdict of a result.
 func verdictOf(r *detection.Result) unlikelyVerdict {
 	return unlikelyVerdict{
-		unlikely:    r.Unlikely,
-		sources:     r.UnlikelySources,
-		cv:          r.UltrasonicCV,
-		cvThreshold: r.UltrasonicCVThreshold,
+		unlikely:        r.Unlikely,
+		sources:         r.UnlikelySources,
+		cv:              r.UltrasonicCV,
+		cvThreshold:     r.UltrasonicCVThreshold,
+		noiseSimilarity: r.NoiseSimilarity,
 	}
 }
 
@@ -889,14 +897,18 @@ func verdictOf(r *detection.Result) unlikelyVerdict {
 // The CV and its threshold are merged only between sides that carry the CV bit: when
 // only one side does, that side's values are kept untouched; when both do, the
 // highest CV wins with the threshold that judged it (the later one's on a tie);
-// when neither does, there is none. Apart from the threshold kept on a CV tie, the
-// merge does not depend on arrival order or on which window had the highest confidence.
+// when neither does, there is none. The noise similarity follows the same three
+// cases with the lowest similarity winning, since the detection is only as close to
+// a noise example as its least similar judged window. Apart from the threshold kept
+// on a CV tie, the merge does not depend on arrival order or on which window had the
+// highest confidence.
 func mergeUnlikelyVerdict(merged *detection.Result, prev, hit unlikelyVerdict) {
 	merged.Unlikely = prev.unlikely && hit.unlikely
 	if !merged.Unlikely {
 		merged.UnlikelySources = 0
 		merged.UltrasonicCV = 0
 		merged.UltrasonicCVThreshold = 0
+		merged.NoiseSimilarity = 0
 		return
 	}
 	merged.UnlikelySources = prev.sources | hit.sources
@@ -913,6 +925,19 @@ func mergeUnlikelyVerdict(merged *detection.Result, prev, hit unlikelyVerdict) {
 	default:
 		merged.UltrasonicCV = 0
 		merged.UltrasonicCVThreshold = 0
+	}
+
+	prevNoise := prev.sources.Has(detection.UnlikelySourceNoiseExamples)
+	hitNoise := hit.sources.Has(detection.UnlikelySourceNoiseExamples)
+	switch {
+	case prevNoise && hitNoise:
+		merged.NoiseSimilarity = min(prev.noiseSimilarity, hit.noiseSimilarity)
+	case prevNoise:
+		merged.NoiseSimilarity = prev.noiseSimilarity
+	case hitNoise:
+		merged.NoiseSimilarity = hit.noiseSimilarity
+	default:
+		merged.NoiseSimilarity = 0
 	}
 }
 
@@ -1004,7 +1029,8 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 	// indefinitely (#4194), so no renewal happens on the pending path.
 }
 
-// processResults processes the results from the BirdNET prediction and returns a list of detections.
+// processResults processes the results from the BirdNET prediction and returns a list of detections,
+// tagged unlikely where a validator judged the chunk's audio (see applyUnlikelyValidators).
 // Every range-filter decision (the Last-heard feed, the primary gate and the
 // stored alternates) reads the settings snapshot passed in, not the processor's own settings.
 //
@@ -1078,13 +1104,25 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		detections = append(detections, det)
 	}
 
-	// Run ultrasonic validation filter on bat-group detections. Computed once per
-	// chunk since all detections share the same source audio.
-	if len(detections) > 0 && isBatGroupModel(item.ModelID) {
-		p.applyUltrasonicFilter(settings, item, detections)
+	if len(detections) > 0 {
+		p.applyUnlikelyValidators(settings, item, detections)
 	}
 
 	return detections
+}
+
+// applyUnlikelyValidators runs the validators that can tag the detections of one
+// chunk unlikely. Each runs once per chunk since all detections share the same
+// source audio: the ultrasonic filter for bat-group models, then the noise example
+// gate for any model whose chunk carries an embedding. A validator only tags; it
+// never clears a tag another one set.
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional for item
+func (p *Processor) applyUnlikelyValidators(settings *conf.Settings, item classifier.Results, detections []Detections) {
+	if isBatGroupModel(item.ModelID) {
+		p.applyUltrasonicFilter(settings, item, detections)
+	}
+	p.applyNoiseExampleGate(&item, detections)
 }
 
 // reasonUltrasonicFilter is the discard reason of the ultrasonic filter when
@@ -1092,6 +1130,15 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 // because discard reasons are aggregated by their exact string (see
 // reasonModelConsensus).
 const reasonUltrasonicFilter = "ultrasonic filter"
+
+// reasonNoiseExamples and reasonUnlikelyCombined are the discard reasons of a
+// detection the noise example gate tagged alone and one both validators tagged. As
+// for reasonUltrasonicFilter the texts are fixed because discard reasons are
+// aggregated by their exact string.
+const (
+	reasonNoiseExamples    = "noise examples"
+	reasonUnlikelyCombined = "ultrasonic filter and noise examples"
+)
 
 // bytesPerPCM16Sample is the size of one 16-bit PCM sample in bytes.
 const bytesPerPCM16Sample = 2
@@ -1852,11 +1899,13 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // privacyfilter.debug on, a summary of the detectors that counted hits
 // reaching the clip (priv.contributions, which is listed whenever the latest hit
 // reaches the clip); the counts are lower bounds once the attribution list has
-// dropped a reaching hit at its cap (priv.hitCountsLowerBound). The ultrasonic
-// filter discards a detection still tagged unlikely when discardunlikely is on,
-// after those checks and before model consensus. The model consensus filter runs
-// last so the other filters keep their discard attribution; cons is the tick's
-// model view (see prepareModelConsensus) and nil skips it.
+// dropped a reaching hit at its cap (priv.hitCountsLowerBound). A detection still
+// tagged unlikely, by the ultrasonic filter or the noise example gate, is
+// discarded when the ultrasonic filter and discardunlikely are on, after those
+// checks and before model consensus; the reason names the validators that tagged
+// it. The model consensus filter runs last so the other filters keep their
+// discard attribution; cons is the tick's model view (see prepareModelConsensus)
+// and nil skips it.
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck, cons *consensusTick) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -1971,15 +2020,31 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 	}
 
 	if f := &settings.Bat.UltrasonicFilter; f.Enabled && f.DiscardUnlikely && item.Detection.Result.Unlikely {
-		GetLogger().Debug("Detection discarded by ultrasonic filter",
-			logger.String("species", item.Detection.Result.Species.CommonName),
+		result := &item.Detection.Result
+		discardReason := unlikelyDiscardReason(result.UnlikelySources)
+		operation := "ultrasonic_filter"
+		if !result.UnlikelySources.Has(detection.UnlikelySourceUltrasonicCV) {
+			operation = "noise_example_gate"
+		}
+		fields := []logger.Field{
+			logger.String("species", result.Species.CommonName),
 			logger.Time("detection_time", item.FirstDetected),
-			logger.Float64("us_frame_cv", item.Detection.Result.UltrasonicCV),
-			logger.Float64("threshold", item.Detection.Result.UltrasonicCVThreshold),
-			logger.String("unlikely_sources", item.Detection.Result.UnlikelySources.String()),
+			logger.String("unlikely_sources", result.UnlikelySources.String()),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
-			logger.String("operation", "ultrasonic_filter"))
-		return true, reasonUltrasonicFilter
+			logger.String("operation", operation),
+		}
+		if result.UnlikelySources.Has(detection.UnlikelySourceUltrasonicCV) {
+			fields = append(fields,
+				logger.Float64("us_frame_cv", result.UltrasonicCV),
+				logger.Float64("threshold", result.UltrasonicCVThreshold))
+		}
+		if result.UnlikelySources.Has(detection.UnlikelySourceNoiseExamples) {
+			fields = append(fields,
+				logger.Float64("noise_similarity", result.NoiseSimilarity),
+				logger.Float64("noise_threshold", noisebank.MatchSimilarity))
+		}
+		GetLogger().Debug("Detection discarded by "+discardReason, fields...)
+		return true, discardReason
 	}
 
 	if cons != nil && p.discardForModelConsensus(item, settings, cons) {
@@ -1987,6 +2052,20 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 	}
 
 	return false, ""
+}
+
+// unlikelyDiscardReason names the validators behind a discarded unlikely detection.
+func unlikelyDiscardReason(sources detection.UnlikelySource) string {
+	cv := sources.Has(detection.UnlikelySourceUltrasonicCV)
+	noise := sources.Has(detection.UnlikelySourceNoiseExamples)
+	switch {
+	case cv && noise:
+		return reasonUnlikelyCombined
+	case noise:
+		return reasonNoiseExamples
+	default:
+		return reasonUltrasonicFilter
+	}
 }
 
 // recordUnscannedSave logs and counts a detection approved although a speech

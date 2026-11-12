@@ -300,19 +300,24 @@ func TestMergePendingHit_UnlikelyOnlyWhenEveryHitIsFlat(t *testing.T) {
 
 // TestMergeUnlikelyVerdict_Sources pins the source composition of the merge in both
 // arrival orders: the detection stays unlikely only while both sides are unlikely,
-// the bits of both sides are kept, and the CV and its threshold come only from a
-// side that carries the CV bit. otherSource stands for a validator other than the
-// CV filter, whose windows carry no CV.
+// the bits of both sides are kept, and each validator's figures come only from a
+// side that carries its bit: the highest CV with the threshold that judged it, the
+// lowest noise similarity.
 func TestMergeUnlikelyVerdict_Sources(t *testing.T) {
 	const (
 		cvSource    = detection.UnlikelySourceUltrasonicCV
-		otherSource = detection.UnlikelySource(1 << 1)
+		noiseSource = detection.UnlikelySourceNoiseExamples
 		threshold   = 0.15
 	)
 	cvWindow := func(cv, judgedAt float64) unlikelyVerdict {
 		return unlikelyVerdict{unlikely: true, sources: cvSource, cv: cv, cvThreshold: judgedAt}
 	}
-	otherWindow := unlikelyVerdict{unlikely: true, sources: otherSource}
+	noiseWindow := func(similarity float64) unlikelyVerdict {
+		return unlikelyVerdict{unlikely: true, sources: noiseSource, noiseSimilarity: similarity}
+	}
+	both := func(cv, judgedAt, similarity float64) unlikelyVerdict {
+		return unlikelyVerdict{true, cvSource | noiseSource, cv, judgedAt, similarity}
+	}
 	active := unlikelyVerdict{}
 
 	tests := []struct {
@@ -321,9 +326,11 @@ func TestMergeUnlikelyVerdict_Sources(t *testing.T) {
 		want unlikelyVerdict
 	}{
 		{"cv with cv keeps the higher cv and its threshold", cvWindow(0.03, 0.10), cvWindow(0.08, threshold), cvWindow(0.08, threshold)},
-		{"cv with other keeps both bits and the cv side values", cvWindow(0.04, threshold), otherWindow, unlikelyVerdict{true, cvSource | otherSource, 0.04, threshold}},
-		{"other with other has no cv", otherWindow, otherWindow, otherWindow},
-		{"an untagged window clears the bits and the cv", active, cvWindow(0.04, threshold), active},
+		{"noise with noise keeps the lower similarity", noiseWindow(0.95), noiseWindow(0.85), noiseWindow(0.85)},
+		{"cv with noise keeps both bits and each side's values", cvWindow(0.04, threshold), noiseWindow(0.90), both(0.04, threshold, 0.90)},
+		{"a window judged by both keeps the cv of the cv side only", both(0.02, 0.10, 0.92), noiseWindow(0.88), both(0.02, 0.10, 0.88)},
+		{"a cv window of zero cv does not mask the noise side", cvWindow(0, threshold), noiseWindow(0.90), both(0, threshold, 0.90)},
+		{"an untagged window clears the bits and the figures", active, both(0.04, threshold, 0.90), active},
 	}
 	for _, tt := range tests {
 		for _, order := range []struct {
@@ -334,9 +341,10 @@ func TestMergeUnlikelyVerdict_Sources(t *testing.T) {
 				// Seeded with stale verdict values: every row must overwrite or clear them.
 				merged := detection.Result{
 					Confidence:            0.9,
-					UnlikelySources:       cvSource | otherSource,
+					UnlikelySources:       cvSource | noiseSource,
 					UltrasonicCV:          0.5,
 					UltrasonicCVThreshold: 0.5,
+					NoiseSimilarity:       0.5,
 				}
 				mergeUnlikelyVerdict(&merged, order.prev, order.hit)
 				assert.Equal(t, tt.want, verdictOf(&merged))
