@@ -117,6 +117,21 @@ describe('SystemProcessTable', () => {
     await waitFor(() => expect(onRetry).toHaveBeenCalledOnce());
   });
 
+  it('moves focus to the Show All switch when a Retry leaves no rows', async () => {
+    const view = renderTable({ processes: [], error: 'Service unavailable' });
+    const retry = within(screen.getByRole('alert')).getByRole('button', {
+      name: t('common.retry'),
+    });
+    retry.focus();
+    await fireEvent.click(retry);
+
+    await view.rerender(tableProps({ processes: [], error: null }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: t('system.processInfo.showAll') })).toHaveFocus()
+    );
+  });
+
   it('clicking the Show All label calls onShowAllChange', async () => {
     const onShowAllChange = vi.fn();
     renderTable({ onShowAllChange });

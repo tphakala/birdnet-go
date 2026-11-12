@@ -74,8 +74,13 @@
 
   let panel = $state<HTMLDivElement>();
   // A Retry that succeeds removes the alert under the focus; the first sort button, or the
-  // panel itself, takes focus instead of the document body
-  const focusPanel = () => [panel?.querySelector<HTMLElement>('thead button'), panel];
+  // Show All switch when no rows came back, takes focus instead of the document body. The
+  // wrapper itself is not focusable, so a click in a row leaves keyboard scrolling with the
+  // capped list.
+  const focusPanel = () => [
+    panel?.querySelector<HTMLElement>('thead button'),
+    panel?.querySelector<HTMLElement>('input[type="checkbox"]'),
+  ];
 
   const displayName = (proc: ProcessInfo): string =>
     proc.name === 'main' ? processName : proc.name;
@@ -181,7 +186,7 @@
   {/if}
 {/snippet}
 
-<div bind:this={panel} tabindex="-1" class="outline-none">
+<div bind:this={panel}>
   <SortableDataTable
     {columns}
     data={processes}
