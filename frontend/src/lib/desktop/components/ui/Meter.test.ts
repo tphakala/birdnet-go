@@ -93,7 +93,7 @@ describe('Meter', () => {
 
     const fills = fillsOf(screen.getByRole('meter'));
     expect(fills.map(fill => fill.dataset.pattern)).toEqual(['solid', 'hatched']);
-    // The cache part keeps its element, so a width transition animates the part that changed
+    // The cache part keeps its element, so it does not animate as if it had shrunk to the new part
     expect(fills[1]).toBe(cache);
   });
 
