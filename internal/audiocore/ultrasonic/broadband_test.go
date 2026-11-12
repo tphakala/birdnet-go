@@ -74,8 +74,10 @@ const (
 var weakBurstSeedOffsets = []uint64{0, 38, 45, 53, 56}
 
 // weakCallStarts are window starts into the weak call recording. They put the
-// calls at different places in the sub-frame grid.
-var weakCallStarts = []int{0, 740, 1258, 2294, 3293}
+// calls at different places in the sub-frame grid. At 109 and 1131 a rule with
+// six wider bands over the same range takes the call; at 740 and the later
+// starts a rule without a margin does.
+var weakCallStarts = []int{0, 109, 740, 1131, 1258, 2294, 3293}
 
 // modelWindows are the analysis window layouts of the two bat models.
 var modelWindows = []struct {
