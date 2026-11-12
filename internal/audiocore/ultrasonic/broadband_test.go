@@ -59,8 +59,9 @@ const (
 	// be run at several window starts.
 	rainFixture     = "rain_256k_s16le.pcm"
 	weakCallFixture = "weak_bat_call_256k_s16le.pcm"
-	// A split whose continuity range would end above the Nyquist frequency of the bat rate.
-	highSplitHz = 110000
+	// A split whose continuity range would end one sub-frame bin above the
+	// Nyquist bin at the bat rate.
+	highSplitHz = 107200
 	// Bytes per sample of the recordings.
 	bytesPerPCM16Sample = 2
 	// At this FFT size the continuity bands are narrower than one bin.
