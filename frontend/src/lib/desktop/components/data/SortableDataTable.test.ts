@@ -184,6 +184,28 @@ describe('SortableDataTable', () => {
     expect(rowNames()).toEqual(['nan', 'one', 'five']);
   });
 
+  it('sorts empty and invalid raw values ahead of the rest', () => {
+    interface Event {
+      id: number;
+      label: string;
+      at: Date | null;
+    }
+    const events: Event[] = [
+      { id: 1, label: 'Mon', at: new Date(2026, 10, 9) },
+      { id: 2, label: 'Never', at: null },
+      { id: 3, label: 'Broken', at: new Date('not a date') },
+      { id: 4, label: 'Sun', at: new Date(2026, 10, 8) },
+    ];
+    const eventColumns: Column<Event>[] = [
+      { key: 'label', header: 'Label' },
+      { key: 'at', header: 'At', sortable: true },
+    ];
+    renderTable({ columns: eventColumns, data: events, defaultSortKey: 'at' });
+    // null and an invalid Date both become '', which orders below every time value.
+    expect(rowNames().slice(2)).toEqual(['Sun', 'Mon']);
+    expect(rowNames().slice(0, 2).sort()).toEqual(['Broken', 'Never']);
+  });
+
   it('sorts a Date field without sortValue chronologically', () => {
     interface Event {
       id: number;
@@ -239,11 +261,40 @@ describe('SortableDataTable', () => {
     expect(screen.queryByRole('region')).not.toBeInTheDocument();
   });
 
+  it('keeps the natural body height when bodyMaxHeight is not set', () => {
+    const { container } = renderTable({});
+    const body = container.querySelector('table')?.parentElement;
+    expect(body?.style.getPropertyValue('--table-body-max-height')).toBe('');
+    expect(body).not.toHaveClass('max-h-(--table-body-max-height)');
+    expect(body).not.toHaveClass('overflow-y-auto');
+  });
+
   it('ignores bodyMaxHeight when the body is resizable', () => {
     const { container } = renderTable({ resizable: true, bodyMaxHeight: 'min(70vh, 40rem)' });
     expect(screen.getByRole('separator')).toBeInTheDocument();
     const body = container.querySelector('table')?.parentElement;
     expect(body?.style.getPropertyValue('--table-body-max-height')).toBe('');
+  });
+
+  describe.each([
+    { align: undefined, expected: 'text-left' },
+    { align: 'left', expected: 'text-left' },
+    { align: 'center', expected: 'text-center' },
+    { align: 'right', expected: 'text-right' },
+  ] as const)('column align $align', ({ align, expected }) => {
+    it.each([true, false])('header (sortable %s) and cells share %s', sortable => {
+      const alignedColumns: Column<Row>[] = [
+        { key: 'name', header: 'Name' },
+        { key: 'score', header: 'Score', sortable, sortValue: r => r.score, align },
+      ];
+      const { container } = renderTable({ columns: alignedColumns });
+      const headers = container.querySelectorAll('thead th');
+      expect(headers[1]).toHaveClass(expected);
+      const cells = [...container.querySelectorAll('tbody tr')].map(tr => tr.children[1]);
+      for (const cell of cells) {
+        expect(cell).toHaveClass(expected);
+      }
+    });
   });
 
   it('right-aligned columns align header and cells', () => {
@@ -307,7 +358,7 @@ describe('SortableDataTable', () => {
     });
   });
 
-  it('pads the notice wrapper only while the snippet renders an element', () => {
+  it('gives the notice wrapper its vertical padding through a has-[*] variant', () => {
     // A notice snippet whose content is all behind {#if} still renders its
     // wrapper (comment anchors, and whitespace between blocks); the wrapper must
     // take no space then. jsdom loads no Tailwind CSS, so this checks the class
