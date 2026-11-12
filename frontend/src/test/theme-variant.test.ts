@@ -284,6 +284,10 @@ describe('theme resolution: pre-paint script and store', () => {
     const reloaded = (await freshStore()).theme;
     reloaded.initialize();
     expect(get(reloaded)).toBe('light');
+    setOs('light');
+    setOs('dark');
+    expect(get(reloaded)).toBe('light');
+    expect(attributes()).toEqual(['light', 'light']);
     expect(localStorage.getItem('theme')).toBe('light');
   });
 
