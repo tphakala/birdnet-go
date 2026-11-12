@@ -30,6 +30,7 @@ import {
 // WCAG 2.1 Level AA contrast ratios
 const WCAG_AA_NORMAL = 4.5; // Normal text
 const WCAG_AA_LARGE = 3.0; // Large text (18pt+ or 14pt+ bold)
+const WCAG_NON_TEXT = 3.0; // UI components, icons and focus indicators (WCAG 1.4.11)
 
 /**
  * Convert hex color to RGB
@@ -637,7 +638,6 @@ describe('SelectDropdown option states in every color scheme', () => {
   const ALL_SCHEMES = [...FIXED_SCHEMES, 'custom'];
 
   /** Minimum ratio for the focus outline against its neighbours (WCAG 1.4.11). */
-  const OUTLINE_MIN_RATIO = 3;
 
   const lightBase = blockBody(tailwindCss, '@theme');
   const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
@@ -718,9 +718,9 @@ describe('SelectDropdown option states in every color scheme', () => {
         const m = measure(primaryOf(scheme, theme), theme);
         expect(m.textOnSelected).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
         expect(m.textOnHighlight).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-        expect(m.outlineOnSurface).toBeGreaterThanOrEqual(OUTLINE_MIN_RATIO);
-        expect(m.outlineOnSelected).toBeGreaterThanOrEqual(OUTLINE_MIN_RATIO);
-        expect(m.outlineOnHighlight).toBeGreaterThanOrEqual(OUTLINE_MIN_RATIO);
+        expect(m.outlineOnSurface).toBeGreaterThanOrEqual(WCAG_NON_TEXT);
+        expect(m.outlineOnSelected).toBeGreaterThanOrEqual(WCAG_NON_TEXT);
+        expect(m.outlineOnHighlight).toBeGreaterThanOrEqual(WCAG_NON_TEXT);
       });
     }
   }
@@ -743,7 +743,7 @@ describe('SelectDropdown option states in every color scheme', () => {
         const m = measure(primary, theme);
         expect(m.textOnSelected, `${theme} ${primary} text`).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
         expect(m.outlineOnSelected, `${theme} ${primary} outline`).toBeGreaterThanOrEqual(
-          OUTLINE_MIN_RATIO
+          WCAG_NON_TEXT
         );
       }
     }
@@ -758,7 +758,6 @@ describe('PlaceSearch colors in light and dark themes', () => {
   const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
 
   /** Minimum ratio for an informative icon (WCAG 1.4.11). */
-  const ICON_MIN_RATIO = 3;
 
   /** Custom property written as `text-[var(--token)]` in a class constant, without opacity. */
   function textToken(classes: string): string {
@@ -799,8 +798,8 @@ describe('PlaceSearch colors in light and dark themes', () => {
 
       it('uses the shared highlight outline and background', () => {
         const outline = tokenValue(outlineToken(OPTION_HIGHLIGHT_OUTLINE_CLASS));
-        expect(getContrastRatio(outline, surface)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
-        expect(getContrastRatio(outline, highlightTint)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
+        expect(getContrastRatio(outline, surface)).toBeGreaterThanOrEqual(WCAG_NON_TEXT);
+        expect(getContrastRatio(outline, highlightTint)).toBeGreaterThanOrEqual(WCAG_NON_TEXT);
       });
 
       it('disclosure text and its link icon meet AA', () => {
@@ -1128,7 +1127,6 @@ describe('Primary and accent content in every color scheme', () => {
   // The shared focus ring (toggle, card, button, table search box) is --color-primary at full
   // strength, so it must reach 3:1 (WCAG 1.4.11) on every surface a control sits on.
   describe('Accessibility: primary focus ring', () => {
-    const FOCUS_RING_MIN_RATIO = 3;
     const SURFACES = ['--color-base-100', '--color-base-200', '--color-base-300'];
 
     for (const scheme of FIXED_SCHEMES) {
@@ -1140,7 +1138,7 @@ describe('Primary and accent content in every color scheme', () => {
               colorOf(scheme, theme, surface)
             );
             expect(ratio, `${scheme} ${theme} primary on ${surface}`).toBeGreaterThanOrEqual(
-              FOCUS_RING_MIN_RATIO
+              WCAG_NON_TEXT
             );
           }
         });

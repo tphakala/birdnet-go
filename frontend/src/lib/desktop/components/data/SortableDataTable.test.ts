@@ -46,6 +46,13 @@ function rowNames(): string[] {
   );
 }
 
+// The three body layouts: plain overflow, a height-capped scroll area, and a resizable container
+const BODY_MODES: [string, Record<string, unknown>][] = [
+  ['uncapped', {}],
+  ['capped', { bodyMaxHeight: '20rem' }],
+  ['resizable', { resizable: true }],
+];
+
 describe('SortableDataTable', () => {
   it('renders headers and rows', () => {
     renderTable({});
@@ -257,20 +264,19 @@ describe('SortableDataTable', () => {
     expect(body).toHaveClass('max-h-(--table-body-max-height)', 'overflow-y-auto');
   });
 
-  it.each([
-    ['an uncapped body', {}],
-    ['a height-capped body', { bodyMaxHeight: '20rem' }],
-    ['a resizable body', { resizable: true }],
-  ])('makes %s without sortable columns keyboard focusable, named by the title', (_name, extra) => {
-    const plainColumns: Column<Row>[] = [
-      { key: 'name', header: 'Name' },
-      { key: 'score', header: 'Score' },
-    ];
-    renderTable({ columns: plainColumns, title: 'Things', ...extra });
-    const body = screen.getByRole('region', { name: 'Things' });
-    expect(body).toHaveAttribute('tabindex', '0');
-    expect(body).toContainElement(document.querySelector('table'));
-  });
+  it.each(BODY_MODES)(
+    'makes the %s body without sortable columns keyboard focusable, named by the title',
+    (_name, extra) => {
+      const plainColumns: Column<Row>[] = [
+        { key: 'name', header: 'Name' },
+        { key: 'score', header: 'Score' },
+      ];
+      renderTable({ columns: plainColumns, title: 'Things', ...extra });
+      const body = screen.getByRole('region', { name: 'Things' });
+      expect(body).toHaveAttribute('tabindex', '0');
+      expect(body).toContainElement(document.querySelector('table'));
+    }
+  );
 
   it('draws the search box focus ring at full strength so it reaches 3:1', () => {
     renderTable({ title: 'Things', searchable: true, searchAccessor: (r: Row) => r.name });
@@ -281,24 +287,19 @@ describe('SortableDataTable', () => {
     expect(ringColours).toEqual(['focus:ring-[var(--color-primary)]']);
   });
 
-  it.each([
-    ['uncapped', {}],
-    ['capped', { bodyMaxHeight: '20rem' }],
-    ['resizable', { resizable: true }],
-  ])('keeps the %s body focusable without a title, as an unnamed scroll area', (_name, extra) => {
-    const plainColumns: Column<Row>[] = [{ key: 'name', header: 'Name' }];
-    const { container } = renderTable({ columns: plainColumns, title: '', ...extra });
-    const body = container.querySelector('table')?.parentElement;
-    expect(body).toHaveAttribute('tabindex', '0');
-    expect(body).not.toHaveAttribute('role');
-    expect(body).not.toHaveAttribute('aria-label');
-  });
+  it.each(BODY_MODES)(
+    'keeps the %s body focusable without a title, as an unnamed scroll area',
+    (_name, extra) => {
+      const plainColumns: Column<Row>[] = [{ key: 'name', header: 'Name' }];
+      const { container } = renderTable({ columns: plainColumns, title: '', ...extra });
+      const body = container.querySelector('table')?.parentElement;
+      expect(body).toHaveAttribute('tabindex', '0');
+      expect(body).not.toHaveAttribute('role');
+      expect(body).not.toHaveAttribute('aria-label');
+    }
+  );
 
-  it.each([
-    ['uncapped', {}],
-    ['capped', { bodyMaxHeight: '20rem' }],
-    ['resizable', { resizable: true }],
-  ])(
+  it.each(BODY_MODES)(
     'adds no extra tab stop to the %s body when a sort button can already focus it',
     (_name, extra) => {
       const { container } = renderTable({ title: 'Things', ...extra });

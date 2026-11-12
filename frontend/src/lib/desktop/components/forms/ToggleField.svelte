@@ -89,8 +89,8 @@
   const TOGGLE_BLOCKED_CLASS =
     'cursor-not-allowed bg-[var(--color-base-content)]/60 checked:bg-[var(--color-primary)]';
 
-  // The default variant rings and dims the switch itself. The card variant rings the card and
-  // dims its content instead, and clears the browser's own ring so it does not double the card ring.
+  // The default variant rings the switch itself. The card variant rings the card and dims its
+  // content instead, and clears the browser's own ring so it does not double the card ring.
   const toggleDefaultClasses =
     'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2';
   const toggleCardClasses = 'focus-visible:outline-none';

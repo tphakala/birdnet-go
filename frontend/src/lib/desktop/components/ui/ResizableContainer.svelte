@@ -42,6 +42,9 @@
     children,
   }: Props = $props();
 
+  // The scroll area is a named region only when it is a tab stop and has a name
+  let scrollRegionLabel = $derived(scrollTabStop && scrollLabel ? scrollLabel : undefined);
+
   let height = $state(0);
 
   // Initialize height from prop once on mount
@@ -103,8 +106,8 @@
     class={cn('overflow-y-auto overflow-x-auto', className)}
     style:height="{height}px"
     tabindex={scrollTabStop ? 0 : undefined}
-    role={scrollTabStop && scrollLabel ? 'region' : undefined}
-    aria-label={scrollTabStop && scrollLabel ? scrollLabel : undefined}
+    role={scrollRegionLabel ? 'region' : undefined}
+    aria-label={scrollRegionLabel}
   >
     {#if children}
       {@render children()}

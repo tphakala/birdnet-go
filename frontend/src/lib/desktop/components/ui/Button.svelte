@@ -63,6 +63,7 @@
     lg: 'px-5 py-2.5 text-sm gap-2',
   };
 
+  // Keep in step with blockedVariantClasses below: each blocked entry is its variant at half alpha
   const variantClasses: Record<ButtonVariant, string> = {
     default:
       'bg-[var(--color-base-200)] text-[var(--color-base-content)] border border-[var(--color-base-300)] hover:bg-[var(--color-base-300)] active:bg-[var(--color-base-300)]/80',

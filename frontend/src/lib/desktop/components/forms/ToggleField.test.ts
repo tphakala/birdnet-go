@@ -4,13 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { ShieldCheck } from '@lucide/svelte';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ToggleField from './ToggleField.svelte';
+import { opacityClasses } from '../../../../test/class-helpers';
 
 const VARIANTS = ['default', 'card', 'inline'] as const;
-
-// Classes that set element opacity, with or without a state variant (opacity-50, disabled:opacity-50)
-function opacityClasses(element: Element | null | undefined): string[] {
-  return [...(element?.classList ?? [])].filter(c => /(^|:)opacity-/.test(c));
-}
 
 describe('ToggleField', () => {
   it('renders with basic props', () => {
