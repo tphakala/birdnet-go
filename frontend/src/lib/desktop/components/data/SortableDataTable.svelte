@@ -294,7 +294,7 @@
                   activeField={sortColumn}
                   direction={sortDirection}
                   onSort={handleSort}
-                  align={column.align ?? 'left'}
+                  align={column.align}
                   className={cn(headerCellClass, column.className)}
                   width={column.width}
                 />

@@ -26,7 +26,7 @@
   - width?: string - Optional fixed column width (applied as inline style on <th>)
 -->
 <script lang="ts" module>
-  export type ColumnAlign = 'left' | 'center' | 'right';
+  import type { ColumnAlign } from '$lib/desktop/components/data/DataTable.types';
 
   /** Tailwind text-align class for a column alignment; unset means left. */
   export function textAlignClass(align?: ColumnAlign): string {

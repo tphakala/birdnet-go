@@ -36,7 +36,7 @@ function renderTable(props: Record<string, unknown>) {
   });
 }
 
-function textSnippet(html: string) {
+function htmlSnippet(html: string) {
   return createRawSnippet(() => ({ render: () => html }));
 }
 
@@ -221,7 +221,7 @@ describe('SortableDataTable', () => {
   });
 
   describe('notice', () => {
-    const notice = textSnippet('<div data-testid="notice">Load failed</div>');
+    const notice = htmlSnippet('<div data-testid="notice">Load failed</div>');
 
     /** Whether the notice follows the header bar and precedes `body` in document order. */
     function noticeIsBetweenHeaderAnd(body: Element): boolean {
@@ -270,14 +270,14 @@ describe('SortableDataTable', () => {
     // wrapper (comment anchors, and whitespace between blocks); the wrapper must
     // take no space then. jsdom loads no Tailwind CSS, so this checks the class
     // that adds the vertical padding only when an element is present.
-    renderTable({ notice: textSnippet('<span data-testid="notice"></span>') });
+    renderTable({ notice: htmlSnippet('<span data-testid="notice"></span>') });
     const wrapper = screen.getByTestId('notice').parentElement;
     expect(wrapper).toHaveClass('has-[*]:py-3');
     expect(wrapper).not.toHaveClass('py-3');
   });
 
   describe('empty snippet', () => {
-    const empty = textSnippet('<p>No backups yet</p>');
+    const empty = htmlSnippet('<p>No backups yet</p>');
 
     it('replaces the default empty state', () => {
       renderTable({ data: [], emptyTitle: 'Nothing here', empty });

@@ -1,9 +1,12 @@
+/** Horizontal text alignment of a table column; unset means left. */
+export type ColumnAlign = 'left' | 'center' | 'right';
+
 export interface Column<T> {
   key: string;
   header: string;
   sortable?: boolean;
   width?: string;
-  align?: 'left' | 'center' | 'right';
+  align?: ColumnAlign;
   className?: string;
   /** Custom render function for returning plain text or numbers for display */
   render?: (_item: T, _index: number) => string | number;
