@@ -7,9 +7,9 @@
   Draws ChevronUp or ChevronDown on the sorted column and a ChevronsUpDown
   icon on the others.
 
-  The unsorted indicator is drawn at 80% of the header text color: header text
-  at 4.5:1 or more leaves it at 3:1 or more, so it stays visible without
-  competing with the active column's chevron.
+  The unsorted indicator is drawn at 80% of the header text color: for the grey
+  header text the tables use, text at 4.5:1 or more leaves it at 3:1 or more, so
+  it stays visible without competing with the active column's chevron.
 
   Props:
   - label: string - Column header text
