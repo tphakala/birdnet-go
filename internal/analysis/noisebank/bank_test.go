@@ -146,6 +146,17 @@ func (n naiveBank) match(space string, q []float32) (float32, bool) {
 	return best, found
 }
 
+func (n naiveBank) detached(owner uint) naiveBank {
+	out := make(naiveBank, len(n))
+	for i, r := range n {
+		if r.owner == owner {
+			r.owner = 0
+		}
+		out[i] = r
+	}
+	return out
+}
+
 func (n naiveBank) withoutOwner(owner uint) naiveBank {
 	var out naiveBank
 	for _, r := range n {
@@ -215,6 +226,22 @@ func TestBank_Transitions(t *testing.T) {
 		}},
 		{"remove detection zero changes nothing", func(b *Bank, n naiveBank) naiveBank {
 			b.Remove(0)
+			return n
+		}},
+		{"detach detection one", func(b *Bank, n naiveBank) naiveBank {
+			b.Detach(detOne)
+			return n.detached(detOne)
+		}},
+		{"remove a detached detection's old ID keeps its examples", func(b *Bank, n naiveBank) naiveBank {
+			b.Remove(detOne)
+			return n
+		}},
+		{"detach zero changes nothing", func(b *Bank, n naiveBank) naiveBank {
+			b.Detach(0)
+			return n
+		}},
+		{"detach a detection that owns nothing", func(b *Bank, n naiveBank) naiveBank {
+			b.Detach(99)
 			return n
 		}},
 		{"replace with no vectors clears the detection", func(b *Bank, n naiveBank) naiveBank {

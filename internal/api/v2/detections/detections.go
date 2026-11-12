@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/analysis/noisebank"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	detectionPkg "github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -211,12 +213,15 @@ type WeatherInfo struct {
 // LockDetection is a pointer so the review handler can tell "field omitted" (nil,
 // leave the lock untouched) apart from an explicit false (unlock): a plain bool
 // would make an omitted field read as false and silently unlock a locked detection.
+// Reason is a pointer for the same reason: absent keeps a stored reason, an empty
+// string clears it, and "no_animal" marks the detection as containing no animal.
 type DetectionRequest struct {
-	Comment       string `json:"comment,omitempty"`
-	Verified      string `json:"verified,omitempty"`
-	IgnoreSpecies string `json:"ignore_species,omitempty"`
-	Locked        bool   `json:"locked,omitempty"`
-	LockDetection *bool  `json:"lock_detection,omitempty"`
+	Comment       string  `json:"comment,omitempty"`
+	Verified      string  `json:"verified,omitempty"`
+	Reason        *string `json:"reason,omitempty"`
+	IgnoreSpecies string  `json:"ignore_species,omitempty"`
+	Locked        bool    `json:"locked,omitempty"`
+	LockDetection *bool   `json:"lock_detection,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response
@@ -1346,6 +1351,19 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusForbidden)
 	}
 
+	// A learning job that is reading this detection's clip must finish first. The
+	// guard is released after the clip and spectrogram files are removed, on every
+	// path, so a mark cannot slip in between the check and the delete. The learned
+	// examples are not touched: they outlive the detection.
+	if noise := c.noiseExamples(); noise != nil {
+		release, ok := noise.GuardDelete(note.ID)
+		if !ok {
+			return c.HandleErrorWithKey(ctx, errNoiseLearning, "A noise learning job is still working on this detection",
+				http.StatusConflict, errorKeyNoiseLearningInProgress, nil)
+		}
+		defer release()
+	}
+
 	// Capture the media name before deleting the DB record. A detection whose audio
 	// was removed by retention keeps its spectrogram renders under the spectrogram
 	// clip name, so those renders are cleaned up with it.
@@ -1454,7 +1472,12 @@ func (c *Handler) invalidateDetectionCache() {
 	c.DetectionCache.Invalidate()
 }
 
-// ReviewDetection updates a detection with verification status and optional comment
+// ReviewDetection updates a detection with verification status, an optional comment
+// and an optional reason. The reason "no_animal" marks the detection as noise and
+// learns from its clip (enhanced database only); an empty reason, or a verdict of
+// correct, takes it out of noise again. The request is validated first (see
+// validateReviewReason), then a mark is made, then the comment and the review are
+// written, then the lock; a refused mark has written nothing.
 func (c *Handler) ReviewDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 
@@ -1481,6 +1504,31 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		return nil // Response already handled by checkDetectionNotLocked
 	}
 
+	// Validate before anything is written.
+	verification, err := parseVerificationStatus(req.Verified)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid verification status", http.StatusBadRequest)
+	}
+	if err := validateReviewReason(req.Reason, req.Verified); err != nil {
+		return c.HandleError(ctx, err, "Invalid review reason", http.StatusBadRequest)
+	}
+
+	// Marking a detection as noise comes first: it writes the review itself and a
+	// refusal has written nothing, so no comment or other change is left behind.
+	noise := c.noiseExamples()
+	markNoise := req.Reason != nil && *req.Reason == entities.ReviewReasonNoAnimal
+	var noiseStatus *noisebank.Status
+	if markNoise {
+		if noise == nil {
+			return c.respondNoiseUnavailable(ctx)
+		}
+		status, markErr := noise.Mark(ctx.Request().Context(), noisebank.MarkRequest{DetectionID: note.ID, OpenClip: c.noiseClipOpener()})
+		if markErr != nil {
+			return c.respondNoiseMarkError(ctx, markErr)
+		}
+		noiseStatus = &status
+	}
+
 	// Handle comment if provided
 	if req.Comment != "" {
 		// Save comment using the datastore method for adding comments
@@ -1490,16 +1538,23 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		}
 	}
 
-	// Handle verification if provided
-	verification, err := parseVerificationStatus(req.Verified)
-	if err != nil {
-		return c.HandleError(ctx, err, "Invalid verification status", http.StatusBadRequest)
-	}
-
 	if verification.IsSet {
-		// Save review using the datastore method for reviews
-		if err := c.AddReview(note.ID, verification.Verified); err != nil {
-			return c.HandleError(ctx, err, "Failed to update verification", http.StatusInternalServerError)
+		// Exactly one path writes the review. A mark was written by Mark. A verdict
+		// that takes the detection out of noise (correct, or false_positive with an
+		// explicit empty reason) goes through the noise service so its examples
+		// change in the same transaction; with no service it is the plain write. A
+		// false_positive that names no reason leaves a stored reason alone.
+		leavesNoise := verification.Verified || (req.Reason != nil && *req.Reason == "")
+		switch {
+		case markNoise:
+		case leavesNoise && noise != nil:
+			if err := noise.LeaveNoise(ctx.Request().Context(), note.ID, verdictOf(verification)); err != nil {
+				return c.HandleError(ctx, err, "Failed to update verification", http.StatusInternalServerError)
+			}
+		default:
+			if err := c.AddReview(note.ID, verification.Verified); err != nil {
+				return c.HandleError(ctx, err, "Failed to update verification", http.StatusInternalServerError)
+			}
 		}
 
 		// Handle ignored species
@@ -1536,9 +1591,20 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 	c.invalidateDetectionCache()
 
 	// Return success response with 200 OK status
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"status": "success",
-	})
+	response := map[string]any{"status": "success"}
+	if noiseStatus != nil {
+		response["noise"] = noiseStatus
+	}
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// verdictOf converts a parsed verification to the review status the noise service
+// writes.
+func verdictOf(v verificationStatus) entities.VerificationStatus {
+	if v.Verified {
+		return entities.VerificationCorrect
+	}
+	return entities.VerificationFalsePositive
 }
 
 // LockDetection locks or unlocks a detection

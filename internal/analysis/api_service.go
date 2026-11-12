@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/noisebank"
 	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api"
@@ -66,6 +67,7 @@ type APIServerService struct {
 	controlChan    chan string
 	audioLevelChan chan audiocore.AudioLevelData
 	privacyRollup  *privacyrollup.Writer
+	noiseExamples  *noisebank.Service
 
 	// cancel stops background goroutines owned by subsystems (e.g. the OAuth2
 	// server's periodic token cleanup). Created in Start, invoked in Stop.
@@ -117,6 +119,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 				_ = s.proc.ShutdownWithContext(context.Background())
 				s.proc = nil
 			}
+			_ = s.stopNoiseExamples(context.Background())
 		}
 	}()
 
@@ -160,6 +163,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	s.proc = processor.New(s.settings, dataStore, s.dbService.DetectionRepository(), bn, s.metrics, s.birdImageCache, GetLogger())
 	s.proc.SetSunCalc(s.sunCalc)
 	s.wireClipDenoiseRecorder()
+	s.startNoiseExamples(ctx, bn)
 
 	// Initialize backup system (optional; failure is non-fatal).
 	backupLog := logger.Global().Module("backup")
@@ -322,6 +326,14 @@ func (s *APIServerService) Stop(ctx context.Context) error {
 				logger.String("operation", "shutdown_processor"))
 		}
 		s.proc = nil
+	}
+
+	// Stop the noise example worker with the other writers, before the database
+	// closes.
+	if err := s.stopNoiseExamples(ctx); err != nil {
+		log.Warn("noise example worker did not stop in time",
+			logger.Error(err),
+			logger.String("operation", "shutdown_noise_examples"))
 	}
 
 	// Stop the privacy rollup writer after the processor's last flush cycle and

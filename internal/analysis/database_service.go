@@ -959,7 +959,10 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 	}()
 
 	// Check user-data tables: if ANY has rows, the database is not safe to delete.
-	userTables := []string{"detections", "alert_rules", "detection_reviews", "dynamic_thresholds"}
+	// noise_examples holds what the user taught the noise example gate, and it
+	// outlives the detections it was learned from, so it can be the only table with
+	// rows.
+	userTables := []string{"detections", "alert_rules", "detection_reviews", "dynamic_thresholds", "noise_examples"}
 	for _, table := range userTables {
 		var exists int64
 		// Check if the table exists before querying it.

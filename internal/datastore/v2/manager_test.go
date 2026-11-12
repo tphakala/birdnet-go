@@ -65,6 +65,7 @@ func TestSQLiteManager_Initialize(t *testing.T) {
 		&entities.DetectionReview{},
 		&entities.DetectionComment{},
 		&entities.DetectionLock{},
+		&entities.NoiseExample{},
 		&entities.MigrationState{},
 		&entities.PrivacyFilterHourly{},
 		&entities.PrivacyFilterDiscard{},

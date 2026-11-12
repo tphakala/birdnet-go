@@ -339,6 +339,7 @@ func (m *MySQLManager) Delete() error {
 	prefix := m.tablePrefix
 	tables := []string{
 		// Core detection tables (drop children first)
+		prefix + "noise_examples",
 		prefix + "detection_locks",
 		prefix + "detection_comments",
 		prefix + "detection_reviews",

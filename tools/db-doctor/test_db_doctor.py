@@ -487,6 +487,68 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
         self.assertEqual(fix.status, "applied", fix.details)
         self.assertEqual(row, ("a.png", 48000, 1))
 
+    def test_noise_examples_and_review_reason_are_known_schema(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            "CREATE TABLE detections (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model_id INTEGER, label_id INTEGER, source_id INTEGER, "
+            "detected_at INTEGER, begin_time INTEGER, end_time INTEGER, "
+            "confidence REAL, latitude REAL, longitude REAL, "
+            "clip_name VARCHAR(500), spectrogram_clip_name VARCHAR(500), "
+            "clip_sample_rate INTEGER, clip_denoised NUMERIC, "
+            "processing_time_ms INTEGER, unlikely NUMERIC, legacy_id INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE detection_reviews (id INTEGER PRIMARY KEY, "
+            "detection_id INTEGER NOT NULL, verified VARCHAR(20) NOT NULL, "
+            "reason VARCHAR(20), created_at DATETIME, updated_at DATETIME)"
+        )
+        conn.execute(
+            "CREATE TABLE noise_examples (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "detection_id INTEGER, window_offset_ms INTEGER NOT NULL, "
+            "embedding_space VARCHAR(96) NOT NULL, dim INTEGER NOT NULL, "
+            "score REAL NOT NULL, vector BLOB NOT NULL, created_at INTEGER NOT NULL, "
+            "CONSTRAINT fk_noise_examples_detection FOREIGN KEY (detection_id) "
+            "REFERENCES detections(id) ON DELETE SET NULL)"
+        )
+        conn.execute("INSERT INTO detections (model_id, label_id) VALUES (1, 1)")
+        conn.execute(
+            "INSERT INTO detection_reviews (detection_id, verified, reason) "
+            "VALUES (1, 'false_positive', 'no_animal')"
+        )
+        conn.execute(
+            "INSERT INTO noise_examples (detection_id, window_offset_ms, "
+            "embedding_space, dim, score, vector, created_at) "
+            "VALUES (1, 0, 'space', 1, 0.9, x'00000000', 1)"
+        )
+        conn.commit()
+        conn.close()
+
+        doctor, report, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "pass", check.details)
+        report.checks.append(check)
+
+        # The tables have no recreation template, so a fix leaves them alone.
+        conn = sqlite3.connect(self.path)
+        try:
+            doctor._fix_schema_contamination(conn, report)
+            reason = conn.execute("SELECT reason FROM detection_reviews").fetchone()
+            examples = conn.execute(
+                "SELECT detection_id, vector FROM noise_examples"
+            ).fetchall()
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("DELETE FROM detections")
+            conn.commit()
+            after_delete = conn.execute(
+                "SELECT detection_id, vector FROM noise_examples"
+            ).fetchall()
+        finally:
+            conn.close()
+        self.assertEqual(reason, ("no_animal",))
+        self.assertEqual(examples, [(1, b"\x00\x00\x00\x00")])
+        self.assertEqual(after_delete, [(None, b"\x00\x00\x00\x00")])
+
     def test_privacy_rollup_fk_orphan_is_reported(self):
         conn = sqlite3.connect(self.path)
         conn.execute("CREATE TABLE audio_sources (id INTEGER PRIMARY KEY)")

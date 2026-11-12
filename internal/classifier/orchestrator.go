@@ -678,6 +678,26 @@ func (o *Orchestrator) ModelSpecFor(modelID string) (ModelSpec, bool) {
 	return ConfiguredSpec(modelID, entry.instance.Spec(), o.CurrentSettings()), true
 }
 
+// EmbeddingSpaceFor returns the embedding space of the loaded model modelID, the
+// space its PredictModelTimed windows carry, without running inference. It
+// reports false when the model is not loaded or has no embedding capability.
+func (o *Orchestrator) EmbeddingSpaceFor(modelID string) (string, bool) {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return "", false
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	reporter, ok := entry.instance.(interface{ EmbeddingSpace() string })
+	if !ok {
+		return "", false
+	}
+	space := reporter.EmbeddingSpace()
+	return space, space != ""
+}
+
 // startBatScheduler creates a fresh scheduler (preserving the suncalc
 // reference from an existing one if present) and starts it. Handles the
 // unload/reload case where the previous scheduler's stopChan is closed.

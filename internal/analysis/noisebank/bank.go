@@ -5,11 +5,21 @@
 // whose embedding is close to an example of the same embedding space is judged to
 // hold no call either. The bank lives in memory so the comparison costs one scan
 // of the examples per window and never touches the database.
+//
+// The Service is the only writer of the noise_examples table and of the review
+// verdicts that enter or leave noise. A review write that marks a detection as
+// noise, or takes it out of noise, must go through Mark or LeaveNoise: they hold
+// one mutex across the review write and the matching example change, so no other
+// request can slip between a verdict and its examples. Examples belong to the
+// bank, not to the detection they were learned from: deleting a detection or its
+// clip removes nothing, and only an explicit verdict change on a detection that
+// still exists removes the examples learned from it.
 package noisebank
 
 import (
 	"maps"
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -134,6 +144,19 @@ func (b *Bank) Remove(detectionID uint) {
 	b.snap.Store(b.snap.Load().without(detectionID))
 }
 
+// Detach turns every example detectionID owns into a detached one, in every
+// space. It is what a delete of the detection does to the stored examples: they
+// stay, and no later detection that reuses the ID can reach them. Detached
+// examples are not touched, and a detectionID of zero is ignored.
+func (b *Bank) Detach(detectionID uint) {
+	if detectionID == 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.snap.Store(b.snap.Load().detached(detectionID))
+}
+
 // Load replaces the whole content of the bank with examples, skipping the
 // unusable ones as Replace does.
 func (b *Bank) Load(examples []Example) {
@@ -167,6 +190,16 @@ func (s *snapshot) without(detectionID uint) *snapshot {
 		if kept := sp.without(detectionID); kept != nil {
 			next.spaces[name] = kept
 		}
+	}
+	return next
+}
+
+// detached returns a snapshot in which detectionID owns nothing. The vectors are
+// shared with s; only the owner lists of the affected spaces are copied.
+func (s *snapshot) detached(detectionID uint) *snapshot {
+	next := &snapshot{spaces: make(map[string]*space, len(s.spaces))}
+	for name, sp := range s.spaces {
+		next.spaces[name] = sp.detached(detectionID)
 	}
 	return next
 }
@@ -230,6 +263,21 @@ func (sp *space) without(owner uint) *space {
 		}
 	}
 	return kept
+}
+
+// detached returns sp with the vectors owner holds set to detached: sp itself
+// when owner holds none.
+func (sp *space) detached(owner uint) *space {
+	if !slices.Contains(sp.owners, owner) {
+		return sp
+	}
+	owners := slices.Clone(sp.owners)
+	for i, o := range owners {
+		if o == owner {
+			owners[i] = 0
+		}
+	}
+	return &space{dim: sp.dim, data: sp.data, owners: owners}
 }
 
 // clone returns a private copy of sp with room for extra more vectors; a nil sp

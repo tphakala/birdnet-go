@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 SCRIPT_VERSION = "1.4.0"
-SCHEMA_VERSION = "v2-2026-11-12"
+SCHEMA_VERSION = "v2-2026-11-13"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -72,12 +72,16 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "first_hit_at", "last_hit_at", "min_confidence", "confidence_sum",
     ],
     "detection_reviews": [
-        "id", "detection_id", "verified", "created_at", "updated_at",
+        "id", "detection_id", "verified", "reason", "created_at", "updated_at",
     ],
     "detection_comments": [
         "id", "detection_id", "entry", "created_at", "updated_at",
     ],
     "detection_locks": ["id", "detection_id", "locked_at"],
+    "noise_examples": [
+        "id", "detection_id", "window_offset_ms", "embedding_space", "dim",
+        "score", "vector", "created_at",
+    ],
     "image_caches": [
         "id", "provider_name", "label_id", "source_provider", "url",
         "license_name", "license_url", "author_name", "author_url",
@@ -178,8 +182,8 @@ LEGACY_V1_TABLES = {"notes", "results", "note_reviews", "note_comments", "note_l
 
 V2_ONLY_TABLES = {
     "detections", "detection_predictions", "detection_reviews",
-    "detection_comments", "detection_locks", "labels", "ai_models",
-    "audio_sources", "label_types", "taxonomic_classes",
+    "detection_comments", "detection_locks", "noise_examples", "labels",
+    "ai_models", "audio_sources", "label_types", "taxonomic_classes",
     "detection_model_contributions", "alert_rules", "alert_conditions",
     "alert_actions", "alert_histories", "migration_states",
     "migration_dirty_ids", "app_metadata", "app_events",
@@ -420,6 +424,7 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
     "detection_reviews": {
         "detection_id": "INTEGER NOT NULL DEFAULT 0",
         "verified": "TEXT NOT NULL DEFAULT ''",
+        "reason": "TEXT",
         "created_at": "DATETIME",
         "updated_at": "DATETIME",
     },
@@ -432,6 +437,15 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
     "detection_locks": {
         "detection_id": "INTEGER NOT NULL DEFAULT 0",
         "locked_at": "DATETIME",
+    },
+    "noise_examples": {
+        "detection_id": "INTEGER",
+        "window_offset_ms": "INTEGER NOT NULL DEFAULT 0",
+        "embedding_space": "TEXT NOT NULL DEFAULT ''",
+        "dim": "INTEGER NOT NULL DEFAULT 0",
+        "score": "REAL NOT NULL DEFAULT 0",
+        "vector": "BLOB NOT NULL DEFAULT x''",
+        "created_at": "INTEGER NOT NULL DEFAULT 0",
     },
     "image_caches": {
         "provider_name": "TEXT NOT NULL DEFAULT 'wikimedia'",
@@ -558,6 +572,7 @@ FK_CHECKS = [
     ("detection_reviews", "detection_id", "detections", "id"),
     ("detection_comments", "detection_id", "detections", "id"),
     ("detection_locks", "detection_id", "detections", "id"),
+    ("noise_examples", "detection_id", "detections", "id"),
     ("detection_model_contributions", "detection_id", "detections", "id"),
     ("alert_conditions", "rule_id", "alert_rules", "id"),
     ("alert_actions", "rule_id", "alert_rules", "id"),
@@ -1262,7 +1277,7 @@ class DatabaseDoctor:
             "app_events", "privacy_filter_hourlies",
             "privacy_filter_discards", "privacy_filter_discard_hits",
             "detection_comments", "detection_locks", "audio_sources",
-            "results", "note_reviews",
+            "noise_examples", "results", "note_reviews",
         ]
 
         for table in stat_tables:

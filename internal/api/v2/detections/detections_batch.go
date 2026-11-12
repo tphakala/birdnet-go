@@ -1,6 +1,7 @@
 package detections
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -83,31 +84,10 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 	ids := deduplicateIDs(req.IDs)
 	var processed, skipped int
 	for _, idStr := range ids {
-		note, err := c.DS.Get(idStr)
-		if err != nil {
-			c.LogWarnIfEnabled("Batch delete: failed to get detection",
-				logger.String("id", idStr),
-				logger.Error(err))
+		if c.deleteOneDetection(idStr) {
+			processed++
+		} else {
 			skipped++
-			continue
-		}
-		if note.Locked {
-			skipped++
-			continue
-		}
-
-		mediaName := note.MediaName()
-		if err := c.DS.Delete(idStr); err != nil {
-			c.LogWarnIfEnabled("Batch delete: failed to delete detection",
-				logger.String("id", idStr),
-				logger.Error(err))
-			skipped++
-			continue
-		}
-
-		processed++
-		if mediaName != "" {
-			c.removeDetectionFiles(mediaName)
 		}
 	}
 
@@ -117,6 +97,47 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 		Processed: processed,
 		Skipped:   skipped,
 	})
+}
+
+// deleteOneDetection deletes one detection of a batch and its files and reports
+// whether it did. A locked or unknown detection, a failed delete, and a detection a
+// learning job is still reading are skipped. It is a function of its own so the
+// delete guard is released when this detection is done, not when the whole batch
+// is.
+func (c *Handler) deleteOneDetection(idStr string) bool {
+	note, err := c.DS.Get(idStr)
+	if err != nil {
+		c.LogWarnIfEnabled("Batch delete: failed to get detection",
+			logger.String("id", idStr),
+			logger.Error(err))
+		return false
+	}
+	if note.Locked {
+		return false
+	}
+
+	if noise := c.noiseExamples(); noise != nil {
+		release, ok := noise.GuardDelete(note.ID)
+		if !ok {
+			c.LogWarnIfEnabled("Batch delete: a noise learning job is still working on the detection",
+				logger.String("id", idStr))
+			return false
+		}
+		defer release()
+	}
+
+	mediaName := note.MediaName()
+	if err := c.DS.Delete(idStr); err != nil {
+		c.LogWarnIfEnabled("Batch delete: failed to delete detection",
+			logger.String("id", idStr),
+			logger.Error(err))
+		return false
+	}
+
+	if mediaName != "" {
+		c.removeDetectionFiles(mediaName)
+	}
+	return true
 }
 
 // BatchReviewDetections sets the verification status on multiple detections, skipping locked ones.
@@ -159,7 +180,7 @@ func (c *Handler) BatchReviewDetections(ctx echo.Context) error {
 			continue
 		}
 
-		if err := c.AddReview(note.ID, verification.Verified); err != nil {
+		if err := c.reviewOne(ctx.Request().Context(), note.ID, verification); err != nil {
 			c.LogWarnIfEnabled("Batch review: failed to set verification",
 				logger.String("id", idStr),
 				logger.Error(err))
@@ -175,6 +196,17 @@ func (c *Handler) BatchReviewDetections(ctx echo.Context) error {
 		Processed: processed,
 		Skipped:   skipped,
 	})
+}
+
+// reviewOne writes one review of a batch. A verdict of correct goes through the
+// noise service, when there is one, so the examples learned from the detection
+// leave with its mark; a false positive keeps the plain write and leaves any mark
+// alone, because a batch carries no reason.
+func (c *Handler) reviewOne(ctx context.Context, id uint, verification verificationStatus) error {
+	if noise := c.noiseExamples(); noise != nil && verification.Verified {
+		return noise.LeaveNoise(ctx, id, verdictOf(verification))
+	}
+	return c.AddReview(id, verification.Verified)
 }
 
 // BatchLockDetections locks or unlocks multiple detections. Already-locked detections

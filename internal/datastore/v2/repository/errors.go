@@ -32,6 +32,10 @@ var (
 	// ErrReviewNotFound indicates no review exists for the detection.
 	ErrReviewNotFound = errors.NewStd("review not found")
 
+	// ErrReviewReasonNeedsFalsePositive indicates a review carried a reason with a
+	// status other than false_positive. Only a false positive has a reason.
+	ErrReviewReasonNeedsFalsePositive = errors.NewStd("review reason requires status false_positive")
+
 	// ErrCommentNotFound indicates the requested comment does not exist.
 	ErrCommentNotFound = errors.NewStd("comment not found")
 

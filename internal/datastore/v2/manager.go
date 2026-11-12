@@ -298,6 +298,7 @@ func v2Entities() []any {
 		&entities.DetectionReview{},
 		&entities.DetectionComment{},
 		&entities.DetectionLock{},
+		&entities.NoiseExample{},
 		&entities.MigrationState{},
 		&entities.MigrationDirtyID{},
 		// Auxiliary tables

@@ -126,6 +126,9 @@ type Processor struct {
 	// the bank, so changes to the examples need no lock here. nil disables the
 	// noise example gate.
 	noiseBank *noisebank.Bank
+	// noiseExamples learns the examples of noiseBank. It is set once before Start
+	// (SetNoiseExamples) and never written again.
+	noiseExamples *noisebank.Service
 	// privacyRollup receives privacy filter activity for the hourly rollup. It is
 	// set once before Start (SetPrivacyRollup) and never written again, so it needs
 	// no lock; nil leaves every hit site a no-op.

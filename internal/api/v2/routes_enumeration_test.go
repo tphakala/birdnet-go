@@ -144,6 +144,8 @@ var protectedReadRoutes = map[string]bool{
 	// Registered in the privacy domain's protected group (privacy/privacy.go, RegisterRoutes).
 	"GET /api/v2/privacy-filter/activity": true,
 	"GET /api/v2/privacy-filter/discards": true,
+	// Registered in the detections domain's protected group (detections/handler.go, RegisterDetectionRoutes).
+	"GET /api/v2/detections/:id/noise": true,
 }
 
 // authGate stands in for the real auth middleware. It records the matched
