@@ -144,7 +144,7 @@ func NewService(cfg Config) *Service {
 	return &Service{
 		cfg:        cfg,
 		bank:       New(),
-		log:        logger.Global().Module("analysis").Module("noisebank"),
+		log:        logger.Global().Module(LogModule),
 		jobs:       make(map[uint]*job),
 		guards:     make(map[uint]int),
 		queue:      make(chan *job, maxQueuedJobs),

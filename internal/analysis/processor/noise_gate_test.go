@@ -2,8 +2,10 @@ package processor
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 const (
@@ -65,6 +68,11 @@ func noiseGateBank() *noisebank.Bank {
 // the match threshold; then every detection of the window is tagged, with the
 // similarity, whatever the model, and a tag the CV filter set is kept.
 func TestApplyNoiseExampleGate(t *testing.T) {
+	const (
+		none = iota
+		miss
+		match
+	)
 	tests := []struct {
 		name       string
 		bank       *noisebank.Bank
@@ -74,21 +82,24 @@ func TestApplyNoiseExampleGate(t *testing.T) {
 		preTagged  bool
 		wantTagged bool
 		wantSim    float64
+		wantLine   int     // none, miss or match: the window line the gate writes
+		wantFound  float64 // similarity recorded on the detections of a compared window
 	}{
-		{"no bank", nil, classifier.RegistryIDBat, noiseGateEmbedding(1), noiseGateSpace, false, false, 0},
-		{"window without embedding", noiseGateBank(), classifier.RegistryIDBat, nil, noiseGateSpace, false, false, 0},
-		{"embedding of another space", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(1), noiseGateOtherSpace, false, false, 0},
-		{"embedding of another dimension", noiseGateBank(), classifier.RegistryIDBat, []float32{1, 0}, noiseGateSpace, false, false, 0},
-		{"below the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(noiseGateBelow), noiseGateSpace, false, false, 0},
-		{"above the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(noiseGateAbove), noiseGateSpace, false, true, noiseGateAbove},
-		{"exactly at the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateVector(4, 3, 0), noiseGateSpace, false, true, 0.8},
-		{"just below the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateVector(4, 3, 0.01), noiseGateSpace, false, false, 0},
-		{"identical to the example", noiseGateBank(), classifier.RegistryIDBat, noiseGateExample(), noiseGateSpace, false, true, 1},
-		{"a model outside the bat group", noiseGateBank(), classifier.RegistryIDBirdNETV24, noiseGateEmbedding(noiseGateAbove), noiseGateSpace, false, true, noiseGateAbove},
-		{"a tag of the CV filter stays when nothing matches", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(noiseGateBelow), noiseGateSpace, true, false, 0},
+		{"no bank", nil, classifier.RegistryIDBat, noiseGateEmbedding(1), noiseGateSpace, false, false, 0, none, 0},
+		{"window without embedding", noiseGateBank(), classifier.RegistryIDBat, nil, noiseGateSpace, false, false, 0, none, 0},
+		{"embedding of another space", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(1), noiseGateOtherSpace, false, false, 0, none, 0},
+		{"embedding of another dimension", noiseGateBank(), classifier.RegistryIDBat, []float32{1, 0}, noiseGateSpace, false, false, 0, none, 0},
+		{"below the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(noiseGateBelow), noiseGateSpace, false, false, 0, miss, noiseGateBelow},
+		{"above the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(noiseGateAbove), noiseGateSpace, false, true, noiseGateAbove, match, noiseGateAbove},
+		{"exactly at the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateVector(4, 3, 0), noiseGateSpace, false, true, 0.8, match, 0.8},
+		{"just below the match threshold", noiseGateBank(), classifier.RegistryIDBat, noiseGateVector(4, 3, 0.01), noiseGateSpace, false, false, 0, miss, 0.8},
+		{"identical to the example", noiseGateBank(), classifier.RegistryIDBat, noiseGateExample(), noiseGateSpace, false, true, 1, match, 1},
+		{"a model outside the bat group", noiseGateBank(), classifier.RegistryIDBirdNETV24, noiseGateEmbedding(noiseGateAbove), noiseGateSpace, false, true, noiseGateAbove, match, noiseGateAbove},
+		{"a tag of the CV filter stays when nothing matches", noiseGateBank(), classifier.RegistryIDBat, noiseGateEmbedding(noiseGateBelow), noiseGateSpace, true, false, 0, miss, noiseGateBelow},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
 			p := &Processor{}
 			p.SetNoiseBank(tt.bank)
 			item := classifier.Results{
@@ -113,9 +124,54 @@ func TestApplyNoiseExampleGate(t *testing.T) {
 				assert.Equal(t, tt.wantTagged, noiseBit, "detection %d noise bit", i)
 				assert.Equal(t, tt.wantTagged || tt.preTagged, got.Unlikely, "detection %d tag", i)
 				assert.InDelta(t, tt.wantSim, got.NoiseSimilarity, noiseGateTolerance, "detection %d similarity", i)
+
+				cmp := detections[i].noiseGate
+				assert.Equal(t, tt.wantLine != none, cmp.compared, "detection %d compared", i)
+				assert.Equal(t, tt.wantLine == match, cmp.matched, "detection %d matched", i)
+				assert.InDelta(t, tt.wantFound, cmp.similarity, noiseGateTolerance, "detection %d compared similarity", i)
 			}
+
+			lines := logLinesWithOperation(buf.String(), noiseGateWindowOperation)
+			if tt.wantLine == none {
+				assert.Empty(t, lines, "a window the gate could not compare writes nothing")
+				return
+			}
+			require.Len(t, lines, 1, "one line per compared window")
+			assert.Contains(t, lines[0], "module=analysis.noisebank")
+			assert.Contains(t, lines[0], "level=DEBUG")
+			assert.Contains(t, lines[0], fmt.Sprintf("matched=%t", tt.wantLine == match))
 		})
 	}
+}
+
+// TestApplyNoiseExampleGate_WindowLineIsDebug pins that the per-window line is
+// written at Debug: a logger at Info drops it, whether the window matched or not.
+func TestApplyNoiseExampleGate_WindowLineIsDebug(t *testing.T) {
+	for _, similarity := range []float64{noiseGateBelow, noiseGateAbove} {
+		buf := logtest.CaptureBufferAt(t, slog.LevelInfo)
+		p := &Processor{}
+		p.SetNoiseBank(noiseGateBank())
+		item := classifier.Results{
+			ModelID:        classifier.RegistryIDBat,
+			Source:         datastore.AudioSource{ID: ultrasonicTestConnection},
+			Embedding:      noiseGateEmbedding(similarity),
+			EmbeddingSpace: noiseGateSpace,
+		}
+		p.applyNoiseExampleGate(&item, []Detections{{}})
+		assert.Empty(t, logLinesWithOperation(buf.String(), noiseGateWindowOperation), "similarity %v", similarity)
+	}
+}
+
+// logLinesWithOperation returns the lines of captured text log output that carry
+// the given operation.
+func logLinesWithOperation(out, op string) []string {
+	var lines []string
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.Contains(line, "operation="+op) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 // noiseGateWindow describes one audio window of a detection for the composition
@@ -195,16 +251,18 @@ func TestApplyUnlikelyValidators_ComposeAcrossWindows(t *testing.T) {
 		wantCV      float64
 		wantCVThr   float64
 		wantSim     float64
+		wantTally   noiseTally // minMatch and maxMiss are compared only where the counts make them valid
 	}{
-		{"CV only", []noiseGateWindow{cvOnly(0.9)}, true, detection.UnlikelySourceUltrasonicCV, cv, cvThreshold, 0},
-		{"noise only", []noiseGateWindow{noise(0.9, simLow)}, true, detection.UnlikelySourceNoiseExamples, 0, 0, simLow},
-		{"both on one window", []noiseGateWindow{both(0.9, simLow)}, true, sourceBoth, cv, cvThreshold, simLow},
-		{"one window each", []noiseGateWindow{cvOnly(0.8), noise(0.9, simLow)}, true, sourceBoth, cv, cvThreshold, simLow},
-		{"lowest similarity wins", []noiseGateWindow{noise(0.8, simLow), noise(0.9, simHigh)}, true, detection.UnlikelySourceNoiseExamples, 0, 0, simLow},
-		{"the CV window is the one with the best confidence", []noiseGateWindow{noise(0.7, simLow), cvOnly(0.95)}, true, sourceBoth, cv, cvThreshold, simLow},
-		{"a window nothing judged clears the tag", []noiseGateWindow{cvOnly(0.9), unjudged(0.8)}, false, 0, 0, 0, 0},
-		{"a window without a match clears the tag", []noiseGateWindow{noise(0.9, simHigh), neither(0.8)}, false, 0, 0, 0, 0},
-		{"a window without embedding between noise windows clears the tag", []noiseGateWindow{noise(0.9, simHigh), unjudged(0.85), noise(0.8, simLow)}, false, 0, 0, 0, 0},
+		{"CV only", []noiseGateWindow{cvOnly(0.9)}, true, detection.UnlikelySourceUltrasonicCV, cv, cvThreshold, 0, noiseTally{}},
+		{"noise only", []noiseGateWindow{noise(0.9, simLow)}, true, detection.UnlikelySourceNoiseExamples, 0, 0, simLow, noiseTally{compared: 1, matched: 1, minMatch: simLow}},
+		{"both on one window", []noiseGateWindow{both(0.9, simLow)}, true, sourceBoth, cv, cvThreshold, simLow, noiseTally{compared: 1, matched: 1, minMatch: simLow}},
+		{"one window each", []noiseGateWindow{cvOnly(0.8), noise(0.9, simLow)}, true, sourceBoth, cv, cvThreshold, simLow, noiseTally{compared: 1, matched: 1, minMatch: simLow}},
+		{"lowest similarity wins", []noiseGateWindow{noise(0.8, simLow), noise(0.9, simHigh)}, true, detection.UnlikelySourceNoiseExamples, 0, 0, simLow, noiseTally{compared: 2, matched: 2, minMatch: simLow}},
+		{"the CV window is the one with the best confidence", []noiseGateWindow{noise(0.7, simLow), cvOnly(0.95)}, true, sourceBoth, cv, cvThreshold, simLow, noiseTally{compared: 1, matched: 1, minMatch: simLow}},
+		{"a window nothing judged clears the tag", []noiseGateWindow{cvOnly(0.9), unjudged(0.8)}, false, 0, 0, 0, 0, noiseTally{}},
+		{"a window without a match clears the tag", []noiseGateWindow{noise(0.9, simHigh), neither(0.8)}, false, 0, 0, 0, 0, noiseTally{compared: 2, matched: 1, minMatch: simHigh, maxMiss: noiseGateBelow}},
+		{"a window without embedding between noise windows clears the tag", []noiseGateWindow{noise(0.9, simHigh), unjudged(0.85), noise(0.8, simLow)}, false, 0, 0, 0, 0, noiseTally{compared: 2, matched: 2, minMatch: simLow}},
+		{"two misses with negative similarities", []noiseGateWindow{noise(0.9, -0.5), noise(0.8, -0.2)}, false, 0, 0, 0, 0, noiseTally{compared: 2, maxMiss: -0.2}},
 	}
 	for _, tt := range tests {
 		for _, order := range []struct {
@@ -224,7 +282,18 @@ func TestApplyUnlikelyValidators_ComposeAcrossWindows(t *testing.T) {
 					p.mergePendingHit(&item, det, endAt, mergeTestWindow)
 				}
 
-				got := onlyPending(t, p).Detection.Result
+				pending := onlyPending(t, p)
+				tally := pending.noiseGate
+				assert.Equal(t, tt.wantTally.compared, tally.compared, "compared windows")
+				assert.Equal(t, tt.wantTally.matched, tally.matched, "matched windows")
+				if tt.wantTally.matched > 0 {
+					assert.InDelta(t, tt.wantTally.minMatch, tally.minMatch, noiseGateTolerance, "lowest matching similarity")
+				}
+				if tt.wantTally.compared > tt.wantTally.matched {
+					assert.InDelta(t, tt.wantTally.maxMiss, tally.maxMiss, noiseGateTolerance, "highest missing similarity")
+				}
+
+				got := pending.Detection.Result
 				assert.Equal(t, tt.wantTagged, got.Unlikely)
 				assert.Equal(t, tt.wantSources, got.UnlikelySources)
 				assert.InDelta(t, tt.wantCV, got.UltrasonicCV, noiseGateTolerance)

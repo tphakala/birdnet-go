@@ -3,6 +3,7 @@ package processor
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 const (
@@ -258,23 +260,28 @@ func TestApplyUltrasonicFilter_UnknownModelIsNotFiltered(t *testing.T) {
 // items. The steps run in order on one processor.
 func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 	p := mergeTestProcessor(t)
+	buf := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	// An approved detection enqueues its actions; the queue is never started, so it
 	// rejects them and none run.
 	p.JobQueue = jobqueue.NewJobQueue()
 
+	compared := noiseTally{compared: 3, matched: 2, minMatch: 0.85, maxMiss: 0.7}
 	steps := []struct {
 		name            string
 		filterEnabled   bool
 		discardUnlikely bool
 		unlikely        bool
+		tally           noiseTally // what the gate found; the zero value is a detection it never compared
 		wantFlushed     int
 	}{
-		{"gate on, tagged", true, true, true, 0},
-		{"gate off, tagged", true, false, true, 1},
-		{"gate on, not tagged", true, true, false, 1},
-		{"filter off, gate on, tagged", false, true, true, 0},
-		{"filter off, gate off, tagged", false, false, true, 1},
-		{"gate on again, tagged", true, true, true, 0},
+		{"gate on, tagged", true, true, true, compared, 0},
+		{"gate off, tagged", true, false, true, compared, 1},
+		{"gate on, not tagged", true, true, false, compared, 1},
+		{"filter off, gate on, tagged", false, true, true, compared, 0},
+		{"filter off, gate off, tagged", false, false, true, compared, 1},
+		{"gate on again, tagged", true, true, true, compared, 0},
+		{"gate on, tagged, never compared", true, true, true, noiseTally{}, 0},
+		{"gate off, not tagged, never compared", true, false, false, noiseTally{}, 1},
 	}
 	for _, step := range steps {
 		now := time.Now()
@@ -283,6 +290,7 @@ func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 			Count:         1,
 			FirstDetected: now.Add(-10 * time.Second),
 			FlushDeadline: now.Add(-time.Second),
+			noiseGate:     step.tally,
 		}
 		item.Detection.Result.Species = detection.Species{ScientificName: mergeTestScientific, CommonName: mergeTestCommon}
 		item.Detection.Result.Unlikely = step.unlikely
@@ -294,10 +302,25 @@ func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 			DiscardUnlikely: step.discardUnlikely,
 		}}})
 
+		buf.Reset()
 		pending, flushed := p.flushPendingDetections()
 		assert.Equal(t, 1, pending, step.name)
 		assert.Equal(t, step.wantFlushed, flushed, step.name)
 		assert.Empty(t, p.pendingDetections, step.name)
+
+		outcomes := logLinesWithOperation(buf.String(), noiseGateDetectionOperation)
+		if step.tally.compared == 0 {
+			assert.Empty(t, outcomes, "%s: a detection the gate never compared writes no outcome line", step.name)
+			continue
+		}
+		require.Len(t, outcomes, 1, "%s: one outcome line", step.name)
+		if step.wantFlushed == 1 {
+			assert.Contains(t, outcomes[0], "outcome=kept", step.name)
+			assert.NotContains(t, outcomes[0], " reason=", step.name)
+		} else {
+			assert.Contains(t, outcomes[0], "outcome=discarded", step.name)
+			assert.Contains(t, outcomes[0], " reason=", step.name)
+		}
 	}
 }
 
