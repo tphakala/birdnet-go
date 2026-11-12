@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import MetricStrip from '$lib/desktop/features/system/components/MetricStrip.svelte';
   import SystemDetailsCard from '$lib/desktop/features/system/components/SystemDetailsCard.svelte';
   import StorageCard from '$lib/desktop/features/system/components/StorageCard.svelte';
@@ -473,14 +474,18 @@
   $effect(() => {
     componentActive.current = true;
 
-    // Load initial data, fetch active models, then load metrics history
-    loadAllData().then(async () => {
-      if (!componentActive.current) return;
-      await fetchActiveModels();
-      if (componentActive.current) {
-        loadMetricsHistory(componentActive);
-      }
-    });
+    // Load initial data, fetch active models, then load metrics history. Untracked: the
+    // loaders read state before their first await (Show All, the CSRF token), and a change
+    // to it must not rerun the whole initialization.
+    untrack(() =>
+      loadAllData().then(async () => {
+        if (!componentActive.current) return;
+        await fetchActiveModels();
+        if (componentActive.current) {
+          loadMetricsHistory(componentActive);
+        }
+      })
+    );
 
     return () => {
       componentActive.current = false;

@@ -1,4 +1,6 @@
+/* global $effect */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { flushSync } from 'svelte';
 
 vi.mock('$lib/utils/api', () => ({
   api: {
@@ -42,6 +44,25 @@ describe('createProcessList', () => {
 
     expect(mockGet.mock.calls.map(call => call[0])).toEqual([DEFAULT_URL, ALL_URL]);
     expect(list.showAll).toBe(true);
+  });
+
+  it('a load inside an effect does not rerun the effect when Show All changes', async () => {
+    mockGet.mockResolvedValue([proc(1, 'main')]);
+    const list = createProcessList();
+    let runs = 0;
+    const stop = $effect.root(() => {
+      $effect(() => {
+        runs++;
+        void list.load();
+      });
+    });
+    flushSync();
+
+    await list.setShowAll(true);
+    flushSync();
+
+    expect(runs).toBe(1);
+    stop();
   });
 
   it('a slower earlier response does not replace a newer one', async () => {

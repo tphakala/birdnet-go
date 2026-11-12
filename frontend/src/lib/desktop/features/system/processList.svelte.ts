@@ -10,6 +10,7 @@
  * the rows first, so rows from the other mode never stay under the new switch position.
  */
 
+import { untrack } from 'svelte';
 import { t } from '$lib/i18n';
 import { api, ApiError } from '$lib/utils/api';
 import type { ProcessInfo } from './types';
@@ -50,7 +51,9 @@ export function createProcessList(): ProcessList {
   async function load(): Promise<void> {
     const request = ++latestRequest;
     try {
-      const rows = await api.get<ProcessInfo[]>(showAll ? ALL_PROCESSES_URL : PROCESSES_URL);
+      // Untracked, so an effect that starts a load does not rerun on every Show All change
+      const url = untrack(() => showAll) ? ALL_PROCESSES_URL : PROCESSES_URL;
+      const rows = await api.get<ProcessInfo[]>(url);
       if (request !== latestRequest) return;
       processes = rows;
       error = null;
