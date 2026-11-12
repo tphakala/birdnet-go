@@ -1,6 +1,13 @@
 /** Horizontal text alignment of a table column; unset means left. */
 export type ColumnAlign = 'left' | 'center' | 'right';
 
+/** Tailwind text-align class for a column alignment; unset means left. */
+export function textAlignClass(align?: ColumnAlign): string {
+  if (align === 'right') return 'text-right';
+  if (align === 'center') return 'text-center';
+  return 'text-left';
+}
+
 export interface Column<T> {
   key: string;
   header: string;

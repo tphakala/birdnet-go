@@ -25,18 +25,8 @@
   - srOnly?: string - Screen reader text override
   - width?: string - Optional fixed column width (applied as inline style on <th>)
 -->
-<script lang="ts" module>
-  import type { ColumnAlign } from '$lib/desktop/components/data/DataTable.types';
-
-  /** Tailwind text-align class for a column alignment; unset means left. */
-  export function textAlignClass(align?: ColumnAlign): string {
-    if (align === 'right') return 'text-right';
-    if (align === 'center') return 'text-center';
-    return 'text-left';
-  }
-</script>
-
 <script lang="ts">
+  import { textAlignClass, type ColumnAlign } from '$lib/desktop/components/data/DataTable.types';
   import { ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';

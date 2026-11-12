@@ -32,8 +32,8 @@
   import { Search } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import type { Column } from './DataTable.types';
-  import SortableHeader, { textAlignClass } from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { textAlignClass, type Column } from './DataTable.types';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
 
@@ -168,6 +168,8 @@
   let displayCount = $derived(count ?? filteredData.length);
 
   let cappedBodyNeedsFocus = $derived(!!bodyMaxHeight && !columns.some(c => c.sortable));
+  // A focusable capped body is announced as a region named by the table title
+  let scrollRegionLabel = $derived(cappedBodyNeedsFocus && title ? title : undefined);
 
   // Fall back to the item reference (not the array index) so that re-sorting or
   // filtering reorders existing rows by identity instead of recreating DOM nodes.
@@ -359,8 +361,8 @@
         )}
         style:--table-body-max-height={bodyMaxHeight}
         tabindex={cappedBodyNeedsFocus ? 0 : undefined}
-        role={cappedBodyNeedsFocus && title ? 'region' : undefined}
-        aria-label={cappedBodyNeedsFocus && title ? title : undefined}
+        role={scrollRegionLabel ? 'region' : undefined}
+        aria-label={scrollRegionLabel}
       >
         {@render tableMarkup()}
       </div>
