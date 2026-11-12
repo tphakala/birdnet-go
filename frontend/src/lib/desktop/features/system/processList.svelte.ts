@@ -1,7 +1,7 @@
 /**
- * Process list for the System overview: the rows, whether the first answer has
- * arrived, the last failure, and the Show All switch, kept in one place so they
- * agree.
+ * Process list for the System overview: the rows, whether the newest load for the
+ * current Show All mode has answered (reset on every Show All change), the last
+ * failure, and the Show All switch, kept in one place so they agree.
  *
  * Every load takes a sequence number and only the answer to the latest request is
  * applied, so a periodic refresh that is still running for the other Show All mode
