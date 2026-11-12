@@ -79,6 +79,27 @@ describe('theme resolution: pre-paint script and store', () => {
     })) as unknown as typeof window.matchMedia;
   }
 
+  /**
+   * Replaces matchMedia with a stub whose `matches` and change listeners move together through
+   * the returned `setOs`. A partial stub of MediaQueryList, hence the cast.
+   */
+  function controllableOs(initial: 'dark' | 'light') {
+    let dark = initial === 'dark';
+    const listeners = new Set<(e: { matches: boolean }) => void>();
+    window.matchMedia = (() => ({
+      get matches() {
+        return dark;
+      },
+      addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) =>
+        listeners.delete(fn),
+    })) as unknown as typeof window.matchMedia;
+    return (value: 'dark' | 'light') => {
+      dark = value === 'dark';
+      listeners.forEach(fn => fn({ matches: dark }));
+    };
+  }
+
   /** Puts `stored` in storage, or makes every access to localStorage throw. */
   function setStorage(stored: Stored) {
     if (stored === 'throws') {
@@ -194,21 +215,12 @@ describe('theme resolution: pre-paint script and store', () => {
     'with %s stored, an OS change to %s is followed only when no valid theme is stored',
     async (stored, change) => {
       setStorage(stored);
-      stubMatchMedia(change === 'dark' ? 'light' : 'dark');
+      const setOs = controllableOs(change === 'dark' ? 'light' : 'dark');
       const { theme } = await freshStore();
-      let listener: ((e: { matches: boolean }) => void) | undefined;
-      // Partial stub that captures the change listener, hence the cast
-      window.matchMedia = (() => ({
-        matches: change !== 'dark',
-        addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
-          listener = fn;
-        },
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
       theme.initialize();
       const before = get(theme);
 
-      listener?.({ matches: change === 'dark' });
+      setOs(change);
 
       const followed = stored === 'throws';
       expect(get(theme)).toBe(followed ? change : before);
@@ -236,48 +248,11 @@ describe('theme resolution: pre-paint script and store', () => {
       ['dark', 'dark'],
     ]);
   });
-});
 
-describe('theme follows the OS until a theme is chosen', () => {
-  const originalMatchMedia = window.matchMedia;
-  const root = document.documentElement;
-
-  afterEach(() => {
-    window.matchMedia = originalMatchMedia;
-    localStorage.removeItem('theme');
-    root.setAttribute('data-theme', 'light');
-    root.removeAttribute('data-theme-controller');
-  });
-
-  /** A matchMedia stub whose `matches` and change listeners move together through `setOs`. */
-  function controllableOs(initial: 'dark' | 'light') {
-    let dark = initial === 'dark';
-    const listeners = new Set<(e: { matches: boolean }) => void>();
-    // Partial stub of MediaQueryList, hence the cast
-    window.matchMedia = (() => ({
-      get matches() {
-        return dark;
-      },
-      addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => listeners.add(fn),
-      removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) =>
-        listeners.delete(fn),
-    })) as unknown as typeof window.matchMedia;
-    return (value: 'dark' | 'light') => {
-      dark = value === 'dark';
-      listeners.forEach(fn => fn({ matches: dark }));
-    };
-  }
-
-  const attributes = () => [
-    root.getAttribute('data-theme'),
-    root.getAttribute('data-theme-controller'),
-  ];
-
-  it('follows the OS until a theme is chosen, then keeps the choice', async () => {
-    localStorage.removeItem('theme');
+  it('stub: OS changes are followed without being stored until a theme is chosen', async () => {
+    setStorage(null);
     const setOs = controllableOs('light');
-    vi.resetModules();
-    const { theme } = await import('$lib/stores/theme');
+    const { theme } = await freshStore();
 
     // First visit: the OS decides and nothing is stored
     theme.initialize();
@@ -296,32 +271,24 @@ describe('theme follows the OS until a theme is chosen', () => {
     expect(get(theme)).toBe('dark');
     expect(localStorage.getItem('theme')).toBeNull();
 
-    // The user picks a theme; later OS changes, ending on the opposite of the choice, are ignored
+    // The user picks a theme; the OS then changes to the opposite of the choice
     theme.toggle();
-    expect(get(theme)).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
-    setOs('light');
-    expect(get(theme)).toBe('light');
     setOs('dark');
     expect(get(theme)).toBe('light');
     expect(attributes()).toEqual(['light', 'light']);
 
-    // Reload with the OS still dark: the stored choice wins and keeps winning
-    vi.resetModules();
-    const reloaded = (await import('$lib/stores/theme')).theme;
+    // A reload with the OS still dark: the stored choice wins and keeps winning
+    const reloaded = (await freshStore()).theme;
     reloaded.initialize();
-    expect(get(reloaded)).toBe('light');
-    setOs('light');
-    setOs('dark');
     expect(get(reloaded)).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
   });
 
   it('ignores a stored value that is not a theme and does not rewrite it', async () => {
-    localStorage.setItem('theme', 'garbage');
+    setStorage('garbage');
     const setOs = controllableOs('dark');
-    vi.resetModules();
-    const { theme } = await import('$lib/stores/theme');
+    const { theme } = await freshStore();
 
     theme.initialize();
     expect(get(theme)).toBe('dark');

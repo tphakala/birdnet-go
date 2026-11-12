@@ -15,11 +15,11 @@ type Scheme = 'dark' | 'light';
 /** Emulates the OS colour scheme and resolves once a MediaQueryList has reported the change. */
 async function emulate(value: Scheme) {
   const list = window.matchMedia(PREFERS_DARK_QUERY);
+  // The emulated value only fires an event when it differs from the current one
+  if (list.matches === (value === 'dark')) return;
   const seen = new Promise<void>(resolve =>
     list.addEventListener('change', () => resolve(), { once: true })
   );
-  // The emulated value only fires an event when it differs from the current one
-  if (list.matches === (value === 'dark')) return;
   await cdp().send('Emulation.setEmulatedMedia', {
     features: [{ name: 'prefers-color-scheme', value }],
   });
@@ -35,7 +35,7 @@ afterEach(async () => {
   await cdp().send('Emulation.setEmulatedMedia', { features: [] });
 });
 
-it('follows real OS changes until a theme is chosen, then keeps the choice', async () => {
+it('real OS changes are followed until a theme is chosen', async () => {
   localStorage.removeItem('theme');
   await emulate('light');
   cleanup = theme.initialize();
