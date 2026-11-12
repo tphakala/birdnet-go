@@ -178,3 +178,47 @@ func TestWindowReader_AgreesWithTheLivePath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, liveTestWindows, seen)
 }
+
+func TestWindowGrid_RangeHelpers(t *testing.T) {
+	// Windows of 10 samples every 4 samples, at 100 Hz: window k covers
+	// [4k, 4k+10) and 1 second is 100 samples.
+	g := windowGrid{window: 10, hop: 4, rate: 100}
+	const span = 38 // windows 0 to 7
+
+	tests := []struct {
+		name      string
+		r         ClipRange
+		hasWindow bool
+		count     int
+	}{
+		{"matches windows 2 to 4", ClipRange{Start: 0.08, End: 0.26}, true, 3},
+		{"one sample short at the end drops the last window", ClipRange{Start: 0.08, End: 0.25}, true, 2},
+		{"one sample late at the start drops the first window", ClipRange{Start: 0.09, End: 0.26}, true, 2},
+		{"one window long between grid lines", ClipRange{Start: 0.02, End: 0.12}, false, 0},
+		{"shorter than a window", ClipRange{Start: 0, End: 0.09}, false, 0},
+		{"past the end of the clip", ClipRange{Start: 5, End: 9}, true, 0},
+		{"an end far past the clip is bounded by it", ClipRange{Start: 0, End: 1e300}, true, 8},
+		{"edges are rounded to the nearest sample", ClipRange{Start: 0.0799999999, End: 0.2600000001}, true, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.hasWindow, g.hasWindowIn(tt.r))
+			assert.Equal(t, tt.count, g.countIn(span, tt.r))
+		})
+	}
+
+	t.Run("a range with an edge that is not a finite number holds no window", func(t *testing.T) {
+		for name, r := range map[string]ClipRange{
+			"NaN start":         {Start: math.NaN(), End: 0.26},
+			"infinite end":      {Start: 0.08, End: math.Inf(1)},
+			"negative infinite": {Start: math.Inf(-1), End: 0.26},
+		} {
+			assert.False(t, g.hasWindowIn(r), name)
+		}
+	})
+
+	t.Run("a degenerate grid holds no window", func(t *testing.T) {
+		assert.False(t, windowGrid{window: 10, hop: 0, rate: 100}.hasWindowIn(ClipRange{Start: 0, End: 5}))
+		assert.Zero(t, windowGrid{window: 10, hop: 0, rate: 100}.countIn(span, ClipRange{Start: 0, End: 5}))
+	})
+}

@@ -43,6 +43,9 @@ const (
 	// an example.
 	msPerSecond = 1000
 
+	// pcmBytesPerSample is the size of one decoded sample in ProbeInfo.DecodedBytes.
+	pcmBytesPerSample = 2
+
 	// bytesPerFloat32 is the size of one stored vector component.
 	bytesPerFloat32 = 4
 )
@@ -100,6 +103,9 @@ type MarkRequest struct {
 	// OpenClip opens the clip of the detection. It is called once by the preflight
 	// and once by the learning job; every file it returns is closed.
 	OpenClip OpenClipFunc
+	// Range, when set, limits learning to the grid windows that lie wholly inside
+	// it and makes the mark a request to relearn the detection from that range.
+	Range *ClipRange
 }
 
 // Service learns noise examples from the clips of detections the user marks as
@@ -239,9 +245,10 @@ type checked struct {
 
 // check decides whether a detection can be marked, from the database, the loaded
 // model and the clip. It writes nothing and takes no lock. With probeClip false the
-// clip is not opened. The returned error is ErrNotFound or a read failure; a
+// clip is not opened. A non-nil rng is checked against the model's window grid and,
+// when the clip is probed, against the clip's length. The returned error is ErrNotFound or a read failure; a
 // refusal is in checked.reason.
-func (s *Service) check(ctx context.Context, id uint, open OpenClipFunc, probeClip bool) (checked, error) {
+func (s *Service) check(ctx context.Context, id uint, open OpenClipFunc, probeClip bool, rng *ClipRange) (checked, error) {
 	det, err := s.cfg.Detections.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrDetectionNotFound) {
@@ -267,12 +274,16 @@ func (s *Service) check(ctx context.Context, id uint, open OpenClipFunc, probeCl
 		out.reason = ReasonModelNotLoaded
 		return out, nil
 	}
+	if rng != nil && !s.gridFor(&spec).hasWindowIn(*rng) {
+		out.reason = ReasonRangeTooShort
+		return out, nil
+	}
 	if out.clipName == "" || open == nil {
 		out.reason = ReasonClipMissing
 		return out, nil
 	}
 	if probeClip {
-		if reason := s.probeClip(ctx, out.clipName, open, &spec); reason != "" {
+		if reason := s.probeClip(ctx, out.clipName, open, &spec, rng); reason != "" {
 			out.reason = reason
 			return out, nil
 		}
@@ -311,8 +322,9 @@ func (s *Service) hasEmbeddingModel(ctx context.Context, det *entities.Detection
 }
 
 // probeClip opens the clip, checks it can be decoded at a rate the model accepts
-// and within the decoded size bound, and closes it.
-func (s *Service) probeClip(ctx context.Context, clipName string, open OpenClipFunc, spec *classifier.ModelSpec) Reason {
+// and within the decoded size bound, that a range, when given, starts inside it,
+// and closes it.
+func (s *Service) probeClip(ctx context.Context, clipName string, open OpenClipFunc, spec *classifier.ModelSpec, rng *ClipRange) Reason {
 	f, err := open(clipName)
 	if err != nil {
 		return ReasonClipMissing
@@ -322,7 +334,18 @@ func (s *Service) probeClip(ctx context.Context, clipName string, open OpenClipF
 	if err != nil || info.SampleRate < spec.MinRawSampleRate || info.DecodedBytes > transcode.MaxDecodedPCMBytes {
 		return ReasonClipUnusable
 	}
+	if rng != nil && rng.Start >= probedSeconds(info) {
+		return ReasonRangeOutsideClip
+	}
 	return ""
+}
+
+// probedSeconds returns the length of a probed clip in seconds, from its declared
+// length: the probe reports the decoded size at 16 bits per channel sample, with
+// at least one channel and a positive rate.
+func probedSeconds(info transcode.ProbeInfo) float64 {
+	frames := info.DecodedBytes / (int64(info.Channels) * pcmBytesPerSample)
+	return float64(frames) / float64(info.SampleRate)
 }
 
 // isMarked reports whether review is a false positive with the no animal reason.
@@ -373,6 +396,14 @@ func (s *Service) spaceCounts(ctx context.Context, id uint, space string) (activ
 // again, so a concurrent mark, verdict change or delete cannot be missed. A
 // refused mark has written nothing.
 //
+// A mark with a Range is a request to relearn: it is not a repeat, however many
+// examples the detection has, unless a job for the detection is already in flight.
+// The job embeds only the grid windows wholly inside the range and, if it finds
+// candidates, replaces the detection's examples with them; if it finds none the
+// earlier examples stay. A range that holds no whole window is refused as
+// ReasonRangeTooShort, and one that starts at or after the end of the clip as
+// ReasonRangeOutsideClip.
+//
 // The error is a *RefusalError, ErrBusy, ErrNotFound or a failure to read or write.
 func (s *Service) Mark(ctx context.Context, req MarkRequest) (Status, error) {
 	// The model's lock is taken here, never under mu.
@@ -381,11 +412,11 @@ func (s *Service) Mark(ctx context.Context, req MarkRequest) (Status, error) {
 		space = ""
 	}
 
-	if st, done, err := s.markNoop(ctx, req.DetectionID, space, known); done || err != nil {
+	if st, done, err := s.markNoop(ctx, req.DetectionID, space, known, req.Range != nil); done || err != nil {
 		return st, err
 	}
 
-	pre, err := s.check(ctx, req.DetectionID, req.OpenClip, true)
+	pre, err := s.check(ctx, req.DetectionID, req.OpenClip, true, req.Range)
 	if err != nil {
 		return Status{}, err
 	}
@@ -404,7 +435,7 @@ func (s *Service) Mark(ctx context.Context, req MarkRequest) (Status, error) {
 	if refusal := s.busyLocked(req.DetectionID); refusal != nil {
 		return Status{}, refusal
 	}
-	_, review, attached, noop, err := s.markStateLocked(ctx, req.DetectionID, space, known)
+	_, review, attached, noop, err := s.markStateLocked(ctx, req.DetectionID, space, known, req.Range != nil)
 	if err != nil {
 		return Status{}, err
 	}
@@ -428,13 +459,23 @@ func (s *Service) Mark(ctx context.Context, req MarkRequest) (Status, error) {
 		return Status{}, fmt.Errorf("save review: %w", err)
 	}
 
-	j := &job{detectionID: req.DetectionID, clipName: pre.clipName, open: req.OpenClip, phase: phaseQueued}
+	j := &job{detectionID: req.DetectionID, clipName: pre.clipName, open: req.OpenClip, rng: copyRange(req.Range), phase: phaseQueued}
 	s.jobs[req.DetectionID] = j
 	s.queue <- j
 
 	return s.statusLocked(ctx, req.DetectionID, &entities.DetectionReview{
 		Verified: entities.VerificationFalsePositive, Reason: &reason,
 	}, space, pre)
+}
+
+// copyRange returns a copy of r, so a job and a status never share the caller's
+// value.
+func copyRange(r *ClipRange) *ClipRange {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	return &c
 }
 
 // busyLocked returns the refusal for a detection that cannot be marked now: the
@@ -451,10 +492,11 @@ func (s *Service) busyLocked(id uint) *RefusalError {
 }
 
 // markStateLocked reads what decides a mark: that the detection exists, its review
-// and the examples attached to it. noop is true when the detection is already
-// marked with attached examples in the current space (in any space while the space
-// is not known) or has a job in flight. The caller holds mu.
-func (s *Service) markStateLocked(ctx context.Context, id uint, space string, known bool) (det *entities.Detection, review *entities.DetectionReview, attached int, noop bool, err error) {
+// and the examples attached to it. noop is true when the detection has a job in
+// flight, or is already marked with attached examples in the current space (in any
+// space while the space is not known) and relearn is false: a mark with a range
+// relearns, so only a job in flight makes it a no-op. The caller holds mu.
+func (s *Service) markStateLocked(ctx context.Context, id uint, space string, known, relearn bool) (det *entities.Detection, review *entities.DetectionReview, attached int, noop bool, err error) {
 	det, err = s.cfg.Detections.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrDetectionNotFound) {
@@ -473,21 +515,22 @@ func (s *Service) markStateLocked(ctx context.Context, id uint, space string, kn
 	if !known {
 		attached = inactive
 	}
-	noop = s.jobs[id].active() || (isMarked(review) && attached > 0)
+	noop = s.jobs[id].active() || (!relearn && isMarked(review) && attached > 0)
 	return det, review, attached, noop, nil
 }
 
 // markNoop answers a repeat mark before any clip or model check: done is true with
-// the current status when the detection is already marked or has a job in flight.
+// the current status when the detection has a job in flight or, unless relearn is
+// set for a mark with a range, is already marked with examples.
 // It leaves a request that a clearing barrier or a delete guard would refuse to
 // the caller's main path.
-func (s *Service) markNoop(ctx context.Context, id uint, space string, known bool) (st Status, done bool, err error) {
+func (s *Service) markNoop(ctx context.Context, id uint, space string, known, relearn bool) (st Status, done bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.busyLocked(id) != nil {
 		return Status{}, false, nil
 	}
-	det, review, _, noop, err := s.markStateLocked(ctx, id, space, known)
+	det, review, _, noop, err := s.markStateLocked(ctx, id, space, known, relearn)
 	if err != nil || !noop {
 		return Status{}, false, err
 	}
@@ -578,13 +621,14 @@ func (s *Service) releaseDelete(detectionID uint) {
 
 // Status reports whether the detection can be marked and the state of learning.
 // It is an error only when the detection does not exist or cannot be read. open
-// is used to check the clip when no job is working on the detection.
+// is used to check the clip when no job is working on the detection. The status
+// carries the range of the latest job of this run, when it had one.
 func (s *Service) Status(ctx context.Context, detectionID uint, open OpenClipFunc) (Status, error) {
 	s.mu.Lock()
 	working := s.jobs[detectionID].active()
 	s.mu.Unlock()
 
-	pre, err := s.check(ctx, detectionID, open, !working)
+	pre, err := s.check(ctx, detectionID, open, !working, nil)
 	if err != nil {
 		return Status{}, err
 	}
@@ -621,6 +665,7 @@ func (s *Service) statusLocked(ctx context.Context, id uint, review *entities.De
 		st.State, st.FailureReason = j.reported()
 		st.WindowsDone = int(j.done.Load())
 		st.WindowsTotal = int(j.total.Load())
+		st.Range = copyRange(j.rng)
 	}
 	if j.active() {
 		return st, nil

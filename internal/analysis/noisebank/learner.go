@@ -33,6 +33,7 @@ type job struct {
 	detectionID uint
 	clipName    string
 	open        OpenClipFunc
+	rng         *ClipRange // the part of the clip to learn from, or nil for all of it
 
 	phase     jobPhase
 	cancelled bool               // a verdict change or Clear ended the job's right to store
@@ -225,8 +226,9 @@ func (s *Service) gridFor(spec *classifier.ModelSpec) windowGrid {
 	return windowGrid{window: window, hop: hop, rate: spec.EffectiveSampleRate()}
 }
 
-// learn embeds every window of the clip and returns the space of the job and the
-// best candidates. A non-empty reason means the job failed.
+// learn embeds every window of the clip, or only the windows wholly inside the
+// job's range, and returns the space of the job and the best candidates. A
+// non-empty reason means the job failed.
 func (s *Service) learn(ctx context.Context, j *job) (space string, found []candidate, reason Reason) {
 	spec, ok := s.cfg.Embedder.ModelSpecFor(modelID)
 	if !ok {
@@ -241,10 +243,24 @@ func (s *Service) learn(ctx context.Context, j *job) (space string, found []cand
 	if reason != "" {
 		return "", nil, reason
 	}
-	j.total.Store(int64(grid.count(src.SpanSamples())))
+	if j.rng != nil {
+		j.total.Store(int64(grid.countIn(src.SpanSamples(), *j.rng)))
+	} else {
+		j.total.Store(int64(grid.count(src.SpanSamples())))
+	}
+
+	// The range edges in samples, converted once for the whole job.
+	var rangeFrom, rangeTo int64
+	if j.rng != nil {
+		rangeFrom, rangeTo = grid.sampleSpan(*j.rng)
+	}
 
 	var best bestCandidates
 	err := forEachWindow(ctx, src, grid, func(offset int64, samples []float32) error {
+		// Only windows wholly inside the range are embedded.
+		if j.rng != nil && (offset < rangeFrom || offset+int64(grid.window) > rangeTo) {
+			return nil
+		}
 		pred, err := s.cfg.Embedder.PredictModelTimed(ctx, modelID, [][]float32{samples})
 		if err != nil {
 			return fmt.Errorf("embed window: %w", err)

@@ -2,6 +2,7 @@ package noisebank
 
 import (
 	"context"
+	"math"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 )
@@ -29,6 +30,55 @@ func (g windowGrid) count(span int64) int {
 		return 0
 	}
 	return int((span-int64(g.window))/int64(g.hop)) + 1
+}
+
+// maxRangeSamples bounds a range edge before it is converted to samples, so an
+// absurdly large request cannot overflow the conversion.
+const maxRangeSamples = 1 << 53
+
+// sampleSpan converts the ends of r to sample offsets at the grid's rate, rounded
+// to the nearest sample so an edge written in decimal seconds still lands on the
+// grid line it names.
+func (g windowGrid) sampleSpan(r ClipRange) (from, to int64) {
+	toSamples := func(seconds float64) int64 {
+		return int64(math.Round(math.Min(math.Max(seconds*float64(g.rate), 0), maxRangeSamples)))
+	}
+	return toSamples(r.Start), toSamples(r.End)
+}
+
+// isFinite reports whether x is neither NaN nor infinite.
+func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
+
+// firstOffsetFrom returns the first window start of the grid at or after sample
+// offset from.
+func (g windowGrid) firstOffsetFrom(from int64) int64 {
+	hop := int64(g.hop)
+	return (from + hop - 1) / hop * hop
+}
+
+// hasWindowIn reports whether the grid has a window wholly inside r, wherever the
+// clip ends. A range with an edge that is not a finite number holds none.
+func (g windowGrid) hasWindowIn(r ClipRange) bool {
+	if g.window <= 0 || g.hop <= 0 || g.rate <= 0 || !isFinite(r.Start) || !isFinite(r.End) {
+		return false
+	}
+	from, to := g.sampleSpan(r)
+	return g.firstOffsetFrom(from)+int64(g.window) <= to
+}
+
+// countIn returns the number of whole windows of a clip of span samples that lie
+// wholly inside r.
+func (g windowGrid) countIn(span int64, r ClipRange) int {
+	if g.window <= 0 || g.hop <= 0 || g.rate <= 0 {
+		return 0
+	}
+	from, to := g.sampleSpan(r)
+	first := g.firstOffsetFrom(from)
+	last := min(to, span) - int64(g.window)
+	if last < first {
+		return 0
+	}
+	return int((last-first)/int64(g.hop)) + 1
 }
 
 // offsetMs returns the start of the window at sample offset in milliseconds of

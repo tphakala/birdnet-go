@@ -167,6 +167,8 @@ A bat detection whose audio held no animal, such as rain, can be marked as noise
 
 A `reason` needs a `verified` value, and `no_animal` needs `false_positive`; anything else is 400 and nothing is written. `verified` stays one of `correct` and `false_positive`: a marked detection is a false positive whose `reason` is `no_animal`.
 
+To learn from a part of the clip, for example the stretch that holds the rain, add `noise_range` to a `no_animal` request: `"noise_range": {"start": 2.5, "end": 9}`. Both numbers are seconds of recording time from the first sample of the clip. A caller must send recording time: a player that plays a time-expanded copy of an ultrasonic clip (audible bats) has to convert its selection to recording time first, or the range lands on the wrong part of the clip. The model's windows stay on the grid anchored at the clip start, so the range does not move them; the job embeds only the windows that lie wholly inside the range, keeps the 4 with the highest raw score (at least 0.5), and replaces the examples learned from the detection before. A range in which no window reaches 0.5 ends in `no_candidates` and leaves the earlier examples in place. Unlike a mark without a range, a mark with one is not a repeat: it relearns an already learned detection, unless the detection's job is already queued or running, in which case it only reports that job. The clip and model checks below apply to it as well. `noise_range` is valid only with `reason: "no_animal"`, its start must not be negative and its end must be after its start; anything else, and a range that holds no whole model window (shorter than one window, or straddling the grid lines so that no window fits inside it), is 400 and nothing is written. A range that starts at or after the end of the clip is 409 `range_outside_clip`.
+
 A refused mark is 409 with the reason as `error_key`, and nothing has been written, not the review and not the comment:
 
 | `error_key`               | Meaning                                                                                                                                       |
@@ -180,6 +182,7 @@ A refused mark is 409 with the reason as `error_key`, and nothing has been writt
 | `clip_denoised`           | The clip was denoised when it was saved; its embeddings do not match what the model hears live                                                |
 | `bank_full`               | The embedding space already holds the most examples it may (2000), counting jobs that have not finished; clear the learned noise to make room |
 | `detection_being_deleted` | A delete of the detection is in progress                                                                                                      |
+| `range_outside_clip`      | The `noise_range` starts at or after the end of the clip                                                                                      |
 
 A full learning queue (`noise_queue_full`) and a clearing barrier (`clearing`) are 503 with `Retry-After`. A clip with no denoise marker, saved before the marker existed, can be learned from.
 
@@ -196,11 +199,12 @@ A full learning queue (`noise_queue_full`) and a clearing barrier (`clearing`) a
   "windowsDone": 37,
   "windowsTotal": 105,
   "failureReason": "",
-  "clipDenoised": false
+  "clipDenoised": false,
+  "range": { "start": 2.5, "end": 9 }
 }
 ```
 
-`unavailableReason` is one of the keys above. `state` is `idle`, `queued`, `running`, `learned` or `failed`. `marked` is the stored reason. `examples` and `inactiveExamples` count the examples still attached to this detection in the current embedding space and in other spaces (kept, never matched); they say nothing about the bank as a whole. They come from the database, while `state` and the window counts describe the job of this run, so after a restart a marked detection can show `idle` with its examples. `failureReason` of a failed job is one of `clip_missing`, `decode_failed`, `inference_failed`, `no_candidates` (no window scored 0.5 or more), `model_changed`, `timeout`, `cancelled` (the verdict changed or the learned noise was cleared first) or `store_failed`. A job runs one window at a time with a pause after each, so live analysis keeps at least half of the model's time.
+`unavailableReason` is one of the keys above. `state` is `idle`, `queued`, `running`, `learned` or `failed`. `marked` is the stored reason. `examples` and `inactiveExamples` count the examples still attached to this detection in the current embedding space and in other spaces (kept, never matched); they say nothing about the bank as a whole. They come from the database, while `state` and the window counts describe the job of this run, so after a restart a marked detection can show `idle` with its examples. `failureReason` of a failed job is one of `clip_missing`, `decode_failed`, `inference_failed`, `no_candidates` (no window scored 0.5 or more), `model_changed`, `timeout`, `cancelled` (the verdict changed or the learned noise was cleared first) or `store_failed`. `range` is the range of the latest job of this run and is left out when that job had none. A job runs one window at a time with a pause after each, so live analysis keeps at least half of the model's time.
 
 The examples belong to the bank, not to the detection. Deleting a detection or its clip removes nothing: the stored link is cleared and the examples keep matching. A delete is refused with 409 (`noise_learning_in_progress`) while the detection's learning job is queued or running, and a batch delete skips that ID. Examples of a deleted detection cannot be removed one by one; the way to remove them is the clear below.
 
@@ -224,6 +228,7 @@ A clear first stops the learning: marks are refused (`clearing`, 503 with `Retry
 
 ```sh
 birdnet-api post detections/<id>/review -d '{"verified":"false_positive","reason":"no_animal"}'
+birdnet-api post detections/<id>/review -d '{"verified":"false_positive","reason":"no_animal","noise_range":{"start":2.5,"end":9}}'
 birdnet-api get detections/<id>/noise
 birdnet-api get detections/noise-examples
 birdnet-api delete detections/noise-examples

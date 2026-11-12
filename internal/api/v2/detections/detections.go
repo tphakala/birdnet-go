@@ -222,6 +222,9 @@ type DetectionRequest struct {
 	IgnoreSpecies string  `json:"ignore_species,omitempty"`
 	Locked        bool    `json:"locked,omitempty"`
 	LockDetection *bool   `json:"lock_detection,omitempty"`
+	// NoiseRange limits what a noise mark learns to a range of the clip, in seconds
+	// of recording time from its start. It is valid only with reason "no_animal".
+	NoiseRange *noisebank.ClipRange `json:"noise_range,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response
@@ -1512,6 +1515,9 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 	if err := validateReviewReason(req.Reason, req.Verified); err != nil {
 		return c.HandleError(ctx, err, "Invalid review reason", http.StatusBadRequest)
 	}
+	if err := validateNoiseRange(req.NoiseRange, req.Reason); err != nil {
+		return c.HandleError(ctx, err, "Invalid noise range", http.StatusBadRequest)
+	}
 
 	// Marking a detection as noise comes first: it writes the review itself and a
 	// refusal has written nothing, so no comment or other change is left behind.
@@ -1522,7 +1528,7 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		if noise == nil {
 			return c.respondNoiseUnavailable(ctx)
 		}
-		status, markErr := noise.Mark(ctx.Request().Context(), noisebank.MarkRequest{DetectionID: note.ID, OpenClip: c.noiseClipOpener()})
+		status, markErr := noise.Mark(ctx.Request().Context(), noisebank.MarkRequest{DetectionID: note.ID, OpenClip: c.noiseClipOpener(), Range: req.NoiseRange})
 		if markErr != nil {
 			return c.respondNoiseMarkError(ctx, markErr)
 		}
