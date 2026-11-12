@@ -1125,6 +1125,29 @@ describe('Primary and accent content in every color scheme', () => {
     });
   }
 
+  // The shared focus ring (toggle, card, button, table search box) is --color-primary at full
+  // strength, so it must reach 3:1 (WCAG 1.4.11) on every surface a control sits on.
+  describe('Accessibility: primary focus ring', () => {
+    const FOCUS_RING_MIN_RATIO = 3;
+    const SURFACES = ['--color-base-100', '--color-base-200', '--color-base-300'];
+
+    for (const scheme of FIXED_SCHEMES) {
+      for (const theme of ['light', 'dark'] as const) {
+        it(`${scheme} ${theme}: primary ring is at least 3:1 on base-100, base-200 and base-300`, () => {
+          for (const surface of SURFACES) {
+            const ratio = getContrastRatio(
+              colorOf(scheme, theme, '--color-primary'),
+              colorOf(scheme, theme, surface)
+            );
+            expect(ratio, `${scheme} ${theme} primary on ${surface}`).toBeGreaterThanOrEqual(
+              FOCUS_RING_MIN_RATIO
+            );
+          }
+        });
+      }
+    }
+  });
+
   it('resolves color-mix against black and white', () => {
     expect(resolve('color-mix(in srgb, #ffffff 80%, black)')).toBe('#cccccc');
     expect(resolve('color-mix(in srgb, #000000 80%, white)')).toBe('#333333');

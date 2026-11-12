@@ -7,6 +7,11 @@ import ToggleField from './ToggleField.svelte';
 
 const VARIANTS = ['default', 'card', 'inline'] as const;
 
+// Classes that set element opacity, with or without a state variant (opacity-50, disabled:opacity-50)
+function opacityClasses(element: Element | null | undefined): string[] {
+  return [...(element?.classList ?? [])].filter(c => /(^|:)opacity-/.test(c));
+}
+
 describe('ToggleField', () => {
   it('renders with basic props', () => {
     render(ToggleField, {
@@ -105,47 +110,6 @@ describe('ToggleField', () => {
     });
 
     expect(screen.getByText('*')).toBeInTheDocument();
-  });
-
-  it('renders in disabled state', () => {
-    render(ToggleField, {
-      props: {
-        label: 'Test Toggle',
-        value: false,
-        onUpdate: vi.fn(),
-        disabled: true,
-      },
-    });
-
-    const toggle = screen.getByRole('checkbox');
-    expect(toggle).toBeDisabled();
-  });
-
-  it('does not call onUpdate when disabled', async () => {
-    const onUpdate = vi.fn();
-    const user = userEvent.setup();
-
-    render(ToggleField, {
-      props: {
-        label: 'Test Toggle',
-        value: false,
-        onUpdate,
-        disabled: true,
-      },
-    });
-
-    const toggle = screen.getByRole('checkbox');
-    expect(toggle).toBeDisabled();
-
-    // Attempt to click the disabled toggle
-    try {
-      await user.click(toggle);
-    } catch {
-      // Click may fail on disabled elements, which is expected
-    }
-
-    // Verify onUpdate was never called
-    expect(onUpdate).not.toHaveBeenCalled();
   });
 
   it('shows error message when provided', () => {
@@ -441,51 +405,64 @@ describe('ToggleField naming and description', () => {
 });
 
 describe('ToggleField disabled, required and error state', () => {
-  it.each(['default', 'card'] as const)(
-    'disables the switch and ignores clicks when disabled (%s)',
+  it.each(VARIANTS)(
+    'a disabled %s switch stays in the tab order, reports aria-disabled and ignores clicks',
     async variant => {
       const onUpdate = vi.fn();
+      const user = userEvent.setup();
       render(ToggleField, {
-        props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
+        props: {
+          label: 'Test Toggle',
+          description: 'Blocked until setup is done',
+          value: false,
+          onUpdate,
+          disabled: true,
+          required: true,
+          variant,
+        },
       });
       const toggle = screen.getByRole('checkbox');
 
-      expect(toggle).toBeDisabled();
-      await fireEvent.click(screen.getByText('Test Toggle'));
+      // aria-disabled instead of native disabled, so Tab still reaches it and reads its description
+      expect(toggle).not.toBeDisabled();
+      expect(toggle).toHaveAttribute('aria-disabled', 'true');
+      expect(toggle).toHaveAccessibleDescription('Blocked until setup is done');
+      // Not required while disabled, as a natively disabled field is not, so it never blocks a submit
+      expect(toggle).not.toBeRequired();
+      await user.tab();
+      expect(toggle).toHaveFocus();
 
+      // Label text, the switch itself and Space all leave it off and report nothing
+      await fireEvent.click(screen.getByText('Test Toggle'));
+      await fireEvent.click(toggle);
+      await user.keyboard(' ');
+      expect(toggle).not.toBeChecked();
       expect(onUpdate).not.toHaveBeenCalled();
     }
   );
 
-  it('a disabled inline switch stays in the tab order, reports aria-disabled and ignores clicks', async () => {
+  it('keeps focus when it becomes disabled and toggles again once enabled', async () => {
     const onUpdate = vi.fn();
     const user = userEvent.setup();
-    render(ToggleField, {
-      props: {
-        label: 'Test Toggle',
-        value: false,
-        onUpdate,
-        disabled: true,
-        required: true,
-        variant: 'inline',
-      },
-    });
+    const props = { label: 'Test Toggle', value: false, onUpdate };
+    const { rerender } = render(ToggleField, { props });
     const toggle = screen.getByRole('checkbox');
 
-    // aria-disabled instead of native disabled, so Tab still reaches it and reads its description
-    expect(toggle).not.toBeDisabled();
-    expect(toggle).toHaveAttribute('aria-disabled', 'true');
-    // Not required while disabled, as a natively disabled field is not, so it never blocks a submit
-    expect(toggle).not.toBeRequired();
     await user.tab();
     expect(toggle).toHaveFocus();
 
-    // Label text, the switch itself and Space all leave it off and report nothing
-    await fireEvent.click(screen.getByText('Test Toggle'));
-    await fireEvent.click(toggle);
+    await rerender({ ...props, disabled: true });
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle).toHaveFocus();
     await user.keyboard(' ');
-    expect(toggle).not.toBeChecked();
     expect(onUpdate).not.toHaveBeenCalled();
+    expect(toggle).not.toBeChecked();
+
+    await rerender({ ...props, disabled: false });
+    expect(toggle).not.toHaveAttribute('aria-disabled');
+    await user.keyboard(' ');
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenLastCalledWith(true);
   });
 
   it.each([false, true])(
@@ -523,33 +500,25 @@ describe('ToggleField disabled, required and error state', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it('the default variant dims its own switch when disabled', () => {
-    render(ToggleField, {
-      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
-    });
+  it.each(['default', 'inline'] as const)(
+    'a disabled %s switch dims through colour, not opacity, so its focus ring stays at full strength',
+    variant => {
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true, variant },
+      });
+      const toggle = screen.getByRole('checkbox');
 
-    expect(screen.getByRole('checkbox')).toHaveClass(
-      'disabled:opacity-50',
-      'disabled:cursor-not-allowed'
-    );
-  });
-
-  it('the inline variant dims its own switch while aria-disabled', () => {
-    render(ToggleField, {
-      props: {
-        label: 'Test Toggle',
-        value: false,
-        onUpdate: vi.fn(),
-        disabled: true,
-        variant: 'inline',
-      },
-    });
-
-    expect(screen.getByRole('checkbox')).toHaveClass(
-      'aria-disabled:opacity-50',
-      'aria-disabled:cursor-not-allowed'
-    );
-  });
+      expect(opacityClasses(toggle)).toEqual([]);
+      expect(toggle).toHaveClass('cursor-not-allowed');
+      expect(toggle).not.toHaveClass('cursor-pointer');
+      expect(toggle).not.toHaveClass('bg-[var(--color-base-content)]/60');
+      expect(toggle).not.toHaveClass('checked:bg-[var(--color-primary)]');
+      expect(toggle).toHaveClass(
+        'focus-visible:outline-2',
+        'focus-visible:outline-[var(--color-primary)]'
+      );
+    }
+  );
 
   it.each(VARIANTS)(
     '%s variant draws the required mark and error text in the error text token',
@@ -683,19 +652,36 @@ describe('ToggleField card variant', () => {
     expect(toggle).toHaveClass('focus-visible:outline-none');
   });
 
-  it('a disabled card shows only the not-allowed cursor, is dimmed once and ignores hover', () => {
+  it('a disabled card shows only the not-allowed cursor, ignores hover and is dimmed once', () => {
     render(ToggleField, {
       props: { ...baseProps, value: false, onUpdate: vi.fn(), disabled: true },
     });
     const toggle = screen.getByRole('checkbox');
     const card = toggle.closest('label');
+    const content = toggle.parentElement;
 
     // cn does not merge conflicting utilities, so a pointer class would win over not-allowed
-    expect(card).toHaveClass('opacity-50', 'cursor-not-allowed');
+    expect(card).toHaveClass('cursor-not-allowed');
     expect(card).not.toHaveClass('cursor-pointer');
     expect(card).not.toHaveClass('hover:border-[var(--border-300)]');
-    // The card is already dimmed, so the switch must not dim a second time
-    expect(toggle).not.toHaveClass('disabled:opacity-50');
+    expect(card).not.toHaveClass('border-[var(--border-200)]');
+    // The card frame draws the focus ring, so it dims through its border colour and never
+    // through element opacity, which would fade the ring
+    expect(opacityClasses(card)).toEqual([]);
+    // The content dims once, in a wrapper inside the frame that holds the icon, text and switch
+    expect(content).not.toBe(card);
+    expect(content).toHaveClass('opacity-50');
+    expect(card).toContainElement(content);
+    expect(content).toContainElement(card?.querySelector('svg') ?? null);
+    expect(content).toContainElement(screen.getByText('Test Toggle'));
+    expect(opacityClasses(toggle)).toEqual([]);
+  });
+
+  it('an enabled card keeps its content at full opacity', () => {
+    render(ToggleField, { props: { ...baseProps, value: false, onUpdate: vi.fn() } });
+    const toggle = screen.getByRole('checkbox');
+
+    expect(toggle.parentElement).not.toHaveClass('opacity-50');
   });
 
   it('an enabled card shows the pointer cursor and only an unchecked one reacts to hover', async () => {
@@ -720,7 +706,10 @@ describe('ToggleField card variant', () => {
         props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), variant },
       });
 
-      expect(screen.getByRole('checkbox')).toHaveClass('focus-visible:outline-2');
+      expect(screen.getByRole('checkbox')).toHaveClass(
+        'focus-visible:outline-2',
+        'focus-visible:outline-[var(--color-primary)]'
+      );
     }
   );
 });

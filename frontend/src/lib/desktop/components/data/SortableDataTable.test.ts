@@ -257,15 +257,28 @@ describe('SortableDataTable', () => {
     expect(body).toHaveClass('max-h-(--table-body-max-height)', 'overflow-y-auto');
   });
 
-  it('makes a height-capped body without sortable columns keyboard focusable', () => {
+  it.each([
+    ['an uncapped body', {}],
+    ['a height-capped body', { bodyMaxHeight: '20rem' }],
+    ['a resizable body', { resizable: true }],
+  ])('makes %s without sortable columns keyboard focusable, named by the title', (_name, extra) => {
     const plainColumns: Column<Row>[] = [
       { key: 'name', header: 'Name' },
       { key: 'score', header: 'Score' },
     ];
-    renderTable({ columns: plainColumns, title: 'Things', bodyMaxHeight: '20rem' });
+    renderTable({ columns: plainColumns, title: 'Things', ...extra });
     const body = screen.getByRole('region', { name: 'Things' });
     expect(body).toHaveAttribute('tabindex', '0');
     expect(body).toContainElement(document.querySelector('table'));
+  });
+
+  it('draws the search box focus ring at full strength so it reaches 3:1', () => {
+    renderTable({ title: 'Things', searchable: true, searchAccessor: (r: Row) => r.name });
+    const search = screen.getByRole('textbox');
+    const ringColours = [...search.classList].filter(c => c.startsWith('focus:ring-['));
+
+    expect(search).toHaveClass('focus:ring-2');
+    expect(ringColours).toEqual(['focus:ring-[var(--color-primary)]']);
   });
 
   it('keeps the capped body focusable without a title, as an unnamed scroll area', () => {

@@ -26,6 +26,7 @@ This folder contains **shared components** used across the application. Feature-
 - `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, EmptyState, and LoadingSpinner
   - Loading: a spinner with a visible label (`loadingLabel`, default "Loading") inside a `role="status"` region that stays in the document, so the label is announced when loading starts
   - Body: resizable box by default; with `resizable={false}`, `bodyMaxHeight` (a CSS length such as `min(70vh, 40rem)`) caps the body so long lists scroll under the sticky header
+  - A body with no sortable column is a tab stop so the arrow keys can scroll it, and a region named by `title`
   - `notice` snippet renders between the header bar and the body in every state (an `ErrorAlert` above rows that stay visible); `empty` snippet replaces the default `EmptyState`
   - Columns with `align: 'right'` right-align header and cells and use tabular figures; a `sortable` column without `sortValue` sorts by its raw field value
   - `SortableHeader.svelte` (in `ui/`) is the sortable `<th>` it uses; standalone tables can use it too. Its `align` prop puts the indicator before the label for right-aligned columns
@@ -83,7 +84,7 @@ This folder contains **shared components** used across the application. Feature-
 - `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `TextInput.svelte` - Text input field; `error` shows an alert and marks the input invalid, `reserveErrorSpace` keeps two lines for that alert so nothing below moves
-- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on); `variant="inline"` is a compact label-then-switch control for toolbars and table header bars, where the label text toggles too; its hit area reaches 0.375rem above and below the label, so keep that space free of other controls
+- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on); `variant="inline"` is a compact label-then-switch control for toolbars and table header bars, where the label text toggles too; its hit area reaches 0.375rem above and below the label, so keep that space free of other controls; `disabled` keeps the switch focusable (`aria-disabled`) in every variant, so a screen reader can still read why it is off
 
 ## Media
 

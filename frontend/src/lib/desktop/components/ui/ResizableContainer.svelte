@@ -9,6 +9,9 @@
   - maxHeight: Maximum height in pixels (default: 800)
   - defaultHeight: Initial height in pixels (default: 448, ~28rem)
   - className: Additional CSS classes for the scrollable container
+  - scrollTabStop: Make the scrollable container a tab stop so the arrow keys can scroll it
+    (default: false; leave off when content inside it can already hold focus)
+  - scrollLabel: Names the scrollable container as a region; used only with scrollTabStop
   - children: Content snippet
 
   @component
@@ -24,6 +27,8 @@
     maxHeight?: number;
     defaultHeight?: number;
     className?: string;
+    scrollTabStop?: boolean;
+    scrollLabel?: string;
     children?: Snippet;
   }
 
@@ -32,6 +37,8 @@
     maxHeight = 800,
     defaultHeight = 448,
     className = '',
+    scrollTabStop = false,
+    scrollLabel,
     children,
   }: Props = $props();
 
@@ -89,8 +96,16 @@
 </script>
 
 <div class="flex flex-col">
-  <!-- Scrollable content -->
-  <div class={cn('overflow-y-auto overflow-x-auto', className)} style:height="{height}px">
+  <!-- Scrollable content; a tab stop only on request, as focusable content inside it already
+       lets the arrow keys scroll it -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div
+    class={cn('overflow-y-auto overflow-x-auto', className)}
+    style:height="{height}px"
+    tabindex={scrollTabStop ? 0 : undefined}
+    role={scrollTabStop && scrollLabel ? 'region' : undefined}
+    aria-label={scrollTabStop && scrollLabel ? scrollLabel : undefined}
+  >
     {#if children}
       {@render children()}
     {/if}

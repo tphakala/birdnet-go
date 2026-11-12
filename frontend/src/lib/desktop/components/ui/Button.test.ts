@@ -7,6 +7,14 @@ import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations, getA11yReport, A11Y_CONFIGS } from '$lib/utils/axe-utils';
 import ButtonHarness from './Button.test.svelte';
 
+const VARIANTS = ['default', 'primary', 'success', 'warning', 'error', 'ghost'] as const;
+
+// Classes that set element opacity outside the native `disabled:` variant, which the browser
+// never focuses and so draws no ring for
+function opacityClasses(element: Element): string[] {
+  return [...element.classList].filter(c => c.includes('opacity-') && !c.startsWith('disabled:'));
+}
+
 describe('Button', () => {
   it('binds ref to the rendered button element', async () => {
     const holder: { el?: HTMLButtonElement | null } = {};
@@ -29,7 +37,9 @@ describe('Button', () => {
     expect(button).not.toBeDisabled();
     expect(button).toHaveFocus();
     expect(onclick).toHaveBeenCalledTimes(1);
-    expect(button).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:cursor-not-allowed');
+    expect(button).toHaveClass('cursor-not-allowed');
+    // Element opacity would fade the focus ring, so the dimming is in the colours
+    expect(opacityClasses(button)).toEqual([]);
     expect(button.className).not.toContain('aria-disabled:pointer-events-none');
   });
 
@@ -68,10 +78,51 @@ describe('Button', () => {
     expect(button.className).not.toContain('bg-[var(--color-primary)]/');
   });
 
-  it('fades a blocked button less while it has keyboard focus so its ring stays visible', () => {
-    render(ButtonHarness, { props: { 'aria-disabled': 'true' } });
+  it.each(VARIANTS)(
+    'dims a blocked %s button through its colours, with the ring at full strength and no press feedback',
+    variant => {
+      render(ButtonHarness, { props: { variant, 'aria-disabled': 'true' } });
+      const button = screen.getByRole('button');
 
-    expect(screen.getByRole('button')).toHaveClass('aria-disabled:focus-visible:opacity-75');
+      expect(button).toHaveClass(
+        'focus-visible:outline-2',
+        'focus-visible:outline-[var(--color-primary)]',
+        'focus-visible:outline-offset-2'
+      );
+      expect(opacityClasses(button)).toEqual([]);
+      expect(button.className).not.toMatch(/(^|\s)(hover|active):/);
+    }
+  );
+
+  it('drops the solid fill of a blocked primary button', () => {
+    render(ButtonHarness, { props: { variant: 'primary', 'aria-disabled': 'true' } });
+
+    expect(screen.getByRole('button')).not.toHaveClass('bg-[var(--color-primary)]');
+  });
+
+  it('keeps native opacity dimming for a natively disabled button', () => {
+    render(ButtonHarness, { props: { disabled: true } });
+
+    expect(screen.getByRole('button')).toHaveClass('disabled:opacity-50');
+  });
+
+  it('follows aria-disabled changes: the solid fill and hover style return when it is cleared', async () => {
+    const { rerender } = render(ButtonHarness, {
+      props: { variant: 'primary', 'aria-disabled': 'true' },
+    });
+    const button = screen.getByRole('button');
+    expect(button).not.toHaveClass('bg-[var(--color-primary)]');
+
+    for (const cleared of [undefined, 'false'] as const) {
+      await rerender({ variant: 'primary', 'aria-disabled': 'true' });
+      expect(button).not.toHaveClass('hover:bg-[var(--color-primary-hover)]');
+
+      await rerender({ variant: 'primary', 'aria-disabled': cleared });
+      expect(button).toHaveClass(
+        'bg-[var(--color-primary)]',
+        'hover:bg-[var(--color-primary-hover)]'
+      );
+    }
   });
 
   it('does not animate the focus ring colour', () => {
