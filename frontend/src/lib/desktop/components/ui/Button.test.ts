@@ -91,6 +91,18 @@ describe('Button', () => {
     }
   );
 
+  it.each(VARIANTS)('gives a blocked %s button none of its enabled colours', variant => {
+    const colours = (el: Element | null) =>
+      [...(el?.classList ?? [])].filter(c => /^(bg|text|border)-\[/.test(c));
+    const enabled = render(ButtonHarness, { props: { variant } }).container.querySelector('button');
+    const blocked = render(ButtonHarness, {
+      props: { variant, 'aria-disabled': 'true' },
+    }).container.querySelector('button');
+
+    expect(colours(blocked).length).toBeGreaterThan(0);
+    expect(colours(blocked).filter(c => colours(enabled).includes(c))).toEqual([]);
+  });
+
   it('treats a boolean aria-disabled like the string form', () => {
     render(ButtonHarness, { props: { variant: 'primary', 'aria-disabled': true } });
     const button = screen.getByRole('button');
