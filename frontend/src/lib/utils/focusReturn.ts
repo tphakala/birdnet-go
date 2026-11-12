@@ -5,7 +5,10 @@ const KEYBOARD_CLICK_DETAIL = 0;
 
 type FocusTarget = HTMLElement | SVGElement;
 
-/** Elements to try, in order, when the container goes away while it holds focus. */
+/**
+ * Elements to try, in order, when the container goes away while it holds focus. An empty
+ * list leaves focus where it is.
+ */
 export type FocusFallback = () => Array<HTMLElement | null | undefined>;
 
 /** Focus return for a dismissible container, created once per component instance. */
@@ -34,7 +37,8 @@ export interface FocusReturn {
  * holding focus from a focusin, or a pointerdown (Safari and iPadOS do not focus a
  * clicked button, so the user's place is where they pressed), until focus moves to
  * another element. Focus that left for nothing (a click on plain page content) still
- * counts, so removal then moves focus to the fallback, which is near where the user was.
+ * counts, so removal then runs the fallback. A fallback that returns an empty list leaves
+ * focus where it is.
  */
 export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
   let root: HTMLElement | undefined;

@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Allt OK",
+      "healthyOfTotal": "{healthy} av {total}",
       "needsAttention": "Kräver uppmärksamhet",
       "failing": "Misslyckas",
       "allClear": "Inga problem",

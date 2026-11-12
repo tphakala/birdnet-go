@@ -10,13 +10,16 @@
   - SortableHeader.svelte  for sortable column headers
   - ResizableContainer.svelte for the sticky-header scroll body
   - EmptyState.svelte      for the empty state
+  - LoadingSpinner.svelte  for the loading state
 
   Body modes: the default is a resizable box (ResizableContainer). With
   `resizable={false}` the table takes its natural height, and `bodyMaxHeight`
   caps it so a long list scrolls under a sticky header while a short list
   stays compact. The `notice` snippet renders between the header bar and the
   body in every state (an error above rows that are still shown), and the
-  `empty` snippet replaces the default empty state.
+  `empty` snippet replaces the default empty state. While `loading` is true the
+  body shows a spinner and a visible label (`loadingLabel`, default "Loading"),
+  announced through a status region that stays in the document.
 
   This component sorts and filters internally. Consumers declare columns with a
   `sortValue` accessor, a `searchAccessor`, and a `renderCell` snippet for custom
@@ -36,11 +39,14 @@
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
 
   interface Props {
     columns: Column<T>[];
     data: T[];
     loading?: boolean;
+    /** Text shown, and announced, while `loading` is true; defaults to the generic loading label. */
+    loadingLabel?: string;
 
     // Header bar
     title?: string;
@@ -92,6 +98,7 @@
     columns = [],
     data = [],
     loading = false,
+    loadingLabel,
     title,
     description,
     count,
@@ -268,14 +275,19 @@
   {/if}
 
   <!-- Body -->
+  <!-- The status region stays in the document so a screen reader announces the label when
+       loading starts; only its content appears and goes. -->
+  <div
+    role="status"
+    class={cn(loading && 'flex items-center justify-center gap-3 py-12 text-sm text-muted')}
+  >
+    {#if loading}
+      <LoadingSpinner size="md" aria-hidden="true" />
+      <span>{loadingLabel ?? t('common.loading')}</span>
+    {/if}
+  </div>
   {#if loading}
-    <div class="flex items-center justify-center py-12">
-      <div
-        class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-        role="status"
-        aria-label={t('common.loading')}
-      ></div>
-    </div>
+    <!-- The loading state above replaces the rows -->
   {:else if data.length === 0}
     {#if empty}
       {@render empty()}

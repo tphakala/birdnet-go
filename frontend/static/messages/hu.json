@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Minden rendben",
+      "healthyOfTotal": "{healthy} / {total}",
       "needsAttention": "Figyelmet igényel",
       "failing": "Sikertelen",
       "allClear": "Nincs probléma",

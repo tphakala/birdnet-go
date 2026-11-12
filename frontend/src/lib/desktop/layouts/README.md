@@ -58,7 +58,7 @@ The top bar, laid out as three sections:
 - `showSidebarToggle`, `showSearch`, `showAudioLevel`, `showNotifications`: show or hide the matching element (all default to true)
 - `debugMode`: passed to the notification bell
 - `securityEnabled`, `accessAllowed`: passed to the settings menu
-- `onSidebarToggle`, `onSearch`, `onNavigate`: callbacks; without `onNavigate` the header uses the navigation store
+- `onSidebarToggle` (required), `onSearch`, `onNavigate`: callbacks. The drawer state lives in `RootLayout`, which passes the toggle; without `onNavigate` the header uses the navigation store
 - `className`
 
 ### DesktopSidebar.svelte

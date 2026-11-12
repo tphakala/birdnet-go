@@ -23,7 +23,8 @@ This folder contains **shared components** used across the application. Feature-
 ## Data
 
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
-- `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, and EmptyState
+- `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, EmptyState, and LoadingSpinner
+  - Loading: a spinner with a visible label (`loadingLabel`, default "Loading") inside a `role="status"` region that stays in the document, so the label is announced when loading starts
   - Body: resizable box by default; with `resizable={false}`, `bodyMaxHeight` (a CSS length such as `min(70vh, 40rem)`) caps the body so long lists scroll under the sticky header
   - `notice` snippet renders between the header bar and the body in every state (an `ErrorAlert` above rows that stay visible); `empty` snippet replaces the default `EmptyState`
   - Columns with `align: 'right'` right-align header and cells and use tabular figures; a `sortable` column without `sortValue` sorts by its raw field value

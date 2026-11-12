@@ -427,6 +427,9 @@
 
   // Refresh slow-changing data not delivered by SSE (system info, disks, processes).
   // Uses recursive setTimeout (like startPollingFallback) to avoid overlapping requests.
+  // Each call is one loop that runs while its own `active` flag is set. A tick still awaiting
+  // its requests when the loop is stopped finds the flag cleared and does not re-arm, so a
+  // stopped loop never leaves a timer behind.
   function startSlowRefresh(active: { current: boolean }): void {
     async function tick(): Promise<void> {
       if (!active.current) return;
@@ -494,15 +497,17 @@
     };
   });
 
-  // Start/stop slow refresh based on active subpage.
-  // The active guard lives inside startSlowRefresh's tick(), so no need to
-  // check componentActive here; this avoids an ordering dependency between effects.
+  // Run one slow-refresh loop while the overview is shown. Each start gets its own flag,
+  // cleared before the timer is: a tick that is mid-request when the subpage changes (its timer
+  // has already fired, so there is nothing to clear) then ends instead of arming a second loop.
   $effect(() => {
-    if (currentSubpage === 'overview') {
-      startSlowRefresh(componentActive);
-    }
+    if (currentSubpage !== 'overview') return;
+
+    const loop = { current: true };
+    startSlowRefresh(loop);
 
     return () => {
+      loop.current = false;
       stopSlowRefresh();
     };
   });

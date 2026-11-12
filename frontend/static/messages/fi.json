@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Kaikki kunnossa",
+      "healthyOfTotal": "{healthy} / {total}",
       "needsAttention": "Vaatii huomiota",
       "failing": "Epäonnistuu",
       "allClear": "Ei ongelmia",

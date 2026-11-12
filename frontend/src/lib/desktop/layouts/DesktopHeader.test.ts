@@ -13,7 +13,12 @@ vi.mock('$lib/stores/sseNotifications', () => ({
 }));
 
 describe('DesktopHeader sidebar toggle', () => {
-  const quietProps = { showSearch: false, showAudioLevel: false, showNotifications: false };
+  const quietProps = {
+    showSearch: false,
+    showAudioLevel: false,
+    showNotifications: false,
+    onSidebarToggle: vi.fn(),
+  };
   const headerTest = createComponentTestFactory(DesktopHeader);
 
   it.each([

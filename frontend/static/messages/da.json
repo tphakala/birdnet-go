@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Alt OK",
+      "healthyOfTotal": "{healthy} af {total}",
       "needsAttention": "Kræver opmærksomhed",
       "failing": "Fejler",
       "allClear": "Alt klart",

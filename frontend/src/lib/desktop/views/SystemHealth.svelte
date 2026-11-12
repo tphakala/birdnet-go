@@ -442,7 +442,9 @@
           {#if report}
             {@const h = report.count_by_status.healthy ?? 0}
             {@const total = report.total_checks}
-            {h === total ? t('health.metricFooter.allPassing') : `${h} of ${total}`}
+            {h === total
+              ? t('health.metricFooter.allPassing')
+              : t('health.metricFooter.healthyOfTotal', { healthy: h, total })}
           {:else if running}
             {t('health.running')}
           {:else}

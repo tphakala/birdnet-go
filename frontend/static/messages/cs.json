@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Vše v pořádku",
+      "healthyOfTotal": "{healthy} z {total}",
       "needsAttention": "Vyžaduje pozornost",
       "failing": "Selhává",
       "allClear": "Bez problémů",

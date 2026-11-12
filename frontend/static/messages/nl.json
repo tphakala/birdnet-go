@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Alles in orde",
+      "healthyOfTotal": "{healthy} van {total}",
       "needsAttention": "Vereist aandacht",
       "failing": "Mislukt",
       "allClear": "Geen problemen",

@@ -4370,6 +4370,7 @@ export type TranslationKey =
   | 'health.summary.skipped'
   | 'health.summary.total'
   | 'health.metricFooter.allPassing'
+  | 'health.metricFooter.healthyOfTotal' // params: healthy, total
   | 'health.metricFooter.needsAttention'
   | 'health.metricFooter.failing'
   | 'health.metricFooter.allClear'
@@ -5012,6 +5013,7 @@ export type TranslationParams = {
   'analysis.gallery.preview.dialogNotice': { build: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
+  'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };
 };
 
 /**

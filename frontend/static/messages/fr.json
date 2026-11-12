@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Tout va bien",
+      "healthyOfTotal": "{healthy} sur {total}",
       "needsAttention": "Attention requise",
       "failing": "En échec",
       "allClear": "RAS",
