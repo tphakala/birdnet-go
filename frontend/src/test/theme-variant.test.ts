@@ -197,6 +197,7 @@ describe('theme resolution: pre-paint script and store', () => {
       stubMatchMedia(change === 'dark' ? 'light' : 'dark');
       const { theme } = await freshStore();
       let listener: ((e: { matches: boolean }) => void) | undefined;
+      // Partial stub that captures the change listener, hence the cast
       window.matchMedia = (() => ({
         matches: change !== 'dark',
         addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
