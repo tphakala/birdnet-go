@@ -488,15 +488,34 @@ describe('ToggleField disabled, required and error state', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it('a disabled inline switch stays off even when an ancestor stops the click', async () => {
+  it.each([false, true])(
+    'a disabled inline switch keeps its state (%s) even when an ancestor stops the click',
+    async value => {
+      const onUpdate = vi.fn();
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value, onUpdate, disabled: true, variant: 'inline' },
+      });
+      const toggle = screen.getByRole('checkbox');
+      // A native listener between the switch and the app root keeps the click from reaching the
+      // delegated handler that cancels it, so the change handler must hold the state itself
+      toggle.closest('label')?.addEventListener('click', event => event.stopPropagation());
+
+      await fireEvent.click(toggle);
+
+      expect(toggle).toHaveProperty('checked', value);
+      expect(onUpdate).not.toHaveBeenCalled();
+    }
+  );
+
+  it('a disabled inline switch stays off even when an ancestor stops the change', async () => {
     const onUpdate = vi.fn();
     render(ToggleField, {
       props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant: 'inline' },
     });
     const toggle = screen.getByRole('checkbox');
-    // A native listener between the switch and the app root keeps the click from reaching the
-    // delegated handler that cancels it, so the change handler must hold the state itself
-    toggle.closest('label')?.addEventListener('click', event => event.stopPropagation());
+    // With the change kept from the delegated handler that restores the state, only the
+    // cancelled click keeps the switch from flipping
+    toggle.closest('label')?.addEventListener('change', event => event.stopPropagation());
 
     await fireEvent.click(toggle);
 
