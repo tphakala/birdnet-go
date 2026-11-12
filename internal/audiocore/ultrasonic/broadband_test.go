@@ -45,7 +45,8 @@ const (
 	keptShareOfRaw   = 0.9
 	clickRawCVFloor  = 0.5
 	lowerBoundMargin = 0.5
-	// A loud steady band in the lower part of the guard band, as a rain bed is.
+	// A loud band without the slow envelope, low in the guard band. It keeps the
+	// guard band median high, as rain does.
 	loudGuardSeed      = 41
 	loudGuardLowHz     = 12000
 	loudGuardSpanHz    = 500
@@ -59,9 +60,17 @@ const (
 	weakCallFixture = "weak_bat_call_256k_s16le.pcm"
 	// A split whose continuity range would end above the Nyquist frequency of the bat rate.
 	highSplitHz = 110000
+	// Bytes per sample of the recordings.
+	bytesPerPCM16Sample = 2
 	// At this FFT size the continuity bands are narrower than one bin.
 	narrowContinuityFFT = 1024
 )
+
+// weakBurstSeedOffsets are added to the noise and tone seeds of the weak
+// bursts window. On every offset but the first, a continuity rule of six bands
+// from 0.7 of the split to the split, each counted as raised as soon as it is
+// above its median, takes more than a tenth of the CV.
+var weakBurstSeedOffsets = []uint64{0, 38, 45, 53, 56}
 
 // weakCallStarts are window starts into the weak call recording. They put the
 // calls at different places in the sub-frame grid.
@@ -115,7 +124,7 @@ func addToneBursts(x []float64, rate int, hz, every, lenSec, amp float64) {
 }
 
 // addToneBand adds tones between lowHz and lowHz+spanHz whose summed power
-// swings by depth with a slow envelope; depth 0 gives a steady band.
+// swings by depth with a slow envelope; depth 0 leaves the envelope out.
 func addToneBand(x []float64, rate int, lowHz, spanHz, amp, depth float64, seed uint64) {
 	rng := rand.New(rand.NewPCG(seed, seed+2))
 	freq := make([]float64, guardTones)
@@ -147,7 +156,7 @@ func readPCM16(t *testing.T, name string) []float32 {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", name))
 	require.NoError(t, err)
-	out := make([]float32, len(raw)/2)
+	out := make([]float32, len(raw)/bytesPerPCM16Sample)
 	_, err = dsppcm.BytesToFloat32(out, raw)
 	require.NoError(t, err)
 	return out
@@ -251,11 +260,12 @@ func TestBroadbandAdjustedCV_ContinuityRangeAboveNyquistKeepsGuardRule(t *testin
 	require.True(t, ok)
 	require.False(t, IsUnlikely(cv, cfg))
 
-	assert.Less(t, BroadbandAdjustedCV(samples, batRate, cfg, cv), lowerBoundMargin*cv)
+	assert.True(t, IsUnlikely(BroadbandAdjustedCV(samples, batRate, cfg, cv), cfg))
 }
 
-// With bands narrower than one bin the continuity rule is off; the guard band
-// rule must keep working.
+// With bands narrower than one bin the continuity rule is off: the guard band
+// rule keeps working, and band limited bursts keep their CV, which they would
+// lose to a continuity rule left on without bands.
 func TestBroadbandAdjustedCV_NarrowContinuityRangeKeepsGuardRule(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
@@ -264,8 +274,15 @@ func TestBroadbandAdjustedCV_NarrowContinuityRangeKeepsGuardRule(t *testing.T) {
 	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
 	require.True(t, ok)
 	require.False(t, IsUnlikely(cv, cfg))
+	assert.True(t, IsUnlikely(BroadbandAdjustedCV(samples, batRate, cfg, cv), cfg))
 
-	assert.Less(t, BroadbandAdjustedCV(samples, batRate, cfg, cv), lowerBoundMargin*cv)
+	x := whiteNoise(batSamples, noiseSigma, noiseSeed)
+	addToneBursts(x, batRate, burstHz, burstEverySec, burstLengthSec, burstAmplitude)
+	bursts := quantizeAll(x)
+	cv, ok = ComputeUSFrameCV(bursts, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg))
+	assert.InDelta(t, cv, BroadbandAdjustedCV(bursts, batRate, cfg, cv), 0)
 }
 
 func TestBroadbandAdjustedCV_BandLimitedBurstsKeepCV(t *testing.T) {
@@ -284,17 +301,19 @@ func TestBroadbandAdjustedCV_BandLimitedBurstsKeepCV(t *testing.T) {
 func TestBroadbandAdjustedCV_WeakBurstsOverGuardFluctuationStayActive(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
-	x := whiteNoise(batSamples, noiseSigma, noiseSeed)
-	addToneBand(x, batRate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, guardSeed)
-	addToneBursts(x, batRate, weakBurstHz, weakBurstEvery, weakBurstLenSec, weakBurstAmp)
-	samples := quantizeAll(x)
-	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
-	require.True(t, ok)
-	require.False(t, IsUnlikely(cv, cfg))
+	for _, offset := range weakBurstSeedOffsets {
+		x := whiteNoise(batSamples, noiseSigma, noiseSeed+offset)
+		addToneBand(x, batRate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, guardSeed+offset)
+		addToneBursts(x, batRate, weakBurstHz, weakBurstEvery, weakBurstLenSec, weakBurstAmp)
+		samples := quantizeAll(x)
+		cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+		require.True(t, ok)
+		require.False(t, IsUnlikely(cv, cfg))
 
-	got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
-	assert.GreaterOrEqual(t, got, keptShareOfRaw*cv)
-	assert.False(t, IsUnlikely(got, cfg))
+		got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
+		assert.GreaterOrEqual(t, got, keptShareOfRaw*cv, "seed offset %d", offset)
+		assert.False(t, IsUnlikely(got, cfg), "seed offset %d", offset)
+	}
 }
 
 func TestBroadbandAdjustedCV_FlatWindowIsNotExamined(t *testing.T) {
