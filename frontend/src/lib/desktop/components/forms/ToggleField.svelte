@@ -120,7 +120,7 @@
 
   // cn does not merge conflicting utilities, so the cursor, the border and the hover border are
   // chosen by state here instead of being overridden later. The frame draws the focus ring, so it
-  // never gets opacity; a disabled card dims its border and fill by alpha and its content
+  // never gets opacity; a disabled card dims its border by alpha and its content
   // wrapper by opacity.
   const CARD_BASE_CLASS =
     'block w-full rounded-lg border-2 p-4 text-left transition-[border-color,background-color] motion-reduce:transition-none has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-[var(--color-primary)] has-[input:focus-visible]:outline-offset-2';
