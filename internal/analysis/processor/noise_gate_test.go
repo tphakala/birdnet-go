@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"testing"
@@ -271,8 +272,6 @@ func TestShouldDiscardDetection_ReasonFollowsSources(t *testing.T) {
 		noiseSource = detection.UnlikelySourceNoiseExamples
 	)
 	p := &Processor{}
-	settings := &conf.Settings{}
-	settings.Bat.UltrasonicFilter = conf.UltrasonicFilterConfig{Enabled: true, DiscardUnlikely: true}
 
 	tests := []struct {
 		name    string
@@ -283,20 +282,25 @@ func TestShouldDiscardDetection_ReasonFollowsSources(t *testing.T) {
 		{"noise examples", noiseSource, "noise examples"},
 		{"both", cvSource | noiseSource, "ultrasonic filter and noise examples"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			item := PendingDetection{Source: mergeTestSource, Count: 1}
-			item.Detection.Result.Unlikely = true
-			item.Detection.Result.UnlikelySources = tt.sources
+	// Discard Unlikely alone decides: a noise tagged detection is dropped with the
+	// ultrasonic filter off as well, and nothing is dropped while it is off.
+	for _, filterEnabled := range []bool{true, false} {
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("%s, filter enabled %t", tt.name, filterEnabled), func(t *testing.T) {
+				settings := &conf.Settings{}
+				settings.Bat.UltrasonicFilter = conf.UltrasonicFilterConfig{Enabled: filterEnabled, DiscardUnlikely: true}
+				item := PendingDetection{Source: mergeTestSource, Count: 1}
+				item.Detection.Result.Unlikely = true
+				item.Detection.Result.UnlikelySources = tt.sources
 
-			discard, reason := p.shouldDiscardDetection(&item, settings, 1, nil, nil)
-			assert.True(t, discard)
-			assert.Equal(t, tt.want, reason)
+				discard, reason := p.shouldDiscardDetection(&item, settings, 1, nil, nil)
+				assert.True(t, discard)
+				assert.Equal(t, tt.want, reason)
 
-			settings.Bat.UltrasonicFilter.DiscardUnlikely = false
-			discard, _ = p.shouldDiscardDetection(&item, settings, 1, nil, nil)
-			assert.False(t, discard, "Discard Unlikely off keeps a tagged detection, whoever tagged it")
-			settings.Bat.UltrasonicFilter.DiscardUnlikely = true
-		})
+				settings.Bat.UltrasonicFilter.DiscardUnlikely = false
+				discard, _ = p.shouldDiscardDetection(&item, settings, 1, nil, nil)
+				assert.False(t, discard, "Discard Unlikely off keeps a tagged detection, whoever tagged it")
+			})
+		}
 	}
 }
