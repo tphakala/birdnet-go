@@ -19,7 +19,7 @@ vi.mock('$lib/utils/api', () => ({
 import { api, ApiError } from '$lib/utils/api';
 import { createProcessList } from './processList.svelte';
 import type { ProcessInfo } from './types';
-import { deferred } from '../../../../test/async-helpers';
+import { deferred, type Deferred } from '../../../../test/async-helpers';
 
 const mockGet = vi.mocked(api.get);
 
@@ -155,17 +155,53 @@ describe('createProcessList', () => {
     expect(list.error).toBe('errors.api.unknownError');
   });
 
-  it('loaded is false until the first response', async () => {
+  it.each([
+    ['succeeds', (pending: Deferred<ProcessInfo[]>) => pending.resolve([proc(1, 'main')])],
+    [
+      'fails',
+      (pending: Deferred<ProcessInfo[]>) =>
+        pending.reject(new ApiError('Service unavailable', 503, new Response())),
+    ],
+  ])('loaded is false until the first response, and true once it %s', async (_, settle) => {
     const pending = deferred<ProcessInfo[]>();
     mockGet.mockReturnValueOnce(pending.promise);
     const list = createProcessList();
 
     const load = list.load();
     expect(list.loaded).toBe(false);
-    pending.reject(new ApiError('Service unavailable', 503, new Response()));
+    settle(pending);
     await load;
 
     expect(list.loaded).toBe(true);
-    expect(list.processes).toEqual([]);
   });
+
+  it.each([
+    ['succeeds', (pending: Deferred<ProcessInfo[]>) => pending.resolve([])],
+    [
+      'fails',
+      (pending: Deferred<ProcessInfo[]>) =>
+        pending.reject(new ApiError('Service unavailable', 503, new Response())),
+    ],
+  ])(
+    'an answer for the old mode that %s does not end loading after a Show All switch',
+    async (_, settle) => {
+      const oldMode = deferred<ProcessInfo[]>();
+      const newMode = deferred<ProcessInfo[]>();
+      mockGet.mockReturnValueOnce(oldMode.promise).mockReturnValueOnce(newMode.promise);
+      const list = createProcessList();
+
+      const refresh = list.load();
+      const toggle = list.setShowAll(true);
+      settle(oldMode);
+      await refresh;
+
+      expect(list.loaded).toBe(false);
+      expect(list.error).toBeNull();
+
+      newMode.resolve([proc(1, 'main')]);
+      await toggle;
+      expect(list.loaded).toBe(true);
+      expect(list.processes.map(p => p.pid)).toEqual([1]);
+    }
+  );
 });
