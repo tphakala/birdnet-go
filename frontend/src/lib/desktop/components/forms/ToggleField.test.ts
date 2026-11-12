@@ -749,6 +749,26 @@ describe('ToggleField inline variant', () => {
     );
   });
 
+  it('inline variant draws its icon inside the label, before the label text', () => {
+    render(ToggleField, {
+      props: {
+        label: 'Show all',
+        value: false,
+        onUpdate: vi.fn(),
+        icon: ShieldCheck,
+        variant: 'inline',
+      },
+    });
+
+    const label = screen.getByRole('checkbox').closest('label');
+    const icon = label?.querySelector('svg');
+    expect(icon).not.toBeNull();
+    // Icon first, then the text: the icon precedes the text in document order
+    expect(icon?.compareDocumentPosition(screen.getByText('Show all'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
   it('inline variant keeps its description and error clear of the hit layer', () => {
     // The label's hit layer reaches 0.375rem (mt-1.5) below it; text inside that band would
     // toggle the switch when clicked
