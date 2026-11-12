@@ -1221,8 +1221,7 @@
         "uptime": "Temps de fonctionnement",
         "process": "Processus"
       },
-      "showAll": "Afficher tous les processus",
-      "showBirdnetOnly": "Afficher BirdNET uniquement"
+      "showAll": "Afficher tous les processus"
     },
     "errors": {
       "systemInfo": "Échec du chargement des informations système : {error}",

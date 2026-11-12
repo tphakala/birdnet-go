@@ -1221,8 +1221,7 @@
         "uptime": "Darbības laiks",
         "process": "Process"
       },
-      "showAll": "Rādīt visus procesus",
-      "showBirdnetOnly": "Rādīt tikai BirdNET"
+      "showAll": "Rādīt visus procesus"
     },
     "errors": {
       "systemInfo": "Neizdevās ielādēt sistēmas informāciju: {error}",

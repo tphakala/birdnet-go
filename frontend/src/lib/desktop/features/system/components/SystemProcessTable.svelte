@@ -1,219 +1,203 @@
-<script lang="ts">
-  import { t } from '$lib/i18n';
-  import { Terminal, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
-  import { formatBytesCompact, formatUptimeCompact } from '$lib/utils/formatters';
+<!--
+  SystemProcessTable.svelte
 
-  interface ProcessInfo {
-    pid: number;
-    name: string;
-    status: string;
-    cpu: number;
-    memory: number;
-    uptime: number;
+  The process list on the System overview, on the shared SortableDataTable: sortable
+  columns (CPU descending first), search by name or PID while Show All is on, a capped
+  body that scrolls under a sticky header, and loading, empty and failed as distinct
+  states. A failed refresh shows an alert with Retry above the rows already loaded.
+
+  Process states are the backend's own words, shown as they arrive; only their pill
+  color is chosen here (processStatusVariant).
+
+  @component
+-->
+<script lang="ts" module>
+  import type { StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
+
+  // Keyed on gopsutil's state words; 'sleeping' is the older spelling of 'sleep'
+  const STATUS_VARIANTS = new Map<string, StatusVariant>([
+    ['running', 'success'],
+    ['sleep', 'neutral'],
+    ['sleeping', 'neutral'],
+    ['idle', 'neutral'],
+    ['stop', 'warning'],
+    ['blocked', 'warning'],
+    ['wait', 'warning'],
+    ['lock', 'warning'],
+    ['zombie', 'error'],
+  ]);
+
+  /** Pill variant for a process state; any state not listed (daemon, unknown, '') is neutral. */
+  export function processStatusVariant(status: string): StatusVariant {
+    return STATUS_VARIANTS.get(status) ?? 'neutral';
   }
+</script>
+
+<script lang="ts">
+  import { Terminal } from '@lucide/svelte';
+  import { t } from '$lib/i18n';
+  import { formatBytesCompact, formatUptimeCompact } from '$lib/utils/formatters';
+  import SortableDataTable from '$lib/desktop/components/data/SortableDataTable.svelte';
+  import type { Column } from '$lib/desktop/components/data/DataTable.types';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
+  import Meter from '$lib/desktop/components/ui/Meter.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
+  import type { ProcessInfo } from '../types';
 
   interface Props {
     processes: ProcessInfo[];
+    /** True until the first answer arrives */
+    loading: boolean;
+    /** Why the latest load failed; the rows already loaded stay below it */
+    error: string | null;
     showAllProcesses: boolean;
+    /** Name shown for the app's own process, which the OS calls main */
     processName?: string;
-    onToggleShowAll: () => void;
+    onShowAllChange: (_value: boolean) => void;
+    onRetry: () => Promise<void>;
   }
 
   let {
     processes,
+    loading,
+    error,
     showAllProcesses,
     processName = 'BirdNET-Go',
-    onToggleShowAll,
+    onShowAllChange,
+    onRetry,
   }: Props = $props();
 
-  type SortColumn = 'name' | 'status' | 'cpu' | 'memory' | 'uptime';
+  /** Height cap of the scrolling body: most of the window, never taller than 40rem. */
+  const BODY_MAX_HEIGHT = 'min(70vh, 40rem)';
+  const MAX_CPU_PERCENT = 100;
 
-  let sortColumn = $state<SortColumn>('cpu');
-  let sortDirection = $state<'asc' | 'desc'>('desc');
+  let panel = $state<HTMLDivElement>();
+  // A Retry that succeeds removes the alert under the focus; the first sort button, or the
+  // panel itself, takes focus instead of the document body
+  const focusPanel = () => [panel?.querySelector<HTMLElement>('thead button'), panel];
 
-  let sortedProcesses = $derived.by(() => {
-    return [...processes].sort((a, b) => {
-      let cmp = 0;
-      switch (sortColumn) {
-        case 'name': {
-          const na = a.name === 'main' ? processName : a.name;
-          const nb = b.name === 'main' ? processName : b.name;
-          cmp = na.localeCompare(nb);
-          break;
-        }
-        case 'status':
-          cmp = a.status.localeCompare(b.status);
-          break;
-        case 'cpu':
-          cmp = a.cpu - b.cpu;
-          break;
-        case 'memory':
-          cmp = a.memory - b.memory;
-          break;
-        case 'uptime':
-          cmp = a.uptime - b.uptime;
-          break;
-      }
-      return sortDirection === 'asc' ? cmp : -cmp;
-    });
-  });
+  const displayName = (proc: ProcessInfo): string =>
+    proc.name === 'main' ? processName : proc.name;
 
-  function toggleSort(col: SortColumn): void {
-    if (sortColumn === col) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortColumn = col;
-      sortDirection = col === 'name' || col === 'status' ? 'asc' : 'desc';
-    }
-  }
+  // Clamped to 0-100 as the backend normalizes it; a missing or NaN value reads as 0
+  const cpuPercent = (proc: ProcessInfo): number =>
+    Number.isFinite(proc.cpu) ? Math.max(0, Math.min(proc.cpu, MAX_CPU_PERCENT)) : 0;
 
-  function statusBadgeClass(status: string): string {
-    switch (status) {
-      case 'running':
-        return 'badge-status-success';
-      case 'sleeping':
-      case 'sleep':
-        return 'badge-status-warning';
-      case 'zombie':
-        return 'badge-status-error';
-      default:
-        return 'bg-slate-500/15 text-muted';
-    }
-  }
-
-  const columns: { key: SortColumn; label: string }[] = [
-    { key: 'name', label: 'system.processInfo.headers.process' },
-    { key: 'status', label: 'system.processInfo.headers.status' },
-    { key: 'cpu', label: 'system.processInfo.headers.cpu' },
-    { key: 'memory', label: 'system.processInfo.headers.memory' },
-    { key: 'uptime', label: 'system.processInfo.headers.uptime' },
-  ];
+  let columns = $derived<Column<ProcessInfo>[]>([
+    {
+      key: 'name',
+      header: t('system.processInfo.headers.process'),
+      sortable: true,
+      sortValue: displayName,
+      className: 'min-w-40',
+    },
+    {
+      key: 'status',
+      header: t('system.processInfo.headers.status'),
+      sortable: true,
+    },
+    {
+      key: 'cpu',
+      header: t('system.processInfo.headers.cpu'),
+      sortable: true,
+      sortValue: cpuPercent,
+      align: 'right',
+      defaultDirection: 'desc',
+    },
+    {
+      key: 'memory',
+      header: t('system.processInfo.headers.memory'),
+      sortable: true,
+      align: 'right',
+      defaultDirection: 'desc',
+    },
+    {
+      key: 'uptime',
+      header: t('system.processInfo.headers.uptime'),
+      sortable: true,
+      align: 'right',
+      defaultDirection: 'desc',
+    },
+  ]);
 </script>
 
-<div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-  <div class="flex items-center justify-between mb-3">
-    <div class="flex items-center gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
-        {t('system.processInfo.title')}
-      </h3>
-      <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
-      >
-        {processes.length}
-      </span>
-    </div>
-    <div class="flex items-center gap-2 cursor-pointer">
-      <span class="text-xs text-muted">{t('system.processInfo.showAll')}</span>
-      <button
-        type="button"
-        class="relative w-8 h-4 rounded-full transition-colors cursor-pointer {showAllProcesses
-          ? 'bg-primary'
-          : 'bg-[var(--surface-300)]'}"
-        role="switch"
-        aria-checked={showAllProcesses}
-        aria-label={t('system.processInfo.showAll')}
-        onclick={onToggleShowAll}
-      >
-        <div
-          class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform"
-          style:transform="translateX({showAllProcesses ? '18px' : '2px'})"
-        ></div>
-      </button>
-    </div>
-  </div>
+{#snippet notice()}
+  {#if error}
+    <ErrorAlert
+      message={t('system.errors.processes', { error })}
+      {onRetry}
+      focusFallback={focusPanel}
+    />
+  {/if}
+{/snippet}
 
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-[var(--border-100)]">
-          {#each columns as col (col.key)}
-            <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-              role="columnheader"
-              tabindex="0"
-              aria-sort={sortColumn === col.key
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              onclick={() => toggleSort(col.key)}
-              onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort(col.key);
-                }
-              }}
-            >
-              <div class="flex items-center gap-1">
-                {t(col.label)}
-                {#if sortColumn === col.key}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
-            </th>
-          {/each}
-        </tr>
-      </thead>
-      <tbody>
-        {#each sortedProcesses as proc (proc.pid)}
-          {@const cpuPct = Number.isFinite(proc.cpu) ? Math.max(0, Math.min(proc.cpu, 100)) : 0}
-          <!-- cpuPct clamps finite values to 0-100% (matching the backend
-               normalization) and guards non-finite values so a missing/NaN cpu
-               renders 0.0% instead of NaN%. -->
-          <tr
-            class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
-          >
-            <td class="py-2 px-3">
-              <div class="flex items-center gap-2">
-                <Terminal class="w-3.5 h-3.5 shrink-0 text-muted" />
-                <div>
-                  <div class="font-medium text-sm">
-                    {proc.name === 'main' ? processName : proc.name}
-                  </div>
-                  <div class="text-[10px] font-mono tabular-nums text-muted">
-                    {t('system.processInfo.headers.pid')}
-                    {proc.pid}
-                  </div>
-                </div>
-              </div>
-            </td>
-            <td class="py-2 px-3">
-              <span
-                class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium {statusBadgeClass(
-                  proc.status
-                )}"
-              >
-                {proc.status}
-              </span>
-            </td>
-            <td class="py-2 px-3">
-              <div class="flex items-center gap-2">
-                <div class="w-12 h-1.5 rounded-full overflow-hidden bg-[var(--surface-300)]">
-                  <div
-                    class="h-full rounded-full bg-primary transition-[width] duration-600 ease-out"
-                    style:width="{cpuPct}%"
-                  ></div>
-                </div>
-                <span class="font-mono tabular-nums text-xs">{cpuPct.toFixed(1)}%</span>
-              </div>
-            </td>
-            <td class="py-2 px-3">
-              <span class="font-mono tabular-nums text-xs font-medium"
-                >{formatBytesCompact(proc.memory)}</span
-              >
-            </td>
-            <td class="py-2 px-3">
-              <span class="font-mono tabular-nums text-xs">{formatUptimeCompact(proc.uptime)}</span>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
+<!-- With a failed load and no rows, the alert alone explains the empty table -->
+{#snippet noEmptyState()}{/snippet}
+
+{#snippet showAllToggle()}
+  <ToggleField
+    variant="inline"
+    label={t('system.processInfo.showAll')}
+    value={showAllProcesses}
+    onUpdate={onShowAllChange}
+  />
+{/snippet}
+
+{#snippet cell({ column, item }: { column: Column<ProcessInfo>; item: ProcessInfo })}
+  {#if column.key === 'name'}
+    <div class="flex items-center gap-2">
+      <Terminal class="size-3.5 shrink-0 text-muted" aria-hidden="true" />
+      <div class="min-w-0">
+        <div class="font-medium wrap-anywhere">{displayName(item)}</div>
+        <div class="text-[0.6875rem] font-mono tabular-nums text-muted">
+          {t('system.processInfo.headers.pid')}
+          {item.pid}
+        </div>
+      </div>
+    </div>
+  {:else if column.key === 'status'}
+    <StatusPill variant={processStatusVariant(item.status)} label={item.status} size="xs" />
+  {:else if column.key === 'cpu'}
+    {@const cpu = cpuPercent(item)}
+    <!-- The value is printed beside the bar, so the bar is hidden from assistive technology -->
+    <div class="flex items-center justify-end gap-2">
+      <Meter
+        value={cpu}
+        size="xs"
+        tone="series-1"
+        label={t('system.processInfo.headers.cpu')}
+        className="w-12 shrink-0"
+        aria-hidden="true"
+      />
+      <span class="w-12 text-right font-mono text-xs whitespace-nowrap">{cpu.toFixed(1)}%</span>
+    </div>
+  {:else if column.key === 'memory'}
+    <span class="font-mono text-xs font-medium whitespace-nowrap"
+      >{formatBytesCompact(item.memory)}</span
+    >
+  {:else if column.key === 'uptime'}
+    <span class="font-mono text-xs whitespace-nowrap">{formatUptimeCompact(item.uptime)}</span>
+  {/if}
+{/snippet}
+
+<div bind:this={panel} tabindex="-1" class="outline-none">
+  <SortableDataTable
+    {columns}
+    data={processes}
+    {loading}
+    title={t('system.processInfo.title')}
+    count={processes.length}
+    searchable={showAllProcesses}
+    searchAccessor={proc => `${displayName(proc)} ${proc.pid}`}
+    defaultSortKey="cpu"
+    keyFn={proc => proc.pid}
+    resizable={false}
+    bodyMaxHeight={BODY_MAX_HEIGHT}
+    emptyTitle={t('system.processInfo.noProcesses')}
+    {notice}
+    empty={error ? noEmptyState : undefined}
+    headerActions={showAllToggle}
+    renderCell={cell}
+  />
 </div>

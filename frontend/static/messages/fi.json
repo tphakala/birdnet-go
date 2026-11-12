@@ -1221,8 +1221,7 @@
         "uptime": "Käynnissäoloaika",
         "process": "Prosessi"
       },
-      "showAll": "Näytä kaikki prosessit",
-      "showBirdnetOnly": "Näytä vain BirdNET"
+      "showAll": "Näytä kaikki prosessit"
     },
     "errors": {
       "systemInfo": "Järjestelmätietojen lataus epäonnistui: {error}",

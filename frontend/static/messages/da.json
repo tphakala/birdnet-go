@@ -1221,8 +1221,7 @@
         "uptime": "Oppetid",
         "process": "Proces"
       },
-      "showAll": "Vis alle processer",
-      "showBirdnetOnly": "Vis kun BirdNET"
+      "showAll": "Vis alle processer"
     },
     "errors": {
       "systemInfo": "Kunne ikke indlæse systeminformation: {error}",

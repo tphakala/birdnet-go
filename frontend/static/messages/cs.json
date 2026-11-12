@@ -1221,8 +1221,7 @@
         "uptime": "Doba provozu",
         "process": "Proces"
       },
-      "showAll": "Zobrazit všechny procesy",
-      "showBirdnetOnly": "Zobrazit pouze BirdNET"
+      "showAll": "Zobrazit všechny procesy"
     },
     "errors": {
       "systemInfo": "Nepodařilo se načíst informace o systému: {error}",
