@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 const (
@@ -276,6 +277,9 @@ func TestMergePendingHit_UnlikelyOnlyWhenEveryHitIsFlat(t *testing.T) {
 				det := detectionFor(mergeTestScientific, mergeTestCommon)
 				det.Result.Confidence = h.confidence
 				det.Result.Unlikely = h.unlikely
+				if h.unlikely {
+					det.Result.UnlikelySources = detection.UnlikelySourceUltrasonicCV
+				}
 				det.Result.UltrasonicCV = h.cv
 				det.Result.UltrasonicCVThreshold = h.threshold
 				p.mergePendingHit(&item, det, endAt, mergeTestWindow)
@@ -285,6 +289,77 @@ func TestMergePendingHit_UnlikelyOnlyWhenEveryHitIsFlat(t *testing.T) {
 			assert.Equal(t, tt.wantUnlikely, got.Unlikely)
 			assert.InDelta(t, tt.wantCV, got.UltrasonicCV, mergeTestEpsilon)
 			assert.InDelta(t, tt.wantThresh, got.UltrasonicCVThreshold, mergeTestEpsilon)
+			wantSources := detection.UnlikelySource(0)
+			if tt.wantUnlikely {
+				wantSources = detection.UnlikelySourceUltrasonicCV
+			}
+			assert.Equal(t, wantSources, got.UnlikelySources, "the source bits survive only while the detection is unlikely")
 		})
 	}
+}
+
+// TestMergeUnlikelyVerdict_Sources pins the source composition of the merge in both
+// arrival orders: the detection stays unlikely only while both sides are unlikely,
+// the bits of both sides are kept, and the CV and its threshold come only from a
+// side that carries the CV bit. otherSource stands for a validator other than the
+// CV filter, whose windows carry no CV.
+func TestMergeUnlikelyVerdict_Sources(t *testing.T) {
+	const (
+		cvSource    = detection.UnlikelySourceUltrasonicCV
+		otherSource = detection.UnlikelySource(1 << 1)
+		threshold   = 0.15
+	)
+	cvWindow := func(cv, judgedAt float64) unlikelyVerdict {
+		return unlikelyVerdict{unlikely: true, sources: cvSource, cv: cv, cvThreshold: judgedAt}
+	}
+	otherWindow := unlikelyVerdict{unlikely: true, sources: otherSource}
+	active := unlikelyVerdict{}
+
+	tests := []struct {
+		name string
+		a, b unlikelyVerdict
+		want unlikelyVerdict
+	}{
+		{"cv with cv keeps the higher cv and its threshold", cvWindow(0.03, 0.10), cvWindow(0.08, threshold), cvWindow(0.08, threshold)},
+		{"cv with other keeps both bits and the cv side values", cvWindow(0.04, threshold), otherWindow, unlikelyVerdict{true, cvSource | otherSource, 0.04, threshold}},
+		{"other with other has no cv", otherWindow, otherWindow, otherWindow},
+		{"an untagged window clears the bits and the cv", active, cvWindow(0.04, threshold), active},
+	}
+	for _, tt := range tests {
+		for _, order := range []struct {
+			name      string
+			prev, hit unlikelyVerdict
+		}{{"a then b", tt.a, tt.b}, {"b then a", tt.b, tt.a}} {
+			t.Run(tt.name+"/"+order.name, func(t *testing.T) {
+				// Seeded with stale verdict values: every row must overwrite or clear them.
+				merged := detection.Result{
+					Confidence:            0.9,
+					UnlikelySources:       cvSource | otherSource,
+					UltrasonicCV:          0.5,
+					UltrasonicCVThreshold: 0.5,
+				}
+				mergeUnlikelyVerdict(&merged, order.prev, order.hit)
+				assert.Equal(t, tt.want, verdictOf(&merged))
+				assert.InDelta(t, 0.9, merged.Confidence, mergeTestEpsilon, "only the verdict fields change")
+			})
+		}
+	}
+}
+
+// TestMergeUnlikelyVerdict_TieReportsLaterThreshold pins that two windows with the
+// same CV report the threshold of the later one, so the order of arrival decides
+// which threshold is shown but never the CV.
+func TestMergeUnlikelyVerdict_TieReportsLaterThreshold(t *testing.T) {
+	const cv = 0.08
+	first := unlikelyVerdict{unlikely: true, sources: detection.UnlikelySourceUltrasonicCV, cv: cv, cvThreshold: 0.10}
+	second := unlikelyVerdict{unlikely: true, sources: detection.UnlikelySourceUltrasonicCV, cv: cv, cvThreshold: 0.15}
+
+	var merged detection.Result
+	mergeUnlikelyVerdict(&merged, first, second)
+	assert.InDelta(t, cv, merged.UltrasonicCV, mergeTestEpsilon)
+	assert.InDelta(t, 0.15, merged.UltrasonicCVThreshold, mergeTestEpsilon, "second arrival is the later window")
+
+	mergeUnlikelyVerdict(&merged, second, first)
+	assert.InDelta(t, cv, merged.UltrasonicCV, mergeTestEpsilon)
+	assert.InDelta(t, 0.10, merged.UltrasonicCVThreshold, mergeTestEpsilon, "first window arriving last is the later window")
 }

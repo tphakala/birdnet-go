@@ -425,10 +425,10 @@ func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 		a.DetectionCtx.recordClipDenoise(ctx, a.clipMarks, a.Result.ClipName)
 	}
 
-	// Add an explanatory comment when the ultrasonic validation filter tagged this detection as unlikely.
+	// Add an explanatory comment when a validator tagged this detection as unlikely.
 	if a.Result.Unlikely && a.Result.ID != 0 && a.Repo != nil {
 		locale := a.Settings.Realtime.Dashboard.Locale
-		comment := formatUnlikelyComment(locale, a.Result.UltrasonicCV, a.Result.UltrasonicCVThreshold)
+		comment := formatUnlikelyComment(locale, &a.Result)
 		noteID := strconv.FormatUint(uint64(a.Result.ID), 10)
 		if err := a.Repo.AddComment(ctx, noteID, comment); err != nil {
 			GetLogger().Warn("failed to add unlikely comment to detection",

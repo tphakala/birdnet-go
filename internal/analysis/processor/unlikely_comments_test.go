@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // frontendStaticDir is the frontend static tree, relative to this package, whose
@@ -36,9 +37,15 @@ func TestFormatUnlikelyComment_EveryLocale(t *testing.T) {
 		cv        = 0.123
 		threshold = 0.15
 	)
+	result := detection.Result{
+		Unlikely:              true,
+		UnlikelySources:       detection.UnlikelySourceUltrasonicCV,
+		UltrasonicCV:          cv,
+		UltrasonicCVThreshold: threshold,
+	}
 	for locale := range unlikelyCommentTemplates {
 		t.Run(locale, func(t *testing.T) {
-			got := formatUnlikelyComment(locale, cv, threshold)
+			got := formatUnlikelyComment(locale, &result)
 			assert.Contains(t, got, "0.123")
 			assert.Contains(t, got, "0.15")
 			assert.NotContains(t, got, "%!")
@@ -47,6 +54,6 @@ func TestFormatUnlikelyComment_EveryLocale(t *testing.T) {
 	}
 
 	assert.Equal(t,
-		formatUnlikelyComment(defaultUnlikelyCommentLocale, cv, threshold),
-		formatUnlikelyComment("xx", cv, threshold))
+		formatUnlikelyComment(defaultUnlikelyCommentLocale, &result),
+		formatUnlikelyComment("xx", &result))
 }
