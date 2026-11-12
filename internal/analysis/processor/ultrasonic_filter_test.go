@@ -252,9 +252,10 @@ func TestApplyUltrasonicFilter_UnknownModelIsNotFiltered(t *testing.T) {
 }
 
 // TestFlushPendingDetections_DiscardUnlikely pins the optional discard of a bat
-// detection still tagged unlikely at flush: it needs the filter, the setting and
-// the tag. Each step publishes its settings after the item is already pending, so
-// a change applies to pending items. The steps run in order on one processor.
+// detection still tagged unlikely at flush: it needs the setting and the tag,
+// whether or not the ultrasonic filter is enabled. Each step publishes its
+// settings after the item is already pending, so a change applies to pending
+// items. The steps run in order on one processor.
 func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 	p := mergeTestProcessor(t)
 	// An approved detection enqueues its actions; the queue is never started, so it
@@ -271,7 +272,8 @@ func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
 		{"gate on, tagged", true, true, true, 0},
 		{"gate off, tagged", true, false, true, 1},
 		{"gate on, not tagged", true, true, false, 1},
-		{"filter off, gate on, tagged", false, true, true, 1},
+		{"filter off, gate on, tagged", false, true, true, 0},
+		{"filter off, gate off, tagged", false, false, true, 1},
 		{"gate on again, tagged", true, true, true, 0},
 	}
 	for _, step := range steps {

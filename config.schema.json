@@ -2756,7 +2756,7 @@
         },
         "discardunlikely": {
           "type": "boolean",
-          "description": "discard detections tagged unlikely instead of saving them; applies only while enabled"
+          "description": "discard detections tagged unlikely by any validator instead of saving them; applies whether or not the filter is enabled, and nothing is discarded while off; the settings page shows the toggle only while the filter is on, otherwise set it in the config file or through the settings API"
         },
         "cvthreshold": {
           "type": "number",

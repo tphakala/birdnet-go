@@ -1901,11 +1901,11 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // reaches the clip); the counts are lower bounds once the attribution list has
 // dropped a reaching hit at its cap (priv.hitCountsLowerBound). A detection still
 // tagged unlikely, by the ultrasonic filter or the noise example gate, is
-// discarded when the ultrasonic filter and discardunlikely are on, after those
-// checks and before model consensus; the reason names the validators that tagged
-// it. The model consensus filter runs last so the other filters keep their
-// discard attribution; cons is the tick's model view (see prepareModelConsensus)
-// and nil skips it.
+// discarded when discardunlikely is on, whether or not the ultrasonic filter is
+// enabled, and never otherwise, after those checks and before model consensus;
+// the reason names the validators that tagged it. The model consensus filter
+// runs last so the other filters keep their discard attribution; cons is the
+// tick's model view (see prepareModelConsensus) and nil skips it.
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck, cons *consensusTick) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -2019,7 +2019,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		}
 	}
 
-	if f := &settings.Bat.UltrasonicFilter; f.Enabled && f.DiscardUnlikely && item.Detection.Result.Unlikely {
+	if settings.Bat.UltrasonicFilter.DiscardUnlikely && item.Detection.Result.Unlikely {
 		result := &item.Detection.Result
 		discardReason := unlikelyDiscardReason(result.UnlikelySources)
 		operation := "ultrasonic_filter"

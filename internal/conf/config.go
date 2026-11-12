@@ -1457,7 +1457,7 @@ type BatConfig struct {
 // one sub-frame bin.
 type UltrasonicFilterConfig struct {
 	Enabled          bool    `yaml:"enabled" json:"enabled"`                   // enable ultrasonic validation filter
-	DiscardUnlikely  bool    `yaml:"discardunlikely" json:"discardUnlikely"`   // discard detections tagged unlikely instead of saving them; applies only while enabled
+	DiscardUnlikely  bool    `yaml:"discardunlikely" json:"discardUnlikely"`   // discard detections tagged unlikely by any validator instead of saving them; applies whether or not the filter is enabled, and nothing is discarded while off; the settings page shows the toggle only while the filter is on, otherwise set it in the config file or through the settings API
 	CVThreshold      float64 `yaml:"cvthreshold" json:"cvThreshold"`           // detections with US frame CV below this are tagged unlikely
 	FFTSize          int     `yaml:"fftsize" json:"fftSize"`                   // FFT window size in samples (a power of 2, at least 2)
 	HopSize          int     `yaml:"hopsize" json:"hopSize"`                   // STFT hop size in samples, 1 to fftsize
