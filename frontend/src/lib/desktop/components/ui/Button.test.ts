@@ -86,6 +86,8 @@ describe('Button', () => {
       );
       expect(opacityClasses(button, { ignoreVariant: 'disabled' })).toEqual([]);
       expect(button.className).not.toMatch(/(^|\s)(hover|active):/);
+      // The label is dimmed by its colour's alpha instead of element opacity
+      expect(button.className).toMatch(/(^|\s)text-\[var\(--[a-z0-9-]+\)\]\/50(\s|$)/);
     }
   );
 
