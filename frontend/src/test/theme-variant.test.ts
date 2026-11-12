@@ -310,7 +310,8 @@ describe('theme resolution: pre-paint script and store', () => {
 
   it('a later mount shows the theme another tab stored after this tab saved its own', async () => {
     setStorage(null);
-    controllableOs('light');
+    // The OS stays dark, so only a read of storage can show light
+    controllableOs('dark');
     const { theme } = await freshStore();
     theme.initialize();
     theme.set('dark');
