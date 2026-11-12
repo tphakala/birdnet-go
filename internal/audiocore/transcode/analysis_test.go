@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -181,6 +182,140 @@ func TestDecodeMono_AllClipFormats(t *testing.T) {
 			assert.True(t, dominantIs(x, m.SampleRate(), testToneHz, testOffToneH), "1 kHz must dominate")
 		})
 	}
+}
+
+// DecodeMonoOpenFile must deliver what DecodeMono delivers for the same clip, at
+// the source rate and resampled, and leave the handle to its owner.
+func TestDecodeMonoOpenFile_MatchesDecodeMono(t *testing.T) {
+	for _, fx := range fixtures() {
+		path, _ := writeFixture(t, fx, testRate, testSeconds)
+		for _, target := range []int{0, testRate / 2} {
+			t.Run(fmt.Sprintf("%s/%d", fx.name, target), func(t *testing.T) {
+				want, err := DecodeMono(t.Context(), path, target)
+				require.NoError(t, err)
+
+				f := openForProbe(t, path)
+				got, err := DecodeMonoOpenFile(t.Context(), f, path, target)
+				require.NoError(t, err)
+				assert.Equal(t, want.SampleRate(), got.SampleRate())
+				assert.Equal(t, collectStream(t, want), collectStream(t, got))
+
+				// The caller keeps ownership: the handle is still open.
+				_, err = f.Stat()
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
+func TestDecodeMonoOpenFile_RejectsNonRegularHandle(t *testing.T) {
+	f := openForProbe(t, t.TempDir())
+
+	_, err := DecodeMonoOpenFile(t.Context(), f, "clip.wav", 0)
+
+	require.ErrorIs(t, err, ErrUnsupportedSource)
+	requireStatError(t, err, errors.CategoryValidation)
+}
+
+func TestDecodeMonoOpenFile_Canceled(t *testing.T) {
+	path, _ := writeFixture(t, fixtureNamed(t, "wav"), testRate, testSeconds)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := DecodeMonoOpenFile(ctx, openForProbe(t, path), path, 0)
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestDecodeMonoOpenFile_ClosedHandle(t *testing.T) {
+	path, _ := writeFixture(t, fixtureNamed(t, "wav"), testRate, testSeconds)
+	f := openForProbe(t, path)
+	require.NoError(t, f.Close())
+
+	_, err := DecodeMonoOpenFile(t.Context(), f, path, 0)
+
+	require.Error(t, err)
+	requireStatError(t, err, errors.CategoryFileIO)
+}
+
+func TestDecodeMonoOpenFile_UndecodableContent(t *testing.T) {
+	junk := filepath.Join(t.TempDir(), "junk.wav")
+	require.NoError(t, os.WriteFile(junk, []byte("not audio"), 0o600))
+
+	_, err := DecodeMonoOpenFile(t.Context(), openForProbe(t, junk), junk, 0)
+
+	require.ErrorIs(t, err, ErrUndecodableSource)
+}
+
+// The handle variant must refuse what DecodeMono refuses, with the same
+// sentinels: a clip cut short of its header, one with too many channels, and a
+// file over the size bound.
+func TestDecodeMonoOpenFile_FailsLikeDecodeMono(t *testing.T) {
+	const frames = 3 * chunkFrames
+	wav := wavBytes(t, testRate, 1, frames)
+	three := filepath.Join(t.TempDir(), "three.wav")
+	writeWAVChannels(t, three, make([]int16, 3*100), testRate, 3)
+	huge := filepath.Join(t.TempDir(), "huge.wav")
+	hf, err := os.Create(huge) //nolint:gosec // G304: test fixture path
+	require.NoError(t, err)
+	require.NoError(t, hf.Truncate(maxSourceFileBytes+1))
+	require.NoError(t, hf.Close())
+	cut := filepath.Join(t.TempDir(), "cut.wav")
+	writeBytes(t, cut, wav[:wavHeaderBytes+frames/2*bytesPerSample])
+
+	tests := []struct {
+		name string
+		path string
+		want error
+	}{
+		{name: "truncated WAV", path: cut, want: ErrTruncatedSource},
+		{name: "three channels", path: three, want: ErrUnsupportedSource},
+		{name: "file over the size bound", path: huge, want: ErrAudioTooLong},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, pathErr := DecodeMono(t.Context(), tt.path, 0)
+			require.ErrorIs(t, pathErr, tt.want, "DecodeMono")
+
+			_, err := DecodeMonoOpenFile(t.Context(), openForProbe(t, tt.path), tt.path, 0)
+			require.ErrorIs(t, err, tt.want)
+		})
+	}
+}
+
+// name picks the decoder by extension and nothing else: the file on disk is not
+// consulted by name, and the handle is read from where the caller left it.
+func TestDecodeMonoOpenFile_NameSelectsDecoderAndOffsetIsKept(t *testing.T) {
+	path, _ := writeFixture(t, fixtureNamed(t, "wav"), testRate, testSeconds)
+	bin := filepath.Join(t.TempDir(), "clip.bin")
+	writeBytes(t, bin, readFile(t, path))
+
+	m, err := DecodeMonoOpenFile(t.Context(), openForProbe(t, bin), "elsewhere/clip.wav", 0)
+	require.NoError(t, err)
+	assert.NotEmpty(t, collectStream(t, m))
+
+	_, err = DecodeMonoOpenFile(t.Context(), openForProbe(t, path), bin, 0)
+	require.ErrorIs(t, err, ErrUnsupportedSource, "the .bin name selects no decoder, whatever the file holds")
+
+	f := openForProbe(t, path)
+	_, err = f.Seek(0, io.SeekEnd)
+	require.NoError(t, err)
+	_, err = DecodeMonoOpenFile(t.Context(), f, path, 0)
+	require.Error(t, err, "a handle left at its end has no audio to decode")
+}
+
+// Stereo is within the analysis channel cap and is averaged to mono, as
+// DecodeMono does; a cap tightened to the export limit would refuse it.
+func TestDecodeMonoOpenFile_AcceptsStereo(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stereo.wav")
+	writeWAVChannels(t, path, impulseClip(2*testRate/10, 100), testRate, 2)
+	want, err := DecodeMono(t.Context(), path, 0)
+	require.NoError(t, err)
+
+	got, err := DecodeMonoOpenFile(t.Context(), openForProbe(t, path), path, 0)
+	require.NoError(t, err)
+
+	assert.Equal(t, collectStream(t, want), collectStream(t, got))
 }
 
 func TestMonoSource_ResampleLengthAndTail(t *testing.T) {

@@ -63,11 +63,7 @@ func ProbeOpenFile(ctx context.Context, f *os.File, name string) (ProbeInfo, err
 	if err := ctx.Err(); err != nil {
 		return ProbeInfo{}, err
 	}
-	info, err := f.Stat()
-	if err != nil {
-		return ProbeInfo{}, wrapError(err, errors.CategoryFileIO, "decode_stat")
-	}
-	if err := checkSourceInfo(info); err != nil {
+	if _, err := statSourceFile(f); err != nil {
 		return ProbeInfo{}, err
 	}
 	return probeSource(ctx, f, name)
