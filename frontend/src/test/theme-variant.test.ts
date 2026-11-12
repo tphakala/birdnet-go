@@ -237,3 +237,96 @@ describe('theme resolution: pre-paint script and store', () => {
     ]);
   });
 });
+
+describe('theme follows the OS until a theme is chosen', () => {
+  const originalMatchMedia = window.matchMedia;
+  const root = document.documentElement;
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    localStorage.removeItem('theme');
+    root.setAttribute('data-theme', 'light');
+    root.removeAttribute('data-theme-controller');
+  });
+
+  /** A matchMedia stub whose `matches` and change listeners move together through `setOs`. */
+  function controllableOs(initial: 'dark' | 'light') {
+    let dark = initial === 'dark';
+    const listeners = new Set<(e: { matches: boolean }) => void>();
+    // Partial stub of MediaQueryList, hence the cast
+    window.matchMedia = (() => ({
+      get matches() {
+        return dark;
+      },
+      addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) =>
+        listeners.delete(fn),
+    })) as unknown as typeof window.matchMedia;
+    return (value: 'dark' | 'light') => {
+      dark = value === 'dark';
+      listeners.forEach(fn => fn({ matches: dark }));
+    };
+  }
+
+  const attributes = () => [
+    root.getAttribute('data-theme'),
+    root.getAttribute('data-theme-controller'),
+  ];
+
+  it('follows the OS until a theme is chosen, then keeps the choice', async () => {
+    localStorage.removeItem('theme');
+    const setOs = controllableOs('light');
+    vi.resetModules();
+    const { theme } = await import('$lib/stores/theme');
+
+    // First visit: the OS decides and nothing is stored
+    theme.initialize();
+    expect(get(theme)).toBe('light');
+    expect(attributes()).toEqual(['light', 'light']);
+    expect(localStorage.getItem('theme')).toBeNull();
+
+    // The OS flips while the page is open
+    setOs('dark');
+    expect(get(theme)).toBe('dark');
+    expect(attributes()).toEqual(['dark', 'dark']);
+    expect(localStorage.getItem('theme')).toBeNull();
+
+    // A second mount changes nothing
+    theme.initialize();
+    expect(get(theme)).toBe('dark');
+    expect(localStorage.getItem('theme')).toBeNull();
+
+    // The user picks a theme; later OS changes, ending on the opposite of the choice, are ignored
+    theme.toggle();
+    expect(get(theme)).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
+    setOs('light');
+    expect(get(theme)).toBe('light');
+    setOs('dark');
+    expect(get(theme)).toBe('light');
+    expect(attributes()).toEqual(['light', 'light']);
+
+    // Reload with the OS still dark: the stored choice wins and keeps winning
+    vi.resetModules();
+    const reloaded = (await import('$lib/stores/theme')).theme;
+    reloaded.initialize();
+    expect(get(reloaded)).toBe('light');
+    setOs('light');
+    setOs('dark');
+    expect(get(reloaded)).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
+  });
+
+  it('ignores a stored value that is not a theme and does not rewrite it', async () => {
+    localStorage.setItem('theme', 'garbage');
+    const setOs = controllableOs('dark');
+    vi.resetModules();
+    const { theme } = await import('$lib/stores/theme');
+
+    theme.initialize();
+    expect(get(theme)).toBe('dark');
+    setOs('light');
+    expect(get(theme)).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('garbage');
+  });
+});

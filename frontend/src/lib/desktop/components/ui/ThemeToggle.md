@@ -5,7 +5,7 @@ A Svelte 5 TypeScript component that provides a theme switcher between light and
 ## Features
 
 - Toggle between light and dark themes
-- Persists theme preference in localStorage
+- Persists the theme the user picks in localStorage
 - Respects system theme preference (if no user preference is set)
 - Smooth animated transition between sun and moon icons
 - Optional tooltip on hover
@@ -59,7 +59,7 @@ theme.subscribe(currentTheme => {
 2. **Theme Application**:
    - Sets `data-theme` attribute on document root
    - Sets `data-theme-controller` for compatibility
-   - Saves preference to localStorage
+   - Saves the preference to localStorage only when the user switches the theme
 
 3. **System Theme Monitoring**:
    - Listens for system theme changes

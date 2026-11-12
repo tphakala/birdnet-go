@@ -5,7 +5,8 @@
  * (`$lib/utils/theme-resolver.js`, also inlined into the pre-paint script in index.html):
  * the stored choice, else the OS preference, else light.
  *
- * Persistence: the choice is saved to localStorage as a raw `light` or `dark` string.
+ * Persistence: only an explicit choice (`set` and `toggle`) is saved to localStorage, as a raw
+ * `light` or `dark` string. Until then the theme follows the OS, at load and when it changes.
  * Storage may be blocked, so every access is guarded and the theme still switches in memory.
  */
 import { writable } from 'svelte/store';
@@ -61,7 +62,6 @@ function createThemeStore() {
   const initialize = () => {
     const theme = resolveTheme();
     applyTheme(theme);
-    persistTheme(theme);
     set(theme);
 
     // Listen for system theme changes
@@ -71,9 +71,10 @@ function createThemeStore() {
       const mediaQuery = window.matchMedia(PREFERS_DARK_QUERY);
       const handleChange = (e: MediaQueryListEvent) => {
         if (readStoredTheme() === null) {
-          // Only update if user hasn't set a preference
+          // No explicit choice yet: follow the OS without saving it as a choice
           const newTheme = e.matches ? 'dark' : 'light';
-          setTheme(newTheme);
+          applyTheme(newTheme);
+          set(newTheme);
         }
       };
 
