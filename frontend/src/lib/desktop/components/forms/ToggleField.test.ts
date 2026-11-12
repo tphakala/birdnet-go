@@ -441,32 +441,80 @@ describe('ToggleField naming and description', () => {
 });
 
 describe('ToggleField disabled, required and error state', () => {
-  it.each(VARIANTS)('disables the switch and ignores clicks when disabled (%s)', async variant => {
+  it.each(['default', 'card'] as const)(
+    'disables the switch and ignores clicks when disabled (%s)',
+    async variant => {
+      const onUpdate = vi.fn();
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
+      });
+      const toggle = screen.getByRole('checkbox');
+
+      expect(toggle).toBeDisabled();
+      await fireEvent.click(screen.getByText('Test Toggle'));
+
+      expect(onUpdate).not.toHaveBeenCalled();
+    }
+  );
+
+  it('a disabled inline switch stays in the tab order, reports aria-disabled and ignores clicks', async () => {
     const onUpdate = vi.fn();
+    const user = userEvent.setup();
     render(ToggleField, {
-      props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
+      props: {
+        label: 'Test Toggle',
+        value: false,
+        onUpdate,
+        disabled: true,
+        required: true,
+        variant: 'inline',
+      },
     });
     const toggle = screen.getByRole('checkbox');
 
-    expect(toggle).toBeDisabled();
-    await fireEvent.click(screen.getByText('Test Toggle'));
+    // aria-disabled instead of native disabled, so Tab still reaches it and reads its description
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    // Not required while disabled, as a natively disabled field is not, so it never blocks a submit
+    expect(toggle).not.toBeRequired();
+    await user.tab();
+    expect(toggle).toHaveFocus();
 
+    // Label text, the switch itself and Space all leave it off and report nothing
+    await fireEvent.click(screen.getByText('Test Toggle'));
+    await fireEvent.click(toggle);
+    await user.keyboard(' ');
+    expect(toggle).not.toBeChecked();
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it.each(['default', 'inline'] as const)(
-    'the %s variant dims its own switch when disabled',
-    variant => {
-      render(ToggleField, {
-        props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true, variant },
-      });
+  it('the default variant dims its own switch when disabled', () => {
+    render(ToggleField, {
+      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
+    });
 
-      expect(screen.getByRole('checkbox')).toHaveClass(
-        'disabled:opacity-50',
-        'disabled:cursor-not-allowed'
-      );
-    }
-  );
+    expect(screen.getByRole('checkbox')).toHaveClass(
+      'disabled:opacity-50',
+      'disabled:cursor-not-allowed'
+    );
+  });
+
+  it('the inline variant dims its own switch while aria-disabled', () => {
+    render(ToggleField, {
+      props: {
+        label: 'Test Toggle',
+        value: false,
+        onUpdate: vi.fn(),
+        disabled: true,
+        variant: 'inline',
+      },
+    });
+
+    expect(screen.getByRole('checkbox')).toHaveClass(
+      'aria-disabled:opacity-50',
+      'aria-disabled:cursor-not-allowed'
+    );
+  });
 
   it.each(VARIANTS)(
     '%s variant draws the required mark and error text in the error text token',

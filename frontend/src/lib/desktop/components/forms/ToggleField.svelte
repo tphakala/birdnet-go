@@ -49,6 +49,15 @@
   const labelId = `${fieldId}-label`;
   const descriptionId = `${fieldId}-description`;
 
+  // A disabled inline switch uses aria-disabled instead of native disabled, so Tab still
+  // reaches it and a screen reader reads its description (the reason it is off). The click
+  // (from the switch, its label or Space) is cancelled instead, so it never flips.
+  let softDisabled = $derived(variant === 'inline' && disabled);
+
+  function handleClick(event: MouseEvent) {
+    if (softDisabled) event.preventDefault();
+  }
+
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
     const newValue = target.checked;
@@ -103,6 +112,9 @@
   const INLINE_LABEL_CLASS =
     "relative isolate inline-flex min-h-8 items-center gap-2 after:absolute after:inset-x-0 after:-inset-y-1.5 after:-z-10 after:content-['']";
 
+  // The inline switch is aria-disabled rather than :disabled, so it dims on that attribute
+  const INLINE_SWITCH_DISABLED_CLASS = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
+
   let labelCursorClass = $derived(disabled ? 'cursor-not-allowed' : 'cursor-pointer');
   // Error text and the required mark use the error text token; --color-error is for fills
   const ERROR_TEXT_CLASS = 'text-[var(--text-error)]';
@@ -143,8 +155,10 @@
     type="checkbox"
     class={cn(toggleBaseClasses, variantClasses, error && toggleErrorClasses)}
     checked={value}
-    {disabled}
-    {required}
+    disabled={disabled && !softDisabled}
+    aria-disabled={softDisabled ? 'true' : undefined}
+    required={required && !softDisabled}
+    onclick={handleClick}
     onchange={handleChange}
     aria-labelledby={labelId}
     aria-describedby={describedBy}
@@ -187,7 +201,7 @@
         {label}
         {@render requiredMark()}
       </span>
-      {@render switchInput(cn(toggleDefaultClasses, 'shrink-0'))}
+      {@render switchInput(cn(toggleDefaultClasses, INLINE_SWITCH_DISABLED_CLASS, 'shrink-0'))}
     </label>
     <!-- The text below starts 0.375rem under the label, outside its hit layer -->
     {#if description}
