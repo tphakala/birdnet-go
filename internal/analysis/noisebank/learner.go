@@ -133,9 +133,23 @@ func (s *Service) work() {
 		case <-s.runCtx.Done():
 			return
 		case j := <-s.queue:
+			s.setBusy(true)
 			s.runJob(j)
+			s.setBusy(false)
 		}
 	}
+}
+
+// setBusy marks the worker as holding a job or as idle, which is what Clear waits
+// on.
+func (s *Service) setBusy(busy bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if busy {
+		s.idle = make(chan struct{})
+		return
+	}
+	close(s.idle)
 }
 
 // runJob runs one job to its end, whatever happens inside it.

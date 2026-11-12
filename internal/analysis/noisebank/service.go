@@ -110,13 +110,17 @@ type Service struct {
 	bank *Bank
 	log  logger.Logger
 
-	// mu serialises Mark's critical section, LeaveNoise, GuardDelete and the commit
-	// of a job. It is held across the short database writes of those paths.
+	// mu serialises Mark's critical section, LeaveNoise, GuardDelete, the commit of
+	// a job and the two locked steps of Clear. It is held across the short database
+	// writes of those paths, and never while waiting for the worker.
 	mu       sync.Mutex
 	jobs     map[uint]*job // the latest job of each detection
 	guards   map[uint]int  // detections with a delete in progress
 	clearing bool          // set while the learned noise is being cleared
 	queue    chan *job
+	// idle is closed while the worker holds no job and open while it runs one, so
+	// Clear can wait for the worker without holding mu. Guarded by mu.
+	idle chan struct{}
 
 	runCtx     context.Context
 	runCancel  context.CancelFunc
@@ -129,6 +133,8 @@ func NewService(cfg Config) *Service {
 		cfg.Now = time.Now
 	}
 	runCtx, runCancel := context.WithCancel(context.Background())
+	idle := make(chan struct{})
+	close(idle)
 	return &Service{
 		cfg:        cfg,
 		bank:       New(),
@@ -136,6 +142,7 @@ func NewService(cfg Config) *Service {
 		jobs:       make(map[uint]*job),
 		guards:     make(map[uint]int),
 		queue:      make(chan *job, maxQueuedJobs),
+		idle:       idle,
 		runCtx:     runCtx,
 		runCancel:  runCancel,
 		workerDone: make(chan struct{}),

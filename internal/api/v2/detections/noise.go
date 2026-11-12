@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -24,6 +25,14 @@ const (
 	// the learning queue is taken.
 	errorKeyNoiseQueueFull = "noise_queue_full"
 
+	// errorKeyNoiseClearTimeout is the error key of a clear that gave up waiting for
+	// the learning worker. Nothing was deleted.
+	errorKeyNoiseClearTimeout = "noise_clear_timeout"
+
+	// clearNoiseTimeout bounds a clear of the learned noise. It runs detached from
+	// the request, so the bound is its own.
+	clearNoiseTimeout = 30 * time.Second
+
 	// noiseRetryAfterSeconds is the Retry-After of a mark that can be retried shortly.
 	noiseRetryAfterSeconds = "5"
 )
@@ -42,6 +51,8 @@ type noiseService interface {
 	LeaveNoise(ctx context.Context, detectionID uint, verified entities.VerificationStatus) error
 	GuardDelete(detectionID uint) (release func(), ok bool)
 	Status(ctx context.Context, detectionID uint, open noisebank.OpenClipFunc) (noisebank.Status, error)
+	Counts(ctx context.Context) (noisebank.Counts, error)
+	Clear(ctx context.Context) (int64, error)
 }
 
 // noiseExamples returns the noise example service, or nil when this install has
@@ -182,4 +193,64 @@ func (c *Handler) GetDetectionNoise(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to read noise learning status", http.StatusInternalServerError)
 	}
 	return ctx.JSON(http.StatusOK, status)
+}
+
+// noiseExamplesResponse is the answer of the bank wide count. The embedded counts
+// carry "examples", "inactiveExamples" and, when the bat model is not loaded and
+// the current embedding space cannot be told, "space": "unknown" (then every
+// stored example is counted in "examples").
+type noiseExamplesResponse struct {
+	noisebank.Counts
+	// Available is false when the install has no noise example service.
+	Available bool `json:"available"`
+	// UnavailableReason says why Available is false.
+	UnavailableReason noisebank.Reason `json:"unavailableReason"`
+	// Max is the most examples one embedding space may hold.
+	Max int `json:"max"`
+}
+
+// GetNoiseExamples reports how many noise examples are stored, in the current
+// embedding space and in others, and the limit per space. Like the status of a
+// detection it is not an error when the install has no noise example service: the
+// answer says so.
+func (c *Handler) GetNoiseExamples(ctx echo.Context) error {
+	noise := c.noiseExamples()
+	if noise == nil {
+		return ctx.JSON(http.StatusOK, noiseExamplesResponse{
+			UnavailableReason: noiseUnavailableReason(),
+			Max:               noisebank.MaxExamplesPerSpace,
+		})
+	}
+	counts, err := noise.Counts(ctx.Request().Context())
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to count noise examples", http.StatusInternalServerError)
+	}
+	return ctx.JSON(http.StatusOK, noiseExamplesResponse{
+		Counts:    counts,
+		Available: true,
+		Max:       noisebank.MaxExamplesPerSpace,
+	})
+}
+
+// ClearNoiseExamples deletes every learned noise example of every embedding space.
+// It touches no review. The clear runs detached from the request with its own
+// timeout, so a client that disconnects does not leave it half way.
+func (c *Handler) ClearNoiseExamples(ctx echo.Context) error {
+	noise := c.noiseExamples()
+	if noise == nil {
+		return c.respondNoiseUnavailable(ctx)
+	}
+	clearCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx.Request().Context()), clearNoiseTimeout)
+	defer cancel()
+	deleted, err := noise.Clear(clearCtx)
+	if err != nil {
+		if refusal, ok := errors.AsType[*noisebank.RefusalError](err); ok {
+			return c.respondRetryLater(ctx, err, string(refusal.Reason))
+		}
+		if errors.Is(err, noisebank.ErrClearTimeout) {
+			return c.respondRetryLater(ctx, err, errorKeyNoiseClearTimeout)
+		}
+		return c.HandleError(ctx, err, "Failed to clear noise examples", http.StatusInternalServerError)
+	}
+	return ctx.JSON(http.StatusOK, map[string]int64{"deleted": deleted})
 }

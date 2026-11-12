@@ -145,6 +145,8 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | DELETE | `/detections/:id`             | `DeleteDetection`         | ✅   | Delete detection record                                                                                                    |
 | POST   | `/detections/:id/review`      | `ReviewDetection`         | ✅   | Review/verify detection                                                                                                    |
 | GET    | `/detections/:id/noise`       | `GetDetectionNoise`       | ✅   | Whether the detection can be marked as noise and how learning from it is going (enhanced database only)                    |
+| GET    | `/detections/noise-examples`  | `GetNoiseExamples`        | ✅   | How many learned noise examples are stored, in the current embedding space and in others (enhanced database only)          |
+| DELETE | `/detections/noise-examples`  | `ClearNoiseExamples`      | ✅   | Delete every learned noise example of every embedding space; cannot be undone (enhanced database only)                     |
 | POST   | `/detections/:id/lock`        | `LockDetection`           | ✅   | Lock detection from changes                                                                                                |
 | POST   | `/detections/ignore`          | `IgnoreSpecies`           | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
 | GET    | `/detections/ignored`         | `GetExcludedSpecies`      | ✅   | Get list of excluded species                                                                                               |
@@ -167,17 +169,17 @@ A `reason` needs a `verified` value, and `no_animal` needs `false_positive`; any
 
 A refused mark is 409 with the reason as `error_key`, and nothing has been written, not the review and not the comment:
 
-| `error_key`               | Meaning                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `legacy_database`         | The install does not use the enhanced database, so there is no noise example service                    |
-| `not_ready`               | The enhanced database is in use but the stored examples could not be loaded at startup                  |
-| `model_unsupported`       | No model that detected the clip has an embedding to learn from (today only the bat model has one)       |
-| `model_not_loaded`        | The bat model is not loaded                                                                             |
-| `clip_missing`            | The detection has no clip, or it cannot be opened                                                       |
-| `clip_unusable`           | The clip cannot be decoded, is sampled below the model minimum, or is too long to hold in memory        |
-| `clip_denoised`           | The clip was denoised when it was saved; its embeddings do not match what the model hears live          |
-| `bank_full`               | The embedding space already holds the most examples it may (2000), counting jobs that have not finished |
-| `detection_being_deleted` | A delete of the detection is in progress                                                                |
+| `error_key`               | Meaning                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy_database`         | The install does not use the enhanced database, so there is no noise example service                                                          |
+| `not_ready`               | The enhanced database is in use but the stored examples could not be loaded at startup                                                        |
+| `model_unsupported`       | No model that detected the clip has an embedding to learn from (today only the bat model has one)                                             |
+| `model_not_loaded`        | The bat model is not loaded                                                                                                                   |
+| `clip_missing`            | The detection has no clip, or it cannot be opened                                                                                             |
+| `clip_unusable`           | The clip cannot be decoded, is sampled below the model minimum, or is too long to hold in memory                                              |
+| `clip_denoised`           | The clip was denoised when it was saved; its embeddings do not match what the model hears live                                                |
+| `bank_full`               | The embedding space already holds the most examples it may (2000), counting jobs that have not finished; clear the learned noise to make room |
+| `detection_being_deleted` | A delete of the detection is in progress                                                                                                      |
 
 A full learning queue (`noise_queue_full`) and a clearing barrier (`clearing`) are 503 with `Retry-After`. A clip with no denoise marker, saved before the marker existed, can be learned from.
 
@@ -198,13 +200,33 @@ A full learning queue (`noise_queue_full`) and a clearing barrier (`clearing`) a
 }
 ```
 
-`unavailableReason` is one of the keys above. `state` is `idle`, `queued`, `running`, `learned` or `failed`. `marked` is the stored reason. `examples` and `inactiveExamples` count the examples still attached to this detection in the current embedding space and in other spaces (kept, never matched); they say nothing about the bank as a whole. They come from the database, while `state` and the window counts describe the job of this run, so after a restart a marked detection can show `idle` with its examples. `failureReason` of a failed job is one of `clip_missing`, `decode_failed`, `inference_failed`, `no_candidates` (no window scored 0.5 or more), `model_changed`, `timeout`, `cancelled` (the verdict changed first) or `store_failed`. A job runs one window at a time with a pause after each, so live analysis keeps at least half of the model's time.
+`unavailableReason` is one of the keys above. `state` is `idle`, `queued`, `running`, `learned` or `failed`. `marked` is the stored reason. `examples` and `inactiveExamples` count the examples still attached to this detection in the current embedding space and in other spaces (kept, never matched); they say nothing about the bank as a whole. They come from the database, while `state` and the window counts describe the job of this run, so after a restart a marked detection can show `idle` with its examples. `failureReason` of a failed job is one of `clip_missing`, `decode_failed`, `inference_failed`, `no_candidates` (no window scored 0.5 or more), `model_changed`, `timeout`, `cancelled` (the verdict changed or the learned noise was cleared first) or `store_failed`. A job runs one window at a time with a pause after each, so live analysis keeps at least half of the model's time.
 
-The examples belong to the bank, not to the detection. Deleting a detection or its clip removes nothing: the stored link is cleared and the examples keep matching. A delete is refused with 409 (`noise_learning_in_progress`) while the detection's learning job is queued or running, and a batch delete skips that ID. Examples of a deleted detection cannot be removed one by one.
+The examples belong to the bank, not to the detection. Deleting a detection or its clip removes nothing: the stored link is cleared and the examples keep matching. A delete is refused with 409 (`noise_learning_in_progress`) while the detection's learning job is queued or running, and a batch delete skips that ID. Examples of a deleted detection cannot be removed one by one; the way to remove them is the clear below.
+
+`GET /detections/noise-examples` counts the whole bank, from the database:
+
+```json
+{
+  "available": true,
+  "unavailableReason": "",
+  "examples": 37,
+  "inactiveExamples": 4,
+  "max": 2000
+}
+```
+
+`examples` counts the stored examples of the current embedding space, `inactiveExamples` those of other spaces (kept, never matched), and `max` is the most one space may hold. A mark that would go past `max` is refused with `bank_full`. When the bat model is not loaded the current space is unknown: every stored example is counted in `examples` and the answer carries `"space": "unknown"`. Without a noise example service the answer is `available: false` with `legacy_database` or `not_ready`.
+
+`DELETE /detections/noise-examples` removes every learned example of every embedding space, and the in-memory bank with them. It cannot be undone. It touches no review: detections still marked as noise keep the mark and show zero examples until they are marked again. The answer is `{"deleted": 41}`. Without a noise example service it is 409 with `legacy_database` or `not_ready`.
+
+A clear first stops the learning: marks are refused (`clearing`, 503 with `Retry-After`) and the queued and running jobs are cancelled, then it waits for the worker to finish its current window and deletes the rows. Only one clear runs at a time; a second one gets `clearing` and changes nothing. Finished jobs are forgotten, so the status of a detection that is still marked reports no examples and the state `idle`. If the worker does not stop within the clear's time limit (30 seconds) the answer is 503 `noise_clear_timeout`: nothing is deleted and marks are accepted again, but the jobs that were cancelled stay cancelled. They report `cancelled`, and their detections can be marked again.
 
 ```sh
 birdnet-api post detections/<id>/review -d '{"verified":"false_positive","reason":"no_animal"}'
 birdnet-api get detections/<id>/noise
+birdnet-api get detections/noise-examples
+birdnet-api delete detections/noise-examples
 ```
 
 ### Integrations (`integrations/integrations.go`)

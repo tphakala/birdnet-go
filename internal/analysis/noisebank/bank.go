@@ -157,6 +157,13 @@ func (b *Bank) Detach(detectionID uint) {
 	b.snap.Store(b.snap.Load().detached(detectionID))
 }
 
+// Clear removes every example of every space.
+func (b *Bank) Clear() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.snap.Store(&snapshot{})
+}
+
 // Load replaces the whole content of the bank with examples, skipping the
 // unusable ones as Replace does.
 func (b *Bank) Load(examples []Example) {

@@ -207,6 +207,43 @@ func TestNoiseExampleCounts(t *testing.T) {
 	assert.Equal(t, map[string]int64{testSpace: 3, "other/space": 1}, all)
 }
 
+// TestNoiseExampleDeleteAll covers the clear: every row of every space goes,
+// attached and detached, reviews stay as they were, and a second call finds
+// nothing.
+func TestNoiseExampleDeleteAll(t *testing.T) {
+	e := newNoiseTestEnv(t)
+	ctx := t.Context()
+	id := e.detection(t, "a.flac")
+	require.NoError(t, e.examples.ReplaceForDetection(ctx, id, []entities.NoiseExample{
+		exampleRow(testSpace, 0, 1, 0), exampleRow("other/space", 500, 1),
+	}))
+	require.NoError(t, e.examples.InsertDetached(ctx, []entities.NoiseExample{exampleRow(testSpace, 0, 1, 1)}))
+	reason := entities.ReviewReasonNoAnimal
+	require.NoError(t, e.detections.SaveReview(ctx, &entities.DetectionReview{
+		DetectionID: id, Verified: entities.VerificationFalsePositive, Reason: &reason,
+	}))
+
+	deleted, err := e.examples.DeleteAll(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), deleted)
+
+	rows, err := e.examples.ListAll(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+	review, err := e.detections.GetReview(ctx, id)
+	require.NoError(t, err)
+	require.NotNil(t, review.Reason)
+	assert.Equal(t, reason, *review.Reason)
+
+	deleted, err = e.examples.DeleteAll(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, deleted)
+
+	require.NoError(t, e.db.Migrator().DropTable(&entities.NoiseExample{}))
+	_, err = e.examples.DeleteAll(ctx)
+	require.Error(t, err)
+}
+
 // TestRemoveForVerdict covers the one transaction behind leaving noise.
 func TestRemoveForVerdict(t *testing.T) {
 	for _, verdict := range []entities.VerificationStatus{entities.VerificationCorrect, entities.VerificationFalsePositive} {

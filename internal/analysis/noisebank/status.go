@@ -51,8 +51,8 @@ const (
 	ReasonModelChanged Reason = "model_changed"
 	// ReasonTimeout means the job ran past its time limit.
 	ReasonTimeout Reason = "timeout"
-	// ReasonCancelled means the verdict changed or the service stopped before the
-	// job stored anything.
+	// ReasonCancelled means the verdict changed, the learned noise was cleared or
+	// the service stopped before the job stored anything.
 	ReasonCancelled Reason = "cancelled"
 	// ReasonStoreFailed means the examples could not be written.
 	ReasonStoreFailed Reason = "store_failed"
@@ -118,7 +118,7 @@ var refusalText = map[Reason]string{
 	ReasonClipMissing:           "the detection has no clip that can be opened",
 	ReasonClipUnusable:          "the clip cannot be decoded for learning",
 	ReasonClipDenoised:          "the clip was denoised when it was saved",
-	ReasonBankFull:              "the limit of learned noise examples is reached; clear the learned noise before marking more",
+	ReasonBankFull:              "the limit of learned noise examples is reached; clear the learned noise (DELETE /api/v2/detections/noise-examples) before marking more",
 	ReasonClearing:              "the learned noise is being cleared",
 	ReasonDetectionBeingDeleted: "the detection is being deleted",
 }
@@ -136,6 +136,9 @@ var (
 	ErrBusy = errors.NewStd("noise example learning queue is full")
 	// ErrNotFound is returned when the detection does not exist.
 	ErrNotFound = errors.NewStd("detection not found")
+	// ErrClearTimeout is returned by Clear when the learning worker did not become
+	// idle in time. Nothing was deleted; the jobs Clear found were cancelled.
+	ErrClearTimeout = errors.NewStd("timed out waiting for noise learning to stop")
 	// ErrInvalidVerdict is returned by LeaveNoise for a verdict that is not a
 	// known review status.
 	ErrInvalidVerdict = errors.NewStd("invalid review verdict")

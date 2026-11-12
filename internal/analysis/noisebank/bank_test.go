@@ -307,3 +307,20 @@ func TestBank_WritersDoNotDisturbReaders(t *testing.T) {
 	assert.Equal(t, []uint{1}, sp.owners)
 	assert.Equal(t, []float32{1, 0}, sp.data)
 }
+
+// TestBank_Clear pins that a clear empties every space and leaves the bank usable.
+func TestBank_Clear(t *testing.T) {
+	b := New()
+	b.Replace(7, spaceA, [][]float32{{1, 0, 0}})
+	b.Add(spaceB, [][]float32{{0, 1}})
+
+	b.Clear()
+
+	assert.Zero(t, b.Len(spaceA))
+	assert.Zero(t, b.Len(spaceB))
+	_, ok := b.Match(spaceA, []float32{1, 0, 0})
+	assert.False(t, ok)
+
+	b.Add(spaceA, [][]float32{{1, 0, 0}})
+	assert.Equal(t, 1, b.Len(spaceA))
+}

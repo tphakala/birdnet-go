@@ -187,6 +187,8 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 	detectionGroup.DELETE("/:id", c.DeleteDetection)
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
 	detectionGroup.GET("/:id/noise", c.GetDetectionNoise)
+	detectionGroup.GET("/noise-examples", c.GetNoiseExamples)
+	detectionGroup.DELETE("/noise-examples", c.ClearNoiseExamples)
 	detectionGroup.POST("/:id/lock", c.LockDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
