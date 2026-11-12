@@ -60,6 +60,12 @@
 
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
+    // A click cancel can be skipped when an ancestor stops the click before it reaches the
+    // delegated handler, so a disabled inline switch also restores its state here
+    if (softDisabled) {
+      target.checked = value;
+      return;
+    }
     const newValue = target.checked;
     // Only notify parent via onUpdate, let bindable value handle internal state
     onUpdate(newValue);

@@ -488,6 +488,22 @@ describe('ToggleField disabled, required and error state', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it('a disabled inline switch stays off even when an ancestor stops the click', async () => {
+    const onUpdate = vi.fn();
+    render(ToggleField, {
+      props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant: 'inline' },
+    });
+    const toggle = screen.getByRole('checkbox');
+    // A native listener between the switch and the app root keeps the click from reaching the
+    // delegated handler that cancels it, so the change handler must hold the state itself
+    toggle.closest('label')?.addEventListener('click', event => event.stopPropagation());
+
+    await fireEvent.click(toggle);
+
+    expect(toggle).not.toBeChecked();
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
   it('the default variant dims its own switch when disabled', () => {
     render(ToggleField, {
       props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
