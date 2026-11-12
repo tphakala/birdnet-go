@@ -72,14 +72,16 @@ describe('Meter', () => {
     ]);
   });
 
-  it.each([
+  const toneTokens: [MeterTone, string][] = [
     ['series-1', '--viz-1'],
     ['series-5', '--viz-5'],
     ['series-8', '--viz-8'],
     ['success', '--viz-success'],
     ['warning', '--viz-warning'],
     ['error', '--viz-error'],
-  ] as [MeterTone, string][])('fills the %s tone from the %s token', (tone, token) => {
+  ];
+
+  it.each(toneTokens)('fills the %s tone from the %s token', (tone, token) => {
     renderTyped(Meter, { props: { value: 50, tone, label: 'Usage' } });
 
     const [fill] = fillsOf(screen.getByRole('meter'));
