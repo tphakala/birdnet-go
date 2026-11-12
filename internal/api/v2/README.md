@@ -333,6 +333,9 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
 - Detection and search responses carry `clipSampleRate` (Hz, an integer) for the detection's original
   audio clip. The field is omitted when the rate is unknown. A spectrogram-only detection reports the
   original clip's rate, which kept images made before the `-bat-v3` change do not match.
+- List, recent and single detection responses carry `clipDenoised: true` when the export stage denoised the saved clip.
+  The field is omitted for a clip written as captured, for a clip saved before the marker existed, and on
+  the legacy database.
 - `GET /detections/:id` fills a missing rate for an older bat detection by reading that clip's header
   once (a few KB, never the whole clip), waiting at most 250 ms, and storing the value. If the clip is
   unreadable, nothing is stored and the next request tries again. If the wait runs out, the field is left

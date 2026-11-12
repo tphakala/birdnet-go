@@ -448,7 +448,7 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
             result.details,
         )
 
-    def test_detections_recreation_keeps_clip_sample_rate_and_spectrogram_name(self):
+    def test_detections_recreation_keeps_clip_metadata_columns(self):
         conn = sqlite3.connect(self.path)
         conn.execute(
             "CREATE TABLE detections (id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -456,13 +456,15 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
             "detected_at INTEGER, begin_time INTEGER, end_time INTEGER, "
             "confidence REAL, latitude REAL, longitude REAL, "
             "clip_name VARCHAR(500), spectrogram_clip_name VARCHAR(500), "
-            "clip_sample_rate INTEGER, processing_time_ms INTEGER, "
+            "clip_sample_rate INTEGER, clip_denoised NUMERIC, "
+            "processing_time_ms INTEGER, "
             "unlikely NUMERIC, legacy_id INTEGER, created_at DATETIME)"
         )
         conn.execute(
             "INSERT INTO detections (model_id, label_id, detected_at, "
-            "confidence, unlikely, spectrogram_clip_name, clip_sample_rate) "
-            "VALUES (1, 1, 1000, 0.9, 0, 'a.png', 48000)"
+            "confidence, unlikely, spectrogram_clip_name, clip_sample_rate, "
+            "clip_denoised) "
+            "VALUES (1, 1, 1000, 0.9, 0, 'a.png', 48000, 1)"
         )
         conn.commit()
         conn.close()
@@ -476,13 +478,14 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
         try:
             fix = doctor._fix_schema_contamination(conn, report)
             row = conn.execute(
-                "SELECT spectrogram_clip_name, clip_sample_rate FROM detections"
+                "SELECT spectrogram_clip_name, clip_sample_rate, clip_denoised "
+                "FROM detections"
             ).fetchone()
         finally:
             conn.close()
 
         self.assertEqual(fix.status, "applied", fix.details)
-        self.assertEqual(row, ("a.png", 48000))
+        self.assertEqual(row, ("a.png", 48000, 1))
 
     def test_privacy_rollup_fk_orphan_is_reported(self):
         conn = sqlite3.connect(self.path)

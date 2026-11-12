@@ -116,6 +116,10 @@ type Processor struct {
 	// (humanHitMaxPerSource) dropped from humanHits. It is guarded by
 	// detectionMutex and created lazily.
 	humanHitsCapDropped map[string]time.Time
+	// clipMarks writes the clip denoise marker. It is set once before Start
+	// (SetClipDenoiseRecorder) and never written again, so it needs no lock; nil on
+	// the legacy store leaves the marker unwritten.
+	clipMarks clipDenoiseRecorder
 	// privacyRollup receives privacy filter activity for the hourly rollup. It is
 	// set once before Start (SetPrivacyRollup) and never written again, so it needs
 	// no lock; nil leaves every hit site a no-op.
@@ -2494,6 +2498,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 			Results:           det.Results,  // Domain model - all alternates, trimmed at save
 			Ds:                p.Ds,         // Legacy - kept for backward compatibility
 			Repo:              p.Repo,       // New - preferred path for database operations
+			clipMarks:         p.clipMarks,
 			CorrelationID:     det.CorrelationID,
 		}
 	}
@@ -2686,7 +2691,8 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 // available) and returns an action that will encode and write the audio file
 // when executed by the job queue. This decouples the slower clip encoding
 // from the fast Database -> SSE pipeline. The action carries the planned
-// clip sample rate and, when the datastore can store one, a recorder to correct it.
+// clip sample rate and, when the datastore can store one, a recorder to correct it,
+// and the recorder of the clip denoise marker (nil on the legacy store).
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext, settings *conf.Settings) *SaveAudioAction {
 	// Derive the capture length and readiness time from the shared conf helper so this
 	// scheduler and the media API (which decides whether a not-yet-written clip is still
@@ -2726,6 +2732,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	base := func() *SaveAudioAction {
 		return &SaveAudioAction{
 			clipRates:        p.Repo,
+			clipMarks:        p.clipMarks,
 			plannedRate:      det.Result.ClipSampleRate,
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
