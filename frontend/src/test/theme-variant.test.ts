@@ -304,6 +304,47 @@ describe('theme resolution: pre-paint script and store', () => {
     expect(attributes()).toEqual(['dark', 'dark']);
   });
 
+  it('a later mount shows the theme another tab stored after this tab saved its own', async () => {
+    setStorage(null);
+    controllableOs('light');
+    const { theme } = await freshStore();
+    theme.initialize();
+    theme.set('dark');
+
+    // Another tab picks light, then this tab mounts again, for example after login
+    localStorage.setItem('theme', 'light');
+    theme.initialize();
+    expect(get(theme)).toBe('light');
+    expect(attributes()).toEqual(['light', 'light']);
+  });
+
+  it('keeps a choice that full storage could not save over the theme stored before', async () => {
+    setStorage('dark');
+    const setOs = controllableOs('dark');
+    const { theme } = await freshStore();
+    theme.initialize();
+    // Reads still work and writes fail, as with a full quota
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: () => 'dark',
+        setItem: () => {
+          throw new Error('storage full');
+        },
+      },
+    });
+
+    theme.set('light');
+    setOs('light');
+    setOs('dark');
+    expect(get(theme)).toBe('light');
+
+    // A second mount keeps the unsaved choice over the stored dark
+    theme.initialize();
+    expect(get(theme)).toBe('light');
+    expect(attributes()).toEqual(['light', 'light']);
+  });
+
   it('ignores a stored value that is not a theme and does not rewrite it', async () => {
     setStorage('garbage');
     const setOs = controllableOs('dark');

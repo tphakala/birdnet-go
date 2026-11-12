@@ -8,8 +8,8 @@
  * Persistence: only an explicit choice (`set` and `toggle`) is saved to localStorage, as a raw
  * `light` or `dark` string. Until then the theme follows the OS, at load and when it changes.
  * Storage may be blocked, so every access is guarded and the theme still switches in memory.
- * The choice is also kept in memory, so with blocked storage it still outlasts OS changes and a
- * second `initialize` for the rest of the session.
+ * A choice that storage cannot keep (blocked or full) is held in memory instead, so it still
+ * outlasts OS changes and a second `initialize` for the rest of the session.
  */
 import { writable } from 'svelte/store';
 import {
@@ -34,16 +34,17 @@ function createThemeStore() {
     applyThemeAttributes(theme);
   };
 
-  // The user's explicit choice this session; storage may be blocked and not keep it
+  // The user's choice when storage did not keep it (blocked or full); null once storage holds it
   let chosen: Theme | null = null;
 
   // Save the theme as the user's choice
   const persistTheme = (theme: Theme) => {
-    chosen = theme;
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
+      chosen = null;
     } catch {
-      // Storage may be blocked or full; the theme still applies for this session
+      // Storage may be blocked or full; keep the choice in memory for this session
+      chosen = theme;
     }
   };
 
