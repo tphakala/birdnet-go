@@ -47,7 +47,7 @@
 
   interface Props {
     processes: ProcessInfo[];
-    /** True until the first answer arrives */
+    /** True until the first answer for the current Show All mode arrives */
     loading: boolean;
     /** Why the latest load failed; the rows already loaded stay below it */
     error: string | null;

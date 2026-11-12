@@ -5,8 +5,9 @@
  *
  * Every load takes a sequence number and only the answer to the latest request is
  * applied, so a periodic refresh that is still running for the other Show All mode
- * cannot overwrite the list after the switch changed. A failure keeps the rows
- * already shown and reports why; the next success clears it.
+ * cannot overwrite the list after the switch changed. A failed refresh keeps the rows
+ * already shown and reports why; the next success clears it. Changing Show All clears
+ * the rows first, so rows from the other mode never stay under the new switch position.
  */
 
 import { t } from '$lib/i18n';
@@ -16,10 +17,11 @@ import type { ProcessInfo } from './types';
 const PROCESSES_URL = '/api/v2/system/processes';
 const ALL_PROCESSES_URL = `${PROCESSES_URL}?all=true`;
 
+/** Process list state for one view; the System overview creates one per mount. */
 export interface ProcessList {
-  /** Rows from the latest successful load */
+  /** Rows of the current Show All mode from its latest successful load; empty until then */
   readonly processes: ProcessInfo[];
-  /** Whether any load has finished, successfully or not */
+  /** Whether a load for the current Show All mode has answered, successfully or not */
   readonly loaded: boolean;
   /** Why the latest load failed, or null after a success */
   readonly error: string | null;
@@ -27,10 +29,14 @@ export interface ProcessList {
   readonly showAll: boolean;
   /** Fetches the list for the current Show All mode; never rejects */
   load: () => Promise<void>;
-  /** Switches Show All and fetches the list for the new mode; never rejects */
+  /** Switches Show All, clears the other mode's rows and fetches the new mode; never rejects */
   setShowAll: (_value: boolean) => Promise<void>;
 }
 
+/**
+ * Creates the process list state. Call load() for the first fetch and each refresh, and
+ * setShowAll() from the switch; neither rejects, a failure is reported through `error`.
+ */
 export function createProcessList(): ProcessList {
   let processes = $state<ProcessInfo[]>([]);
   let loaded = $state(false);
@@ -67,6 +73,11 @@ export function createProcessList(): ProcessList {
     },
     load,
     setShowAll(value: boolean): Promise<void> {
+      if (value !== showAll) {
+        processes = [];
+        error = null;
+        loaded = false;
+      }
       showAll = value;
       return load();
     },
