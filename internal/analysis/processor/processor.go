@@ -889,8 +889,8 @@ func verdictOf(r *detection.Result) unlikelyVerdict {
 // The CV and its threshold are merged only between sides that carry the CV bit: when
 // only one side does, that side's values are kept untouched; when both do, the
 // highest CV wins with the threshold that judged it (the later one's on a tie);
-// when neither does, there is none. The merge does not depend on arrival order or on
-// which window had the highest confidence.
+// when neither does, there is none. Apart from the threshold kept on a CV tie, the
+// merge does not depend on arrival order or on which window had the highest confidence.
 func mergeUnlikelyVerdict(merged *detection.Result, prev, hit unlikelyVerdict) {
 	merged.Unlikely = prev.unlikely && hit.unlikely
 	if !merged.Unlikely {
