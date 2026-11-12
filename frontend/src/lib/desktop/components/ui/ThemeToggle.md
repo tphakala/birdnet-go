@@ -59,11 +59,11 @@ theme.subscribe(currentTheme => {
 2. **Theme Application**:
    - Sets `data-theme` attribute on document root
    - Sets `data-theme-controller` for compatibility
-   - Saves the preference to localStorage only when the user switches the theme
+   - Saves the theme to localStorage only from `theme.set()` and `theme.toggle()`, never on load or when the system theme changes
 
 3. **System Theme Monitoring**:
    - Listens for system theme changes
-   - Only applies if user hasn't set an explicit preference
+   - Only applies while no theme is stored and none was picked with `theme.set()` or `theme.toggle()`
 
 ## Integration with Existing System
 
