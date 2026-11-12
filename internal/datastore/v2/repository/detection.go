@@ -37,6 +37,12 @@ type DetectionRepository interface {
 	// clip metadata) and never reports ErrDetectionNotFound or ErrDetectionLocked.
 	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
 
+	// RecordClipDenoised sets whether the clip of the detection whose clip_name
+	// still equals clipName was denoised on export, overwriting any stored value.
+	// An empty clipName is a no-op. It ignores detection locks (the marker is clip
+	// metadata) and never reports ErrDetectionNotFound or ErrDetectionLocked.
+	RecordClipDenoised(ctx context.Context, id uint, clipName string, denoised bool) error
+
 	// FillClipSampleRate sets the clip sample rate (Hz) only while it is NULL and
 	// clip_name still equals clipName, so concurrent fills converge and an exporter
 	// value is never overwritten. It reports whether a row changed. An empty

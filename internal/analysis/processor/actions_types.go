@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
 
@@ -81,6 +82,55 @@ type DetectionContext struct {
 	// off slow work. A stored empty BirdImage is a resolved verdict of "nothing
 	// available", which is why it is a pointer: nil means nobody has looked yet.
 	birdImage atomic.Pointer[imageprovider.BirdImage]
+
+	// clipDenoise is what the export stage did to the clip: clipDenoiseUnset until
+	// the clip is encoded, then clipDenoiseRaw or clipDenoiseDenoised. Together with
+	// NoteID it lets whichever of SaveAudioAction and DatabaseAction finishes last
+	// write the denoise marker: the clip can be encoded before its row exists.
+	clipDenoise atomic.Int32
+}
+
+// Values of DetectionContext.clipDenoise.
+const (
+	clipDenoiseUnset int32 = iota
+	clipDenoiseRaw
+	clipDenoiseDenoised
+)
+
+// clipDenoiseRecordTimeout bounds one marker write. The write is detached from the
+// caller's cancellation (see recordClipDenoise), so this is its only bound.
+const clipDenoiseRecordTimeout = 5 * time.Second
+
+// recordClipDenoise writes the denoise marker of the detection's clip once both
+// the export state and the saved row's ID are known, and does nothing before that.
+// SaveAudioAction stores the state and then calls it; DatabaseAction stores the
+// note ID and then calls it. Each side stores its own value before it looks at the
+// other's, so whatever the order at least one call sees both and writes, and when
+// both do the second write repeats the first. It does nothing without a recorder
+// (the legacy store) or a clip name.
+//
+// The write runs on a context detached from ctx: the database action's save can
+// land after its job's last attempt ended, and the row exists by then. A failure is
+// logged and never fails the calling action, because the clip and the detection are
+// already stored.
+func (d *DetectionContext) recordClipDenoise(ctx context.Context, recorder clipDenoiseRecorder, clipName string) {
+	if recorder == nil || clipName == "" {
+		return
+	}
+	state := d.clipDenoise.Load()
+	noteID := uint(d.NoteID.Load())
+	if state == clipDenoiseUnset || noteID == 0 {
+		return
+	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), clipDenoiseRecordTimeout)
+	defer cancel()
+	if err := recorder.RecordClipDenoised(writeCtx, noteID, clipName, state == clipDenoiseDenoised); err != nil {
+		GetLogger().Error("Failed to record whether the clip was denoised",
+			logger.String("component", "analysis.processor.actions"),
+			logger.Uint64("note_id", uint64(noteID)),
+			logger.Error(err),
+			logger.String("operation", "clip_denoised_record"))
+	}
 }
 
 // StoreBirdImage records the image resolution for this detection, including the
@@ -135,6 +185,7 @@ type DatabaseAction struct {
 	Settings          *conf.Settings
 	Ds                datastore.Interface           // Legacy - to be removed after migration
 	Repo              datastore.DetectionRepository // New - preferred for database operations
+	clipMarks         clipDenoiseRecorder           // Writes the clip denoise marker; nil on the legacy store
 	Result            detection.Result              // Domain model (single source of truth)
 	Results           []detection.AdditionalResult  // All finite alternates; storedAlternates trims them at save
 	EventTracker      *EventTracker
@@ -193,6 +244,9 @@ type SaveAudioAction struct {
 	// written through after the encode; nil only for a processor built without a
 	// repository (tests).
 	clipRates clipSampleRateRecorder
+	// clipMarks is where the denoise marker of the clip is written; nil on the
+	// legacy store, which has no such column.
+	clipMarks clipDenoiseRecorder
 	// denoiseAttempted is set before the export-stage denoise runs, so a retried
 	// export (Extended Capture defers and retries; a.pcmData survives between
 	// attempts) never denoises the same PCM twice, whether the first attempt
@@ -289,6 +343,12 @@ type speciesDetectionTimeSource interface {
 // needs to correct the stored clip sample rate after the encode.
 type clipSampleRateRecorder interface {
 	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
+}
+
+// clipDenoiseRecorder is the single v2 detection repository method the export and
+// database actions need to record whether a clip was denoised.
+type clipDenoiseRecorder interface {
+	RecordClipDenoised(ctx context.Context, id uint, clipName string, denoised bool) error
 }
 
 // rateLimitDecision caches the event-tracker verdict of an action's first

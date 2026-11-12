@@ -420,6 +420,9 @@ func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
 	if a.DetectionCtx != nil {
 		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
+		// The clip can be encoded before this row exists; when it was, the marker
+		// is still unwritten and this is the call that writes it.
+		a.DetectionCtx.recordClipDenoise(ctx, a.clipMarks, a.Result.ClipName)
 	}
 
 	// Add an explanatory comment when the ultrasonic validation filter tagged this detection as unlikely.
@@ -818,6 +821,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return err
 	}
 	a.correctClipSampleRate(ctx, exportRate)
+	a.recordClipDenoised(ctx)
 
 	// Get file size for logging
 	fileInfo, err := os.Stat(outputPath)
@@ -1647,6 +1651,23 @@ func (a *SaveAudioAction) correctClipSampleRate(ctx context.Context, exportRate 
 			logger.Error(err),
 			logger.String("operation", "clip_sample_rate_correct"))
 	}
+}
+
+// recordClipDenoised stores on the shared detection context whether the clip just
+// written was denoised, then writes the marker if the detection's row is already
+// saved; otherwise DatabaseAction writes it once the save lands. denoisePreset is
+// set only by a successful denoise, so a skipped, failed or timed-out denoise
+// reads as written as captured. Without a shared context there is no row to mark.
+func (a *SaveAudioAction) recordClipDenoised(ctx context.Context) {
+	if a.DetectionCtx == nil {
+		return
+	}
+	state := clipDenoiseRaw
+	if a.denoisePreset != "" {
+		state = clipDenoiseDenoised
+	}
+	a.DetectionCtx.clipDenoise.Store(state)
+	a.DetectionCtx.recordClipDenoise(ctx, a.clipMarks, a.ClipName)
 }
 
 // resampleExportTo converts the captured PCM from srcRate to dstRate for export,

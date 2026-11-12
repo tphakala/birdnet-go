@@ -279,6 +279,22 @@ func (r *detectionRepository) RecordClipSampleRate(ctx context.Context, id uint,
 	}, r.metrics)
 }
 
+// columnClipDenoised is the detections column recording whether the clip was denoised on export.
+const columnClipDenoised = "clip_denoised"
+
+// RecordClipDenoised sets the denoise marker of a detection whose clip_name still
+// equals clipName, overwriting any stored value. Like RecordClipSampleRate it is a
+// single guarded UPDATE, so a clip replaced or removed in the meantime is never
+// marked, and it does not check detection locks: the marker is clip metadata.
+func (r *detectionRepository) RecordClipDenoised(ctx context.Context, id uint, clipName string, denoised bool) error {
+	if clipName == "" {
+		return nil
+	}
+	return datastore.RetryOnLock(ctx, "v2_record_clip_denoised", func() error {
+		return r.clipRows(ctx, id, clipName).Update(columnClipDenoised, denoised).Error
+	}, r.metrics)
+}
+
 // FillClipSampleRate sets the clip sample rate only while it is NULL and clip_name
 // still equals clipName. It reports whether a row changed.
 func (r *detectionRepository) FillClipSampleRate(ctx context.Context, id uint, clipName string, rate int) (bool, error) {

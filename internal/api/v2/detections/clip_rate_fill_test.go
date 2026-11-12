@@ -565,6 +565,22 @@ func TestResultToDetectionResponse_ClipSampleRate(t *testing.T) {
 	assert.NotContains(t, string(body), "clipSampleRate", "an unknown rate is omitted")
 }
 
+func TestResultToDetectionResponse_ClipDenoised(t *testing.T) {
+	_, _, h := setupTestEnvironment(t)
+
+	resp := h.resultToDetectionResponse(&detection.Result{ClipName: rateTestClipName, ClipDenoised: true}, false, nil)
+	assert.True(t, resp.ClipDenoised)
+	body, err := json.Marshal(resp)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"clipDenoised":true`)
+
+	resp = h.resultToDetectionResponse(&detection.Result{ClipName: rateTestClipName}, false, nil)
+	assert.False(t, resp.ClipDenoised)
+	body, err = json.Marshal(resp)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "clipDenoised", "a clip that was not denoised omits the field")
+}
+
 // TestGetDetection_LazyFill_WorkTimeoutAndDetach verifies the shared work is
 // bounded by clipRateWorkTimeout and does not follow the request context.
 func TestGetDetection_LazyFill_WorkTimeoutAndDetach(t *testing.T) {

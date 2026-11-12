@@ -164,6 +164,8 @@ type DetectionResponse struct {
 	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip, omitted when unknown. Bat spectrograms span 0 to half of it. A spectrogram-only detection reports the original clip's rate.
 	ClipSampleRate int `json:"clipSampleRate,omitempty"`
+	// ClipDenoised is true when the export stage denoised the saved clip. It is omitted for a clip written as captured, for a clip saved before the marker existed, and on the legacy database.
+	ClipDenoised bool `json:"clipDenoised,omitempty"`
 	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded. An entry with hitCount 0 is a model that was active on the source without a hit.
 	ModelContributions []ModelContributionResponse `json:"modelContributions,omitempty"`
 	Verified           string                      `json:"verified"`
@@ -830,6 +832,7 @@ func (c *Handler) resultToDetectionResponse(r *detectionPkg.Result, includeWeath
 		// SpectrogramOnly never exposes the kept clip name, only that an image exists.
 		SpectrogramOnly: r.IsSpectrogramOnly(),
 		ClipSampleRate:  r.ClipSampleRate,
+		ClipDenoised:    r.ClipDenoised,
 		Locked:          r.Locked,
 		Unlikely:        r.Unlikely,
 	}

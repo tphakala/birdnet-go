@@ -49,6 +49,11 @@ type Result struct {
 	// retention removed its audio. Repository reads set it; Save ignores it.
 	SpectrogramClipName string
 
+	// ClipDenoised is true only for a clip the export stage denoised. Repository reads
+	// set it; Save ignores it. A clip saved before the marker existed, or written as
+	// captured, reads false.
+	ClipDenoised bool
+
 	// Validation flags
 	Unlikely bool // Tagged by the ultrasonic validation filter when every hit window lacked bat echolocation characteristics
 

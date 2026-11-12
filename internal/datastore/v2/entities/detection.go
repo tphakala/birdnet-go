@@ -28,6 +28,8 @@ type Detection struct {
 	SpectrogramClipName *string `gorm:"type:varchar(500)"`
 	// ClipSampleRate is the sample rate in Hz of the saved audio clip file. It is NULL when unknown (rows written before the column existed that were never probed, and rows with no clip). It describes the original capture, so it survives retention.
 	ClipSampleRate *int
+	// ClipDenoised records whether the export stage denoised the saved clip: true when it did, false when it wrote the captured audio. It is NULL for a clip saved before this column existed and for a row with no clip, and NULL is treated as not denoised. The exporter sets it after the clip is written. It describes the file, so it survives retention.
+	ClipDenoised *bool
 
 	// Processing metadata
 	ProcessingTimeMs *int64 // Milliseconds
