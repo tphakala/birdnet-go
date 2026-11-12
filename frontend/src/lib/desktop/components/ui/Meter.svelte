@@ -185,7 +185,11 @@
   }
 
   .meter-fill[data-pattern='hatched'] {
-    background: repeating-linear-gradient(135deg, var(--meter-fill) 0 2px, transparent 2px 4px);
+    background: repeating-linear-gradient(
+      135deg,
+      var(--meter-hatch, var(--meter-fill)) 0 2px,
+      transparent 2px 4px
+    );
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -206,7 +210,7 @@
     }
 
     .meter-fill[data-pattern='hatched'] {
-      background: repeating-linear-gradient(135deg, Highlight 0 2px, transparent 2px 4px);
+      --meter-hatch: Highlight;
     }
   }
 </style>

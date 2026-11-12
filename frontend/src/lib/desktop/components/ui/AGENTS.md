@@ -29,7 +29,8 @@ import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 - A `className` prop merged with `cn()` from `$lib/utils/cn`, plus `...rest`
   spread onto the root element for HTML attributes
 - A `children` snippet where the component wraps content
-- Tailwind utility classes only; accessibility attributes built in
+- Tailwind utility classes; component CSS only for what utilities cannot express (`Meter`:
+  hatching, segment gaps, forced-colors); accessibility attributes built in
 
 ## Adding a New Primitive
 
