@@ -17,6 +17,11 @@ type Results struct {
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
 	ModelID         string                // identifies which model produced these results
+	// Embedding is the window's embedding when the model exposes one, else nil.
+	// EmbeddingSpace names the space it belongs to; only vectors of the same space
+	// are comparable.
+	Embedding      []float32
+	EmbeddingSpace string
 	// Audio describes the timing of PCMdata on the producer's audio timeline.
 	Audio AudioTiming
 }
@@ -76,6 +81,11 @@ func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, 
 	if r.PCMdata != nil {
 		newCopy.PCMdata = make([]byte, len(r.PCMdata))
 		copy(newCopy.PCMdata, r.PCMdata)
+	}
+
+	if r.Embedding != nil {
+		newCopy.Embedding = make([]float32, len(r.Embedding))
+		copy(newCopy.Embedding, r.Embedding)
 	}
 
 	// Deep copy Results slice

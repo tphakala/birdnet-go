@@ -163,9 +163,9 @@ type predictCountingBackend struct {
 func (*predictCountingBackend) IsModelLoaded(string) bool { return true }
 func (*predictCountingBackend) IsModelActive(string) bool { return true }
 
-func (p *predictCountingBackend) PredictModelTimed(context.Context, string, [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
+func (p *predictCountingBackend) PredictModelTimed(context.Context, string, [][]float32) (classifier.Prediction, error) {
 	p.predictCalls++
-	return nil, classifier.PredictTiming{}, errors.NewStd("scripted predict failure")
+	return classifier.Prediction{}, errors.NewStd("scripted predict failure")
 }
 
 // TestProcessMonitorTick_ContiguousWindowRequirement pins that a model whose spec
@@ -732,8 +732,8 @@ type dispatchBackend struct {
 func (dispatchBackend) IsModelLoaded(string) bool { return true }
 func (dispatchBackend) IsModelActive(string) bool { return true }
 
-func (b dispatchBackend) PredictModelTimed(context.Context, string, [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
-	return nil, classifier.PredictTiming{}, b.predictErr
+func (b dispatchBackend) PredictModelTimed(context.Context, string, [][]float32) (classifier.Prediction, error) {
+	return classifier.Prediction{}, b.predictErr
 }
 
 func (dispatchBackend) EffectiveBaseOverlap() time.Duration { return 0 }
