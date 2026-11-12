@@ -164,14 +164,13 @@
 </div>
 
 <style>
-  /* Component CSS rather than utilities: the hatch pattern, the segment gap that flex-shrink
-     keeps inside the track, and the forced-colors fallback have no readable utility form.
+  /* Component CSS rather than utilities: the hatch pattern, the segment joint drawn inside the
+     segment widths, and the forced-colors fallback have no readable utility form.
      The track sits in Tailwind's components layer, so utilities passed in className (w-12 in a
      table cell) still win over it. */
   @layer components {
     .meter {
       display: flex;
-      gap: 2px;
       width: 100%;
       overflow: hidden;
       border-radius: 9999px;
@@ -180,22 +179,33 @@
     }
   }
 
+  /* Each part's flex-basis is its share of the track, so the joint between parts is a
+     transparent start border inside the part (border-box, background clipped to the padding
+     box) rather than a flex gap, which would add to the widths and push the stack past its
+     value. The background longhands keep background-clip from being reset. */
   .meter-fill {
+    box-sizing: border-box;
     flex-grow: 0;
     flex-shrink: 1;
     min-width: 0;
-    background: var(--meter-fill);
+    background-color: var(--meter-fill);
+    background-clip: padding-box;
     transition: flex-basis 400ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
-  /* Only the data end is rounded; joints between parts stay square on either side of the gap */
+  .meter-fill + .meter-fill {
+    border-inline-start: 2px solid transparent;
+  }
+
+  /* Only the data end is rounded; joints between parts stay square on either side */
   .meter-fill:last-child {
     border-start-end-radius: 9999px;
     border-end-end-radius: 9999px;
   }
 
   .meter-fill[data-pattern='hatched'] {
-    background: repeating-linear-gradient(
+    background-color: transparent;
+    background-image: repeating-linear-gradient(
       135deg,
       var(--meter-hatch, var(--meter-fill)) 0 2px,
       transparent 2px 4px
@@ -216,7 +226,7 @@
 
     .meter-fill {
       forced-color-adjust: none;
-      background: Highlight;
+      background-color: Highlight;
     }
 
     .meter-fill[data-pattern='hatched'] {
