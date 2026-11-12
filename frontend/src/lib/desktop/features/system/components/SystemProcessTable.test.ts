@@ -117,6 +117,19 @@ describe('SystemProcessTable', () => {
     await waitFor(() => expect(onRetry).toHaveBeenCalledOnce());
   });
 
+  it('moves focus to the first sort button when a Retry brings rows back', async () => {
+    const view = renderTable({ error: 'Service unavailable' });
+    const retry = within(screen.getByRole('alert')).getByRole('button', {
+      name: t('common.retry'),
+    });
+    retry.focus();
+    await fireEvent.click(retry);
+
+    await view.rerender(tableProps({ error: null }));
+
+    await waitFor(() => expect(screen.getByTestId('sort-name')).toHaveFocus());
+  });
+
   it('moves focus to the Show All switch when a Retry leaves no rows', async () => {
     const view = renderTable({ processes: [], error: 'Service unavailable' });
     const retry = within(screen.getByRole('alert')).getByRole('button', {
