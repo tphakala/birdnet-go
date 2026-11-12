@@ -74,7 +74,7 @@
 
   let panel = $state<HTMLDivElement>();
   // A Retry that succeeds removes the alert under the focus; the first sort button, or the
-  // Show All switch when no rows came back, takes focus instead of the document body. The
+  // Show All switch when the table shows no rows, takes focus instead of the document body. The
   // wrapper itself is not focusable, so a click in a row leaves keyboard scrolling with the
   // capped list.
   const focusPanel = () => [
