@@ -308,6 +308,22 @@ describe('SortableDataTable', () => {
     }
   );
 
+  it.each([
+    ['first', 0],
+    ['middle', 1],
+    ['last', 2],
+  ])('adds no extra tab stop when only the %s column is sortable', (_position, sortableIndex) => {
+    const cols: Column<Row>[] = [
+      { key: 'name', header: 'Name' },
+      { key: 'score', header: 'Score' },
+      { key: 'id', header: 'ID' },
+    ].map((col, i) => ({ ...col, sortable: i === sortableIndex, sortValue: r => r.id }));
+    const { container } = renderTable({ columns: cols, title: 'Things' });
+    const body = container.querySelector('table')?.parentElement;
+    expect(body).not.toHaveAttribute('tabindex');
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
   it('keeps the natural body height when bodyMaxHeight is not set', () => {
     const { container } = renderTable({});
     const body = container.querySelector('table')?.parentElement;
