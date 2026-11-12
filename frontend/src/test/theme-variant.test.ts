@@ -236,12 +236,12 @@ describe('theme resolution: pre-paint script and store', () => {
     theme.subscribe(value => seen.push([value, root.getAttribute('data-theme')]));
     seen.length = 0;
 
-    theme.toggle();
-    theme.set('light');
+    // The OS turns dark before mount, so initialize resolves a new value
     setOs('dark');
-    localStorage.removeItem('theme');
     theme.initialize();
     setOs('light');
+    theme.toggle();
+    theme.set('light');
 
     expect(seen).toEqual([
       ['dark', 'dark'],
@@ -285,6 +285,23 @@ describe('theme resolution: pre-paint script and store', () => {
     reloaded.initialize();
     expect(get(reloaded)).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
+  });
+
+  it('keeps a theme chosen while storage is blocked through OS changes and a second mount', async () => {
+    setStorage('throws');
+    const setOs = controllableOs('light');
+    const { theme } = await freshStore();
+    theme.initialize();
+
+    theme.set('dark');
+    setOs('dark');
+    setOs('light');
+    expect(get(theme)).toBe('dark');
+
+    // A second mount, for example after login, keeps the choice too
+    theme.initialize();
+    expect(get(theme)).toBe('dark');
+    expect(attributes()).toEqual(['dark', 'dark']);
   });
 
   it('ignores a stored value that is not a theme and does not rewrite it', async () => {
