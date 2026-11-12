@@ -185,4 +185,54 @@ describe('theme resolution: pre-paint script and store', () => {
     expect(get(theme)).toBe('dark');
     expect(attributes()).toEqual(['dark', 'dark']);
   });
+
+  it.each([
+    ['throws', 'dark'],
+    ['light', 'dark'],
+    ['dark', 'light'],
+  ] as const)(
+    'with %s stored, an OS change to %s is followed only when no valid theme is stored',
+    async (stored, change) => {
+      setStorage(stored);
+      stubMatchMedia(change === 'dark' ? 'light' : 'dark');
+      const { theme } = await freshStore();
+      let listener: ((e: { matches: boolean }) => void) | undefined;
+      window.matchMedia = (() => ({
+        matches: change !== 'dark',
+        addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
+          listener = fn;
+        },
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      theme.initialize();
+      const before = get(theme);
+
+      listener?.({ matches: change === 'dark' });
+
+      const followed = stored === 'throws';
+      expect(get(theme)).toBe(followed ? change : before);
+      expect(attributes()).toEqual([get(theme), get(theme)]);
+    }
+  );
+
+  it('subscribers see the new theme only after the attributes changed', async () => {
+    setStorage(null);
+    stubMatchMedia('light');
+    const { theme } = await freshStore();
+    const seen: Array<[string, string | null]> = [];
+    theme.subscribe(value => seen.push([value, root.getAttribute('data-theme')]));
+    seen.length = 0;
+
+    theme.toggle();
+    theme.set('light');
+    stubMatchMedia('dark');
+    localStorage.removeItem('theme');
+    theme.initialize()?.();
+
+    expect(seen).toEqual([
+      ['dark', 'dark'],
+      ['light', 'light'],
+      ['dark', 'dark'],
+    ]);
+  });
 });
