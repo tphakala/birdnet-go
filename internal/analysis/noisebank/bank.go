@@ -25,6 +25,11 @@ import (
 )
 
 const (
+	// LogModule is the logger module of the noise example feature: the gate in the
+	// processor and the learning service both write through it, so their lines share
+	// one log file.
+	LogModule = "analysis.noisebank"
+
 	// MatchSimilarity is the cosine similarity at or above which a window counts as
 	// matching a noise example.
 	MatchSimilarity = 0.80

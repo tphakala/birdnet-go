@@ -61,6 +61,7 @@ const (
 	DefaultSpectrogramLogPath   = "logs/spectrogram.log"
 	DefaultActionsLogPath       = "logs/actions.log"
 	DefaultClassifierLogPath    = "logs/classifier.log"
+	DefaultNoiseBankLogPath     = "logs/noisebank.log"
 	DefaultMaxSize              = 100   // MB before rotation
 	DefaultMaxAge               = 30    // days to keep rotated files
 	DefaultMaxRotatedFiles      = 10    // max number of rotated files
@@ -106,6 +107,12 @@ var defaultModuleOutputs = map[string]ModuleOutput{
 
 	// Action processing logs (command execution, database saves, notifications)
 	"analysis.processor": {Enabled: true, FilePath: DefaultActionsLogPath, ConsoleAlso: true},
+
+	// Noise example gate decisions and learning service lines: one Info line per
+	// detection the gate compared, and one Debug line per compared analysis window
+	// when the module level is set to debug. A debug level makes the window lines
+	// frequent, so there is no console copy.
+	"analysis.noisebank": {Enabled: true, FilePath: DefaultNoiseBankLogPath},
 }
 
 // DefaultModuleOutput returns the built-in default ModuleOutput for a known

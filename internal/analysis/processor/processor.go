@@ -286,6 +286,7 @@ type Detections struct {
 	pcmData3s     []byte                       // 3s PCM data containing the detection
 	Result        detection.Result             // Detection result containing highest match
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
+	noiseGate     noiseComparison              // What the noise example gate found for the window; only feeds the decision log
 }
 
 // taskDetectionFor returns the detection payload to queue with action. The
@@ -363,6 +364,11 @@ type PendingDetection struct {
 	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration); the privacy filter can hold a detection past it until its clip is scanned. Also caps the clip EndTime (see detectionEndTime); the saved clip ends PreCapture after it
 
 	ModelContributions map[string]ModelContribution // Per-model detection data, keyed by model ID
+
+	// noiseGate tallies what the noise example gate found across the windows that fed
+	// this detection. It lives here, not on Detection, which a higher-confidence
+	// window replaces. It only feeds the decision log.
+	noiseGate noiseTally
 }
 
 // pendingDetectionKey creates a composite key for the pendingDetections map.
@@ -949,7 +955,8 @@ func mergeUnlikelyVerdict(merged *detection.Result, prev, hit unlikelyVerdict) {
 // model may have created) or creates one, counts the hit, records it in the model's
 // contribution statistics stamped with hitAt, and applies extended capture when the
 // species qualifies. On update it also merges the ultrasonic unlikely verdict of the hit
-// (see mergeUnlikelyVerdict). It takes and releases pendingMutex itself; the caller must not
+// (see mergeUnlikelyVerdict) and folds the hit's noise example comparison into the
+// pending entry's tally. It takes and releases pendingMutex itself; the caller must not
 // hold it.
 func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, hitAt time.Time, detectionWindow time.Duration) {
 	commonName := strings.ToLower(det.Result.Species.CommonName)
@@ -982,6 +989,7 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 				logger.String("operation", "update_pending_detection"))
 		}
 		mergeUnlikelyVerdict(&existing.Detection.Result, previous, verdictOf(&det.Result))
+		existing.noiseGate.add(det.noiseGate)
 		existing.Count++
 
 		// Track per-model contribution
@@ -1003,6 +1011,8 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 			logger.String("operation", "create_pending_detection"))
 		var contrib ModelContribution
 		contrib.recordHit(confidence, hitAt)
+		var noiseGate noiseTally
+		noiseGate.add(det.noiseGate)
 		p.pendingDetections[mapKey] = PendingDetection{
 			Detection:       *det,
 			Confidence:      confidence,
@@ -1017,6 +1027,7 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 			FlushDeadline:      now.Add(detectionWindow),
 			Count:              1,
 			ModelContributions: map[string]ModelContribution{item.ModelID: contrib},
+			noiseGate:          noiseGate,
 		}
 	}
 
@@ -2243,6 +2254,8 @@ func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration 
 // stays pending and is re-checked on the next tick. An approved detection is built
 // from the same settings snapshot the check used. The model view of the model
 // consensus filter is prepared once per tick, before pendingMutex is taken.
+// A detection the noise example gate compared writes its outcome line when it is
+// discarded or flushed, not when it is deferred.
 // Returns the count of pending and flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
@@ -2297,6 +2310,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 				logger.Int("model_count", len(item.ModelContributions)),
 				logger.String("reason", reason),
 				logger.String("operation", "discard_detection"))
+			p.logNoiseGateOutcome(&item, speciesName, noiseGateOutcomeDiscarded, reason)
 			if reason == reasonPrivacyFilter && p.privacyRollup != nil {
 				rollupEvents = append(rollupEvents, discardEvent(item.Source, &priv.hit))
 				discardRecords = append(discardRecords, privacyDiscard(settings, &item, &priv, now))
@@ -2332,6 +2346,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			logger.Int("model_count", len(item.ModelContributions)),
 			logger.Int("required", itemMinDetections),
 			logger.String("operation", "flush_detection"))
+		p.logNoiseGateOutcome(&item, speciesName, noiseGateOutcomeKept, "")
 
 		p.processApprovedDetection(&item, speciesName, settings)
 		delete(p.pendingDetections, mapKey)
