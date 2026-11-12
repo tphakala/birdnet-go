@@ -514,6 +514,10 @@ describe('ToggleField disabled, required and error state', () => {
       expect(toggle).not.toHaveClass('bg-[var(--color-base-content)]/60');
       expect(toggle).not.toHaveClass('checked:bg-[var(--color-primary)]');
       expect(toggle).toHaveClass(
+        'bg-[var(--color-base-content)]/30',
+        'checked:bg-[var(--color-primary)]/50'
+      );
+      expect(toggle).toHaveClass(
         'focus-visible:outline-2',
         'focus-visible:outline-[var(--color-primary)]'
       );
@@ -675,7 +679,27 @@ describe('ToggleField card variant', () => {
     expect(content).toContainElement(card?.querySelector('svg') ?? null);
     expect(content).toContainElement(screen.getByText('Test Toggle'));
     expect(opacityClasses(toggle)).toEqual([]);
+    // The wrapper already dims the switch, so it keeps the enabled track
+    expect(toggle).toHaveClass(
+      'bg-[var(--color-base-content)]/60',
+      'checked:bg-[var(--color-primary)]'
+    );
+    expect(toggle).not.toHaveClass('bg-[var(--color-base-content)]/30');
   });
+
+  it.each([
+    [false, 'border-[var(--border-200)]/50', 'border-[var(--border-200)]'],
+    [true, 'border-[var(--color-primary)]/50', 'border-[var(--color-primary)]'],
+  ])(
+    'a disabled card with value %s dims its frame through its border colour',
+    (value, dimmed, full) => {
+      render(ToggleField, { props: { ...baseProps, value, onUpdate: vi.fn(), disabled: true } });
+      const card = screen.getByRole('checkbox').closest('label');
+
+      expect(card).toHaveClass(dimmed);
+      expect(card).not.toHaveClass(full);
+    }
+  );
 
   it('an enabled card keeps its content at full opacity', () => {
     render(ToggleField, { props: { ...baseProps, value: false, onUpdate: vi.fn() } });
