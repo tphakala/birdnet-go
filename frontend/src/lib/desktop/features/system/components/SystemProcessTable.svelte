@@ -200,6 +200,7 @@
     resizable={false}
     bodyMaxHeight={BODY_MAX_HEIGHT}
     emptyTitle={t('system.processInfo.noProcesses')}
+    noResultsMessage={t('search.noResultsFound')}
     {notice}
     empty={error ? noEmptyState : undefined}
     headerActions={showAllToggle}

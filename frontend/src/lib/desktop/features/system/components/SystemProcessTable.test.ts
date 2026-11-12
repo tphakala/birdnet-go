@@ -152,6 +152,14 @@ describe('SystemProcessTable', () => {
     expect(shownNames()[0]).toContain('ffmpeg');
   });
 
+  it('says no results when a search matches nothing', async () => {
+    renderTable({ showAllProcesses: true });
+
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'nothing-like-this' } });
+
+    expect(screen.getByText(t('search.noResultsFound'))).toBeInTheDocument();
+  });
+
   it('keeps sort and search across a data refresh', async () => {
     const view = renderTable({ showAllProcesses: true });
     await fireEvent.click(screen.getByTestId('sort-name'));
