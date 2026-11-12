@@ -52,9 +52,9 @@
 
   // A disabled switch uses aria-disabled instead of native disabled, in every variant, so Tab
   // still reaches it and a screen reader reads its description (the reason it is off). The
-  // click (from the switch, its label or Space) is cancelled instead, so it never flips. The
-  // cancel listens on the input itself, not through delegation, so an ancestor that stops the
-  // click on its way up cannot skip it.
+  // click (from the switch, its label or Space) is cancelled instead, so it never flips. Both
+  // handlers listen on the input itself, not through delegation, so an ancestor that stops the
+  // click or the change on its way up cannot skip them.
   function handleClick(event: MouseEvent) {
     if (disabled) event.preventDefault();
   }
@@ -81,15 +81,16 @@
     before:shadow-sm before:transition-transform
   `.trim();
 
-  // The track and cursor are chosen by state, not overridden: a disabled switch stays focusable,
-  // and element opacity would fade its focus ring below 3:1. The dimmed track is half the
-  // enabled alpha, the same look as 50% opacity, without fading the ring.
-  const TOGGLE_ENABLED_CLASS =
-    'cursor-pointer bg-[var(--color-base-content)]/60 checked:bg-[var(--color-primary)]';
-  const TOGGLE_DIMMED_CLASS =
-    'cursor-not-allowed bg-[var(--color-base-content)]/30 checked:bg-[var(--color-primary)]/50';
-  const TOGGLE_BLOCKED_CLASS =
-    'cursor-not-allowed bg-[var(--color-base-content)]/60 checked:bg-[var(--color-primary)]';
+  // The track, its checked colour and the cursor are chosen by state, not overridden: a disabled
+  // switch stays focusable, and element opacity would fade its focus ring below 3:1. The dimmed
+  // track is half the enabled alpha, the same look as 50% opacity, without fading the ring.
+  const TOGGLE_ENABLED_CLASS = 'cursor-pointer bg-[var(--color-base-content)]/60';
+  const TOGGLE_DIMMED_CLASS = 'cursor-not-allowed bg-[var(--color-base-content)]/30';
+  const TOGGLE_BLOCKED_CLASS = 'cursor-not-allowed bg-[var(--color-base-content)]/60';
+  const CHECKED_PRIMARY_CLASS = 'checked:bg-[var(--color-primary)]';
+  const CHECKED_PRIMARY_DIMMED_CLASS = 'checked:bg-[var(--color-primary)]/50';
+  const CHECKED_ERROR_CLASS = 'checked:bg-[var(--color-error)]';
+  const CHECKED_ERROR_DIMMED_CLASS = 'checked:bg-[var(--color-error)]/50';
 
   // The default variant rings the switch itself. The card variant rings the card and dims its
   // content instead, and clears the browser's own ring so it does not double the card ring.
@@ -103,20 +104,24 @@
   };
 
   // The card dims its content wrapper, so its switch keeps the enabled track
+  let dimmedTrack = $derived(disabled && variant !== 'card');
   let toggleStateClass = $derived(
-    !disabled
-      ? TOGGLE_ENABLED_CLASS
-      : variant === 'card'
-        ? TOGGLE_BLOCKED_CLASS
-        : TOGGLE_DIMMED_CLASS
+    !disabled ? TOGGLE_ENABLED_CLASS : dimmedTrack ? TOGGLE_DIMMED_CLASS : TOGGLE_BLOCKED_CLASS
+  );
+  let toggleCheckedClass = $derived(
+    error
+      ? dimmedTrack
+        ? CHECKED_ERROR_DIMMED_CLASS
+        : CHECKED_ERROR_CLASS
+      : dimmedTrack
+        ? CHECKED_PRIMARY_DIMMED_CLASS
+        : CHECKED_PRIMARY_CLASS
   );
 
   let toggleBaseClasses = $derived(
     // eslint-disable-next-line security/detect-object-injection -- size is typed as 'sm' | 'md'
-    `${toggleSharedClasses} ${toggleSizeClasses[size]} ${toggleStateClass}`
+    `${toggleSharedClasses} ${toggleSizeClasses[size]} ${toggleStateClass} ${toggleCheckedClass}`
   );
-
-  const toggleErrorClasses = 'checked:bg-[var(--color-error)]';
 
   // cn does not merge conflicting utilities, so the cursor, the border and the hover border are
   // chosen by state here instead of being overridden later. The frame draws the focus ring, so it
@@ -186,12 +191,12 @@
   <input
     id={fieldId}
     type="checkbox"
-    class={cn(toggleBaseClasses, variantClasses, error && toggleErrorClasses)}
+    class={cn(toggleBaseClasses, variantClasses)}
     checked={value}
     aria-disabled={disabled ? 'true' : undefined}
     required={required && !disabled}
     onclickcapture={handleClick}
-    onchange={handleChange}
+    onchangecapture={handleChange}
     aria-labelledby={labelId}
     aria-describedby={describedBy}
     aria-invalid={error ? 'true' : undefined}

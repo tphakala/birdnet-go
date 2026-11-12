@@ -499,6 +499,51 @@ describe('ToggleField disabled, required and error state', () => {
     }
   );
 
+  it.each(VARIANTS)(
+    'a disabled %s switch keeps its state when an ancestor stops the click early and the change late',
+    async variant => {
+      const onUpdate = vi.fn();
+      const { container } = render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
+      });
+      const toggle = screen.getByRole('checkbox');
+      // The click is stopped before the switch and the change on its way up, so neither the
+      // click cancel nor a delegated change handler would run
+      container.addEventListener('click', event => event.stopPropagation(), true);
+      toggle.parentElement?.addEventListener('change', event => event.stopPropagation());
+
+      await fireEvent.click(toggle);
+
+      expect(toggle).not.toBeChecked();
+      expect(onUpdate).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(VARIANTS.flatMap(variant => [false, true].map(disabled => [variant, disabled] as const)))(
+    'a checked %s switch with an error (disabled %s) draws only the error colour',
+    (variant, disabled) => {
+      render(ToggleField, {
+        props: {
+          label: 'Test Toggle',
+          value: true,
+          onUpdate: vi.fn(),
+          error: 'Bad',
+          disabled,
+          variant,
+        },
+      });
+      const checkedColours = [...screen.getByRole('checkbox').classList].filter(c =>
+        c.startsWith('checked:bg-')
+      );
+      // The card dims its content wrapper instead, so only the default and inline tracks halve
+      const dimmed = disabled && variant !== 'card';
+
+      expect(checkedColours).toEqual([
+        dimmed ? 'checked:bg-[var(--color-error)]/50' : 'checked:bg-[var(--color-error)]',
+      ]);
+    }
+  );
+
   it.each(['default', 'inline'] as const)(
     'a disabled %s switch dims through colour, not opacity, so its focus ring stays at full strength',
     variant => {
