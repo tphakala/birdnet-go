@@ -30,9 +30,13 @@
     | 'warning'
     | 'error';
 
+  /** Bar height: xs (0.375rem) for table rows, sm (0.5rem) for cards. */
   export type MeterSize = 'xs' | 'sm';
 
-  /** From `value` upwards (in the units of `value` and `max`), the fill takes `tone`. */
+  /**
+   * From `value` upwards (in the units of `value` and `max`), the fill takes `tone`. It is
+   * compared with the value clamped to 0..max, so a threshold above `max` is never reached.
+   */
   export interface MeterThreshold {
     value: number;
     tone: MeterTone;
@@ -56,7 +60,10 @@
     max?: number;
     /** Fill tone when no threshold is reached */
     tone?: MeterTone;
-    /** Tone changes by value; the highest threshold at or below the value wins */
+    /**
+     * Tone of the single fill by value; the highest threshold at or below the clamped value
+     * wins. Not used with `segments`, whose parts carry their own tones.
+     */
     thresholds?: MeterThreshold[];
     /** Stacked parts drawn instead of a single fill; `value` stays the reported value */
     segments?: MeterSegment[];

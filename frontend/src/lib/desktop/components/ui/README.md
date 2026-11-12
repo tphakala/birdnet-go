@@ -459,7 +459,7 @@ type MeterTone =
   | 'error';
 
 interface MeterThreshold {
-  value: number; // from this value upwards (units of value and max)
+  value: number; // from this value upwards (units of value and max), compared with the clamped value
   tone: MeterTone;
 }
 
@@ -473,7 +473,7 @@ interface Props extends HTMLAttributes<HTMLDivElement> {
   value: number; // clamped to 0..max; a non-finite value reads as 0
   max?: number; // default 100
   tone?: MeterTone; // default 'series-1'
-  thresholds?: MeterThreshold[]; // the highest threshold at or below the value wins
+  thresholds?: MeterThreshold[]; // single fill only; the highest threshold at or below the clamped value wins
   segments?: MeterSegment[]; // stacked parts instead of one fill; value stays the reported value
   size?: 'xs' | 'sm'; // xs 0.375rem for table rows, sm 0.5rem (default) for cards
   label: string; // accessible name
