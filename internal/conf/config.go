@@ -1450,8 +1450,11 @@ type BatConfig struct {
 // The filter measures temporal variability of ultrasonic energy (US frame CV) in the audio window it is given, at the model's analysis rate.
 // Real bat echolocation produces bursts of ultrasonic energy (high CV), while false positives
 // from audible-range sounds show flat ultrasonic energy at the noise floor (low CV).
-// A window that passes the CV check is then examined in shorter sub-frames, and sub-frames where the band
-// from 0.6 to 0.8 of FrequencySplitHz jumps together with the ultrasonic band (clicks, rustling) do not count toward the CV.
+// A window that passes the CV check is then examined in shorter sub-frames. Sub-frames where the band
+// from 0.6 to 0.8 of FrequencySplitHz jumps together with the ultrasonic band (clicks, rustling) do not count toward the CV,
+// and neither do sub-frames where every band of a twentieth of FrequencySplitHz, from 0.7 to 1.2 of it, is raised together
+// with the ultrasonic band (rain). The second check is skipped when FFTSize is so small that such a band is narrower than
+// one sub-frame bin.
 type UltrasonicFilterConfig struct {
 	Enabled          bool    `yaml:"enabled" json:"enabled"`                   // enable ultrasonic validation filter
 	DiscardUnlikely  bool    `yaml:"discardunlikely" json:"discardUnlikely"`   // discard detections tagged unlikely instead of saving them; applies only while enabled
