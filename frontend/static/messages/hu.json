@@ -1221,8 +1221,7 @@
         "uptime": "Üzemidő",
         "process": "Folyamat"
       },
-      "showAll": "Összes folyamat megjelenítése",
-      "showBirdnetOnly": "Csak BirdNET megjelenítése"
+      "showAll": "Összes folyamat megjelenítése"
     },
     "errors": {
       "systemInfo": "A rendszer információ betöltése sikertelen: {error}",

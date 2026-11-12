@@ -122,4 +122,40 @@ describe('Card', () => {
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create backup' })).toBeInTheDocument();
   });
+  // The body wrapper's classes for each variant, header source and padding setting: each of
+  // title, description, header snippet and header actions alone counts as a header, and
+  // bodyClassName is always appended.
+  it.each([
+    ['default', 'none', true, 'p-6'],
+    ['default', 'title', true, 'px-6 pb-6'],
+    ['default', 'actions', true, 'px-6 pb-6'],
+    ['default', 'description', true, 'px-6 pb-6'],
+    ['default', 'header', true, 'px-6 pb-6'],
+    ['default', 'title', false, ''],
+    ['panel', 'none', true, 'flex-1 min-h-0 p-4'],
+    ['panel', 'title', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'actions', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'description', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'header', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'actions', false, 'flex-1 min-h-0'],
+  ] as const)(
+    '%s variant with header %s and padding %s gives the body "%s" plus bodyClassName',
+    (variant, headerSource, padding, expected) => {
+      renderTyped(CardTestWrapper, {
+        props: {
+          variant,
+          padding,
+          bodyClassName: 'gap-3',
+          title: headerSource === 'title' ? 'Storage' : '',
+          actionLabel: headerSource === 'actions' ? 'Refresh' : '',
+          description: headerSource === 'description' ? 'Disk usage' : undefined,
+          showHeader: headerSource === 'header',
+        },
+      });
+
+      const body = screen.getByText('Card content');
+      const classes = [...body.classList].sort();
+      expect(classes).toEqual([...expected.split(' ').filter(Boolean), 'gap-3'].sort());
+    }
+  );
 });

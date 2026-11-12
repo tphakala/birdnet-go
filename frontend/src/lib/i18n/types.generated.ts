@@ -945,7 +945,6 @@ export type TranslationKey =
   | 'system.processInfo.headers.uptime'
   | 'system.processInfo.headers.process'
   | 'system.processInfo.showAll'
-  | 'system.processInfo.showBirdnetOnly'
   | 'system.errors.systemInfo' // params: error
   | 'system.errors.diskUsage' // params: error
   | 'system.errors.memoryUsage' // params: error

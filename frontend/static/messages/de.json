@@ -1221,8 +1221,7 @@
         "uptime": "Laufzeit",
         "process": "Prozess"
       },
-      "showAll": "Alle Prozesse anzeigen",
-      "showBirdnetOnly": "Nur BirdNET anzeigen"
+      "showAll": "Alle Prozesse anzeigen"
     },
     "errors": {
       "systemInfo": "Fehler beim Laden der Systeminformationen: {error}",

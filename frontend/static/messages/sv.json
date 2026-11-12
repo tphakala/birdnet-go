@@ -1221,8 +1221,7 @@
         "uptime": "Drifttid",
         "process": "Process"
       },
-      "showAll": "Visa alla processer",
-      "showBirdnetOnly": "Visa endast BirdNET"
+      "showAll": "Visa alla processer"
     },
     "errors": {
       "systemInfo": "Kunde inte ladda systeminformation: {error}",

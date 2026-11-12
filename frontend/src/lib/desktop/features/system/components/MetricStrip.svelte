@@ -93,140 +93,144 @@
   });
 </script>
 
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-  <!-- CPU -->
-  <div
-    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-  >
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-blue-500/10">
-          <Cpu class="w-4 h-4 text-blue-500" />
+<div class="@container">
+  <div class="grid grid-cols-2 @4xl:grid-cols-4 gap-3">
+    <!-- CPU -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-blue-500/10">
+            <Cpu class="w-4 h-4 text-blue-500" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('system.metrics.cpu')}</span>
         </div>
-        <span class="text-xs font-medium text-muted">{t('system.metrics.cpu')}</span>
+        <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
       </div>
-      <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
-    </div>
-    <div class="flex-1 min-h-[28px]">
-      <Sparkline data={cpuHistory} color={sparklineColorCpu} />
-    </div>
-    <div class="flex justify-between mt-2 text-[10px] text-muted">
-      <span>{cpuCores} {t('system.metrics.cores')}</span>
-      <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
-    </div>
-  </div>
-
-  <!-- Memory -->
-  <div
-    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-  >
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-violet-500/10">
-          <MemoryStick class="w-4 h-4 text-violet-500" />
-        </div>
-        <span class="text-xs font-medium text-muted">{t('system.metrics.memory')}</span>
-      </div>
-      <span class="font-mono tabular-nums text-lg font-semibold">{memoryPercent.toFixed(1)}%</span>
-    </div>
-    <div class="flex-1 min-h-[28px]">
-      <Sparkline data={memoryHistory} color={sparklineColorMemory} />
-    </div>
-    <div class="flex justify-between mt-2 text-[10px] text-muted">
-      <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
-      <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
-    </div>
-  </div>
-
-  <!-- Temperature -->
-  <div
-    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-  >
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-orange-500/10">
-          <Thermometer class="w-4 h-4 text-orange-500" />
-        </div>
-        <span class="text-xs font-medium text-muted">{t('system.metrics.temperature')}</span>
-      </div>
-      <span class="font-mono tabular-nums text-lg font-semibold">
-        {#if temperatureAvailable}
-          {temperatureValue.toFixed(1)}{tempSymbol}
-        {:else}
-          -
-        {/if}
-      </span>
-    </div>
-    {#if temperatureAvailable}
       <div class="flex-1 min-h-[28px]">
-        <Sparkline data={temperatureHistory} color={sparklineColorTemperature} />
+        <Sparkline data={cpuHistory} color={sparklineColorCpu} />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span>{t('system.metrics.min')} {tempMin.toFixed(1)}{tempSymbol}</span>
-        <span>{t('system.metrics.max')} {tempMax.toFixed(1)}{tempSymbol}</span>
+        <span>{cpuCores} {t('system.metrics.cores')}</span>
+        <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
       </div>
-    {:else}
-      <div class="flex-1 min-h-[28px] flex items-center">
-        <span class="text-xs text-muted">{t('system.metrics.tempUnavailable')}</span>
-      </div>
-    {/if}
-  </div>
+    </div>
 
-  <!-- Inference Time -->
-  <div
-    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-  >
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-teal-500/10">
-          <Brain class="w-4 h-4 text-teal-500" />
+    <!-- Memory -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-violet-500/10">
+            <MemoryStick class="w-4 h-4 text-violet-500" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('system.metrics.memory')}</span>
         </div>
-        <span class="text-xs font-medium text-muted">{t('system.metrics.inference')}</span>
+        <span class="font-mono tabular-nums text-lg font-semibold">{memoryPercent.toFixed(1)}%</span
+        >
       </div>
-      <div class="flex items-center gap-2">
-        {#if worstStatus === 'ok'}
-          <span
-            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-success"
-            >{t('system.metrics.statusOk')}</span
-          >
-        {:else if worstStatus === 'warning'}
-          <span
-            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-warning"
-            >{t('system.metrics.statusWarning')}</span
-          >
-        {:else if worstStatus === 'critical'}
-          <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-error"
-            >{t('system.metrics.statusCritical')}</span
-          >
-        {/if}
+      <div class="flex-1 min-h-[28px]">
+        <Sparkline data={memoryHistory} color={sparklineColorMemory} />
+      </div>
+      <div class="flex justify-between mt-2 text-[10px] text-muted">
+        <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
+        <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
+      </div>
+    </div>
+
+    <!-- Temperature -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-orange-500/10">
+            <Thermometer class="w-4 h-4 text-orange-500" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('system.metrics.temperature')}</span>
+        </div>
         <span class="font-mono tabular-nums text-lg font-semibold">
-          {#if hasInferenceData}
-            {primaryAvgMs.toFixed(0)}ms
+          {#if temperatureAvailable}
+            {temperatureValue.toFixed(1)}{tempSymbol}
           {:else}
             -
           {/if}
         </span>
       </div>
+      {#if temperatureAvailable}
+        <div class="flex-1 min-h-[28px]">
+          <Sparkline data={temperatureHistory} color={sparklineColorTemperature} />
+        </div>
+        <div class="flex justify-between mt-2 text-[10px] text-muted">
+          <span>{t('system.metrics.min')} {tempMin.toFixed(1)}{tempSymbol}</span>
+          <span>{t('system.metrics.max')} {tempMax.toFixed(1)}{tempSymbol}</span>
+        </div>
+      {:else}
+        <div class="flex-1 min-h-[28px] flex items-center">
+          <span class="text-xs text-muted">{t('system.metrics.tempUnavailable')}</span>
+        </div>
+      {/if}
     </div>
-    {#if hasInferenceData}
-      <div class="flex-1 min-h-[28px]">
-        <Sparkline datasets={inferenceDatasets} />
-      </div>
-      <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted">
-        {#each modelsWithData as m (m.id)}
-          <span class="flex items-center gap-1">
-            <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>
-            {m.name}
-            <span class="font-mono tabular-nums"
-              >{m.history[m.history.length - 1].toFixed(0)}ms</span
+
+    <!-- Inference Time -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-teal-500/10">
+            <Brain class="w-4 h-4 text-teal-500" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('system.metrics.inference')}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          {#if worstStatus === 'ok'}
+            <span
+              class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-success"
+              >{t('system.metrics.statusOk')}</span
             >
+          {:else if worstStatus === 'warning'}
+            <span
+              class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-warning"
+              >{t('system.metrics.statusWarning')}</span
+            >
+          {:else if worstStatus === 'critical'}
+            <span
+              class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-error"
+              >{t('system.metrics.statusCritical')}</span
+            >
+          {/if}
+          <span class="font-mono tabular-nums text-lg font-semibold">
+            {#if hasInferenceData}
+              {primaryAvgMs.toFixed(0)}ms
+            {:else}
+              -
+            {/if}
           </span>
-        {/each}
+        </div>
       </div>
-    {:else}
-      <div class="flex-1 min-h-[28px] flex items-center">
-        <span class="text-xs text-muted">{t('system.metrics.noInference')}</span>
-      </div>
-    {/if}
+      {#if hasInferenceData}
+        <div class="flex-1 min-h-[28px]">
+          <Sparkline datasets={inferenceDatasets} />
+        </div>
+        <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted">
+          {#each modelsWithData as m (m.id)}
+            <span class="flex items-center gap-1">
+              <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>
+              {m.name}
+              <span class="font-mono tabular-nums"
+                >{m.history[m.history.length - 1].toFixed(0)}ms</span
+              >
+            </span>
+          {/each}
+        </div>
+      {:else}
+        <div class="flex-1 min-h-[28px] flex items-center">
+          <span class="text-xs text-muted">{t('system.metrics.noInference')}</span>
+        </div>
+      {/if}
+    </div>
   </div>
 </div>

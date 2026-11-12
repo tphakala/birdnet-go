@@ -131,10 +131,29 @@
 
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
-  --text-error: #b91c1c; /* red-700 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-error: #991b1b; /* red-800 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
   --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #92400e; /* amber-800 - warning text, same rule */
   --text-info: #075985; /* sky-800 - info text, same rule */
+
+  /* Data visualization: chart series and meter fills (Meter.svelte, sparklines, legends).
+     Theme tokens, not scheme tokens: schemes.css changes only primary and accent, so these
+     hold under every color scheme, custom included. Every fill reaches 3:1 on --surface-100
+     and on --viz-track (color-contrast.test.ts). Series 2 to 7 also stay apart from each other
+     under protanopia and deuteranopia, so any of them can share a chart; series 1 and 8 are
+     for single-series marks and overflow. */
+  --viz-track: #e2e8f0; /* slate-200 - decorative meter groove, the value is printed beside it */
+  --viz-1: #2563eb; /* blue-600 */
+  --viz-2: #5b21b6; /* violet-800 */
+  --viz-3: #a16207; /* yellow-700 */
+  --viz-4: #059669; /* emerald-600 */
+  --viz-5: #9d174d; /* pink-800 */
+  --viz-6: #075985; /* sky-800 */
+  --viz-7: #a855f7; /* purple-500 */
+  --viz-8: #be123c; /* rose-700 */
+  --viz-success: #15803d; /* green-700 */
+  --viz-warning: #b45309; /* amber-700 */
+  --viz-error: #dc2626; /* red-600 */
 
   /* Component tokens */
   --radius-box: 0.5rem;
@@ -211,10 +230,24 @@
 
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
-  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
   --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
   --text-info: #38bdf8; /* sky-400 - info text, same rule */
+
+  /* Data visualization, same rules as the light block */
+  --viz-track: #1e293b; /* slate-800 */
+  --viz-1: #60a5fa; /* blue-400 */
+  --viz-2: #8b5cf6; /* violet-500 */
+  --viz-3: #fde047; /* yellow-300 */
+  --viz-4: #34d399; /* emerald-400 */
+  --viz-5: #ec4899; /* pink-500 */
+  --viz-6: #0ea5e9; /* sky-500 */
+  --viz-7: #d8b4fe; /* purple-300 */
+  --viz-8: #f43f5e; /* rose-500 */
+  --viz-success: #4ade80; /* green-400 */
+  --viz-warning: #fbbf24; /* amber-400 */
+  --viz-error: #f87171; /* red-400 */
 
   /* Shadows (darker for dark mode) */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);

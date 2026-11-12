@@ -1221,8 +1221,7 @@
         "uptime": "Werktijd",
         "process": "Proces"
       },
-      "showAll": "Toon alle processen",
-      "showBirdnetOnly": "Toon alleen BirdNET"
+      "showAll": "Toon alle processen"
     },
     "errors": {
       "systemInfo": "Systeem informatie inlezen mislukt: {error}",

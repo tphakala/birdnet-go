@@ -1,26 +1,20 @@
 /* ========================================================================
    Species Display Shared Styles
    
-   Shared CSS for the species listing components of the detections list. Uses 'sp-' prefix to avoid conflicts with existing custom.css.
-   
+   Shared CSS for the species listing components of the detections list.
+   Uses the 'sp-' prefix to avoid conflicts with custom.css.
+
    Used by:
    - DetectionsList.svelte (detections list table)
    - DetectionRow.svelte (detections list rows)
 
    Imported app-wide and unlayered: every table rule below must stay scoped
    to the detections list table (.detections-table), never a bare element.
-   
-   FILE ORGANIZATION:
-   1. CSS Custom Properties & Theming (lines 13-35)
-   2. Base Component Styles (lines 37-128)
-   3. Responsive Design & Media Queries (lines 130-506)
-   4. Animations & Keyframes (lines 197-237)
-   5. Accessibility & Print Styles (lines 171-195, 504+)
-   
-   TODO: Consider splitting into focused modules:
-   - species-display-base.css (theming + core styles)
-   - species-display-responsive.css (media queries)
-   - species-display-animations.css (keyframes + transitions)
+
+   Sections, in order: custom properties, base species container styles,
+   layout variants, responsive adjustments, accessibility, live update
+   animations, dark theme adjustments, detection list table layout and its
+   responsive adjustments, print styles.
    ======================================================================== */
 
 /* CSS Custom Properties for theming */
@@ -115,14 +109,8 @@
 }
 
 /* ========================================================================
-   Layout Variants for Different Components
+   Layout Variants
    ======================================================================== */
-
-/* Dashboard Recent Detections Layout (compact, horizontal) */
-.sp-layout-dashboard {
-  /* Compact layout for dashboard - thumbnails visible */
-  gap: 0.5rem;
-}
 
 /* Detections Page Layout (spacious, grid-based) */
 .sp-layout-detections {
@@ -299,7 +287,7 @@
 }
 
 /* ========================================================================
-   Responsive Grid Adjustments
+   Detection List Table Responsive Adjustments
    ======================================================================== */
 
 /* Hide thumbnails on narrow viewports to prioritize species text */

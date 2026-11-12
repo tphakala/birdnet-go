@@ -1,0 +1,207 @@
+/* global $effect */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { flushSync } from 'svelte';
+
+vi.mock('$lib/utils/api', () => ({
+  api: {
+    get: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(message: string, status: number, _response?: Response) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+    }
+  },
+}));
+
+import { api, ApiError } from '$lib/utils/api';
+import { createProcessList } from './processList.svelte';
+import type { ProcessInfo } from './types';
+import { deferred, type Deferred } from '../../../../test/async-helpers';
+
+const mockGet = vi.mocked(api.get);
+
+const DEFAULT_URL = '/api/v2/system/processes';
+const ALL_URL = '/api/v2/system/processes?all=true';
+
+function proc(pid: number, name: string): ProcessInfo {
+  return { pid, name, status: 'running', cpu: 1, memory: 1024, uptime: 60 };
+}
+
+describe('createProcessList', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('loads the app processes, or every process when Show All is on', async () => {
+    mockGet.mockResolvedValue([proc(1, 'main')]);
+    const list = createProcessList();
+
+    await list.load();
+    await list.setShowAll(true);
+
+    expect(mockGet.mock.calls.map(call => call[0])).toEqual([DEFAULT_URL, ALL_URL]);
+    expect(list.showAll).toBe(true);
+  });
+
+  it('a load inside an effect does not rerun the effect when Show All changes', async () => {
+    mockGet.mockResolvedValue([proc(1, 'main')]);
+    const list = createProcessList();
+    let runs = 0;
+    const stop = $effect.root(() => {
+      $effect(() => {
+        runs++;
+        void list.load();
+      });
+    });
+    flushSync();
+
+    await list.setShowAll(true);
+    flushSync();
+
+    expect(runs).toBe(1);
+    stop();
+  });
+
+  it('a slower earlier response does not replace a newer one', async () => {
+    const slow = deferred<ProcessInfo[]>();
+    const fast = deferred<ProcessInfo[]>();
+    mockGet.mockReturnValueOnce(slow.promise).mockReturnValueOnce(fast.promise);
+    const list = createProcessList();
+
+    const refresh = list.load();
+    const toggle = list.setShowAll(true);
+    fast.resolve([proc(1, 'main'), proc(2, 'systemd')]);
+    await toggle;
+    slow.resolve([proc(1, 'main')]);
+    await refresh;
+
+    expect(list.showAll).toBe(true);
+    expect(list.processes.map(p => p.pid)).toEqual([1, 2]);
+  });
+
+  it('a stale failure does not report an error over a newer success', async () => {
+    const slow = deferred<ProcessInfo[]>();
+    mockGet.mockReturnValueOnce(slow.promise).mockResolvedValueOnce([proc(1, 'main')]);
+    const list = createProcessList();
+
+    const first = list.load();
+    await list.load();
+    slow.reject(new ApiError('Gateway timeout', 504, new Response()));
+    await first;
+
+    expect(list.error).toBeNull();
+    expect(list.processes).toHaveLength(1);
+  });
+
+  it('a failed Show All switch shows no rows from the other mode', async () => {
+    const list = createProcessList();
+    mockGet.mockResolvedValueOnce([proc(1, 'main')]);
+    await list.load();
+
+    const pending = deferred<ProcessInfo[]>();
+    mockGet.mockReturnValueOnce(pending.promise);
+    const toggle = list.setShowAll(true);
+    expect(list.loaded).toBe(false);
+    expect(list.processes).toEqual([]);
+    pending.reject(new ApiError('Service unavailable', 503, new Response()));
+    await toggle;
+
+    expect(list.showAll).toBe(true);
+    expect(list.processes).toEqual([]);
+    expect(list.error).toBe('Service unavailable');
+    expect(list.loaded).toBe(true);
+  });
+
+  it('a Show All switch clears the error of the previous mode', async () => {
+    const list = createProcessList();
+    mockGet.mockRejectedValueOnce(new ApiError('Service unavailable', 503, new Response()));
+    await list.load();
+    expect(list.error).toBe('Service unavailable');
+
+    const pending = deferred<ProcessInfo[]>();
+    mockGet.mockReturnValueOnce(pending.promise);
+    const toggle = list.setShowAll(true);
+
+    expect(list.error).toBeNull();
+    pending.resolve([proc(1, 'main')]);
+    await toggle;
+  });
+
+  it('a failed refresh keeps the rows and reports the error, and the next success clears it', async () => {
+    const list = createProcessList();
+    mockGet.mockResolvedValueOnce([proc(1, 'main'), proc(2, 'systemd')]);
+    await list.load();
+
+    mockGet.mockRejectedValueOnce(new ApiError('Service unavailable', 503, new Response()));
+    await list.load();
+    expect(list.processes.map(p => p.pid)).toEqual([1, 2]);
+    expect(list.error).toBe('Service unavailable');
+
+    mockGet.mockResolvedValueOnce([proc(3, 'main')]);
+    await list.load();
+    expect(list.error).toBeNull();
+    expect(list.processes.map(p => p.pid)).toEqual([3]);
+  });
+
+  it('reports a generic reason when the failure is not an API error', async () => {
+    mockGet.mockRejectedValueOnce(new TypeError('boom'));
+    const list = createProcessList();
+
+    await list.load();
+
+    expect(list.error).toBe('errors.api.unknownError');
+  });
+
+  it.each([
+    ['succeeds', (pending: Deferred<ProcessInfo[]>) => pending.resolve([proc(1, 'main')])],
+    [
+      'fails',
+      (pending: Deferred<ProcessInfo[]>) =>
+        pending.reject(new ApiError('Service unavailable', 503, new Response())),
+    ],
+  ])('loaded is false until the first response, and true once it %s', async (_, settle) => {
+    const pending = deferred<ProcessInfo[]>();
+    mockGet.mockReturnValueOnce(pending.promise);
+    const list = createProcessList();
+
+    const load = list.load();
+    expect(list.loaded).toBe(false);
+    settle(pending);
+    await load;
+
+    expect(list.loaded).toBe(true);
+  });
+
+  it.each([
+    ['succeeds', (pending: Deferred<ProcessInfo[]>) => pending.resolve([])],
+    [
+      'fails',
+      (pending: Deferred<ProcessInfo[]>) =>
+        pending.reject(new ApiError('Service unavailable', 503, new Response())),
+    ],
+  ])(
+    'an answer for the old mode that %s does not end loading after a Show All switch',
+    async (_, settle) => {
+      const oldMode = deferred<ProcessInfo[]>();
+      const newMode = deferred<ProcessInfo[]>();
+      mockGet.mockReturnValueOnce(oldMode.promise).mockReturnValueOnce(newMode.promise);
+      const list = createProcessList();
+
+      const refresh = list.load();
+      const toggle = list.setShowAll(true);
+      settle(oldMode);
+      await refresh;
+
+      expect(list.loaded).toBe(false);
+      expect(list.error).toBeNull();
+
+      newMode.resolve([proc(1, 'main')]);
+      await toggle;
+      expect(list.loaded).toBe(true);
+      expect(list.processes.map(p => p.pid)).toEqual([1]);
+    }
+  );
+});

@@ -2594,14 +2594,7 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 // 0; past the first entry the order only fixes what the status API and logs report.
 // ModelInfos already returns that order (compareModelOrder) and filtering keeps it.
 func (o *Orchestrator) DefaultTargets() []ModelInfo {
-	infos := o.ModelInfos()
-	targets := make([]ModelInfo, 0, len(infos))
-	for i := range infos {
-		if isScheduleGated(infos[i].ID) {
-			continue
-		}
-		targets = append(targets, infos[i])
-	}
+	targets := slices.DeleteFunc(o.ModelInfos(), func(m ModelInfo) bool { return isScheduleGated(m.ID) })
 	if len(targets) == 0 {
 		return nil
 	}
@@ -2609,8 +2602,9 @@ func (o *Orchestrator) DefaultTargets() []ModelInfo {
 }
 
 // compareModelOrder is the one model order the orchestrator reports: the BirdNET
-// v2.4 entry first, then byte order by registry ID. ModelInfos and DefaultTargets
-// share it so every list of loaded models reads the same way.
+// v2.4 entry first (defaultTargetRank), then byte order by registry ID. ModelInfos
+// sorts by it, so DefaultTargets and every other list of loaded models built from
+// ModelInfos read the same way.
 func compareModelOrder(aID, bID string) int {
 	if ra, rb := defaultTargetRank(aID), defaultTargetRank(bID); ra != rb {
 		return ra - rb
@@ -2618,10 +2612,8 @@ func compareModelOrder(aID, bID string) int {
 	return strings.Compare(aID, bID)
 }
 
-// defaultTargetRank orders the BirdNET v2.4 entry ahead of every other default
-// target so the first default is stable: fallbackTargets uses defaults[:1] for a
-// misconfigured source (it must stay v2.4 for I1) and the species_count startup read
-// keys on element 0; every other model shares a rank and falls back to byte order.
+// defaultTargetRank ranks the BirdNET v2.4 entry ahead of every other model, which
+// share one rank; DefaultTargets explains why v2.4 must lead.
 func defaultTargetRank(registryID string) int {
 	if registryID == RegistryIDBirdNETV24 {
 		return 0

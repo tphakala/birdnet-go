@@ -1221,8 +1221,7 @@
         "uptime": "Tiempo activo",
         "process": "Proceso"
       },
-      "showAll": "Mostrar todos los procesos",
-      "showBirdnetOnly": "Mostrar solo BirdNET"
+      "showAll": "Mostrar todos los procesos"
     },
     "errors": {
       "systemInfo": "Error al cargar la información del sistema: {error}",

@@ -4,9 +4,9 @@ import StatusPill, { type StatusVariant } from './StatusPill.svelte';
 
 /** The pill element around a label, narrowed so a markup change fails here and not later. */
 function pillOf(label: string): HTMLElement {
-  const pill = screen.getByText(label).closest('span.rounded-full.border');
-  expect(pill, `pill around "${label}"`).not.toBeNull();
-  return pill as HTMLElement;
+  const pill = screen.getByText(label).closest<HTMLElement>('span.rounded-full.border');
+  if (!pill) throw new Error(`no pill around "${label}"`);
+  return pill;
 }
 
 // Text uses the text token; the tint, border and dot keep the fill token.

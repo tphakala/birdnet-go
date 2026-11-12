@@ -49,8 +49,23 @@
   const labelId = `${fieldId}-label`;
   const descriptionId = `${fieldId}-description`;
 
+  // A disabled inline switch uses aria-disabled instead of native disabled, so Tab still
+  // reaches it and a screen reader reads its description (the reason it is off). The click
+  // (from the switch, its label or Space) is cancelled instead, so it never flips.
+  let softDisabled = $derived(variant === 'inline' && disabled);
+
+  function handleClick(event: MouseEvent) {
+    if (softDisabled) event.preventDefault();
+  }
+
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
+    // A click cancel can be skipped when an ancestor stops the click before it reaches the
+    // delegated handler, so a disabled inline switch also restores its state here
+    if (softDisabled) {
+      target.checked = value;
+      return;
+    }
     const newValue = target.checked;
     // Only notify parent via onUpdate, let bindable value handle internal state
     onUpdate(newValue);
@@ -103,12 +118,12 @@
   const INLINE_LABEL_CLASS =
     "relative isolate inline-flex min-h-8 items-center gap-2 after:absolute after:inset-x-0 after:-inset-y-1.5 after:-z-10 after:content-['']";
 
+  // The inline switch is aria-disabled rather than :disabled, so it dims on that attribute
+  const INLINE_SWITCH_DISABLED_CLASS = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
+
   let labelCursorClass = $derived(disabled ? 'cursor-not-allowed' : 'cursor-pointer');
-  // The inline variant uses the error text token (4.5:1 on every base surface); the default
-  // and card variants keep their original colour
-  let errorTextClass = $derived(
-    variant === 'inline' ? 'text-[var(--text-error)]' : 'text-[var(--color-error)]'
-  );
+  // Error text and the required mark use the error text token; --color-error is for fills
+  const ERROR_TEXT_CLASS = 'text-[var(--text-error)]';
 
   let cardClasses = $derived(
     cn(
@@ -135,7 +150,7 @@
 
 {#snippet requiredMark()}
   {#if required}
-    <span class={errorTextClass}>*</span>
+    <span class={ERROR_TEXT_CLASS}>*</span>
   {/if}
 {/snippet}
 
@@ -146,8 +161,10 @@
     type="checkbox"
     class={cn(toggleBaseClasses, variantClasses, error && toggleErrorClasses)}
     checked={value}
-    {disabled}
-    {required}
+    disabled={disabled && !softDisabled}
+    aria-disabled={softDisabled ? 'true' : undefined}
+    required={required && !softDisabled}
+    onclick={handleClick}
     onchange={handleChange}
     aria-labelledby={labelId}
     aria-describedby={describedBy}
@@ -190,10 +207,11 @@
         {label}
         {@render requiredMark()}
       </span>
-      {@render switchInput(cn(toggleDefaultClasses, 'shrink-0'))}
+      {@render switchInput(cn(toggleDefaultClasses, INLINE_SWITCH_DISABLED_CLASS, 'shrink-0'))}
     </label>
+    <!-- The text below starts 0.375rem under the label, outside its hit layer -->
     {#if description}
-      <div id={descriptionId} class="help-text">{description}</div>
+      <div id={descriptionId} class="help-text mt-1.5">{description}</div>
     {/if}
   {:else}
     <div class="flex items-center justify-between">
@@ -224,8 +242,8 @@
   {/if}
 
   {#if error}
-    <div id="{fieldId}-error" class="py-1">
-      <span class={cn('text-xs', errorTextClass)}>{error}</span>
+    <div id="{fieldId}-error" class={cn('py-1', variant === 'inline' && !description && 'mt-0.5')}>
+      <span class={cn('text-xs', ERROR_TEXT_CLASS)}>{error}</span>
     </div>
   {/if}
 </div>
