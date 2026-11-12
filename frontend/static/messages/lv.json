@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Viss kārtībā",
+      "healthyOfTotal": "{healthy} no {total}",
       "needsAttention": "Nepieciešama uzmanība",
       "failing": "Neizdodas",
       "allClear": "Bez problēmām",

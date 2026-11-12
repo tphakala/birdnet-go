@@ -5979,6 +5979,7 @@
     },
     "metricFooter": {
       "allPassing": "Alle godkjent",
+      "healthyOfTotal": "{healthy} av {total}",
       "needsAttention": "Trenger oppmerksomhet",
       "failing": "Mislykkes",
       "allClear": "Alt klart",
