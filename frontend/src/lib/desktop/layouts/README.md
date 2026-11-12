@@ -14,7 +14,7 @@ The layout wrapper that `App.svelte` puts around every page. It provides:
 - The page content area (`#mainContent`, a 12-column grid inside a `max-w-7xl` container) that renders the `children` snippet
 - A global toast container
 - An empty `<dialog id="loginModal">` placeholder; the real login modal is rendered by the sidebar
-- On mount: initializes the auth store, fetches the restart status (skipped while authentication is required and not yet granted), restores the saved theme from `localStorage`, and redirects to HTTPS when `data-https-redirect="true"` is set on the document element (not on `localhost` or `127.0.0.1`)
+- On mount: initializes the auth store, fetches the restart status (skipped while authentication is required and not yet granted), and redirects to HTTPS when `data-https-redirect="true"` is set on the document element (not on `localhost` or `127.0.0.1`)
 
 **Props:**
 
@@ -106,7 +106,7 @@ What `src/App.svelte` does with a route:
 
 ## Theme Management
 
-- `RootLayout` restores the saved theme from `localStorage` on mount
+- The saved theme is applied before first paint by the inline script in `index.html` and kept by the theme store
 - The theme toggle is in the header settings menu, which is shown from the `md` breakpoint up
 - The theme is applied through the `data-theme` attribute on the document element
 
