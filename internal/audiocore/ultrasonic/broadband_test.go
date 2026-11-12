@@ -1,8 +1,11 @@
 package ultrasonic
 
 import (
+	"encoding/binary"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,6 +45,18 @@ const (
 	keptShareOfRaw   = 0.9
 	clickRawCVFloor  = 0.5
 	lowerBoundMargin = 0.5
+	// A loud steady band in the lower part of the guard band, as a rain bed is.
+	loudGuardSeed      = 41
+	loudGuardLowHz     = 12000
+	loudGuardSpanHz    = 500
+	loudGuardAmplitude = 0.05
+	// One-sample impulses: the flattest broadband event there is.
+	impulseAmplitude = 0.3
+	// Recorded windows: 144000 samples of signed 16 bit little endian PCM at 256 kHz.
+	rainFixture     = "rain_256k_s16le.pcm"
+	weakCallFixture = "weak_bat_call_256k_s16le.pcm"
+	pcm16FullScale  = 32768
+	recordedCVDelta = 0.001
 )
 
 // whiteNoise returns a seeded Gaussian floor.
@@ -82,14 +97,14 @@ func addToneBursts(x []float64, rate int, hz, every, lenSec, amp float64) {
 	}
 }
 
-// addGuardFluctuation adds audible tones between 11 and 17 kHz whose power
-// swings with a slow envelope.
-func addGuardFluctuation(x []float64, rate int, seed uint64) {
+// addToneBand adds tones between lowHz and lowHz+spanHz whose summed power
+// swings by depth with a slow envelope; depth 0 gives a steady band.
+func addToneBand(x []float64, rate int, lowHz, spanHz, amp, depth float64, seed uint64) {
 	rng := rand.New(rand.NewPCG(seed, seed+2))
 	freq := make([]float64, guardTones)
 	phase := make([]float64, guardTones)
 	for k := range guardTones {
-		freq[k] = guardLowHz + guardSpanHz*rng.Float64()
+		freq[k] = lowHz + spanHz*rng.Float64()
 		phase[k] = 2 * math.Pi * rng.Float64()
 	}
 	for i := range x {
@@ -98,8 +113,34 @@ func addGuardFluctuation(x []float64, rate int, seed uint64) {
 		for k := range guardTones {
 			s += math.Sin(2*math.Pi*freq[k]*t + phase[k])
 		}
-		x[i] += guardAmplitude * (1 + guardDepth*math.Sin(2*math.Pi*guardEnvelopeHz*t)) * s / math.Sqrt(guardTones)
+		x[i] += amp * (1 + depth*math.Sin(2*math.Pi*guardEnvelopeHz*t)) * s / math.Sqrt(guardTones)
 	}
+}
+
+// addImpulses adds one-sample impulses, whose spectrum is flat from DC to Nyquist.
+func addImpulses(x []float64, rate int, every, amp float64) {
+	step := int(every * float64(rate))
+	for i := step / 2; i < len(x); i += step {
+		x[i] += amp
+	}
+}
+
+// addGuardFluctuation adds audible tones between 11 and 17 kHz whose power
+// swings with a slow envelope.
+func addGuardFluctuation(x []float64, rate int, seed uint64) {
+	addToneBand(x, rate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, seed)
+}
+
+// readPCM16 loads a recorded window from testdata.
+func readPCM16(t *testing.T, name string) []float32 {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	require.NoError(t, err)
+	out := make([]float32, len(raw)/2)
+	for i := range out {
+		out[i] = float32(int16(binary.LittleEndian.Uint16(raw[2*i:]))) / pcm16FullScale
+	}
+	return out
 }
 
 func quantizeAll(x []float64) []float32 {
@@ -140,6 +181,64 @@ func TestBroadbandAdjustedCV_ClickTrainIsLowered(t *testing.T) {
 			assert.True(t, IsUnlikely(got, cfg))
 		})
 	}
+}
+
+// A loud band low in the guard band keeps its median high, so the impulses do
+// not stand out there; they still raise every band up to the split.
+func TestBroadbandAdjustedCV_ImpulsesOverLoudGuardBandAreLowered(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	tests := []struct {
+		name    string
+		rate, n int
+	}{
+		{"Bat", batRate, batSamples},
+		{"BSG-BAT", bsgBatRate, bsgBatSamples},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			x := whiteNoise(tt.n, noiseSigma, noiseSeed)
+			addToneBand(x, tt.rate, loudGuardLowHz, loudGuardSpanHz, loudGuardAmplitude, 0, loudGuardSeed)
+			addImpulses(x, tt.rate, clickEverySec, impulseAmplitude)
+			samples := quantizeAll(x)
+			cv, ok := ComputeUSFrameCV(samples, tt.rate, cfg)
+			require.True(t, ok)
+			require.False(t, IsUnlikely(cv, cfg), "the raw CV must pass the current check")
+
+			got := BroadbandAdjustedCV(samples, tt.rate, cfg, cv)
+			assert.Less(t, got, cfg.CVThreshold*lowerBoundMargin)
+		})
+	}
+}
+
+// Rain recorded at 192 kHz on a home station and resampled to the bat model
+// rate: its ticks run from about 14 kHz through the split and the rain keeps
+// the guard band median high, so the guard band rule alone leaves the CV at
+// 0.35.
+func TestBroadbandAdjustedCV_RecordedRainIsLowered(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	samples := readPCM16(t, rainFixture)
+	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg), "the raw CV must pass the current check")
+
+	got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
+	assert.Less(t, got, cfg.CVThreshold*lowerBoundMargin)
+}
+
+// Two faint Eptesicus nilssonii calls near 30 kHz from the same station. A
+// window like this is close to the threshold, so nothing may be taken from it.
+func TestBroadbandAdjustedCV_RecordedWeakCallStaysActive(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	samples := readPCM16(t, weakCallFixture)
+	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg))
+
+	assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), recordedCVDelta)
 }
 
 func TestBroadbandAdjustedCV_BandLimitedBurstsKeepCV(t *testing.T) {
