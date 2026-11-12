@@ -22,23 +22,29 @@ describe('Meter', () => {
     expect(fillsOf(meter).map(fill => fill.style.flexBasis)).toEqual(['37.5%']);
   });
 
-  const thresholds: MeterThreshold[] = [
-    // Out of order on purpose: the highest threshold reached wins, not the last listed
-    { value: 90, tone: 'error' },
-    { value: 70, tone: 'warning' },
-  ];
+  const warning: MeterThreshold = { value: 70, tone: 'warning' };
+  const error: MeterThreshold = { value: 90, tone: 'error' };
+  // Both list orders: the highest threshold reached wins, not the first or last listed
+  const thresholdOrders = [
+    ['descending', [error, warning]],
+    ['ascending', [warning, error]],
+  ] as const;
 
-  it.each([
-    [0, 'success'],
-    [69.99, 'success'],
-    [70, 'warning'],
-    [89.99, 'warning'],
-    [90, 'error'],
-    [100, 'error'],
-  ] as const)('picks the tone of the highest threshold reached (%s -> %s)', (value, tone) => {
-    renderTyped(Meter, { props: { value, tone: 'success', thresholds, label: 'Usage' } });
+  describe.each(thresholdOrders)('with thresholds listed %s', (_, thresholds) => {
+    it.each([
+      [0, 'success'],
+      [69.99, 'success'],
+      [70, 'warning'],
+      [89.99, 'warning'],
+      [90, 'error'],
+      [100, 'error'],
+    ] as const)('picks the tone of the highest threshold reached (%s -> %s)', (value, tone) => {
+      renderTyped(Meter, {
+        props: { value, tone: 'success', thresholds: [...thresholds], label: 'Usage' },
+      });
 
-    expect(fillsOf(screen.getByRole('meter')).map(fill => fill.dataset.tone)).toEqual([tone]);
+      expect(fillsOf(screen.getByRole('meter')).map(fill => fill.dataset.tone)).toEqual([tone]);
+    });
   });
 
   it.each([
