@@ -179,22 +179,26 @@
     }
   }
 
-  /* Each part's flex-basis is its share of the track, so the joint between parts is a
-     transparent start border inside the part (border-box, background clipped to the padding
-     box) rather than a flex gap, which would add to the widths and push the stack past its
-     value. The background longhands keep background-clip from being reset. */
+  /* Each part's flex-basis is its share of the track, so the joint between parts is painted
+     over the start of the later part in the track color (an inset shadow, which takes no
+     layout space). A flex gap or a border would add to the widths, or set a minimum width
+     on a part narrower than the joint, and push the stack past its value. */
   .meter-fill {
-    box-sizing: border-box;
+    --meter-joint: var(--viz-track);
+
     flex-grow: 0;
     flex-shrink: 1;
     min-width: 0;
     background-color: var(--meter-fill);
-    background-clip: padding-box;
     transition: flex-basis 400ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   .meter-fill + .meter-fill {
-    border-inline-start: 2px solid transparent;
+    box-shadow: inset 2px 0 0 var(--meter-joint);
+  }
+
+  .meter-fill + .meter-fill:dir(rtl) {
+    box-shadow: inset -2px 0 0 var(--meter-joint);
   }
 
   /* Only the data end is rounded; joints between parts stay square on either side */
@@ -225,6 +229,8 @@
     }
 
     .meter-fill {
+      --meter-joint: Canvas;
+
       forced-color-adjust: none;
       background-color: Highlight;
     }
