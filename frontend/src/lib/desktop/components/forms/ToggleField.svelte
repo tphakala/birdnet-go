@@ -189,8 +189,9 @@
       </span>
       {@render switchInput(cn(toggleDefaultClasses, 'shrink-0'))}
     </label>
+    <!-- The text below starts 0.375rem under the label, outside its hit layer -->
     {#if description}
-      <div id={descriptionId} class="help-text">{description}</div>
+      <div id={descriptionId} class="help-text mt-1.5">{description}</div>
     {/if}
   {:else}
     <div class="flex items-center justify-between">
@@ -221,7 +222,7 @@
   {/if}
 
   {#if error}
-    <div id="{fieldId}-error" class="py-1">
+    <div id="{fieldId}-error" class={cn('py-1', variant === 'inline' && !description && 'mt-0.5')}>
       <span class={cn('text-xs', ERROR_TEXT_CLASS)}>{error}</span>
     </div>
   {/if}

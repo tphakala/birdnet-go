@@ -701,6 +701,35 @@ describe('ToggleField inline variant', () => {
     );
   });
 
+  it('inline variant keeps its description and error clear of the hit layer', () => {
+    // The label's hit layer reaches 0.375rem (mt-1.5) below it; text inside that band would
+    // toggle the switch when clicked
+    const { unmount } = render(ToggleField, {
+      props: {
+        label: 'Show all',
+        description: 'Toggle description',
+        error: 'Toggle error',
+        value: false,
+        onUpdate: vi.fn(),
+        variant: 'inline',
+      },
+    });
+    expect(screen.getByText('Toggle description')).toHaveClass('mt-1.5');
+    unmount();
+
+    // Without a description the error follows the label: mt-0.5 plus its py-1 is 0.375rem
+    render(ToggleField, {
+      props: {
+        label: 'Show all',
+        error: 'Toggle error',
+        value: false,
+        onUpdate: vi.fn(),
+        variant: 'inline',
+      },
+    });
+    expect(screen.getByText('Toggle error').parentElement).toHaveClass('mt-0.5', 'py-1');
+  });
+
   it.each(['default', 'card'] as const)('the %s variant keeps its inherited weight', variant => {
     render(ToggleField, {
       props: {
