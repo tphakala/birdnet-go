@@ -4,6 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
+import { PREFERS_DARK_QUERY } from '$lib/utils/theme-resolver.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -13,7 +14,7 @@ import { indexHtmlScriptBlock } from './index-html';
 const here = dirname(fileURLToPath(import.meta.url));
 const stylesheet = readFileSync(join(here, '..', 'styles', 'tailwind.css'), 'utf8');
 
-/** The theme block of the inline pre-paint script (the tag also holds other init code). */
+/** The theme block of the inline pre-paint script, with the shared resolver inlined. */
 const prePaintScript = indexHtmlScriptBlock('// Immediately set the theme');
 
 describe('dark variant', () => {
@@ -71,7 +72,7 @@ describe('theme resolution: pre-paint script and store', () => {
       return;
     }
     window.matchMedia = ((query: string) => ({
-      matches: os === 'dark' && query === '(prefers-color-scheme: dark)',
+      matches: os === 'dark' && query === PREFERS_DARK_QUERY,
       media: query,
       addEventListener: () => {},
       removeEventListener: () => {},
@@ -103,13 +104,6 @@ describe('theme resolution: pre-paint script and store', () => {
     return [root.getAttribute('data-theme'), root.getAttribute('data-theme-controller')];
   }
 
-  /** Runs the script from a clean root and returns the attributes it set. */
-  function attributesAfterRunning() {
-    clearAttributes();
-    new Function(prePaintScript)();
-    return attributes();
-  }
-
   /** Imports a fresh store, so its import-time resolution runs against the current inputs. */
   async function freshStore() {
     vi.resetModules();
@@ -138,7 +132,9 @@ describe('theme resolution: pre-paint script and store', () => {
       setStorage(stored);
       stubMatchMedia(os);
 
-      expect(attributesAfterRunning()).toEqual([want, want]);
+      clearAttributes();
+      new Function(prePaintScript)();
+      expect(attributes()).toEqual([want, want]);
 
       const { theme } = await freshStore();
       expect(get(theme)).toBe(want);

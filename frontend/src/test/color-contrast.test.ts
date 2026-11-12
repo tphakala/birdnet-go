@@ -1281,7 +1281,7 @@ describe('Custom scheme hover and pressed fills', () => {
   });
 
   it('the index.html pre-paint script restores a JSON-encoded scheme', () => {
-    // The scheme block of the pre-paint script (the tag also holds other init code)
+    // The scheme block of the pre-paint script
     const script = indexHtmlScriptBlock('// Restore color scheme');
     expect(script).not.toBe('');
     // Stored JSON-encoded, as the app stores it
