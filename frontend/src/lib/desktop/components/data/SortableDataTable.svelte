@@ -16,7 +16,7 @@
   `resizable={false}` the table takes its natural height, and `bodyMaxHeight`
   caps it so a long list scrolls under a sticky header while a short list
   stays compact. A body without a sortable column is a tab stop so the arrow
-  keys can scroll it, and a region named by `title`. The `notice` snippet
+  keys can scroll it; with a `title` it is also a region named by it. The `notice` snippet
   renders between the header bar and the body in every state (an error above
   rows that are still shown), and the `empty` snippet replaces the default empty state.
   While `loading` is true the body shows a spinner and a visible label
@@ -179,7 +179,7 @@
   // The body scrolls sideways whenever the table is wider than the card, and vertically when
   // capped, so without a sort button inside it to hold focus it needs a tab stop of its own
   let bodyNeedsFocus = $derived(!columns.some(c => c.sortable));
-  // A focusable body is announced as a region named by the table title
+  // A focusable body with a title is announced as a region named by it
   let scrollRegionLabel = $derived(bodyNeedsFocus && title ? title : undefined);
 
   // Fall back to the item reference (not the array index) so that re-sorting or
