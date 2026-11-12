@@ -59,9 +59,13 @@ const (
 	// be run at several window starts.
 	rainFixture     = "rain_256k_s16le.pcm"
 	weakCallFixture = "weak_bat_call_256k_s16le.pcm"
-	// A split whose continuity range would end one sub-frame bin above the
-	// Nyquist bin at the bat rate.
+	// A split whose continuity range would end above the Nyquist frequency of
+	// the bat rate, past the last bin of the spectrum (128.64 kHz against 128 kHz).
 	highSplitHz = 107200
+	// A split whose continuity range would end 40 Hz above the Nyquist frequency
+	// of the bat rate, inside the last bin, and a loud band low in its guard band.
+	nearNyquistSplitHz   = 106700
+	nearNyquistGuardLoHz = 64500
 	// Bytes per sample of the recordings.
 	bytesPerPCM16Sample = 2
 	// At this FFT size the continuity bands are narrower than one bin.
@@ -267,6 +271,24 @@ func TestBroadbandAdjustedCV_ContinuityRangeAboveNyquistKeepsGuardRule(t *testin
 	require.False(t, IsUnlikely(cv, cfg))
 
 	assert.True(t, IsUnlikely(BroadbandAdjustedCV(samples, batRate, cfg, cv), cfg))
+}
+
+// A range that ends above Nyquist by less than one bin still fits the
+// spectrum in whole bins, but the rule is off for it: impulses that the guard
+// band rule cannot see keep the window active.
+func TestBroadbandAdjustedCV_ContinuityRangeJustAboveNyquistIsOff(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	cfg.FrequencySplitHz = nearNyquistSplitHz
+	x := whiteNoise(batSamples, noiseSigma, noiseSeed)
+	addToneBand(x, batRate, nearNyquistGuardLoHz, loudGuardSpanHz, loudGuardAmplitude, 0, loudGuardSeed)
+	addImpulses(x, batRate, clickEverySec, impulseAmplitude)
+	samples := quantizeAll(x)
+	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg))
+
+	assert.False(t, IsUnlikely(BroadbandAdjustedCV(samples, batRate, cfg, cv), cfg))
 }
 
 // With bands narrower than one bin the continuity rule is off: the guard band

@@ -57,7 +57,7 @@ const (
 // median, or every band of the continuity range exceeds
 // broadbandContinuityThreshold times its own window median. The second rule is
 // left out when a continuity band would be narrower than one sub-frame bin or
-// the range would end above the Nyquist bin. The ultrasonic power of a
+// the range would end above the Nyquist frequency. The ultrasonic power of a
 // broadband sub-frame is replaced by the median, and the returned CV is cv
 // scaled by the CV after that replacement over the CV before it.
 //
@@ -97,7 +97,7 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 	frame := make([]float32, subSize)
 	power := make([]float32, plan.NumBins())
 	var cont [][]float64 // stays empty, and the rule off, when its bands do not fit the spectrum
-	if contSpan >= broadbandContinuityBands && contHi <= len(power) {
+	if contSpan >= broadbandContinuityBands && broadbandContinuityHighRatio*split <= float64(sampleRate)/2 {
 		cont = make([][]float64, broadbandContinuityBands)
 		for k := range cont {
 			cont[k] = make([]float64, numSub)
