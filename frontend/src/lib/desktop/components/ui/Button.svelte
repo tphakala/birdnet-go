@@ -63,7 +63,7 @@
     lg: 'px-5 py-2.5 text-sm gap-2',
   };
 
-  // Keep in step with blockedVariantClasses below: each blocked entry is its variant at half alpha
+  // Keep in step with blockedVariantClasses below, which dims each variant by alpha
   const variantClasses: Record<ButtonVariant, string> = {
     default:
       'bg-[var(--color-base-200)] text-[var(--color-base-content)] border border-[var(--color-base-300)] hover:bg-[var(--color-base-300)] active:bg-[var(--color-base-300)]/80',
@@ -82,12 +82,13 @@
   // An aria-disabled button stays focusable, so it dims through colour alpha (half of each
   // variant's own) instead of element opacity, which would fade its focus ring. No hover or
   // press styles: it does nothing. Primary draws a transparent border, as a translucent border
-  // over a translucent fill would show a darker edge.
+  // over a translucent fill would show a darker edge, and keeps its light label at full strength
+  // over the half fill: halving both made the label far fainter than 50% opacity did.
   const blockedVariantClasses: Record<ButtonVariant, string> = {
     default:
       'bg-[var(--color-base-200)]/50 text-[var(--color-base-content)]/50 border border-[var(--color-base-300)]/50',
     primary:
-      'bg-[var(--color-primary)]/50 text-[var(--color-primary-content)]/50 border border-transparent',
+      'bg-[var(--color-primary)]/50 text-[var(--color-primary-content)] border border-transparent',
     success:
       'bg-[var(--color-success)]/8 text-[var(--color-success)]/50 border border-[var(--color-success)]/12',
     warning:

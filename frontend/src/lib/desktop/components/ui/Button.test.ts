@@ -86,8 +86,13 @@ describe('Button', () => {
       );
       expect(opacityClasses(button, { ignoreVariant: 'disabled' })).toEqual([]);
       expect(button.className).not.toMatch(/(^|\s)(hover|active):/);
-      // The label is dimmed by its colour's alpha instead of element opacity
-      expect(button.className).toMatch(/(^|\s)text-\[var\(--[a-z0-9-]+\)\]\/50(\s|$)/);
+      // The label is dimmed by its colour's alpha instead of element opacity. Primary keeps its
+      // light label over the half-strength fill, as 50% opacity used to draw it.
+      const label =
+        variant === 'primary'
+          ? /(^|\s)text-\[var\(--color-primary-content\)\](\s|$)/
+          : /(^|\s)text-\[var\(--[a-z0-9-]+\)\]\/50(\s|$)/;
+      expect(button.className).toMatch(label);
     }
   );
 
@@ -99,8 +104,11 @@ describe('Button', () => {
       props: { variant, 'aria-disabled': 'true' },
     }).container.querySelector('button');
 
+    // Primary's label colour is the one class it keeps (see the dimming test above)
+    const kept = variant === 'primary' ? ['text-[var(--color-primary-content)]'] : [];
+
     expect(colours(blocked).length).toBeGreaterThan(0);
-    expect(colours(blocked).filter(c => colours(enabled).includes(c))).toEqual([]);
+    expect(colours(blocked).filter(c => colours(enabled).includes(c))).toEqual(kept);
   });
 
   it('treats a boolean aria-disabled like the string form', () => {
