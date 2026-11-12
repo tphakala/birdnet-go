@@ -254,12 +254,11 @@ guessing:
 
 Theme colours are written as CSS variables in arbitrary values
 (`text-[var(--color-base-content)]`), not bare theme class names. Error text
-uses `text-[var(--text-error)]`, which is verified on base-100 and on a 15%
-error tint over base-100 (check other surfaces yourself); `--color-error` is for
-fills and borders. Success, warning and info text use `--text-success`,
-`--text-warning` and `--text-info`, which reach 4.5:1 on base-100, base-200,
-base-300 and on a 15% tint of their fill over each; `.badge-status-*`, `.alert-*`,
-`.text-success/warning/info` and `StatusPill` already use them. Use the
+uses `text-[var(--text-error)]`; `--color-error` is for fills and borders.
+Success, warning and info text use `--text-success`, `--text-warning` and
+`--text-info`. All four text tokens reach 4.5:1 on base-100, base-200, base-300
+and on a 15% tint of their fill over each; `.badge-status-*`, `.alert-*`,
+`.text-error/success/warning/info` and `StatusPill` already use them. Use the
 `--color-*` fills for backgrounds, borders and dots, not for new text.
 
 ### General Rules

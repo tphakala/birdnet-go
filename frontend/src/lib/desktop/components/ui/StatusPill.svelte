@@ -10,8 +10,8 @@
   - Size variants (xs, sm, md)
   - Supports custom labels or i18n keys
   - Text uses the --text-<variant> tokens; the tint, border and dot use the --color-<variant>
-    fills. success, warning and info text is 4.5:1 or more on its tint over base-100/200/300;
-    error text is verified on base-100 only (see color-contrast.test.ts)
+    fills. success, warning, info and error text is 4.5:1 or more on its tint over
+    base-100/200/300 (see color-contrast.test.ts)
 
   @component
 -->

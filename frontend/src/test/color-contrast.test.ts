@@ -513,14 +513,9 @@ describe('Status text rules', () => {
     ['light', lightBase, blockBody(css, ":root,\n[data-theme='light']")],
     ['dark', darkBlock, darkBlock],
   ] as const) {
-    // .alert-* and .badge-status-* draw a 15% fill tint under their text token. --text-error is
-    // checked on base-100 only: its base-200 and base-300 tints are below AA today.
+    // .alert-* and .badge-status-* draw a 15% fill tint under their text token
     for (const { token, fill } of TEXT_TOKENS) {
-      const surfaces =
-        token === '--text-error'
-          ? ['--color-base-100']
-          : ['--color-base-100', '--color-base-200', '--color-base-300'];
-      for (const surface of surfaces) {
+      for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
         it(`${token} passes AA on a 15% ${fill} tint over ${surface} in the ${name} theme`, () => {
           const tint = applyOpacity(readVar(block, fill), readVar(block, surface), 0.15);
           expect(getContrastRatio(readVar(textBlock, token), tint)).toBeGreaterThanOrEqual(

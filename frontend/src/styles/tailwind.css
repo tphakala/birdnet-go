@@ -131,7 +131,7 @@
 
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
-  --text-error: #b91c1c; /* red-700 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-error: #991b1b; /* red-800 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
   --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #92400e; /* amber-800 - warning text, same rule */
   --text-info: #075985; /* sky-800 - info text, same rule */
@@ -211,7 +211,7 @@
 
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
-  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
   --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
   --text-info: #38bdf8; /* sky-400 - info text, same rule */
