@@ -60,5 +60,7 @@ func TestResultModelContrib_HasHitStats(t *testing.T) {
 func TestUnlikelySource_String(t *testing.T) {
 	assert.Equal(t, "none", UnlikelySource(0).String())
 	assert.Equal(t, "ultrasonic_cv", UnlikelySourceUltrasonicCV.String())
+	assert.Equal(t, "noise_examples", UnlikelySourceNoiseExamples.String())
+	assert.Equal(t, "ultrasonic_cv+noise_examples", (UnlikelySourceUltrasonicCV | UnlikelySourceNoiseExamples).String())
 	assert.Equal(t, "ultrasonic_cv", (UnlikelySourceUltrasonicCV | UnlikelySource(1<<7)).String())
 }

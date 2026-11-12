@@ -20,6 +20,9 @@ const (
 	// UnlikelySourceUltrasonicCV is the ultrasonic validation filter, which judges a
 	// window by the variation of its energy above the split frequency.
 	UnlikelySourceUltrasonicCV UnlikelySource = 1 << iota
+	// UnlikelySourceNoiseExamples is the comparison with the noise examples the user
+	// marked, which judges a window by the similarity of its embedding to them.
+	UnlikelySourceNoiseExamples
 )
 
 // Has reports whether every bit of source is set.
@@ -33,6 +36,7 @@ var unlikelySourceNames = []struct {
 	name   string
 }{
 	{UnlikelySourceUltrasonicCV, "ultrasonic_cv"},
+	{UnlikelySourceNoiseExamples, "noise_examples"},
 }
 
 // String names the set bits for logs, joined by "+"; the empty set is "none".
@@ -106,6 +110,7 @@ type Result struct {
 	UltrasonicCV          float64                       // US frame CV from validation filter, highest among the hit windows (for comment generation)
 	UltrasonicCVThreshold float64                       // CV threshold that judged the window behind UltrasonicCV (for comment generation)
 	UnlikelySources       UnlikelySource                // Validators that tagged a hit window unlikely; zero unless Unlikely is set
+	NoiseSimilarity       float64                       // Cosine similarity to the closest noise example, lowest among the windows the noise examples judged (for comment generation)
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
