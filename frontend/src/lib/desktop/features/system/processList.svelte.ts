@@ -21,7 +21,10 @@ const ALL_PROCESSES_URL = `${PROCESSES_URL}?all=true`;
 export interface ProcessList {
   /** Rows of the current Show All mode from its latest successful load; empty until then */
   readonly processes: ProcessInfo[];
-  /** Whether a load for the current Show All mode has answered, successfully or not */
+  /**
+   * False from creation, and after each Show All change, until the newest load answers
+   * (successfully or not); then true until the next Show All change
+   */
   readonly loaded: boolean;
   /** Why the latest load failed; null after a success and while a Show All change loads */
   readonly error: string | null;
