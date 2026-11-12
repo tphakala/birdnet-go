@@ -74,13 +74,46 @@
 
   let panel = $state<HTMLDivElement>();
   // A Retry that succeeds removes the alert under the focus; the first sort button, or the
-  // Show All switch when the table shows no rows, takes focus instead of the document body. The
-  // wrapper itself is not focusable, so a click in a row leaves keyboard scrolling with the
-  // capped list.
-  const focusPanel = () => [
-    panel?.querySelector<HTMLElement>('thead button'),
-    panel?.querySelector<HTMLElement>('input[type="checkbox"]'),
-  ];
+  // Show All switch when the table shows no rows, takes focus instead of the document body.
+  // After a click in the rows, though, focus sits on the page body, where the arrow keys and
+  // Space scroll the capped list; pulling focus to a sort button when the alert later goes
+  // would make Space sort instead, so the fallback then offers nothing. Focus anywhere in the
+  // panel, or a click on the alert, restores it. The wrapper itself is not focusable.
+  // Plain variable: only the fallback callback reads it, nothing renders from it.
+  let leftForRows = false;
+
+  $effect(() => {
+    const root = panel;
+    if (!root) return;
+    // By the time a click fires, the press has already moved focus, so this records what
+    // actually happened: a touch pan over the rows fires no click and leaves focus on Retry.
+    const onClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof globalThis.Element)) return;
+      if (target.closest('tbody')) {
+        leftForRows = !document.activeElement?.closest('[role="alert"]');
+      } else if (target.closest('[role="alert"]')) {
+        leftForRows = false;
+      }
+    };
+    const onFocusIn = () => {
+      leftForRows = false;
+    };
+    root.addEventListener('click', onClick);
+    root.addEventListener('focusin', onFocusIn);
+    return () => {
+      root.removeEventListener('click', onClick);
+      root.removeEventListener('focusin', onFocusIn);
+    };
+  });
+
+  const focusPanel = () =>
+    leftForRows
+      ? []
+      : [
+          panel?.querySelector<HTMLElement>('thead button'),
+          panel?.querySelector<HTMLElement>('input[type="checkbox"]'),
+        ];
 
   const displayName = (proc: ProcessInfo): string =>
     proc.name === 'main' ? processName : proc.name;
@@ -191,6 +224,7 @@
     {columns}
     data={processes}
     {loading}
+    loadingLabel={t('system.processInfo.loading')}
     title={t('system.processInfo.title')}
     count={processes.length}
     searchable={showAllProcesses}

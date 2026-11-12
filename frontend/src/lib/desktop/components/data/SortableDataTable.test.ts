@@ -142,10 +142,28 @@ describe('SortableDataTable', () => {
     expect(nameHeader?.getAttribute('style')).toContain('width: 7rem');
   });
 
-  it('shows a loading spinner and no table while loading', () => {
-    renderTable({ loading: true });
-    expect(screen.getByRole('status')).toBeInTheDocument();
+  it('shows a labelled loading state and no table while loading', () => {
+    const view = renderTable({ loading: true });
+    expect(screen.getByRole('status')).toHaveTextContent('common.loading');
     expect(document.querySelector('table')).not.toBeInTheDocument();
+    view.unmount();
+
+    renderTable({ loading: true, loadingLabel: 'Loading things' });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading things');
+  });
+
+  it('keeps one status region across a loading change', async () => {
+    const view = renderTable({ loading: false });
+    const region = screen.getByRole('status');
+    expect(region).toBeEmptyDOMElement();
+
+    await view.rerender({ loading: true, loadingLabel: 'Loading things' });
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region).toHaveTextContent('Loading things');
+
+    await view.rerender({ loading: false });
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region).toBeEmptyDOMElement();
   });
 
   it('uses the count prop for the badge when provided, overriding the row count', () => {

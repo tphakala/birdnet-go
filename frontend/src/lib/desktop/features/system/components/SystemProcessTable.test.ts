@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { tick } from 'svelte';
 import { cleanup, render, screen, within, fireEvent, waitFor } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
 import { t } from '$lib/i18n';
@@ -12,13 +13,17 @@ function proc(overrides: Partial<ProcessInfo> & Pick<ProcessInfo, 'pid' | 'name'
   return { status: 'sleep', cpu: 0, memory: 1024, uptime: 60, ...overrides };
 }
 
-// CPU descending (ffmpeg, main, systemd) differs from the listed order, from the shown-name
-// order (BirdNET-Go, ffmpeg, systemd) and from the equal memory and uptime values, so the
-// default sort is told apart from no sort and from a sort on another column.
+// Four rows whose listed order and every sorted order are pairwise different (shown names:
+// sshd, BirdNET-Go, systemd, ffmpeg): CPU descending ffmpeg, BirdNET-Go, sshd, systemd; shown
+// name BirdNET-Go, ffmpeg, sshd, systemd; raw name ffmpeg, main, sshd, systemd (the same as the
+// CPU order, so a name sort that ignores the shown name changes nothing); status ascending
+// ffmpeg, BirdNET-Go, systemd, sshd; memory descending BirdNET-Go, sshd, systemd, ffmpeg;
+// uptime descending systemd, ffmpeg, sshd, BirdNET-Go.
 const rows: ProcessInfo[] = [
-  proc({ pid: 10, name: 'systemd', cpu: 0.5 }),
-  proc({ pid: 20, name: 'main', status: 'running', cpu: 12.5 }),
-  proc({ pid: 30, name: 'ffmpeg', cpu: 20 }),
+  proc({ pid: 40, name: 'sshd', status: 'zombie', cpu: 5, memory: 300, uptime: 200 }),
+  proc({ pid: 20, name: 'main', status: 'running', cpu: 12.5, memory: 400, uptime: 100 }),
+  proc({ pid: 10, name: 'systemd', status: 'sleep', cpu: 0.5, memory: 200, uptime: 400 }),
+  proc({ pid: 30, name: 'ffmpeg', status: 'idle', cpu: 20, memory: 100, uptime: 300 }),
 ];
 
 type TableProps = Partial<ComponentProps<typeof SystemProcessTable>>;
@@ -49,6 +54,11 @@ function shownNames(): string[] {
     .map(row => within(row).getAllByRole('cell')[0].textContent.trim());
 }
 
+/** Shown process names alone, without the PID line. */
+function shownOrder(): string[] {
+  return shownNames().map(name => name.split(/\s/)[0].replace(/PID.*$/, ''));
+}
+
 describe('SystemProcessTable', () => {
   afterEach(() => {
     cleanup();
@@ -61,7 +71,21 @@ describe('SystemProcessTable', () => {
     expect(names[0]).toContain('ffmpeg');
     expect(names[1]).toContain(APP_NAME);
     expect(names[1]).not.toContain('main');
-    expect(names[2]).toContain('systemd');
+    expect(names[2]).toContain('sshd');
+    expect(names[3]).toContain('systemd');
+  });
+
+  it.each([
+    ['name', ['BirdNET-Go', 'ffmpeg', 'sshd', 'systemd']],
+    ['status', ['ffmpeg', 'BirdNET-Go', 'systemd', 'sshd']],
+    ['memory', ['BirdNET-Go', 'sshd', 'systemd', 'ffmpeg']],
+    ['uptime', ['systemd', 'ffmpeg', 'sshd', 'BirdNET-Go']],
+  ])('the first click on %s sorts %j', async (key, order) => {
+    renderTable();
+
+    await fireEvent.click(screen.getByTestId(`sort-${key}`));
+
+    expect(shownOrder()).toEqual(order);
   });
 
   it.each<[string, StatusVariant]>([
@@ -117,12 +141,13 @@ describe('SystemProcessTable', () => {
     const noProcesses = t('system.processInfo.noProcesses');
 
     const loading = renderTable({ processes: [], loading: true });
-    expect(screen.getByRole('status', { name: t('common.loading') })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(t('system.processInfo.loading'));
     expect(screen.queryByText(noProcesses)).not.toBeInTheDocument();
     loading.unmount();
 
     const empty = renderTable({ processes: [] });
     expect(screen.getByText(noProcesses)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     empty.unmount();
 
@@ -130,6 +155,7 @@ describe('SystemProcessTable', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(t('system.errors.processes', { error: 'Service unavailable' }));
     expect(within(alert).getByRole('button', { name: t('common.retry') })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(screen.queryByText(noProcesses)).not.toBeInTheDocument();
   });
 
@@ -192,6 +218,12 @@ describe('SystemProcessTable', () => {
 
     expect(shownNames()).toHaveLength(1);
     expect(shownNames()[0]).toContain('ffmpeg');
+
+    // The shown name is searched, not the raw one ("main")
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'bird' } });
+
+    expect(shownNames()).toHaveLength(1);
+    expect(shownNames()[0]).toContain(APP_NAME);
   });
 
   it('says no results when a search matches nothing', async () => {
@@ -206,17 +238,103 @@ describe('SystemProcessTable', () => {
     const view = renderTable({ showAllProcesses: true });
     await fireEvent.click(screen.getByTestId('sort-name'));
     await fireEvent.input(screen.getByRole('textbox'), { target: { value: 's' } });
-    expect(shownNames().map(name => name.split(' ')[0])).toEqual(['systemd']);
+    expect(shownOrder()).toEqual(['sshd', 'systemd']);
 
     await view.rerender(
       tableProps({
         showAllProcesses: true,
-        // sshd has the lowest CPU, so a sort reset to CPU would put it last
-        processes: [...rows, proc({ pid: 40, name: 'sshd', cpu: 0 })],
+        // snapd has the lowest CPU, so a sort reset to CPU would put it last
+        processes: [...rows, proc({ pid: 50, name: 'snapd', cpu: 0 })],
       })
     );
 
     expect(screen.getByRole('textbox')).toHaveValue('s');
-    expect(shownNames().map(name => name.split(' ')[0])).toEqual(['sshd', 'systemd']);
+    expect(shownOrder()).toEqual(['snapd', 'sshd', 'systemd']);
+  });
+
+  describe('focus after the alert goes', () => {
+    function renderFailed() {
+      const view = renderTable({ error: 'Service unavailable' });
+      const retry = within(screen.getByRole('alert')).getByRole('button', {
+        name: t('common.retry'),
+      });
+      const cell = within(screen.getByRole('table')).getAllByRole('cell')[0];
+      return { view, retry, cell };
+    }
+
+    async function clearAlert(view: ReturnType<typeof renderTable>) {
+      await view.rerender(tableProps({ error: null }));
+      await tick();
+    }
+
+    // jsdom does not move focus on a press, so each sequence blurs or focuses explicitly
+    it('stays on the page body after a click in the rows', async () => {
+      const { view, retry, cell } = renderFailed();
+      retry.focus();
+      await fireEvent.click(retry);
+      retry.blur();
+      await fireEvent.click(cell);
+
+      await clearAlert(view);
+
+      expect(document.body).toHaveFocus();
+    });
+
+    it('stays on the page body when another part of the panel is pressed after the row click', async () => {
+      const { view, retry, cell } = renderFailed();
+      retry.focus();
+      await fireEvent.click(retry);
+      retry.blur();
+      await fireEvent.click(cell);
+      const title = screen.getByText(t('system.processInfo.title'));
+      await fireEvent.pointerDown(title);
+      await fireEvent.click(title);
+
+      await clearAlert(view);
+
+      expect(document.body).toHaveFocus();
+    });
+
+    it('goes back to the first sort button when focus returns to the alert after a row click', async () => {
+      const { view, retry, cell } = renderFailed();
+      retry.focus();
+      retry.blur();
+      await fireEvent.click(cell);
+      retry.focus();
+
+      await clearAlert(view);
+
+      expect(screen.getByTestId('sort-name')).toHaveFocus();
+    });
+
+    it('goes back to the first sort button after a press on an alert that took no focus', async () => {
+      const { view, retry, cell } = renderFailed();
+      // Safari does not focus a clicked button
+      await fireEvent.pointerDown(retry);
+      await fireEvent.click(cell);
+      await fireEvent.pointerDown(retry);
+      await fireEvent.click(retry);
+
+      await clearAlert(view);
+
+      expect(screen.getByTestId('sort-name')).toHaveFocus();
+    });
+
+    it('goes to the first sort button when a row press left focus in the alert', async () => {
+      const { view, retry, cell } = renderFailed();
+      retry.focus();
+      // A touch pan, or any press that does not move focus
+      await fireEvent.click(cell);
+
+      await clearAlert(view);
+
+      expect(screen.getByTestId('sort-name')).toHaveFocus();
+    });
+  });
+
+  it('has no wrapper around the rows that is a tab stop', () => {
+    renderTable();
+
+    expect(screen.getByRole('table').closest('[tabindex]')).toBeNull();
   });
 });

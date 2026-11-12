@@ -5,7 +5,10 @@ const KEYBOARD_CLICK_DETAIL = 0;
 
 type FocusTarget = HTMLElement | SVGElement;
 
-/** Elements to try, in order, when the container goes away while it holds focus. */
+/**
+ * Elements to try, in order, when the container goes away while it holds focus. An empty
+ * list leaves focus where it is.
+ */
 export type FocusFallback = () => Array<HTMLElement | null | undefined>;
 
 /** Focus return for a dismissible container, created once per component instance. */
