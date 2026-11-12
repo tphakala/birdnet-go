@@ -100,6 +100,8 @@
   });
 
   interface Fill {
+    /** Index of the segment the fill draws (0 for a single fill), stable while others empty */
+    key: number;
     tone: MeterTone;
     pattern: NonNullable<MeterSegment['pattern']>;
     basis: string;
@@ -109,15 +111,16 @@
   // stray gap appears.
   let fills = $derived.by((): Fill[] => {
     if (!segments) {
-      return [{ tone: currentTone, pattern: 'solid', basis: percent(current) }];
+      return [{ key: 0, tone: currentTone, pattern: 'solid', basis: percent(current) }];
     }
     let used = 0;
     const parts: Fill[] = [];
-    for (const segment of segments) {
+    for (const [key, segment] of segments.entries()) {
       const part = clamp(segment.value, range - used);
       used += part;
       if (part > 0) {
         parts.push({
+          key,
           tone: segment.tone,
           pattern: segment.pattern ?? 'solid',
           basis: percent(part),
@@ -142,7 +145,7 @@
   class={cn('meter', size === 'xs' ? 'h-1.5' : 'h-2', className)}
   {...rest}
 >
-  {#each fills as fill, i (i)}
+  {#each fills as fill (fill.key)}
     <div
       class="meter-fill"
       data-tone={fill.tone}

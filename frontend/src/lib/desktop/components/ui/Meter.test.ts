@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/svelte';
 import { renderTyped, screen } from '../../../../test/render-helpers';
 import Meter, { type MeterSegment, type MeterThreshold, type MeterTone } from './Meter.svelte';
 
@@ -70,6 +71,24 @@ describe('Meter', () => {
       ['series-2', 'hatched', '30%'],
       ['series-4', 'solid', '30%'],
     ]);
+  });
+
+  it('keeps each segment on its own element when an earlier segment becomes non-empty', async () => {
+    const segmentsWith = (used: number): MeterSegment[] => [
+      { value: used, tone: 'series-1' },
+      { value: 30, tone: 'series-2', pattern: 'hatched' },
+    ];
+    const view = render(Meter, {
+      props: { value: 30, segments: segmentsWith(0), label: 'RAM' },
+    });
+    const [cache] = fillsOf(screen.getByRole('meter'));
+
+    await view.rerender({ value: 35, segments: segmentsWith(5), label: 'RAM' });
+
+    const fills = fillsOf(screen.getByRole('meter'));
+    expect(fills.map(fill => fill.dataset.pattern)).toEqual(['solid', 'hatched']);
+    // The cache part keeps its element, so a width transition animates the part that changed
+    expect(fills[1]).toBe(cache);
   });
 
   const toneTokens: [MeterTone, string][] = [
