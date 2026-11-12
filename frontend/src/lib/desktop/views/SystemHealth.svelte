@@ -421,129 +421,131 @@
 
 <div class="col-span-12 space-y-4">
   <!-- Status Metric Strip (matches System Overview pattern) -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    <!-- Healthy -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-green-500/10">
-            <CheckCircle class="w-4 h-4 text-[var(--color-success)]" />
+  <div class="@container">
+    <div class="grid grid-cols-2 @4xl:grid-cols-4 gap-3">
+      <!-- Healthy -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-green-500/10">
+              <CheckCircle class="w-4 h-4 text-[var(--color-success)]" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
+          <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--color-success)]">
+            {report?.count_by_status?.healthy ?? (running ? '…' : '-')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--color-success)]">
-          {report?.count_by_status?.healthy ?? (running ? '…' : '-')}
-        </span>
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {@const h = report.count_by_status.healthy ?? 0}
+            {@const total = report.total_checks}
+            {h === total ? t('health.metricFooter.allPassing') : `${h} of ${total}`}
+          {:else if running}
+            {t('health.running')}
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {@const h = report.count_by_status.healthy ?? 0}
-          {@const total = report.total_checks}
-          {h === total ? t('health.metricFooter.allPassing') : `${h} of ${total}`}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
-      </div>
-    </div>
 
-    <!-- Warning -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-amber-500/10">
-            <AlertTriangle class="w-4 h-4 text-[var(--color-warning)]" />
+      <!-- Warning -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-amber-500/10">
+              <AlertTriangle class="w-4 h-4 text-[var(--color-warning)]" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.warnings')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.warnings')}</span>
+          <span
+            class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+              ?.warning ?? 0) > 0
+              ? 'text-[var(--color-warning)]'
+              : 'opacity-40'}"
+          >
+            {report?.count_by_status?.warning ?? (running ? '…' : '-')}
+          </span>
         </div>
-        <span
-          class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status?.warning ??
-            0) > 0
-            ? 'text-[var(--color-warning)]'
-            : 'opacity-40'}"
-        >
-          {report?.count_by_status?.warning ?? (running ? '…' : '-')}
-        </span>
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {(report.count_by_status.warning ?? 0) > 0
+              ? t('health.metricFooter.needsAttention')
+              : t('health.metricFooter.none')}
+          {:else if running}
+            {t('health.running')}
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {(report.count_by_status.warning ?? 0) > 0
-            ? t('health.metricFooter.needsAttention')
-            : t('health.metricFooter.none')}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
-      </div>
-    </div>
 
-    <!-- Critical -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-red-500/10">
-            <XCircle class="w-4 h-4 text-[var(--color-error)]" />
+      <!-- Critical -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-red-500/10">
+              <XCircle class="w-4 h-4 text-[var(--color-error)]" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.critical')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.critical')}</span>
+          <span
+            class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+              ?.critical ?? 0) > 0
+              ? 'text-[var(--color-error)]'
+              : 'opacity-40'}"
+          >
+            {report?.count_by_status?.critical ?? (running ? '…' : '-')}
+          </span>
         </div>
-        <span
-          class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
-            ?.critical ?? 0) > 0
-            ? 'text-[var(--color-error)]'
-            : 'opacity-40'}"
-        >
-          {report?.count_by_status?.critical ?? (running ? '…' : '-')}
-        </span>
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {(report.count_by_status.critical ?? 0) > 0
+              ? t('health.metricFooter.failing')
+              : t('health.metricFooter.allClear')}
+          {:else if running}
+            {t('health.running')}
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {(report.count_by_status.critical ?? 0) > 0
-            ? t('health.metricFooter.failing')
-            : t('health.metricFooter.allClear')}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
-      </div>
-    </div>
 
-    <!-- Skipped -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-slate-500/10">
-            <SkipForward class="w-4 h-4 text-slate-500" />
+      <!-- Skipped -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-slate-500/10">
+              <SkipForward class="w-4 h-4 text-slate-500" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
+          <span
+            class="font-mono tabular-nums text-2xl font-semibold"
+            class:opacity-40={!((report?.count_by_status?.skipped ?? 0) > 0)}
+          >
+            {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
+          </span>
         </div>
-        <span
-          class="font-mono tabular-nums text-2xl font-semibold"
-          class:opacity-40={!((report?.count_by_status?.skipped ?? 0) > 0)}
-        >
-          {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
-        </span>
-      </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {(report.count_by_status.skipped ?? 0) > 0
-            ? t('health.metricFooter.noData')
-            : t('health.metricFooter.none')}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {(report.count_by_status.skipped ?? 0) > 0
+              ? t('health.metricFooter.noData')
+              : t('health.metricFooter.none')}
+          {:else if running}
+            {t('health.running')}
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
     </div>
   </div>
