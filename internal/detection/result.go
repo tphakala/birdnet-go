@@ -4,7 +4,50 @@
 // is handled by boundary-specific DTOs and entities.
 package detection
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// UnlikelySource is a bit set naming the validators that tagged a detection
+// unlikely. On one audio window a bit means that validator judged the window. On a
+// detection built from several hit windows a bit means that validator judged at
+// least one of them, never that it judged every one: the detection stays unlikely
+// only while every hit window was judged by some validator.
+type UnlikelySource uint8
+
+const (
+	// UnlikelySourceUltrasonicCV is the ultrasonic validation filter, which judges a
+	// window by the variation of its energy above the split frequency.
+	UnlikelySourceUltrasonicCV UnlikelySource = 1 << iota
+)
+
+// Has reports whether every bit of source is set.
+func (s UnlikelySource) Has(source UnlikelySource) bool {
+	return s&source == source
+}
+
+// unlikelySourceNames lists the log name of every source bit, in bit order.
+var unlikelySourceNames = []struct {
+	source UnlikelySource
+	name   string
+}{
+	{UnlikelySourceUltrasonicCV, "ultrasonic_cv"},
+}
+
+// String names the set bits for logs, joined by "+"; the empty set is "none".
+func (s UnlikelySource) String() string {
+	var names []string
+	for _, n := range unlikelySourceNames {
+		if s.Has(n.source) {
+			names = append(names, n.name)
+		}
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, "+")
+}
 
 // Result represents a single bird detection event.
 // This is the core domain model used throughout the application.
@@ -55,13 +98,14 @@ type Result struct {
 	ClipDenoised bool
 
 	// Validation flags
-	Unlikely bool // Tagged by the ultrasonic validation filter when every hit window lacked bat echolocation characteristics
+	Unlikely bool // Tagged by a validator when every hit window was judged not to hold a call of the detected species; UnlikelySources says which validators judged
 
 	// Runtime-only data (not persisted)
 	Occurrence            float64                       // Probability 0-1 based on location/time/season
 	ModelContributions    map[string]ResultModelContrib // Per-model data keyed by model ID: the models with hits (cross-model consensus) and the active models without one
 	UltrasonicCV          float64                       // US frame CV from validation filter, highest among the hit windows (for comment generation)
 	UltrasonicCVThreshold float64                       // CV threshold that judged the window behind UltrasonicCV (for comment generation)
+	UnlikelySources       UnlikelySource                // Validators that tagged a hit window unlikely; zero unless Unlikely is set
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string

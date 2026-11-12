@@ -359,6 +359,7 @@ func TestApplyUltrasonicFilter_BroadbandClicksAreTagged(t *testing.T) {
 
 	got := detections[0].Result
 	assert.True(t, got.Unlikely)
+	assert.Equal(t, detection.UnlikelySourceUltrasonicCV, got.UnlikelySources)
 	assert.Less(t, got.UltrasonicCV, cfg.CVThreshold)
 	assert.InDelta(t, cfg.CVThreshold, got.UltrasonicCVThreshold, 0)
 }

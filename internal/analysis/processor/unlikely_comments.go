@@ -1,6 +1,10 @@
 package processor
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/tphakala/birdnet-go/internal/detection"
+)
 
 // unlikelyCommentTemplates maps UI locale codes to format strings for the
 // automatic comment added when the ultrasonic validation filter tags a bat
@@ -32,11 +36,13 @@ var unlikelyCommentTemplates = map[string]string{
 const defaultUnlikelyCommentLocale = "en"
 
 // formatUnlikelyComment returns a localized comment explaining why a detection
-// was tagged as unlikely by the ultrasonic validation filter.
-func formatUnlikelyComment(locale string, cv, threshold float64) string {
+// was tagged as unlikely. The ultrasonic CV filter is the only validator so far, so
+// its template serves every result whatever result.UnlikelySources holds; the
+// result is passed whole so the text can follow the sources once there are several.
+func formatUnlikelyComment(locale string, result *detection.Result) string {
 	tmpl, ok := unlikelyCommentTemplates[locale]
 	if !ok {
 		tmpl = unlikelyCommentTemplates[defaultUnlikelyCommentLocale]
 	}
-	return fmt.Sprintf(tmpl, cv, threshold)
+	return fmt.Sprintf(tmpl, result.UltrasonicCV, result.UltrasonicCVThreshold)
 }

@@ -35,7 +35,7 @@ type Detection struct {
 	ProcessingTimeMs *int64 // Milliseconds
 
 	// Validation flags
-	Unlikely bool `gorm:"default:false"` // Tagged by ultrasonic validation filter
+	Unlikely bool `gorm:"default:false"` // Tagged by a validator as unlikely to hold a call of the detected species
 
 	// Migration reference (preserves legacy ID for lookups and related data migration)
 	LegacyID *uint `gorm:"index"`
