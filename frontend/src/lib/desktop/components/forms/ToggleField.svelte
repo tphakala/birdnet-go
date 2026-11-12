@@ -86,7 +86,6 @@
     'cursor-pointer bg-[var(--color-base-content)]/60 checked:bg-[var(--color-primary)]';
   const TOGGLE_DIMMED_CLASS =
     'cursor-not-allowed bg-[var(--color-base-content)]/30 checked:bg-[var(--color-primary)]/50';
-  // The card dims its content wrapper instead, so its switch keeps the enabled track
   const TOGGLE_BLOCKED_CLASS =
     'cursor-not-allowed bg-[var(--color-base-content)]/60 checked:bg-[var(--color-primary)]';
 
@@ -101,15 +100,18 @@
     md: 'w-12 h-6 before:w-5 before:h-5 checked:before:translate-x-6',
   };
 
-   
+  // The card dims its content wrapper, so its switch keeps the enabled track
+  let toggleStateClass = $derived(
+    !disabled
+      ? TOGGLE_ENABLED_CLASS
+      : variant === 'card'
+        ? TOGGLE_BLOCKED_CLASS
+        : TOGGLE_DIMMED_CLASS
+  );
+
   let toggleBaseClasses = $derived(
-    `${toggleSharedClasses} ${toggleSizeClasses[size]} ${
-      !disabled
-        ? TOGGLE_ENABLED_CLASS
-        : variant === 'card'
-          ? TOGGLE_BLOCKED_CLASS
-          : TOGGLE_DIMMED_CLASS
-    }`
+    // eslint-disable-next-line security/detect-object-injection -- size is typed as 'sm' | 'md'
+    `${toggleSharedClasses} ${toggleSizeClasses[size]} ${toggleStateClass}`
   );
 
   const toggleErrorClasses = 'checked:bg-[var(--color-error)]';
