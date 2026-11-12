@@ -23,7 +23,7 @@ export interface ProcessList {
   readonly processes: ProcessInfo[];
   /** Whether a load for the current Show All mode has answered, successfully or not */
   readonly loaded: boolean;
-  /** Why the latest load failed, or null after a success */
+  /** Why the latest load failed; null after a success and while a Show All change loads */
   readonly error: string | null;
   /** Whether every process is listed, or only the app's own */
   readonly showAll: boolean;
