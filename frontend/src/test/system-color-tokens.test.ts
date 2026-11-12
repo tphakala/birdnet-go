@@ -79,6 +79,8 @@ describe('System page colors', () => {
   it.each([
     ['a hex color', 'style="color: #f59e0b"'],
     ['a short hex color', 'style="color: #fa0"'],
+    ['a 4 digit hex color', 'style="color: #fa0f"'],
+    ['an 8 digit hex color', 'style="color: #f59e0bcc"'],
     ['a palette class', 'class="px-2 bg-slate-500/15"'],
     ['a palette class behind a variant', 'class="dark:hover:text-amber-400"'],
     ['a palette class behind a bracket variant', 'class="[&>svg]:text-red-500"'],
