@@ -95,6 +95,7 @@ describe('SystemProcessTable', () => {
       processes: [
         proc({ pid: 1, name: 'busy', cpu: 250, memory: 5 * 1024 * 1024, uptime: 90_061 }),
         proc({ pid: 2, name: 'odd', cpu: Number.NaN }),
+        proc({ pid: 3, name: 'below', cpu: -5 }),
       ],
     });
 
@@ -109,6 +110,7 @@ describe('SystemProcessTable', () => {
     // Columns: process, status, CPU, memory, uptime
     expect(cells[0].slice(2)).toEqual(['100.0%', '5.0 MB', '1d 1h 1m']);
     expect(cells[1][2]).toBe('0.0%');
+    expect(cells[2][2]).toBe('0.0%');
   });
 
   it('shows loading, empty and failed as three different states', () => {
