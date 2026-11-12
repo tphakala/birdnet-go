@@ -24,18 +24,26 @@ const (
 	// power of a sub-frame must exceed to count as a broadband event. Ordinary
 	// guard band fluctuation stays below it.
 	broadbandGuardThreshold = 3.0
-	// broadbandContinuityLowRatio is where the continuity range starts, as a
-	// fraction of FrequencySplitHz; it ends at the split: 14 to 20 kHz at the
-	// 20 kHz default. Rain ticks begin near 14 kHz and run through the split,
-	// above most of the guard band, whose median the rain itself keeps high.
-	// The guard band rule stays beside it: on recorded audio neither rule
-	// replaced the other, and rain does not reach below 0.7 of the split.
-	broadbandContinuityLowRatio = 0.7
+	// broadbandContinuityLowRatio and broadbandContinuityHighRatio bound the
+	// continuity range as fractions of FrequencySplitHz: 14 to 24 kHz at the
+	// 20 kHz default, so the range crosses the split. Rain ticks begin near
+	// 14 kHz and run through the split, above most of the guard band, whose
+	// median the rain itself keeps high. The guard band rule stays beside this
+	// one: on recorded audio neither rule replaced the other.
+	broadbandContinuityLowRatio  = 0.7
+	broadbandContinuityHighRatio = 1.2
 	// broadbandContinuityBands is how many equal bands the continuity range is
-	// cut into (1 kHz each at the default). A tick raises all of them at once; a
-	// call above the split raises none, and one that reaches just below the
-	// split raises only the upper ones.
-	broadbandContinuityBands = 6
+	// cut into (1 kHz each at the default). A tick raises all of them at once.
+	// A call well above the range leaves most of them at their noise level; a
+	// call that sweeps through the split fills the upper bands itself, so only
+	// the bands below the split speak against it.
+	broadbandContinuityBands = 10
+	// broadbandContinuityThreshold is how many times its window median the
+	// power of a continuity band must exceed to count as raised. Noise alone is
+	// above its median half the time, and a faint real call can come with a
+	// slight rise below the split; on recorded calls that rise stayed below
+	// this factor in at least one band.
+	broadbandContinuityThreshold = 1.25
 )
 
 // BroadbandAdjustedCV removes the share of broadband events from cv, the
@@ -46,10 +54,12 @@ const (
 // window is therefore re-examined in sub-frames of FFTSize/8. A sub-frame is
 // broadband when its ultrasonic power is above the window median and either
 // the power in the guard band exceeds broadbandGuardThreshold times its window
-// median, or every band of the continuity range is above its own window
-// median. The ultrasonic power of a broadband sub-frame is replaced by the
-// median, and the returned CV is cv scaled by the CV after that replacement
-// over the CV before it.
+// median, or every band of the continuity range exceeds
+// broadbandContinuityThreshold times its own window median. The second rule is
+// left out when a continuity band would be narrower than one sub-frame bin or
+// the range would end above the Nyquist bin. The ultrasonic power of a
+// broadband sub-frame is replaced by the median, and the returned CV is cv
+// scaled by the CV after that replacement over the CV before it.
 //
 // The step only lowers a CV. cv is returned unchanged when it is already below
 // the threshold, when the settings or the window leave no usable sub-frame
@@ -74,7 +84,8 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 		return cv
 	}
 	contLo := int(broadbandContinuityLowRatio * split / binWidth)
-	contSpan := splitBin - contLo
+	contHi := int(broadbandContinuityHighRatio * split / binWidth)
+	contSpan := contHi - contLo
 	plan, err := stft.New(stft.Config{FrameSize: subSize, HopSize: subHop, Window: stft.HannSymmetric})
 	if err != nil {
 		return cv
@@ -83,15 +94,15 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 	numSub := 1 + (len(samples)-subSize)/subHop
 	us := make([]float64, numSub)
 	guard := make([]float64, numSub)
-	var cont [][]float64 // stays empty, and the rule off, when a band would be narrower than one bin
-	if contSpan >= broadbandContinuityBands {
+	frame := make([]float32, subSize)
+	power := make([]float32, plan.NumBins())
+	var cont [][]float64 // stays empty, and the rule off, when its bands do not fit the spectrum
+	if contSpan >= broadbandContinuityBands && contHi <= len(power) {
 		cont = make([][]float64, broadbandContinuityBands)
 		for k := range cont {
 			cont[k] = make([]float64, numSub)
 		}
 	}
-	frame := make([]float32, subSize)
-	power := make([]float32, plan.NumBins())
 	for f := range numSub {
 		offset := f * subHop
 		removeMean(frame, samples[offset:offset+subSize])
@@ -108,12 +119,12 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 	if before <= 0 || medianGuard <= 0 {
 		return cv
 	}
-	medianCont := make([]float64, len(cont))
+	contFloor := make([]float64, len(cont))
 	for k := range cont {
-		medianCont[k] = median(cont[k])
+		contFloor[k] = broadbandContinuityThreshold * median(cont[k])
 	}
 	for f := range us {
-		if us[f] > medianUS && (guard[f] > broadbandGuardThreshold*medianGuard || allAbove(cont, medianCont, f)) {
+		if us[f] > medianUS && (guard[f] > broadbandGuardThreshold*medianGuard || allAbove(cont, contFloor, f)) {
 			us[f] = medianUS
 		}
 	}
@@ -121,11 +132,11 @@ func BroadbandAdjustedCV(samples []float32, sampleRate int, cfg conf.UltrasonicF
 	return cv * min(1, coefficientOfVariation(us)/before)
 }
 
-// allAbove reports whether every band exceeds its median in sub-frame f; it is
+// allAbove reports whether every band exceeds its floor in sub-frame f; it is
 // false when there are no bands.
-func allAbove(bands [][]float64, medians []float64, f int) bool {
+func allAbove(bands [][]float64, floors []float64, f int) bool {
 	for k, band := range bands {
-		if band[f] <= medians[k] {
+		if band[f] <= floors[k] {
 			return false
 		}
 	}

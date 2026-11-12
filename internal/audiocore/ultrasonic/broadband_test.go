@@ -52,12 +52,20 @@ const (
 	loudGuardAmplitude = 0.05
 	// One-sample impulses: the flattest broadband event there is.
 	impulseAmplitude = 0.3
-	// Recorded windows: 144000 samples of signed 16 bit little endian PCM at 256 kHz.
+	// Recordings as signed 16 bit little endian PCM at 256 kHz: one window of
+	// rain, and a weak call with 4096 samples more than a window, so that it can
+	// be run at several window starts.
 	rainFixture     = "rain_256k_s16le.pcm"
 	weakCallFixture = "weak_bat_call_256k_s16le.pcm"
+	// A split whose continuity range would end above the Nyquist frequency of the bat rate.
+	highSplitHz = 110000
 	// At this FFT size the continuity bands are narrower than one bin.
 	narrowContinuityFFT = 1024
 )
+
+// weakCallStarts are window starts into the weak call recording. They put the
+// calls at different places in the sub-frame grid.
+var weakCallStarts = []int{0, 740, 1258, 2294, 3293}
 
 // modelWindows are the analysis window layouts of the two bat models.
 var modelWindows = []struct {
@@ -212,21 +220,38 @@ func TestBroadbandAdjustedCV_RecordedRainIsLowered(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, IsUnlikely(cv, cfg), "the raw CV must pass the current check")
 
-	got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
-	assert.Less(t, got, cfg.CVThreshold*lowerBoundMargin)
+	assert.True(t, IsUnlikely(BroadbandAdjustedCV(samples, batRate, cfg, cv), cfg))
 }
 
-// Two faint Eptesicus nilssonii calls near 30 kHz from the same station. A
-// window like this is close to the threshold, so nothing may be taken from it.
+// Two faint Eptesicus nilssonii calls near 30 kHz from the same station. The
+// calls come with a slight rise below the split, and the window is close to
+// the threshold, so nothing may be taken from it wherever the window starts.
 func TestBroadbandAdjustedCV_RecordedWeakCallStaysActive(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
-	samples := readPCM16(t, weakCallFixture)
+	recording := readPCM16(t, weakCallFixture)
+	for _, start := range weakCallStarts {
+		samples := recording[start : start+batSamples]
+		cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+		require.True(t, ok)
+		require.False(t, IsUnlikely(cv, cfg))
+
+		assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), 0, "window start %d", start)
+	}
+}
+
+// The continuity range of a split close to Nyquist would end above it. The
+// continuity rule is then off, and the guard band rule must keep working.
+func TestBroadbandAdjustedCV_ContinuityRangeAboveNyquistKeepsGuardRule(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	cfg.FrequencySplitHz = highSplitHz
+	samples := clickWindow(batRate, batSamples)
 	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
 	require.True(t, ok)
 	require.False(t, IsUnlikely(cv, cfg))
 
-	assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), 0)
+	assert.Less(t, BroadbandAdjustedCV(samples, batRate, cfg, cv), lowerBoundMargin*cv)
 }
 
 // With bands narrower than one bin the continuity rule is off; the guard band
