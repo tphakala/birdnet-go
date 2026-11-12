@@ -20,7 +20,7 @@
     debugMode?: boolean;
     securityEnabled?: boolean;
     accessAllowed?: boolean;
-    onSidebarToggle?: () => void;
+    onSidebarToggle: () => void;
     onSearch?: (_query: string) => void;
     onNavigate?: (_url: string) => void;
     className?: string;
@@ -42,19 +42,6 @@
     onNavigate,
     className = '',
   }: Props = $props();
-
-  // Handle sidebar toggle
-  function handleSidebarToggle() {
-    if (onSidebarToggle) {
-      onSidebarToggle();
-    } else {
-      // Default behavior - toggle drawer checkbox if it exists
-      const drawer = document.getElementById('my-drawer') as HTMLInputElement;
-      if (drawer) {
-        drawer.checked = !drawer.checked;
-      }
-    }
-  }
 
   // Handle search queries (quick search functionality)
   function handleSearch(query: string) {
@@ -84,7 +71,7 @@
   <div class="flex items-center gap-2 sm:gap-4">
     {#if showSidebarToggle}
       <button
-        onclick={handleSidebarToggle}
+        onclick={onSidebarToggle}
         class="inline-flex items-center justify-center rounded-lg p-0 sm:p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10 lg:hidden"
         aria-label={t('navigation.toggleSidebar')}
         aria-expanded={sidebarOpen}
