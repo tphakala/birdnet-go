@@ -637,8 +637,6 @@ describe('SelectDropdown option states in every color scheme', () => {
   const FIXED_SCHEMES = ['blue', 'forest', 'amber', 'violet', 'rose'];
   const ALL_SCHEMES = [...FIXED_SCHEMES, 'custom'];
 
-  /** Minimum ratio for the focus outline against its neighbours (WCAG 1.4.11). */
-
   const lightBase = blockBody(tailwindCss, '@theme');
   const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
 
@@ -756,8 +754,6 @@ describe('PlaceSearch colors in light and dark themes', () => {
   const lightBase = blockBody(tailwindCss, '@theme');
   const lightText = blockBody(tailwindCss, ":root,\n[data-theme='light']");
   const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
-
-  /** Minimum ratio for an informative icon (WCAG 1.4.11). */
 
   /** Custom property written as `text-[var(--token)]` in a class constant, without opacity. */
   function textToken(classes: string): string {
