@@ -2,6 +2,7 @@ package detections
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -105,11 +106,15 @@ func (c *Handler) respondNoiseUnavailable(ctx echo.Context) error {
 
 // respondNoiseMarkError answers a failed Mark. A refusal is 409 with the reason as
 // the error key, except a clearing barrier and a full queue, which are 503 with a
-// Retry-After. Nothing has been written by the request in any of these cases.
+// Retry-After, and a range that holds no whole model window, which is 400. Nothing has been written by the request in any of these cases.
 func (c *Handler) respondNoiseMarkError(ctx echo.Context, err error) error {
 	if refusal, ok := errors.AsType[*noisebank.RefusalError](err); ok {
 		if refusal.Reason == noisebank.ReasonClearing {
 			return c.respondRetryLater(ctx, err, string(refusal.Reason))
+		}
+		if refusal.Reason == noisebank.ReasonRangeTooShort {
+			// The request itself is wrong, whatever the state of the clip.
+			return c.HandleErrorWithKey(ctx, err, "Invalid noise range", http.StatusBadRequest, string(refusal.Reason), nil)
 		}
 		return c.HandleErrorWithKey(ctx, err, "Detection cannot be marked as noise", http.StatusConflict, string(refusal.Reason), nil)
 	}
@@ -253,4 +258,26 @@ func (c *Handler) ClearNoiseExamples(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to clear noise examples", http.StatusInternalServerError)
 	}
 	return ctx.JSON(http.StatusOK, map[string]int64{"deleted": deleted})
+}
+
+// validateNoiseRange checks the range of a noise mark without writing anything.
+// A range only means something for a mark, so it needs the no_animal reason; its
+// ends must be finite, the start not negative and the end after the start. Whether
+// it is long enough for a model window and lies inside the clip is for the noise
+// service to say, since it needs the model and the clip.
+func validateNoiseRange(r *noisebank.ClipRange, reason *string) error {
+	if r == nil {
+		return nil
+	}
+	switch {
+	case reason == nil || *reason != entities.ReviewReasonNoAnimal:
+		return &reviewReasonError{message: "noise_range requires reason " + entities.ReviewReasonNoAnimal}
+	case math.IsNaN(r.Start) || math.IsInf(r.Start, 0) || math.IsNaN(r.End) || math.IsInf(r.End, 0):
+		return &reviewReasonError{message: "noise_range must hold finite numbers"}
+	case r.Start < 0:
+		return &reviewReasonError{message: "noise_range start must not be negative"}
+	case r.End <= r.Start:
+		return &reviewReasonError{message: "noise_range end must be after its start"}
+	}
+	return nil
 }

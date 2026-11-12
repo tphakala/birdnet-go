@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -798,4 +799,102 @@ func TestClearNoiseExamples(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestReviewDetection_NoiseRange(t *testing.T) {
+	const marked = `"verified":"false_positive","reason":"no_animal"`
+
+	t.Run("invalid ranges write nothing and call nothing", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"negative start":       `{` + marked + `,"noise_range":{"start":-1,"end":5}}`,
+			"reversed":             `{` + marked + `,"noise_range":{"start":5,"end":2}}`,
+			"empty":                `{` + marked + `,"noise_range":{"start":3,"end":3}}`,
+			"without a reason":     `{"verified":"false_positive","noise_range":{"start":0,"end":5}}`,
+			"with an empty reason": `{"verified":"false_positive","reason":"","noise_range":{"start":0,"end":5}}`,
+			"without a verdict":    `{"noise_range":{"start":0,"end":5}}`,
+			"on a correct verdict": `{"verified":"correct","noise_range":{"start":0,"end":5}}`,
+		} {
+			t.Run(name, func(t *testing.T) {
+				noise := newFakeNoise()
+				e, mockDS, h := reviewFixture(t, noise)
+
+				rec := postJSON(t, e, h.ReviewDetection, "7", body)
+
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				assert.Empty(t, noise.eventLog())
+				mockDS.AssertNotCalled(t, "SaveNoteReview", mock.Anything)
+				mockDS.AssertNotCalled(t, "SaveNoteComment", mock.Anything)
+			})
+		}
+	})
+
+	t.Run("a range without a service is refused like any mark", func(t *testing.T) {
+		e, _, h := reviewFixture(t, nil)
+
+		rec := postJSON(t, e, h.ReviewDetection, "7", `{`+marked+`,"noise_range":{"start":0,"end":5}}`)
+
+		assert.Equal(t, http.StatusConflict, rec.Code)
+	})
+
+	t.Run("service refusals of a range", func(t *testing.T) {
+		tests := []struct {
+			reason     noisebank.Reason
+			wantStatus int
+		}{
+			{noisebank.ReasonRangeTooShort, http.StatusBadRequest},
+			{noisebank.ReasonRangeOutsideClip, http.StatusConflict},
+		}
+		for _, tt := range tests {
+			t.Run(string(tt.reason), func(t *testing.T) {
+				noise := newFakeNoise()
+				noise.markErr = &noisebank.RefusalError{Reason: tt.reason}
+				e, mockDS, h := reviewFixture(t, noise)
+
+				rec := postJSON(t, e, h.ReviewDetection, "7", `{`+marked+`,"comment":"rain","noise_range":{"start":0,"end":5}}`)
+
+				assert.Equal(t, tt.wantStatus, rec.Code)
+				assert.Equal(t, string(tt.reason), errorKeyOf(t, rec))
+				mockDS.AssertNotCalled(t, "SaveNoteComment", mock.Anything)
+			})
+		}
+	})
+
+	t.Run("a valid range reaches the service", func(t *testing.T) {
+		noise := newFakeNoise()
+		e, _, h := reviewFixture(t, noise)
+
+		rec := postJSON(t, e, h.ReviewDetection, "7", `{`+marked+`,"noise_range":{"start":1.5,"end":9}}`)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, noise.marks, 1)
+		assert.Equal(t, &noisebank.ClipRange{Start: 1.5, End: 9}, noise.marks[0].Range)
+	})
+
+	t.Run("a mark without a range sends none", func(t *testing.T) {
+		noise := newFakeNoise()
+		e, _, h := reviewFixture(t, noise)
+
+		rec := postJSON(t, e, h.ReviewDetection, "7", `{`+marked+`}`)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, noise.marks, 1)
+		assert.Nil(t, noise.marks[0].Range)
+	})
+}
+
+func TestValidateNoiseRange_RejectsNonFiniteValues(t *testing.T) {
+	reason := entities.ReviewReasonNoAnimal
+	for name, r := range map[string]noisebank.ClipRange{
+		"NaN start":    {Start: math.NaN(), End: 5},
+		"NaN end":      {Start: 0, End: math.NaN()},
+		"infinite end": {Start: 0, End: math.Inf(1)},
+		"infinite low": {Start: math.Inf(-1), End: 5},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Error(t, validateNoiseRange(&r, &reason))
+		})
+	}
+	ok := noisebank.ClipRange{Start: 0, End: 5}
+	assert.NoError(t, validateNoiseRange(&ok, &reason))
+	assert.NoError(t, validateNoiseRange(nil, nil))
 }

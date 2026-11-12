@@ -36,6 +36,13 @@ const (
 	ReasonClearing Reason = "clearing"
 	// ReasonDetectionBeingDeleted means a delete of the detection is in progress.
 	ReasonDetectionBeingDeleted Reason = "detection_being_deleted"
+	// ReasonRangeTooShort means the requested range holds no whole analysis window
+	// of the model: it is shorter than a window, or it straddles the grid lines so
+	// that no window starts and ends inside it.
+	ReasonRangeTooShort Reason = "range_too_short"
+	// ReasonRangeOutsideClip means the requested range starts at or after the end
+	// of the clip.
+	ReasonRangeOutsideClip Reason = "range_outside_clip"
 )
 
 // Reasons a learning job fails after it was accepted.
@@ -102,6 +109,17 @@ type Status struct {
 	FailureReason Reason `json:"failureReason"`
 	// ClipDenoised is true when the clip was denoised when it was saved.
 	ClipDenoised bool `json:"clipDenoised"`
+	// Range is the range of the latest job of this run, omitted when that job
+	// learned from the whole clip or no job is known.
+	Range *ClipRange `json:"range,omitempty"`
+}
+
+// ClipRange is a stretch of a clip, in seconds of recording time from its first
+// sample. A player that plays a time-expanded copy of an ultrasonic clip has to
+// convert its selection to recording time before sending it.
+type ClipRange struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
 }
 
 // RefusalError is returned by Mark when the request is refused. Nothing has been
@@ -121,6 +139,8 @@ var refusalText = map[Reason]string{
 	ReasonBankFull:              "the limit of learned noise examples is reached; clear the learned noise (DELETE /api/v2/detections/noise-examples) before marking more",
 	ReasonClearing:              "the learned noise is being cleared",
 	ReasonDetectionBeingDeleted: "the detection is being deleted",
+	ReasonRangeTooShort:         "the range holds no whole analysis window of the model",
+	ReasonRangeOutsideClip:      "the range starts at or after the end of the clip",
 }
 
 // Error implements error.
