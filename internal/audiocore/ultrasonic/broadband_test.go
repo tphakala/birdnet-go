@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -240,12 +241,14 @@ func TestBroadbandAdjustedCV_RecordedWeakCallStaysActive(t *testing.T) {
 	cfg := defaultFilterConfig()
 	recording := readPCM16(t, weakCallFixture)
 	for _, start := range weakCallStarts {
-		samples := recording[start : start+batSamples]
-		cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
-		require.True(t, ok)
-		require.False(t, IsUnlikely(cv, cfg))
+		t.Run("start "+strconv.Itoa(start), func(t *testing.T) {
+			samples := recording[start : start+batSamples]
+			cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+			require.True(t, ok)
+			require.False(t, IsUnlikely(cv, cfg))
 
-		assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), 0, "window start %d", start)
+			assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), 0)
+		})
 	}
 }
 
@@ -302,17 +305,19 @@ func TestBroadbandAdjustedCV_WeakBurstsOverGuardFluctuationStayActive(t *testing
 	t.Parallel()
 	cfg := defaultFilterConfig()
 	for _, offset := range weakBurstSeedOffsets {
-		x := whiteNoise(batSamples, noiseSigma, noiseSeed+offset)
-		addToneBand(x, batRate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, guardSeed+offset)
-		addToneBursts(x, batRate, weakBurstHz, weakBurstEvery, weakBurstLenSec, weakBurstAmp)
-		samples := quantizeAll(x)
-		cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
-		require.True(t, ok)
-		require.False(t, IsUnlikely(cv, cfg))
+		t.Run("seed offset "+strconv.FormatUint(offset, 10), func(t *testing.T) {
+			x := whiteNoise(batSamples, noiseSigma, noiseSeed+offset)
+			addToneBand(x, batRate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, guardSeed+offset)
+			addToneBursts(x, batRate, weakBurstHz, weakBurstEvery, weakBurstLenSec, weakBurstAmp)
+			samples := quantizeAll(x)
+			cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+			require.True(t, ok)
+			require.False(t, IsUnlikely(cv, cfg))
 
-		got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
-		assert.GreaterOrEqual(t, got, keptShareOfRaw*cv, "seed offset %d", offset)
-		assert.False(t, IsUnlikely(got, cfg), "seed offset %d", offset)
+			got := BroadbandAdjustedCV(samples, batRate, cfg, cv)
+			assert.GreaterOrEqual(t, got, keptShareOfRaw*cv)
+			assert.False(t, IsUnlikely(got, cfg))
+		})
 	}
 }
 
