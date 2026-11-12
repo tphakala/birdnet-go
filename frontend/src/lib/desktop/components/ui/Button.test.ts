@@ -100,6 +100,24 @@ describe('Button', () => {
     expect(screen.getByRole('button')).not.toHaveClass('bg-[var(--color-primary)]');
   });
 
+  it('treats a boolean aria-disabled like the string form', () => {
+    render(ButtonHarness, { props: { variant: 'primary', 'aria-disabled': true } });
+    const button = screen.getByRole('button');
+
+    expect(button).toHaveClass('cursor-not-allowed');
+    expect(button).not.toHaveClass('bg-[var(--color-primary)]');
+  });
+
+  it('keeps the plain variant look under native disabled even with aria-disabled set', () => {
+    render(ButtonHarness, {
+      props: { variant: 'primary', disabled: true, 'aria-disabled': 'true' },
+    });
+    const button = screen.getByRole('button');
+
+    expect(button).toHaveClass('bg-[var(--color-primary)]', 'disabled:opacity-50');
+    expect(button).not.toHaveClass('cursor-not-allowed');
+  });
+
   it('keeps native opacity dimming for a natively disabled button', () => {
     render(ButtonHarness, { props: { disabled: true } });
 
