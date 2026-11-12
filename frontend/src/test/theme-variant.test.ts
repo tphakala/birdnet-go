@@ -230,7 +230,7 @@ describe('theme resolution: pre-paint script and store', () => {
 
   it('subscribers see the new theme only after the attributes changed', async () => {
     setStorage(null);
-    stubMatchMedia('light');
+    const setOs = controllableOs('light');
     const { theme } = await freshStore();
     const seen: Array<[string, string | null]> = [];
     theme.subscribe(value => seen.push([value, root.getAttribute('data-theme')]));
@@ -238,14 +238,16 @@ describe('theme resolution: pre-paint script and store', () => {
 
     theme.toggle();
     theme.set('light');
-    stubMatchMedia('dark');
+    setOs('dark');
     localStorage.removeItem('theme');
-    theme.initialize()?.();
+    theme.initialize();
+    setOs('light');
 
     expect(seen).toEqual([
       ['dark', 'dark'],
       ['light', 'light'],
       ['dark', 'dark'],
+      ['light', 'light'],
     ]);
   });
 
