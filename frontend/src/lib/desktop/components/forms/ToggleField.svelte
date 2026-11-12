@@ -104,11 +104,8 @@
     "relative isolate inline-flex min-h-8 items-center gap-2 after:absolute after:inset-x-0 after:-inset-y-1.5 after:-z-10 after:content-['']";
 
   let labelCursorClass = $derived(disabled ? 'cursor-not-allowed' : 'cursor-pointer');
-  // The inline variant uses the error text token (4.5:1 on every base surface); the default
-  // and card variants keep their original colour
-  let errorTextClass = $derived(
-    variant === 'inline' ? 'text-[var(--text-error)]' : 'text-[var(--color-error)]'
-  );
+  // Error text and the required mark use the error text token; --color-error is for fills
+  const ERROR_TEXT_CLASS = 'text-[var(--text-error)]';
 
   let cardClasses = $derived(
     cn(
@@ -135,7 +132,7 @@
 
 {#snippet requiredMark()}
   {#if required}
-    <span class={errorTextClass}>*</span>
+    <span class={ERROR_TEXT_CLASS}>*</span>
   {/if}
 {/snippet}
 
@@ -225,7 +222,7 @@
 
   {#if error}
     <div id="{fieldId}-error" class="py-1">
-      <span class={cn('text-xs', errorTextClass)}>{error}</span>
+      <span class={cn('text-xs', ERROR_TEXT_CLASS)}>{error}</span>
     </div>
   {/if}
 </div>

@@ -7,18 +7,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { indexHtmlScriptBlock } from './index-html';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const stylesheet = readFileSync(join(here, '..', 'styles', 'tailwind.css'), 'utf8');
-const indexHtml = readFileSync(join(here, '..', '..', 'index.html'), 'utf8');
 
 /** The theme block of the inline pre-paint script (the tag also holds other init code). */
-function prePaintThemeScript(): string {
-  const start = indexHtml.indexOf('// Immediately set the theme');
-  const end = indexHtml.indexOf('})();', start);
-  return start === -1 || end === -1 ? '' : indexHtml.slice(start, end + '})();'.length);
-}
-
-const prePaintScript = prePaintThemeScript();
+const prePaintScript = indexHtmlScriptBlock('// Immediately set the theme');
 
 describe('dark variant', () => {
   const declaration = stylesheet.match(/^@custom-variant dark \(&(.*)\);$/m);
@@ -72,6 +67,8 @@ describe('index.html pre-paint theme script', () => {
 
   /** Runs the script from a clean root and returns the attributes it set. */
   function attributesAfterRunning() {
+    root.removeAttribute('data-theme');
+    root.removeAttribute('data-theme-controller');
     new Function(prePaintScript)();
     return [root.getAttribute('data-theme'), root.getAttribute('data-theme-controller')];
   }
@@ -80,8 +77,6 @@ describe('index.html pre-paint theme script', () => {
     if (stored === null) localStorage.removeItem('theme');
     else localStorage.setItem('theme', stored);
     stubMatchMedia(osDark);
-    root.removeAttribute('data-theme');
-    root.removeAttribute('data-theme-controller');
     const [theme, controller] = attributesAfterRunning();
     expect(controller).toBe(theme);
     return theme;
@@ -106,8 +101,6 @@ describe('index.html pre-paint theme script', () => {
     localStorage.removeItem('theme');
     // Simulates an environment without matchMedia
     window.matchMedia = undefined as unknown as typeof window.matchMedia;
-    root.removeAttribute('data-theme');
-    root.removeAttribute('data-theme-controller');
     expect(attributesAfterRunning()).toEqual(['light', 'light']);
   });
 
@@ -116,8 +109,6 @@ describe('index.html pre-paint theme script', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage blocked');
     });
-    root.removeAttribute('data-theme');
-    root.removeAttribute('data-theme-controller');
     expect(attributesAfterRunning()).toEqual(['light', 'light']);
   });
 });

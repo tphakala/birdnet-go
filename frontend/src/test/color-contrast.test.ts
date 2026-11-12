@@ -16,6 +16,7 @@ import {
   TOAST_CLOSE_CLASS,
   TOAST_TYPE_CLASSES,
 } from '../lib/desktop/components/ui/NotificationToast.styles';
+import { indexHtmlScriptBlock } from './index-html';
 import { confidenceColorClasses } from '../lib/desktop/features/dashboard/utils/confidenceColors';
 import {
   PLACE_DISCLOSURE_CLASS,
@@ -351,6 +352,7 @@ const STATUSES = ['error', 'success', 'warning', 'info'] as const;
 
 /** Status text tokens and the fill token each one is drawn over (as a 15% tint). */
 const TEXT_TOKENS = STATUSES.map(status => ({
+  status,
   token: `--text-${status}`,
   fill: `--color-${status}`,
 }));
@@ -413,9 +415,7 @@ describe('Status text rules', () => {
     }
   }
 
-  for (const status of STATUSES) {
-    const token = `--text-${status}`;
-    const fill = `--color-${status}`;
+  for (const { status, token, fill } of TEXT_TOKENS) {
     const tintedSelectors = [`.alert-${status}`, `.badge-status-${status}`];
 
     for (const selector of [`.text-${status}`, ...tintedSelectors]) {
@@ -1184,14 +1184,6 @@ describe('Custom scheme hover and pressed fills', () => {
     }
   });
 
-  /** The scheme block of the pre-paint script in index.html (the tag also holds other init code). */
-  function prePaintSchemeScript(): string {
-    const html = readFileSync(join(stylesDir, '..', '..', 'index.html'), 'utf8');
-    const start = html.indexOf('// Restore color scheme');
-    const end = html.indexOf('})();', start);
-    return start === -1 || end === -1 ? '' : html.slice(start, end + '})();'.length);
-  }
-
   /** Runs a shipped inline script with the scheme stored JSON-encoded, as the app stores it. */
   function schemeAfterRunning(script: string): string | null {
     localStorage.setItem('color-scheme', JSON.stringify('amber'));
@@ -1202,7 +1194,8 @@ describe('Custom scheme hover and pressed fills', () => {
   }
 
   it('the index.html pre-paint script restores a JSON-encoded scheme', () => {
-    const script = prePaintSchemeScript();
+    // The scheme block of the pre-paint script (the tag also holds other init code)
+    const script = indexHtmlScriptBlock('// Restore color scheme');
     expect(script).not.toBe('');
     expect(schemeAfterRunning(script)).toBe('amber');
   });

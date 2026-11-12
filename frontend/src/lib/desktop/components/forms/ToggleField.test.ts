@@ -468,6 +468,26 @@ describe('ToggleField disabled, required and error state', () => {
     }
   );
 
+  it.each(VARIANTS)(
+    '%s variant draws the required mark and error text in the error text token',
+    variant => {
+      render(ToggleField, {
+        props: {
+          label: 'Show all',
+          value: false,
+          onUpdate: vi.fn(),
+          required: true,
+          error: 'Toggle error',
+          variant,
+        },
+      });
+
+      // --text-error holds 4.5:1 on base-100, 200 and 300; --color-error is for fills
+      expect(screen.getByText('*')).toHaveClass('text-[var(--text-error)]');
+      expect(screen.getByText('Toggle error')).toHaveClass('text-[var(--text-error)]');
+    }
+  );
+
   it.each(VARIANTS)('marks the switch required and shows the asterisk (%s)', variant => {
     render(ToggleField, {
       props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), required: true, variant },
@@ -643,23 +663,6 @@ describe('ToggleField inline variant', () => {
     expect(onUpdate).toHaveBeenLastCalledWith(false);
   });
 
-  it('inline variant draws the required mark and error text in the error text token', () => {
-    render(ToggleField, {
-      props: {
-        label: 'Show all',
-        value: false,
-        onUpdate: vi.fn(),
-        required: true,
-        error: 'Toggle error',
-        variant: 'inline',
-      },
-    });
-
-    // --text-error holds 4.5:1 on base-100, 200 and 300; --color-error is for fills
-    expect(screen.getByText('*')).toHaveClass('text-[var(--text-error)]');
-    expect(screen.getByText('Toggle error')).toHaveClass('text-[var(--text-error)]');
-  });
-
   it('inline variant sets regular weight on its label, description and error text', () => {
     render(ToggleField, {
       props: {
@@ -678,51 +681,39 @@ describe('ToggleField inline variant', () => {
     expect(regular).toContainElement(screen.getByText('Toggle error'));
   });
 
-  it('inline variant label is a touch target taller than its row', () => {
+  it('inline variant label is a touch target taller than its row, under its content', () => {
     render(ToggleField, {
       props: { label: 'Show all', value: false, onUpdate: vi.fn(), variant: 'inline' },
     });
 
-    // 2rem box plus a 0.375rem layer above and below: 2.75rem to touch, never sideways
+    // 2rem box plus a 0.375rem layer above and below: 2.75rem to touch, never sideways. The
+    // layer sits behind the text and the switch inside the label's own stacking context
+    // (isolate, -z-10), so pointer hits on them reach them and not the layer.
     expect(screen.getByRole('checkbox').closest('label')).toHaveClass(
       'relative',
+      'isolate',
       'min-h-8',
       'after:absolute',
       'after:inset-x-0',
       'after:-inset-y-1.5',
+      'after:-z-10',
       'cursor-pointer'
     );
   });
 
-  it('inline variant keeps its hit layer under the label content', () => {
+  it.each(['default', 'card'] as const)('the %s variant keeps its inherited weight', variant => {
     render(ToggleField, {
-      props: { label: 'Show all', value: false, onUpdate: vi.fn(), variant: 'inline' },
+      props: {
+        label: 'Test Toggle',
+        value: false,
+        onUpdate: vi.fn(),
+        error: 'Toggle error',
+        variant,
+      },
     });
 
-    // The layer sits behind the text and the switch inside the label's own stacking context,
-    // so pointer hits on them reach them and not the layer
-    expect(screen.getByRole('checkbox').closest('label')).toHaveClass('isolate', 'after:-z-10');
+    expect(screen.getByText('Toggle error').closest('.font-normal')).toBeNull();
   });
-
-  it.each(['default', 'card'] as const)(
-    'the %s variant keeps its original error colour and inherited weight',
-    variant => {
-      render(ToggleField, {
-        props: {
-          label: 'Test Toggle',
-          value: false,
-          onUpdate: vi.fn(),
-          required: true,
-          error: 'Toggle error',
-          variant,
-        },
-      });
-
-      expect(screen.getByText('*')).toHaveClass('text-[var(--color-error)]');
-      expect(screen.getByText('Toggle error')).toHaveClass('text-[var(--color-error)]');
-      expect(screen.getByText('Toggle error').closest('.font-normal')).toBeNull();
-    }
-  );
 });
 
 describe('ToggleField Accessibility', () => {
