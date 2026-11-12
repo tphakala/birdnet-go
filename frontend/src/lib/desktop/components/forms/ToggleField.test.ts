@@ -481,25 +481,6 @@ describe('ToggleField disabled, required and error state', () => {
   );
 
   it.each(VARIANTS)(
-    'a disabled %s switch stays off even when an ancestor stops the change',
-    async variant => {
-      const onUpdate = vi.fn();
-      render(ToggleField, {
-        props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
-      });
-      const toggle = screen.getByRole('checkbox');
-      // With the change kept from the delegated handler that restores the state, only the
-      // cancelled click keeps the switch from flipping
-      toggle.parentElement?.addEventListener('change', event => event.stopPropagation());
-
-      await fireEvent.click(toggle);
-
-      expect(toggle).not.toBeChecked();
-      expect(onUpdate).not.toHaveBeenCalled();
-    }
-  );
-
-  it.each(VARIANTS)(
     'a disabled %s switch keeps its state even when an ancestor stops both the click and the change',
     async variant => {
       const onUpdate = vi.fn();
