@@ -167,6 +167,8 @@
 
   let displayCount = $derived(count ?? filteredData.length);
 
+  let cappedBodyNeedsFocus = $derived(!!bodyMaxHeight && !columns.some(c => c.sortable));
+
   // Fall back to the item reference (not the array index) so that re-sorting or
   // filtering reorders existing rows by identity instead of recreating DOM nodes.
   function rowKey(item: T, index: number): string | number | T {
@@ -346,6 +348,9 @@
         {@render tableMarkup()}
       </ResizableContainer>
     {:else}
+      <!-- A capped body scrolls, so it needs a tab stop for the arrow keys unless a sort
+           button inside it can already hold focus. -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
         class={cn(
           'overflow-x-auto',
@@ -353,6 +358,9 @@
             'max-h-(--table-body-max-height) overflow-y-auto rounded-b-xl scroll-shadow-y'
         )}
         style:--table-body-max-height={bodyMaxHeight}
+        tabindex={cappedBodyNeedsFocus ? 0 : undefined}
+        role={cappedBodyNeedsFocus && title ? 'region' : undefined}
+        aria-label={cappedBodyNeedsFocus && title ? title : undefined}
       >
         {@render tableMarkup()}
       </div>

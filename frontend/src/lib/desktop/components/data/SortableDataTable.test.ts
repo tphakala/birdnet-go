@@ -212,6 +212,33 @@ describe('SortableDataTable', () => {
     expect(body).toHaveClass('max-h-(--table-body-max-height)', 'overflow-y-auto');
   });
 
+  it('makes a height-capped body without sortable columns keyboard focusable', () => {
+    const plainColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name' },
+      { key: 'score', header: 'Score' },
+    ];
+    renderTable({ columns: plainColumns, title: 'Things', bodyMaxHeight: '20rem' });
+    const body = screen.getByRole('region', { name: 'Things' });
+    expect(body).toHaveAttribute('tabindex', '0');
+    expect(body).toContainElement(document.querySelector('table'));
+  });
+
+  it('keeps the capped body focusable without a title, as an unnamed scroll area', () => {
+    const plainColumns: Column<Row>[] = [{ key: 'name', header: 'Name' }];
+    const { container } = renderTable({ columns: plainColumns, title: '', bodyMaxHeight: '20rem' });
+    const body = container.querySelector('table')?.parentElement;
+    expect(body).toHaveAttribute('tabindex', '0');
+    expect(body).not.toHaveAttribute('role');
+    expect(body).not.toHaveAttribute('aria-label');
+  });
+
+  it('adds no extra tab stop when a sort button can already focus the capped body', () => {
+    const { container } = renderTable({ title: 'Things', bodyMaxHeight: '20rem' });
+    const body = container.querySelector('table')?.parentElement;
+    expect(body).not.toHaveAttribute('tabindex');
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
   it('ignores bodyMaxHeight when the body is resizable', () => {
     const { container } = renderTable({ resizable: true, bodyMaxHeight: 'min(70vh, 40rem)' });
     expect(screen.getByRole('separator')).toBeInTheDocument();
