@@ -147,6 +147,21 @@ func (r *noiseExampleRepository) CountBySpace(ctx context.Context) (map[string]i
 	return r.countBySpace(r.db.WithContext(ctx))
 }
 
+// DeleteAll deletes the whole table. The always true condition is how GORM is
+// told the missing filter is intended.
+func (r *noiseExampleRepository) DeleteAll(ctx context.Context) (int64, error) {
+	var deleted int64
+	err := datastore.RetryOnLock(ctx, "v2_delete_all_noise_examples", func() error {
+		res := r.db.WithContext(ctx).Table(r.table()).Where("1 = 1").Delete(&entities.NoiseExample{})
+		if res.Error != nil {
+			return fmt.Errorf("delete all noise examples: %w", res.Error)
+		}
+		deleted = res.RowsAffected
+		return nil
+	}, r.metrics)
+	return deleted, err
+}
+
 // RemoveForVerdict deletes the detection's examples and writes its review with the
 // given status and no reason, in one transaction. It wraps the write the way
 // SaveReview does: a locked database is retried and the repository metrics see it.

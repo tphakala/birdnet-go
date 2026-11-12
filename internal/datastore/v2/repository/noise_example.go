@@ -36,6 +36,10 @@ type NoiseExampleRepository interface {
 	// CountBySpace returns the number of rows of every embedding space.
 	CountBySpace(ctx context.Context) (map[string]int64, error)
 
+	// DeleteAll deletes every row of every embedding space, attached or detached,
+	// in one statement, and returns how many it deleted. It touches no review.
+	DeleteAll(ctx context.Context) (int64, error)
+
 	// RemoveForVerdict deletes the rows attached to detectionID and upserts that
 	// detection's review with the status verified and no reason, in one
 	// transaction, and returns how many rows it deleted. The review write fails

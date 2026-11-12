@@ -38,6 +38,13 @@ type fakeNoise struct {
 	leaveErr   error
 	status     noisebank.Status
 	statusErr  error
+	counts     noisebank.Counts
+	countsErr  error
+	cleared    int64
+	// clearCtxErr and clearHasDeadline describe the context Clear was called with.
+	clearCtxErr      error
+	clearHasDeadline bool
+	clearErr         error
 	// refuseGuard lists the detections whose delete guard is refused.
 	refuseGuard map[uint]bool
 
@@ -106,6 +113,20 @@ func (f *fakeNoise) GuardDelete(id uint) (release func(), ok bool) {
 func (f *fakeNoise) Status(context.Context, uint, noisebank.OpenClipFunc) (noisebank.Status, error) {
 	f.record("status")
 	return f.status, f.statusErr
+}
+
+func (f *fakeNoise) Counts(context.Context) (noisebank.Counts, error) {
+	f.record("counts")
+	return f.counts, f.countsErr
+}
+
+func (f *fakeNoise) Clear(ctx context.Context) (int64, error) {
+	f.record("clear")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clearCtxErr = ctx.Err()
+	_, f.clearHasDeadline = ctx.Deadline()
+	return f.cleared, f.clearErr
 }
 
 func (f *fakeNoise) eventLog() []string {
@@ -625,4 +646,156 @@ func TestNoiseExamples_ComesFromTheProcessor(t *testing.T) {
 
 	h.Processor = nil
 	assert.Nil(t, h.noiseExamples())
+}
+
+// noiseExamplesRequest runs a handler on the bank wide noise example route.
+func noiseExamplesRequest(t *testing.T, e *echo.Echo, method string, handler echo.HandlerFunc, requestCtx context.Context) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, "/api/v2/detections/noise-examples", http.NoBody).WithContext(requestCtx)
+	rec := httptest.NewRecorder()
+	require.NoError(t, handler(e.NewContext(req, rec)))
+	return rec
+}
+
+func TestGetNoiseExamples(t *testing.T) {
+	get := func(t *testing.T, e *echo.Echo, h *Handler) (*httptest.ResponseRecorder, noiseExamplesResponse) {
+		t.Helper()
+		rec := noiseExamplesRequest(t, e, http.MethodGet, h.GetNoiseExamples, t.Context())
+		var a noiseExamplesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &a))
+		return rec, a
+	}
+
+	t.Run("reports the counts and the cap", func(t *testing.T) {
+		e, _, h := setupTestEnvironment(t)
+		noise := newFakeNoise()
+		noise.counts = noisebank.Counts{Examples: 37, InactiveExamples: 4}
+		h.noise = noise
+
+		rec, a := get(t, e, h)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		assert.JSONEq(t, `{"available":true,"unavailableReason":"","examples":37,"inactiveExamples":4,"max":2000}`, rec.Body.String())
+		assert.True(t, a.Available)
+		assert.Equal(t, 37, a.Examples)
+		assert.Equal(t, 4, a.InactiveExamples)
+		assert.Equal(t, noisebank.MaxExamplesPerSpace, a.Max)
+	})
+
+	t.Run("an unknown space is reported as such", func(t *testing.T) {
+		e, _, h := setupTestEnvironment(t)
+		noise := newFakeNoise()
+		noise.counts = noisebank.Counts{Examples: 41, Space: noisebank.SpaceUnknown}
+		h.noise = noise
+
+		_, a := get(t, e, h)
+
+		assert.Equal(t, 41, a.Examples)
+		assert.Equal(t, "unknown", a.Space)
+	})
+
+	t.Run("without a service the answer says why", func(t *testing.T) {
+		for name, tt := range map[string]struct {
+			enhanced bool
+			want     noisebank.Reason
+		}{
+			"legacy database":      {false, noisebank.ReasonLegacyDatabase},
+			"enhanced, not loaded": {true, noisebank.ReasonNotReady},
+		} {
+			t.Run(name, func(t *testing.T) {
+				if tt.enhanced {
+					datastoreV2.SetEnhancedDatabaseMode()
+					t.Cleanup(datastoreV2.ResetDatabaseMode)
+				}
+				e, _, h := setupTestEnvironment(t)
+
+				rec, a := get(t, e, h)
+
+				require.Equal(t, http.StatusOK, rec.Code)
+				assert.False(t, a.Available)
+				assert.Equal(t, tt.want, a.UnavailableReason)
+				assert.Equal(t, noisebank.MaxExamplesPerSpace, a.Max)
+			})
+		}
+	})
+
+	t.Run("a failing count is a 500", func(t *testing.T) {
+		e, _, h := setupTestEnvironment(t)
+		noise := newFakeNoise()
+		noise.countsErr = errors.NewStd("database is down")
+		h.noise = noise
+
+		rec, _ := get(t, e, h)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
+func TestClearNoiseExamples(t *testing.T) {
+	deleteAll := func(t *testing.T, e *echo.Echo, h *Handler, requestCtx context.Context) *httptest.ResponseRecorder {
+		t.Helper()
+		return noiseExamplesRequest(t, e, http.MethodDelete, h.ClearNoiseExamples, requestCtx)
+	}
+
+	t.Run("answers how many examples were deleted", func(t *testing.T) {
+		e, _, h := setupTestEnvironment(t)
+		noise := newFakeNoise()
+		noise.cleared = 41
+		h.noise = noise
+
+		rec := deleteAll(t, e, h, t.Context())
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		assert.JSONEq(t, `{"deleted":41}`, rec.Body.String())
+	})
+
+	t.Run("runs detached from the request with its own deadline", func(t *testing.T) {
+		e, _, h := setupTestEnvironment(t)
+		noise := newFakeNoise()
+		h.noise = noise
+		requestCtx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		rec := deleteAll(t, e, h, requestCtx)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.NoError(t, noise.clearCtxErr, "a client that went away must not stop the clear")
+		assert.True(t, noise.clearHasDeadline)
+	})
+
+	t.Run("without a service nothing is cleared", func(t *testing.T) {
+		e, _, h := setupTestEnvironment(t)
+
+		rec := deleteAll(t, e, h, t.Context())
+
+		assert.Equal(t, http.StatusConflict, rec.Code)
+		assert.Equal(t, string(noisebank.ReasonLegacyDatabase), errorKeyOf(t, rec))
+	})
+
+	t.Run("errors map to their status", func(t *testing.T) {
+		tests := []struct {
+			err        error
+			wantStatus int
+			wantKey    string
+			retryAfter bool
+		}{
+			{&noisebank.RefusalError{Reason: noisebank.ReasonClearing}, http.StatusServiceUnavailable, "clearing", true},
+			{noisebank.ErrClearTimeout, http.StatusServiceUnavailable, "noise_clear_timeout", true},
+			{errors.NewStd("database is down"), http.StatusInternalServerError, "", false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.err.Error(), func(t *testing.T) {
+				e, _, h := setupTestEnvironment(t)
+				noise := newFakeNoise()
+				noise.clearErr = tt.err
+				h.noise = noise
+
+				rec := deleteAll(t, e, h, t.Context())
+
+				assert.Equal(t, tt.wantStatus, rec.Code)
+				assert.Equal(t, tt.wantKey, errorKeyOf(t, rec))
+				assert.Equal(t, tt.retryAfter, rec.Header().Get(echo.HeaderRetryAfter) != "")
+			})
+		}
+	})
 }

@@ -11,14 +11,16 @@ import (
 )
 
 // blockedJob starts a job for a new detection and holds it inside the embedder
-// until the returned function is called.
+// until the returned function is called. It waits for a call made by that job,
+// so it also works in an environment whose embedder was already used.
 func blockedJob(t *testing.T, e *testEnv, clip string, windows int) (id uint, unblock func()) {
 	t.Helper()
 	id = e.markedDetection(clip, windows)
 	unblock = e.emb.blockCalls()
 	t.Cleanup(unblock)
+	before := e.emb.callCount()
 	e.mustMark(id)
-	e.waitCalls(1)
+	e.waitCalls(before + 1)
 	return id, unblock
 }
 
