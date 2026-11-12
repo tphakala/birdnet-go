@@ -94,6 +94,21 @@ describe('createProcessList', () => {
     expect(list.loaded).toBe(true);
   });
 
+  it('a Show All switch clears the error of the previous mode', async () => {
+    const list = createProcessList();
+    mockGet.mockRejectedValueOnce(new ApiError('Service unavailable', 503, new Response()));
+    await list.load();
+    expect(list.error).toBe('Service unavailable');
+
+    const pending = deferred<ProcessInfo[]>();
+    mockGet.mockReturnValueOnce(pending.promise);
+    const toggle = list.setShowAll(true);
+
+    expect(list.error).toBeNull();
+    pending.resolve([proc(1, 'main')]);
+    await toggle;
+  });
+
   it('a failed refresh keeps the rows and reports the error, and the next success clears it', async () => {
     const list = createProcessList();
     mockGet.mockResolvedValueOnce([proc(1, 'main'), proc(2, 'systemd')]);
