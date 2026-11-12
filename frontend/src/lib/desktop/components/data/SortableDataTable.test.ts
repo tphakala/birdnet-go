@@ -169,6 +169,21 @@ describe('SortableDataTable', () => {
     expect(rowNames()).toEqual(['hundred', 'ten', 'nine']);
   });
 
+  it('sorts a raw numeric field holding NaN consistently', () => {
+    const rawColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name' },
+      { key: 'score', header: 'Score', sortable: true },
+    ];
+    const rows: Row[] = [
+      { id: 1, name: 'five', score: 5 },
+      { id: 2, name: 'nan', score: Number.NaN },
+      { id: 3, name: 'one', score: 1 },
+    ];
+    renderTable({ columns: rawColumns, data: rows, defaultSortKey: 'score' });
+    // NaN sorts as an empty value, ahead of every number, instead of scrambling the rest.
+    expect(rowNames()).toEqual(['nan', 'one', 'five']);
+  });
+
   it('sorts a Date field without sortValue chronologically', () => {
     interface Event {
       id: number;

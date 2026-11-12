@@ -184,13 +184,14 @@
     return value == null ? '' : String(value);
   }
 
-  /** Sort form of a field: dates by time (an invalid date as ''), the rest as displayed. */
+  /** Sort form of a field: dates by time, an invalid date or NaN as '', the rest as displayed. */
   function sortKey(value: unknown): string | number {
     if (value instanceof Date) {
       const time = value.getTime();
       return Number.isNaN(time) ? '' : time;
     }
-    return displayValue(value);
+    const shown = displayValue(value);
+    return typeof shown === 'number' && Number.isNaN(shown) ? '' : shown;
   }
 
   function cellValue(column: Column<T>, item: T, index: number): string | number {
