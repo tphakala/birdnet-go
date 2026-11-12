@@ -496,6 +496,25 @@ describe('ToggleField disabled, required and error state', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it.each(VARIANTS)(
+    'a disabled %s switch keeps its state even when an ancestor stops both the click and the change',
+    async variant => {
+      const onUpdate = vi.fn();
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
+      });
+      const toggle = screen.getByRole('checkbox');
+      const ancestor = toggle.parentElement;
+      ancestor?.addEventListener('click', event => event.stopPropagation());
+      ancestor?.addEventListener('change', event => event.stopPropagation());
+
+      await fireEvent.click(toggle);
+
+      expect(toggle).not.toBeChecked();
+      expect(onUpdate).not.toHaveBeenCalled();
+    }
+  );
+
   it.each(['default', 'inline'] as const)(
     'a disabled %s switch dims through colour, not opacity, so its focus ring stays at full strength',
     variant => {

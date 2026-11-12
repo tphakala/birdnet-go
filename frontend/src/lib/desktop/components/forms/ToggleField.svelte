@@ -52,15 +52,17 @@
 
   // A disabled switch uses aria-disabled instead of native disabled, in every variant, so Tab
   // still reaches it and a screen reader reads its description (the reason it is off). The
-  // click (from the switch, its label or Space) is cancelled instead, so it never flips.
+  // click (from the switch, its label or Space) is cancelled instead, so it never flips. The
+  // cancel listens on the input itself, not through delegation, so an ancestor that stops the
+  // click on its way up cannot skip it.
   function handleClick(event: MouseEvent) {
     if (disabled) event.preventDefault();
   }
 
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
-    // A click cancel can be skipped when an ancestor stops the click before it reaches the
-    // delegated handler, so a disabled switch also restores its state here
+    // A click cancel can still be skipped when an ancestor stops the click in the capture
+    // phase, before it reaches the input, so a disabled switch also restores its state here
     if (disabled) {
       target.checked = value;
       return;
@@ -188,7 +190,7 @@
     checked={value}
     aria-disabled={disabled ? 'true' : undefined}
     required={required && !disabled}
-    onclick={handleClick}
+    onclickcapture={handleClick}
     onchange={handleChange}
     aria-labelledby={labelId}
     aria-describedby={describedBy}
