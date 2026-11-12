@@ -5,6 +5,7 @@ import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { setCsrfToken } from '$lib/stores/appState.svelte';
 import { connectionState } from '$lib/stores/connectionState.svelte';
+import { deferred } from '../../../test/async-helpers';
 import System from './System.svelte';
 
 const SLOW_REFRESH_MS = 30_000;
@@ -73,16 +74,11 @@ function counts(): number[] {
 
 /** Holds every answer for a URL until the returned function is called. */
 function hold(url: string): () => void {
-  let release = () => {};
-  held.set(
-    url,
-    new Promise<void>(resolve => {
-      release = resolve;
-    })
-  );
+  const gate = deferred();
+  held.set(url, gate.promise);
   return () => {
     held.delete(url);
-    release();
+    gate.resolve();
   };
 }
 
