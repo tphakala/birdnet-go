@@ -1,7 +1,6 @@
 package ultrasonic
 
 import (
-	"encoding/binary"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -55,9 +55,18 @@ const (
 	// Recorded windows: 144000 samples of signed 16 bit little endian PCM at 256 kHz.
 	rainFixture     = "rain_256k_s16le.pcm"
 	weakCallFixture = "weak_bat_call_256k_s16le.pcm"
-	pcm16FullScale  = 32768
-	recordedCVDelta = 0.001
+	// At this FFT size the continuity bands are narrower than one bin.
+	narrowContinuityFFT = 1024
 )
+
+// modelWindows are the analysis window layouts of the two bat models.
+var modelWindows = []struct {
+	name    string
+	rate, n int
+}{
+	{"Bat", batRate, batSamples},
+	{"BSG-BAT", bsgBatRate, bsgBatSamples},
+}
 
 // whiteNoise returns a seeded Gaussian floor.
 func whiteNoise(n int, sigma float64, seed uint64) []float64 {
@@ -125,21 +134,14 @@ func addImpulses(x []float64, rate int, every, amp float64) {
 	}
 }
 
-// addGuardFluctuation adds audible tones between 11 and 17 kHz whose power
-// swings with a slow envelope.
-func addGuardFluctuation(x []float64, rate int, seed uint64) {
-	addToneBand(x, rate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, seed)
-}
-
 // readPCM16 loads a recorded window from testdata.
 func readPCM16(t *testing.T, name string) []float32 {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", name))
 	require.NoError(t, err)
 	out := make([]float32, len(raw)/2)
-	for i := range out {
-		out[i] = float32(int16(binary.LittleEndian.Uint16(raw[2*i:]))) / pcm16FullScale
-	}
+	_, err = dsppcm.BytesToFloat32(out, raw)
+	require.NoError(t, err)
 	return out
 }
 
@@ -161,14 +163,7 @@ func clickWindow(rate, n int) []float32 {
 func TestBroadbandAdjustedCV_ClickTrainIsLowered(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
-	tests := []struct {
-		name    string
-		rate, n int
-	}{
-		{"Bat", batRate, batSamples},
-		{"BSG-BAT", bsgBatRate, bsgBatSamples},
-	}
-	for _, tt := range tests {
+	for _, tt := range modelWindows {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			samples := clickWindow(tt.rate, tt.n)
@@ -188,14 +183,7 @@ func TestBroadbandAdjustedCV_ClickTrainIsLowered(t *testing.T) {
 func TestBroadbandAdjustedCV_ImpulsesOverLoudGuardBandAreLowered(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
-	tests := []struct {
-		name    string
-		rate, n int
-	}{
-		{"Bat", batRate, batSamples},
-		{"BSG-BAT", bsgBatRate, bsgBatSamples},
-	}
-	for _, tt := range tests {
+	for _, tt := range modelWindows {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			x := whiteNoise(tt.n, noiseSigma, noiseSeed)
@@ -238,7 +226,21 @@ func TestBroadbandAdjustedCV_RecordedWeakCallStaysActive(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, IsUnlikely(cv, cfg))
 
-	assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), recordedCVDelta)
+	assert.InDelta(t, cv, BroadbandAdjustedCV(samples, batRate, cfg, cv), 0)
+}
+
+// With bands narrower than one bin the continuity rule is off; the guard band
+// rule must keep working.
+func TestBroadbandAdjustedCV_NarrowContinuityRangeKeepsGuardRule(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	cfg.FFTSize, cfg.HopSize = narrowContinuityFFT, narrowContinuityFFT/2
+	samples := clickWindow(batRate, batSamples)
+	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
+	require.True(t, ok)
+	require.False(t, IsUnlikely(cv, cfg))
+
+	assert.Less(t, BroadbandAdjustedCV(samples, batRate, cfg, cv), lowerBoundMargin*cv)
 }
 
 func TestBroadbandAdjustedCV_BandLimitedBurstsKeepCV(t *testing.T) {
@@ -258,7 +260,7 @@ func TestBroadbandAdjustedCV_WeakBurstsOverGuardFluctuationStayActive(t *testing
 	t.Parallel()
 	cfg := defaultFilterConfig()
 	x := whiteNoise(batSamples, noiseSigma, noiseSeed)
-	addGuardFluctuation(x, batRate, guardSeed)
+	addToneBand(x, batRate, guardLowHz, guardSpanHz, guardAmplitude, guardDepth, guardSeed)
 	addToneBursts(x, batRate, weakBurstHz, weakBurstEvery, weakBurstLenSec, weakBurstAmp)
 	samples := quantizeAll(x)
 	cv, ok := ComputeUSFrameCV(samples, batRate, cfg)
