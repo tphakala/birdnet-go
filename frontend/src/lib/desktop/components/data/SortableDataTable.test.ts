@@ -184,7 +184,8 @@ describe('SortableDataTable', () => {
     expect(rowNames()).toEqual(['nan', 'one', 'five']);
   });
 
-  it('sorts empty and invalid raw values ahead of the rest', () => {
+  it('sorts empty and invalid raw values first ascending and last descending', async () => {
+    const user = userEvent.setup();
     interface Event {
       id: number;
       label: string;
@@ -204,6 +205,10 @@ describe('SortableDataTable', () => {
     // null and an invalid Date both become '', which orders below every time value.
     expect(rowNames().slice(2)).toEqual(['Sun', 'Mon']);
     expect(rowNames().slice(0, 2).sort()).toEqual(['Broken', 'Never']);
+
+    await user.click(screen.getByTestId('sort-at'));
+    expect(rowNames().slice(0, 2)).toEqual(['Mon', 'Sun']);
+    expect(rowNames().slice(2).sort()).toEqual(['Broken', 'Never']);
   });
 
   it('sorts a Date field without sortValue chronologically', () => {

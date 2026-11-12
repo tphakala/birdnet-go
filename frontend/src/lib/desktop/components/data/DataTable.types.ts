@@ -25,8 +25,8 @@ export interface Column<T> {
    * sorts internally.
    * When omitted, SortableDataTable sorts by the raw `item[key]` value (numbers
    * numerically, dates by time, anything else as a string; an empty, null, NaN or
-   * invalid-date value sorts as an empty string, ahead of the rest), so set it
-   * whenever the displayed value differs from the field.
+   * invalid-date value sorts as an empty string, first ascending and last
+   * descending), so set it whenever the displayed value differs from the field.
    */
   sortValue?: (_item: T) => string | number;
   /**
