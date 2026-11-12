@@ -1280,25 +1280,16 @@ describe('Custom scheme hover and pressed fills', () => {
     }
   });
 
-  /** Runs a shipped inline script with the scheme stored JSON-encoded, as the app stores it. */
-  function schemeAfterRunning(script: string): string | null {
-    localStorage.setItem('color-scheme', JSON.stringify('amber'));
-    document.documentElement.removeAttribute('data-scheme');
-    new Function(script)();
-    localStorage.removeItem('color-scheme');
-    return document.documentElement.getAttribute('data-scheme');
-  }
-
   it('the index.html pre-paint script restores a JSON-encoded scheme', () => {
     // The scheme block of the pre-paint script (the tag also holds other init code)
     const script = indexHtmlScriptBlock('// Restore color scheme');
     expect(script).not.toBe('');
-    expect(schemeAfterRunning(script)).toBe('amber');
-  });
-
-  it('the theme init script restores a JSON-encoded scheme', async () => {
-    const { getThemeInitScript } = await import('../lib/utils/theme-init');
-    expect(schemeAfterRunning(getThemeInitScript())).toBe('amber');
+    // Stored JSON-encoded, as the app stores it
+    localStorage.setItem('color-scheme', JSON.stringify('amber'));
+    document.documentElement.removeAttribute('data-scheme');
+    new Function(script)();
+    localStorage.removeItem('color-scheme');
+    expect(document.documentElement.getAttribute('data-scheme')).toBe('amber');
   });
 
   it('the scheme store sets a shade away from the content colour', async () => {

@@ -4,26 +4,15 @@
     <meta charset="UTF-8" />
     <title>BirdNET-Go</title>
     <script>
-      // Immediately set the theme before any content loads to prevent flash
+      // Immediately set the theme before any content loads to prevent flash.
+      // The resolver is inlined from src/lib/utils/theme-resolver.js by the inline-prepaint-theme
+      // plugin in vite.config.js; the theme store imports the same file.
       (function () {
-        try {
-          // Same order as getInitialTheme in stores/theme.ts: stored choice, then the OS, then light
-          const stored = localStorage.getItem('theme');
-          const theme =
-            stored === 'dark' || stored === 'light'
-              ? stored
-              : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-                ? 'dark'
-                : 'light';
-          document.documentElement.setAttribute('data-theme', theme);
-          document.documentElement.setAttribute('data-theme-controller', theme);
-        } catch (e) {
-          // localStorage may be unavailable in Safari private browsing
-          document.documentElement.setAttribute('data-theme', 'light');
-          document.documentElement.setAttribute('data-theme-controller', 'light');
-        }
+        __PREPAINT_THEME_RESOLVER__;
+        applyThemeAttributes(resolveTheme());
       })();
-
+    </script>
+    <script>
       // Restore color scheme before content loads to prevent FOUC
       (function () {
         try {

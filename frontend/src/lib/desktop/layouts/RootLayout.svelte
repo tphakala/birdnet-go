@@ -60,13 +60,6 @@
 
     // SSE notifications are auto-initialized when imported
 
-    // Set theme from localStorage
-    const savedTheme = globalThis.localStorage.getItem('theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-      document.documentElement.setAttribute('data-theme-controller', savedTheme);
-    }
-
     // Handle HTTPS redirect if configured
     if (
       window.location.protocol !== 'https:' &&

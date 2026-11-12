@@ -1,85 +1,50 @@
 /**
  * theme.ts
  *
- * Theme management store for application-wide dark/light mode control.
- * Handles theme persistence, system preference detection, and DOM updates.
+ * Theme store for dark/light mode. The first value comes from the shared resolver
+ * (`$lib/utils/theme-resolver.js`, also inlined into the pre-paint script in index.html):
+ * the stored choice, else the OS preference, else light.
  *
- * Usage:
- * - Theme toggle components in headers/settings
- * - Application initialization for theme setup
- * - System preference synchronization
- * - Theme persistence across sessions
- *
- * Features:
- * - Light/dark theme switching
- * - System preference detection and following
- * - localStorage persistence
- * - Automatic DOM attribute updates
- * - Real-time theme change listeners
- * - SSR-safe initialization
- *
- * Theme Integration:
- * - Works with custom CSS theme system
- * - Updates CSS custom properties
- * - Manages data-theme attributes
- * - Coordinates with Tailwind dark mode
- *
- * System Integration:
- * - Detects prefers-color-scheme media query
- * - Follows system theme changes automatically
- * - Respects user preference override
- * - Graceful fallback to light theme
- *
- * State Management:
- * - Reactive theme store
- * - Toggle functionality
- * - Initialization helpers
- * - Change event handling
- *
- * Persistence:
- * - localStorage for user preferences
- * - DOM attribute synchronization
- * - Session restoration
+ * Persistence: the choice is saved to localStorage as a raw `light` or `dark` string.
+ * Storage may be blocked, so every access is guarded and the theme still switches in memory.
  */
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { writable } from 'svelte/store';
+import {
+  PREFERS_DARK_QUERY,
+  THEME_STORAGE_KEY,
+  applyThemeAttributes,
+  readStoredTheme,
+  resolveTheme,
+} from '$lib/utils/theme-resolver.js';
 
 export type Theme = 'light' | 'dark';
 
 // Create a custom theme store
 function createThemeStore() {
-  // Get initial theme from localStorage or default to light
-  const getInitialTheme = (): Theme => {
-    if (typeof window === 'undefined') return 'light';
+  const { subscribe, set, update } = writable<Theme>(
+    typeof window === 'undefined' ? 'light' : resolveTheme()
+  );
 
-    const stored = localStorage.getItem('theme');
-    if (stored === 'dark' || stored === 'light') {
-      return stored;
-    }
-
-    // Check system preference
-    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-
-    return 'light';
-  };
-
-  const { subscribe, set, update } = writable<Theme>(getInitialTheme());
-
-  // Apply theme to document
+  // Apply theme to the document
   const applyTheme = (theme: Theme) => {
     if (typeof window === 'undefined') return;
+    applyThemeAttributes(theme);
+  };
 
-    document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.setAttribute('data-theme-controller', theme);
-    localStorage.setItem('theme', theme);
+  // Save the theme as the user's choice
+  const persistTheme = (theme: Theme) => {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Storage may be blocked or full; the theme still applies for this session
+    }
   };
 
   // Set theme with side effects
   const setTheme = (theme: Theme) => {
-    set(theme);
     applyTheme(theme);
+    persistTheme(theme);
+    set(theme);
   };
 
   // Toggle theme
@@ -87,21 +52,25 @@ function createThemeStore() {
     update(currentTheme => {
       const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
       applyTheme(newTheme);
+      persistTheme(newTheme);
       return newTheme;
     });
   };
 
   // Initialize theme on mount
   const initialize = () => {
-    const theme = getInitialTheme();
+    const theme = resolveTheme();
     applyTheme(theme);
+    persistTheme(theme);
     set(theme);
 
     // Listen for system theme changes
+    // matchMedia is missing in some environments, which the types do not model
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (window.matchMedia) {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const mediaQuery = window.matchMedia(PREFERS_DARK_QUERY);
       const handleChange = (e: MediaQueryListEvent) => {
-        if (!localStorage.getItem('theme')) {
+        if (readStoredTheme() === null) {
           // Only update if user hasn't set a preference
           const newTheme = e.matches ? 'dark' : 'light';
           setTheme(newTheme);
@@ -109,7 +78,7 @@ function createThemeStore() {
       };
 
       mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery?.removeEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
   };
 
