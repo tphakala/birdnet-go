@@ -46,6 +46,10 @@ type Bat struct {
 	embeddingSpace string
 }
 
+// EmbeddingSpace returns the identifier of the embedding space the backbone of
+// this instance produces, the Space of every WindowEmbedding it returns.
+func (b *Bat) EmbeddingSpace() string { return b.embeddingSpace }
+
 // BatModelConfig holds configuration for creating a Bat model instance.
 type BatModelConfig struct {
 	EmbeddingModelPath  string

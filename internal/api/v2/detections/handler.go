@@ -88,6 +88,10 @@ type Handler struct {
 	// contributions reads stored model contributions for the detection responses.
 	// It is nil unless the enhanced v2 database is active; see RegisterDetectionRoutes.
 	contributions modelContributionReader
+
+	// noise replaces the processor's noise example service when set. Production
+	// leaves it nil; tests inject a fake.
+	noise noiseService
 }
 
 // New constructs the detections domain handler around the shared core and the
@@ -182,6 +186,7 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 	detectionGroup := g.Group("/detections", c.AuthMiddleware)
 	detectionGroup.DELETE("/:id", c.DeleteDetection)
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
+	detectionGroup.GET("/:id/noise", c.GetDetectionNoise)
 	detectionGroup.POST("/:id/lock", c.LockDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)

@@ -15,6 +15,22 @@ func (p *Processor) SetNoiseBank(b *noisebank.Bank) {
 	p.noiseBank = b
 }
 
+// SetNoiseExamples sets the service that learns noise examples from marked
+// detections and keeps the bank in step with the database. Call it before Start
+// and never reset it; the processor and the API read the pointer without a lock.
+// The service owns the bank set by SetNoiseBank, so set both from the same
+// service.
+func (p *Processor) SetNoiseExamples(s *noisebank.Service) {
+	p.noiseExamples = s
+}
+
+// NoiseExamples returns the service set by SetNoiseExamples, or nil when the
+// install does not have one (the legacy database, or a start whose examples could
+// not be loaded).
+func (p *Processor) NoiseExamples() *noisebank.Service {
+	return p.noiseExamples
+}
+
 // applyNoiseExampleGate tags the detections of one analysis window as unlikely when
 // the window's embedding is close to a noise example the user marked. The tag is
 // the same one the ultrasonic filter sets, with the noise bit and the similarity

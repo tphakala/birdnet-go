@@ -1326,6 +1326,7 @@ func TestClassifyMixedSchema(t *testing.T) {
 		{"R4 v2-shaped notification_histories without rows", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 0, true))), verdictKeepLegacy},
 		{"R5 both sides hold detections", build(completedMarker, legacyRows("notes", 2), v2Rows("detections", 4)), verdictRefuseBothHoldData},
 		{"R5 legacy rows and detection_locks rows", build(legacyRows("notes", 2), v2Rows("detection_locks", 1)), verdictRefuseBothHoldData},
+		{"legacy rows and only noise_examples rows on the enhanced side", build(legacyRows("notes", 2), v2Rows("noise_examples", 4)), verdictRefuseBothHoldData},
 		{"R4 legacy rows and a NOT NULL label_id notification_histories row (regenerable)", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 1, true))), verdictKeepLegacy},
 		{"R4 legacy rows and an image_caches row with a nullable label_id (regenerable)", build(legacyRows("notes", 2), shared(sharedProbe("image_caches", 1, false))), verdictKeepLegacy},
 		{"R5 legacy rows and a NOT NULL label_id threshold_events row", build(legacyRows("notes", 2), shared(sharedProbe("threshold_events", 1, true))), verdictRefuseSharedTables},

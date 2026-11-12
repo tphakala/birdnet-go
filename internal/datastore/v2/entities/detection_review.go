@@ -10,14 +10,21 @@ const (
 	VerificationFalsePositive VerificationStatus = "false_positive"
 )
 
+// ReviewReasonNoAnimal is the review reason of a false positive whose audio held
+// no animal at all. Only a false_positive review carries a reason.
+const ReviewReasonNoAnimal = "no_animal"
+
 // DetectionReview stores verification status for a detection.
 // This replaces the legacy 'note_reviews' table.
 type DetectionReview struct {
 	ID          uint               `gorm:"primaryKey"`
 	DetectionID uint               `gorm:"not null;uniqueIndex"`
 	Verified    VerificationStatus `gorm:"type:varchar(20);not null"`
-	CreatedAt   time.Time          `gorm:"autoCreateTime;index"`
-	UpdatedAt   time.Time          `gorm:"autoUpdateTime"`
+	// Reason says why a false_positive review is one; NULL when no reason was given
+	// and always NULL for any other status.
+	Reason    *string   `gorm:"type:varchar(20)"`
+	CreatedAt time.Time `gorm:"autoCreateTime;index"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 
 	// Relationship
 	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`

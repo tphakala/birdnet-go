@@ -1318,7 +1318,14 @@ func (r *detectionRepository) DeletePredictions(ctx context.Context, detectionID
 // SaveReview creates or updates a review for a detection.
 // Uses GORM's clause.OnConflict for dialect-aware upsert (SQLite + MySQL).
 // Idempotent: re-saving updates the verified status and timestamp.
+//
+// The reason follows the status: a non-nil review.Reason is written as given and
+// is refused unless the status is false_positive; a nil one leaves a stored
+// reason alone while the status stays false_positive and clears it otherwise.
 func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.DetectionReview) error {
+	if review.Reason != nil && review.Verified != entities.VerificationFalsePositive {
+		return ErrReviewReasonNeedsFalsePositive
+	}
 	return datastore.RetryOnLock(ctx, "v2_save_review", func() error {
 		now := time.Now()
 		review.UpdatedAt = now
@@ -1327,11 +1334,27 @@ func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.D
 				Columns: []clause.Column{{Name: "detection_id"}},
 				DoUpdates: clause.Assignments(map[string]any{
 					"verified":   string(review.Verified),
+					columnReason: reviewReasonValue(review.Verified, review.Reason),
 					"updated_at": now,
 				}),
 			}).
 			Create(review).Error
 	}, r.metrics)
+}
+
+// columnReason is the detection_reviews column holding the review reason.
+const columnReason = "reason"
+
+// reviewReasonValue is the value an update statement assigns to the reason of a
+// review whose status becomes status. A given reason is written as is. Without
+// one, the stored reason is kept while the status is false_positive and cleared
+// otherwise; the status is a bound parameter so the expression is the same SQL on
+// SQLite, MySQL and MariaDB.
+func reviewReasonValue(status entities.VerificationStatus, reason *string) any {
+	if reason != nil {
+		return *reason
+	}
+	return gorm.Expr("CASE WHEN ? = ? THEN "+columnReason+" ELSE NULL END", string(status), string(entities.VerificationFalsePositive))
 }
 
 // GetReview retrieves the review for a detection.
@@ -1354,6 +1377,7 @@ func (r *detectionRepository) UpdateReview(ctx context.Context, detectionID uint
 			Where("detection_id = ?", detectionID).
 			Updates(map[string]any{
 				"verified":   verified,
+				columnReason: reviewReasonValue(verified, nil),
 				"updated_at": time.Now(),
 			})
 		if result.Error != nil {

@@ -144,6 +144,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/detections/:id/predictions` | `GetDetectionPredictions` | ❌   | Alternate species the detecting model scored (enhanced database only)                                                      |
 | DELETE | `/detections/:id`             | `DeleteDetection`         | ✅   | Delete detection record                                                                                                    |
 | POST   | `/detections/:id/review`      | `ReviewDetection`         | ✅   | Review/verify detection                                                                                                    |
+| GET    | `/detections/:id/noise`       | `GetDetectionNoise`       | ✅   | Whether the detection can be marked as noise and how learning from it is going (enhanced database only)                    |
 | POST   | `/detections/:id/lock`        | `LockDetection`           | ✅   | Lock detection from changes                                                                                                |
 | POST   | `/detections/ignore`          | `IgnoreSpecies`           | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
 | GET    | `/detections/ignored`         | `GetExcludedSpecies`      | ✅   | Get list of excluded species                                                                                               |
@@ -151,6 +152,60 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/detections/batch/review`    | `BatchReviewDetections`   | ✅   | Bulk set verification status                                                                                               |
 | POST   | `/detections/batch/lock`      | `BatchLockDetections`     | ✅   | Bulk lock or unlock detections                                                                                             |
 | POST   | `/detections/batch/resolve`   | `BatchResolveDetections`  | ✅   | Resolve query params to detection IDs                                                                                      |
+
+#### Noise examples (enhanced database only)
+
+A bat detection whose audio held no animal, such as rain, can be marked as noise. The loaded bat model then embeds the saved clip, the 4 windows with the highest raw bat score (at least 0.5, whatever `bat.threshold` is) are stored as noise examples, and later bat windows that match an example are tagged unlikely. The tag becomes a discard only when Discard Unlikely is on.
+
+`POST /detections/:id/review` takes an optional `reason`:
+
+- `"reason": "no_animal"` with `"verified": "false_positive"` marks the detection and queues the learning job. The response carries `noise`, the same object `GET /detections/:id/noise` returns. Marking an already marked detection that has examples in the current embedding space, or one whose job is running, changes nothing, whatever has happened to its clip since.
+- `"reason": ""` (empty) takes the detection out of noise: its examples are deleted together with the review write, and `verified` is stored as sent.
+- No `reason` leaves a stored reason alone while `verified` stays `false_positive`, so the review page that sends only `verified` and `comment` cannot unlearn a detection. `verified: "correct"` removes the examples, for every detection and in the batch endpoint too, while the feature is available. When the status endpoint reports `not_ready` (the stored examples could not be loaded at startup), a `correct` save does not touch them and they stay until `correct` is saved again after a successful start.
+
+A `reason` needs a `verified` value, and `no_animal` needs `false_positive`; anything else is 400 and nothing is written. `verified` stays one of `correct` and `false_positive`: a marked detection is a false positive whose `reason` is `no_animal`.
+
+A refused mark is 409 with the reason as `error_key`, and nothing has been written, not the review and not the comment:
+
+| `error_key`               | Meaning                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `legacy_database`         | The install does not use the enhanced database, so there is no noise example service                    |
+| `not_ready`               | The enhanced database is in use but the stored examples could not be loaded at startup                  |
+| `model_unsupported`       | No model that detected the clip has an embedding to learn from (today only the bat model has one)       |
+| `model_not_loaded`        | The bat model is not loaded                                                                             |
+| `clip_missing`            | The detection has no clip, or it cannot be opened                                                       |
+| `clip_unusable`           | The clip cannot be decoded, is sampled below the model minimum, or is too long to hold in memory        |
+| `clip_denoised`           | The clip was denoised when it was saved; its embeddings do not match what the model hears live          |
+| `bank_full`               | The embedding space already holds the most examples it may (2000), counting jobs that have not finished |
+| `detection_being_deleted` | A delete of the detection is in progress                                                                |
+
+A full learning queue (`noise_queue_full`) and a clearing barrier (`clearing`) are 503 with `Retry-After`. A clip with no denoise marker, saved before the marker existed, can be learned from.
+
+`GET /detections/:id/noise` never fails for a known detection:
+
+```json
+{
+  "available": true,
+  "unavailableReason": "",
+  "marked": true,
+  "state": "running",
+  "examples": 4,
+  "inactiveExamples": 0,
+  "windowsDone": 37,
+  "windowsTotal": 105,
+  "failureReason": "",
+  "clipDenoised": false
+}
+```
+
+`unavailableReason` is one of the keys above. `state` is `idle`, `queued`, `running`, `learned` or `failed`. `marked` is the stored reason. `examples` and `inactiveExamples` count the examples still attached to this detection in the current embedding space and in other spaces (kept, never matched); they say nothing about the bank as a whole. They come from the database, while `state` and the window counts describe the job of this run, so after a restart a marked detection can show `idle` with its examples. `failureReason` of a failed job is one of `clip_missing`, `decode_failed`, `inference_failed`, `no_candidates` (no window scored 0.5 or more), `model_changed`, `timeout`, `cancelled` (the verdict changed first) or `store_failed`. A job runs one window at a time with a pause after each, so live analysis keeps at least half of the model's time.
+
+The examples belong to the bank, not to the detection. Deleting a detection or its clip removes nothing: the stored link is cleared and the examples keep matching. A delete is refused with 409 (`noise_learning_in_progress`) while the detection's learning job is queued or running, and a batch delete skips that ID. Examples of a deleted detection cannot be removed one by one.
+
+```sh
+birdnet-api post detections/<id>/review -d '{"verified":"false_positive","reason":"no_animal"}'
+birdnet-api get detections/<id>/noise
+```
 
 ### Integrations (`integrations/integrations.go`)
 

@@ -48,6 +48,8 @@ func (m *embeddingMockModelInstance) PredictWithEmbedding(context.Context, [][]f
 	return []datastore.Results{{Species: "Myotis daubentonii", Confidence: 0.8}}, m.embedding, nil
 }
 
+func (m *embeddingMockModelInstance) EmbeddingSpace() string { return m.embedding.Space }
+
 func (m *mockModelInstance) Spec() ModelSpec { return m.spec }
 func (m *mockModelInstance) ModelID() string { return m.id }
 func (m *mockModelInstance) ModelName() string {
@@ -1374,6 +1376,30 @@ func TestOrchestrator_PredictModelTimed_CarriesWindowEmbedding(t *testing.T) {
 		require.Len(t, pred.Results, 1)
 		assert.Equal(t, WindowEmbedding{}, pred.Embedding)
 	})
+}
+
+// TestOrchestrator_EmbeddingSpaceFor verifies the space of a loaded embedding
+// model is reported without running inference, and that a plain model, a closed
+// model and an unknown model report none.
+func TestOrchestrator_EmbeddingSpaceFor(t *testing.T) {
+	t.Parallel()
+
+	inst := &embeddingMockModelInstance{embedding: WindowEmbedding{Space: "test-space"}}
+	inst.id = "m1"
+	plain := &mockModelInstance{id: "m2"}
+	o := &Orchestrator{
+		models: map[string]*modelEntry{"m1": {instance: inst}, "m2": {instance: plain}, "m3": {instance: nil}},
+	}
+
+	space, ok := o.EmbeddingSpaceFor("m1")
+	assert.True(t, ok)
+	assert.Equal(t, "test-space", space)
+
+	for _, id := range []string{"m2", "m3", "unknown"} {
+		space, ok = o.EmbeddingSpaceFor(id)
+		assert.False(t, ok, id)
+		assert.Empty(t, space, id)
+	}
 }
 
 // TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming verifies the not-loaded

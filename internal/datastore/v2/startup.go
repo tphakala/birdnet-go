@@ -1424,6 +1424,7 @@ func orphanedBareV2Tables() []string {
 		"alert_histories",
 		"alert_rules",
 		// Detection children first, then parent
+		"noise_examples",
 		"detection_locks",
 		"detection_comments",
 		"detection_reviews",
@@ -1513,12 +1514,12 @@ const (
 )
 
 // bareDetectionTables are the bare v2 tables that hold or reference detections: the
-// detections table and the five tables with a foreign key to it, children first and
+// detections table and the six tables with a foreign key to it, children first and
 // detections last. Dropping them (each verified empty) is how the keep-legacy reconcile
 // removes the state older releases and the prefix decision key on. Same order as the
 // manual drop in the wiki guide.
 var bareDetectionTables = []string{
-	"detection_locks", "detection_comments", "detection_reviews",
+	"noise_examples", "detection_locks", "detection_comments", "detection_reviews",
 	"detection_model_contributions", "detection_predictions", "detections",
 }
 

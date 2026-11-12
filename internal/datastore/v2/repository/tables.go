@@ -13,6 +13,7 @@ const (
 	tableDetectionReviews            = "detection_reviews"
 	tableDetectionComments           = "detection_comments"
 	tableDetectionLocks              = "detection_locks"
+	tableNoiseExamples               = "noise_examples"
 	// Auxiliary tables
 	tableDailyEvents         = "daily_events"
 	tableHourlyWeathers      = "hourly_weathers"
@@ -48,6 +49,7 @@ const (
 	tableV2DetectionReviews            = "v2_detection_reviews"
 	tableV2DetectionComments           = "v2_detection_comments"
 	tableV2DetectionLocks              = "v2_detection_locks"
+	tableV2NoiseExamples               = "v2_noise_examples"
 	// Auxiliary tables
 	tableV2DailyEvents         = "v2_daily_events"
 	tableV2HourlyWeathers      = "v2_hourly_weathers"
