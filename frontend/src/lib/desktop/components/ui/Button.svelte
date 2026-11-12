@@ -16,10 +16,12 @@
 
   Behaviour:
   - Draws a 2px primary outline on keyboard focus (focus-visible).
-  - aria-disabled="true" dims the button and shows a not-allowed cursor but leaves it
-    focusable and clickable, so a blocked action can keep a reason reachable through
-    aria-describedby; the caller must ignore the click. Native `disabled` also blocks
-    pointer events.
+  - aria-disabled="true" dims the button's fill, border and text colour (not its opacity, which
+    would fade the focus ring) and shows a not-allowed cursor, with no hover or press change,
+    but leaves it focusable and clickable, so a blocked action can keep a reason reachable
+    through aria-describedby; the caller must ignore the click. Content that sets its own
+    colour keeps it, so button content should inherit currentColor. Native `disabled` dims by
+    opacity and also blocks pointer events.
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
@@ -61,6 +63,7 @@
     lg: 'px-5 py-2.5 text-sm gap-2',
   };
 
+  // Keep in step with blockedVariantClasses below, which dims each variant by alpha
   const variantClasses: Record<ButtonVariant, string> = {
     default:
       'bg-[var(--color-base-200)] text-[var(--color-base-content)] border border-[var(--color-base-300)] hover:bg-[var(--color-base-300)] active:bg-[var(--color-base-300)]/80',
@@ -75,6 +78,30 @@
     ghost:
       'bg-transparent text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] active:bg-[var(--color-base-300)]',
   };
+
+  // An aria-disabled button stays focusable, so it dims through colour alpha (half of each
+  // variant's own) instead of element opacity, which would fade its focus ring. No hover or
+  // press styles: it does nothing. Primary draws a transparent border, as a translucent border
+  // over a translucent fill would show a darker edge, and keeps its light label at full strength
+  // over the half fill: halving both made the label far fainter than 50% opacity did.
+  const blockedVariantClasses: Record<ButtonVariant, string> = {
+    default:
+      'bg-[var(--color-base-200)]/50 text-[var(--color-base-content)]/50 border border-[var(--color-base-300)]/50',
+    primary:
+      'bg-[var(--color-primary)]/50 text-[var(--color-primary-content)] border border-transparent',
+    success:
+      'bg-[var(--color-success)]/8 text-[var(--color-success)]/50 border border-[var(--color-success)]/12',
+    warning:
+      'bg-[var(--color-warning)]/8 text-[var(--color-warning)]/50 border border-[var(--color-warning)]/12',
+    error:
+      'bg-[var(--color-error)]/8 text-[var(--color-error)]/50 border border-[var(--color-error)]/12',
+    ghost: 'bg-transparent text-[var(--color-base-content)]/50',
+  };
+
+  // Native `disabled` buttons cannot take focus, so they keep the plain opacity dimming
+  let blocked = $derived(
+    !disabled && (rest['aria-disabled'] === true || rest['aria-disabled'] === 'true')
+  );
 </script>
 
 <button
@@ -86,11 +113,10 @@
   class={cn(
     'inline-flex items-center justify-center rounded-lg font-medium transition-[color,background-color,border-color] motion-reduce:transition-none',
     'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2',
-    // A blocked button stays focusable; the ring needs 3:1, so it fades less while focused
-    'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:focus-visible:opacity-75',
+    blocked && 'cursor-not-allowed',
     'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
     safeGet(sizeClasses, size, ''),
-    safeGet(variantClasses, variant, ''),
+    safeGet(blocked ? blockedVariantClasses : variantClasses, variant, ''),
     classProp,
     className
   )}

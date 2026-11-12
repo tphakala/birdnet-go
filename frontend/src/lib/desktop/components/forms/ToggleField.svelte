@@ -21,6 +21,7 @@
      */
     variant?: 'default' | 'card' | 'inline';
     value: boolean;
+    /** Blocks changes but keeps the switch focusable (aria-disabled), announced with its description. */
     disabled?: boolean;
     error?: string;
     onUpdate: (_value: boolean) => void;
@@ -49,20 +50,20 @@
   const labelId = `${fieldId}-label`;
   const descriptionId = `${fieldId}-description`;
 
-  // A disabled inline switch uses aria-disabled instead of native disabled, so Tab still
-  // reaches it and a screen reader reads its description (the reason it is off). The click
-  // (from the switch, its label or Space) is cancelled instead, so it never flips.
-  let softDisabled = $derived(variant === 'inline' && disabled);
-
+  // A disabled switch uses aria-disabled instead of native disabled, in every variant, so Tab
+  // still reaches it and a screen reader reads its description (the reason it is off). The
+  // click (from the switch, its label or Space) is cancelled instead, so it never flips. Both
+  // handlers listen on the input itself, not through delegation, so an ancestor that stops the
+  // click or the change on its way up cannot skip them.
   function handleClick(event: MouseEvent) {
-    if (softDisabled) event.preventDefault();
+    if (disabled) event.preventDefault();
   }
 
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
-    // A click cancel can be skipped when an ancestor stops the click before it reaches the
-    // delegated handler, so a disabled inline switch also restores its state here
-    if (softDisabled) {
+    // A click cancel can still be skipped when an ancestor stops the click in the capture
+    // phase, before it reaches the input, so a disabled switch also restores its state here
+    if (disabled) {
       target.checked = value;
       return;
     }
@@ -74,19 +75,27 @@
   // Native Tailwind toggle classes: shared base + size variants. The off track is
   // base-content at 60% for at least 3:1 against the card (WCAG 1.4.11), as the Checkbox box is.
   const toggleSharedClasses = `
-    appearance-none rounded-full cursor-pointer transition-all relative
-    bg-[var(--color-base-content)]/60
+    appearance-none rounded-full transition-all relative
     before:content-[''] before:absolute before:top-0.5 before:left-0.5
     before:rounded-full before:bg-[var(--color-base-100)]
     before:shadow-sm before:transition-transform
-    checked:bg-[var(--color-primary)]
-    disabled:cursor-not-allowed
   `.trim();
 
-  // The default variant rings and dims the switch itself. The card variant rings and dims
-  // the card instead, and clears the browser's own ring so it does not double the card ring.
+  // The track, its checked colour and the cursor are chosen by state, not overridden: a disabled
+  // switch stays focusable, and element opacity would fade its focus ring below 3:1. The dimmed
+  // track is half the enabled alpha, the same look as 50% opacity, without fading the ring.
+  const TOGGLE_ENABLED_CLASS = 'cursor-pointer bg-[var(--color-base-content)]/60';
+  const TOGGLE_DIMMED_CLASS = 'cursor-not-allowed bg-[var(--color-base-content)]/30';
+  const TOGGLE_BLOCKED_CLASS = 'cursor-not-allowed bg-[var(--color-base-content)]/60';
+  const CHECKED_PRIMARY_CLASS = 'checked:bg-[var(--color-primary)]';
+  const CHECKED_PRIMARY_DIMMED_CLASS = 'checked:bg-[var(--color-primary)]/50';
+  const CHECKED_ERROR_CLASS = 'checked:bg-[var(--color-error)]';
+  const CHECKED_ERROR_DIMMED_CLASS = 'checked:bg-[var(--color-error)]/50';
+
+  // The default variant rings the switch itself. The card variant rings the card and dims its
+  // content instead, and clears the browser's own ring so it does not double the card ring.
   const toggleDefaultClasses =
-    'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50';
+    'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2';
   const toggleCardClasses = 'focus-visible:outline-none';
 
   const toggleSizeClasses = {
@@ -94,19 +103,39 @@
     md: 'w-12 h-6 before:w-5 before:h-5 checked:before:translate-x-6',
   };
 
-  // eslint-disable-next-line security/detect-object-injection -- size is typed as 'sm' | 'md'
-  let toggleBaseClasses = $derived(`${toggleSharedClasses} ${toggleSizeClasses[size]}`);
+  // The card dims its content wrapper, so its switch keeps the enabled track
+  let dimmedTrack = $derived(disabled && variant !== 'card');
+  let toggleStateClass = $derived(
+    !disabled ? TOGGLE_ENABLED_CLASS : dimmedTrack ? TOGGLE_DIMMED_CLASS : TOGGLE_BLOCKED_CLASS
+  );
+  let toggleCheckedClass = $derived(
+    error
+      ? dimmedTrack
+        ? CHECKED_ERROR_DIMMED_CLASS
+        : CHECKED_ERROR_CLASS
+      : dimmedTrack
+        ? CHECKED_PRIMARY_DIMMED_CLASS
+        : CHECKED_PRIMARY_CLASS
+  );
 
-  const toggleErrorClasses = 'checked:bg-[var(--color-error)]';
+  let toggleBaseClasses = $derived(
+    // eslint-disable-next-line security/detect-object-injection -- size is typed as 'sm' | 'md'
+    `${toggleSharedClasses} ${toggleSizeClasses[size]} ${toggleStateClass} ${toggleCheckedClass}`
+  );
 
-  // cn does not merge conflicting utilities, so the cursor and the hover border are chosen
-  // by state here instead of being overridden later
+  // cn does not merge conflicting utilities, so the cursor, the border and the hover border are
+  // chosen by state here instead of being overridden later. The frame draws the focus ring, so it
+  // never gets opacity; a disabled card dims its border by alpha and its content
+  // wrapper by opacity.
   const CARD_BASE_CLASS =
-    'flex w-full items-start gap-3 rounded-lg border-2 p-4 text-left transition-[border-color,background-color] motion-reduce:transition-none has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-[var(--color-primary)] has-[input:focus-visible]:outline-offset-2';
+    'block w-full rounded-lg border-2 p-4 text-left transition-[border-color,background-color] motion-reduce:transition-none has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-[var(--color-primary)] has-[input:focus-visible]:outline-offset-2';
   const CARD_ON_CLASS = 'border-[var(--color-primary)] bg-[var(--color-primary)]/5';
   const CARD_OFF_CLASS = 'border-[var(--border-200)]';
+  const CARD_ON_DISABLED_CLASS = 'border-[var(--color-primary)]/50 bg-[var(--color-primary)]/5';
+  const CARD_OFF_DISABLED_CLASS = 'border-[var(--border-200)]/50';
   const CARD_ENABLED_CLASS = 'cursor-pointer';
-  const CARD_DISABLED_CLASS = 'cursor-not-allowed opacity-50';
+  const CARD_DISABLED_CLASS = 'cursor-not-allowed';
+  const CARD_CONTENT_CLASS = 'flex w-full items-start gap-3';
   // Only an unchecked, enabled card reacts to hover, so a checked card keeps its primary border
   const CARD_HOVER_CLASS = 'hover:border-[var(--border-300)]';
 
@@ -118,9 +147,6 @@
   const INLINE_LABEL_CLASS =
     "relative isolate inline-flex min-h-8 items-center gap-2 after:absolute after:inset-x-0 after:-inset-y-1.5 after:-z-10 after:content-['']";
 
-  // The inline switch is aria-disabled rather than :disabled, so it dims on that attribute
-  const INLINE_SWITCH_DISABLED_CLASS = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
-
   let labelCursorClass = $derived(disabled ? 'cursor-not-allowed' : 'cursor-pointer');
   // Error text and the required mark use the error text token; --color-error is for fills
   const ERROR_TEXT_CLASS = 'text-[var(--text-error)]';
@@ -128,7 +154,13 @@
   let cardClasses = $derived(
     cn(
       CARD_BASE_CLASS,
-      value ? CARD_ON_CLASS : CARD_OFF_CLASS,
+      value
+        ? disabled
+          ? CARD_ON_DISABLED_CLASS
+          : CARD_ON_CLASS
+        : disabled
+          ? CARD_OFF_DISABLED_CLASS
+          : CARD_OFF_CLASS,
       disabled ? CARD_DISABLED_CLASS : CARD_ENABLED_CLASS,
       !value && !disabled && CARD_HOVER_CLASS
     )
@@ -159,13 +191,12 @@
   <input
     id={fieldId}
     type="checkbox"
-    class={cn(toggleBaseClasses, variantClasses, error && toggleErrorClasses)}
+    class={cn(toggleBaseClasses, variantClasses)}
     checked={value}
-    disabled={disabled && !softDisabled}
-    aria-disabled={softDisabled ? 'true' : undefined}
-    required={required && !softDisabled}
-    onclick={handleClick}
-    onchange={handleChange}
+    aria-disabled={disabled ? 'true' : undefined}
+    required={required && !disabled}
+    onclickcapture={handleClick}
+    onchangecapture={handleChange}
     aria-labelledby={labelId}
     aria-describedby={describedBy}
     aria-invalid={error ? 'true' : undefined}
@@ -177,25 +208,27 @@
 <div class={cn('min-w-0', variant === 'inline' && 'font-normal', className)} {...rest}>
   {#if variant === 'card'}
     <label for={fieldId} class={cardClasses}>
-      {#if icon}
-        {@const Icon = icon}
-        <Icon class={cardIconClasses} />
-      {/if}
-      <span class="block min-w-0 flex-1">
-        <span id={labelId} class="block text-sm font-medium text-[var(--color-base-content)]">
-          {label}
-          {@render requiredMark()}
-        </span>
-        {#if description}
-          <span
-            id={descriptionId}
-            class="mt-0.5 block text-sm text-[var(--color-base-content)] opacity-80"
-          >
-            {description}
-          </span>
+      <span class={cn(CARD_CONTENT_CLASS, disabled && 'opacity-50')}>
+        {#if icon}
+          {@const Icon = icon}
+          <Icon class={cardIconClasses} />
         {/if}
+        <span class="block min-w-0 flex-1">
+          <span id={labelId} class="block text-sm font-medium text-[var(--color-base-content)]">
+            {label}
+            {@render requiredMark()}
+          </span>
+          {#if description}
+            <span
+              id={descriptionId}
+              class="mt-0.5 block text-sm text-[var(--color-base-content)] opacity-80"
+            >
+              {description}
+            </span>
+          {/if}
+        </span>
+        {@render switchInput(cn(toggleCardClasses, 'mt-0.5 shrink-0'))}
       </span>
-      {@render switchInput(cn(toggleCardClasses, 'mt-0.5 shrink-0'))}
     </label>
   {:else if variant === 'inline'}
     <label for={fieldId} class={cn(INLINE_LABEL_CLASS, labelCursorClass)}>
@@ -207,7 +240,7 @@
         {label}
         {@render requiredMark()}
       </span>
-      {@render switchInput(cn(toggleDefaultClasses, INLINE_SWITCH_DISABLED_CLASS, 'shrink-0'))}
+      {@render switchInput(cn(toggleDefaultClasses, 'shrink-0'))}
     </label>
     <!-- The text below starts 0.375rem under the label, outside its hit layer -->
     {#if description}

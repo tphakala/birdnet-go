@@ -15,11 +15,13 @@
   Body modes: the default is a resizable box (ResizableContainer). With
   `resizable={false}` the table takes its natural height, and `bodyMaxHeight`
   caps it so a long list scrolls under a sticky header while a short list
-  stays compact. The `notice` snippet renders between the header bar and the
-  body in every state (an error above rows that are still shown), and the
-  `empty` snippet replaces the default empty state. While `loading` is true the
-  body shows a spinner and a visible label (`loadingLabel`, default "Loading"),
-  announced through a status region that stays in the document.
+  stays compact. A body without a sortable column is a tab stop so the arrow
+  keys can scroll it; with a `title` it is also a region named by it. The `notice` snippet
+  renders between the header bar and the body in every state (an error above
+  rows that are still shown), and the `empty` snippet replaces the default empty state.
+  While `loading` is true the body shows a spinner and a visible label
+  (`loadingLabel`, default "Loading"), announced through a status region that
+  stays in the document.
 
   This component sorts and filters internally. Consumers declare columns with a
   `sortValue` accessor, a `searchAccessor`, and a `renderCell` snippet for custom
@@ -174,9 +176,11 @@
 
   let displayCount = $derived(count ?? filteredData.length);
 
-  let cappedBodyNeedsFocus = $derived(!!bodyMaxHeight && !columns.some(c => c.sortable));
-  // A focusable capped body is announced as a region named by the table title
-  let scrollRegionLabel = $derived(cappedBodyNeedsFocus && title ? title : undefined);
+  // The body scrolls sideways whenever the table is wider than the card, and vertically when
+  // capped, so without a sort button inside it to hold focus it needs a tab stop of its own
+  let bodyNeedsFocus = $derived(!columns.some(c => c.sortable));
+  // A focusable body with a title is announced as a region named by it
+  let scrollRegionLabel = $derived(bodyNeedsFocus && title ? title : undefined);
 
   // Fall back to the item reference (not the array index) so that re-sorting or
   // filtering reorders existing rows by identity instead of recreating DOM nodes.
@@ -258,7 +262,7 @@
             data-1p-ignore
             data-lpignore="true"
             data-form-type="other"
-            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/40"
+            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
           />
         </div>
       {/if}
@@ -358,11 +362,17 @@
     {/snippet}
 
     {#if resizable}
-      <ResizableContainer {defaultHeight} {minHeight} {maxHeight}>
+      <ResizableContainer
+        {defaultHeight}
+        {minHeight}
+        {maxHeight}
+        scrollTabStop={bodyNeedsFocus}
+        scrollLabel={scrollRegionLabel}
+      >
         {@render tableMarkup()}
       </ResizableContainer>
     {:else}
-      <!-- A capped body scrolls, so it needs a tab stop for the arrow keys unless a sort
+      <!-- The body can scroll, so it needs a tab stop for the arrow keys unless a sort
            button inside it can already hold focus. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
@@ -372,7 +382,7 @@
             'max-h-(--table-body-max-height) overflow-y-auto rounded-b-xl scroll-shadow-y'
         )}
         style:--table-body-max-height={bodyMaxHeight}
-        tabindex={cappedBodyNeedsFocus ? 0 : undefined}
+        tabindex={bodyNeedsFocus ? 0 : undefined}
         role={scrollRegionLabel ? 'region' : undefined}
         aria-label={scrollRegionLabel}
       >
