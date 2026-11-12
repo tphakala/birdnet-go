@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 SCRIPT_VERSION = "1.4.0"
-SCHEMA_VERSION = "v2-2026-10-26"
+SCHEMA_VERSION = "v2-2026-11-12"
 
 # ---------------------------------------------------------------------------
 # Constants
