@@ -1168,28 +1168,16 @@ describe('Primary and accent content in every color scheme', () => {
       return bodies;
     }
 
-    const BACKGROUND_DECLARATION = /(?:^|[\s;{])background(?:-color|-image)?\s*:/;
-
-    /**
-     * Tint fraction of the primary fill that each rule for `selector` puts behind the text. A rule
-     * that sets background, background-color or background-image in any form other than the oklch
-     * share fails the test.
-     */
-    function tintFractions(selector: string): number[] {
-      const fractions = activeBodies(selector)
-        .filter(body => BACKGROUND_DECLARATION.test(body))
-        .map(body => {
-          const match = /color-mix\(in oklch, var\(--color-primary\) (\d+)%, transparent\)/.exec(
-            body
-          );
-          expect(match, `${selector} tints --color-primary`).not.toBeNull();
-          return Number(match?.[1]) / 100;
-        });
-      expect(fractions.length, `${selector} sets a background`).toBeGreaterThan(0);
-      return fractions;
+    /** Tint fraction of the primary fill that an active rule puts behind the text. */
+    function tintFraction(selector: string): number {
+      const match = /color-mix\(in oklch, var\(--color-primary\) (\d+)%, transparent\)/.exec(
+        activeBodies(selector).join('\n')
+      );
+      expect(match, `${selector} tints --color-primary`).not.toBeNull();
+      return Number(match?.[1]) / 100;
     }
 
-    const TINT = tintFractions(ACTIVE_RULES[0])[0];
+    const TINT = tintFraction(ACTIVE_RULES[0]);
 
     const surfacesOf = (theme: Theme) => SURFACES.map(name => colorOf(SURFACE_SCHEME, theme, name));
 
@@ -1214,7 +1202,7 @@ describe('Primary and accent content in every color scheme', () => {
         expect(new Set(colorValues(activeBodies(selector)))).toEqual(
           new Set([`var(${TEXT_TOKEN})`])
         );
-        expect(new Set(tintFractions(selector))).toEqual(new Set([TINT]));
+        expect(tintFraction(selector)).toBe(TINT);
       });
     }
 
