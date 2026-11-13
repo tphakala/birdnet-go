@@ -8,9 +8,15 @@
   let upperOpen = $state(false);
 </script>
 
-<button type="button">Page button</button>
+<button type="button"
+  >Page button<span tabindex="-1" aria-hidden="true" data-testid="page-button-icon"></span></button
+>
 <button type="button" disabled>Disabled button</button>
 <section tabindex="-1" aria-label="Wrapper"><p>Wrapper text</p></section>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<section tabindex="0" aria-label="Region">
+  <section tabindex="-1" aria-label="Inner wrapper"><p>Inner wrapper text</p></section>
+</section>
 <button type="button" onclick={() => (lowerOpen = !lowerOpen)}>Toggle lower</button>
 <button type="button" onclick={() => (upperOpen = !upperOpen)}>Toggle upper</button>
 <button

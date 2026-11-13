@@ -1296,6 +1296,25 @@ describe('Modal', () => {
         expect(document.body).toHaveFocus();
       });
 
+      it('returns focus to the control pressed through a tabindex=-1 child', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(screen.getByTestId('page-button-icon'));
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Page button')).toHaveFocus();
+      });
+
+      it('does not take a focusable region around a tabindex=-1 wrapper as the opener', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        await fireEvent.pointerDown(screen.getByText('Inner wrapper text'));
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
       it('does not take a disabled button as the opener', async () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));

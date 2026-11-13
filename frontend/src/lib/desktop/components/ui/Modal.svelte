@@ -141,12 +141,14 @@
   /** The control a press landed on, or null for plain content, a disabled control or a negative tabindex wrapper */
   function pressedControl(target: unknown): HTMLElement | SVGElement | null {
     if (!isElement(target)) return null;
-    const candidate = target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR);
-    if (!candidate) return null;
-    if (candidate.closest(UNPRESSABLE_SELECTOR)) return null;
-    return candidate.matches(NATIVE_INTERACTIVE_SELECTOR) || candidate.tabIndex >= 0
-      ? candidate
-      : null;
+    const nearest = target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR);
+    if (!nearest) return null;
+    // A tabindex=-1 element (an icon inside a button) belongs to the native control around it, if any
+    const candidate =
+      nearest.matches(NATIVE_INTERACTIVE_SELECTOR) || nearest.tabIndex >= 0
+        ? nearest
+        : nearest.closest<HTMLElement>(NATIVE_INTERACTIVE_SELECTOR);
+    return candidate && !candidate.closest(UNPRESSABLE_SELECTOR) ? candidate : null;
   }
 
   if (typeof document !== 'undefined') {
