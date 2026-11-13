@@ -8,7 +8,7 @@ import type {
   PrerequisiteCheck,
   PrerequisitesResponse,
 } from '$lib/types/migration';
-import type { DatabaseOverviewResponse } from '$lib/types/database';
+import type { DatabaseOverviewResponse, MySQLDetails, SQLiteDetails } from '$lib/types/database';
 import type { LegacyStatus } from '$lib/types/legacy';
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
@@ -1358,5 +1358,121 @@ describe('DatabaseDashboard data errors', () => {
     await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+});
+
+const sqliteDetails = {
+  engine_version: '3.45.0',
+  journal_mode: 'wal',
+  page_size: 4096,
+  integrity_check: 'ok',
+  last_vacuum_at: null,
+  wal_size_bytes: 0,
+  wal_checkpoints: 0,
+  freelist_pages: 0,
+  cache_size_bytes: 0,
+  busy_timeouts: 0,
+} satisfies SQLiteDetails;
+
+const mysqlDetails = {
+  active_connections: 2,
+  idle_connections: 3,
+  max_connections: 100,
+  threads_idle: 0,
+  total_created: 10,
+  connection_errors: 0,
+  threads_running: 1,
+  threads_cached: 1,
+  buffer_pool_hit_rate: 99,
+  buffer_pool_size_bytes: 1024,
+  lock_waits: 0,
+  deadlocks: 0,
+  avg_lock_wait_ms: 0,
+  table_locks_waited: 0,
+  table_locks_immediate: 0,
+} satisfies MySQLDetails;
+
+const hourlyCounts = [
+  { hour: '2026-02-24T10:00:00Z', count: 4 },
+  { hour: '2026-02-24T11:00:00Z', count: 8 },
+  { hour: '2026-02-24T12:00:00Z', count: 6 },
+];
+
+const MYSQL_LOCATION = 'db.example.lan:3306/birdnet';
+const SQLITE_OVERVIEW_LOCATION = 'sqlite-overview.example.lan:3306/ignored';
+
+const sqliteOverview = {
+  ...overview,
+  location: SQLITE_OVERVIEW_LOCATION,
+  sqlite: sqliteDetails,
+  detection_rate_24h: hourlyCounts,
+} satisfies DatabaseOverviewResponse;
+
+const mysqlOverview = {
+  ...overview,
+  engine: 'mysql',
+  location: MYSQL_LOCATION,
+  mysql: mysqlDetails,
+  detection_rate_24h: hourlyCounts,
+} satisfies DatabaseOverviewResponse;
+
+/** True when `later` comes after `earlier` in document order. */
+function follows(earlier: HTMLElement, later: HTMLElement): boolean {
+  return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+const rateTitle = () => t('system.database.dashboard.detectionRate.title');
+const chartLabel = () => t('system.database.dashboard.detectionRate.chartLabel');
+const tablesTitle = () => t('system.database.dashboard.tables.title');
+
+describe('DatabaseDashboard v2-only overview layout', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+  });
+
+  it('shows the detection rate card after the SQLite cards and before the table breakdown', async () => {
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: sqliteOverview });
+
+    renderTyped(DatabaseDashboard);
+
+    const rate = await screen.findByRole('heading', { name: rateTitle() });
+    const engineCard = screen.getByRole('heading', {
+      name: t('system.database.dashboard.details.title'),
+    });
+    expect(follows(engineCard, rate)).toBe(true);
+    expect(follows(rate, screen.getByRole('heading', { name: tablesTitle() }))).toBe(true);
+    expect(screen.getByRole('img', { name: chartLabel() })).toBeInTheDocument();
+    expect(screen.queryByText(SQLITE_OVERVIEW_LOCATION)).not.toBeInTheDocument();
+  });
+
+  it('shows the MySQL location in the detection rate card after the MySQL cards', async () => {
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: mysqlOverview });
+
+    renderTyped(DatabaseDashboard);
+
+    const rate = await screen.findByRole('heading', { name: rateTitle() });
+    const engineCard = screen.getByRole('heading', {
+      name: t('system.database.dashboard.connectionPool.title'),
+    });
+    expect(follows(engineCard, rate)).toBe(true);
+    expect(follows(rate, screen.getByRole('heading', { name: tablesTitle() }))).toBe(true);
+    expect(screen.getByText(MYSQL_LOCATION)).toBeInTheDocument();
+  });
+
+  it('renders no empty engine row when the overview has no engine details', async () => {
+    serve({
+      [STATUS_URL]: v2OnlyStatus,
+      [OVERVIEW_URL]: { ...overview, detection_rate_24h: hourlyCounts },
+    });
+
+    const { container } = renderTyped(DatabaseDashboard);
+
+    await screen.findByRole('heading', { name: rateTitle() });
+    const emptyGrid = Array.from(container.querySelectorAll('div.grid')).find(
+      grid => grid.children.length === 0
+    );
+    expect(emptyGrid).toBeUndefined();
   });
 });

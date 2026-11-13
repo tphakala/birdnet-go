@@ -751,15 +751,17 @@
         />
 
         <!-- Middle row: engine-specific cards -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {#if overview.engine === 'sqlite' && overview.sqlite}
+        {#if overview.engine === 'sqlite' && overview.sqlite}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DatabaseSqliteDetails details={overview.sqlite} />
             <DatabaseLocksWalCard details={overview.sqlite} />
-          {:else if overview.engine === 'mysql' && overview.mysql}
+          </div>
+        {:else if overview.engine === 'mysql' && overview.mysql}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DatabaseMysqlConnectionPool details={overview.mysql} />
             <DatabaseMysqlInnodbCard details={overview.mysql} />
-          {/if}
-        </div>
+          </div>
+        {/if}
 
         <!-- Detection rate: full-width row so the chart can size to its container -->
         <DatabaseDetectionRateCard

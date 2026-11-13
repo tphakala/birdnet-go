@@ -76,6 +76,38 @@ describe('DatabaseDetectionRateCard side panel', () => {
     expect(screen.getByText(host)).toBeInTheDocument();
   });
 
+  it('hides the host line when the MySQL location is empty or missing', () => {
+    const hostLabel = t('system.database.dashboard.detectionRate.mysqlHost');
+    for (const mysqlHost of ['', undefined]) {
+      const { container, unmount } = renderTyped(DatabaseDetectionRateCard, {
+        props: { data: [], engine: 'mysql', mysqlHost },
+      });
+
+      expect(screen.queryByText(hostLabel)).not.toBeInTheDocument();
+      expect(container.querySelector('.wrap-anywhere')).toBeNull();
+      expect(screen.getByText(mysqlNoteLabel())).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('renders the min, average and max rate of the data', () => {
+    const data = [
+      { hour: '2026-02-24T10:00:00Z', count: 4 },
+      { hour: '2026-02-24T11:00:00Z', count: 8 },
+      { hour: '2026-02-24T12:00:00Z', count: 6 },
+    ];
+    renderTyped(DatabaseDetectionRateCard, { props: { data, engine: 'mysql' } });
+
+    const perHour = t('system.database.dashboard.detectionRate.perHour');
+    const figure = (label: string, value: number) =>
+      screen.getByText(
+        content => content.replace(/\s+/g, ' ').trim() === `${label} ${value}${perHour}`
+      );
+    expect(figure(t('system.database.dashboard.detectionRate.min'), 4)).toBeInTheDocument();
+    expect(figure(t('system.database.dashboard.detectionRate.avg'), 6)).toBeInTheDocument();
+    expect(figure(t('system.database.dashboard.detectionRate.max'), 8)).toBeInTheDocument();
+  });
+
   it('renders zero min, average and maximum labels for empty data', () => {
     renderTyped(DatabaseDetectionRateCard, { props: { data: [], engine: 'mysql' } });
 
