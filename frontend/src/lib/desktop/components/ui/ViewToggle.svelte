@@ -7,11 +7,14 @@
   - view: 'table' | 'cards' - Current view mode
   - onViewChange: (view: 'table' | 'cards') => void - View change callback
   - className?: string - Additional CSS classes
+
+  Keyboard: one Tab stop on the checked view, arrow keys move between the views.
 -->
 <script lang="ts">
   import { LayoutList, LayoutGrid } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { radioGroupKeys } from '$lib/utils/radioGroupKeys';
 
   interface Props {
     view: 'table' | 'cards';
@@ -26,12 +29,14 @@
   class={cn('view-toggle', className)}
   role="radiogroup"
   aria-label={t('detections.viewToggle.label')}
+  use:radioGroupKeys
 >
   <button
     type="button"
     class={cn('view-toggle-btn', view === 'table' && 'view-toggle-btn-active')}
     role="radio"
     aria-checked={view === 'table'}
+    tabindex={view === 'table' ? 0 : -1}
     aria-label={t('detections.viewToggle.table')}
     onclick={() => onViewChange('table')}
   >
@@ -42,6 +47,7 @@
     class={cn('view-toggle-btn', view === 'cards' && 'view-toggle-btn-active')}
     role="radio"
     aria-checked={view === 'cards'}
+    tabindex={view === 'cards' ? 0 : -1}
     aria-label={t('detections.viewToggle.cards')}
     onclick={() => onViewChange('cards')}
   >
