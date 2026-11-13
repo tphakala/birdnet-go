@@ -158,11 +158,29 @@ describe('SystemInference', () => {
 
     const { container } = inferenceTest.render({});
 
-    const skeleton = container.querySelector('[data-testid="inference-skeleton"]');
+    const skeleton = container.querySelector<HTMLElement>('[data-testid="inference-skeleton"]');
     expect(skeleton).not.toBeNull();
-    // The mocked i18n returns the key when no translation is registered.
-    expect(skeleton?.textContent).toContain('system.inference.loading');
     expect(container.querySelector('.animate-spin')).toBeNull();
+
+    // One polite status region whose label is visible text, not screen reader only.
+    // The mocked i18n returns the key when no translation is registered.
+    expect(skeleton?.getAttribute('role')).toBe('status');
+    const label = Array.from(skeleton?.querySelectorAll('*') ?? []).find(
+      el => el.children.length === 0 && el.textContent === 'system.inference.loading'
+    );
+    expect(label).toBeDefined();
+    expect(label?.closest('.sr-only')).toBeNull();
+
+    // Every placeholder bar is hidden from assistive technology and stops pulsing under
+    // reduced motion; the label stays exposed.
+    const bars = Array.from(skeleton?.querySelectorAll('.animate-pulse') ?? []);
+    expect(bars.length).toBeGreaterThan(0);
+    for (const bar of bars) {
+      expect(bar.getAttribute('aria-hidden')).toBe('true');
+      expect(bar.classList.contains('motion-reduce:animate-none')).toBe(true);
+      expect(bar.contains(label ?? null)).toBe(false);
+    }
+    expect(label?.closest('[aria-hidden="true"]')).toBeNull();
   });
 
   it('renders the empty state when the snapshot has no models', async () => {
