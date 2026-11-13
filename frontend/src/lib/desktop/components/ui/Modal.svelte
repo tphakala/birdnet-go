@@ -134,14 +134,16 @@
   // document.activeElement is body when a dialog opens from one; this is then the opener.
   let pressedElement: HTMLElement | SVGElement | null = null;
 
+  function isElement(node: unknown): node is HTMLElement | SVGElement {
+    return node instanceof HTMLElement || node instanceof SVGElement;
+  }
+
   /** The control a press landed on, or null for plain content, a disabled control or a negative tabindex wrapper */
   function pressedControl(target: unknown): HTMLElement | SVGElement | null {
-    if (!(target instanceof HTMLElement || target instanceof SVGElement)) return null;
+    if (!isElement(target)) return null;
     const candidate = target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR);
     if (!candidate) return null;
-    if (candidate.matches(UNPRESSABLE_SELECTOR) || candidate.closest(UNPRESSABLE_SELECTOR)) {
-      return null;
-    }
+    if (candidate.closest(UNPRESSABLE_SELECTOR)) return null;
     return candidate.matches(NATIVE_INTERACTIVE_SELECTOR) || candidate.tabIndex >= 0
       ? candidate
       : null;
@@ -173,30 +175,20 @@
     );
   }
 
-  /** True when focus is on an element of the dialog itself */
-  function focusIsInside(dialog: HTMLElement | undefined): boolean {
-    const active = document.activeElement;
-    return (
-      (active instanceof HTMLElement || active instanceof SVGElement) && !!dialog?.contains(active)
-    );
-  }
-
   /**
    * The element to return focus to when a dialog opens: the focused element, or the
-   * pressed one when focus is on body or nowhere. Null when there is none. Callers
-   * check focusIsInside first, since focus in the dialog keeps the earlier opener.
+   * pressed one when focus is on body or nowhere, else null. Undefined when focus is
+   * inside the dialog itself, which keeps the earlier opener.
    */
-  function pickOpener(dialog: HTMLElement | undefined): HTMLElement | SVGElement | null {
+  function pickOpener(
+    dialog: HTMLElement | undefined
+  ): HTMLElement | SVGElement | null | undefined {
     const active = document.activeElement;
-    const isElement = active instanceof HTMLElement || active instanceof SVGElement;
+    if (isElement(active) && dialog?.contains(active)) return undefined;
     const nothingFocused =
-      !isElement || active === document.body || active === document.documentElement;
-    if (nothingFocused) {
-      return pressedElement?.isConnected && !dialog?.contains(pressedElement)
-        ? pressedElement
-        : null;
-    }
-    return active;
+      !isElement(active) || active === document.body || active === document.documentElement;
+    if (!nothingFocused) return active;
+    return pressedElement?.isConnected && !dialog?.contains(pressedElement) ? pressedElement : null;
   }
 </script>
 
@@ -600,8 +592,8 @@
     if (isOpen) {
       // Focus inside this dialog (left there by a quick close and reopen) keeps the earlier opener;
       // otherwise the opener is set afresh, to null when nothing usable was focused or pressed
-      const dialog = untrack(() => dialogElement);
-      if (!focusIsInside(dialog)) stackEntry.opener = pickOpener(dialog);
+      const opener = pickOpener(untrack(() => dialogElement));
+      if (opener !== undefined) stackEntry.opener = opener;
       stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();

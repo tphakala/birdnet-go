@@ -1226,6 +1226,12 @@ describe('Modal', () => {
     // Safari and iPadOS do not focus a clicked button: activeElement stays body, so the
     // element the user pressed is the only record of where the dialog was opened from.
     describe('opened by a press that did not focus the button', () => {
+      async function openAndCloseLower() {
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        await press('Toggle lower');
+      }
+
       it('returns focus to the pressed button', async () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));
@@ -1242,11 +1248,7 @@ describe('Modal', () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));
         await fireEvent.pointerDown(document.body);
-        await press('Toggle lower');
-        await waitFor(() => expect(button('Lower action')).toHaveFocus());
-
-        await press('Toggle lower');
-
+        await openAndCloseLower();
         expect(document.body).toHaveFocus();
       });
 
@@ -1267,11 +1269,7 @@ describe('Modal', () => {
         await fireEvent.pointerDown(button('Page button'));
         button('Toggle upper').focus();
         button('Toggle upper').blur();
-        await press('Toggle lower');
-        await waitFor(() => expect(button('Lower action')).toHaveFocus());
-
-        await press('Toggle lower');
-
+        await openAndCloseLower();
         expect(document.body).toHaveFocus();
       });
 
@@ -1294,11 +1292,7 @@ describe('Modal', () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));
         await fireEvent.pointerDown(screen.getByText('Wrapper text'));
-        await press('Toggle lower');
-        await waitFor(() => expect(button('Lower action')).toHaveFocus());
-
-        await press('Toggle lower');
-
+        await openAndCloseLower();
         expect(document.body).toHaveFocus();
       });
 
@@ -1321,22 +1315,14 @@ describe('Modal', () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));
         await fireEvent.pointerCancel(button('Toggle lower'));
-        await press('Toggle lower');
-        await waitFor(() => expect(button('Lower action')).toHaveFocus());
-
-        await press('Toggle lower');
-
+        await openAndCloseLower();
         expect(document.body).toHaveFocus();
       });
 
       it('ignores a press with a non-primary button', async () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'), { button: SECONDARY_BUTTON });
-        await press('Toggle lower');
-        await waitFor(() => expect(button('Lower action')).toHaveFocus());
-
-        await press('Toggle lower');
-
+        await openAndCloseLower();
         expect(document.body).toHaveFocus();
       });
 
