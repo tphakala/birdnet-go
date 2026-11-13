@@ -82,7 +82,7 @@
     /** True while any gallery action runs on any card. */
     actionInFlight?: boolean;
     /** id of the visible status line that explains why actions are paused. */
-    pausedReasonId?: string;
+    pausedReasonId: string;
     /** Download progress of this card's running install, reinstall or swap. */
     progress?: DownloadProgress | null;
     /** Installed mode: a better variant exists for this host. */
