@@ -182,6 +182,26 @@ describe('ExpandableText measurement', () => {
 });
 
 describe('ExpandableText focus', () => {
+  it('leaves focus alone when the toggle goes away without having focus', async () => {
+    let fits = false;
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(() =>
+      fits ? CLAMPED_HEIGHT : FULL_HEIGHT
+    );
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    const { rerender } = render(ExpandableText, { props: { text: LONG_TEXT } });
+    outside.focus();
+
+    // A new text that fits removes the toggle through a measurement
+    fits = true;
+    await rerender({ text: SHORT_TEXT });
+
+    expect(screen.queryByRole('button', { name: /common\.ui/ })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
   it('keeps focus in the text when Show less leaves nothing to collapse', async () => {
     // Clipped at first; the card then widens while expanded, so the clamped text fits
     let fits = false;
