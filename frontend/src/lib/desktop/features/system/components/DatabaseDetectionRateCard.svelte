@@ -66,9 +66,9 @@
           <div class="flex items-center gap-2 text-sm">
             <Database class="w-3.5 h-3.5 shrink-0 text-muted" />
             <span class="text-muted">{t('system.database.dashboard.detectionRate.mysqlHost')}</span>
-            <span class="font-mono text-xs font-medium ml-auto min-w-0 break-all text-right"
-              >{mysqlHost ?? ''}</span
-            >
+          </div>
+          <div class="mt-1 min-w-0 font-mono text-xs font-medium wrap-anywhere">
+            {mysqlHost ?? ''}
           </div>
           <p class="mt-2 text-[10px] text-muted">
             {t('system.database.dashboard.detectionRate.mysqlBackupNote')}
