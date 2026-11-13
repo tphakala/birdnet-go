@@ -74,4 +74,18 @@ describe('DatabaseTableBreakdown sorting', () => {
 
     expect(screen.getByTestId('sort-engine').tagName).toBe('BUTTON');
   });
+
+  it('sorts the engine column ascending first', async () => {
+    const mysqlTables: TableStats[] = [
+      { name: 'one', row_count: 1, size_bytes: 100, usage_pct: 10, engine: 'MyISAM' },
+      { name: 'two', row_count: 2, size_bytes: 200, usage_pct: 20, engine: 'Aria' },
+      { name: 'three', row_count: 3, size_bytes: 300, usage_pct: 30, engine: 'InnoDB' },
+    ];
+    renderTyped(DatabaseTableBreakdown, { props: { tables: mysqlTables, showEngine: true } });
+
+    await fireEvent.click(screen.getByTestId('sort-engine'));
+
+    expect(rowNames()).toEqual(['two', 'three', 'one']);
+    expect(header('engine')).toHaveAttribute('aria-sort', 'ascending');
+  });
 });
