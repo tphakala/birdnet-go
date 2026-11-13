@@ -1,6 +1,7 @@
 <!--
   Test harness: drives ExpandableText's lines prop from its own signal, as a parent would.
-  A rerender through the testing library replaces all props together, which also changes `text`.
+  A rerender through the testing library assigns one new props object, so every prop read re-runs,
+  `text` included, even when only `lines` changes.
 -->
 <script lang="ts">
   import ExpandableText from './ExpandableText.svelte';
