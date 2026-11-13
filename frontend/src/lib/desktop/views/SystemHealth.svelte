@@ -597,7 +597,7 @@
           aria-describedby={running ? RUN_STATUS_ID : undefined}
           aria-label={t('health.refresh')}
           title={t('health.refresh')}
-          class="inline-flex items-center justify-center size-8 rounded-md transition-colors hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center size-8 rounded-md transition-colors not-aria-disabled:hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
         >
           <RefreshCw class="size-4 {running ? 'animate-spin' : ''}" />
         </button>
@@ -613,7 +613,6 @@
           class="inline-flex rounded-md border border-[var(--color-base-300)] overflow-hidden"
           role="radiogroup"
           aria-label={t('health.window.label')}
-          aria-describedby={running ? RUN_STATUS_ID : undefined}
           use:radioGroupKeys
         >
           {#each windowPresets as w (w)}
@@ -628,7 +627,7 @@
               class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-base-content)] focus-visible:shadow-[inset_0_0_0_4px_var(--color-primary-content)] aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
                 ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
-                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
+                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] not-aria-disabled:hover:bg-[var(--color-base-300)]'}"
             >
               {t(`health.window.${w}`)}
             </button>

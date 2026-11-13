@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { runAxeTest } from '$lib/utils/axe-utils';
 import SystemHealth from './SystemHealth.svelte';
 
 const TOTAL_CHECKS = 5;
@@ -92,6 +93,9 @@ describe('SystemHealth keyboard and run state', () => {
     const stops = windowRadios().filter(r => r.getAttribute('tabindex') === '0');
     expect(stops).toHaveLength(1);
     expect(stops[0]).toHaveAttribute('aria-checked', 'true');
+    for (const radio of windowRadios().filter(r => r.getAttribute('aria-checked') !== 'true')) {
+      expect(radio).toHaveAttribute('tabindex', '-1');
+    }
   });
 
   it('draws the focus ring inside each window radio so the clipped group cannot hide it', async () => {
@@ -104,6 +108,7 @@ describe('SystemHealth keyboard and run state', () => {
     // primary content colour, so one of them stands out on any neighbouring fill. It stays at full
     // strength while a run fades the control. Rendered contrast and clipping are browser-only checks.
     for (const radio of windowRadios()) {
+      expect(radio).toHaveClass('focus-visible:outline-2');
       expect(radio).toHaveClass('focus-visible:-outline-offset-2');
       expect(radio).not.toHaveClass('focus-visible:outline-offset-2');
       expect(radio).toHaveClass('focus-visible:outline-[var(--color-base-content)]');
@@ -119,9 +124,23 @@ describe('SystemHealth keyboard and run state', () => {
     render(SystemHealth);
     await screen.findByText('health.metricFooter.allPassing');
 
-    expect(screen.getByRole('button', { name: 'health.refresh' })).toHaveClass(
-      'aria-disabled:focus-visible:opacity-100'
-    );
+    const refresh = screen.getByRole('button', { name: 'health.refresh' });
+    expect(refresh).toHaveClass('focus-visible:outline-2');
+    expect(refresh).toHaveClass('aria-disabled:focus-visible:opacity-100');
+  });
+
+  it('applies hover backgrounds only while no run is active', async () => {
+    mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
+    render(SystemHealth);
+    await screen.findByText('health.metricFooter.allPassing');
+
+    // A disabled-looking control must not light up on hover. Rendered hover is a browser-only check.
+    const refresh = screen.getByRole('button', { name: 'health.refresh' });
+    expect(refresh).toHaveClass('not-aria-disabled:hover:bg-[var(--color-base-200)]');
+    expect(refresh).not.toHaveClass('hover:bg-[var(--color-base-200)]');
+    const [, next] = checkedAndNextRadio();
+    expect(next).toHaveClass('not-aria-disabled:hover:bg-[var(--color-base-300)]');
+    expect(next).not.toHaveClass('hover:bg-[var(--color-base-300)]');
   });
 
   it('keeps the Refresh button and the window radios out from under a dimmed ancestor', async () => {
@@ -174,6 +193,33 @@ describe('SystemHealth keyboard and run state', () => {
 
     finish(report(TOTAL_CHECKS));
     await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));
+    expect(refresh).not.toHaveAttribute('aria-describedby');
+    for (const radio of windowRadios()) {
+      expect(radio).not.toHaveAttribute('aria-disabled');
+      expect(radio).not.toHaveAttribute('aria-describedby');
+    }
+    expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('does not move selection or focus on ArrowRight while a run is active', async () => {
+    const { finish } = await renderWithPendingRun();
+    await fireEvent.click(screen.getByRole('button', { name: 'health.refresh' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'health.refresh' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      )
+    );
+
+    const [first, second] = checkedAndNextRadio();
+    first.focus();
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+    expect(first).toHaveAttribute('aria-checked', 'true');
+    expect(second).toHaveAttribute('aria-checked', 'false');
+    expect(document.activeElement).not.toBe(second);
+
+    finish(report(TOTAL_CHECKS));
   });
 
   it('ignores a window click and a second Refresh click while a run is active', async () => {
@@ -193,5 +239,15 @@ describe('SystemHealth keyboard and run state', () => {
     expect(mocks.post).toHaveBeenCalledTimes(callsDuringRun);
 
     finish(report(TOTAL_CHECKS));
+  });
+
+  it('has no accessibility violations in the diagnostics header', async () => {
+    mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
+    render(SystemHealth);
+    await screen.findByText('health.metricFooter.allPassing');
+
+    const group = screen.getByRole('radiogroup').closest('div')?.parentElement;
+    if (!group) throw new Error('window selector container not found');
+    expect((await runAxeTest(group)).violations).toEqual([]);
   });
 });
