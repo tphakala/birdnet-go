@@ -22,8 +22,9 @@
  * 6. a status fill reaching the text through a style: `style:color` that is not a text token, base
  *    content or textColorFor(...), and `color: var(--color-success|warning|error|info)`.
  *
- * Comments (HTML, block and line) are removed before scanning, so prose may name a hex or a
- * utility.
+ * Comments are removed before scanning, so prose may name a hex or a utility: HTML comments, and
+ * block and line comments that start a line or follow whitespace (a line comment may also follow
+ * a semicolon). A block comment glued to code, as in a Svelte {} expression, is scanned like code.
  *
  * Not scanned: white, black, transparent, colour functions (rgb(), hsl(), oklch()), CSS
  * named colours, and any file not in the list.
@@ -279,8 +280,8 @@ describe('System page colors', () => {
       ['2: opacity-50'],
     ],
     [
-      'a glob in a string',
-      'const g = \'a/**/*.ts\';\n<p class="opacity-50"/>\n/* c */',
+      'a block comment opener inside a string',
+      'const g = \'src/*.ts\';\n<p class="opacity-50"/>\nx */',
       ['2: opacity-50'],
     ],
     [
