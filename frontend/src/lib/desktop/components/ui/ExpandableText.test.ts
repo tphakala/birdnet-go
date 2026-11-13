@@ -1,25 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fireEvent, render } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { CLAMPED_HEIGHT, FULL_HEIGHT, stubLayout } from '../../../../test/layout-helpers';
 import { renderTyped, screen } from '../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ExpandableText from './ExpandableText.svelte';
 
 const LONG_TEXT = 'A long description that does not fit in three lines on a narrow card.';
 const SHORT_TEXT = 'Short.';
-const CLAMPED_HEIGHT = 50;
-const FULL_HEIGHT = 84;
-
-/**
- * jsdom has no layout, so scrollHeight and clientHeight are 0. Stub them so a paragraph
- * holding `clippedText` reports more content than it shows; any other text fits.
- */
-function stubLayout(clippedText: string): void {
-  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
-  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
-    return this.textContent === clippedText ? FULL_HEIGHT : CLAMPED_HEIGHT;
-  });
-}
 
 function paragraphOf(text: string): HTMLElement {
   const p = screen.getByText(text);

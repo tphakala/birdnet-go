@@ -2,44 +2,32 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fireEvent, render, within } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
 import { screen } from '../../../../../test/render-helpers';
-import type { CatalogEntry, DownloadProgress } from '$lib/types/models';
-import { CHANNEL_STABLE } from '$lib/utils/variantSelection';
+import type { CatalogEntry } from '$lib/types/models';
+import { catalogEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
+import { stubLayout } from '../../../../../test/layout-helpers';
 import ModelCardGrid from './ModelCardGrid.svelte';
 
 const PAUSED_ID = 'gallery-action-status';
-const CLAMPED_HEIGHT = 50;
-const FULL_HEIGHT = 84;
 const LONG_DESCRIPTION = 'Model a has a description too long for three lines.';
 
 function entry(id: string, overrides: Partial<CatalogEntry> = {}): CatalogEntry {
-  return {
+  return catalogEntry({
     id,
     name: `Model ${id}`,
     description: `Model ${id} description`,
-    author: 'Tester',
     license: 'MIT',
     commercialUse: true,
-    category: 'bird',
-    region: '',
-    speciesCount: 100,
-    version: '1.0',
-    channel: CHANNEL_STABLE,
     installed: true,
-    compatible: true,
-    totalSizeBytes: 1_000_000,
-    hasGeomodel: false,
     ...overrides,
-  };
+  });
 }
 
-const progress: DownloadProgress = {
+const progress = downloadProgress({
   catalogId: 'a',
-  status: 'downloading',
   downloadedBytes: 1,
   totalBytes: 2,
-  currentFile: 1,
   totalFiles: 1,
-};
+});
 
 type GridProps = ComponentProps<typeof ModelCardGrid>;
 
@@ -121,10 +109,7 @@ describe('ModelCardGrid', () => {
   });
 
   it('keeps a card expanded when the entries are reordered or another is removed', async () => {
-    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
-    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
-      return this.textContent === LONG_DESCRIPTION ? FULL_HEIGHT : CLAMPED_HEIGHT;
-    });
+    stubLayout(LONG_DESCRIPTION);
     const a = entry('a', { description: LONG_DESCRIPTION });
     const b = entry('b');
     const { rerender } = renderGrid({ entries: [a, b] });

@@ -4,13 +4,17 @@ import { fireEvent, within } from '@testing-library/svelte';
 import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
-import type { CatalogEntry, CatalogVariant, DownloadProgress } from '$lib/types/models';
-import { CHANNEL_PREVIEW, CHANNEL_STABLE } from '$lib/utils/variantSelection';
+import type { CatalogVariant } from '$lib/types/models';
+import { CHANNEL_PREVIEW } from '$lib/utils/variantSelection';
+import {
+  catalogEntry as entry,
+  downloadProgress as progress,
+} from '../../../../../test/fixtures/catalog';
+import { stubLayout } from '../../../../../test/layout-helpers';
 import ModelCard from './ModelCard.svelte';
 
 const PAUSED_ID = 'gallery-action-status';
 const LARGE_SPECIES_COUNT = 12012;
-const TOTAL_BYTES = 2_000_000;
 const ONE_MIB = 1024 * 1024;
 
 function variant(overrides: Partial<CatalogVariant> = {}): CatalogVariant {
@@ -23,39 +27,6 @@ function variant(overrides: Partial<CatalogVariant> = {}): CatalogVariant {
     compatible: true,
     recommended: false,
     hardwareClass: 'amd64Cpu',
-    ...overrides,
-  };
-}
-
-function entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
-  return {
-    id: 'test-bird',
-    name: 'Test Bird Model',
-    description: 'A test bird classifier',
-    author: 'Tester',
-    license: 'CC-BY-NC-4.0',
-    commercialUse: false,
-    category: 'bird',
-    region: '',
-    speciesCount: 100,
-    version: '1.0',
-    channel: CHANNEL_STABLE,
-    installed: false,
-    compatible: true,
-    totalSizeBytes: 1_000_000,
-    hasGeomodel: false,
-    ...overrides,
-  };
-}
-
-function progress(overrides: Partial<DownloadProgress> = {}): DownloadProgress {
-  return {
-    catalogId: 'test-bird',
-    status: 'downloading',
-    downloadedBytes: TOTAL_BYTES / 2,
-    totalBytes: TOTAL_BYTES,
-    currentFile: 1,
-    totalFiles: 2,
     ...overrides,
   };
 }
@@ -75,9 +46,6 @@ function renderCard(props: Partial<CardProps> & Pick<CardProps, 'entry' | 'mode'
 function button(action: string, name = 'Test Bird Model'): HTMLElement {
   return screen.getByRole('button', { name: `${action} ${name}` });
 }
-
-const clampedHeight = 50;
-const fullHeight = 84;
 
 beforeEach(() => {
   // t is a shared mock: drop the calls earlier tests made, keep its implementation
@@ -99,21 +67,14 @@ describe('ModelCard', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
 
-    it('blocks Install and explains why on an incompatible available entry', () => {
+    it('blocks Install on an incompatible available entry and explains why by the notice', () => {
       renderCard({ entry: entry({ compatible: false }), mode: 'available' });
 
       const install = button('analysis.gallery.install');
       expect(install).toBeEnabled();
       expect(install).toHaveAttribute('aria-disabled', 'true');
       expect(screen.getByRole('status')).toHaveTextContent('analysis.gallery.entryIncompatible');
-    });
-
-    it('describes a blocked Install by the incompatibility notice', () => {
-      renderCard({ entry: entry({ compatible: false }), mode: 'available' });
-
-      expect(button('analysis.gallery.install')).toHaveAccessibleDescription(
-        'analysis.gallery.entryIncompatible'
-      );
+      expect(install).toHaveAccessibleDescription('analysis.gallery.entryIncompatible');
     });
 
     it('offers Reinstall and Remove on an installed entry', () => {
@@ -228,11 +189,11 @@ describe('ModelCard', () => {
     });
 
     it.each([
-      ['available', 'install', 'analysis.gallery.install', 'analysis.gallery.installing'],
-      ['installed', 'remove', 'analysis.gallery.remove', 'analysis.gallery.removing'],
+      ['available', 'install', 'analysis.gallery.installing'],
+      ['installed', 'remove', 'analysis.gallery.removing'],
     ] as const)(
       'a %s card running %s blocks that button, names it by its running label and ignores clicks',
-      async (mode, busy, _label, running) => {
+      async (mode, busy, running) => {
         const { onAction } = renderCard({
           entry: entry({ installed: mode === 'installed' }),
           mode,
@@ -516,10 +477,7 @@ describe('ModelCard', () => {
   it('keeps a long description in full and names its toggle after the model', () => {
     const description =
       'Bat classifier for full-band recordings. Needs a 192 kHz input to hear the calls.';
-    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(clampedHeight);
-    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
-      return this.textContent === description ? fullHeight : clampedHeight;
-    });
+    stubLayout(description);
     renderCard({ entry: entry({ description }), mode: 'available' });
 
     expect(screen.getByText(/192 kHz/)).toHaveTextContent(description);

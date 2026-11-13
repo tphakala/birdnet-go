@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
-import { CHANNEL_STABLE } from '$lib/utils/variantSelection';
+import { catalogEntry as birdEntry } from '../../../../../test/fixtures/catalog';
 
 // Page-level coverage for the model-gallery install-error split:
 // a failed install must NOT blank the grid (installError is a separate banner from
@@ -108,27 +108,6 @@ beforeEach(() => {
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).
 const NETWORK_ERROR = 'HTTP request failed for https://huggingface.co/model: connection refused';
-
-function birdEntry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
-  return {
-    id: 'test-bird',
-    name: 'Test Bird Model',
-    description: 'A test bird classifier',
-    author: 'Tester',
-    license: 'CC-BY-NC-4.0',
-    commercialUse: false,
-    category: 'bird',
-    region: '',
-    speciesCount: 100,
-    version: '1.0',
-    channel: CHANNEL_STABLE,
-    installed: false,
-    compatible: true,
-    totalSizeBytes: 1_000_000,
-    hasGeomodel: false,
-    ...overrides,
-  };
-}
 
 async function gotoAvailableTab(): Promise<void> {
   // Top-level Models tab, then the Available gallery sub-tab (i18n mock echoes keys).
