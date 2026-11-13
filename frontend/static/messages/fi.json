@@ -207,7 +207,6 @@
     "hoursShort": "t"
   },
   "pageTitle": {
-    "settings": "Asetukset - BirdNET-Go",
     "pageNotFound": "404 - Sivua ei löydy",
     "serverError": "500 - Sisäinen palvelinvirhe",
     "componentError": "Komponentin latausvirhe",

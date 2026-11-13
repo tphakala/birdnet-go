@@ -185,7 +185,6 @@ export type TranslationKey =
   | 'common.actionsColumn'
   | 'common.closeModal'
   | 'common.hoursShort'
-  | 'pageTitle.settings'
   | 'pageTitle.pageNotFound'
   | 'pageTitle.serverError'
   | 'pageTitle.componentError'

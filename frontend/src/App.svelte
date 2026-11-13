@@ -42,6 +42,10 @@
 
   const logger = getLogger('app');
 
+  // The brand is not translated, so it is not an i18n key.
+  const APP_NAME = 'BirdNET-Go';
+  const TITLE_SEPARATOR = ' - ';
+
   /**
    * Client-side navigation function.
    * Updates URL via History API. Route handling is triggered reactively
@@ -137,6 +141,17 @@
   let settingsLoad = $state<SettingsLoadState>('pending');
   let appLoading = $derived(appState.loading);
   let appError = $derived(appState.error);
+
+  // The single writer of document.title: "<Page> - BirdNET-Go". While the shell is not shown
+  // (loading, or the load failed) only the app name is known. A title that equals its key has
+  // no translation, so it is not shown.
+  let documentTitle = $derived.by(() => {
+    if (!appInitialized || appError) return APP_NAME;
+    const showsLogin = requireLogin || loginRouteActive;
+    const key = showsLogin ? 'auth.loginTitle' : pageTitleKey;
+    const page = showsLogin ? t(key) : pageTitle;
+    return !page || page === key ? APP_NAME : `${page}${TITLE_SEPARATOR}${APP_NAME}`;
+  });
 
   // Route configuration for better maintainability
   interface RouteConfig {
@@ -775,6 +790,10 @@
     };
   });
 </script>
+
+<svelte:head>
+  <title>{documentTitle}</title>
+</svelte:head>
 
 {#snippet renderRoute(component: Component | null)}
   {#if component}

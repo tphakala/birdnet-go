@@ -207,7 +207,6 @@
     "hoursShort": "godz."
   },
   "pageTitle": {
-    "settings": "Ustawienia - BirdNET-Go",
     "pageNotFound": "404 - Nie znaleziono strony",
     "serverError": "500 - Wewnętrzny błąd serwera",
     "componentError": "Błąd ładowania komponentu",

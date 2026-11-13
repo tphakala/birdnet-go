@@ -207,7 +207,6 @@
     "hoursShort": "ó"
   },
   "pageTitle": {
-    "settings": "Beállítások - BirdNET-Go",
     "pageNotFound": "404 - Az oldal nem található",
     "serverError": "500 - Belső szerverhiba",
     "componentError": "Komponens betöltési hiba",
