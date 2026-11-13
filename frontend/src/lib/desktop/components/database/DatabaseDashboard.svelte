@@ -750,22 +750,25 @@
           {queriesPerSecHistory}
         />
 
-        <!-- Middle row: engine-specific cards + detection rate -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          {#if overview.engine === 'sqlite' && overview.sqlite}
+        <!-- Middle row: engine-specific cards -->
+        {#if overview.engine === 'sqlite' && overview.sqlite}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DatabaseSqliteDetails details={overview.sqlite} />
             <DatabaseLocksWalCard details={overview.sqlite} />
-          {:else if overview.engine === 'mysql' && overview.mysql}
+          </div>
+        {:else if overview.engine === 'mysql' && overview.mysql}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DatabaseMysqlConnectionPool details={overview.mysql} />
             <DatabaseMysqlInnodbCard details={overview.mysql} />
-          {/if}
+          </div>
+        {/if}
 
-          <DatabaseDetectionRateCard
-            data={overview.detection_rate_24h ?? []}
-            engine={overview.engine}
-            mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
-          />
-        </div>
+        <!-- Detection rate: full-width row so the chart can size to its container -->
+        <DatabaseDetectionRateCard
+          data={overview.detection_rate_24h ?? []}
+          engine={overview.engine}
+          mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
+        />
 
         <!-- Table breakdown -->
         <DatabaseTableBreakdown
