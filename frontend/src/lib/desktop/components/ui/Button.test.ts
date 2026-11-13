@@ -139,8 +139,9 @@ describe('Button', () => {
   );
 
   // Computed from the theme tokens on base-100, base-200 and base-300 in both themes: the error
-  // text is 4.5:1 or better at the 15% resting fill and below it from 17% up on the dark
-  // theme's base-300, so hover and press show their state through the border, not the fill
+  // text is 4.5:1 or better at the 15% resting fill, and darkening the fill toward 25% takes it
+  // below 4.5:1 on the dark theme's base-300, so hover and press show their state through the
+  // border, not the fill
   it('shows the error hover and press state through the border, not a darker fill', () => {
     const button = render(ButtonHarness, { props: { variant: 'error' } }).container.querySelector(
       'button'
