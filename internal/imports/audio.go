@@ -22,13 +22,21 @@ import (
 // audioWorkerLimit is the maximum number of concurrent clip-copy goroutines per batch.
 const audioWorkerLimit = 4
 
+// Directory names of a BirdNET-Pi audio tree.
+const (
+	// extractedDirName is the directory that holds the by-date tree in a live install.
+	extractedDirName = "Extracted"
+	// byDateDirName is the directory that groups the clips by capture date.
+	byDateDirName = "By_Date"
+)
+
 // AudioTreeLayouts lists where the by-date clip tree sits inside a BirdNET-Pi audio
 // root: nested in "Extracted" in a live install, directly in the root in a backup
 // made with BirdNET-Pi's backup tool. Clips are looked up as
 // <layout>/<date>/<common name>/<file>, and audio root discovery uses the same list.
 var AudioTreeLayouts = []string{
-	filepath.Join("Extracted", "By_Date"),
-	"By_Date",
+	filepath.Join(extractedDirName, byDateDirName),
+	byDateDirName,
 }
 
 // sanitizePathComponent validates that s is a single safe path component.
