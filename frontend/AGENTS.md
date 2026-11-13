@@ -273,6 +273,16 @@ and `--text-primary` does the same for every fixed scheme in both themes;
 - Every state (loading, saving, validating, error, success) has a visible,
   labelled indicator; a bare spinner is not enough. Fetching, saving and
   processing are distinct states with distinct labels.
+- Every page, and every card that loads its own data, shows a skeleton of its
+  final layout while it loads, not a spinner in a corner. The skeleton mirrors
+  the loaded layout (same grid, card chrome and minimum heights) so nothing
+  jumps when the data arrives, keeps one visible labelled `role="status"`
+  indicator, marks each placeholder bar `aria-hidden="true"`, stops pulsing
+  under `motion-reduce`, and lets bars shrink (`min-w-0 max-w-full`) so none
+  overflows a card at tablet and desktop widths. Use
+  `src/lib/desktop/features/system/components/InferenceSkeleton.svelte` as the
+  reference. Many existing pages still show a spinner; give a page a skeleton
+  when you change its loading state.
 - Validation errors appear next to the offending field with the specific
   reason, including a required field left empty. Show the error once the field
   is left or a submit is attempted, clear it when the user edits the field, and
