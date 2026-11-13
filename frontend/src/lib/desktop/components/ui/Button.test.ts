@@ -111,6 +111,30 @@ describe('Button', () => {
     expect(colours(blocked).filter(c => colours(enabled).includes(c))).toEqual(kept);
   });
 
+  it.each(['success', 'warning', 'error'] as const)(
+    '%s colours its text with the text token and keeps the fill token for fill and border',
+    variant => {
+      const resting = render(ButtonHarness, { props: { variant } }).container.querySelector(
+        'button'
+      );
+      const blocked = render(ButtonHarness, {
+        props: { variant, 'aria-disabled': 'true' },
+      }).container.querySelector('button');
+
+      expect(resting).toHaveClass(
+        `text-[var(--text-${variant})]`,
+        `bg-[var(--color-${variant})]/15`,
+        `border-[var(--color-${variant})]/25`
+      );
+      expect(resting).not.toHaveClass(`text-[var(--color-${variant})]`);
+      expect(blocked).toHaveClass(
+        `text-[var(--text-${variant})]/50`,
+        `bg-[var(--color-${variant})]/8`
+      );
+      expect(blocked).not.toHaveClass(`text-[var(--color-${variant})]/50`);
+    }
+  );
+
   it('treats a boolean aria-disabled like the string form', () => {
     render(ButtonHarness, { props: { variant: 'primary', 'aria-disabled': true } });
     const button = screen.getByRole('button');
