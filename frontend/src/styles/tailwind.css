@@ -135,6 +135,7 @@
   --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #92400e; /* amber-800 - warning text, same rule */
   --text-info: #075985; /* sky-800 - info text, same rule */
+  --text-primary: #1e40af; /* blue-800 - primary-hue text (active sidebar item), same rule; schemes.css overrides it per scheme */
 
   /* Data visualization: chart series and meter fills (Meter.svelte, sparklines, legends).
      Theme tokens, not scheme tokens: schemes.css changes only primary and accent, so these
@@ -234,6 +235,7 @@
   --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
   --text-info: #38bdf8; /* sky-400 - info text, same rule */
+  --text-primary: #60a5fa; /* blue-400 - primary-hue text (active sidebar item), same rule; schemes.css overrides it per scheme */
 
   /* Data visualization, same rules as the light block */
   --viz-track: #1e293b; /* slate-800 */
@@ -2457,12 +2459,12 @@
   /* Menu active state utilities - using color-mix for transparency with CSS variables */
   .menu-item-active {
     background-color: color-mix(in oklch, var(--color-primary) 15%, transparent);
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .menu-subitem-active {
     background-color: color-mix(in oklch, var(--color-primary) 15%, transparent);
-    color: var(--color-primary);
+    color: var(--text-primary);
     font-weight: 500;
   }
 

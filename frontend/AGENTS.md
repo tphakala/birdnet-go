@@ -256,9 +256,13 @@ Theme colours are written as CSS variables in arbitrary values
 (`text-[var(--color-base-content)]`), not bare theme class names. Error text
 uses `text-[var(--text-error)]`; `--color-error` is for fills and borders.
 Success, warning and info text use `--text-success`, `--text-warning` and
-`--text-info`. All four text tokens reach 4.5:1 on base-100, base-200, base-300
-and on a 15% tint of their fill over each; `.badge-status-*`, `.alert-*`,
-`.text-error/success/warning/info` and `StatusPill` already use them. Use the
+`--text-info`; text in the primary hue, such as the active sidebar item, uses
+`--text-primary` (`schemes.css` sets it per colour scheme, and the custom
+scheme maps it to `--color-base-content`). All four status text tokens reach
+4.5:1 on base-100, base-200, base-300 and on a 15% tint of their fill over each,
+and `--text-primary` does the same for every fixed scheme in both themes;
+`.badge-status-*`, `.alert-*`, `.text-error/success/warning/info` and
+`StatusPill` already use them. Use the
 `--color-*` fills for backgrounds, borders and dots, not for new text.
 
 ### General Rules

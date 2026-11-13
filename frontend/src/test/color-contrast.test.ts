@@ -1142,6 +1142,136 @@ describe('Primary and accent content in every color scheme', () => {
     }
   });
 
+  describe('Accessibility: sidebar active item text', () => {
+    const SURFACES = ['--color-base-100', '--color-base-200', '--color-base-300'];
+    const ACTIVE_RULES = ['.menu-item-active', '.menu-subitem-active'];
+    const TEXT_TOKEN = '--text-primary';
+    const lightTextBlock = blockBody(tailwindCss, ":root,\n[data-theme='light']");
+    const CUSTOM_BLOCK_SELECTOR = "\n[data-scheme='custom']";
+    // Surfaces do not depend on the scheme; any scheme resolves them from the theme blocks.
+    const SURFACE_SCHEME = 'blue';
+
+    /** Body of the first `selector { ... }` rule in tailwind.css. */
+    function ruleBody(selector: string): string {
+      const start = tailwindCss.indexOf(`${selector} {`);
+      expect(start, `${selector} rule found`).toBeGreaterThanOrEqual(0);
+      return tailwindCss.slice(start, tailwindCss.indexOf('}', start));
+    }
+
+    /** Tint fraction of the primary fill that the active rules put behind the text. */
+    function tintFraction(selector: string): number {
+      const match = /color-mix\(in oklch, var\(--color-primary\) (\d+)%, transparent\)/.exec(
+        ruleBody(selector)
+      );
+      expect(match, `${selector} tints --color-primary`).not.toBeNull();
+      return Number(match?.[1]) / 100;
+    }
+
+    /** Value of --text-primary for a fixed scheme in a theme, mirroring the cascade. */
+    function textPrimaryOf(scheme: string, theme: Theme): string {
+      const candidates = [
+        theme === 'dark' ? schemeBlock(scheme, 'dark') : null,
+        schemeBlock(scheme, 'light'),
+        theme === 'dark' ? darkBlock : lightTextBlock,
+      ];
+      for (const block of candidates) {
+        const value = block === null ? null : findVar(block, TEXT_TOKEN);
+        if (value !== null) {
+          return value;
+        }
+      }
+      throw new Error(`${TEXT_TOKEN} is not defined for ${scheme} ${theme}`);
+    }
+
+    /** Lowest ratio of `text` on the three surfaces and on the `fill` tint over each. */
+    function worstRatio(text: string, fill: string, theme: Theme, fraction: number): number {
+      const ratios = SURFACES.flatMap(surface => {
+        const base = colorOf(SURFACE_SCHEME, theme, surface);
+        return [
+          getContrastRatio(text, base),
+          getContrastRatio(text, applyOpacity(fill, base, fraction)),
+        ];
+      });
+      return Math.min(...ratios);
+    }
+
+    for (const selector of ACTIVE_RULES) {
+      it(`${selector} colours its text with ${TEXT_TOKEN} and keeps its tint`, () => {
+        const body = ruleBody(selector);
+        expect(body).toContain(`color: var(${TEXT_TOKEN});`);
+        expect(body).not.toMatch(/(^|[\s;])color:\s*var\(--color-primary\)/);
+        expect(tintFraction(selector)).toBeGreaterThan(0);
+      });
+    }
+
+    it('both active rules use the same tint', () => {
+      expect(tintFraction(ACTIVE_RULES[0])).toBe(tintFraction(ACTIVE_RULES[1]));
+    });
+
+    for (const scheme of FIXED_SCHEMES) {
+      for (const theme of ['light', 'dark'] as const) {
+        it(`${scheme} ${theme}: ${TEXT_TOKEN} meets AA on the surfaces and the active tint`, () => {
+          const fill = colorOf(scheme, theme, '--color-primary');
+          for (const selector of ACTIVE_RULES) {
+            const ratio = worstRatio(
+              textPrimaryOf(scheme, theme),
+              fill,
+              theme,
+              tintFraction(selector)
+            );
+            expect(ratio, `${scheme} ${theme} ${selector}`).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+          }
+        });
+      }
+    }
+
+    it('maps the custom scheme to the theme text colour', () => {
+      const body = blockBody(schemesCss, CUSTOM_BLOCK_SELECTOR);
+      expect(body).toMatch(/--text-primary:\s*var\(--color-base-content\);/);
+    });
+
+    it('custom scheme: base-content passes on the active tint for any primary color', () => {
+      const channel = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
+      const toHex = (n: number) => n.toString(16).padStart(2, '0');
+      for (const theme of ['light', 'dark'] as const) {
+        const text = colorOf(SURFACE_SCHEME, theme, '--color-base-content');
+        for (const r of channel) {
+          for (const g of channel) {
+            for (const b of channel) {
+              const fill = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+              for (const selector of ACTIVE_RULES) {
+                const ratio = worstRatio(text, fill, theme, tintFraction(selector));
+                expect(ratio, `${theme} ${fill} ${selector}`).toBeGreaterThanOrEqual(
+                  WCAG_AA_NORMAL
+                );
+              }
+            }
+          }
+        }
+      }
+    });
+
+    for (const scheme of FIXED_SCHEMES.filter(name => name !== 'blue')) {
+      it(`${scheme} defines ${TEXT_TOKEN} in its light and dark blocks`, () => {
+        for (const theme of ['light', 'dark'] as const) {
+          const block = schemeBlock(scheme, theme);
+          expect(block, `${scheme} ${theme} block`).not.toBeNull();
+          expect(
+            findVar(block ?? '', TEXT_TOKEN),
+            `${scheme} ${theme} ${TEXT_TOKEN}`
+          ).not.toBeNull();
+        }
+      });
+    }
+
+    it('section headers of the active section use the text token, not the fill', () => {
+      const file = join(srcDir, 'lib', 'desktop', 'layouts', 'CollapsibleNavSection.svelte');
+      const text = readFileSync(file, 'utf8');
+      expect(text).not.toContain('text-[var(--color-primary)]');
+      expect(text).toContain('text-[var(--text-primary)]');
+    });
+  });
+
   it('resolves color-mix against black and white', () => {
     expect(resolve('color-mix(in srgb, #ffffff 80%, black)')).toBe('#cccccc');
     expect(resolve('color-mix(in srgb, #000000 80%, white)')).toBe('#333333');

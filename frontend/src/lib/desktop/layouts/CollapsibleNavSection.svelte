@@ -111,7 +111,7 @@
         class={cn(
           menuItemBase,
           menuItemCollapsed,
-          routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
+          routeActive ? 'text-[var(--text-primary)]' : 'text-[var(--color-base-content)]/80',
           'hover:text-[var(--color-base-content)] hover:menu-hover',
           focusRing
         )}
@@ -183,7 +183,7 @@
       onclick={onToggleExpanded}
       class={cn(
         menuItemBase,
-        routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
+        routeActive ? 'text-[var(--text-primary)]' : 'text-[var(--color-base-content)]/80',
         'hover:text-[var(--color-base-content)] hover:menu-hover',
         focusRing
       )}
