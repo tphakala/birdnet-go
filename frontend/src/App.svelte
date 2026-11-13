@@ -141,9 +141,9 @@
   let appLoading = $derived(appState.loading);
   let appError = $derived(appState.error);
 
-  // The single writer of document.title: "<Page> - BirdNET-Go". While the shell is not shown
-  // (loading, or the load failed) only the app name is known. A title that equals its key has
-  // no translation, so it is not shown.
+  // The single writer of document.title: "<Page> - BirdNET-Go", with the code of a generic error
+  // page in front of the page. While the shell is not shown (loading, or the load failed) only
+  // the app name is known. A title that equals its key has no translation, so it is not shown.
   let documentTitle = $derived.by(() => {
     if (!appInitialized || appError) return APP_NAME;
     const showsLogin = requireLogin || loginRouteActive;
