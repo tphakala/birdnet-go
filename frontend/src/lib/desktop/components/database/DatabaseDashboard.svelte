@@ -750,8 +750,8 @@
           {queriesPerSecHistory}
         />
 
-        <!-- Middle row: engine-specific cards + detection rate -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <!-- Middle row: engine-specific cards -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {#if overview.engine === 'sqlite' && overview.sqlite}
             <DatabaseSqliteDetails details={overview.sqlite} />
             <DatabaseLocksWalCard details={overview.sqlite} />
@@ -759,13 +759,14 @@
             <DatabaseMysqlConnectionPool details={overview.mysql} />
             <DatabaseMysqlInnodbCard details={overview.mysql} />
           {/if}
-
-          <DatabaseDetectionRateCard
-            data={overview.detection_rate_24h ?? []}
-            engine={overview.engine}
-            mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
-          />
         </div>
+
+        <!-- Detection rate: full-width row so the chart can size to its container -->
+        <DatabaseDetectionRateCard
+          data={overview.detection_rate_24h ?? []}
+          engine={overview.engine}
+          mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
+        />
 
         <!-- Table breakdown -->
         <DatabaseTableBreakdown
