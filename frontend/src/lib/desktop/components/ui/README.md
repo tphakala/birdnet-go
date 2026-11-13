@@ -636,7 +636,7 @@ interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'class'> {
 
 - Measures overflow while collapsed, at mount, when the text or `lines` change and when the paragraph is resized, so the toggle follows the layout
 - Native button with `aria-expanded` and `aria-controls`; the visible label leads its accessible name, and `subject` tells toggles on several cards apart
-- A new `text` starts collapsed
+- Expansion belongs to the text that was expanded: any other `text` starts collapsed
 
 ---
 

@@ -18,7 +18,7 @@
   - Overflow is measured while collapsed, at mount, when text or lines change, when the
     paragraph is resized (sidebar toggled, window resized) and when a web font finishes loading,
     so the toggle appears or goes away with the layout.
-  - A new text starts collapsed, so a stale Show less never stays behind.
+  - Expansion belongs to the text that was expanded: any other text starts collapsed, so a stale Show less never stays behind.
 -->
 <script lang="ts">
   /* global ResizeObserver, FontFaceSet */
@@ -59,7 +59,7 @@
   let paragraph = $state<HTMLElement>();
   let toggleButton = $state<HTMLElement>();
   let overflowing = $state(false);
-  // The text that was expanded; any other text is collapsed, so a new text starts collapsed
+  // The text that was expanded; any other text is collapsed
   let expandedText = $state<string | null>(null);
   const expanded = $derived(expandedText === text);
 
