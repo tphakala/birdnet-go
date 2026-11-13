@@ -5,20 +5,6 @@
   regions (header, description, notices, details, footer) sit on the rows of ModelCardGrid
   through subgrid, so the regions line up across a row of cards whatever each card holds.
 
-  Props:
-  - entry: The catalog entry shown
-  - mode: 'installed' describes the installed variant and offers Optimize, Reinstall and
-    Remove; 'available' describes the recommended variant and offers Install
-  - regionNames: Region slug to localized region name
-  - busy: The action running on this card, or null. On an installed card 'install' is the
-    variant swap (Optimize)
-  - actionInFlight: True while any gallery action runs on any card
-  - pausedReasonId: id of the visible status line saying why actions are paused
-  - progress: Download progress of this card's running install, reinstall or swap
-  - optimizeAvailable: Installed mode: a better variant exists for this host
-  - onAction: Called with the action and the entry when an action button is used
-  - className: Classes for the article
-
   Behaviour:
   - No action button is natively disabled, so Tab always reaches it. While its own action runs,
     while another action runs, and for Install on an incompatible entry it is aria-disabled,
@@ -29,8 +15,25 @@
   - Must be a direct child of ModelCardGrid's grid: the card spans five of its rows.
 -->
 <script lang="ts" module>
+  import logoBirdnet from '$lib/assets/logos/logo-birdnet.png';
+  import logoGoogle from '$lib/assets/logos/logo-google.png';
+  import logoJyu from '$lib/assets/logos/logo-jyu.jpeg';
+
   export type ModelCardMode = 'installed' | 'available';
   export type ModelCardAction = 'install' | 'reinstall' | 'remove';
+
+  const MODEL_LOGOS: Record<string, string> = {
+    birdnet: logoBirdnet,
+    perch: logoGoogle,
+    bsg: logoJyu,
+  };
+
+  function getModelLogo(id: string): string | null {
+    for (const [prefix, logo] of Object.entries(MODEL_LOGOS)) {
+      if (id.startsWith(prefix)) return logo;
+    }
+    return null;
+  }
 </script>
 
 <script lang="ts">
@@ -54,10 +57,11 @@
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import ExpandableText from '$lib/desktop/components/ui/ExpandableText.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
-  import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
+  import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import type { CatalogEntry, CatalogVariant, DownloadProgress } from '$lib/types/models';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import { validateProtocolURL } from '$lib/utils/security';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import { generateId } from '$lib/utils/uuid';
   import {
@@ -66,12 +70,10 @@
     variantHardwareLabel,
   } from '$lib/utils/variantSelection';
 
-  import logoBirdnet from '$lib/assets/logos/logo-birdnet.png';
-  import logoGoogle from '$lib/assets/logos/logo-google.png';
-  import logoJyu from '$lib/assets/logos/logo-jyu.jpeg';
-
   interface Props {
+    /** The catalog entry shown. */
     entry: CatalogEntry;
+    /** 'installed' describes the installed variant and offers Optimize, Reinstall and Remove; 'available' describes the recommended variant and offers Install. */
     mode: ModelCardMode;
     /** Region slug to localized name, as ModelVariantPicker takes it. */
     regionNames: ReadonlyMap<string, string>;
@@ -85,9 +87,9 @@
     progress?: DownloadProgress | null;
     /** Installed mode: a better variant exists for this host. */
     optimizeAvailable?: boolean;
+    /** Called with the action and the entry when an action button is used. */
     // eslint-disable-next-line no-unused-vars -- the param names document the callback contract
     onAction: (action: ModelCardAction, entry: CatalogEntry) => void;
-    className?: string;
   }
 
   let {
@@ -100,17 +102,10 @@
     progress = null,
     optimizeAvailable = false,
     onAction,
-    className,
   }: Props = $props();
 
-  const MODEL_LOGOS: Record<string, string> = {
-    birdnet: logoBirdnet,
-    perch: logoGoogle,
-    bsg: logoJyu,
-  };
-
   /** Schemes an upstream link may use; anything else is shown as plain text. */
-  const LINK_PROTOCOLS = new Set(['http:', 'https:']);
+  const LINK_PROTOCOLS = ['http', 'https'];
 
   /** Lines of description shown before Show more. */
   const DESCRIPTION_LINES = 3;
@@ -120,29 +115,7 @@
   const titleId = generateId('model-card-title');
   const incompatibleNoticeId = generateId('model-card-incompatible');
 
-  function getModelLogo(id: string): string | null {
-    for (const [prefix, logo] of Object.entries(MODEL_LOGOS)) {
-      if (id.startsWith(prefix)) return logo;
-    }
-    return null;
-  }
-
-  /** The URL when it is an absolute http or https URL, else null. */
-  function safeLinkUrl(url: string | undefined): string | null {
-    if (!url) return null;
-    try {
-      return LINK_PROTOCOLS.has(new URL(url).protocol) ? url : null;
-    } catch {
-      return null;
-    }
-  }
-
-  // Render an entry-level incompatibility code (e.g. "backend.onnx_unavailable") through the
-  // same i18n reason path the variant picker uses, falling back to a generic localized line
-  // when the code is absent or has no translation, so a structured code never surfaces as a
-  // raw dotted string. The fallback is cause-neutral on purpose: it is only reached when the
-  // code is missing or unmapped, which is exactly when the specific cause is not known.
-  // Entry-level codes carry no interpolation args (unlike variant reasons).
+  // Localized text for an entry-level incompatibility code; a cause-neutral line when the code is absent or unmapped.
   function entryIncompatibleText(code: string | undefined): string {
     const fallback = t('analysis.gallery.entryIncompatible');
     return code ? translateReason(code, undefined, fallback) : fallback;
@@ -193,7 +166,11 @@
   }
 
   const logo = $derived(getModelLogo(entry.id));
-  const upstreamUrl = $derived(safeLinkUrl(entry.upstreamUrl));
+  const upstreamUrl = $derived(
+    entry.upstreamUrl && validateProtocolURL(entry.upstreamUrl, LINK_PROTOCOLS)
+      ? entry.upstreamUrl
+      : null
+  );
   const isPreview = $derived(entry.channel === CHANNEL_PREVIEW);
   const hasVariants = $derived((entry.variants ?? []).length > 0);
   const shownVariant = $derived(displayVariantFor(entry, mode));
@@ -206,6 +183,19 @@
   const hasNotices = $derived(showPreviewNotice || !entry.compatible || progress !== null);
   const showGeomodel = $derived(entry.hasGeomodel && entry.category !== 'geomodel');
   const showOptimize = $derived(mode === 'installed' && optimizeAvailable);
+  const license: { variant: StatusVariant; Icon: LucideIcon; note: string } = $derived(
+    entry.commercialUse
+      ? {
+          variant: 'success',
+          Icon: Shield,
+          note: t('analysis.gallery.license.commercialUseAllowed'),
+        }
+      : {
+          variant: 'neutral',
+          Icon: ShieldAlert,
+          note: t('analysis.gallery.license.nonCommercialOnly'),
+        }
+  );
 
   interface ActionSpec {
     action: ModelCardAction;
@@ -293,18 +283,18 @@
 
 {#snippet notice(
   tone: 'warning' | 'error',
-  Icon: LucideIcon,
   text: string,
   role: 'note' | 'status',
   id: string | undefined
 )}
+  {@const Icon = tone === 'error' ? XCircle : TriangleAlert}
   <div {id} class="model-card-notice" data-tone={tone} {role}>
     <Icon class="model-card-notice-icon size-4 shrink-0" aria-hidden="true" />
     <span>{text}</span>
   </div>
 {/snippet}
 
-<article class={cn('model-card', className)} aria-labelledby={titleId}>
+<article class="model-card" aria-labelledby={titleId}>
   <header class="model-card-header">
     {#if logo}
       <img
@@ -383,32 +373,15 @@
   {#if hasNotices}
     <div class="model-card-notices">
       {#if showPreviewNotice}
-        {@render notice(
-          'warning',
-          TriangleAlert,
-          t('analysis.gallery.preview.cardNotice'),
-          'note',
-          undefined
-        )}
+        {@render notice('warning', t('analysis.gallery.preview.cardNotice'), 'note', undefined)}
       {/if}
       {#if !entry.compatible}
-        {#if mode === 'installed'}
-          {@render notice(
-            'error',
-            XCircle,
-            entryIncompatibleText(entry.incompatibleReason),
-            'status',
-            undefined
-          )}
-        {:else}
-          {@render notice(
-            'warning',
-            TriangleAlert,
-            entryIncompatibleText(entry.incompatibleReason),
-            'status',
-            incompatibleNoticeId
-          )}
-        {/if}
+        {@render notice(
+          mode === 'installed' ? 'error' : 'warning',
+          entryIncompatibleText(entry.incompatibleReason),
+          'status',
+          incompatibleNoticeId
+        )}
       {/if}
       {#if progress}
         {#if progress.status === 'complete'}
@@ -477,27 +450,15 @@
       {/if}
       <dt>{t('analysis.gallery.license.license')}</dt>
       <dd class="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {#if entry.commercialUse}
-          <StatusPill
-            variant="success"
-            size="sm"
-            label={entry.license}
-            className="whitespace-nowrap"
-          >
-            {#snippet leadingIcon()}<Shield class="size-3" />{/snippet}
-          </StatusPill>
-          <span>{t('analysis.gallery.license.commercialUseAllowed')}</span>
-        {:else}
-          <StatusPill
-            variant="neutral"
-            size="sm"
-            label={entry.license}
-            className="whitespace-nowrap"
-          >
-            {#snippet leadingIcon()}<ShieldAlert class="size-3" />{/snippet}
-          </StatusPill>
-          <span>{t('analysis.gallery.license.nonCommercialOnly')}</span>
-        {/if}
+        <StatusPill
+          variant={license.variant}
+          size="sm"
+          label={entry.license}
+          className="whitespace-nowrap"
+        >
+          {#snippet leadingIcon()}<license.Icon class="size-3" />{/snippet}
+        </StatusPill>
+        <span>{license.note}</span>
       </dd>
     </dl>
     {#if showGeomodel}
