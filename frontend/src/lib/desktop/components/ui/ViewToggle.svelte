@@ -80,14 +80,13 @@
     background-color: color-mix(in srgb, var(--color-base-200) 50%, transparent);
   }
 
-  /* Inset ring: the group clips overflow, so an outline drawn outside the button would be cut off. */
+  /* Two-band inset ring: the group clips overflow, so an outline drawn outside the button would be
+     cut off. The outer band (text colour) and the inner band (primary content colour) differ from
+     each other, so one of them stands out against the segment and its neighbour in every state. */
   .view-toggle-btn:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-base-content);
     outline-offset: -2px;
-  }
-
-  .view-toggle-btn-active:focus-visible {
-    outline-color: var(--color-primary-content);
+    box-shadow: inset 0 0 0 4px var(--color-primary-content);
   }
 
   .view-toggle-btn-active {

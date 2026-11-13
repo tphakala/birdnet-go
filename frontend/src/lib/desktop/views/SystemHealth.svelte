@@ -599,7 +599,7 @@
           aria-describedby={running ? RUN_STATUS_ID : undefined}
           aria-label={t('health.refresh')}
           title={t('health.refresh')}
-          class="inline-flex items-center justify-center size-8 rounded-md transition-colors hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center size-8 rounded-md transition-colors hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
         >
           <RefreshCw class="size-4 {running ? 'animate-spin' : ''}" />
         </button>
@@ -627,10 +627,10 @@
               aria-disabled={running ? 'true' : undefined}
               aria-describedby={running ? RUN_STATUS_ID : undefined}
               onclick={() => selectWindow(w)}
-              class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed {selectedWindow ===
+              class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-base-content)] focus-visible:shadow-[inset_0_0_0_4px_var(--color-primary-content)] aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
-                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)] focus-visible:outline-[var(--color-primary-content)]'
-                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] focus-visible:outline-[var(--color-primary)]'}"
+                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
+                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
             >
               {t(`health.window.${w}`)}
             </button>

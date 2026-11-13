@@ -48,6 +48,19 @@ describe('DatabaseTableBreakdown sorting', () => {
     }
   });
 
+  it('draws the sort button focus ring inside the button so the scroll wrapper cannot clip it', () => {
+    renderTyped(DatabaseTableBreakdown, { props: { tables } });
+
+    // The table sits in an overflow-x-auto wrapper that cuts an outline drawn outside the button.
+    // Ring thickness on every side and its contrast are browser-only checks.
+    for (const field of ['name', 'row_count', 'size_bytes']) {
+      const cell = header(field);
+      expect(cell?.className).toContain('[&>button]:focus-visible:outline-2');
+      expect(cell?.className).toContain('[&>button]:focus-visible:-outline-offset-2');
+      expect(cell?.className).toContain('[&>button]:focus-visible:outline-[var(--color-primary)]');
+    }
+  });
+
   it('sorts a numeric column descending first and then toggles', async () => {
     renderTyped(DatabaseTableBreakdown, { props: { tables } });
 

@@ -100,17 +100,28 @@ describe('SystemHealth keyboard and run state', () => {
     await screen.findByText('health.metricFooter.allPassing');
 
     // The group keeps overflow-hidden for its rounded corners; an outside ring would be cut off.
-    // Ring visibility and contrast are browser-only checks.
+    // The ring has two bands, an outer outline in the text colour and an inner inset band in the
+    // primary content colour, so one of them stands out on any neighbouring fill. It stays at full
+    // strength while a run fades the control. Rendered contrast and clipping are browser-only checks.
     for (const radio of windowRadios()) {
       expect(radio).toHaveClass('focus-visible:-outline-offset-2');
       expect(radio).not.toHaveClass('focus-visible:outline-offset-2');
-      const checked = radio.getAttribute('aria-checked') === 'true';
+      expect(radio).toHaveClass('focus-visible:outline-[var(--color-base-content)]');
       expect(radio).toHaveClass(
-        checked
-          ? 'focus-visible:outline-[var(--color-primary-content)]'
-          : 'focus-visible:outline-[var(--color-primary)]'
+        'focus-visible:shadow-[inset_0_0_0_4px_var(--color-primary-content)]'
       );
+      expect(radio).toHaveClass('aria-disabled:focus-visible:opacity-100');
     }
+  });
+
+  it('keeps the Refresh focus ring at full strength while a run fades the button', async () => {
+    mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
+    render(SystemHealth);
+    await screen.findByText('health.metricFooter.allPassing');
+
+    expect(screen.getByRole('button', { name: 'health.refresh' })).toHaveClass(
+      'aria-disabled:focus-visible:opacity-100'
+    );
   });
 
   it('selects and focuses the next window on ArrowRight', async () => {
