@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/svelte';
+import { waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,6 +46,7 @@ vi.mock('./lib/stores/appState.svelte', async importOriginal => {
 });
 
 import App from './App.svelte';
+import { renderTyped } from './test/render-helpers';
 import { t } from './lib/i18n';
 import { appState } from './lib/stores/appState.svelte';
 import { navigation } from './lib/stores/navigation.svelte';
@@ -87,13 +88,13 @@ describe('App document title', () => {
 
   it('shows the page title followed by the app name', async () => {
     navigation.redirect(DASHBOARD_PATH);
-    render(App);
+    renderTyped(App);
     await waitFor(() => expect(document.title).toBe(`[navigation.dashboard] - ${APP_NAME}`));
   });
 
   it('follows client-side navigation', async () => {
     navigation.redirect(DASHBOARD_PATH);
-    render(App);
+    renderTyped(App);
     await waitFor(() => expect(document.title).toBe(`[navigation.dashboard] - ${APP_NAME}`));
 
     navigation.navigate(HELP_PATH);
@@ -105,7 +106,7 @@ describe('App document title', () => {
 
   it('restores the page title after leaving an error page', async () => {
     navigation.redirect(UNKNOWN_PATH);
-    render(App);
+    renderTyped(App);
     await waitFor(() => expect(document.title).toBe(`[pageTitle.pageNotFound] - ${APP_NAME}`));
 
     navigation.navigate(DASHBOARD_PATH);
@@ -115,14 +116,14 @@ describe('App document title', () => {
   it('titles the login screen for a visitor who is not allowed in', async () => {
     startup.security = { enabled: true, accessAllowed: false, privateMode: true };
     navigation.redirect(DASHBOARD_PATH);
-    render(App);
+    renderTyped(App);
     await waitFor(() => expect(document.title).toBe(`[auth.loginTitle] - ${APP_NAME}`));
   });
 
   it('shows only the app name when the app failed to load', async () => {
     startup.error = INIT_ERROR;
     navigation.redirect(DASHBOARD_PATH);
-    render(App);
+    renderTyped(App);
     // The title is the app name while loading too, so assert only once init has failed.
     await waitFor(() => expect(appState.error).toBe(INIT_ERROR));
     await tick();
@@ -133,7 +134,7 @@ describe('App document title', () => {
     // The test environment replaces window.location with a plain object, which App reads.
     window.location.search = `?error=${ERROR_CODE}`;
     navigation.redirect(UNKNOWN_PATH);
-    render(App);
+    renderTyped(App);
     await waitFor(() =>
       expect(document.title).toBe(`${ERROR_CODE} - [common.error] - ${APP_NAME}`)
     );
@@ -141,7 +142,7 @@ describe('App document title', () => {
 
   it('shows only the app name when the page title has no translation', async () => {
     navigation.redirect(ABOUT_PATH);
-    render(App);
+    renderTyped(App);
     await waitFor(() => expect(document.title).toBe(APP_NAME));
   });
 });
