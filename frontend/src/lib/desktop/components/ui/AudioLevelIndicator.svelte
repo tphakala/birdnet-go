@@ -662,7 +662,7 @@
   <button
     bind:this={buttonRef}
     onclick={() => (dropdownOpen = !dropdownOpen)}
-    class="w-full h-full relative focus:outline-hidden group"
+    class="w-full h-full relative rounded-full group focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
     aria-expanded={dropdownOpen}
     aria-haspopup="true"
     aria-label={selectedSource
