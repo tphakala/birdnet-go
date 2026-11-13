@@ -56,7 +56,7 @@
               </h4>
               <Badge variant="warning" size="sm" text={t('system.importExport.experimental')} />
             </div>
-            <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
+            <p class="text-sm text-muted mt-0.5">
               {t('system.importExport.birdnetPi.cardDescription')}
             </p>
             <p class="text-xs text-muted mt-1.5">

@@ -35,7 +35,7 @@
   <div class="flex flex-wrap gap-3">
     <button
       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-             bg-amber-500/15 text-amber-700 dark:text-amber-300
+             bg-amber-500/15 text-[var(--text-warning)]
              border border-amber-500/30
              hover:bg-amber-500/25 active:bg-amber-500/35
              disabled:opacity-50 disabled:cursor-not-allowed
