@@ -558,8 +558,8 @@
           '; }';
         doc.head.appendChild(newStyle);
 
-        // Update toolbar button colors
-        const toolbarBtns = doc.querySelectorAll('.toolbar-btn');
+        // Update toolbar button and hint colors
+        const toolbarBtns = doc.querySelectorAll('.toolbar-btn, .exit-hint');
         toolbarBtns.forEach((btn: Element) => {
           (btn as HTMLElement).style.color = th.foreground;
         });
