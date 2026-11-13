@@ -98,6 +98,34 @@ describe('radioGroupKeys', () => {
     expect(document.activeElement).toBe(radios[2]);
   });
 
+  it('skips a radio that is hidden or inert, or sits inside such an element', async () => {
+    const { radios } = setup(['a', 'b', 'c', 'd', 'e']);
+    radios[1].hidden = true;
+    radios[2].setAttribute('inert', '');
+    const wrapper = document.createElement('span');
+    wrapper.hidden = true;
+    radios[3].replaceWith(wrapper);
+    wrapper.appendChild(radios[3]);
+    radios[0].focus();
+
+    await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
+
+    expect(checkedLabel(radios)).toBe('e');
+    expect(document.activeElement).toBe(radios[4]);
+  });
+
+  it('skips a radio that cannot take focus, such as one hidden by CSS', async () => {
+    const { radios } = setup(['a', 'b', 'c']);
+    // A radio hidden by display:none ignores focus() in a browser; jsdom has no layout, so mimic it.
+    radios[1].focus = () => {};
+    radios[0].focus();
+
+    await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
+
+    expect(checkedLabel(radios)).toBe('c');
+    expect(document.activeElement).toBe(radios[2]);
+  });
+
   it('leaves selection and focus alone when every other radio is aria-disabled', async () => {
     const { radios } = setup(['a', 'b', 'c'], ['b', 'c']);
     radios[0].focus();

@@ -1,8 +1,9 @@
 import type { Action } from 'svelte/action';
-import { tick } from 'svelte';
 
 const RADIO_SELECTOR = '[role="radio"]';
 const UNAVAILABLE_SELECTOR = '[aria-disabled="true"], :disabled';
+/** A radio that is, or sits inside, a hidden or inert element cannot take focus. */
+const UNFOCUSABLE_SELECTOR = '[hidden], [inert]';
 
 /** Arrow keys mapped to the step they take through the group. */
 const KEY_STEP: ReadonlyMap<string, number> = new Map([
@@ -17,11 +18,12 @@ const KEY_STEP: ReadonlyMap<string, number> = new Map([
  * do not implement the keyboard pattern themselves.
  *
  * Arrow Right/Down and Left/Up select the next or previous radio (wrapping at
- * both ends), skipping any radio that is `aria-disabled="true"` or natively
- * disabled, then move focus to it. Selection goes through the radio's own click
- * handler, so any disabled-state suppression stays in the consumer. Arrows pressed
- * with Alt, Ctrl or Meta are left to the browser. When no other radio can be
- * selected the key does nothing.
+ * both ends), skipping any radio that is `aria-disabled="true"`, natively
+ * disabled, hidden, inert or otherwise unable to take focus. Focus moves to the
+ * radio first, and selection goes through that radio's own click handler, so any
+ * disabled-state suppression stays in the consumer. Arrows pressed with Alt, Ctrl
+ * or Meta are left to the browser. When no other radio can be selected the key
+ * does nothing.
  *
  * The consumer owns the roving tabindex: the checked radio has `tabindex="0"`
  * and the others `tabindex="-1"`, so the group is a single Tab stop.
@@ -45,9 +47,11 @@ export const radioGroupKeys: Action<HTMLElement> = node => {
       // at() counts a negative index from the end, so the remainder wraps in both directions.
       const candidate = radios.at((start + step * offset) % radios.length);
       if (!candidate || candidate.matches(UNAVAILABLE_SELECTOR)) continue;
+      if (candidate.closest(UNFOCUSABLE_SELECTOR)) continue;
+      // Focus first: a radio hidden by CSS ignores focus(), and selecting it would leave focus behind.
+      candidate.focus();
+      if (!candidate.matches(':focus')) continue;
       candidate.click();
-      // The click handler updates the roving tabindex; focus once the DOM reflects it.
-      void tick().then(() => candidate.focus());
       return;
     }
   }
