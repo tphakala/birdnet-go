@@ -63,7 +63,7 @@ describe('ViewToggle', () => {
     );
   });
 
-  it('has no accessibility violations', async () => {
+  it('has no Accessibility violations', async () => {
     const { container } = renderTyped(ViewToggle, {
       props: { view: 'table', onViewChange: vi.fn() },
     });

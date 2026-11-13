@@ -242,7 +242,7 @@ describe('SystemHealth keyboard and run state', () => {
     finish(report(TOTAL_CHECKS));
   });
 
-  it('has no accessibility violations', async () => {
+  it('has no Accessibility violations', async () => {
     mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
     const { container } = render(SystemHealth);
     await screen.findByText('health.metricFooter.allPassing');
