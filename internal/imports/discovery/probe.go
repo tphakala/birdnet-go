@@ -192,7 +192,12 @@ func hasExtractedTree(dir string) bool {
 		return false
 	}
 	defer func() { _ = root.Close() }()
-	byDate, err := root.Open(filepath.Join(extractedDirName, byDateDirName))
+	byDatePath := filepath.Join(extractedDirName, byDateDirName)
+	// Opening a FIFO without a writer blocks, so only a directory is opened.
+	if info, err := root.Stat(byDatePath); err != nil || !info.IsDir() {
+		return false
+	}
+	byDate, err := root.Open(byDatePath)
 	if err != nil {
 		return false
 	}
