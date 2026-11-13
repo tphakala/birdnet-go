@@ -62,7 +62,9 @@ export function createTerminalExitKeys(now: () => number = Date.now): TerminalEx
     const armedAt = escapeAt;
     escapeAt = null;
 
-    if (ev.key === KEY_ESCAPE && !hasCommandModifier) {
+    // Only a plain Escape arms: Shift+Escape is another key, while Shift+Tab
+    // still releases below.
+    if (ev.key === KEY_ESCAPE && !hasCommandModifier && !ev.shiftKey) {
       escapeAt = now();
       return true;
     }

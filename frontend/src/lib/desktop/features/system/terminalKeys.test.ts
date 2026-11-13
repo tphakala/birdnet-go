@@ -84,6 +84,16 @@ describe('createTerminalExitKeys', () => {
     expect(handler(key('keydown', 'Tab'))).toBe(true);
   });
 
+  it('does not treat Shift+Escape as the exit prefix, and it drops an armed Escape', () => {
+    const { handler } = setup();
+    expect(handler(key('keydown', 'Escape', { shiftKey: true }))).toBe(true);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+
+    handler(key('keydown', 'Escape'));
+    handler(key('keydown', 'Escape', { shiftKey: true }));
+    expect(handler(key('keydown', 'Tab', { shiftKey: true }))).toBe(true);
+  });
+
   it.each(['ctrlKey', 'altKey', 'metaKey'] as const)(
     'does not release Tab combined with %s',
     modifier => {
