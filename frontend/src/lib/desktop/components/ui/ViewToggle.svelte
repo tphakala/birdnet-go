@@ -80,6 +80,16 @@
     background-color: color-mix(in srgb, var(--color-base-200) 50%, transparent);
   }
 
+  /* Inset ring: the group clips overflow, so an outline drawn outside the button would be cut off. */
+  .view-toggle-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+
+  .view-toggle-btn-active:focus-visible {
+    outline-color: var(--color-primary-content);
+  }
+
   .view-toggle-btn-active {
     background-color: var(--color-primary);
     color: var(--color-primary-content);

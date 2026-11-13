@@ -87,7 +87,7 @@
               activeField={sortColumn}
               direction={sortDirection}
               onSort={toggleSort}
-              className="py-2 px-3 text-xs font-medium text-muted select-none"
+              className="p-0 text-xs font-medium text-muted select-none [&>button]:w-full [&>button]:px-3 [&>button]:py-2"
             />
           {/each}
           <th scope="col" class="text-left py-2 px-3 text-xs font-medium text-muted">

@@ -94,6 +94,25 @@ describe('SystemHealth keyboard and run state', () => {
     expect(stops[0]).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('draws the focus ring inside each window radio so the clipped group cannot hide it', async () => {
+    mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
+    render(SystemHealth);
+    await screen.findByText('health.metricFooter.allPassing');
+
+    // The group keeps overflow-hidden for its rounded corners; an outside ring would be cut off.
+    // Ring visibility and contrast are browser-only checks.
+    for (const radio of windowRadios()) {
+      expect(radio).toHaveClass('focus-visible:-outline-offset-2');
+      expect(radio).not.toHaveClass('focus-visible:outline-offset-2');
+      const checked = radio.getAttribute('aria-checked') === 'true';
+      expect(radio).toHaveClass(
+        checked
+          ? 'focus-visible:outline-[var(--color-primary-content)]'
+          : 'focus-visible:outline-[var(--color-primary)]'
+      );
+    }
+  });
+
   it('selects and focuses the next window on ArrowRight', async () => {
     mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
     render(SystemHealth);

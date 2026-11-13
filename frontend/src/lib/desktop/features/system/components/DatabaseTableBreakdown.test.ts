@@ -34,6 +34,20 @@ describe('DatabaseTableBreakdown sorting', () => {
     expect(screen.queryByTestId('sort-engine')).not.toBeInTheDocument();
   });
 
+  it('makes the sort button fill the whole header cell', () => {
+    renderTyped(DatabaseTableBreakdown, { props: { tables } });
+
+    // The th carries no padding and the button takes it, so a click anywhere in the cell sorts.
+    // jsdom has no layout: the rendered size is a browser-only check.
+    for (const field of ['name', 'row_count', 'size_bytes']) {
+      const cell = header(field);
+      expect(cell).toHaveClass('p-0');
+      expect(cell?.className).toContain('[&>button]:w-full');
+      expect(cell?.className).toContain('[&>button]:py-2');
+      expect(cell?.className).toContain('[&>button]:px-3');
+    }
+  });
+
   it('sorts a numeric column descending first and then toggles', async () => {
     renderTyped(DatabaseTableBreakdown, { props: { tables } });
 
