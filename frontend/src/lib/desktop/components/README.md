@@ -116,6 +116,7 @@ This folder contains **shared components** used across the application. Feature-
 - `DatePicker.svelte` - Date picker input
 - `EmptyState.svelte` - Empty state display
 - `ErrorAlert.svelte` - Error message display
+- `ExpandableText.svelte` - Text clamped to a few lines with a Show more / Show less toggle that appears only when the text is cut off
 - `Input.svelte` - Generic input field
 - `LanguageSelector.svelte` - Language selection dropdown
 - `LoadingSpinner.svelte` - Loading animation
@@ -184,6 +185,8 @@ The following components are located in their feature directories:
 
 ### Settings (`features/settings/components/`)
 
+- `ModelCard.svelte` - Model gallery card (installed or available) whose regions line up across a row through subgrid
+- `ModelCardGrid.svelte` - Model gallery grid with columns sized by its own width
 - `SettingsCard.svelte` - Settings display card
 - `SettingsSection.svelte` - Settings section wrapper
 
