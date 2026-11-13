@@ -1,4 +1,4 @@
-const HOST_BREAK_AFTER = /[.\-:]/;
+const HOST_SEGMENT = /[^.\-:]*[.\-:]|[^.\-:]+/g;
 
 /**
  * Splits a host string into segments that each end with a `.`, `-` or `:`, so a renderer can
@@ -6,14 +6,5 @@ const HOST_BREAK_AFTER = /[.\-:]/;
  * An empty string gives no segments; a string without separators gives one.
  */
 export function splitHostSegments(host: string): string[] {
-  const segments: string[] = [];
-  let start = 0;
-  for (let i = 0; i < host.length; i++) {
-    if (HOST_BREAK_AFTER.test(host[i])) {
-      segments.push(host.slice(start, i + 1));
-      start = i + 1;
-    }
-  }
-  if (start < host.length) segments.push(host.slice(start));
-  return segments;
+  return host.match(HOST_SEGMENT) ?? [];
 }

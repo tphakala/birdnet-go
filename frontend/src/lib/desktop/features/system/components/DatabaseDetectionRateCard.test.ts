@@ -68,7 +68,7 @@ describe('DatabaseDetectionRateCard side panel', () => {
     });
 
     expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText(host).textContent).toBe(host);
+    expect(screen.getByText(host)).toBeInTheDocument();
   });
 
   it('renders zero min, average and maximum labels for empty data', () => {

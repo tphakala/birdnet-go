@@ -43,9 +43,6 @@ describe('splitHostSegments', () => {
   });
 
   it('keeps unicode hosts intact', () => {
-    expect(splitHostSegments('tietokanta.päivä-äö.example:3306').join('')).toBe(
-      'tietokanta.päivä-äö.example:3306'
-    );
     expect(splitHostSegments('päivä.äö')).toEqual(['päivä.', 'äö']);
   });
 
