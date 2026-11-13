@@ -1202,6 +1202,13 @@ describe('Primary and accent content in every color scheme', () => {
       }
     }
 
+    it('lists every scheme that schemes.css defines, so none escapes the loops above', () => {
+      const defined = new Set(
+        [...schemesCss.matchAll(/\[data-scheme=["']?([^"'\]]+)["']?\]/g)].map(m => m[1])
+      );
+      expect([...defined].sort()).toEqual([...FIXED_SCHEMES, 'custom'].sort());
+    });
+
     for (const scheme of FIXED_SCHEMES.filter(name => name !== 'blue')) {
       it(`${scheme} defines ${TEXT_TOKEN} in its light and dark blocks`, () => {
         for (const theme of ['light', 'dark'] as const) {
