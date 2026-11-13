@@ -124,7 +124,7 @@ describe('SystemHealth keyboard and run state', () => {
     for (const radio of windowRadios()) {
       expect(radio).not.toBeDisabled();
       expect(radio).toHaveAttribute('aria-disabled', 'true');
-      expect(radio.closest('[role="radiogroup"]')).toHaveAttribute('aria-describedby', describedBy);
+      expect(radio).toHaveAttribute('aria-describedby', describedBy);
     }
 
     finish(report(TOTAL_CHECKS));

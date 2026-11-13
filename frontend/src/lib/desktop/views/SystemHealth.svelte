@@ -625,6 +625,7 @@
               aria-checked={selectedWindow === w}
               tabindex={selectedWindow === w ? 0 : -1}
               aria-disabled={running ? 'true' : undefined}
+              aria-describedby={running ? RUN_STATUS_ID : undefined}
               onclick={() => selectWindow(w)}
               class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
