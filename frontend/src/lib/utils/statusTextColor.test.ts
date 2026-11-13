@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { textColorFor, NEUTRAL_TEXT_COLOR as NEUTRAL } from './statusTextColor';
+import { textColorFor } from './statusTextColor';
+
+const NEUTRAL = 'var(--color-base-content)';
 
 describe('textColorFor', () => {
   it.each([

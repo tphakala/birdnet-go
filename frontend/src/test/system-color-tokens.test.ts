@@ -42,6 +42,7 @@ const MIGRATED_FILES = [
   'lib/desktop/features/import-export/pages/ImportExportPage.svelte',
   'lib/desktop/features/import-export/components/ImportActivityCard.svelte',
   'lib/desktop/features/import-export/components/ImportCountTile.svelte',
+  'lib/desktop/layouts/DesktopSidebar.svelte',
   'lib/desktop/features/system/components/RestartCard.svelte',
 ];
 
@@ -139,13 +140,15 @@ function isTooFaded(percent: number): boolean {
   return percent > 0 && percent < FADED_TEXT_MIN_PERCENT;
 }
 
+// One alternation so the leftmost comment wins: a /* inside a line comment, or a // inside a block
+// comment, stays part of that comment. Block and line comments must start a line or follow
+// whitespace (a line comment may also follow ;), so a URL, a protocol relative href or a glob in
+// a string is not taken for one.
+const COMMENT = /<!--[\s\S]*?-->|(?<=^|\s)\/\*[\s\S]*?\*\/|(?<=^|[\s;])\/\/.*$/gm;
+
 /** Removes HTML, block and line comments, keeping every newline so line numbers stay true. */
 function stripComments(source: string): string {
-  const blank = (comment: string) => comment.replace(/[^\n]/g, '');
-  return source
-    .replace(/<!--[\s\S]*?-->/g, blank)
-    .replace(/\/\*[\s\S]*?\*\//g, blank)
-    .replace(/(?<![:\w])\/\/.*$/gm, '');
+  return source.replace(COMMENT, comment => comment.replace(/[^\n]/g, ''));
 }
 
 /** Colors written outside the tokens, with their line numbers. */
@@ -265,6 +268,33 @@ describe('System page colors', () => {
     ['a hidden element', 'class="opacity-0"'],
   ])('passes %s', (_name, source) => {
     expect(findRawColors(source)).toEqual([]);
+  });
+
+  it.each([
+    ['a protocol relative href', '<a href="//cdn.x/a" class="opacity-50">', ['1: opacity-50']],
+    ['an https URL', 'class="opacity-50" href="https://x.y"', ['1: opacity-50']],
+    [
+      'a glob in a line comment',
+      '// see src/*.ts\n<p class="opacity-50"/>\n/* c */',
+      ['2: opacity-50'],
+    ],
+    [
+      'a glob in a string',
+      'const g = \'a/**/*.ts\';\n<p class="opacity-50"/>\n/* c */',
+      ['2: opacity-50'],
+    ],
+    [
+      'a line below a multi line comment',
+      '<!--\n a\n -->\n<p class="opacity-50"/>',
+      ['4: opacity-50'],
+    ],
+    [
+      'a line below a multi line block comment',
+      '/*\n a\n*/\n<p class="opacity-50"/>',
+      ['4: opacity-50'],
+    ],
+  ])('keeps hits and line numbers next to %s', (_name, source, hits) => {
+    expect(findRawColors(source)).toEqual(hits);
   });
 
   it('PALETTE lists every palette Tailwind ships', () => {

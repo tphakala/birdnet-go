@@ -1,5 +1,5 @@
 /** Neutral text colour, also the fallback for a fill that has no text token. */
-export const NEUTRAL_TEXT_COLOR = 'var(--color-base-content)';
+const NEUTRAL_TEXT_COLOR = 'var(--color-base-content)';
 
 /** The text token for each status fill; the fills are for backgrounds, borders and dots. */
 const TEXT_TOKEN_FOR_FILL: ReadonlyMap<string, string> = new Map([
