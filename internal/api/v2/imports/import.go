@@ -495,24 +495,20 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 	return id, nil
 }
 
-// resolveAudioSourceDir returns the directory that holds the BirdNET-Pi audio
-// tree of the source database. It is the root the importer looks the clips up
-// under: "Extracted/By_Date/<date>/<common name>/<file>".
+// resolveAudioSourceDir returns the directory a db-audio import looks its
+// clips up under, as "Extracted/By_Date/<date>/<common name>/<file>".
 //
-// BirdNET-Pi does not keep the audio tree next to the database: the database
-// lives in ~/BirdNET-Pi/scripts and the clips in ~/BirdSongs, so the database
-// directory alone does not find them. The search is bounded
-// (discovery.ResolveAudioRoot) and falls back to the database directory when no
-// audio tree is found, which keeps the engine's existing "audio source
-// directory unavailable" and "source clip not found" behaviour.
-//
-// bound is the directory the search must stay inside (see audioSearchBound);
-// the database directory itself is always inside it, so the fallback is too.
+// BirdNET-Pi keeps its database in ~/BirdNET-Pi/scripts and its clips in
+// ~/BirdSongs, so discovery.ResolveAudioRoot searches the database directory
+// and two levels above it, inside bound (see audioSearchBound). When no audio
+// tree is found the database directory is returned, which is inside bound:
+// the import then reports each clip as "source clip not found" and still
+// imports the detections.
 func (c *Handler) resolveAudioSourceDir(dbPath, bound string) string {
 	dbDir := filepath.Dir(dbPath)
 	audioRoot, found := discovery.ResolveAudioRoot(dbPath, bound)
 	if !found {
-		c.LogWarnIfEnabled("import: no BirdNET-Pi audio tree found next to the source database, its clips will be missing",
+		c.LogWarnIfEnabled("import: no BirdNET-Pi audio tree found for the source database, its clips will be missing",
 			logger.String("source_db", dbPath),
 			logger.String("audio_source_dir", dbDir))
 		return dbDir
@@ -536,7 +532,8 @@ func (c *Handler) containerImportRoot() string {
 // audioSearchBound returns the directory the BirdNET-Pi audio-root search of an
 // import must stay inside, so a db-audio import never copies clips from outside
 // the source the user was allowed to import:
-//   - a staged import (stagingDir != "") is bounded by its staging directory;
+//   - a staged import (stagingDir != "") is bounded by its staging directory, so
+//     the search does not climb into the shared staging parent;
 //   - a container install is bounded by the import source root, the same root
 //     resolveImportSourcePath contains the database path in;
 //   - a native install returns "" (unbounded), because a native source path is
