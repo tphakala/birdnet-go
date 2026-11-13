@@ -53,6 +53,16 @@ func TestResolveAudioRoot(t *testing.T) {
 			want: "home/BirdNET-Pi/scripts",
 		},
 		{
+			name: "BirdSongs child wins over its own level",
+			dirs: []string{"home/BirdNET-Pi/scripts/BirdSongs/" + audioRootTestTree, "home/BirdNET-Pi/scripts/" + audioRootTestTree},
+			want: "home/BirdNET-Pi/scripts/BirdSongs",
+		},
+		{
+			name: "BirdSongs child wins over its own level at the third level",
+			dirs: []string{"home/BirdSongs/" + audioRootTestTree, "home/" + audioRootTestTree},
+			want: "home/BirdSongs",
+		},
+		{
 			name: "tree past the third level is not found",
 			dirs: []string{"home/BirdSongs/" + audioRootTestTree},
 			db:   "home/nested/BirdNET-Pi/scripts/birds.db",
@@ -61,6 +71,18 @@ func TestResolveAudioRoot(t *testing.T) {
 			name: "empty By_Date does not win",
 			dirs: []string{"home/BirdNET-Pi/scripts/Extracted/By_Date", "home/BirdSongs/" + audioRootTestTree},
 			want: "home/BirdSongs",
+		},
+		{
+			name: "empty trees at every nearer candidate do not win",
+			dirs: []string{
+				"home/BirdNET-Pi/scripts/BirdSongs/Extracted/By_Date",
+				"home/BirdNET-Pi/scripts/Extracted/By_Date",
+				"home/BirdNET-Pi/BirdSongs/Extracted/By_Date",
+				"home/BirdNET-Pi/Extracted/By_Date",
+				"home/BirdSongs/Extracted/By_Date",
+				"home/" + audioRootTestTree,
+			},
+			want: "home",
 		},
 		{
 			name:       "Extracted link leaving the candidate does not win",
