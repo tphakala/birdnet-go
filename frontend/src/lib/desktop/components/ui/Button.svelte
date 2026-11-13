@@ -74,7 +74,7 @@
     warning:
       'bg-[var(--color-warning)]/15 text-[var(--text-warning)] border border-[var(--color-warning)]/25 hover:bg-[var(--color-warning)]/25 active:bg-[var(--color-warning)]/35',
     error:
-      'bg-[var(--color-error)]/15 text-[var(--text-error)] border border-[var(--color-error)]/25 hover:bg-[var(--color-error)]/25 active:bg-[var(--color-error)]/35',
+      'bg-[var(--color-error)]/15 text-[var(--text-error)] border border-[var(--color-error)]/25 hover:border-[var(--color-error)]/50 active:border-[var(--color-error)]/70',
     ghost:
       'bg-transparent text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] active:bg-[var(--color-base-300)]',
   };

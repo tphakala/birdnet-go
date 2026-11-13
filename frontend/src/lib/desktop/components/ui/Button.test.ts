@@ -10,6 +10,9 @@ import { opacityClasses } from '../../../../test/class-helpers';
 
 const VARIANTS = ['default', 'primary', 'success', 'warning', 'error', 'ghost'] as const;
 
+/** Highest error fill opacity, in percent, at which the computed text contrast stays 4.5:1 or better. */
+const MAX_ERROR_STATE_FILL_PERCENT = 16;
+
 describe('Button', () => {
   it('binds ref to the rendered button element', async () => {
     const holder: { el?: HTMLButtonElement | null } = {};
@@ -134,6 +137,24 @@ describe('Button', () => {
       expect(blocked).not.toHaveClass(`text-[var(--color-${variant})]/50`);
     }
   );
+
+  // Computed from the theme tokens on base-100, base-200 and base-300 in both themes: the error
+  // text is 4.5:1 or better at the 15% resting fill and below it from 17% up on the dark
+  // theme's base-300, so hover and press show their state through the border, not the fill
+  it('shows the error hover and press state through the border, not a darker fill', () => {
+    const button = render(ButtonHarness, { props: { variant: 'error' } }).container.querySelector(
+      'button'
+    );
+
+    const fillAlphas = [...(button?.classList ?? [])]
+      .filter(c => /^(hover|active):bg-\[var\(--color-error\)\]\/\d+$/.test(c))
+      .map(c => Number(c.split('/').pop()));
+    expect(fillAlphas.filter(alpha => alpha > MAX_ERROR_STATE_FILL_PERCENT)).toEqual([]);
+    expect(button).toHaveClass(
+      'hover:border-[var(--color-error)]/50',
+      'active:border-[var(--color-error)]/70'
+    );
+  });
 
   it('treats a boolean aria-disabled like the string form', () => {
     render(ButtonHarness, { props: { variant: 'primary', 'aria-disabled': true } });
