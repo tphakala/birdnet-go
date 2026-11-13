@@ -1259,12 +1259,11 @@ describe('Primary and accent content in every color scheme', () => {
       expect(blockBody(schemesCss, "\n[data-scheme='custom']")).toMatch(
         /--text-primary:\s*var\(--color-base-content\);/
       );
-      const fills = GRID_COLORS;
-      expect(fills).toHaveLength(CHANNEL_STEPS.length ** 3);
+      expect(GRID_COLORS).toHaveLength(CHANNEL_STEPS.length ** 3);
       for (const theme of ['light', 'dark'] as const) {
         const text = colorOf(SURFACE_SCHEME, theme, '--color-base-content');
         const surfaces = surfacesOf(theme);
-        for (const fill of fills) {
+        for (const fill of GRID_COLORS) {
           expect(worstRatio(text, fill, surfaces), `${theme} ${fill}`).toBeGreaterThanOrEqual(
             WCAG_AA_NORMAL
           );
