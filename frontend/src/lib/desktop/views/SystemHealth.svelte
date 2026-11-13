@@ -222,6 +222,17 @@
     }
   }
 
+  /** The text token for a status fill: badge text uses it, the tinted background keeps the fill. */
+  const TEXT_TOKEN_FOR_FILL: Record<string, string> = {
+    'var(--color-error)': 'var(--text-error)',
+    'var(--color-warning)': 'var(--text-warning)',
+    'var(--color-success)': 'var(--text-success)',
+  };
+
+  function textColorFor(fill: string): string {
+    return TEXT_TOKEN_FOR_FILL[fill] ?? fill;
+  }
+
   function formatTimeAgo(isoTime: string): string {
     const now = Date.now();
     const then = new Date(isoTime).getTime();
@@ -756,7 +767,7 @@
                             <td class="px-3 py-1.5">
                               <span
                                 class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                                style:color={levelColor(group.level)}
+                                style:color={textColorFor(levelColor(group.level))}
                                 style:background="color-mix(in srgb, {levelColor(group.level)} 10%, transparent)"
                               >
                                 {group.level}
@@ -819,7 +830,7 @@
                             <span class="text-muted">{t('health.detail.pattern')}:</span>
                             <span
                               class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={patternColor(pattern)}
+                              style:color={textColorFor(patternColor(pattern))}
                               style:background="color-mix(in srgb, {patternColor(pattern)} 10%, transparent)"
                             >
                               {patternLabel(pattern)}
@@ -832,7 +843,7 @@
                             <span class="text-muted">{t('health.detail.velocity')}:</span>
                             <span
                               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={velocityColor(velocity)}
+                              style:color={textColorFor(velocityColor(velocity))}
                               style:background="color-mix(in srgb, {velocityColor(velocity)} 10%, transparent)"
                             >
                               {#if velocity === VELOCITY_INCREASING}

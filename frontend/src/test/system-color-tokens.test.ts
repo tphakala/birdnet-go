@@ -17,7 +17,9 @@
  * 5. faded body text: text-[var(--color-base-content)]/NN, text-base-content/NN or a plain
  *    opacity-NN with NN under FADED_TEXT_MIN_PERCENT, which drops muted text below 4.5:1 (use
  *    text-muted). Variant forms such as disabled:opacity-50 pass: they style a disabled
- *    control, which WCAG exempts.
+ *    control, which WCAG exempts;
+ * 6. a status fill reaching the text through a style: `style:color` that is not a text token, base
+ *    content or textColorFor(...), and `color: var(--color-success|warning|error|info)`.
  *
  * Not scanned: white, black, transparent, colour functions (rgb(), hsl(), oklch()), CSS
  * named colours, and any file not in the list.
@@ -34,6 +36,7 @@ const MIGRATED_FILES = [
   'lib/desktop/views/SystemHealth.svelte',
   'lib/desktop/features/system/components/DatabaseSqliteDetails.svelte',
   'lib/desktop/features/import-export/pages/ImportExportPage.svelte',
+  'lib/desktop/features/import-export/components/ImportActivityCard.svelte',
 ];
 
 /** Body text at or above this opacity (percent) still reaches 4.5:1 on the base surfaces. */
@@ -80,6 +83,12 @@ const PALETTE_CLASS = new RegExp(
 const PALETTE_VAR = new RegExp(`--color-(?:${PALETTE_ALTERNATION})-\\d{2,3}\\b`, 'g');
 // text-[var(--color-success)] and its warning, error and info siblings, also behind variants
 const STATUS_FILL_TEXT = /(?<![\w-])text-\[var\(--color-(?:success|warning|error|info)\)\]/g;
+// A Svelte style:color directive must be a text token, base content or the textColorFor helper;
+// a function result such as levelColor(...) hands the status fill to the text
+const STYLE_COLOR_NOT_TOKEN =
+  /style:color=(?:\{(?!textColorFor\()|["'](?!var\(--(?:text-|color-base-content)))/g;
+// color: var(--color-success) in a style attribute (background-color does not match)
+const STYLE_COLOR_FILL = /(?<![\w-])color:\s*var\(--color-(?:success|warning|error|info)\)/g;
 // Unprefixed faded text: base-content with an opacity suffix, or a plain opacity utility (also as
 // a Svelte class: directive). A variant prefix (disabled:, hover:) does not match.
 const FADED_BASE_CONTENT =
@@ -94,6 +103,9 @@ function findRawColors(source: string): string[] {
     for (const match of line.matchAll(PALETTE_CLASS)) hits.push(`${index + 1}: ${match[0]}`);
     for (const match of line.matchAll(PALETTE_VAR)) hits.push(`${index + 1}: ${match[0]}`);
     for (const match of line.matchAll(STATUS_FILL_TEXT)) hits.push(`${index + 1}: ${match[0]}`);
+    for (const match of line.matchAll(STYLE_COLOR_NOT_TOKEN))
+      hits.push(`${index + 1}: ${match[0]}`);
+    for (const match of line.matchAll(STYLE_COLOR_FILL)) hits.push(`${index + 1}: ${match[0]}`);
     for (const match of [...line.matchAll(FADED_BASE_CONTENT), ...line.matchAll(FADED_OPACITY)]) {
       const percent = Number(match[1]);
       if (percent > 0 && percent < FADED_TEXT_MIN_PERCENT) hits.push(`${index + 1}: ${match[0]}`);
@@ -128,6 +140,9 @@ describe('System page colors', () => {
     ['a palette Tailwind added later', 'class="bg-mauve-500"'],
     ['a palette variable in an arbitrary value', 'class="text-[var(--color-red-500)]"'],
     ['a palette variable in a style', 'style="color: var(--color-amber-400)"'],
+    ['a style color from a fill helper', 'style:color={levelColor(group.level)}'],
+    ['a style color set to a fill', 'style:color="var(--color-success)"'],
+    ['a style attribute color set to a fill', 'style="color: var(--color-warning)"'],
     ['a success fill used as text', 'class="text-[var(--color-success)]"'],
     ['a warning fill used as text', 'class="text-xs text-[var(--color-warning)]"'],
     ['an error fill used as text behind a variant', 'class="hover:text-[var(--color-error)]"'],
@@ -155,6 +170,13 @@ describe('System page colors', () => {
       'a status fill as a background',
       'class="bg-[var(--color-success)]/10 border-[var(--color-error)]"',
     ],
+    ['a style color from the text token helper', 'style:color={textColorFor(levelColor(level))}'],
+    ['a style color set to a text token', 'style:color="var(--text-error)"'],
+    [
+      'a fill in a style background',
+      'style:background="color-mix(in srgb, {fill} 10%, transparent)"',
+    ],
+    ['a fill in a background-color style', 'style="background-color: var(--color-success)"'],
     ['a status text token', 'class="text-[var(--text-success)] text-[var(--text-warning)]"'],
     ['text at the faded limit', 'class="text-[var(--color-base-content)]/70 opacity-70"'],
     ['a variant opacity', 'class="disabled:opacity-50 hover:opacity-80 opacity-100"'],
