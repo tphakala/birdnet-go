@@ -8,10 +8,11 @@
   interface Props {
     data: HourlyCount[];
     color?: string;
-    height?: number;
   }
 
-  let { data = [], color = '#f59e0b', height = DETECTION_RATE_CHART_HEIGHT }: Props = $props();
+  let { data = [], color = '#f59e0b' }: Props = $props();
+
+  const height = DETECTION_RATE_CHART_HEIGHT;
 
   // The chart fills its container; bind:clientWidth is measured in the browser only
   let containerWidth = $state(0);

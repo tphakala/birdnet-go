@@ -19,8 +19,4 @@ describe('clampChartWidth', () => {
     expect(clampChartWidth(Number.NaN)).toBe(DETECTION_RATE_CHART_MIN_WIDTH);
     expect(clampChartWidth(Number.POSITIVE_INFINITY)).toBe(DETECTION_RATE_CHART_MIN_WIDTH);
   });
-
-  it('honours a custom minimum', () => {
-    expect(clampChartWidth(50, 120)).toBe(120);
-  });
 });
