@@ -7,7 +7,6 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/imports/discovery"
-	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 const (
@@ -86,11 +85,7 @@ func (c *Handler) ValidateImportSource(ctx echo.Context) error {
 		if req.SourcePath == "" {
 			return ctx.JSON(http.StatusOK, validateResponse{Valid: false, Reason: reasonInvalidPath})
 		}
-		root := c.importSourceRoot
-		if root == "" {
-			root = sysinfo.DefaultExternalMountPath
-		}
-		resolved, err := resolveImportSourcePath(root, req.SourcePath)
+		resolved, err := resolveImportSourcePath(c.containerImportRoot(), req.SourcePath)
 		if err != nil {
 			return ctx.JSON(http.StatusOK, validateResponse{Valid: false, Reason: reasonInvalidPath})
 		}
