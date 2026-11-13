@@ -121,6 +121,51 @@
     const key = radioGroupKey(a);
     return key !== null && key === radioGroupKey(b);
   }
+
+  // Elements a press can land on that take focus: the opener candidates
+  const PRESSABLE_SELECTOR = 'button, a[href], input, select, textarea, summary, [tabindex]';
+
+  // The focusable element of the last press, while focus has not moved since and no press
+  // landed on plain content after it. Safari and iPadOS do not focus a clicked button, so
+  // document.activeElement is body when a dialog opens from one; this is then the opener.
+  let pressedElement: HTMLElement | SVGElement | null = null;
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener(
+      'pointerdown',
+      event => {
+        const target = event.target;
+        pressedElement =
+          target instanceof HTMLElement || target instanceof SVGElement
+            ? target.closest<HTMLElement | SVGElement>(PRESSABLE_SELECTOR)
+            : null;
+      },
+      true
+    );
+    document.addEventListener(
+      'focusin',
+      () => {
+        pressedElement = null;
+      },
+      true
+    );
+  }
+
+  /**
+   * The element to return focus to when a dialog opens: the focused element, or the
+   * pressed one when focus is on body (or nowhere). Null when focus is inside the
+   * dialog itself, which keeps the earlier opener.
+   */
+  function pickOpener(dialog: HTMLElement | undefined): HTMLElement | SVGElement | null {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement || active instanceof SVGElement)) return null;
+    if (dialog?.contains(active)) return null;
+    const nothingFocused = active === document.body || active === document.documentElement;
+    if (nothingFocused && pressedElement?.isConnected && !dialog?.contains(pressedElement)) {
+      return pressedElement;
+    }
+    return active;
+  }
 </script>
 
 <script lang="ts">
@@ -522,13 +567,8 @@
   $effect(() => {
     if (isOpen) {
       // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
-      const active = document.activeElement;
-      if (
-        (active instanceof HTMLElement || active instanceof SVGElement) &&
-        !untrack(() => dialogElement)?.contains(active)
-      ) {
-        stackEntry.opener = active;
-      }
+      const opener = pickOpener(untrack(() => dialogElement));
+      if (opener) stackEntry.opener = opener;
       stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();

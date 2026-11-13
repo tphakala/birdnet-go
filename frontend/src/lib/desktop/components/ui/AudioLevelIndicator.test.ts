@@ -163,6 +163,15 @@ describe('AudioLevelIndicator start and stop', () => {
     vi.restoreAllMocks();
   });
 
+  it('shows a focus ring on the header button when focused with the keyboard', async () => {
+    await renderWithSources();
+
+    const trigger = screen.getByRole('button', { name: /media\.audio\.levelFor/ });
+
+    expect(trigger).toHaveClass('focus-visible:outline-2', 'focus-visible:outline-offset-2');
+    expect(trigger).not.toHaveClass('focus:outline-hidden');
+  });
+
   it('reports a failed HLS.js load and hides the message', async () => {
     mocks.tryLoadHls.mockResolvedValue(null);
     mocks.canPlayHls.mockReturnValue(false);

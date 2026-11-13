@@ -1219,6 +1219,72 @@ describe('Modal', () => {
       expect(bar).toHaveFocus();
       svg.remove();
     });
+
+    // Safari and iPadOS do not focus a clicked button: activeElement stays body, so the
+    // element the user pressed is the only record of where the dialog was opened from.
+    describe('opened by a press that did not focus the button', () => {
+      it('returns focus to the pressed button', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        expect(document.body).toHaveFocus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Toggle lower')).toHaveFocus();
+      });
+
+      it('leaves focus on body when the last press hit plain page content', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        await fireEvent.pointerDown(document.body);
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(document.body).toHaveFocus();
+      });
+
+      it('prefers the focused element over an earlier press', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Page button'));
+        button('Toggle lower').focus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Toggle lower')).toHaveFocus();
+      });
+
+      it('forgets the press once focus moved to another element', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Page button'));
+        button('Toggle upper').focus();
+        button('Toggle upper').blur();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(document.body).toHaveFocus();
+      });
+
+      it('keeps the press on a control that then lost focus without a focus move', async () => {
+        renderTyped(ModalToggleHost, {});
+        button('Page button').focus();
+        await fireEvent.pointerDown(button('Page button'));
+        button('Page button').blur();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Page button')).toHaveFocus();
+      });
+    });
   });
 
   describe('with a searchable dropdown inside', () => {
