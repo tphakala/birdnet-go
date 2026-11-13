@@ -6,7 +6,7 @@ describe('clampChartWidth', () => {
     expect(clampChartWidth(640)).toBe(640);
   });
 
-  it('rounds fractional widths down so the chart never exceeds its container', () => {
+  it('rounds fractional widths down to whole pixels', () => {
     expect(clampChartWidth(640.9)).toBe(640);
   });
 
