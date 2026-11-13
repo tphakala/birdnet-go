@@ -195,6 +195,7 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     sidebarTest.render({ currentRoute: '/ui/dashboard' });
 
     expect(screen.getByLabelText('navigation.viewOnGithubAriaLabel')).toHaveClass(
+      'text-muted',
       'hover:underline'
     );
   });
