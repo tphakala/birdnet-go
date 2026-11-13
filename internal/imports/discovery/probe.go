@@ -2,13 +2,10 @@ package discovery
 
 import (
 	"context"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
 )
 
@@ -28,10 +25,6 @@ const (
 	// BirdNET-Pi keeps its database in ~/BirdNET-Pi/scripts and writes its
 	// clips to ~/BirdSongs, two levels above the database directory.
 	audioRootSearchLevels = 3
-	// audioRootCandidatesPerLevel is the number of candidates every searched
-	// level contributes: the level itself and a "BirdSongs" directory next to
-	// it.
-	audioRootCandidatesPerLevel = 2
 )
 
 // audioDirNames are sibling directory names that indicate a BirdNET-Pi audio
@@ -112,7 +105,12 @@ func probeCandidate(ctx context.Context, dbPath string, kind Kind) SourceCandida
 	return c
 }
 
-// guessAudioDir returns the first sibling audio directory next to dbPath, or "".
+// guessAudioDir returns the first "BirdSongs" or "Extracted" directory in the
+// directory of dbPath, or "". The guess is the audio directory itself and is
+// only looked for beside the database: it becomes the --audio argument of
+// import-stage, which accepts only a sibling of the database. It is not the
+// audio root of an import. ResolveAudioRoot finds that: the directory that
+// contains "Extracted", searched up to audioRootSearchLevels levels.
 func guessAudioDir(dbPath string) string {
 	parent := filepath.Dir(dbPath)
 	for _, name := range audioDirNames {
@@ -125,82 +123,45 @@ func guessAudioDir(dbPath string) string {
 }
 
 // ResolveAudioRoot returns the directory that holds the BirdNET-Pi audio tree
-// of the database at dbPath, and whether such a directory was found.
+// of the database at dbPath, and whether one was found. The result is the
+// directory that contains "Extracted", because the importer looks a clip up
+// as "Extracted/By_Date/<date>/<common name>/<file>" under it.
 //
-// The returned directory is the one that CONTAINS the "Extracted" directory,
-// because a clip is looked up as
-// "Extracted/By_Date/<date>/<common name>/<file>" relative to that root.
+// The search covers audioRootSearchLevels levels, nearest first, starting at
+// the database directory. Each level contributes two candidates: its
+// "BirdSongs" child, then the level itself. The first candidate with a
+// non-empty "Extracted/By_Date" directory wins (see hasExtractedTree).
 //
-// The search starts at the database's own directory and walks up at most
-// audioRootSearchLevels levels. At every level the level itself and a
-// "BirdSongs" directory next to it are candidates, because BirdNET-Pi keeps
-// its database in ~/BirdNET-Pi/scripts and writes its clips to ~/BirdSongs.
-// The first candidate that holds an "Extracted/By_Date" tree wins.
+// bound, when not empty, is the directory the import may read from. A
+// candidate is skipped unless its symlink-resolved path lies inside the
+// symlink-resolved bound, and nothing is found when bound cannot be
+// resolved. An empty bound leaves the search unbounded.
 //
-// A candidate only counts when the tree is readable inside it, which is
-// checked with the same os.Root sandbox the importer opens the audio root
-// with: a tree that is only reachable through a symlink leaving the
-// candidate does not win, and the search continues with the next candidate.
-//
-// bound, when not empty, is the directory the caller allows the import to
-// read from: the import source root of a container install, or the staging
-// directory of a staged import. The search then never leaves it: the walk
-// stops at the first level outside bound, and a candidate that resolves
-// outside bound (for example a "BirdSongs" symlink pointing elsewhere) is
-// skipped. Both checks compare symlink-resolved paths. When bound cannot be
-// resolved, no candidate is trusted and nothing is found. An empty bound
-// leaves the search unbounded, which is the native install case where the
-// user may import from any path the service user can read.
-//
-// Symlinks are not resolved in the result, so the returned root is the path
-// that was found and not a copy of it. The importer opens that path as an
-// os.Root, which contains every lookup inside it.
+// dbPath must be absolute; a relative path finds nothing. The result is the
+// candidate path as built, with its symlinks unresolved.
 func ResolveAudioRoot(dbPath, bound string) (string, bool) {
-	resolvedBound := ""
+	if !filepath.IsAbs(dbPath) {
+		return "", false
+	}
 	if bound != "" {
-		var err error
-		resolvedBound, err = filepath.EvalSymlinks(bound)
+		resolved, err := filepath.EvalSymlinks(bound)
 		if err != nil {
 			return "", false
 		}
+		bound = resolved
 	}
-	for _, candidate := range audioRootCandidates(dbPath, resolvedBound) {
-		if resolvedBound != "" && !resolvesWithin(resolvedBound, candidate) {
-			continue
-		}
-		if !hasExtractedTree(candidate) {
-			continue
-		}
-		return candidate, true
-	}
-	return "", false
-}
-
-// audioRootCandidates returns the directories that may hold the BirdNET-Pi
-// audio tree of dbPath, in search order. Every candidate is a directory that is
-// expected to contain the "Extracted" directory.
-//
-// When resolvedBound is not empty (it must already be symlink-resolved), the
-// walk stops at the first level that does not resolve inside it, so no
-// candidate is taken from above the bound.
-func audioRootCandidates(dbPath, resolvedBound string) []string {
-	candidates := make([]string, 0, audioRootSearchLevels*audioRootCandidatesPerLevel)
 	level := filepath.Dir(dbPath)
 	for range audioRootSearchLevels {
-		if resolvedBound != "" && !resolvesWithin(resolvedBound, level) {
-			break
+		for _, candidate := range []string{filepath.Join(level, birdSongsDirName), level} {
+			if (bound == "" || resolvesWithin(bound, candidate)) && hasExtractedTree(candidate) {
+				return candidate, true
+			}
 		}
-		// A "BirdSongs" directory holds the "Extracted" tree itself, while an
-		// "Extracted" directory next to the database is the tree itself, so the
-		// level that holds it is the root.
-		candidates = append(candidates, filepath.Join(level, birdSongsDirName), level)
-		parent := filepath.Dir(level)
-		if parent == level {
-			break
-		}
-		level = parent
+		// At the filesystem root Dir returns the root again, so the remaining
+		// levels repeat the same two candidates.
+		level = filepath.Dir(level)
 	}
-	return candidates
+	return "", false
 }
 
 // resolvesWithin reports whether path, after its symlinks are resolved, lies
@@ -218,87 +179,24 @@ func resolvesWithin(resolvedBound, path string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// hasExtractedTree reports whether dir holds a BirdNET-Pi "Extracted/By_Date"
-// clip tree.
-//
-// The tree is looked up through an os.Root, the same sandbox the importer
-// opens the audio root with, so the answer is the answer the importer gets: a
-// tree that only exists through a symlink leaving dir is not found, and the
-// search continues with the next candidate.
-//
-// The tree must also be usable, not only present: the By_Date directory must
-// be searchable (isTraversable), so a tree the service user can see but not
-// enter is rejected and the search continues with the next candidate instead
-// of selecting a root whose every clip would then be a miss.
+// hasExtractedTree reports whether dir holds a non-empty "Extracted/By_Date"
+// directory. The lookup goes through an os.Root, as the importer's clip
+// lookups do, so a tree that is only reachable through a symlink leaving dir
+// does not count. One entry is read: an empty skeleton must not win over a
+// populated tree further up, and a large By_Date is never listed. Whether
+// the clips below are readable is left to the import, which counts a clip it
+// cannot read as a miss.
 func hasExtractedTree(dir string) bool {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return false
 	}
 	defer func() { _ = root.Close() }()
-	byDate := filepath.Join(extractedDirName, byDateDirName)
-	info, err := root.Stat(byDate)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	return isTraversable(root, byDate) && hasReachableDateDir(root, byDate)
-}
-
-// dateDirProbeBatch is how many By_Date entries are read at a time while
-// looking for a reachable date directory.
-const dateDirProbeBatch = 64
-
-// hasReachableDateDir reports whether the By_Date directory rel inside root is
-// empty or holds at least one date directory the importer can enter. Clips
-// live one level further down (By_Date/<date>/<species>/<clip>), so a tree
-// whose date directories are all closed to the service user, such as a copy
-// that kept another user's 0700 modes, would make every clip a miss; such a
-// tree is rejected and the search continues with the next candidate.
-//
-// One reachable date directory is enough. A single closed directory in an
-// otherwise readable tree costs only the clips inside it, which the import
-// reports as misses, while rejecting the whole tree for it would lose every
-// clip. Entries that are not directories (a stray file, a broken symlink) are
-// ignored, and the scan stops at the first reachable date directory.
-func hasReachableDateDir(root *os.Root, rel string) bool {
-	dir, err := root.Open(rel)
+	byDate, err := root.Open(filepath.Join(extractedDirName, byDateDirName))
 	if err != nil {
 		return false
 	}
-	defer func() { _ = dir.Close() }()
-	empty := true
-	for {
-		entries, readErr := dir.ReadDir(dateDirProbeBatch)
-		for _, entry := range entries {
-			empty = false
-			dateRel := filepath.Join(rel, entry.Name())
-			info, statErr := root.Stat(dateRel)
-			if statErr == nil && info.IsDir() && isTraversable(root, dateRel) {
-				return true
-			}
-		}
-		if readErr != nil {
-			// io.EOF ends the listing. Any other error means the importer
-			// could not list the tree either.
-			return empty && errors.Is(readErr, io.EOF)
-		}
-	}
-}
-
-// traversalProbeName is a child name no clip tree contains. Looking it up
-// tells whether a directory can be searched without listing it or touching
-// any of its real entries.
-const traversalProbeName = ".birdnet-go-traversal-probe"
-
-// isTraversable reports whether the clips under the directory rel inside root
-// can be reached. It looks up a child name that does not exist through root,
-// the same os.Root the importer opens clips with: "not found" means the lookup
-// got inside the directory, anything else (permission denied) means the
-// importer could not open a clip there either. os.Root opens every directory
-// on a path, so this needs the same read and search permission the clip reads
-// need, no more. The result does not depend on any real entry, so a broken
-// symlink among the clips cannot reject the tree.
-func isTraversable(root *os.Root, rel string) bool {
-	_, err := root.Lstat(filepath.Join(rel, traversalProbeName))
-	return errors.Is(err, fs.ErrNotExist)
+	defer func() { _ = byDate.Close() }()
+	names, err := byDate.Readdirnames(1)
+	return err == nil && len(names) > 0
 }

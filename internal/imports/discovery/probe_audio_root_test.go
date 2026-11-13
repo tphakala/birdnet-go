@@ -3,6 +3,7 @@
 package discovery
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,438 +12,128 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Clip path components of the synthetic BirdNET-Pi audio tree used by the
-// tests: the clips live in Extracted/By_Date/<date>/<common name>/<file>.
 const (
-	audioRootTestDate    = "2024-01-01"
-	audioRootTestComName = "Great Tit"
+	// audioRootTestTree is a non-empty BirdNET-Pi clip tree: one date directory
+	// inside Extracted/By_Date is enough to make By_Date hold an entry.
+	audioRootTestTree = "Extracted/By_Date/2024-01-01"
+	// audioRootTestDB is the database path of a BirdNET-Pi installation,
+	// relative to the temporary base directory.
+	audioRootTestDB = "home/BirdNET-Pi/scripts/birds.db"
 )
 
-// TestResolveAudioRoot covers the bounded search for the BirdNET-Pi audio
-// tree. The database directory is only one of the candidates: BirdNET-Pi keeps
-// its database in ~/BirdNET-Pi/scripts and writes its clips to ~/BirdSongs, so
-// the audio root is not always next to birds.db.
-//
-// A candidate only counts when the tree is readable inside it. An "Extracted"
-// link that leaves the candidate therefore does not make the candidate the
-// audio root: the importer reads the clips through an os.Root sandbox, and a
-// tree outside that sandbox is not readable.
+// TestResolveAudioRoot covers the search for the BirdNET-Pi audio tree.
+// BirdNET-Pi keeps its database in ~/BirdNET-Pi/scripts and writes its clips to
+// ~/BirdSongs, so the audio root is not always next to birds.db. All paths in
+// the table are relative to a temporary base directory.
 func TestResolveAudioRoot(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		// dirs are the directories, relative to the home directory, that build
-		// the synthetic tree.
+		// dirs are the directories that build the synthetic tree.
 		dirs []string
-		// dbPath is the database path relative to the home directory.
-		dbPath string
-		// link is a symbolic link relative to the home directory, or "" when the
-		// fixture has none.
-		link string
-		// linkTarget is the target of that link, relative to the directory that
-		// holds the link.
+		// link and linkTarget describe one symbolic link, "" for none.
+		link       string
 		linkTarget string
-		// want is the expected audio root relative to the home directory, or
-		// "" when no audio tree is expected to be found.
+		// db is the database path, audioRootTestDB when empty.
+		db string
+		// bound is the directory the search may not leave, "" for unbounded.
+		bound string
+		// want is the expected audio root, "" when none is expected.
 		want string
 	}{
 		{
-			name:   "clips in the database directory",
-			dirs:   []string{"BirdNET-Pi/scripts/Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   "BirdNET-Pi/scripts",
+			name: "real BirdNET-Pi layout",
+			dirs: []string{"home/BirdSongs/" + audioRootTestTree},
+			want: "home/BirdSongs",
 		},
 		{
-			name:   "BirdSongs in the database directory",
-			dirs:   []string{"BirdNET-Pi/scripts/BirdSongs/Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   "BirdNET-Pi/scripts/BirdSongs",
+			name: "nearest tree wins",
+			dirs: []string{"home/BirdNET-Pi/scripts/" + audioRootTestTree, "home/BirdSongs/" + audioRootTestTree},
+			want: "home/BirdNET-Pi/scripts",
 		},
 		{
-			name:   "BirdSongs in the parent of the database directory",
-			dirs:   []string{"BirdNET-Pi/BirdSongs/Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   "BirdNET-Pi/BirdSongs",
+			name: "tree past the third level is not found",
+			dirs: []string{"home/BirdSongs/" + audioRootTestTree},
+			db:   "home/nested/BirdNET-Pi/scripts/birds.db",
 		},
 		{
-			name:   "BirdSongs next to the BirdNET-Pi installation",
-			dirs:   []string{"BirdSongs/Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   "BirdSongs",
+			name: "empty By_Date does not win",
+			dirs: []string{"home/BirdNET-Pi/scripts/Extracted/By_Date", "home/BirdSongs/" + audioRootTestTree},
+			want: "home/BirdSongs",
 		},
 		{
-			// The tree is one level above the last searched level, so the
-			// bounded search does not reach it and the caller falls back to
-			// the database directory.
-			name:   "BirdSongs one level past the searched depth is not found",
-			dirs:   []string{"BirdSongs/Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "nested/BirdNET-Pi/scripts/birds.db",
-			want:   "",
+			name:       "Extracted link leaving the candidate does not win",
+			dirs:       []string{"home/BirdSongs/" + audioRootTestTree},
+			link:       "home/BirdNET-Pi/scripts/Extracted",
+			linkTarget: "home/BirdSongs/Extracted",
+			want:       "home/BirdSongs",
 		},
 		{
-			name:   "Extracted next to the BirdNET-Pi installation",
-			dirs:   []string{"Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   ".",
+			name:       "symlinked BirdSongs is returned unresolved",
+			dirs:       []string{"home-other/BirdSongs/" + audioRootTestTree},
+			link:       "home/BirdSongs",
+			linkTarget: "home-other/BirdSongs",
+			want:       "home/BirdSongs",
 		},
 		{
-			name:   "no audio tree anywhere",
-			dirs:   []string{"BirdNET-Pi/scripts"},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   "",
+			name:       "BirdSongs link leaving a bound that is a string prefix of the target",
+			dirs:       []string{"home-other/BirdSongs/" + audioRootTestTree},
+			link:       "home/BirdSongs",
+			linkTarget: "home-other/BirdSongs",
+			bound:      "home",
 		},
 		{
-			name:   "Extracted without By_Date is not an audio tree",
-			dirs:   []string{"Extracted"},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			want:   "",
+			name:  "tree in the parent of the bound is not found",
+			dirs:  []string{"home/BirdSongs/" + audioRootTestTree},
+			bound: "home/BirdNET-Pi",
 		},
 		{
-			name:   "an Extracted link that leaves the candidate is not an audio tree",
-			dirs:   []string{"BirdSongs/Extracted/By_Date/" + audioRootTestDate + "/" + audioRootTestComName},
-			dbPath: "BirdNET-Pi/scripts/birds.db",
-			link:   "BirdNET-Pi/scripts/Extracted",
-			// The link leaves the database directory and points at the real
-			// tree, so it looks like an audio tree to an unsandboxed lookup.
-			linkTarget: "../../BirdSongs/Extracted",
-			want:       "BirdSongs",
+			name:       "symlinked bound",
+			dirs:       []string{"home/BirdSongs/" + audioRootTestTree},
+			link:       "mnt",
+			linkTarget: "home",
+			bound:      "mnt",
+			want:       "home/BirdSongs",
+		},
+		{
+			name:  "unresolvable bound is not treated as unbounded",
+			dirs:  []string{"home/BirdNET-Pi/scripts/" + audioRootTestTree},
+			bound: "missing",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			home := t.TempDir()
+			base := t.TempDir()
 			for _, dir := range tt.dirs {
-				require.NoError(t, os.MkdirAll(filepath.Join(home, filepath.FromSlash(dir)), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
 			}
-			dbPath := filepath.Join(home, filepath.FromSlash(tt.dbPath))
-			require.NoError(t, os.MkdirAll(filepath.Dir(dbPath), 0o755))
-			require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
+			db := filepath.Join(base, cmp.Or(tt.db, audioRootTestDB))
+			require.NoError(t, os.MkdirAll(filepath.Dir(db), 0o755))
+			require.NoError(t, os.WriteFile(db, nil, 0o600))
 			if tt.link != "" {
-				linkPath := filepath.Join(home, filepath.FromSlash(tt.link))
-				if err := os.Symlink(tt.linkTarget, linkPath); err != nil {
-					t.Skipf("cannot create symlink: %v", err)
+				linkPath := filepath.Join(base, tt.link)
+				require.NoError(t, os.MkdirAll(filepath.Dir(linkPath), 0o755))
+				if err := os.Symlink(filepath.Join(base, tt.linkTarget), linkPath); err != nil {
+					t.Skipf("symlinks are not available: %v", err)
 				}
 			}
 
-			// Every fixture lives inside home, so bounding the search by home
-			// must give the same answer as the unbounded search.
-			for _, bound := range []string{"", home} {
-				got, found := ResolveAudioRoot(dbPath, bound)
-				if tt.want == "" {
-					assert.False(t, found, "no audio tree is expected for %q (bound %q)", tt.name, bound)
-					assert.Empty(t, got, "no audio root is expected for %q (bound %q)", tt.name, bound)
-					continue
-				}
-				require.True(t, found, "an audio tree is expected for %q (bound %q)", tt.name, bound)
-				assert.Equal(t, filepath.Join(home, filepath.FromSlash(tt.want)), got,
-					"the audio root of %q (bound %q)", tt.name, bound)
+			bound := ""
+			if tt.bound != "" {
+				bound = filepath.Join(base, tt.bound)
 			}
+			got, found := ResolveAudioRoot(db, bound)
+
+			if tt.want == "" {
+				assert.False(t, found)
+				assert.Empty(t, got)
+				return
+			}
+			assert.True(t, found)
+			assert.Equal(t, filepath.Join(base, tt.want), got)
 		})
 	}
-}
-
-// TestResolveAudioRoot_SymlinkedBirdSongs verifies that a BirdSongs directory
-// that is reached through a symlink is returned as the path that was found:
-// it is neither resolved to its target nor copied somewhere else. The importer
-// opens that path as an os.Root, so the root has to stay the directory that
-// holds the clip tree.
-func TestResolveAudioRoot_SymlinkedBirdSongs(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	outside := t.TempDir()
-	clipDir := filepath.Join(outside, birdSongsDirName, extractedDirName, byDateDirName,
-		audioRootTestDate, audioRootTestComName)
-	require.NoError(t, os.MkdirAll(clipDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(clipDir, "great_tit.wav"), []byte("clip"), 0o644))
-
-	// The control file sits next to the audio root, outside it. It exists, so
-	// a refused lookup proves the sandbox refuses the path and not that the
-	// file is missing.
-	secret := filepath.Join(outside, "secret.txt")
-	require.NoError(t, os.WriteFile(secret, []byte("secret"), 0o600))
-
-	link := filepath.Join(home, birdSongsDirName)
-	if err := os.Symlink(filepath.Join(outside, birdSongsDirName), link); err != nil {
-		t.Skipf("cannot create symlink: %v", err)
-	}
-	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
-	require.NoError(t, os.MkdirAll(dbDir, 0o755))
-	dbPath := filepath.Join(dbDir, "birds.db")
-	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
-
-	got, found := ResolveAudioRoot(dbPath, "")
-	require.True(t, found, "the symlinked audio tree must be found")
-	assert.Equal(t, link, got, "the symlink path is the audio root: it is not resolved and not copied")
-
-	// The root stays a sandbox: the clip tree is reachable inside it, while a
-	// lookup that leaves the root is refused.
-	root, err := os.OpenRoot(got)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, root.Close()) })
-
-	_, err = root.Stat(filepath.Join(extractedDirName, byDateDirName))
-	require.NoError(t, err, "the audio tree is reachable inside the root")
-
-	// The control file exists next to the root, so the sandbox is what
-	// refuses the lookup: the root is the BirdSongs directory, so ".." from
-	// inside it is the directory that holds the control file.
-	_, err = os.Stat(secret)
-	require.NoError(t, err, "the control file exists outside the root")
-
-	_, err = root.Stat(filepath.Join("..", "secret.txt"))
-	require.Error(t, err, "os.Root must refuse a lookup that leaves the root")
-}
-
-// TestResolveAudioRoot_Bound verifies that a bounded search never selects an
-// audio tree outside the bound: the import source root of a container install
-// or the staging directory of a staged import. Without that bound a database
-// at <root>/birds.db would make <root>/../BirdSongs a candidate, and a
-// db-audio import could copy clips from outside the mount the user is allowed
-// to import from.
-func TestResolveAudioRoot_Bound(t *testing.T) {
-	t.Parallel()
-
-	mkTree := func(t *testing.T, dir string) {
-		t.Helper()
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, extractedDirName, byDateDirName,
-			audioRootTestDate, audioRootTestComName), 0o755))
-	}
-	mkDB := func(t *testing.T, path string) {
-		t.Helper()
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, []byte("birds.db"), 0o600))
-	}
-
-	t.Run("a tree above the bound is not found", func(t *testing.T) {
-		t.Parallel()
-		home := t.TempDir()
-		mount := filepath.Join(home, "mount")
-		mkTree(t, filepath.Join(home, birdSongsDirName))
-		dbPath := filepath.Join(mount, "birds.db")
-		mkDB(t, dbPath)
-
-		// The unbounded search climbs out of the mount and finds the tree,
-		// which proves the fixture would be found without the bound.
-		got, found := ResolveAudioRoot(dbPath, "")
-		require.True(t, found, "the unbounded search reaches the tree above the mount")
-		assert.Equal(t, filepath.Join(home, birdSongsDirName), got)
-
-		got, found = ResolveAudioRoot(dbPath, mount)
-		assert.False(t, found, "the bounded search must not leave the mount")
-		assert.Empty(t, got)
-	})
-
-	t.Run("a BirdSongs link that leaves the bound is skipped", func(t *testing.T) {
-		t.Parallel()
-		mount := t.TempDir()
-		outside := t.TempDir()
-		mkTree(t, filepath.Join(outside, birdSongsDirName))
-		if err := os.Symlink(filepath.Join(outside, birdSongsDirName),
-			filepath.Join(mount, birdSongsDirName)); err != nil {
-			t.Skipf("cannot create symlink: %v", err)
-		}
-		dbPath := filepath.Join(mount, "scripts", "birds.db")
-		mkDB(t, dbPath)
-
-		got, found := ResolveAudioRoot(dbPath, mount)
-		assert.False(t, found, "a candidate that resolves outside the bound must be skipped")
-		assert.Empty(t, got)
-	})
-
-	t.Run("a tree inside the bound is found through a symlinked bound", func(t *testing.T) {
-		t.Parallel()
-		base := t.TempDir()
-		realDir := filepath.Join(base, "real")
-		mkTree(t, filepath.Join(realDir, birdSongsDirName))
-		dbPath := filepath.Join(realDir, "BirdNET-Pi", "scripts", "birds.db")
-		mkDB(t, dbPath)
-		boundLink := filepath.Join(base, "external")
-		if err := os.Symlink(realDir, boundLink); err != nil {
-			t.Skipf("cannot create symlink: %v", err)
-		}
-
-		got, found := ResolveAudioRoot(dbPath, boundLink)
-		require.True(t, found, "the bound is compared after its symlinks are resolved")
-		assert.Equal(t, filepath.Join(realDir, birdSongsDirName), got)
-	})
-
-	t.Run("a bound that does not exist finds nothing", func(t *testing.T) {
-		t.Parallel()
-		home := t.TempDir()
-		mkTree(t, home)
-		dbPath := filepath.Join(home, "birds.db")
-		mkDB(t, dbPath)
-
-		got, found := ResolveAudioRoot(dbPath, filepath.Join(home, "missing"))
-		assert.False(t, found, "an unresolvable bound trusts no candidate")
-		assert.Empty(t, got)
-	})
-}
-
-// TestResolveAudioRoot_SkipsUnreadableTree verifies that a tree the service
-// user cannot traverse is not selected: the search goes on to the next
-// candidate, here the BirdSongs directory next to the installation.
-func TestResolveAudioRoot_SkipsUnreadableTree(t *testing.T) {
-	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("permission bits do not restrict root")
-	}
-
-	home := t.TempDir()
-	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
-	locked := filepath.Join(dbDir, extractedDirName, byDateDirName)
-	require.NoError(t, os.MkdirAll(filepath.Join(locked, audioRootTestDate), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
-		audioRootTestDate, audioRootTestComName), 0o755))
-	dbPath := filepath.Join(dbDir, "birds.db")
-	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
-
-	// Read but no search permission: the entries can be listed but not entered.
-	require.NoError(t, os.Chmod(locked, 0o600))
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate))
-
-	got, found := ResolveAudioRoot(dbPath, home)
-	require.True(t, found, "the readable tree must be found")
-	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
-		"an untraversable tree next to the database must be skipped")
-}
-
-// TestResolveAudioRoot_SearchOnlyTreeIsRejected verifies that a By_Date
-// directory the service user can enter but not list is rejected, and the
-// search moves on to the next candidate. The importer opens clips through an
-// os.Root, which opens every directory on the path and so needs read
-// permission: in a search-only tree every clip read would fail.
-func TestResolveAudioRoot_SearchOnlyTreeIsRejected(t *testing.T) {
-	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("permission bits do not restrict root")
-	}
-
-	home := t.TempDir()
-	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
-	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
-	require.NoError(t, os.MkdirAll(filepath.Join(byDate, audioRootTestDate, audioRootTestComName), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
-		audioRootTestDate, audioRootTestComName), 0o755))
-	dbPath := filepath.Join(dbDir, "birds.db")
-	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
-
-	// Search but no read permission: entries cannot be listed, only entered.
-	require.NoError(t, os.Chmod(byDate, 0o311))
-	t.Cleanup(func() { _ = os.Chmod(byDate, 0o755) })
-
-	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate))
-
-	got, found := ResolveAudioRoot(dbPath, home)
-	require.True(t, found, "the next, readable tree must be found")
-	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
-		"a search-only tree the importer cannot read is skipped")
-}
-
-// TestResolveAudioRoot_BrokenEntryDoesNotRejectTree verifies that a dangling
-// symlink inside By_Date does not make an otherwise usable tree look
-// unreadable.
-func TestResolveAudioRoot_BrokenEntryDoesNotRejectTree(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
-	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
-	require.NoError(t, os.MkdirAll(filepath.Join(byDate, audioRootTestDate, audioRootTestComName), 0o755))
-	// "0000" sorts before the date directory, so a check that looks at the
-	// first entry would hit the broken link.
-	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(byDate, "0000")); err != nil {
-		t.Skipf("cannot create symlink: %v", err)
-	}
-	dbPath := filepath.Join(dbDir, "birds.db")
-	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
-
-	got, found := ResolveAudioRoot(dbPath, home)
-	require.True(t, found, "a broken entry must not reject the tree")
-	assert.Equal(t, dbDir, got)
-}
-
-// skipIfReachable skips the test when the importer's own os.Root can still
-// reach rel inside dir after the test removed permission bits on the way: the
-// platform or filesystem ignores directory permission bits (Windows only maps
-// the write bit to the read-only attribute), so the fixture cannot model a
-// tree the service user is locked out of.
-func skipIfReachable(t *testing.T, dir, rel string) {
-	t.Helper()
-	root, err := os.OpenRoot(dir)
-	require.NoError(t, err)
-	defer func() { _ = root.Close() }()
-	if _, err := root.Stat(rel); err == nil {
-		t.Skip("directory permission bits are not enforced here")
-	}
-}
-
-// TestResolveAudioRoot_ClosedDateDirsRejectTree verifies that a tree whose
-// By_Date directory is readable but whose every date directory is closed to
-// the service user is skipped: every clip read there would fail, so the search
-// moves on to the next candidate.
-func TestResolveAudioRoot_ClosedDateDirsRejectTree(t *testing.T) {
-	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("permission bits do not restrict root")
-	}
-
-	home := t.TempDir()
-	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
-	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
-	closedDates := []string{audioRootTestDate, "2024-05-02"}
-	for _, date := range closedDates {
-		require.NoError(t, os.MkdirAll(filepath.Join(byDate, date, audioRootTestComName), 0o755))
-	}
-	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
-		audioRootTestDate, audioRootTestComName), 0o755))
-	dbPath := filepath.Join(dbDir, "birds.db")
-	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
-
-	for _, date := range closedDates {
-		closed := filepath.Join(byDate, date)
-		require.NoError(t, os.Chmod(closed, 0o000))
-		t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
-	}
-	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate, audioRootTestComName))
-
-	got, found := ResolveAudioRoot(dbPath, home)
-	require.True(t, found, "the next, readable tree must be found")
-	assert.Equal(t, filepath.Join(home, birdSongsDirName), got,
-		"a tree whose date directories are all closed is skipped")
-}
-
-// TestResolveAudioRoot_OneClosedDateDirKeepsTree verifies that a single closed
-// date directory does not reject an otherwise readable tree: only its clips
-// are lost, while skipping the tree would lose all of them.
-func TestResolveAudioRoot_OneClosedDateDirKeepsTree(t *testing.T) {
-	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("permission bits do not restrict root")
-	}
-
-	home := t.TempDir()
-	dbDir := filepath.Join(home, "BirdNET-Pi", "scripts")
-	byDate := filepath.Join(dbDir, extractedDirName, byDateDirName)
-	closed := filepath.Join(byDate, audioRootTestDate)
-	require.NoError(t, os.MkdirAll(filepath.Join(closed, audioRootTestComName), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(byDate, "2024-05-02", audioRootTestComName), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(byDate, "notes.txt"), []byte("x"), 0o600))
-	require.NoError(t, os.MkdirAll(filepath.Join(home, birdSongsDirName, extractedDirName, byDateDirName,
-		audioRootTestDate, audioRootTestComName), 0o755))
-	dbPath := filepath.Join(dbDir, "birds.db")
-	require.NoError(t, os.WriteFile(dbPath, []byte("birds.db"), 0o600))
-
-	require.NoError(t, os.Chmod(closed, 0o000))
-	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
-	skipIfReachable(t, dbDir, filepath.Join(extractedDirName, byDateDirName, audioRootTestDate, audioRootTestComName))
-
-	got, found := ResolveAudioRoot(dbPath, home)
-	require.True(t, found)
-	assert.Equal(t, dbDir, got, "one closed date directory does not reject the tree")
 }
