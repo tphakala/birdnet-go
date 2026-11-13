@@ -12,6 +12,8 @@ vi.mock('./lib/desktop/features/dashboard/pages/DashboardPage.svelte', () => ({
 vi.mock('./lib/desktop/features/wizard/WizardDialog.svelte', () => ({ default: () => {} }));
 vi.mock('./lib/desktop/views/About.svelte', () => ({ default: () => {} }));
 vi.mock('./lib/desktop/views/Help.svelte', () => ({ default: () => {} }));
+vi.mock('./lib/desktop/views/Settings.svelte', () => ({ default: () => {} }));
+vi.mock('./lib/desktop/views/Notifications.svelte', () => ({ default: () => {} }));
 
 vi.mock('./lib/utils/logger', async importOriginal => {
   const original = await importOriginal<typeof import('./lib/utils/logger')>();
@@ -58,6 +60,19 @@ const DASHBOARD_PATH = '/ui/dashboard';
 const UNKNOWN_PATH = '/ui/no-such-page';
 const ERROR_CODE = '403';
 const INIT_ERROR = 'init failed';
+const NOTIFICATIONS_PATH = '/ui/notifications';
+const SETTINGS_BASE = '/ui/settings';
+const SETTINGS_SUBPAGES = [
+  'main',
+  'userinterface',
+  'audio',
+  'detectionfilters',
+  'integrations',
+  'security',
+  'species',
+  'notifications',
+  'support',
+];
 const UNTRANSLATED_KEY = 'navigation.about';
 
 const SRC_LIB_DIR = join(import.meta.dirname, 'lib');
@@ -138,6 +153,41 @@ describe('App document title', () => {
     await waitFor(() =>
       expect(document.title).toBe(`${ERROR_CODE} - [common.error] - ${APP_NAME}`)
     );
+  });
+
+  it('gives every settings subpage a unique title that names Settings, apart from the other routes', async () => {
+    navigation.redirect(NOTIFICATIONS_PATH);
+    renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[navigation.notifications] - ${APP_NAME}`));
+    const titles = [document.title];
+
+    for (const subpage of SETTINGS_SUBPAGES) {
+      navigation.navigate(`${SETTINGS_BASE}/${subpage}`);
+      await waitFor(() => expect(document.title).toContain('[navigation.settings]'));
+      expect(document.title).toMatch(/^\[settings\.sections\.\w+\] - \[navigation\.settings\] - /);
+      titles.push(document.title);
+      navigation.navigate(HELP_PATH);
+      await waitFor(() => expect(document.title).not.toContain('[navigation.settings]'));
+    }
+
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  it('keeps the section before Settings whatever the translations are', async () => {
+    vi.mocked(t).mockImplementation(key =>
+      key === 'navigation.settings' ? 'Einstellungen' : `<${key}>`
+    );
+    navigation.redirect(`${SETTINGS_BASE}/audio`);
+    renderTyped(App);
+    await waitFor(() =>
+      expect(document.title).toBe(`<settings.sections.audio> - Einstellungen - ${APP_NAME}`)
+    );
+  });
+
+  it('shows plain Settings for a settings path without a known section', async () => {
+    navigation.redirect(`${SETTINGS_BASE}/no-such-section`);
+    renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[navigation.settings] - ${APP_NAME}`));
   });
 
   it('shows only the app name when the page title has no translation', async () => {
