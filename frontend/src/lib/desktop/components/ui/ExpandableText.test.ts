@@ -87,6 +87,59 @@ describe('ExpandableText', () => {
   });
 });
 
+describe('ExpandableText focus', () => {
+  it('keeps focus in the text when Show less leaves nothing to collapse', async () => {
+    // Clipped at first; the card then widens while expanded, so the clamped text fits
+    let fits = false;
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(() =>
+      fits ? CLAMPED_HEIGHT : FULL_HEIGHT
+    );
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT } });
+
+    const toggle = screen.getByRole('button', { name: 'common.ui.showMore' });
+    toggle.focus();
+    await fireEvent.click(toggle);
+    fits = true;
+    await fireEvent.click(screen.getByRole('button', { name: 'common.ui.showLess' }));
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(paragraphOf(LONG_TEXT));
+  });
+
+  it('keeps focus in the text when an expanded text that fits is collapsed', async () => {
+    // A is expanded, B fits (measured), then A returns expanded with nothing to clip
+    stubLayout(LONG_TEXT);
+    const { rerender } = render(ExpandableText, { props: { text: LONG_TEXT } });
+    await fireEvent.click(screen.getByRole('button', { name: 'common.ui.showMore' }));
+    await rerender({ text: SHORT_TEXT });
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    await rerender({ text: LONG_TEXT });
+
+    const showLess = screen.getByRole('button', { name: 'common.ui.showLess' });
+    showLess.focus();
+    await fireEvent.click(showLess);
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(paragraphOf(LONG_TEXT));
+  });
+  it('keeps focus in the text when the text changes under a focused toggle', async () => {
+    // A is expanded, B fits (measured), A returns expanded with nothing clipped, then B again
+    stubLayout(LONG_TEXT);
+    const { rerender } = render(ExpandableText, { props: { text: LONG_TEXT } });
+    await fireEvent.click(screen.getByRole('button', { name: 'common.ui.showMore' }));
+    await rerender({ text: SHORT_TEXT });
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    await rerender({ text: LONG_TEXT });
+    screen.getByRole('button', { name: 'common.ui.showLess' }).focus();
+
+    await rerender({ text: SHORT_TEXT });
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(paragraphOf(SHORT_TEXT));
+  });
+});
+
 describe('ExpandableText Accessibility', () => {
   it('has no violations collapsed or expanded', async () => {
     stubLayout(LONG_TEXT);

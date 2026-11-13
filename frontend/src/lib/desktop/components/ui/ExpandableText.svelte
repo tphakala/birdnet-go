@@ -22,6 +22,7 @@
 -->
 <script lang="ts">
   /* global ResizeObserver */
+  import { untrack } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -56,6 +57,7 @@
   const textId = generateId('expandable-text');
 
   let paragraph = $state<HTMLElement>();
+  let toggleButton = $state<HTMLElement>();
   let overflowing = $state(false);
   // The text that was expanded; any other text is collapsed, so a new text starts collapsed
   let expandedText = $state<string | null>(null);
@@ -70,12 +72,22 @@
     if (!element || expanded) return;
 
     const measure = () => {
-      overflowing = element.scrollHeight > element.clientHeight + OVERFLOW_TOLERANCE_PX;
+      const clipped = element.scrollHeight > element.clientHeight + OVERFLOW_TOLERANCE_PX;
+      // The toggle goes away with this result: move focus to the text while it still exists
+      if (!clipped && document.activeElement === untrack(() => toggleButton)) element.focus();
+      overflowing = clipped;
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
+  });
+
+  // Runs before the DOM update: when the focused toggle is about to go away without a new
+  // measurement (a collapse or a new text while nothing is clipped), move focus to the text
+  $effect.pre(() => {
+    if (overflowing || expanded || !toggleButton) return;
+    if (document.activeElement === toggleButton) paragraph?.focus();
   });
 
   function toggle() {
@@ -87,12 +99,18 @@
   <p
     bind:this={paragraph}
     id={textId}
-    class={cn(textClassName, !expanded && safeGet(CLAMP_CLASSES, lines, CLAMP_CLASSES[3]))}
+    tabindex="-1"
+    class={cn(
+      'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]',
+      textClassName,
+      !expanded && safeGet(CLAMP_CLASSES, lines, CLAMP_CLASSES[3])
+    )}
   >
     {text}
   </p>
   {#if overflowing || expanded}
     <button
+      bind:this={toggleButton}
       type="button"
       class="inline-flex min-h-6 items-center rounded-sm text-xs font-medium text-[var(--color-base-content)]/80 underline underline-offset-2 hover:text-[var(--color-base-content)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
       aria-expanded={expanded}
