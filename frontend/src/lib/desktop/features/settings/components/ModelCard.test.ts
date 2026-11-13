@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { ComponentProps } from 'svelte';
 import { fireEvent, within } from '@testing-library/svelte';
 import { renderTyped, screen } from '../../../../../test/render-helpers';
@@ -11,6 +11,7 @@ import ModelCard from './ModelCard.svelte';
 const PAUSED_ID = 'gallery-action-status';
 const LARGE_SPECIES_COUNT = 12012;
 const TOTAL_BYTES = 2_000_000;
+const ONE_MIB = 1024 * 1024;
 
 function variant(overrides: Partial<CatalogVariant> = {}): CatalogVariant {
   return {
@@ -77,6 +78,11 @@ function button(action: string, name = 'Test Bird Model'): HTMLElement {
 
 const clampedHeight = 50;
 const fullHeight = 84;
+
+beforeEach(() => {
+  // t is a shared mock: drop the calls earlier tests made, keep its implementation
+  vi.mocked(t).mockClear();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -213,6 +219,30 @@ describe('ModelCard', () => {
       expect(install).not.toHaveAttribute('aria-disabled');
     });
 
+    it.each([
+      ['available', 'install', 'analysis.gallery.install', 'analysis.gallery.installing'],
+      ['installed', 'remove', 'analysis.gallery.remove', 'analysis.gallery.removing'],
+    ] as const)(
+      'a %s card running %s disables that button and labels it',
+      (mode, busy, label, running) => {
+        renderCard({ entry: entry({ installed: mode === 'installed' }), mode, busy });
+
+        const own = button(label);
+        expect(own).toBeDisabled();
+        expect(own).not.toHaveAttribute('aria-disabled');
+        expect(own).toHaveTextContent(running);
+      }
+    );
+
+    it('titles a paused button with the reason', () => {
+      renderCard({ entry: entry(), mode: 'available', actionInFlight: true });
+
+      expect(button('analysis.gallery.install')).toHaveAttribute(
+        'title',
+        'analysis.gallery.actionInProgress'
+      );
+    });
+
     it('labels a running Optimize as applying', () => {
       renderCard({
         entry: entry({ installed: true }),
@@ -235,6 +265,44 @@ describe('ModelCard', () => {
       expect(bar).toHaveAttribute('aria-valuenow', '50');
       expect(bar).toHaveAccessibleName(/analysis\.gallery\.progress\.downloading Test Bird Model/);
       expect(screen.getByText(/\(1\/2\)/)).toBeInTheDocument();
+    });
+
+    it('shows the downloaded and total bytes while downloading', () => {
+      renderCard({
+        entry: entry(),
+        mode: 'available',
+        busy: 'install',
+        progress: progress({ downloadedBytes: ONE_MIB, totalBytes: 2 * ONE_MIB }),
+      });
+
+      expect(screen.getByText('1 MB / 2 MB')).toBeInTheDocument();
+    });
+
+    it('reports 0 percent and no byte counts when the total size is unknown', () => {
+      renderCard({
+        entry: entry(),
+        mode: 'available',
+        busy: 'install',
+        progress: progress({ totalBytes: 0, downloadedBytes: 5 }),
+      });
+
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+      expect(screen.queryByText(/Bytes/)).not.toBeInTheDocument();
+    });
+
+    it('shows the file counter and byte counts only while downloading', () => {
+      renderCard({
+        entry: entry(),
+        mode: 'available',
+        busy: 'install',
+        progress: progress({ status: 'verifying' }),
+      });
+
+      expect(screen.getByRole('progressbar')).toHaveAccessibleName(
+        /analysis\.gallery\.progress\.verifying/
+      );
+      expect(screen.queryByText(/\(1\/2\)/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/ \/ /)).not.toBeInTheDocument();
     });
 
     it('omits the file counter for a single file', () => {
@@ -347,6 +415,35 @@ describe('ModelCard', () => {
       );
     });
 
+    it('falls back to the default variant without a recommendation', () => {
+      renderCard({
+        entry: entry({
+          variants: [
+            variant({ id: 'v-eu', region: 'eu', default: false, hardwareClass: 'gpuNvidia' }),
+            variant({ id: 'v-default', default: true, hardwareClass: 'arm64Cpu' }),
+          ],
+        }),
+        mode: 'available',
+      });
+
+      expect(detailsValue('analysis.gallery.hardwareLabel')).toHaveTextContent(
+        'analysis.gallery.hardware.arm64Cpu'
+      );
+    });
+
+    it('shows a placeholder hardware value when the installed variant is gone', () => {
+      renderCard({
+        entry: entry({
+          installed: true,
+          variants: [recommendedVariant],
+          installedVariantId: 'v-gone',
+        }),
+        mode: 'installed',
+      });
+
+      expect(detailsValue('analysis.gallery.hardwareLabel')).toHaveTextContent(/^-$/);
+    });
+
     it('shows a flat entry region and no hardware row', () => {
       renderCard({ entry: entry({ region: 'Finland' }), mode: 'available' });
 
@@ -428,6 +525,15 @@ describe('ModelCard', () => {
       expect(screen.queryByText('analysis.gallery.geomodelBadge') !== null).toBe(shown);
     }
   );
+
+  it.each([
+    ['installed', 'error'],
+    ['available', 'warning'],
+  ] as const)('a %s card shows the incompatibility in the %s tone', (mode, tone) => {
+    renderCard({ entry: entry({ installed: mode === 'installed', compatible: false }), mode });
+
+    expect(screen.getByRole('status')).toHaveAttribute('data-tone', tone);
+  });
 
   it('shows the incompatibility on an installed card too', () => {
     renderCard({
