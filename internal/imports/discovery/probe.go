@@ -17,8 +17,9 @@ const (
 	// extractedDirName is the directory inside an audio root that holds the
 	// clips, organised as Extracted/By_Date/<date>/<common name>/<file>.
 	extractedDirName = "Extracted"
-	// byDateDirName is the directory inside "Extracted" that groups the clips
-	// by capture date.
+	// byDateDirName is the directory that groups the clips by capture date. It
+	// sits inside "Extracted" in a live BirdNET-Pi install and directly in the
+	// audio root in a backup made with BirdNET-Pi's backup tool.
 	byDateDirName = "By_Date"
 	// audioRootSearchLevels is the number of directory levels that are searched
 	// for the audio tree: the database directory plus two parent levels.
@@ -30,6 +31,10 @@ const (
 // audioDirNames are sibling directory names that indicate a BirdNET-Pi audio
 // tree next to a birds.db.
 var audioDirNames = []string{birdSongsDirName, extractedDirName, byDateDirName}
+
+// audioTreeLayouts are the supported locations of the by-date clip tree inside
+// an audio root: a live install nests it in "Extracted", a backup does not.
+var audioTreeLayouts = []string{filepath.Join(extractedDirName, byDateDirName), byDateDirName}
 
 // Probe inspects a single birds.db path and returns its candidate metadata. It
 // is the manual-entry counterpart to a Scan hit: the wizard's "validate this
@@ -105,12 +110,12 @@ func probeCandidate(ctx context.Context, dbPath string, kind Kind) SourceCandida
 	return c
 }
 
-// guessAudioDir returns the first "BirdSongs" or "Extracted" directory in the
-// directory of dbPath, or "". The guess is the audio directory itself and is
+// guessAudioDir returns the first "BirdSongs", "Extracted" or "By_Date"
+// directory in the directory of dbPath, or "". The guess is the audio directory itself and is
 // only looked for beside the database: it becomes the --audio argument of
 // import-stage, which accepts only a sibling of the database. It is not the
 // audio root of an import. ResolveAudioRoot finds that: the directory that
-// contains "Extracted", searched up to audioRootSearchLevels levels.
+// holds the by-date clip tree, searched up to audioRootSearchLevels levels.
 func guessAudioDir(dbPath string) string {
 	parent := filepath.Dir(dbPath)
 	for _, name := range audioDirNames {
@@ -124,13 +129,14 @@ func guessAudioDir(dbPath string) string {
 
 // ResolveAudioRoot returns the directory that holds the BirdNET-Pi audio tree
 // of the database at dbPath, and whether one was found. The result is the
-// directory that contains "Extracted", because the importer looks a clip up
-// as "Extracted/By_Date/<date>/<common name>/<file>" under it.
+// directory that holds the by-date clip tree, because the importer looks a clip
+// up as "Extracted/By_Date/<date>/<common name>/<file>" or, in a backup,
+// "By_Date/<date>/<common name>/<file>" under it.
 //
 // The search covers audioRootSearchLevels levels, nearest first, starting at
 // the database directory. Each level contributes two candidates: its
 // "BirdSongs" child, then the level itself. The first candidate with a
-// non-empty "Extracted/By_Date" directory wins (see hasExtractedTree).
+// non-empty "Extracted/By_Date" or "By_Date" directory wins (see hasAudioTree).
 //
 // bound, when not empty, is the directory the import may read from. A
 // candidate is skipped unless its symlink-resolved path lies inside the
@@ -153,7 +159,7 @@ func ResolveAudioRoot(dbPath, bound string) (string, bool) {
 	level := filepath.Dir(dbPath)
 	for range audioRootSearchLevels {
 		for _, candidate := range []string{filepath.Join(level, birdSongsDirName), level} {
-			if (bound == "" || resolvesWithin(bound, candidate)) && hasExtractedTree(candidate) {
+			if (bound == "" || resolvesWithin(bound, candidate)) && hasAudioTree(candidate) {
 				return candidate, true
 			}
 		}
@@ -179,29 +185,39 @@ func resolvesWithin(resolvedBound, path string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// hasExtractedTree reports whether dir holds a non-empty "Extracted/By_Date"
-// directory. The lookup goes through an os.Root, as the importer's clip
-// lookups do, so a tree that is only reachable through a symlink leaving dir
-// does not count. One entry is read: an empty skeleton must not win over a
-// populated tree further up, and a large By_Date is never listed. Whether
-// the clips below are readable is left to the import, which counts a clip it
-// cannot read as a miss.
-func hasExtractedTree(dir string) bool {
+// hasAudioTree reports whether dir holds a non-empty by-date clip tree, in
+// either supported layout (see audioTreeLayouts). The lookup goes through an
+// os.Root, as the importer's clip lookups do, so a tree that is only reachable
+// through a symlink leaving dir does not count. One entry is read: an empty
+// skeleton must not win over a populated tree further up, and a large By_Date
+// is never listed. Whether the clips below are readable is left to the import,
+// which counts a clip it cannot read as a miss.
+func hasAudioTree(dir string) bool {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return false
 	}
 	defer func() { _ = root.Close() }()
-	byDatePath := filepath.Join(extractedDirName, byDateDirName)
+	for _, layout := range audioTreeLayouts {
+		if hasEntries(root, layout) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasEntries reports whether the directory at path inside root has at least
+// one entry.
+func hasEntries(root *os.Root, path string) bool {
 	// Opening a FIFO without a writer blocks, so only a directory is opened.
-	if info, err := root.Stat(byDatePath); err != nil || !info.IsDir() {
+	if info, err := root.Stat(path); err != nil || !info.IsDir() {
 		return false
 	}
-	byDate, err := root.Open(byDatePath)
+	dir, err := root.Open(path)
 	if err != nil {
 		return false
 	}
-	defer func() { _ = byDate.Close() }()
-	names, err := byDate.Readdirnames(1)
+	defer func() { _ = dir.Close() }()
+	names, err := dir.Readdirnames(1)
 	return err == nil && len(names) > 0
 }

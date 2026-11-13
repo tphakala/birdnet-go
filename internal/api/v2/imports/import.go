@@ -496,7 +496,8 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 }
 
 // resolveAudioSourceDir returns the directory a db-audio import looks its
-// clips up under, as "Extracted/By_Date/<date>/<common name>/<file>".
+// clips up under, as "Extracted/By_Date/<date>/<common name>/<file>" or, in a
+// BirdNET-Pi backup, "By_Date/<date>/<common name>/<file>".
 //
 // BirdNET-Pi keeps its database in ~/BirdNET-Pi/scripts and its clips in
 // ~/BirdSongs, so discovery.ResolveAudioRoot searches the database directory
