@@ -49,6 +49,7 @@ const ABOUT_PATH = '/ui/about';
 const HELP_PATH = '/ui/help';
 const DASHBOARD_PATH = '/ui/dashboard';
 const UNKNOWN_PATH = '/ui/no-such-page';
+const ERROR_CODE = '403';
 const INIT_ERROR = 'init failed';
 const UNTRANSLATED_KEY = 'navigation.about';
 
@@ -73,6 +74,7 @@ describe('App document title', () => {
   });
 
   afterEach(() => {
+    window.location.search = '';
     if (originalT) vi.mocked(t).mockImplementation(originalT);
     navigation.redirect(DASHBOARD_PATH);
   });
@@ -119,6 +121,16 @@ describe('App document title', () => {
     await waitFor(() => expect(appState.error).toBe(INIT_ERROR));
     await tick();
     expect(document.title).toBe(APP_NAME);
+  });
+
+  it('keeps the error code in the title of a generic error page', async () => {
+    // The test environment replaces window.location with a plain object, which App reads.
+    window.location.search = `?error=${ERROR_CODE}`;
+    navigation.redirect(UNKNOWN_PATH);
+    render(App);
+    await waitFor(() =>
+      expect(document.title).toBe(`${ERROR_CODE} - [common.error] - ${APP_NAME}`)
+    );
   });
 
   it('shows only the app name when the page title has no translation', async () => {

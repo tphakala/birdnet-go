@@ -146,9 +146,13 @@
   // no translation, so it is not shown.
   let documentTitle = $derived.by(() => {
     if (!appInitialized || appError) return APP_NAME;
-    const key = requireLogin || loginRouteActive ? 'auth.loginTitle' : pageTitleKey;
+    const showsLogin = requireLogin || loginRouteActive;
+    const key = showsLogin ? 'auth.loginTitle' : pageTitleKey;
     const page = t(key);
-    return !page || page === key ? APP_NAME : `${page} - ${APP_NAME}`;
+    if (!page || page === key) return APP_NAME;
+    // The generic error page shows its code, so the tab carries it too.
+    const code = !showsLogin && currentRoute === 'error-generic' ? dynamicErrorCode : null;
+    return code ? `${code} - ${page} - ${APP_NAME}` : `${page} - ${APP_NAME}`;
   });
 
   // Route configuration for better maintainability
