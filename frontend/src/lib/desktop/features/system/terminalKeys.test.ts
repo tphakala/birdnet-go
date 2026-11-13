@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createTerminalExitKeys, TAB_RELEASE_WINDOW_MS } from './terminalKeys';
+import type { Terminal } from '@xterm/xterm';
+import {
+  attachTerminalExitKeys,
+  createTerminalExitKeys,
+  TAB_RELEASE_WINDOW_MS,
+} from './terminalKeys';
 
 type KeyInit = Partial<Pick<KeyboardEvent, 'ctrlKey' | 'altKey' | 'metaKey' | 'shiftKey'>>;
 
@@ -92,5 +97,39 @@ describe('createTerminalExitKeys', () => {
     expect(handler(key('keyup', 'Tab'))).toBe(true);
     expect(handler(key('keypress', 'Tab'))).toBe(true);
     expect(handler(key('keydown', 'Tab'))).toBe(false);
+  });
+});
+
+describe('attachTerminalExitKeys', () => {
+  type KeyHandler = (ev: KeyboardEvent) => boolean;
+
+  function stubTerminal(textarea: HTMLTextAreaElement | undefined) {
+    const captured: { handler?: KeyHandler } = {};
+    const term = {
+      textarea,
+      attachCustomKeyEventHandler(handler: KeyHandler) {
+        captured.handler = handler;
+      },
+    };
+    // Partial stub: xterm needs a real layout engine, only the two members used here exist.
+    return { captured, term: term as unknown as Terminal };
+  }
+
+  it('registers the exit handler and describes the input by the hint', () => {
+    const textarea = document.createElement('textarea');
+    const { captured, term } = stubTerminal(textarea);
+
+    attachTerminalExitKeys(term, 'hint-id');
+
+    expect(textarea.getAttribute('aria-describedby')).toBe('hint-id');
+    expect(captured.handler?.(key('keydown', 'Escape'))).toBe(true);
+    expect(captured.handler?.(key('keydown', 'Tab'))).toBe(false);
+  });
+
+  it('still registers the handler when the terminal has no input element', () => {
+    const { captured, term } = stubTerminal(undefined);
+
+    expect(() => attachTerminalExitKeys(term, 'hint-id')).not.toThrow();
+    expect(captured.handler).toBeDefined();
   });
 });
