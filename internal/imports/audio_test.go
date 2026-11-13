@@ -31,7 +31,21 @@ const comGreatTit = "Great Tit"
 // Returns the path of the created clip file.
 func makeAudioTree(t *testing.T, root, date, comName, fileName string, content []byte) string {
 	t.Helper()
-	dir := filepath.Join(root, "Extracted", "By_Date", date, comName)
+	return makeClip(t, filepath.Join(root, "Extracted", "By_Date"), date, comName, fileName, content)
+}
+
+// makeBackupAudioTree is makeAudioTree for the layout of a BirdNET-Pi backup,
+// which keeps By_Date directly under root: root/By_Date/<date>/<comName>/<fileName>.
+func makeBackupAudioTree(t *testing.T, root, date, comName, fileName string, content []byte) string {
+	t.Helper()
+	return makeClip(t, filepath.Join(root, "By_Date"), date, comName, fileName, content)
+}
+
+// makeClip writes a clip file at byDateDir/<date>/<comName>/<fileName> and
+// returns its path.
+func makeClip(t *testing.T, byDateDir, date, comName, fileName string, content []byte) string {
+	t.Helper()
+	dir := filepath.Join(byDateDir, date, comName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	path := filepath.Join(dir, fileName)
 	require.NoError(t, os.WriteFile(path, content, 0o644))
@@ -75,13 +89,25 @@ func walkFiles(t *testing.T, dir string) []string {
 // package-private we use an integration approach.
 
 func TestImport_WithAudio_CopiesClips(t *testing.T) {
+	assertImportCopiesClips(t, makeAudioTree)
+}
+
+func TestImport_WithAudio_CopiesClips_BackupLayout(t *testing.T) {
+	assertImportCopiesClips(t, makeBackupAudioTree)
+}
+
+// assertImportCopiesClips imports one detection whose clip makeTree places in the
+// source audio tree, and checks the clip is copied into the export directory and
+// recorded on the detection.
+func assertImportCopiesClips(t *testing.T, makeTree func(t *testing.T, root, date, comName, fileName string, content []byte) string) {
+	t.Helper()
 	audioSrc := t.TempDir()
 	exportDir := t.TempDir()
 	date := "2025-03-25"
 	comName := "Great Spotted Woodpecker"
 	fileName := "woodpecker.mp3"
 	clipContent := []byte("fake audio content")
-	makeAudioTree(t, audioSrc, date, comName, fileName, clipContent)
+	makeTree(t, audioSrc, date, comName, fileName, clipContent)
 
 	rows := []birdnetPiRow{
 		{
@@ -296,6 +322,136 @@ func TestImport_WithAudio_FallbackPreference(t *testing.T) {
 	data, readErr := os.ReadFile(destAbs)
 	require.NoError(t, readErr, "clip must be copied to %s", destAbs)
 	assert.Equal(t, exactContent, data, "the exact-ComName directory must be preferred over the fallback")
+}
+
+// layoutTestDate and layoutTestFile name the one detection the layout tests import.
+const (
+	layoutTestDate = "2025-03-25"
+	layoutTestFile = "woodpecker.mp3"
+)
+
+// importLayoutDetection imports one detection with audio from audioSrc and returns
+// the clip export directory.
+func importLayoutDetection(t *testing.T, audioSrc, comName string) string {
+	t.Helper()
+	exportDir := t.TempDir()
+	rows := []birdnetPiRow{{
+		Date: layoutTestDate, Time: "14:27:32",
+		SciName: "Dendrocopos major", ComName: comName,
+		Confidence: 0.74, Lat: 60.75, Lon: 24.77,
+		Cutoff: 0.7, Sens: 1.25, FileName: layoutTestFile,
+	}}
+	src, err := newBirdNetPiSource(t, newFixtureDB(t, rows))
+	require.NoError(t, err)
+	repo := newDetectionRepo(t, newTestStore(t))
+	stats, err := imports.NewEngine(repo).Run(t.Context(), src, &imports.ImportOptions{
+		SourceNode:     imports.DefaultSourceNode,
+		Location:       time.UTC,
+		BatchSize:      100,
+		IncludeAudio:   true,
+		AudioSourceDir: audioSrc,
+		ClipExportPath: exportDir,
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, stats.Inserted)
+	return exportDir
+}
+
+// readLayoutClip returns the bytes of the clip importLayoutDetection copied into exportDir.
+func readLayoutClip(t *testing.T, exportDir string) []byte {
+	t.Helper()
+	ts := time.Date(2025, 3, 25, 14, 27, 32, 0, time.UTC)
+	relPath := imports.TargetClipRelPathForTest("Dendrocopos major", 0.74, ts, "mp3")
+	data, err := os.ReadFile(filepath.Join(exportDir, filepath.FromSlash(relPath)))
+	require.NoError(t, err, "the clip must have been copied")
+	return data
+}
+
+// TestImport_WithAudio_LayoutPrecedence verifies the lookup order when a source holds
+// both audio tree layouts: every layout is tried for the exact common name before the
+// fallback name, and Extracted/By_Date comes before By_Date. The clips differ in
+// content so the copied one is attributable to one location.
+func TestImport_WithAudio_LayoutPrecedence(t *testing.T) {
+	const comName = "Great Spotted Woodpecker"
+	tests := []struct {
+		name    string
+		comName string
+		build   func(t *testing.T, root string)
+		want    string
+	}{
+		{
+			name:    "same clip in both layouts prefers Extracted/By_Date",
+			comName: comName,
+			build: func(t *testing.T, root string) {
+				t.Helper()
+				makeAudioTree(t, root, layoutTestDate, comName, layoutTestFile, []byte("extracted clip"))
+				makeBackupAudioTree(t, root, layoutTestDate, comName, layoutTestFile, []byte("backup clip"))
+			},
+			want: "extracted clip",
+		},
+		{
+			name:    "By_Date is used when a populated Extracted/By_Date lacks the clip",
+			comName: comName,
+			build: func(t *testing.T, root string) {
+				t.Helper()
+				makeAudioTree(t, root, layoutTestDate, comName, "other.mp3", []byte("other clip"))
+				makeBackupAudioTree(t, root, layoutTestDate, comName, layoutTestFile, []byte("backup clip"))
+			},
+			want: "backup clip",
+		},
+		{
+			name:    "exact name under By_Date beats the fallback name under Extracted/By_Date",
+			comName: "Robin's Thrush",
+			build: func(t *testing.T, root string) {
+				t.Helper()
+				makeAudioTree(t, root, layoutTestDate, "Robins_Thrush", layoutTestFile, []byte("fallback clip"))
+				makeBackupAudioTree(t, root, layoutTestDate, "Robin's Thrush", layoutTestFile, []byte("exact clip"))
+			},
+			want: "exact clip",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			audioSrc := t.TempDir()
+			tt.build(t, audioSrc)
+			assert.Equal(t, tt.want, string(readLayoutClip(t, importLayoutDetection(t, audioSrc, tt.comName))))
+		})
+	}
+}
+
+// TestImport_WithAudio_FallbackComName_BackupLayout verifies the underscore and
+// apostrophe fallback name is found under By_Date as well.
+func TestImport_WithAudio_FallbackComName_BackupLayout(t *testing.T) {
+	audioSrc := t.TempDir()
+	makeBackupAudioTree(t, audioSrc, layoutTestDate, "Robins_Thrush", layoutTestFile, []byte("thrush audio"))
+
+	data := readLayoutClip(t, importLayoutDetection(t, audioSrc, "Robin's Thrush"))
+
+	assert.Equal(t, []byte("thrush audio"), data)
+}
+
+// TestImport_WithAudio_BackupLayoutSymlinkEscape verifies a By_Date directory that is a
+// symlink to a tree outside the audio source is not followed: the clip is a miss and
+// nothing is written to the export directory. The control runs the same clip from a
+// real By_Date directory, so the miss is containment and not an absent file.
+func TestImport_WithAudio_BackupLayoutSymlinkEscape(t *testing.T) {
+	const comName = "Great Spotted Woodpecker"
+	outside := t.TempDir()
+	makeClip(t, outside, layoutTestDate, comName, layoutTestFile, []byte("outside clip"))
+	audioSrc := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(audioSrc, "By_Date")); err != nil {
+		t.Skipf("symlinks are not available: %v", err)
+	}
+
+	exportDir := importLayoutDetection(t, audioSrc, comName)
+
+	entries, err := os.ReadDir(exportDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "a By_Date link leaving the audio source must not yield a clip")
+
+	controlSrc := t.TempDir()
+	makeBackupAudioTree(t, controlSrc, layoutTestDate, comName, layoutTestFile, []byte("outside clip"))
+	assert.Equal(t, []byte("outside clip"), readLayoutClip(t, importLayoutDetection(t, controlSrc, comName)))
 }
 
 func TestImport_WithAudio_MissingClip_ImportsContinues(t *testing.T) {

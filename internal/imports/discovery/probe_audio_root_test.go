@@ -68,6 +68,22 @@ func TestResolveAudioRoot(t *testing.T) {
 			db:   "home/nested/BirdNET-Pi/scripts/birds.db",
 		},
 		{
+			name: "backup layout with By_Date next to the database",
+			dirs: []string{"backup/By_Date/2025-03-25"},
+			db:   "backup/birds.db",
+			want: "backup",
+		},
+		{
+			name: "backup By_Date beats a populated tree further up",
+			dirs: []string{"home/BirdNET-Pi/scripts/By_Date/2025-03-25", "home/BirdSongs/" + audioRootTestTree},
+			want: "home/BirdNET-Pi/scripts",
+		},
+		{
+			name: "empty backup By_Date does not win",
+			dirs: []string{"home/BirdNET-Pi/scripts/By_Date", "home/BirdSongs/" + audioRootTestTree},
+			want: "home/BirdSongs",
+		},
+		{
 			name: "empty By_Date does not win",
 			dirs: []string{"home/BirdNET-Pi/scripts/Extracted/By_Date", "home/BirdSongs/" + audioRootTestTree},
 			want: "home/BirdSongs",
