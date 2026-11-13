@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/svelte';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 
@@ -62,5 +62,50 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
 
     expect(menu.getByText(EDIT_LABEL)).toBeInTheDocument();
     expect(menu.getByText(RESET_LABEL)).toBeInTheDocument();
+  });
+
+  describe('focus after the Reset Dashboard confirmation closes', () => {
+    const CANCEL_LABEL = t('common.buttons.cancel');
+
+    async function openConfirmFrom(press: (item: HTMLElement) => Promise<void>) {
+      const menu = await renderAndOpen({ securityEnabled: false });
+      await press(menu.getByText(RESET_LABEL).closest('button') as HTMLButtonElement);
+      return screen.getByRole('button', { name: MENU_LABEL });
+    }
+
+    it.each([
+      [
+        'keyboard activation',
+        async (item: HTMLElement) => {
+          item.focus();
+          await fireEvent.click(item);
+        },
+      ],
+      [
+        'a press that does not focus the item (Safari)',
+        async (item: HTMLElement) => {
+          await fireEvent.pointerDown(item);
+          await fireEvent.click(item);
+        },
+      ],
+    ])('returns to the settings menu button when cancelled after %s', async (_name, press) => {
+      const trigger = await openConfirmFrom(press);
+
+      await fireEvent.click(await screen.findByRole('button', { name: CANCEL_LABEL }));
+
+      await waitFor(() => expect(trigger).toHaveFocus());
+    });
+
+    it('returns to the settings menu button when dismissed with Escape', async () => {
+      const trigger = await openConfirmFrom(async item => {
+        item.focus();
+        await fireEvent.click(item);
+      });
+      await screen.findByRole('button', { name: CANCEL_LABEL });
+
+      await fireEvent.keyDown(document, { key: 'Escape' });
+
+      await waitFor(() => expect(trigger).toHaveFocus());
+    });
   });
 });
