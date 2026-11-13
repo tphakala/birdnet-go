@@ -160,6 +160,28 @@ describe('ExpandableText measurement', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('stops listening for web fonts while expanded', async () => {
+    const fonts = new EventTarget();
+    Object.defineProperty(document, 'fonts', { value: fonts, configurable: true });
+    let fits = false;
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(() =>
+      fits ? CLAMPED_HEIGHT : FULL_HEIGHT
+    );
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT } });
+    await fireEvent.click(screen.getByRole('button', { name: 'common.ui.showMore' }));
+    const showLess = screen.getByRole('button', { name: 'common.ui.showLess' });
+    showLess.focus();
+
+    // A listener left from the collapsed state would measure the unclamped text as fitting
+    // and move focus off the toggle
+    fits = true;
+    fonts.dispatchEvent(new Event('loadingdone'));
+    await tick();
+
+    expect(document.activeElement).toBe(showLess);
+  });
+
   it('re-measures once web fonts have loaded', async () => {
     // jsdom has no FontFaceSet; an EventTarget stands in for document.fonts
     const fonts = new EventTarget();
