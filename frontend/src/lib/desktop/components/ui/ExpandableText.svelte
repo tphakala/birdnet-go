@@ -15,13 +15,13 @@
 
   Behaviour:
   - The whole text stays in the DOM and the accessibility tree; collapsing only clamps it.
-  - Overflow is measured while collapsed, at mount, when text or lines change, and when the
-    paragraph is resized (sidebar toggled, window resized), so the toggle appears or goes away
-    with the layout.
+  - Overflow is measured while collapsed, at mount, when text or lines change, when the
+    paragraph is resized (sidebar toggled, window resized) and when a web font finishes loading,
+    so the toggle appears or goes away with the layout.
   - A new text starts collapsed, so a stale Show less never stays behind.
 -->
 <script lang="ts">
-  /* global ResizeObserver */
+  /* global ResizeObserver, FontFaceSet */
   import { untrack } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { t } from '$lib/i18n';
@@ -80,7 +80,13 @@
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    return () => observer.disconnect();
+    // A web font that finishes loading can rewrap the text without resizing the clamped box
+    const fonts: FontFaceSet | undefined = document.fonts;
+    fonts?.addEventListener('loadingdone', measure);
+    return () => {
+      observer.disconnect();
+      fonts?.removeEventListener('loadingdone', measure);
+    };
   });
 
   // Runs before the DOM update: when the focused toggle is about to go away without a new

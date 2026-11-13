@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fireEvent, render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { renderTyped, screen } from '../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ExpandableText from './ExpandableText.svelte';
@@ -84,6 +85,32 @@ describe('ExpandableText', () => {
     await rerender({ text: SHORT_TEXT });
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(paragraphOf(SHORT_TEXT)).toHaveClass('line-clamp-3');
+  });
+});
+
+describe('ExpandableText measurement', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'fonts');
+  });
+
+  it('re-measures once web fonts have loaded', async () => {
+    // jsdom has no FontFaceSet; an EventTarget stands in for document.fonts
+    const fonts = new EventTarget();
+    Object.defineProperty(document, 'fonts', { value: fonts, configurable: true });
+    let clipped = false;
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(() =>
+      clipped ? FULL_HEIGHT : CLAMPED_HEIGHT
+    );
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT } });
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    // The web font is wider than the fallback: same box, one more line
+    clipped = true;
+    fonts.dispatchEvent(new Event('loadingdone'));
+    await tick();
+
+    expect(screen.getByRole('button', { name: 'common.ui.showMore' })).toBeInTheDocument();
   });
 });
 
