@@ -190,6 +190,7 @@ describe('SystemHealth keyboard and run state', () => {
       expect(radio).toHaveAttribute('aria-disabled', 'true');
       expect(radio).toHaveAttribute('aria-describedby', describedBy);
     }
+    expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-describedby');
 
     finish(report(TOTAL_CHECKS));
     await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));
