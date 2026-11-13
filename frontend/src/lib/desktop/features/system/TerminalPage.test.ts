@@ -9,6 +9,7 @@ interface MockTerminal {
   textarea?: HTMLTextAreaElement;
   handler?: KeyHandler;
   focusCount: number;
+  selection: string;
 }
 
 // Every Terminal the page creates, so tests can reach its input, key handler and focus calls
@@ -23,6 +24,7 @@ vi.mock('@xterm/xterm', () => ({
     textarea?: HTMLTextAreaElement;
     handler?: (ev: KeyboardEvent) => boolean;
     focusCount = 0;
+    selection = '';
     constructor() {
       created.terminals.push(this);
     }
@@ -30,8 +32,10 @@ vi.mock('@xterm/xterm', () => ({
     rows = 24;
     options = {};
     loadAddon() {}
-    open() {
-      this.textarea = document.createElement('textarea');
+    open(container: HTMLElement) {
+      // Like xterm, the input lives in the document of the container it is opened in
+      this.textarea = container.ownerDocument.createElement('textarea');
+      container.appendChild(this.textarea);
     }
     focus() {
       this.focusCount++;
@@ -47,7 +51,7 @@ vi.mock('@xterm/xterm', () => ({
       this.handler = handler;
     }
     getSelection() {
-      return '';
+      return this.selection;
     }
   },
 }));
@@ -58,8 +62,13 @@ vi.mock('@xterm/addon-fit', () => ({
 }));
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 vi.mock('@xterm/xterm/css/xterm.css?raw', () => ({ default: '' }));
+vi.mock('$lib/utils/clipboard', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/clipboard')>()),
+  copyToClipboard: vi.fn(() => Promise.resolve(true)),
+}));
 
 import { settingsStore } from '$lib/stores/settings';
+import { copyToClipboard } from '$lib/utils/clipboard';
 import { opacityClasses } from '../../../../test/class-helpers';
 import TerminalPage from './TerminalPage.svelte';
 
@@ -71,6 +80,21 @@ const TOOLBAR_BUTTON_LABELS = [
   'terminal.expand',
   'terminal.fullscreen',
 ];
+
+const THEME_STORAGE_KEY = 'birdnet-terminal-theme';
+
+// Undo what the page tests change outside their own DOM: settings, globals and the saved theme
+function restoreGlobalsAfterEach() {
+  let settingsSnapshot = get(settingsStore);
+  beforeEach(() => {
+    settingsSnapshot = get(settingsStore);
+  });
+  afterEach(() => {
+    settingsStore.set(settingsSnapshot);
+    vi.unstubAllGlobals();
+    localStorage.removeItem(THEME_STORAGE_KEY);
+  });
+}
 
 function enableTerminal() {
   const state = get(settingsStore);
@@ -84,6 +108,8 @@ function enableTerminal() {
 }
 
 describe('TerminalPage toolbar', () => {
+  restoreGlobalsAfterEach();
+
   beforeEach(() => {
     vi.stubGlobal(
       'WebSocket',
@@ -137,6 +163,18 @@ describe('TerminalPage toolbar', () => {
     expect(handler?.(key('Tab'))).toBe(false);
   });
 
+  it('forgets an armed Escape when the inline terminal input loses focus', async () => {
+    render(TerminalPage);
+    await tick();
+    const [terminal] = created.terminals;
+    const key = (k: string) => new KeyboardEvent('keydown', { key: k });
+
+    terminal.handler?.(key('Escape'));
+    terminal.textarea?.dispatchEvent(new FocusEvent('blur'));
+
+    expect(terminal.handler?.(key('Tab'))).toBe(true);
+  });
+
   it('hands focus back to the terminal after Copy, Expand and Fullscreen', async () => {
     const { getByRole } = render(TerminalPage);
     await tick();
@@ -148,12 +186,36 @@ describe('TerminalPage toolbar', () => {
     await fireEvent.click(getByRole('button', { name: 'terminal.expand' }));
     await waitFor(() => expect(terminal.focusCount).toBe(2));
 
-    document.dispatchEvent(new Event('fullscreenchange'));
-    await waitFor(() => expect(terminal.focusCount).toBe(3));
+    // jsdom has no Fullscreen API: stand in for the browser entering fullscreen
+    const element = HTMLElement.prototype as { requestFullscreen?: () => Promise<void> };
+    element.requestFullscreen = () => {
+      document.dispatchEvent(new Event('fullscreenchange'));
+      return Promise.resolve();
+    };
+    try {
+      await fireEvent.click(getByRole('button', { name: 'terminal.fullscreen' }));
+      await waitFor(() => expect(terminal.focusCount).toBe(3));
+    } finally {
+      delete element.requestFullscreen;
+    }
+  });
+
+  it('copies a non-empty selection and then hands focus back to the terminal', async () => {
+    const { getByRole } = render(TerminalPage);
+    await tick();
+    const [terminal] = created.terminals;
+    terminal.selection = 'ls -la';
+
+    await fireEvent.click(getByRole('button', { name: 'terminal.copySelection' }));
+
+    expect(copyToClipboard).toHaveBeenCalledWith('ls -la');
+    await waitFor(() => expect(terminal.focusCount).toBe(1));
   });
 });
 
 describe('TerminalPage detached window', () => {
+  restoreGlobalsAfterEach();
+
   afterEach(() => {
     document.querySelectorAll('iframe').forEach(frame => frame.remove());
     vi.restoreAllMocks();
@@ -161,6 +223,7 @@ describe('TerminalPage detached window', () => {
 
   // Foreground colours of the three terminal themes, as computed style reports them
   const DARK_FOREGROUND = 'rgb(169, 177, 214)';
+  const SWATCH_IDS = ['theme-dark', 'theme-light', 'theme-hc'];
   const TOOLBAR_TEXT_SELECTORS = ['#status-text', '#dimensions', '#terminal-exit-hint'];
 
   async function detach() {
@@ -234,14 +297,47 @@ describe('TerminalPage detached window', () => {
     expect(handler?.(new KeyboardEvent('keydown', { key: 'Tab' }))).toBe(false);
   });
 
-  it('draws a full-strength outline on a focused popup toolbar button', async () => {
+  it('draws a full-strength outline on a focused popup toolbar or swatch button', async () => {
     const doc = await detach();
     // Rules come from the popup's own window, so test them by shape, not by instanceof
     const focusRule = [...doc.styleSheets]
       .flatMap(sheet => [...sheet.cssRules])
-      .find(rule => 'selectorText' in rule && rule.selectorText === '.toolbar-btn:focus-visible');
+      .find(
+        rule =>
+          'selectorText' in rule &&
+          rule.selectorText === '.toolbar-btn:focus-visible, .swatch-btn:focus-visible'
+      );
     expect(focusRule?.cssText).toContain('opacity: 1');
     // A real outline, so forced colors still draws the ring
-    expect(focusRule?.cssText).toContain('outline: 2px solid');
+    expect(focusRule?.cssText).toContain('outline: 2px solid currentColor');
+  });
+
+  it('draws theme swatch buttons in the theme foreground so the ring follows it', async () => {
+    const doc = await detach();
+    const swatchColors = () =>
+      SWATCH_IDS.map(id => {
+        const button = doc.getElementById(id);
+        if (!button) throw new Error(`missing ${id}`);
+        return doc.defaultView?.getComputedStyle(button).color;
+      });
+    const all = (color: string) => SWATCH_IDS.map(() => color);
+    expect(swatchColors()).toEqual(all(DARK_FOREGROUND));
+
+    doc.getElementById('theme-light')?.click();
+    expect(swatchColors()).toEqual(all('rgb(56, 58, 66)'));
+
+    doc.getElementById('theme-hc')?.click();
+    expect(swatchColors()).toEqual(all('rgb(0, 255, 0)'));
+  });
+
+  it('forgets an armed Escape when the detached terminal input loses focus', async () => {
+    await detach();
+    const popupTerminal = created.terminals[1];
+    const key = (k: string) => new KeyboardEvent('keydown', { key: k });
+
+    popupTerminal.handler?.(key('Escape'));
+    popupTerminal.textarea?.dispatchEvent(new FocusEvent('blur'));
+
+    expect(popupTerminal.handler?.(key('Tab'))).toBe(true);
   });
 });

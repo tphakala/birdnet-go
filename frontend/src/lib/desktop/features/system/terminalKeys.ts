@@ -6,6 +6,10 @@
  * here implements the "Escape, then Tab" convention: Escape still reaches the
  * shell, and a Tab or Shift+Tab pressed within TAB_RELEASE_WINDOW_MS of it is
  * not handled by xterm, so the browser moves focus as it normally would.
+ *
+ * Keys that belong to something else never arm or release the exit: input
+ * method composition is left to xterm, and auto-repeat of Escape or Tab is
+ * ignored, so holding Tab and tapping Escape does not leave the terminal.
  */
 
 import type { Terminal } from '@xterm/xterm';
@@ -15,6 +19,10 @@ export const TAB_RELEASE_WINDOW_MS = 2000;
 
 const KEY_ESCAPE = 'Escape';
 const KEY_TAB = 'Tab';
+/** `KeyboardEvent.key` reported while an input method processes a key. */
+const KEY_PROCESS = 'Process';
+/** Legacy `keyCode` reported for keys consumed by an input method. */
+const KEYCODE_IME_PROCESSING = 229;
 const MODIFIER_KEYS: ReadonlySet<string> = new Set(['Shift', 'Control', 'Alt', 'Meta']);
 
 /** Key handling for one terminal. */
@@ -39,8 +47,18 @@ export function createTerminalExitKeys(now: () => number = Date.now): TerminalEx
   const handleKey = (ev: KeyboardEvent): boolean => {
     if (ev.type !== 'keydown') return true;
 
+    // Composition keys belong to the input method; xterm handles them itself.
+    if (ev.isComposing || ev.key === KEY_PROCESS || ev.keyCode === KEYCODE_IME_PROCESSING) {
+      escapeAt = null;
+      return true;
+    }
+
     // Pressing Shift for Shift+Tab is part of the sequence, not a new key.
     if (MODIFIER_KEYS.has(ev.key)) return true;
+
+    // A repeating Escape or Tab neither arms nor releases, and keeps the armed
+    // state as it was: the window runs from the first Escape, not the last repeat.
+    if (ev.repeat && (ev.key === KEY_ESCAPE || ev.key === KEY_TAB)) return true;
 
     const hasCommandModifier = ev.ctrlKey || ev.altKey || ev.metaKey;
     const armedAt = escapeAt;
@@ -51,13 +69,10 @@ export function createTerminalExitKeys(now: () => number = Date.now): TerminalEx
       return true;
     }
 
-    if (
-      ev.key === KEY_TAB &&
-      !hasCommandModifier &&
-      armedAt !== null &&
-      now() - armedAt <= TAB_RELEASE_WINDOW_MS
-    ) {
-      return false;
+    if (ev.key === KEY_TAB && !hasCommandModifier && armedAt !== null) {
+      // A negative elapsed time means the clock stepped back; do not trust the arm.
+      const elapsed = now() - armedAt;
+      if (elapsed >= 0 && elapsed <= TAB_RELEASE_WINDOW_MS) return false;
     }
 
     return true;

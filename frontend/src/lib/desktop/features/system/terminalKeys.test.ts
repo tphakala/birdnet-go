@@ -6,7 +6,9 @@ import {
   TAB_RELEASE_WINDOW_MS,
 } from './terminalKeys';
 
-type KeyInit = Partial<Pick<KeyboardEvent, 'ctrlKey' | 'altKey' | 'metaKey' | 'shiftKey'>>;
+type KeyInit = Partial<
+  Pick<KeyboardEvent, 'ctrlKey' | 'altKey' | 'metaKey' | 'shiftKey' | 'isComposing' | 'repeat'>
+> & { keyCode?: number };
 
 function key(type: string, k: string, init: KeyInit = {}): KeyboardEvent {
   return new KeyboardEvent(type, { key: k, ...init });
@@ -90,6 +92,59 @@ describe('createTerminalExitKeys', () => {
       expect(handler(key('keydown', 'Tab', { [modifier]: true }))).toBe(true);
     }
   );
+
+  it('does not arm the exit on an Escape pressed while composing', () => {
+    const { handler } = setup();
+    expect(handler(key('keydown', 'Escape', { isComposing: true }))).toBe(true);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+  });
+
+  it('does not release Tab pressed while composing, and drops the armed Escape', () => {
+    const { handler } = setup();
+    handler(key('keydown', 'Escape'));
+    expect(handler(key('keydown', 'Tab', { isComposing: true }))).toBe(true);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+  });
+
+  it('drops an armed Escape on an input method Process key or keyCode 229', () => {
+    const { handler } = setup();
+    handler(key('keydown', 'Escape'));
+    expect(handler(key('keydown', 'Process'))).toBe(true);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+
+    // keyCode 229 on Escape itself must not arm
+    expect(handler(key('keydown', 'Escape', { keyCode: 229 }))).toBe(true);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+  });
+
+  it('never releases on a repeating Tab and keeps the Escape armed', () => {
+    const { handler } = setup();
+    handler(key('keydown', 'Escape'));
+    expect(handler(key('keydown', 'Tab', { repeat: true }))).toBe(true);
+    expect(handler(key('keydown', 'Tab'))).toBe(false);
+  });
+
+  it('does not refresh the window on a repeating Escape', () => {
+    const { handler, advance } = setup();
+    handler(key('keydown', 'Escape'));
+    advance(TAB_RELEASE_WINDOW_MS - 100);
+    expect(handler(key('keydown', 'Escape', { repeat: true }))).toBe(true);
+    advance(200);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+  });
+
+  it('does not arm on a repeating Escape alone', () => {
+    const { handler } = setup();
+    handler(key('keydown', 'Escape', { repeat: true }));
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+  });
+
+  it('does not release when the clock stepped backward after Escape', () => {
+    const { handler, advance } = setup();
+    handler(key('keydown', 'Escape'));
+    advance(-500);
+    expect(handler(key('keydown', 'Tab'))).toBe(true);
+  });
 
   it('always passes keyup and keypress events', () => {
     const { handler } = setup();

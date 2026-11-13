@@ -392,8 +392,8 @@
       'html, body { width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: ' +
       theme.background +
       '; }' +
-      '#toolbar { height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid rgba(128,128,128,0.2); background: rgba(128,128,128,0.06); }' +
-      '.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 10px; }' +
+      '#toolbar { min-height: 40px; flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; justify-content: space-between; padding: 4px 12px; border-bottom: 1px solid rgba(128,128,128,0.2); background: rgba(128,128,128,0.06); }' +
+      '.toolbar-left, .toolbar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }' +
       '.status-group { display: flex; align-items: center; gap: 6px; }' +
       '.status-dot { width: 7px; height: 7px; border-radius: 50%; }' +
       '.status-dot.connected { background: #10b981; animation: pulse 2s infinite; }' +
@@ -409,7 +409,9 @@
       theme.foreground +
       '; }' +
       '.theme-swatches { display: flex; gap: 4px; }' +
-      '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }' +
+      '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; color: ' +
+      theme.foreground +
+      '; }' +
       '.swatch-btn:hover { background: rgba(128,128,128,0.15); }' +
       '.swatch-btn.active { background: rgba(128,128,128,0.2); }' +
       '.swatch { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid; }' +
@@ -434,7 +436,7 @@
       MUTED_OPACITY +
       '; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
       '.toolbar-btn:hover { opacity: 1; background: rgba(128,128,128,0.15); }' +
-      '.toolbar-btn:focus-visible { opacity: 1; outline: 2px solid currentColor; outline-offset: 1px; }' +
+      '.toolbar-btn:focus-visible, .swatch-btn:focus-visible { opacity: 1; outline: 2px solid currentColor; outline-offset: 1px; }' +
       '.toolbar-btn.copied { opacity: 1; color: #10b981; }' +
       '#terminal { flex: 1; min-height: 0; overflow: hidden; }' +
       '.xterm { padding: 12px 16px; }' +
@@ -563,7 +565,7 @@
 
         // Update toolbar button and text colors
         const toolbarBtns = doc.querySelectorAll(
-          '.toolbar-btn, .status-text, .dimensions, .exit-hint'
+          '.toolbar-btn, .swatch-btn, .status-text, .dimensions, .exit-hint'
         );
         toolbarBtns.forEach((btn: Element) => {
           (btn as HTMLElement).style.color = th.foreground;
@@ -639,7 +641,6 @@
         }
         if (statusText) {
           statusText.textContent = t('terminal.disconnected');
-          statusText.className = 'status-text disconnected';
         }
       };
 
