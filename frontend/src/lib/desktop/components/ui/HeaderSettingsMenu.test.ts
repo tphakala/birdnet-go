@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
@@ -39,6 +39,10 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('hides Edit and Reset Dashboard from unauthenticated guests', async () => {
