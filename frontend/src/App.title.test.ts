@@ -236,17 +236,20 @@ const TITLE_IN_HEAD_RE = /<svelte:head\b[^>]*>(?:(?!<\/svelte:head>)[\s\S])*?<ti
 const TITLE_ASSIGNMENT_RE = /\bdocument\.title\s*=(?!=)/;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 const SCRIPT_COMMENT_RE = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
+const HEAD_TAG = '<svelte:head';
+const DOCUMENT_TITLE = 'document.title';
 const APP_COMPONENT = 'App.svelte';
 const TEST_FILE_RE = /\.(?:test|spec)\.[cm]?[jt]s$|(?:^|[\\/])test[\\/]/;
 const SOURCE_FILE_RE = /\.(?:svelte|ts|js)$/;
 
 function hasTitleInHead(source: string): boolean {
-  return TITLE_IN_HEAD_RE.test(source.replace(HTML_COMMENT_RE, ''));
+  return source.includes(HEAD_TAG) && TITLE_IN_HEAD_RE.test(source.replace(HTML_COMMENT_RE, ''));
 }
 
 function assignsDocumentTitle(source: string): boolean {
-  return TITLE_ASSIGNMENT_RE.test(
-    source.replace(HTML_COMMENT_RE, '').replace(SCRIPT_COMMENT_RE, '')
+  return (
+    source.includes(DOCUMENT_TITLE) &&
+    TITLE_ASSIGNMENT_RE.test(source.replace(HTML_COMMENT_RE, '').replace(SCRIPT_COMMENT_RE, ''))
   );
 }
 
