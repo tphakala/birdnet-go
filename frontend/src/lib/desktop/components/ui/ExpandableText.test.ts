@@ -5,6 +5,7 @@ import { CLAMPED_HEIGHT, FULL_HEIGHT, stubLayout } from '../../../../test/layout
 import { renderTyped, screen } from '../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ExpandableText from './ExpandableText.svelte';
+import ExpandableTextLinesHarness from './ExpandableText.lines.test.svelte';
 
 const LONG_TEXT = 'A long description that does not fit in three lines on a narrow card.';
 const SHORT_TEXT = 'Short.';
@@ -96,6 +97,20 @@ describe('ExpandableText measurement', () => {
     renderTyped(ExpandableText, { props: { text: LONG_TEXT, lines } });
 
     expect(paragraphOf(LONG_TEXT)).toHaveClass(`line-clamp-${lines}`);
+  });
+
+  it('re-measures when the lines prop changes on its own', async () => {
+    // The text is clipped only under the 2 line clamp: at 4 lines the box is as tall as the text
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
+      return this.classList.contains('line-clamp-2') ? CLAMPED_HEIGHT : FULL_HEIGHT;
+    });
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(FULL_HEIGHT);
+    render(ExpandableTextLinesHarness, { props: { text: LONG_TEXT } });
+    expect(screen.queryByRole('button', { name: 'common.ui.showMore' })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'narrow' }));
+
+    expect(screen.getByRole('button', { name: 'common.ui.showMore' })).toBeInTheDocument();
   });
 
   it.each([
