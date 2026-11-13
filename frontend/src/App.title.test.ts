@@ -135,6 +135,21 @@ describe('App document title', () => {
     await waitFor(() => expect(document.title).toBe(`[auth.loginTitle] - ${APP_NAME}`));
   });
 
+  it('titles the login screen without Settings when a settings page was requested', async () => {
+    startup.security = { enabled: true, accessAllowed: false, privateMode: true };
+    navigation.redirect(`${SETTINGS_BASE}/audio`);
+    renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[auth.loginTitle] - ${APP_NAME}`));
+  });
+
+  it('titles the login screen without an error code when an error page was requested', async () => {
+    startup.security = { enabled: true, accessAllowed: false, privateMode: true };
+    window.location.search = `?error=${ERROR_CODE}`;
+    navigation.redirect(UNKNOWN_PATH);
+    renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[auth.loginTitle] - ${APP_NAME}`));
+  });
+
   it('shows only the app name when the app failed to load', async () => {
     startup.error = INIT_ERROR;
     navigation.redirect(DASHBOARD_PATH);
