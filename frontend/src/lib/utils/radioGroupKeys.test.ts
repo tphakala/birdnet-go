@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fireEvent } from '@testing-library/svelte';
 import { radioGroupKeys } from './radioGroupKeys';
 
@@ -124,6 +124,25 @@ describe('radioGroupKeys', () => {
 
     expect(checkedLabel(radios)).toBe('c');
     expect(document.activeElement).toBe(radios[2]);
+  });
+
+  it('selects a focused radio even when the window lacks system focus and :focus does not match', async () => {
+    const { radios } = setup(['a', 'b', 'c']);
+    // An unfocused window or iframe keeps the focused element as activeElement but never matches :focus.
+    const realMatches = Element.prototype.matches;
+    const matches = vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string
+    ) {
+      return selector === ':focus' ? false : realMatches.call(this, selector);
+    });
+    radios[0].focus();
+
+    await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
+    matches.mockRestore();
+
+    expect(checkedLabel(radios)).toBe('b');
+    expect(document.activeElement).toBe(radios[1]);
   });
 
   it('leaves selection and focus alone when every other radio is aria-disabled', async () => {
