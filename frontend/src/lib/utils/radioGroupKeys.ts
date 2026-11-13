@@ -42,8 +42,8 @@ export const radioGroupKeys: Action<HTMLElement> = node => {
 
     event.preventDefault();
     for (let offset = 1; offset < radios.length; offset++) {
-      const index = (((start + step * offset) % radios.length) + radios.length) % radios.length;
-      const candidate = radios.at(index);
+      // at() counts a negative index from the end, so the remainder wraps in both directions.
+      const candidate = radios.at((start + step * offset) % radios.length);
       if (!candidate || candidate.matches(UNAVAILABLE_SELECTOR)) continue;
       candidate.click();
       // The click handler updates the roving tabindex; focus once the DOM reflects it.
