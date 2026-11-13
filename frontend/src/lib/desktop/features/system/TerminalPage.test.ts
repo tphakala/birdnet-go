@@ -5,10 +5,17 @@ import { get } from 'svelte/store';
 
 type KeyHandler = (ev: KeyboardEvent) => boolean;
 
-// Every Terminal the page creates, so tests can reach its input and its key handler
-const created = vi.hoisted(() => ({
-  terminals: [] as { textarea?: HTMLTextAreaElement; handler?: KeyHandler; focusCount: number }[],
-}));
+interface MockTerminal {
+  textarea?: HTMLTextAreaElement;
+  handler?: KeyHandler;
+  focusCount: number;
+}
+
+// Every Terminal the page creates, so tests can reach its input, key handler and focus calls
+const created = vi.hoisted(() => {
+  const terminals: MockTerminal[] = [];
+  return { terminals };
+});
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
