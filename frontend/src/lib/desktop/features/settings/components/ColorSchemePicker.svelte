@@ -4,7 +4,6 @@
   import { settingsActions, dashboardSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { radioGroupKeys } from '$lib/utils/radioGroupKeys';
   import { Check } from '@lucide/svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
   import { SCHEME_GRADIENT_MAP, type LogoVariant } from '$lib/stores/logoVariant';
@@ -104,7 +103,6 @@
     class="flex flex-wrap gap-3"
     role="radiogroup"
     aria-label={t('settings.appearance.colorScheme')}
-    use:radioGroupKeys
   >
     {#each schemes as opt (opt.id)}
       <button
@@ -117,8 +115,7 @@
         onclick={() => selectScheme(opt.id)}
         aria-label={t(opt.labelKey)}
         aria-checked={$scheme === opt.id}
-        tabindex={$scheme === opt.id ? 0 : -1}
-        aria-disabled={disabled ? 'true' : undefined}
+        {disabled}
       >
         <div
           class={cn(
