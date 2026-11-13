@@ -10,9 +10,10 @@
    ================================================ */
 
 /* --- Blue (default) ---
-   No overrides needed: the @theme values in tailwind.css
-   define the blue primary and accent, and the light and
-   dark theme blocks there define its --text-primary. This
+   No overrides needed: the @theme values and the dark
+   theme block in tailwind.css define the blue primary and
+   accent, and the light and dark theme blocks there define
+   its --text-primary. This
    selector exists only for explicitness and to match the
    data-scheme attribute set by the scheme store. */
 [data-scheme='blue'] {

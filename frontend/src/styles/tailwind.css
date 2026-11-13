@@ -116,8 +116,9 @@
 [data-theme='light'] {
   color-scheme: light;
 
-  /* Color variables are now registered in @theme above. Only non-color tokens and the
-     text tokens (--text-*, including --text-primary) remain here. */
+  /* Color fills (--color-*) are registered in @theme above. This block holds the surface,
+     border, hover overlay, text (--text-*, including --text-primary) and visualization
+     tokens, plus the other non-color tokens. */
 
   /* Surface colors */
   --surface-100: #ffffff;
