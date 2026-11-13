@@ -91,9 +91,9 @@ describe('ModelCardGrid', () => {
     });
 
     const reinstallA = within(card('Model a')).getByRole('button', {
-      name: 'analysis.gallery.reinstall Model a',
+      name: 'analysis.gallery.reinstalling Model a',
     });
-    expect(reinstallA).toBeDisabled();
+    expect(reinstallA).toHaveAttribute('aria-disabled', 'true');
     expect(reinstallA).toHaveTextContent('analysis.gallery.reinstalling');
     for (const button of within(card('Model b')).getAllByRole('button')) {
       expect(button).toHaveAttribute('aria-disabled', 'true');

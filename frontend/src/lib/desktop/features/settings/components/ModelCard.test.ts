@@ -99,14 +99,16 @@ describe('ModelCard', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
 
-    it('disables Install and explains why on an incompatible available entry', () => {
+    it('blocks Install and explains why on an incompatible available entry', () => {
       renderCard({ entry: entry({ compatible: false }), mode: 'available' });
 
-      expect(button('analysis.gallery.install')).toBeDisabled();
+      const install = button('analysis.gallery.install');
+      expect(install).toBeEnabled();
+      expect(install).toHaveAttribute('aria-disabled', 'true');
       expect(screen.getByRole('status')).toHaveTextContent('analysis.gallery.entryIncompatible');
     });
 
-    it('describes a disabled Install by the incompatibility notice', () => {
+    it('describes a blocked Install by the incompatibility notice', () => {
       renderCard({ entry: entry({ compatible: false }), mode: 'available' });
 
       expect(button('analysis.gallery.install')).toHaveAccessibleDescription(
@@ -196,10 +198,12 @@ describe('ModelCard', () => {
         busy: 'reinstall',
       });
 
-      const reinstall = button('analysis.gallery.reinstall');
-      expect(reinstall).toBeDisabled();
-      expect(reinstall).not.toHaveAttribute('aria-disabled');
+      const reinstall = button('analysis.gallery.reinstalling');
+      expect(reinstall).toBeEnabled();
+      expect(reinstall).toHaveAttribute('aria-disabled', 'true');
+      expect(reinstall).toHaveAttribute('aria-describedby', PAUSED_ID);
       expect(reinstall).toHaveTextContent('analysis.gallery.reinstalling');
+      await fireEvent.click(reinstall);
 
       const remove = button('analysis.gallery.remove');
       expect(remove).toHaveAttribute('aria-disabled', 'true');
@@ -207,30 +211,41 @@ describe('ModelCard', () => {
       expect(onAction).not.toHaveBeenCalled();
     });
 
-    it('keeps an incompatible Install natively disabled, never paused', () => {
-      renderCard({
+    it('keeps an incompatible Install blocked by the notice, never by the paused reason', async () => {
+      const { onAction } = renderCard({
         entry: entry({ compatible: false }),
         mode: 'available',
         actionInFlight: true,
       });
 
       const install = button('analysis.gallery.install');
-      expect(install).toBeDisabled();
-      expect(install).not.toHaveAttribute('aria-disabled');
+      expect(install).toBeEnabled();
+      expect(install).toHaveAttribute('aria-disabled', 'true');
+      expect(install).not.toHaveAttribute('aria-describedby', PAUSED_ID);
+      expect(install).not.toHaveAttribute('title');
+      await fireEvent.click(install);
+      expect(onAction).not.toHaveBeenCalled();
     });
 
     it.each([
       ['available', 'install', 'analysis.gallery.install', 'analysis.gallery.installing'],
       ['installed', 'remove', 'analysis.gallery.remove', 'analysis.gallery.removing'],
     ] as const)(
-      'a %s card running %s disables that button and labels it',
-      (mode, busy, label, running) => {
-        renderCard({ entry: entry({ installed: mode === 'installed' }), mode, busy });
+      'a %s card running %s blocks that button, names it by its running label and ignores clicks',
+      async (mode, busy, _label, running) => {
+        const { onAction } = renderCard({
+          entry: entry({ installed: mode === 'installed' }),
+          mode,
+          busy,
+        });
 
-        const own = button(label);
-        expect(own).toBeDisabled();
-        expect(own).not.toHaveAttribute('aria-disabled');
+        const own = button(running);
+        expect(own).toBeEnabled();
+        expect(own).toHaveAttribute('aria-disabled', 'true');
+        expect(own).toHaveAttribute('aria-describedby', PAUSED_ID);
         expect(own).toHaveTextContent(running);
+        await fireEvent.click(own);
+        expect(onAction).not.toHaveBeenCalled();
       }
     );
 
@@ -251,8 +266,8 @@ describe('ModelCard', () => {
         busy: 'install',
       });
 
-      const optimize = button('analysis.gallery.optimize.swap');
-      expect(optimize).toBeDisabled();
+      const optimize = button('analysis.gallery.optimize.applying');
+      expect(optimize).toHaveAttribute('aria-disabled', 'true');
       expect(optimize).toHaveTextContent('analysis.gallery.optimize.applying');
     });
   });

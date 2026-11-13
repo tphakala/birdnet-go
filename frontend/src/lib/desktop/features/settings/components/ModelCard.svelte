@@ -20,9 +20,12 @@
   - className: Classes for the article
 
   Behaviour:
-  - A button is natively disabled only while its own action runs (and Install on an
-    incompatible entry). While another action runs it is aria-disabled, stays focusable, points
-    aria-describedby at pausedReasonId and ignores clicks.
+  - No action button is natively disabled, so Tab always reaches it. While its own action runs,
+    while another action runs, and for Install on an incompatible entry it is aria-disabled,
+    ignores clicks and points aria-describedby at the visible reason (pausedReasonId, or the
+    incompatibility notice).
+  - A button's accessible name is "{label} {name}", with the running label while its action
+    runs, so it always contains the visible text.
   - Must be a direct child of ModelCardGrid's grid: the card spans five of its rows.
 -->
 <script lang="ts" module>
@@ -210,12 +213,13 @@
     icon: LucideIcon;
     label: string;
     runningLabel: string;
-    /** Natively disabled: this action runs, or it can never run here. */
-    disabled: boolean;
-    /** Another action runs: focusable, described, click ignored. */
+    /** Another action runs: blocked, described by the paused reason. */
     paused: boolean;
+    /** This action runs: blocked, described by the paused reason. */
     running: boolean;
-    /** id of the visible text that explains a native disabled state. */
+    /** The action can never run here: blocked, described by the notice at describedBy. */
+    unavailable?: boolean;
+    /** id of the visible text that explains an unavailable action. */
     describedBy?: string;
   }
 
@@ -225,10 +229,10 @@
     icon: Download,
     label: t('analysis.gallery.install'),
     runningLabel: t('analysis.gallery.installing'),
-    disabled: !entry.compatible || busy === 'install',
-    // Incompatible entries keep their permanent native-disabled state, explained on the card
+    // Incompatible entries stay blocked for good, explained by the notice, never by the paused reason
     paused: inFlight && busy !== 'install' && entry.compatible,
     running: busy === 'install',
+    unavailable: !entry.compatible,
     describedBy: entry.compatible ? undefined : incompatibleNoticeId,
   });
 
@@ -238,7 +242,6 @@
     icon: Sparkles,
     label: t('analysis.gallery.optimize.swap'),
     runningLabel: t('analysis.gallery.optimize.applying'),
-    disabled: busy === 'install',
     paused: inFlight && busy !== 'install',
     running: busy === 'install',
   });
@@ -249,7 +252,6 @@
     icon: RefreshCw,
     label: t('analysis.gallery.reinstall'),
     runningLabel: t('analysis.gallery.reinstalling'),
-    disabled: busy === 'reinstall',
     paused: inFlight && busy !== 'reinstall',
     running: busy === 'reinstall',
   });
@@ -260,23 +262,22 @@
     icon: Trash2,
     label: t('analysis.gallery.remove'),
     runningLabel: t('analysis.gallery.removing'),
-    disabled: busy === 'remove',
     paused: inFlight && busy !== 'remove',
     running: busy === 'remove',
   });
 </script>
 
 {#snippet actionButton(spec: ActionSpec)}
+  {@const blocked = spec.paused || spec.running || spec.unavailable === true}
   <Button
     variant={spec.variant}
     size="sm"
-    disabled={spec.disabled}
-    aria-disabled={spec.paused ? 'true' : undefined}
-    aria-describedby={spec.paused ? pausedReasonId : spec.describedBy}
+    aria-disabled={blocked ? 'true' : undefined}
+    aria-describedby={spec.unavailable ? spec.describedBy : blocked ? pausedReasonId : undefined}
     title={spec.paused ? t('analysis.gallery.actionInProgress') : undefined}
-    aria-label="{spec.label} {entry.name}"
+    aria-label="{spec.running ? spec.runningLabel : spec.label} {entry.name}"
     onclick={() => {
-      if (spec.paused) return;
+      if (blocked) return;
       onAction(spec.action, entry);
     }}
   >
