@@ -748,6 +748,7 @@
                       </thead>
                       <tbody>
                         {#each topErrors as group (group.component + ':' + group.message)}
+                          {@const levelFill = levelColor(group.level)}
                           <tr class="border-b border-[var(--color-base-200)]/50 last:border-0">
                             <td class="px-3 py-1.5">
                               {#if group.component}
@@ -767,8 +768,8 @@
                             <td class="px-3 py-1.5">
                               <span
                                 class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                                style:color={textColorFor(levelColor(group.level))}
-                                style:background="color-mix(in srgb, {levelColor(group.level)} 10%, transparent)"
+                                style:color={textColorFor(levelFill)}
+                                style:background="color-mix(in srgb, {levelFill} 10%, transparent)"
                               >
                                 {group.level}
                               </span>
@@ -826,12 +827,13 @@
                         {/if}
 
                         {#if typeof pattern === 'string' && pattern !== PATTERN_NONE}
+                          {@const patternFill = patternColor(pattern)}
                           <span class="inline-flex items-center gap-1.5 text-xs">
                             <span class="text-muted">{t('health.detail.pattern')}:</span>
                             <span
                               class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={textColorFor(patternColor(pattern))}
-                              style:background="color-mix(in srgb, {patternColor(pattern)} 10%, transparent)"
+                              style:color={textColorFor(patternFill)}
+                              style:background="color-mix(in srgb, {patternFill} 10%, transparent)"
                             >
                               {patternLabel(pattern)}
                             </span>
@@ -839,12 +841,13 @@
                         {/if}
 
                         {#if typeof velocity === 'string' && velocity !== VELOCITY_NA}
+                          {@const velocityFill = velocityColor(velocity)}
                           <span class="inline-flex items-center gap-1.5 text-xs">
                             <span class="text-muted">{t('health.detail.velocity')}:</span>
                             <span
                               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={textColorFor(velocityColor(velocity))}
-                              style:background="color-mix(in srgb, {velocityColor(velocity)} 10%, transparent)"
+                              style:color={textColorFor(velocityFill)}
+                              style:background="color-mix(in srgb, {velocityFill} 10%, transparent)"
                             >
                               {#if velocity === VELOCITY_INCREASING}
                                 <TrendingUp class="size-3" />
