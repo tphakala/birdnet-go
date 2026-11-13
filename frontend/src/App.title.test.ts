@@ -75,7 +75,6 @@ const SETTINGS_NAME_PATTERN = /^\[settings\.sections\.\w+\] - \[navigation\.sett
 // The URL segments Settings.svelte maps to a section, so a section added there without a title
 // in App.svelte fails the subpage test below.
 function settingsSubpagesFromView(): string[] {
-   
   const map = SETTINGS_SECTION_MAP_RE.exec(readFileSync(SETTINGS_VIEW_PATH, 'utf8'));
   return Array.from((map?.[1] ?? '').matchAll(OBJECT_KEY_RE), match => match[1]);
 }
@@ -252,7 +251,6 @@ function assignsDocumentTitle(source: string): boolean {
 }
 
 function sourceFiles(): string[] {
-   
   return readdirSync(SRC_DIR, { recursive: true, encoding: 'utf8' }).filter(file =>
     SOURCE_FILE_RE.test(file)
   );
