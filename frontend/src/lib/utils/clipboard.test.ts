@@ -48,6 +48,27 @@ describe('copyToClipboard focus handling', () => {
     }
   );
 
+  it('returns focus inside a popup document passed as targetDoc', async () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const popup = frame.contentDocument;
+    if (!popup?.defaultView) throw new Error('iframe document has no window');
+    popup.defaultView.HTMLTextAreaElement.prototype.select = function select(
+      this: HTMLTextAreaElement
+    ) {
+      this.focus();
+    };
+    const popupButton = popup.createElement('button');
+    popup.body.append(popupButton);
+    popupButton.focus();
+    popup.execCommand = vi.fn(() => true);
+
+    expect(await copyToClipboard('text', popup)).toBe(true);
+
+    expect(popup.activeElement).toBe(popupButton);
+    frame.remove();
+  });
+
   it('leaves focus alone when the Clipboard API succeeds', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
