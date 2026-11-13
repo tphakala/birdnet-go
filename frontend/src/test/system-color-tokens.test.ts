@@ -77,10 +77,8 @@ const PALETTE_CLASS = new RegExp(
   'g'
 );
 const PALETTE_VAR = new RegExp(`--color-(?:${PALETTE_ALTERNATION})-\\d{2,3}\\b`, 'g');
-// text-[var(--color-success)] and its warning, error and info siblings, behind any variants, with
-// or without an opacity suffix
-const STATUS_FILL_TEXT =
-  /(?<![\w-])(?:[\w-]+:)*text-\[var\(--color-(?:success|warning|error|info)\)\](?:\/\d{1,3})?/g;
+// text-[var(--color-success)] and its warning, error and info siblings, also behind variants
+const STATUS_FILL_TEXT = /(?<![\w-])text-\[var\(--color-(?:success|warning|error|info)\)\]/g;
 // Unprefixed faded text: base-content with an opacity suffix, or a plain opacity utility (also as
 // a Svelte class: directive). A variant prefix (disabled:, hover:) does not match.
 const FADED_BASE_CONTENT = /(?<![\w:-])text-\[var\(--color-base-content\)\]\/(\d{1,3})(?![\d%])/g;
@@ -133,7 +131,6 @@ describe('System page colors', () => {
     ['an error fill used as text behind a variant', 'class="hover:text-[var(--color-error)]"'],
     ['an info fill used as text with opacity', 'class="text-[var(--color-info)]/80"'],
     ['base content faded by an opacity suffix', 'class="text-[var(--color-base-content)]/60"'],
-    ['base content faded to a bare percentage', 'class="text-[var(--color-base-content)]/40"'],
     ['faded text by opacity utility', 'class="text-xs opacity-60 truncate"'],
     ['a faded Svelte class directive', 'class:opacity-40={count === 0}'],
   ])('flags %s', (_name, source) => {
@@ -157,8 +154,7 @@ describe('System page colors', () => {
     ],
     ['a status text token', 'class="text-[var(--text-success)] text-[var(--text-warning)]"'],
     ['text at the faded limit', 'class="text-[var(--color-base-content)]/70 opacity-70"'],
-    ['a disabled control opacity', 'class="disabled:opacity-50 aria-disabled:opacity-50"'],
-    ['a hover opacity', 'class="hover:opacity-80 opacity-100"'],
+    ['a variant opacity', 'class="disabled:opacity-50 hover:opacity-80 opacity-100"'],
     ['a hidden element', 'class="opacity-0"'],
   ])('passes %s', (_name, source) => {
     expect(findRawColors(source)).toEqual([]);
