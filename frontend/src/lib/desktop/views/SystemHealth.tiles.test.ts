@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import SystemHealth from './SystemHealth.svelte';
+import type { DiagnosticsReport } from '$lib/types/diagnostics.types';
 
 const TOTAL_CHECKS = 5;
 const SKIPPED_LABEL_KEY = 'health.summary.skipped';
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({ post: vi.fn() }));
 
 vi.mock('$lib/utils/api', () => ({ api: { post: mocks.post } }));
 
-function report(counts: Record<string, number>) {
+function report(counts: Record<string, number>): DiagnosticsReport {
   return {
     id: 'report-1',
     status: 'healthy',

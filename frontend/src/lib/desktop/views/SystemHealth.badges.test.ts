@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import SystemHealth from './SystemHealth.svelte';
+import type { DiagnosticsReport } from '$lib/types/diagnostics.types';
 
 const mocks = vi.hoisted(() => ({ post: vi.fn() }));
 
@@ -10,7 +11,7 @@ const CHECK_NAME = 'log_errors';
 const CHECK_BUTTON_NAME = /Log Errors/;
 const NEUTRAL_FILL = 'var(--color-base-content)';
 
-function report(details: Record<string, unknown>) {
+function report(details: Record<string, unknown>): DiagnosticsReport {
   return {
     id: 'report-1',
     status: 'warning',
@@ -25,6 +26,7 @@ function report(details: Record<string, unknown>) {
         status: 'warning',
         message: 'errors found',
         duration_ms: 1,
+        timestamp: '2026-01-01T00:00:01Z',
         details,
       },
     ],

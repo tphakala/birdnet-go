@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, screen } from '@testing-library/svelte';
 import RestartCard from './RestartCard.svelte';
+import { renderTyped } from '../../../../../test/render-helpers';
 import { restartState } from '$lib/stores/restart.svelte';
 
 // The text tokens reach 4.5:1 on the 15% and 25% fill tints in both themes and on the pressed
@@ -13,7 +14,7 @@ describe('RestartCard buttons', () => {
 
   it('writes both labels with a text token and keeps the pressed tint at 30% or less', () => {
     restartState.container_restart_available = true;
-    render(RestartCard);
+    renderTyped(RestartCard);
 
     expect(screen.getByRole('button', { name: 'restart.applicationRestart' })).toHaveClass(
       'text-[var(--text-warning)]',
