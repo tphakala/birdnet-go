@@ -29,6 +29,7 @@ function paragraphOf(text: string): HTMLElement {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('ExpandableText', () => {
@@ -91,6 +92,72 @@ describe('ExpandableText', () => {
 describe('ExpandableText measurement', () => {
   afterEach(() => {
     Reflect.deleteProperty(document, 'fonts');
+  });
+
+  it.each([2, 3, 4] as const)('clamps to %i lines while collapsed', lines => {
+    stubLayout(LONG_TEXT);
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT, lines } });
+
+    expect(paragraphOf(LONG_TEXT)).toHaveClass(`line-clamp-${lines}`);
+  });
+
+  it.each([
+    [1, false],
+    [2, true],
+  ])('with a %i px overshoot shows a toggle: %s', (overshoot, shown) => {
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(CLAMPED_HEIGHT + overshoot);
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT } });
+
+    expect(screen.queryByRole('button') !== null).toBe(shown);
+  });
+
+  it('shows and hides the toggle when the paragraph is resized', async () => {
+    // The shared ResizeObserver mock never calls back; this one calls back for the elements it
+    // observes, so a resize only reaches the component through observe()
+    const observers = new Set<CapturingObserver>();
+    class CapturingObserver implements ResizeObserver {
+      readonly observed = new Set<Element>();
+      readonly callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+        observers.add(this);
+      }
+      observe(target: Element): void {
+        this.observed.add(target);
+      }
+      unobserve(target: Element): void {
+        this.observed.delete(target);
+      }
+      disconnect(): void {
+        this.observed.clear();
+      }
+    }
+    const resize = (target: Element) => {
+      for (const observer of observers) {
+        if (observer.observed.has(target)) observer.callback([], observer);
+      }
+    };
+    vi.stubGlobal('ResizeObserver', CapturingObserver);
+    let clipped = false;
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(CLAMPED_HEIGHT);
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(() =>
+      clipped ? FULL_HEIGHT : CLAMPED_HEIGHT
+    );
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT } });
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    // Narrower: the text no longer fits
+    clipped = true;
+    resize(paragraphOf(LONG_TEXT));
+    await tick();
+    expect(screen.getByRole('button', { name: 'common.ui.showMore' })).toBeInTheDocument();
+
+    // Wider again: it fits
+    clipped = false;
+    resize(paragraphOf(LONG_TEXT));
+    await tick();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('re-measures once web fonts have loaded', async () => {
