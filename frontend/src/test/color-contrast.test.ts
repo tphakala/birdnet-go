@@ -1236,11 +1236,6 @@ describe('Primary and accent content in every color scheme', () => {
         }
       }
     });
-
-    it('section headers of the active section use the text token', () => {
-      const file = join(srcDir, 'lib', 'desktop', 'layouts', 'CollapsibleNavSection.svelte');
-      expect(readFileSync(file, 'utf8')).toContain('text-[var(--text-primary)]');
-    });
   });
 
   it('resolves color-mix against black and white', () => {

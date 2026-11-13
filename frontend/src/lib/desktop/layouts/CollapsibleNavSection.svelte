@@ -88,6 +88,10 @@
   const menuItemBase =
     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
   const menuItemCollapsed = 'justify-center px-0';
+  // The active section gets the same tint and text colour as an active flat item (NavFlatItem)
+  const menuItemActive = 'menu-item-active';
+  const menuItemInactive =
+    'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover';
   const subitemClass =
     'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150';
   const focusRing =
@@ -111,8 +115,7 @@
         class={cn(
           menuItemBase,
           menuItemCollapsed,
-          routeActive ? 'text-[var(--text-primary)]' : 'text-[var(--color-base-content)]/80',
-          'hover:text-[var(--color-base-content)] hover:menu-hover',
+          routeActive ? menuItemActive : menuItemInactive,
           focusRing
         )}
         aria-expanded={flyoutOpen}
@@ -181,12 +184,7 @@
     <button
       type="button"
       onclick={onToggleExpanded}
-      class={cn(
-        menuItemBase,
-        routeActive ? 'text-[var(--text-primary)]' : 'text-[var(--color-base-content)]/80',
-        'hover:text-[var(--color-base-content)] hover:menu-hover',
-        focusRing
-      )}
+      class={cn(menuItemBase, routeActive ? menuItemActive : menuItemInactive, focusRing)}
       aria-expanded={expanded}
     >
       <Icon class="size-5 shrink-0" />

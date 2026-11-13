@@ -71,6 +71,36 @@ describe('CollapsibleNavSection', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Active section header
+  // -------------------------------------------------------------------------
+
+  // menu-item-active draws the tint and the --text-primary text, the same as an active flat
+  // item, so the header reads as active in every scheme (jsdom cannot render the colours)
+  const ACTIVE_CLASS = 'menu-item-active';
+
+  it.each([
+    ['expanded', { isCollapsed: false }],
+    ['collapsed', { isCollapsed: true }],
+  ])('the header of the active section has the active item style when %s', (_mode, mode) => {
+    sectionTest.render({ ...baseProps, ...mode, routeActive: true });
+
+    const header = screen.getByRole('button', { name: 'System' });
+    expect(header).toHaveClass(ACTIVE_CLASS);
+    expect(header).not.toHaveClass('hover:menu-hover');
+  });
+
+  it.each([
+    ['expanded', { isCollapsed: false }],
+    ['collapsed', { isCollapsed: true }],
+  ])('the header of an inactive section has no active style when %s', (_mode, mode) => {
+    sectionTest.render({ ...baseProps, ...mode, routeActive: false });
+
+    const header = screen.getByRole('button', { name: 'System' });
+    expect(header).not.toHaveClass(ACTIVE_CLASS);
+    expect(header).toHaveClass('hover:menu-hover');
+  });
+
+  // -------------------------------------------------------------------------
   // aria-current: flyout mode
   // -------------------------------------------------------------------------
 
