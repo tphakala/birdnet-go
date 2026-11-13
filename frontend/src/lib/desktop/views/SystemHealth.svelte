@@ -564,9 +564,7 @@
       <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
         {t('health.diagnostics')}
       </h3>
-      <div
-        class="flex items-center gap-3 text-xs text-[var(--color-base-content)] opacity-60 shrink-0"
-      >
+      <div class="flex items-center gap-3 text-xs text-muted shrink-0">
         {#if error}
           <span
             role="alert"

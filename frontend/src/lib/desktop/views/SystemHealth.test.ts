@@ -124,6 +124,21 @@ describe('SystemHealth keyboard and run state', () => {
     );
   });
 
+  it('keeps the Refresh button and the window radios out from under a dimmed ancestor', async () => {
+    mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
+    render(SystemHealth);
+    await screen.findByText('health.metricFooter.allPassing');
+
+    // An ancestor opacity multiplies into the focus ring and cannot be lifted by the child.
+    // The computed opacity chain and the ring contrast are browser-only checks.
+    const controls = [screen.getByRole('button', { name: 'health.refresh' }), ...windowRadios()];
+    for (const control of controls) {
+      for (let node = control.parentElement; node; node = node.parentElement) {
+        expect(node.className).not.toMatch(/(^|\s)opacity-\d+(\s|$)/);
+      }
+    }
+  });
+
   it('selects and focuses the next window on ArrowRight', async () => {
     mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
     render(SystemHealth);
