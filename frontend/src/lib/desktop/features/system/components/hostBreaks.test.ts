@@ -10,7 +10,7 @@ describe('splitHostSegments', () => {
     expect(splitHostSegments('localhost')).toEqual(['localhost']);
   });
 
-  it('ends each segment with its separator so no character is lost', () => {
+  it('closes every segment but the last with its separator', () => {
     expect(splitHostSegments('mysql.internal.example.org:3306')).toEqual([
       'mysql.',
       'internal.',
