@@ -207,7 +207,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Nastavenia - BirdNET-Go",
     "pageNotFound": "404 - Stránka sa nenašla",
     "serverError": "500 - Interná chyba servera",
     "componentError": "Chyba načítania komponentu",

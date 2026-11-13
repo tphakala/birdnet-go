@@ -55,10 +55,6 @@
   });
 </script>
 
-<svelte:head>
-  <title>{t('pageTitle.settings')}</title>
-</svelte:head>
-
 <main class="col-span-12 w-full">
   <!-- Restart-required is shown by the global RestartBanner (RootLayout),
        driven by backend restart state. -->

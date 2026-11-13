@@ -34,10 +34,6 @@
   let hasStackTrace = $derived(stackTrace && stackTrace.trim().length > 0);
 </script>
 
-<svelte:head>
-  <title>{code} - {title}</title>
-</svelte:head>
-
 <div class={cn('col-span-12 min-h-[60vh] flex items-center justify-center', className)}>
   <div class="text-center p-8 rounded-lg bg-[var(--color-base-100)] shadow-lg max-w-4xl w-full">
     <h1 class="text-6xl font-bold text-[var(--color-base-content)] mb-4">{code}</h1>
