@@ -44,10 +44,12 @@ const (
 
 // Model release channels. An empty CatalogEntry.Channel means a stable (GA)
 // release; ChannelPreview marks a developer-preview build the gallery labels as
-// not the final GA build.
+// not the final GA build; ChannelExperimental marks a published model whose
+// performance in BirdNET-Go is not proven yet.
 const (
-	ChannelStable  = "stable"
-	ChannelPreview = "preview"
+	ChannelStable       = "stable"
+	ChannelPreview      = "preview"
+	ChannelExperimental = "experimental"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
@@ -70,8 +72,10 @@ type CatalogEntry struct {
 	Version       string `json:"version"`        // model version string
 	// Channel marks a non-stable release. "" (or "stable") is the normal GA build;
 	// "preview" marks a developer-preview build the gallery flags as not the GA
-	// build. omitempty keeps every stable entry's on-disk JSON byte-identical, so
-	// adding this field does not shift catalogChecksum or force a schema-version bump.
+	// build; "experimental" marks a published model whose performance in BirdNET-Go
+	// is not proven yet. omitempty keeps every stable entry's on-disk JSON
+	// byte-identical, so adding this field does not shift catalogChecksum or force
+	// a schema-version bump.
 	Channel string `json:"channel,omitempty"`
 	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
 	// channel (e.g. "preview3.1"). Empty for stable releases. omitempty as above.
@@ -773,6 +777,7 @@ func bsgBatCatalogEntry() CatalogEntry {
 		CommercialUse:   true,
 		Category:        CategoryBat,
 		Region:          "Europe",
+		Channel:         ChannelExperimental,
 		SpeciesCount:    bsgBatNumSpecies,
 		Version:         DetectionVersionBSGBat,
 		RegistryID:      RegistryIDBSGBat,

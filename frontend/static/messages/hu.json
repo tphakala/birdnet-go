@@ -764,7 +764,7 @@
         "showSpecies": "{species} faj megjelenítése",
         "ignoreSpecies": "{species} faj figyelmen kívül hagyása",
         "showSpeciesConfirm": "Biztosan meg szeretné jeleníteni a {species} jövőbeli észleléseit?",
-        "ignoreSpeciesConfirm": "Biztosan figyelmen kívül szeretné hagyni a {species} jövőbeli észleléseit? Ez csak az új észleléseket érinti — a meglévők az adatbázisban maradnak.",
+        "ignoreSpeciesConfirm": "Biztosan figyelmen kívül szeretné hagyni a {species} jövőbeli észleléseit? Ez csak az új észleléseket érinti; a meglévők az adatbázisban maradnak.",
         "unlockDetection": "Észlelés zárolásának feloldása",
         "lockDetection": "Észlelés zárolása",
         "unlockDetectionConfirm": "Biztosan fel szeretné oldani a {species} észlelésének zárolását? Ez lehetővé teszi a törlését a rendszeres karbantartás során.",
@@ -4041,7 +4041,7 @@
         "userIdLabel": "Felhasználói ID (opcionális)",
         "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
         "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
-        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
+        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva: a bejelentkezés sikertelen lesz",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",
@@ -4134,7 +4134,7 @@
       },
       "privateMode": {
         "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
-        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül; bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -5832,6 +5832,11 @@
         "buildLabel": "{version} · {build}",
         "cardNotice": "Fejlesztői előzetes, nem végleges kiadás. Ez egy korai tesztverzió; az eredmények a stabil verzió előtt még változhatnak.",
         "dialogNotice": "Fejlesztői előzetest ({build}) készülsz telepíteni. Kipróbálásra jó, de egyelőre nem ajánlott egyedüli osztályozóként használni."
+      },
+      "experimental": {
+        "badge": "Kísérleti",
+        "cardNotice": "Kísérleti a BirdNET-Góban. A modell publikált, de a teljesítménye a BirdNET-Góban még nem bizonyított, ezért az eredmények kevésbé megbízhatóak lehetnek.",
+        "dialogNotice": "Olyan modellt telepít, amely a BirdNET-Góban kísérleti. A teljesítménye még nem bizonyított, ezért ellenőrizze az észleléseit, mielőtt támaszkodna rá."
       },
       "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
       "regionGlobal": "Globális",

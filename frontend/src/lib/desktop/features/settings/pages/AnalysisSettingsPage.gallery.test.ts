@@ -206,6 +206,64 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(vi.mocked(modelsApi.fetchCatalog).mock.calls.length).toBe(catalogCallsBeforeRetry);
   });
 
+  it('shows the experimental notice in the license dialog of an experimental model', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ channel: 'experimental' })],
+    });
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+
+    expect(
+      await screen.findByText('analysis.gallery.experimental.dialogNotice')
+    ).toBeInTheDocument();
+  });
+
+  it('shows the preview notice with the build label in the license dialog of a preview model', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ channel: 'preview', buildLabel: 'b42', version: '9.9' })],
+    });
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+
+    expect(await screen.findByText('analysis.gallery.preview.dialogNotice')).toBeInTheDocument();
+    expect(
+      screen.queryByText('analysis.gallery.experimental.dialogNotice')
+    ).not.toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith('analysis.gallery.preview.dialogNotice', { build: 'b42' });
+  });
+
+  it('names the model version in the preview license dialog notice when there is no build label', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ channel: 'preview', version: '9.9' })],
+    });
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+
+    expect(await screen.findByText('analysis.gallery.preview.dialogNotice')).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith('analysis.gallery.preview.dialogNotice', { build: '9.9' });
+  });
+
+  it('shows no experimental notice in the license dialog of a stable model', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ channel: 'stable' })],
+    });
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ });
+
+    expect(
+      screen.queryByText('analysis.gallery.experimental.dialogNotice')
+    ).not.toBeInTheDocument();
+  });
+
   async function startTestBirdInstall(): Promise<void> {
     render(AnalysisSettingsPage);
     await gotoAvailableTab();

@@ -5833,6 +5833,11 @@
         "cardNotice": "Entwicklervorschau, keine finale Version. Dies ist ein früher Build zum Testen; Ergebnisse können sich vor der stabilen Version ändern.",
         "dialogNotice": "Sie installieren eine Entwicklervorschau ({build}). Zum Ausprobieren geeignet, aber noch nicht als einziger Klassifikator empfohlen."
       },
+      "experimental": {
+        "badge": "Experimentell",
+        "cardNotice": "In BirdNET-Go experimentell. Das Modell ist veröffentlicht, seine Leistung in BirdNET-Go ist aber noch nicht erwiesen, daher können die Ergebnisse weniger zuverlässig sein.",
+        "dialogNotice": "Sie installieren ein Modell, das in BirdNET-Go experimentell ist. Seine Leistung ist noch nicht erwiesen; prüfen Sie seine Erkennungen, bevor Sie sich darauf verlassen."
+      },
       "entryIncompatible": "Dieses Modell ist auf diesem System nicht verfügbar.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

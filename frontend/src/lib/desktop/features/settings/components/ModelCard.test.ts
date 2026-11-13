@@ -5,7 +5,7 @@ import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
 import type { CatalogVariant } from '$lib/types/models';
-import { CHANNEL_PREVIEW } from '$lib/utils/variantSelection';
+import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW } from '$lib/utils/variantSelection';
 import {
   catalogEntry as entry,
   downloadProgress as progress,
@@ -353,6 +353,35 @@ describe('ModelCard', () => {
     });
   });
 
+  describe('experimental', () => {
+    it.each(['available', 'installed'] as const)('shows the pill on a %s card', mode => {
+      renderCard({ entry: entry({ channel: CHANNEL_EXPERIMENTAL, installed: true }), mode });
+
+      expect(screen.getByText('analysis.gallery.experimental.badge')).toBeInTheDocument();
+      expect(screen.queryByText('analysis.gallery.preview.badge')).not.toBeInTheDocument();
+    });
+
+    it('adds the experimental notice on the Available tab only', () => {
+      const experimental = entry({ channel: CHANNEL_EXPERIMENTAL });
+      const { unmount } = renderCard({ entry: experimental, mode: 'available' });
+      expect(screen.getByRole('note')).toHaveTextContent(
+        'analysis.gallery.experimental.cardNotice'
+      );
+      unmount();
+
+      renderCard({ entry: { ...experimental, installed: true }, mode: 'installed' });
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    });
+
+    it('shows no channel pill or notice on a stable card', () => {
+      renderCard({ entry: entry({ channel: 'stable' }), mode: 'available' });
+
+      expect(screen.queryByText('analysis.gallery.experimental.badge')).not.toBeInTheDocument();
+      expect(screen.queryByText('analysis.gallery.preview.badge')).not.toBeInTheDocument();
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    });
+  });
+
   describe('license', () => {
     it.each([
       [true, 'analysis.gallery.license.commercialUseAllowed'],
@@ -401,6 +430,45 @@ describe('ModelCard', () => {
       renderCard({ entry: withVariants, mode: 'installed', regionNames: new Map() });
 
       expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('eu');
+    });
+
+    it('falls back to the entry region for a variant without a region', () => {
+      renderCard({
+        entry: entry({
+          region: 'Europe',
+          variants: [variant({ id: 'fp32', default: true })],
+          recommendedVariantId: 'fp32',
+        }),
+        mode: 'available',
+      });
+
+      expect(detailsValue('analysis.gallery.regionLabel')).toHaveTextContent('Europe');
+    });
+
+    describe('when the entry and the variant both carry a region', () => {
+      // The entry region and the variant's region name are different words, so
+      // only the variant's own region can produce either expected value below.
+      const regional = entry({
+        region: 'Nordics',
+        variants: [variant({ id: 'v-eu', region: 'eu', default: true })],
+        recommendedVariantId: 'v-eu',
+      });
+
+      it('shows the variant region name over the entry region', () => {
+        renderCard({
+          entry: regional,
+          mode: 'available',
+          regionNames: new Map([['eu', 'Europa']]),
+        });
+
+        expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('Europa');
+      });
+
+      it('shows the raw variant region slug over the entry region when its name is unknown', () => {
+        renderCard({ entry: regional, mode: 'available', regionNames: new Map() });
+
+        expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('eu');
+      });
     });
 
     it('describes the recommended variant on the Available tab', () => {

@@ -56,7 +56,7 @@ export interface CatalogEntry {
   region: string;
   speciesCount: number;
   version: string;
-  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA. Always present. */
+  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA, 'experimental' for a published model whose performance in BirdNET-Go is not proven yet. Always present. */
   channel: string;
   /** Human-facing build tag shown next to the version for a non-stable channel (e.g. 'preview3.1'); absent for stable releases. */
   buildLabel?: string;

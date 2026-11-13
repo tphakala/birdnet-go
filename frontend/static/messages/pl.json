@@ -5833,6 +5833,11 @@
         "cardNotice": "Wersja zapoznawcza dla deweloperów, to nie jest wydanie ostateczne. Jest to wczesna kompilacja do testów; wyniki mogą ulec zmianie przed wersją stabilną.",
         "dialogNotice": "Instalujesz wersję zapoznawczą dla deweloperów ({build}). Nadaje się do wypróbowania, ale nie jest jeszcze zalecana jako jedyny klasyfikator."
       },
+      "experimental": {
+        "badge": "Eksperymentalny",
+        "cardNotice": "Eksperymentalny w BirdNET-Go. Model jest opublikowany, ale jego skuteczność w BirdNET-Go nie została jeszcze potwierdzona, więc wyniki mogą być mniej wiarygodne.",
+        "dialogNotice": "Instalujesz model, który w BirdNET-Go jest eksperymentalny. Jego skuteczność nie została jeszcze potwierdzona, więc sprawdź jego detekcje, zanim im zaufasz."
+      },
       "entryIncompatible": "Ten model nie jest dostępny w tym systemie.",
       "regionGlobal": "Globalny",
       "hardwareLabel": "Sprzęt",

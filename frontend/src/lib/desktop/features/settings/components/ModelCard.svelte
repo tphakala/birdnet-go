@@ -65,6 +65,7 @@
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import { generateId } from '$lib/utils/uuid';
   import {
+    CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
     translateReason,
     variantHardwareLabel,
@@ -137,12 +138,6 @@
     );
   }
 
-  // The variant's localized region name, or "Global" when the variant is global.
-  function displayRegionName(variant: CatalogVariant | null): string {
-    if (!variant?.region) return t('analysis.gallery.regionGlobal');
-    return regionNames.get(variant.region) ?? variant.region;
-  }
-
   function progressPercent(p: DownloadProgress): number {
     if (p.totalBytes <= 0) return 0;
     return Math.min(PERCENT, Math.round((p.downloadedBytes / p.totalBytes) * PERCENT));
@@ -171,16 +166,40 @@
       ? entry.upstreamUrl
       : null
   );
-  const isPreview = $derived(entry.channel === CHANNEL_PREVIEW);
+  // The pill and the Available-tab notice that flag a non-stable release channel
+  const channelCopy = $derived.by(() => {
+    switch (entry.channel) {
+      case CHANNEL_PREVIEW:
+        return {
+          badge: t('analysis.gallery.preview.badge'),
+          notice: t('analysis.gallery.preview.cardNotice'),
+        };
+      case CHANNEL_EXPERIMENTAL:
+        return {
+          badge: t('analysis.gallery.experimental.badge'),
+          notice: t('analysis.gallery.experimental.cardNotice'),
+        };
+      default:
+        return null;
+    }
+  });
   const hasVariants = $derived((entry.variants ?? []).length > 0);
   const shownVariant = $derived(displayVariantFor(entry, mode));
+  // The shown variant's localized region name. A variant without a region (a hardware
+  // build, or the single variant of a regional model) falls back to the entry's own
+  // region, and is "Global" only when the entry has none either.
+  const regionLabel = $derived(
+    shownVariant?.region
+      ? (regionNames.get(shownVariant.region) ?? shownVariant.region)
+      : entry.region || t('analysis.gallery.regionGlobal')
+  );
   const speciesCount = $derived(shownVariant?.speciesCount ?? entry.speciesCount);
   // A caller that passes only `busy` still pauses the card's other buttons
   const inFlight = $derived(actionInFlight || busy !== null);
   // Available cards dim the logo of an entry this host cannot run; the text keeps full contrast
   const unavailable = $derived(mode === 'available' && !entry.compatible);
-  const showPreviewNotice = $derived(mode === 'available' && isPreview);
-  const hasNotices = $derived(showPreviewNotice || !entry.compatible || progress !== null);
+  const channelNoticeText = $derived(mode === 'available' ? (channelCopy?.notice ?? null) : null);
+  const hasNotices = $derived(channelNoticeText !== null || !entry.compatible || progress !== null);
   const showGeomodel = $derived(entry.hasGeomodel && entry.category !== 'geomodel');
   const showOptimize = $derived(mode === 'installed' && optimizeAvailable);
   // The completion line; empty while nothing has completed. The page announces it through its own live region
@@ -332,12 +351,12 @@
         <h4 id={titleId} class="text-sm font-semibold text-[var(--color-base-content)]">
           {entry.name}
         </h4>
-        {#if isPreview}
+        {#if channelCopy}
           <StatusPill
             variant="warning"
             size="sm"
             showDot={false}
-            label={t('analysis.gallery.preview.badge')}
+            label={channelCopy.badge}
             className="whitespace-nowrap"
           />
         {/if}
@@ -380,8 +399,8 @@
 
   {#if hasNotices}
     <div class="model-card-notices">
-      {#if showPreviewNotice}
-        {@render notice('warning', t('analysis.gallery.preview.cardNotice'), 'note', undefined)}
+      {#if channelNoticeText}
+        {@render notice('warning', channelNoticeText, 'note', undefined)}
       {/if}
       {#if !entry.compatible}
         {@render notice(
@@ -427,12 +446,9 @@
 
   <div class="model-card-details">
     <dl class="model-card-facts">
-      {#if hasVariants}
+      {#if hasVariants || entry.region}
         <dt>{t('analysis.gallery.regionLabel')}</dt>
-        <dd>{displayRegionName(shownVariant)}</dd>
-      {:else if entry.region}
-        <dt>{t('analysis.gallery.regionLabel')}</dt>
-        <dd>{entry.region}</dd>
+        <dd>{regionLabel}</dd>
       {/if}
       <dt>{t('analysis.gallery.speciesLabel')}</dt>
       <dd class="tabular-nums">
