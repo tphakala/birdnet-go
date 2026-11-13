@@ -7,7 +7,7 @@ type KeyHandler = (ev: KeyboardEvent) => boolean;
 
 // Every Terminal the page creates, so tests can reach its input and its key handler
 const created = vi.hoisted(() => ({
-  terminals: [] as { textarea?: HTMLTextAreaElement; handler?: KeyHandler }[],
+  terminals: [] as { textarea?: HTMLTextAreaElement; handler?: KeyHandler; focusCount: number }[],
 }));
 
 vi.mock('@xterm/xterm', () => ({
@@ -15,6 +15,7 @@ vi.mock('@xterm/xterm', () => ({
     // Like xterm, the input only exists once the terminal is opened
     textarea?: HTMLTextAreaElement;
     handler?: (ev: KeyboardEvent) => boolean;
+    focusCount = 0;
     constructor() {
       created.terminals.push(this);
     }
@@ -25,7 +26,9 @@ vi.mock('@xterm/xterm', () => ({
     open() {
       this.textarea = document.createElement('textarea');
     }
-    focus() {}
+    focus() {
+      this.focusCount++;
+    }
     dispose() {}
     onData() {
       return { dispose() {} };
@@ -126,6 +129,21 @@ describe('TerminalPage toolbar', () => {
     expect(handler?.(key('Escape'))).toBe(true);
     expect(handler?.(key('Tab'))).toBe(false);
   });
+
+  it('hands focus back to the terminal after Copy, Expand and Fullscreen', async () => {
+    const { getByRole } = render(TerminalPage);
+    await tick();
+    const [terminal] = created.terminals;
+
+    await fireEvent.click(getByRole('button', { name: 'terminal.copySelection' }));
+    expect(terminal.focusCount).toBe(1);
+
+    await fireEvent.click(getByRole('button', { name: 'terminal.expand' }));
+    await waitFor(() => expect(terminal.focusCount).toBe(2));
+
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await waitFor(() => expect(terminal.focusCount).toBe(3));
+  });
 });
 
 describe('TerminalPage detached window', () => {
@@ -195,5 +213,26 @@ describe('TerminalPage detached window', () => {
     expect(toolbarText(doc).map(t => t.opacity === '' || t.opacity === '1')).toEqual(
       TOOLBAR_TEXT_SELECTORS.map(() => true)
     );
+  });
+
+  it('wires the exit keys and the hint to the detached terminal', async () => {
+    const doc = await detach();
+    const popupTerminal = created.terminals[1];
+
+    const hint = doc.getElementById(popupTerminal.textarea?.getAttribute('aria-describedby') ?? '');
+    expect(hint?.textContent.trim()).toBe('terminal.keyboardExitHint');
+
+    const handler: KeyHandler | undefined = popupTerminal.handler;
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'Escape' }))).toBe(true);
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'Tab' }))).toBe(false);
+  });
+
+  it('lifts a focused popup toolbar button to full opacity', async () => {
+    const doc = await detach();
+    // Rules come from the popup's own window, so test them by shape, not by instanceof
+    const focusRule = [...doc.styleSheets]
+      .flatMap(sheet => [...sheet.cssRules])
+      .find(rule => 'selectorText' in rule && rule.selectorText === '.toolbar-btn:focus-visible');
+    expect(focusRule?.cssText).toContain('opacity: 1');
   });
 });
