@@ -14,7 +14,7 @@ function key(type: string, k: string, init: KeyInit = {}): KeyboardEvent {
 
 function setup() {
   let clock = 1000;
-  const handler = createTerminalExitKeys(() => clock);
+  const { handleKey: handler } = createTerminalExitKeys(() => clock);
   return {
     handler,
     advance: (ms: number) => {
@@ -124,6 +124,17 @@ describe('attachTerminalExitKeys', () => {
     expect(textarea.getAttribute('aria-describedby')).toBe('hint-id');
     expect(captured.handler?.(key('keydown', 'Escape'))).toBe(true);
     expect(captured.handler?.(key('keydown', 'Tab'))).toBe(false);
+  });
+
+  it('forgets an armed Escape when the terminal input loses focus', () => {
+    const textarea = document.createElement('textarea');
+    const { captured, term } = stubTerminal(textarea);
+    attachTerminalExitKeys(term, 'hint-id');
+
+    captured.handler?.(key('keydown', 'Escape'));
+    textarea.dispatchEvent(new FocusEvent('blur'));
+
+    expect(captured.handler?.(key('keydown', 'Tab'))).toBe(true);
   });
 
   it('still registers the handler when the terminal has no input element', () => {
