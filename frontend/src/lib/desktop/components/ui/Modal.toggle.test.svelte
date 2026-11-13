@@ -9,6 +9,8 @@
 </script>
 
 <button type="button">Page button</button>
+<button type="button" disabled>Disabled button</button>
+<section tabindex="-1" aria-label="Wrapper"><p>Wrapper text</p></section>
 <button type="button" onclick={() => (lowerOpen = !lowerOpen)}>Toggle lower</button>
 <button type="button" onclick={() => (upperOpen = !upperOpen)}>Toggle upper</button>
 <button

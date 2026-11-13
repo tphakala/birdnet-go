@@ -16,8 +16,15 @@
 
   // CSS selector for elements that may be keyboard focusable. getTabbable()
   // narrows the matches to the ones the Tab key actually reaches.
-  const TABBABLE_CANDIDATE_SELECTOR =
-    'button, a[href], area[href], input, select, textarea, summary, [tabindex]';
+  const NATIVE_INTERACTIVE_SELECTOR =
+    'button, a[href], area[href], input, select, textarea, summary';
+  const TABBABLE_CANDIDATE_SELECTOR = `${NATIVE_INTERACTIVE_SELECTOR}, [tabindex]`;
+
+  // Controls a press cannot activate: disabled, or inside an inert or disabled subtree
+  const UNPRESSABLE_SELECTOR = ':disabled, [inert], fieldset[disabled]';
+
+  // MouseEvent.button of a primary press: left mouse button, touch contact, pen tip
+  const PRIMARY_POINTER_BUTTON = 0;
 
   // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
   const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
@@ -127,15 +134,33 @@
   // document.activeElement is body when a dialog opens from one; this is then the opener.
   let pressedElement: HTMLElement | SVGElement | null = null;
 
+  /** The control a press landed on, or null for plain content, a disabled control or a negative tabindex wrapper */
+  function pressedControl(target: unknown): HTMLElement | SVGElement | null {
+    if (!(target instanceof HTMLElement || target instanceof SVGElement)) return null;
+    const candidate = target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR);
+    if (!candidate) return null;
+    if (candidate.matches(UNPRESSABLE_SELECTOR) || candidate.closest(UNPRESSABLE_SELECTOR)) {
+      return null;
+    }
+    return candidate.matches(NATIVE_INTERACTIVE_SELECTOR) || candidate.tabIndex >= 0
+      ? candidate
+      : null;
+  }
+
   if (typeof document !== 'undefined') {
     document.addEventListener(
       'pointerdown',
       event => {
-        const target = event.target;
         pressedElement =
-          target instanceof HTMLElement || target instanceof SVGElement
-            ? target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR)
-            : null;
+          event.button === PRIMARY_POINTER_BUTTON ? pressedControl(event.target) : null;
+      },
+      true
+    );
+    // A scroll that starts on a button sends pointerdown, then pointercancel, and no click
+    document.addEventListener(
+      'pointercancel',
+      () => {
+        pressedElement = null;
       },
       true
     );
@@ -148,18 +173,28 @@
     );
   }
 
+  /** True when focus is on an element of the dialog itself */
+  function focusIsInside(dialog: HTMLElement | undefined): boolean {
+    const active = document.activeElement;
+    return (
+      (active instanceof HTMLElement || active instanceof SVGElement) && !!dialog?.contains(active)
+    );
+  }
+
   /**
    * The element to return focus to when a dialog opens: the focused element, or the
-   * pressed one when focus is on body (or nowhere). Null when focus is inside the
-   * dialog itself, which keeps the earlier opener.
+   * pressed one when focus is on body or nowhere. Null when there is none. Callers
+   * check focusIsInside first, since focus in the dialog keeps the earlier opener.
    */
   function pickOpener(dialog: HTMLElement | undefined): HTMLElement | SVGElement | null {
     const active = document.activeElement;
-    if (!(active instanceof HTMLElement || active instanceof SVGElement)) return null;
-    if (dialog?.contains(active)) return null;
-    const nothingFocused = active === document.body || active === document.documentElement;
-    if (nothingFocused && pressedElement?.isConnected && !dialog?.contains(pressedElement)) {
-      return pressedElement;
+    const isElement = active instanceof HTMLElement || active instanceof SVGElement;
+    const nothingFocused =
+      !isElement || active === document.body || active === document.documentElement;
+    if (nothingFocused) {
+      return pressedElement?.isConnected && !dialog?.contains(pressedElement)
+        ? pressedElement
+        : null;
     }
     return active;
   }
@@ -563,9 +598,10 @@
 
   $effect(() => {
     if (isOpen) {
-      // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
-      const opener = pickOpener(untrack(() => dialogElement));
-      if (opener) stackEntry.opener = opener;
+      // Focus inside this dialog (left there by a quick close and reopen) keeps the earlier opener;
+      // otherwise the opener is set afresh, to null when nothing usable was focused or pressed
+      const dialog = untrack(() => dialogElement);
+      if (!focusIsInside(dialog)) stackEntry.opener = pickOpener(dialog);
       stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { api } from '$lib/utils/api';
+import { navigation } from '$lib/stores/navigation.svelte';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 
 /**
@@ -86,6 +88,20 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
       await screen.findByRole('button', { name: CANCEL_LABEL });
       await fireEvent.keyDown(document, { key: 'Escape' });
     }
+
+    it('confirming resets the layout, goes to the dashboard and returns focus to the menu button', async () => {
+      const patch = vi.spyOn(api, 'patch').mockResolvedValue({});
+      const navigate = vi.spyOn(navigation, 'navigate').mockImplementation(() => {});
+      const menu = await renderAndOpen({ securityEnabled: false });
+      await pressWithKeyboard(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
+      const dialog = await screen.findByRole('dialog');
+
+      await fireEvent.click(within(dialog).getByRole('button', { name: RESET_LABEL }));
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/ui/dashboard'));
+      expect(patch).toHaveBeenCalledWith('/api/v2/settings/dashboard', expect.anything());
+      await waitFor(() => expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus());
+    });
 
     it.each([
       ['keyboard activation', 'Cancel', pressWithKeyboard, dismissWithCancel],
