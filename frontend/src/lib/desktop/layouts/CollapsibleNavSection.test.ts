@@ -76,29 +76,21 @@ describe('CollapsibleNavSection', () => {
 
   // menu-item-active draws the tint and the --text-primary text, the same as an active flat
   // item, so the header reads as active in every scheme (jsdom cannot render the colours)
-  const ACTIVE_CLASS = 'menu-item-active';
-
   it.each([
-    ['expanded', { isCollapsed: false }],
-    ['collapsed', { isCollapsed: true }],
-  ])('the header of the active section has the active item style when %s', (_mode, mode) => {
-    sectionTest.render({ ...baseProps, ...mode, routeActive: true });
+    ['expanded', false, true],
+    ['collapsed', true, true],
+    ['expanded', false, false],
+    ['collapsed', true, false],
+  ])(
+    'the %s header has the active item style only for the active section (%s, %s)',
+    (_mode, isCollapsed, routeActive) => {
+      sectionTest.render({ ...baseProps, isCollapsed, routeActive });
 
-    const header = screen.getByRole('button', { name: 'System' });
-    expect(header).toHaveClass(ACTIVE_CLASS);
-    expect(header).not.toHaveClass('hover:menu-hover');
-  });
-
-  it.each([
-    ['expanded', { isCollapsed: false }],
-    ['collapsed', { isCollapsed: true }],
-  ])('the header of an inactive section has no active style when %s', (_mode, mode) => {
-    sectionTest.render({ ...baseProps, ...mode, routeActive: false });
-
-    const header = screen.getByRole('button', { name: 'System' });
-    expect(header).not.toHaveClass(ACTIVE_CLASS);
-    expect(header).toHaveClass('hover:menu-hover');
-  });
+      const header = screen.getByRole('button', { name: 'System' });
+      expect(header.classList.contains('menu-item-active')).toBe(routeActive);
+      expect(header.classList.contains('hover:menu-hover')).toBe(!routeActive);
+    }
+  );
 
   // -------------------------------------------------------------------------
   // aria-current: flyout mode
