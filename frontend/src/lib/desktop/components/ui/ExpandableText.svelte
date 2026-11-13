@@ -20,6 +20,17 @@
     so the toggle appears or goes away with the layout.
   - Expansion belongs to the text that was expanded: any other text starts collapsed, so a stale Show less never stays behind.
 -->
+<script lang="ts" module>
+  type ClampLines = 2 | 3 | 4;
+
+  // Literal class names, so Tailwind generates them (a built name like `line-clamp-${n}` is not)
+  const CLAMP_CLASSES: Record<ClampLines, string> = {
+    2: 'line-clamp-2',
+    3: 'line-clamp-3',
+    4: 'line-clamp-4',
+  };
+</script>
+
 <script lang="ts">
   /* global ResizeObserver, FontFaceSet */
   import { untrack } from 'svelte';
@@ -28,8 +39,6 @@
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
   import { generateId } from '$lib/utils/uuid';
-
-  type ClampLines = 2 | 3 | 4;
 
   interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'class'> {
     text: string;
@@ -42,13 +51,6 @@
   }
 
   let { text, lines = 3, subject, className, textClassName, ...rest }: Props = $props();
-
-  // Literal class names, so Tailwind generates them (a built name like `line-clamp-${n}` is not)
-  const CLAMP_CLASSES: Record<ClampLines, string> = {
-    2: 'line-clamp-2',
-    3: 'line-clamp-3',
-    4: 'line-clamp-4',
-  };
 
   // A paragraph that fits can still report a scroll height one pixel above its client height
   // through sub-pixel rounding
