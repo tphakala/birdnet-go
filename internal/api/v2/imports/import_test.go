@@ -416,7 +416,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	c.Repo = mockRepo
 
 	// The database directory doubles as the BirdNET-Pi audio root: the tree next to
-	// birds.db is the first place the handler searches, and here it is also the
+	// birds.db is one of the places the handler searches, and here it is also the
 	// import source root.
 	sourceRoot := t.TempDir()
 	makeBirdsDBAt(t, filepath.Join(sourceRoot, "birds.db"), date, comName, fileName)

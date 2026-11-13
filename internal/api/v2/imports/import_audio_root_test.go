@@ -53,6 +53,7 @@ func TestDBAudioImport_AudioRoot(t *testing.T) {
 		// directory, "" for the home directory itself.
 		sourceRootRel string
 		// native selects a native install: no container, the search is unbounded.
+		// A staged import is always native.
 		native bool
 		// staged runs the import as a sudo-staged one, bounded by the directory
 		// of the database, which then sits in a staging directory.
@@ -80,7 +81,6 @@ func TestDBAudioImport_AudioRoot(t *testing.T) {
 			// No audio is staged, so the only outcome that can happen is that
 			// nothing outside the staging directory is read.
 			name:   "staged: clips outside the staging directory are not read",
-			native: true,
 			staged: true,
 		},
 		{
@@ -120,7 +120,7 @@ func TestDBAudioImport_AudioRoot(t *testing.T) {
 				require.NoError(t, os.WriteFile(clipPath, clipContent, 0o644))
 			}
 			c.importSourceRoot = filepath.Join(home, tt.sourceRootRel)
-			if tt.native {
+			if tt.native || tt.staged {
 				c.isContainerEnv = func() bool { return false }
 			}
 
