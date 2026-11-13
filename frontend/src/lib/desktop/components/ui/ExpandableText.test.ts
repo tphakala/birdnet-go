@@ -50,6 +50,15 @@ describe('ExpandableText', () => {
     expect(paragraph).toHaveClass('line-clamp-3');
   });
 
+  it('lets a word wider than the box wrap, so the clamp can measure the text', () => {
+    stubLayout(LONG_TEXT);
+    renderTyped(ExpandableText, { props: { text: LONG_TEXT } });
+
+    // The clamp hides overflow: an unbroken word would be cut off sideways at an unchanged
+    // height, which an overflow check that compares heights does not detect
+    expect(paragraphOf(LONG_TEXT)).toHaveClass('break-words');
+  });
+
   it('names the toggle after its subject, visible label first', () => {
     stubLayout(LONG_TEXT);
     renderTyped(ExpandableText, { props: { text: LONG_TEXT, subject: 'BSG-BAT' } });

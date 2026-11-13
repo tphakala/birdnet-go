@@ -109,7 +109,7 @@
     id={textId}
     tabindex="-1"
     class={cn(
-      'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]',
+      'break-words rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]',
       textClassName,
       !expanded && safeGet(CLAMP_CLASSES, lines, CLAMP_CLASSES[3])
     )}
