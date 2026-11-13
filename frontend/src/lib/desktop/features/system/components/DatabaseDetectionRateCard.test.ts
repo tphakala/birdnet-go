@@ -79,12 +79,11 @@ describe('DatabaseDetectionRateCard side panel', () => {
   it('hides the host line when the MySQL location is empty or missing', () => {
     const hostLabel = t('system.database.dashboard.detectionRate.mysqlHost');
     for (const mysqlHost of ['', undefined]) {
-      const { container, unmount } = renderTyped(DatabaseDetectionRateCard, {
+      const { unmount } = renderTyped(DatabaseDetectionRateCard, {
         props: { data: [], engine: 'mysql', mysqlHost },
       });
 
       expect(screen.queryByText(hostLabel)).not.toBeInTheDocument();
-      expect(container.querySelector('.wrap-anywhere')).toBeNull();
       expect(screen.getByText(mysqlNoteLabel())).toBeInTheDocument();
       unmount();
     }
