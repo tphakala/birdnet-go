@@ -31,6 +31,7 @@ describe('DatabaseTableBreakdown sorting', () => {
     }
     expect(header('size_bytes')).toHaveAttribute('aria-sort', 'descending');
     expect(header('name')).toHaveAttribute('aria-sort', 'none');
+    expect(screen.queryByTestId('sort-engine')).not.toBeInTheDocument();
   });
 
   it('sorts a numeric column descending first and then toggles', async () => {
@@ -54,7 +55,7 @@ describe('DatabaseTableBreakdown sorting', () => {
     expect(header('name')).toHaveAttribute('aria-sort', 'ascending');
   });
 
-  it('adds an engine column header only when showEngine is set', () => {
+  it('adds an engine column header when showEngine is set', () => {
     renderTyped(DatabaseTableBreakdown, { props: { tables, showEngine: true } });
 
     expect(screen.getByTestId('sort-engine').tagName).toBe('BUTTON');

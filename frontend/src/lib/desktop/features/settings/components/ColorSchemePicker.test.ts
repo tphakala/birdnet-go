@@ -37,6 +37,19 @@ describe('ColorSchemePicker', () => {
     expect(forest).toHaveAttribute('tabindex', '0');
   });
 
+  it('wraps ArrowLeft from the first scheme to the custom scheme', async () => {
+    renderTyped(ColorSchemePicker);
+    const all = radios();
+    const first = all[0];
+    const last = all[all.length - 1];
+
+    first.focus();
+    await fireEvent.keyDown(first, { key: 'ArrowLeft' });
+
+    expect(get(scheme)).toBe('custom');
+    await waitFor(() => expect(document.activeElement).toBe(last));
+  });
+
   it('keeps the radios focusable but does not change the scheme when disabled', async () => {
     renderTyped(ColorSchemePicker, { props: { disabled: true } });
     const [blue, forest] = radios();

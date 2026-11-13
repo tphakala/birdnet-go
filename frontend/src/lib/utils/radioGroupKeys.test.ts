@@ -89,6 +89,15 @@ describe('radioGroupKeys', () => {
     expect(document.activeElement).toBe(radios[2]);
   });
 
+  it('skips a natively disabled radio', async () => {
+    const { radios } = setup(['a', 'b', 'c']);
+    radios[1].disabled = true;
+    radios[0].focus();
+    await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
+    expect(checkedLabel(radios)).toBe('c');
+    expect(document.activeElement).toBe(radios[2]);
+  });
+
   it('leaves selection and focus alone when every other radio is aria-disabled', async () => {
     const { radios } = setup(['a', 'b', 'c'], ['b', 'c']);
     radios[0].focus();
