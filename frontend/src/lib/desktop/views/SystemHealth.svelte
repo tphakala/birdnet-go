@@ -302,7 +302,7 @@
       // cached up to 24h. Only the explicit "Run diagnostics" click sets it; the
       // auto-run on mount and the window switch reuse the cache, because
       // quick_check runs on the single pinned SQLite connection and can stall
-      // writes on a large database (#3939).
+      // writes on a large database (issue 3939).
       const url = `/api/v2/system/diagnostics/run?window=${selectedWindow}${
         forceIntegrity ? '&refresh_integrity=true' : ''
       }`;
@@ -429,12 +429,12 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
           <div class="flex items-center gap-2">
-            <div class="p-1.5 rounded-lg bg-green-500/10">
-              <CheckCircle class="w-4 h-4 text-[var(--color-success)]" />
+            <div class="p-1.5 rounded-lg bg-[var(--color-success)]/10">
+              <CheckCircle class="w-4 h-4 text-[var(--text-success)]" />
             </div>
             <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
           </div>
-          <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--color-success)]">
+          <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--text-success)]">
             {report?.count_by_status?.healthy ?? (running ? '…' : '-')}
           </span>
         </div>
@@ -459,16 +459,16 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
           <div class="flex items-center gap-2">
-            <div class="p-1.5 rounded-lg bg-amber-500/10">
-              <AlertTriangle class="w-4 h-4 text-[var(--color-warning)]" />
+            <div class="p-1.5 rounded-lg bg-[var(--color-warning)]/10">
+              <AlertTriangle class="w-4 h-4 text-[var(--text-warning)]" />
             </div>
             <span class="text-xs font-medium text-muted">{t('health.summary.warnings')}</span>
           </div>
           <span
             class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
               ?.warning ?? 0) > 0
-              ? 'text-[var(--color-warning)]'
-              : 'opacity-40'}"
+              ? 'text-[var(--text-warning)]'
+              : 'text-muted'}"
           >
             {report?.count_by_status?.warning ?? (running ? '…' : '-')}
           </span>
@@ -492,16 +492,16 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
           <div class="flex items-center gap-2">
-            <div class="p-1.5 rounded-lg bg-red-500/10">
-              <XCircle class="w-4 h-4 text-[var(--color-error)]" />
+            <div class="p-1.5 rounded-lg bg-[var(--color-error)]/10">
+              <XCircle class="w-4 h-4 text-[var(--text-error)]" />
             </div>
             <span class="text-xs font-medium text-muted">{t('health.summary.critical')}</span>
           </div>
           <span
             class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
               ?.critical ?? 0) > 0
-              ? 'text-[var(--color-error)]'
-              : 'opacity-40'}"
+              ? 'text-[var(--text-error)]'
+              : 'text-muted'}"
           >
             {report?.count_by_status?.critical ?? (running ? '…' : '-')}
           </span>
@@ -525,14 +525,14 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
           <div class="flex items-center gap-2">
-            <div class="p-1.5 rounded-lg bg-slate-500/10">
-              <SkipForward class="w-4 h-4 text-slate-500" />
+            <div class="p-1.5 rounded-lg bg-[var(--color-base-content)]/10">
+              <SkipForward class="w-4 h-4 text-muted" />
             </div>
             <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
           </div>
           <span
             class="font-mono tabular-nums text-2xl font-semibold"
-            class:opacity-40={!((report?.count_by_status?.skipped ?? 0) > 0)}
+            class:text-muted={!((report?.count_by_status?.skipped ?? 0) > 0)}
           >
             {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
           </span>
@@ -558,14 +558,12 @@
       <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
         {t('health.diagnostics')}
       </h3>
-      <div
-        class="flex items-center gap-3 text-xs text-[var(--color-base-content)] opacity-60 shrink-0"
-      >
+      <div class="flex items-center gap-3 text-xs text-muted shrink-0">
         {#if error}
           <span
             role="alert"
             aria-live="assertive"
-            class="flex items-center gap-1.5 text-[var(--color-error)] opacity-100"
+            class="flex items-center gap-1.5 text-[var(--text-error)]"
           >
             <XCircle class="size-3.5" />
             {error}
@@ -578,7 +576,7 @@
             <Clock class="size-3.5" />
             {t('health.lastRun')}
             {getLocalTimeString(new Date(report.started_at))}
-            <span class="opacity-60">· {report.duration_ms.toFixed(0)}ms</span>
+            <span class="text-muted">· {report.duration_ms.toFixed(0)}ms</span>
           </span>
         {:else if running}
           <span class="flex items-center gap-1.5">
@@ -601,7 +599,7 @@
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2">
-        <span class="text-xs text-[var(--color-base-content)] opacity-60">
+        <span class="text-xs text-muted">
           {t('health.window.label')}:
         </span>
         <div
@@ -635,7 +633,7 @@
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {#if copied}
-            <CheckCircle class="size-3.5 text-[var(--color-success)]" />
+            <CheckCircle class="size-3.5 text-[var(--text-success)]" />
             {t('health.copied')}
           {:else}
             <ClipboardCopy class="size-3.5" />
@@ -698,16 +696,16 @@
                       {@render sparklineSvg(sparkline, statusColor(result.status))}
                     {/if}
                   </div>
-                  <p class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
+                  <p class="text-xs text-muted truncate">
                     {result.message}
                   </p>
                 </div>
-                <span class="text-xs text-[var(--color-base-content)] opacity-40 shrink-0">
+                <span class="text-xs text-muted shrink-0">
                   {result.duration_ms.toFixed(1)}ms
                 </span>
                 {#if expandable}
                   <ChevronDown
-                    class="size-4 shrink-0 opacity-40 transition-transform {isExpanded
+                    class="size-4 shrink-0 text-muted transition-transform {isExpanded
                       ? 'rotate-180'
                       : ''}"
                   />
@@ -721,16 +719,12 @@
                 >
                   <!-- Top Errors (for log checks) -->
                   {#if topErrors}
-                    <p
-                      class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60"
-                    >
+                    <p class="px-3 py-1.5 text-xs font-medium text-muted">
                       {t('health.logs.topErrors')}
                     </p>
                     <table class="w-full text-xs">
                       <thead>
-                        <tr
-                          class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
-                        >
+                        <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
                           <th class="px-3 py-1.5 font-medium">{t('health.logs.errorComponent')}</th>
                           <th class="px-3 py-1.5 font-medium">{t('health.logs.errorMessage')}</th>
                           <th class="px-3 py-1.5 font-medium text-right"
@@ -750,7 +744,7 @@
                                   {group.component}
                                 </span>
                               {:else}
-                                <span class="opacity-30">-</span>
+                                <span class="text-muted">-</span>
                               {/if}
                             </td>
                             <td class="px-3 py-1.5 max-w-[300px] truncate" title={group.message}>
@@ -777,7 +771,7 @@
                     <!-- Last Event Callout -->
                     {#if result.details?.last_event}
                       <div class="px-3 py-2 flex items-center gap-2">
-                        <Clock class="size-3.5 opacity-50" />
+                        <Clock class="size-3.5 text-muted" />
                         <span class="text-xs font-medium">
                           {t('health.detail.lastEvent')}:
                           <span class="opacity-70" title={String(result.details.last_event)}>
@@ -785,7 +779,7 @@
                           </span>
                         </span>
                         {#if result.details?.lifetime_total != null}
-                          <span class="text-xs opacity-50">
+                          <span class="text-xs text-muted">
                             ({result.details.lifetime_total}
                             {t('health.detail.lifetime')})
                           </span>
@@ -804,23 +798,23 @@
                       >
                         {#if windowTotal != null && typeof windowTotal === 'number' && windowTotal > 0}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <Activity class="size-3 opacity-50" />
-                            <span class="opacity-60">{t('health.detail.windowTotal')}:</span>
+                            <Activity class="size-3 text-muted" />
+                            <span class="text-muted">{t('health.detail.windowTotal')}:</span>
                             <span class="font-medium font-mono">{windowTotal}</span>
                           </span>
                         {/if}
 
                         {#if typeof activeHours === 'number' && activeHours > 0}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <Clock class="size-3 opacity-50" />
-                            <span class="opacity-60">{t('health.detail.activeHours')}:</span>
+                            <Clock class="size-3 text-muted" />
+                            <span class="text-muted">{t('health.detail.activeHours')}:</span>
                             <span class="font-medium font-mono">{activeHours}</span>
                           </span>
                         {/if}
 
                         {#if typeof pattern === 'string' && pattern !== PATTERN_NONE}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <span class="opacity-60">{t('health.detail.pattern')}:</span>
+                            <span class="text-muted">{t('health.detail.pattern')}:</span>
                             <span
                               class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
                               style:color={patternColor(pattern)}
@@ -833,7 +827,7 @@
 
                         {#if typeof velocity === 'string' && velocity !== VELOCITY_NA}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <span class="opacity-60">{t('health.detail.velocity')}:</span>
+                            <span class="text-muted">{t('health.detail.velocity')}:</span>
                             <span
                               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
                               style:color={velocityColor(velocity)}
@@ -856,15 +850,13 @@
                     <!-- Recent Events Table -->
                     {#if recentEvents && recentEvents.length > 0}
                       <p
-                        class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60 border-t border-[var(--color-base-200)]/50"
+                        class="px-3 py-1.5 text-xs font-medium text-muted border-t border-[var(--color-base-200)]/50"
                       >
                         {t('health.detail.recentEvents')}
                       </p>
                       <table class="w-full text-xs">
                         <thead>
-                          <tr
-                            class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
-                          >
+                          <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
                             <th class="px-3 py-1.5 font-medium">{t('health.detail.time')}</th>
                             <th class="px-3 py-1.5 font-medium">{t('health.detail.source')}</th>
                             <th class="px-3 py-1.5 font-medium text-right"

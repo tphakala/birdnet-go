@@ -779,7 +779,7 @@ Performance Optimizations:
             href={appState.projectLinks.repoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80 transition-colors duration-150"
+            class="text-xs text-muted hover:text-[var(--color-base-content)] transition-colors duration-150"
             aria-label={t('navigation.viewOnGithubAriaLabel')}
           >
             {version}

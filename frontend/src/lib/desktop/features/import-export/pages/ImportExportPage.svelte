@@ -40,7 +40,7 @@
       <div class="px-6 pt-5 pb-1">
         <h3
           id="import-sources-heading"
-          class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60"
+          class="text-xs font-semibold uppercase tracking-wider text-muted"
         >
           {t('system.importExport.import.sectionTitle')}
         </h3>
@@ -59,7 +59,7 @@
             <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
               {t('system.importExport.birdnetPi.cardDescription')}
             </p>
-            <p class="text-xs text-[var(--color-base-content)]/60 mt-1.5">
+            <p class="text-xs text-muted mt-1.5">
               {t('system.importExport.birdnetPi.experimentalNotice')}
               <a
                 href={appState.projectLinks.newIssueUrl}
@@ -80,10 +80,7 @@
         </li>
         <!-- birds.db upload (planned) -->
         <li class="px-6 py-4 flex items-start gap-4">
-          <Upload
-            class="size-5 text-[var(--color-base-content)]/40 mt-0.5 shrink-0"
-            aria-hidden="true"
-          />
+          <Upload class="size-5 text-muted mt-0.5 shrink-0" aria-hidden="true" />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
               <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
@@ -91,7 +88,7 @@
               </h4>
               <Badge variant="neutral" size="sm" text={t('system.importExport.comingSoon')} />
             </div>
-            <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5">
+            <p class="text-sm text-muted mt-0.5">
               {t('system.importExport.birdsDbUpload.cardDescription')}
             </p>
           </div>
@@ -106,7 +103,7 @@
       <div class="px-6 pt-5 pb-1">
         <h3
           id="export-sources-heading"
-          class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60"
+          class="text-xs font-semibold uppercase tracking-wider text-muted"
         >
           {t('system.importExport.export.sectionTitle')}
         </h3>
@@ -114,10 +111,7 @@
       <ul>
         <!-- Detections export (planned) -->
         <li class="px-6 py-4 flex items-start gap-4">
-          <FileDown
-            class="size-5 text-[var(--color-base-content)]/40 mt-0.5 shrink-0"
-            aria-hidden="true"
-          />
+          <FileDown class="size-5 text-muted mt-0.5 shrink-0" aria-hidden="true" />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
               <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
@@ -125,7 +119,7 @@
               </h4>
               <Badge variant="neutral" size="sm" text={t('system.importExport.comingSoon')} />
             </div>
-            <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5">
+            <p class="text-sm text-muted mt-0.5">
               {t('system.importExport.export.cardDescription')}
             </p>
           </div>

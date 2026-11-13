@@ -5,12 +5,18 @@
  * contrast in one of them, and no other test would notice it coming back. This scan covers
  * the files already moved to tokens; add each System file here when it moves.
  *
- * Scanned, line by line, in every file of MIGRATED_FILES:
+ * Text colors must also reach 4.5:1 in the light theme. Scanned, line by line, in every file of
+ * MIGRATED_FILES:
  * 1. a `#` followed by 3, 4, 6 or 8 hex digits (not an HTML entity such as `&#160;`);
  * 2. any Tailwind utility, behind any variants, whose name ends in a palette name and a 2 or
  *    3 digit shade, with or without an opacity suffix (text-slate-500, border-t-red-500/50,
  *    dark:hover:ring-offset-amber-400, inset-shadow-red-500);
- * 3. a `--color-<palette>-<shade>` variable (text-[var(--color-red-500)]).
+ * 3. a `--color-<palette>-<shade>` variable (text-[var(--color-red-500)]);
+ * 4. a status fill used as text (text-[var(--color-success|warning|error|info)]): the fills are
+ *    for backgrounds, borders and dots, the text tokens are --text-success and its siblings;
+ * 5. faded body text: text-[var(--color-base-content)]/NN or a plain opacity-NN with NN under
+ *    FADED_TEXT_MIN_PERCENT, which drops muted text below 4.5:1 (use text-muted). Variant forms
+ *    such as disabled:opacity-50 pass: they style a disabled control, which WCAG exempts.
  *
  * Not scanned: white, black, transparent, colour functions (rgb(), hsl(), oklch()), CSS
  * named colours, and any file not in the list.
@@ -22,7 +28,15 @@ import { dirname, join } from 'node:path';
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const MIGRATED_FILES = ['lib/desktop/features/system/components/SystemProcessTable.svelte'];
+const MIGRATED_FILES = [
+  'lib/desktop/features/system/components/SystemProcessTable.svelte',
+  'lib/desktop/views/SystemHealth.svelte',
+  'lib/desktop/features/system/components/DatabaseSqliteDetails.svelte',
+  'lib/desktop/features/import-export/pages/ImportExportPage.svelte',
+];
+
+/** Body text at or above this opacity (percent) still reaches 4.5:1 on the base surfaces. */
+const FADED_TEXT_MIN_PERCENT = 70;
 
 /** Every palette Tailwind ships; a test below reads the installed theme to keep this complete. */
 const PALETTE = [
@@ -63,6 +77,14 @@ const PALETTE_CLASS = new RegExp(
   'g'
 );
 const PALETTE_VAR = new RegExp(`--color-(?:${PALETTE_ALTERNATION})-\\d{2,3}\\b`, 'g');
+// text-[var(--color-success)] and its warning, error and info siblings, behind any variants, with
+// or without an opacity suffix
+const STATUS_FILL_TEXT =
+  /(?<![\w-])(?:[\w-]+:)*text-\[var\(--color-(?:success|warning|error|info)\)\](?:\/\d{1,3})?/g;
+// Unprefixed faded text: base-content with an opacity suffix, or a plain opacity utility (also as
+// a Svelte class: directive). A variant prefix (disabled:, hover:) does not match.
+const FADED_BASE_CONTENT = /(?<![\w:-])text-\[var\(--color-base-content\)\]\/(\d{1,3})(?![\d%])/g;
+const FADED_OPACITY = /(?:(?<![\w:-])|(?<=\bclass:))opacity-(\d{1,3})(?![\d%])/g;
 
 /** Colors written outside the tokens, with their line numbers. */
 function findRawColors(source: string): string[] {
@@ -71,6 +93,11 @@ function findRawColors(source: string): string[] {
     for (const match of line.matchAll(HEX_COLOR)) hits.push(`${index + 1}: ${match[0]}`);
     for (const match of line.matchAll(PALETTE_CLASS)) hits.push(`${index + 1}: ${match[0]}`);
     for (const match of line.matchAll(PALETTE_VAR)) hits.push(`${index + 1}: ${match[0]}`);
+    for (const match of line.matchAll(STATUS_FILL_TEXT)) hits.push(`${index + 1}: ${match[0]}`);
+    for (const match of [...line.matchAll(FADED_BASE_CONTENT), ...line.matchAll(FADED_OPACITY)]) {
+      const percent = Number(match[1]);
+      if (percent > 0 && percent < FADED_TEXT_MIN_PERCENT) hits.push(`${index + 1}: ${match[0]}`);
+    }
   });
   return hits;
 }
@@ -101,6 +128,14 @@ describe('System page colors', () => {
     ['a palette Tailwind added later', 'class="bg-mauve-500"'],
     ['a palette variable in an arbitrary value', 'class="text-[var(--color-red-500)]"'],
     ['a palette variable in a style', 'style="color: var(--color-amber-400)"'],
+    ['a success fill used as text', 'class="text-[var(--color-success)]"'],
+    ['a warning fill used as text', 'class="text-xs text-[var(--color-warning)]"'],
+    ['an error fill used as text behind a variant', 'class="hover:text-[var(--color-error)]"'],
+    ['an info fill used as text with opacity', 'class="text-[var(--color-info)]/80"'],
+    ['base content faded by an opacity suffix', 'class="text-[var(--color-base-content)]/60"'],
+    ['base content faded to a bare percentage', 'class="text-[var(--color-base-content)]/40"'],
+    ['faded text by opacity utility', 'class="text-xs opacity-60 truncate"'],
+    ['a faded Svelte class directive', 'class:opacity-40={count === 0}'],
   ])('flags %s', (_name, source) => {
     expect(findRawColors(source)).toHaveLength(1);
   });
@@ -116,6 +151,15 @@ describe('System page colors', () => {
     ['gradient positions', 'class="from-10% via-30% to-90%"'],
     ['a theme variable', 'style="color: var(--color-base-300)"'],
     ['an HTML entity', 'title="a&#160;b"'],
+    [
+      'a status fill as a background',
+      'class="bg-[var(--color-success)]/10 border-[var(--color-error)]"',
+    ],
+    ['a status text token', 'class="text-[var(--text-success)] text-[var(--text-warning)]"'],
+    ['text at the faded limit', 'class="text-[var(--color-base-content)]/70 opacity-70"'],
+    ['a disabled control opacity', 'class="disabled:opacity-50 aria-disabled:opacity-50"'],
+    ['a hover opacity', 'class="hover:opacity-80 opacity-100"'],
+    ['a hidden element', 'class="opacity-0"'],
   ])('passes %s', (_name, source) => {
     expect(findRawColors(source)).toEqual([]);
   });
