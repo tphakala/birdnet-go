@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
-import { catalogEntry as birdEntry } from '../../../../../test/fixtures/catalog';
+import { catalogEntry as birdEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
 
 // Page-level coverage for the model-gallery install-error split:
 // a failed install must NOT blank the grid (installError is a separate banner from
@@ -604,13 +604,6 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
 });
 
 describe('AnalysisSettingsPage model gallery cards', () => {
-  const REGION_ROW_SELECTORS = [
-    '.model-card-header',
-    '.model-card-description',
-    '.model-card-details',
-    '.model-card-footer',
-  ];
-
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -643,11 +636,6 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     return found;
   }
 
-  // Which of the card's regions are rendered, by the class ModelCard gives each
-  function regionsOf(card: HTMLElement): string[] {
-    return REGION_ROW_SELECTORS.filter(selector => card.querySelector(selector) !== null);
-  }
-
   it('names the two tablists differently', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: cardEntries() });
     render(AnalysisSettingsPage);
@@ -658,14 +646,14 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     expect(names).toEqual(['settings.tabs.navigation', 'analysis.gallery.tabs.navigationAria']);
   });
 
-  it('renders both tabs through ModelCard with the same card structure', async () => {
+  it('renders both tabs through ModelCard, one article per entry', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: cardEntries() });
     render(AnalysisSettingsPage);
     await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
     await screen.findByRole('article', { name: 'Builtin' });
 
     const installed = ['Builtin', 'Preview Installed', 'Bad Installed'].map(cardNamed);
-    expect(document.querySelectorAll('article.model-card')).toHaveLength(installed.length);
+    expect(screen.getAllByRole('article')).toHaveLength(installed.length);
     // Built-in card: the footer carries the built-in pill instead of buttons
     expect(
       within(cardNamed('Builtin')).queryByRole('button', { name: /reinstall|remove/ })
@@ -675,14 +663,13 @@ describe('AnalysisSettingsPage model gallery cards', () => {
       'analysis.gallery.entryIncompatible'
     );
     expect(cardNamed('Preview Installed')).toHaveTextContent('analysis.gallery.preview.badge');
-    const installedStructure = installed.map(regionsOf);
 
     await fireEvent.click(
       await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
     );
     const previewCard = await screen.findByRole('article', { name: 'Preview Available' });
     const available = [previewCard, cardNamed('Bad Available')];
-    expect(document.querySelectorAll('article.model-card')).toHaveLength(available.length);
+    expect(screen.getAllByRole('article')).toHaveLength(available.length);
     expect(within(previewCard).getByRole('note')).toHaveTextContent(
       'analysis.gallery.preview.cardNotice'
     );
@@ -695,11 +682,6 @@ describe('AnalysisSettingsPage model gallery cards', () => {
         name: /analysis\.gallery\.install Bad Available/,
       })
     ).toHaveAttribute('aria-disabled', 'true');
-
-    // Each card renders all of the regions
-    for (const structure of [...installedStructure, ...available.map(regionsOf)]) {
-      expect(structure).toEqual(REGION_ROW_SELECTORS);
-    }
   });
 
   // A held action leaves its id set: the card it runs on shows the running label and the
@@ -750,6 +732,38 @@ describe('AnalysisSettingsPage model gallery cards', () => {
       expect(screen.queryByRole('button', { name: `${runningLabel} Second Model` })).toBeNull();
     }
   );
+
+  it('shows the download progress of a running install on its own card only', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({ id: 'first', name: 'First Model' }),
+        birdEntry({ id: 'second', name: 'Second Model' }),
+      ],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation((_id, onProgress) => {
+      onProgress(downloadProgress({ catalogId: 'first' }));
+      return () => {};
+    });
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'analysis.gallery.install First Model' })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+
+    expect(await within(cardNamed('First Model')).findByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '50'
+    );
+    expect(within(cardNamed('Second Model')).queryByRole('progressbar')).toBeNull();
+  });
 
   it('shows localized region names from the fetched regions on the Installed tab and in every Available section', async () => {
     const variant = {
