@@ -183,6 +183,14 @@
   const hasNotices = $derived(showPreviewNotice || !entry.compatible || progress !== null);
   const showGeomodel = $derived(entry.hasGeomodel && entry.category !== 'geomodel');
   const showOptimize = $derived(mode === 'installed' && optimizeAvailable);
+  // The completion line; empty while nothing has completed. Shown, and announced through the live region
+  const completeText = $derived(
+    progress?.status === 'complete'
+      ? busy === 'reinstall'
+        ? t('analysis.gallery.reinstallComplete')
+        : t('analysis.gallery.progress.complete')
+      : ''
+  );
   const license: { variant: StatusVariant; Icon: LucideIcon; note: string } = $derived(
     entry.commercialUse
       ? {
@@ -295,6 +303,8 @@
 {/snippet}
 
 <article class="model-card" aria-labelledby={titleId}>
+  <!-- Always rendered, so a screen reader hears its text change when an install completes; a line mounted together with its text is often not announced (see frontend/AGENTS.md, Accessibility) -->
+  <span class="sr-only" role="status">{completeText}</span>
   <header class="model-card-header">
     {#if logo}
       <img
@@ -387,9 +397,7 @@
         {#if progress.status === 'complete'}
           <p class="flex items-center gap-2 text-sm font-medium text-[var(--text-success)]">
             <Check class="size-4 shrink-0" aria-hidden="true" />
-            {busy === 'reinstall'
-              ? t('analysis.gallery.reinstallComplete')
-              : t('analysis.gallery.progress.complete')}
+            {completeText}
           </p>
         {:else}
           <div class="space-y-1.5">

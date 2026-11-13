@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { ComponentProps } from 'svelte';
-import { fireEvent, within } from '@testing-library/svelte';
+import { fireEvent, render, within } from '@testing-library/svelte';
 import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
@@ -47,6 +47,14 @@ function button(action: string, name = 'Test Bird Model'): HTMLElement {
   return screen.getByRole('button', { name: `${action} ${name}` });
 }
 
+// A card notice (preview or incompatible), found by its data-tone attribute: its role is
+// not unique on the card, which also carries a live region for the completion announcement
+function notice(): HTMLElement {
+  const found = document.querySelector('[data-tone]');
+  if (!(found instanceof HTMLElement)) throw new Error('the card shows no notice');
+  return found;
+}
+
 beforeEach(() => {
   // t is a shared mock: drop the calls earlier tests made, keep its implementation
   vi.mocked(t).mockClear();
@@ -64,7 +72,7 @@ describe('ModelCard', () => {
       const install = button('analysis.gallery.install');
       expect(install).toBeEnabled();
       expect(install).not.toHaveAttribute('aria-disabled');
-      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(document.querySelector('[data-tone]')).not.toBeInTheDocument();
     });
 
     it('blocks Install on an incompatible available entry and explains why by the notice', () => {
@@ -73,7 +81,7 @@ describe('ModelCard', () => {
       const install = button('analysis.gallery.install');
       expect(install).toBeEnabled();
       expect(install).toHaveAttribute('aria-disabled', 'true');
-      expect(screen.getByRole('status')).toHaveTextContent('analysis.gallery.entryIncompatible');
+      expect(notice()).toHaveTextContent('analysis.gallery.entryIncompatible');
       expect(install).toHaveAccessibleDescription('analysis.gallery.entryIncompatible');
     });
 
@@ -304,8 +312,36 @@ describe('ModelCard', () => {
       });
 
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(screen.getByText(text, { selector: 'p' })).toBeInTheDocument();
     });
+
+    it.each([
+      ['install', 'available', 'analysis.gallery.progress.complete'],
+      ['reinstall', 'installed', 'analysis.gallery.reinstallComplete'],
+    ] as const)(
+      'announces a completed %s through the live region already on the card',
+      async (busy, mode, text) => {
+        const { rerender } = render(ModelCard, {
+          props: {
+            entry: entry({ installed: mode === 'installed' }),
+            mode,
+            busy,
+            progress: progress({ status: 'downloading' }),
+            regionNames: REGION_NAMES,
+            pausedReasonId: PAUSED_ID,
+            onAction: vi.fn(),
+          },
+        });
+        const region = screen.getByRole('status');
+        expect(region.textContent).toBe('');
+
+        await rerender({ progress: progress({ status: 'complete' }) });
+
+        // The same element, so a screen reader sees its text change rather than a new node
+        expect(screen.getByRole('status')).toBe(region);
+        expect(region).toHaveTextContent(text);
+      }
+    );
   });
 
   describe('preview', () => {
@@ -505,7 +541,9 @@ describe('ModelCard', () => {
   ] as const)('a %s card shows the incompatibility in the %s tone', (mode, tone) => {
     renderCard({ entry: entry({ installed: mode === 'installed', compatible: false }), mode });
 
-    expect(screen.getByRole('status')).toHaveAttribute('data-tone', tone);
+    expect(notice()).toHaveAttribute('data-tone', tone);
+    // The notice keeps its status role next to the completion live region
+    expect(notice()).toHaveAttribute('role', 'status');
   });
 
   it('shows the incompatibility on an installed card too', () => {
@@ -514,7 +552,7 @@ describe('ModelCard', () => {
       mode: 'installed',
     });
 
-    expect(screen.getByRole('status')).toHaveTextContent('analysis.gallery.entryIncompatible');
+    expect(notice()).toHaveTextContent('analysis.gallery.entryIncompatible');
   });
 });
 

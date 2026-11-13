@@ -635,6 +635,14 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     return screen.getByRole('article', { name });
   }
 
+  // A card's notice, found by its data-tone attribute: its role is not unique on the card,
+  // which also carries a live region for the completion announcement
+  function noticeOf(card: HTMLElement): HTMLElement {
+    const found = card.querySelector('[data-tone]');
+    if (!(found instanceof HTMLElement)) throw new Error('the card shows no notice');
+    return found;
+  }
+
   // Which of the card's regions are rendered, by the class ModelCard gives each
   function regionsOf(card: HTMLElement): string[] {
     return REGION_ROW_SELECTORS.filter(selector => card.querySelector(selector) !== null);
@@ -663,7 +671,7 @@ describe('AnalysisSettingsPage model gallery cards', () => {
       within(cardNamed('Builtin')).queryByRole('button', { name: /reinstall|remove/ })
     ).toBeNull();
     // Incompatible card explains itself in a status notice
-    expect(within(cardNamed('Bad Installed')).getByRole('status')).toHaveTextContent(
+    expect(noticeOf(cardNamed('Bad Installed'))).toHaveTextContent(
       'analysis.gallery.entryIncompatible'
     );
     expect(cardNamed('Preview Installed')).toHaveTextContent('analysis.gallery.preview.badge');
@@ -679,7 +687,7 @@ describe('AnalysisSettingsPage model gallery cards', () => {
       'analysis.gallery.preview.cardNotice'
     );
     expect(previewCard).toHaveTextContent('analysis.gallery.preview.badge');
-    expect(within(cardNamed('Bad Available')).getByRole('status')).toHaveTextContent(
+    expect(noticeOf(cardNamed('Bad Available'))).toHaveTextContent(
       'analysis.gallery.entryIncompatible'
     );
     expect(
