@@ -416,6 +416,32 @@ describe('ModelCard', () => {
       expect(detailsValue('analysis.gallery.regionLabel')).toHaveTextContent('Europe');
     });
 
+    describe('when the entry and the variant both carry a region', () => {
+      // The entry region and the variant's region name are different words, so
+      // only the variant's own region can produce either expected value below.
+      const regional = entry({
+        region: 'Nordics',
+        variants: [variant({ id: 'v-eu', region: 'eu', default: true })],
+        recommendedVariantId: 'v-eu',
+      });
+
+      it('shows the variant region name over the entry region', () => {
+        renderCard({
+          entry: regional,
+          mode: 'available',
+          regionNames: new Map([['eu', 'Europa']]),
+        });
+
+        expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('Europa');
+      });
+
+      it('shows the raw variant region slug over the entry region when its name is unknown', () => {
+        renderCard({ entry: regional, mode: 'available', regionNames: new Map() });
+
+        expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('eu');
+      });
+    });
+
     it('describes the recommended variant on the Available tab', () => {
       renderCard({ entry: withVariants, mode: 'available' });
 
