@@ -137,12 +137,6 @@
     );
   }
 
-  // The variant's localized region name, or "Global" when the variant is global.
-  function displayRegionName(variant: CatalogVariant | null): string {
-    if (!variant?.region) return t('analysis.gallery.regionGlobal');
-    return regionNames.get(variant.region) ?? variant.region;
-  }
-
   function progressPercent(p: DownloadProgress): number {
     if (p.totalBytes <= 0) return 0;
     return Math.min(PERCENT, Math.round((p.downloadedBytes / p.totalBytes) * PERCENT));
@@ -174,6 +168,14 @@
   const isPreview = $derived(entry.channel === CHANNEL_PREVIEW);
   const hasVariants = $derived((entry.variants ?? []).length > 0);
   const shownVariant = $derived(displayVariantFor(entry, mode));
+  // The shown variant's localized region name. A variant without a region (a hardware
+  // build, or the single variant of a regional model) falls back to the entry's own
+  // region, and is "Global" only when the entry has none either.
+  const regionLabel = $derived(
+    shownVariant?.region
+      ? (regionNames.get(shownVariant.region) ?? shownVariant.region)
+      : entry.region || t('analysis.gallery.regionGlobal')
+  );
   const speciesCount = $derived(shownVariant?.speciesCount ?? entry.speciesCount);
   // A caller that passes only `busy` still pauses the card's other buttons
   const inFlight = $derived(actionInFlight || busy !== null);
@@ -427,12 +429,9 @@
 
   <div class="model-card-details">
     <dl class="model-card-facts">
-      {#if hasVariants}
+      {#if hasVariants || entry.region}
         <dt>{t('analysis.gallery.regionLabel')}</dt>
-        <dd>{displayRegionName(shownVariant)}</dd>
-      {:else if entry.region}
-        <dt>{t('analysis.gallery.regionLabel')}</dt>
-        <dd>{entry.region}</dd>
+        <dd>{regionLabel}</dd>
       {/if}
       <dt>{t('analysis.gallery.speciesLabel')}</dt>
       <dd class="tabular-nums">

@@ -403,6 +403,19 @@ describe('ModelCard', () => {
       expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('eu');
     });
 
+    it('falls back to the entry region for a variant without a region', () => {
+      renderCard({
+        entry: entry({
+          region: 'Europe',
+          variants: [variant({ id: 'fp32', default: true })],
+          recommendedVariantId: 'fp32',
+        }),
+        mode: 'available',
+      });
+
+      expect(detailsValue('analysis.gallery.regionLabel')).toHaveTextContent('Europe');
+    });
+
     it('describes the recommended variant on the Available tab', () => {
       renderCard({ entry: withVariants, mode: 'available' });
 
