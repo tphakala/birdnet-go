@@ -80,8 +80,14 @@
   const POPUP_RECONNECT_DELAY_MS = 100;
   /** Id of the keyboard exit hint, referenced by the terminal input's aria-describedby */
   const EXIT_HINT_ID = 'terminal-exit-hint';
-  const FOCUS_RING_CLASS =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]';
+  // Toolbar buttons dim their icon through colour alpha (70%, see MUTED_OPACITY), never element
+  // opacity, which would also fade the focus outline. The outline is a real outline, not a
+  // shadow, so forced-colors mode keeps it.
+  const TOOLBAR_BUTTON_CLASS =
+    'p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]';
+  const TOOLBAR_ICON_MUTED_CLASS =
+    'text-[var(--color-base-content)]/70 hover:text-[var(--color-base-content)]';
+  const TOOLBAR_ICON_ACTIVE_CLASS = 'text-[var(--color-base-content)]';
   /** Minimum opacity for secondary/muted text elements (WCAG AA compliant) */
   const MUTED_OPACITY = 0.7;
 
@@ -403,8 +409,6 @@
       '; }' +
       '.exit-hint { font-size: 11px; font-family: system-ui, sans-serif; color: ' +
       theme.foreground +
-      '; opacity: ' +
-      MUTED_OPACITY +
       '; }' +
       '.theme-swatches { display: flex; gap: 4px; }' +
       '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }' +
@@ -841,9 +845,9 @@
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
             <button
-              class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
-              style:color="var(--color-base-content)"
-              style:opacity={showThemeMenu ? 1 : MUTED_OPACITY}
+              class="{TOOLBAR_BUTTON_CLASS} {showThemeMenu
+                ? TOOLBAR_ICON_ACTIVE_CLASS
+                : TOOLBAR_ICON_MUTED_CLASS}"
               onclick={() => (showThemeMenu = !showThemeMenu)}
               title={t('terminal.colorTheme')}
               aria-label={t('terminal.colorTheme')}
@@ -913,9 +917,9 @@
           </div>
 
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
-            style:color="var(--color-base-content)"
-            style:opacity={isCopied ? 1 : MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {isCopied
+              ? TOOLBAR_ICON_ACTIVE_CLASS
+              : TOOLBAR_ICON_MUTED_CLASS}"
             onclick={copyTerminalOutput}
             title={t('terminal.copySelection')}
             aria-label={t('terminal.copySelection')}
@@ -927,9 +931,7 @@
             {/if}
           </button>
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
-            style:color="var(--color-base-content)"
-            style:opacity={MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {TOOLBAR_ICON_MUTED_CLASS}"
             onclick={detachTerminal}
             title={t('terminal.detach')}
             aria-label={t('terminal.detach')}
@@ -937,9 +939,7 @@
             <ExternalLink class="w-3.5 h-3.5" />
           </button>
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
-            style:color="var(--color-base-content)"
-            style:opacity={MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {TOOLBAR_ICON_MUTED_CLASS}"
             onclick={toggleExpanded}
             title={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
             aria-label={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
@@ -951,9 +951,7 @@
             {/if}
           </button>
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
-            style:color="var(--color-base-content)"
-            style:opacity={MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {TOOLBAR_ICON_MUTED_CLASS}"
             onclick={toggleFullscreen}
             title={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
             aria-label={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
