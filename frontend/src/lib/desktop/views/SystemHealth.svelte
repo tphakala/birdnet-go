@@ -24,11 +24,13 @@
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
+  import type {
+    HealthStatus,
+    HealthCategory,
+    DiagnosticsResult,
+    DiagnosticsReport,
+  } from '$lib/types/diagnostics.types';
   import { textColorFor } from '$lib/utils/statusTextColor';
-
-  type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
-  type HealthCategory =
-    'system' | 'audio' | 'analysis' | 'streams' | 'database' | 'network' | 'config' | 'logs';
 
   interface SparklineBucket {
     t: string;
@@ -40,28 +42,6 @@
     source: string;
     delta: number;
     metric: string;
-  }
-
-  interface DiagnosticsResult {
-    name: string;
-    category: HealthCategory;
-    status: HealthStatus;
-    message: string;
-    details?: Record<string, unknown>;
-    duration_ms: number;
-    timestamp: string;
-  }
-
-  interface DiagnosticsReport {
-    id: string;
-    status: HealthStatus;
-    started_at: string;
-    completed_at: string;
-    duration_ms: number;
-    total_checks: number;
-    results: DiagnosticsResult[];
-    summary: Record<string, HealthStatus>;
-    count_by_status: Record<string, number>;
   }
 
   const categoryOrder: HealthCategory[] = [
