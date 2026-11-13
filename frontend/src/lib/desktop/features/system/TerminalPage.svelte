@@ -22,6 +22,7 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { settingsStore } from '$lib/stores/settings';
+  import { attachTerminalExitKeys } from './terminalKeys';
   import {
     TerminalSquare,
     WifiOff,
@@ -77,6 +78,16 @@
   const POPUP_WINDOW_FEATURES = 'width=900,height=600,menubar=no,toolbar=no,location=no,status=no';
   const POPUP_DOM_SETTLE_MS = 50;
   const POPUP_RECONNECT_DELAY_MS = 100;
+  /** Id of the keyboard exit hint, referenced by the terminal input's aria-describedby */
+  const EXIT_HINT_ID = 'terminal-exit-hint';
+  // Toolbar buttons dim their icon through colour alpha (the /70 mirrors MUTED_OPACITY, Tailwind
+  // needs a literal), never element opacity, which would also fade the focus outline. The
+  // outline is a real outline, not a shadow, so forced-colors mode keeps it.
+  const TOOLBAR_BUTTON_CLASS =
+    'p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]';
+  const TOOLBAR_ICON_MUTED_CLASS =
+    'text-[var(--color-base-content)]/70 hover:text-[var(--color-base-content)]';
+  const TOOLBAR_ICON_ACTIVE_CLASS = 'text-[var(--color-base-content)]';
   /** Minimum opacity for secondary/muted text elements (WCAG AA compliant) */
   const MUTED_OPACITY = 0.7;
 
@@ -170,6 +181,7 @@
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalContainer);
+    attachTerminalExitKeys(term, EXIT_HINT_ID);
     fitAddon.fit();
 
     // Track terminal dimensions
@@ -324,7 +336,7 @@
       '<!DOCTYPE html><html lang="' +
       (document.documentElement.lang || 'en') +
       '"><head><meta charset="UTF-8"/>' +
-      '<title>BirdNET-Go \u2014 ' +
+      '<title>BirdNET-Go - ' +
       t('terminal.title') +
       '</title></head>' +
       '<body>' +
@@ -337,6 +349,11 @@
       '</span>' +
       '</div>' +
       '<span id="dimensions" class="dimensions"></span>' +
+      '<span id="' +
+      EXIT_HINT_ID +
+      '" class="exit-hint">' +
+      t('terminal.keyboardExitHint') +
+      '</span>' +
       '</div>' +
       '<div class="toolbar-right">' +
       '<div class="theme-swatches">' +
@@ -375,23 +392,26 @@
       'html, body { width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: ' +
       theme.background +
       '; }' +
-      '#toolbar { height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid rgba(128,128,128,0.2); background: rgba(128,128,128,0.06); }' +
-      '.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 10px; }' +
+      '#toolbar { min-height: 40px; flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; justify-content: space-between; padding: 4px 12px; border-bottom: 1px solid rgba(128,128,128,0.2); background: rgba(128,128,128,0.06); }' +
+      '.toolbar-left, .toolbar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }' +
       '.status-group { display: flex; align-items: center; gap: 6px; }' +
       '.status-dot { width: 7px; height: 7px; border-radius: 50%; }' +
       '.status-dot.connected { background: #10b981; animation: pulse 2s infinite; }' +
       '.status-dot.disconnected { background: #ef4444; }' +
       '@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }' +
-      '.status-text { font-size: 11px; font-weight: 500; font-family: system-ui, sans-serif; }' +
-      '.status-text.connected { color: #10b981; }' +
-      '.status-text.disconnected { color: #ef4444; }' +
-      '.dimensions { font-size: 10px; font-family: monospace; opacity: ' +
-      MUTED_OPACITY +
-      '; color: ' +
+      '.status-text { font-size: 11px; font-weight: 500; font-family: system-ui, sans-serif; color: ' +
+      theme.foreground +
+      '; }' +
+      '.dimensions { font-size: 10px; font-family: monospace; color: ' +
+      theme.foreground +
+      '; }' +
+      '.exit-hint { font-size: 11px; font-family: system-ui, sans-serif; color: ' +
       theme.foreground +
       '; }' +
       '.theme-swatches { display: flex; gap: 4px; }' +
-      '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }' +
+      '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; color: ' +
+      theme.foreground +
+      '; }' +
       '.swatch-btn:hover { background: rgba(128,128,128,0.15); }' +
       '.swatch-btn.active { background: rgba(128,128,128,0.2); }' +
       '.swatch { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid; }' +
@@ -416,6 +436,7 @@
       MUTED_OPACITY +
       '; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
       '.toolbar-btn:hover { opacity: 1; background: rgba(128,128,128,0.15); }' +
+      '.toolbar-btn:focus-visible, .swatch-btn:focus-visible { opacity: 1; outline: 2px solid currentColor; outline-offset: 1px; }' +
       '.toolbar-btn.copied { opacity: 1; color: #10b981; }' +
       '#terminal { flex: 1; min-height: 0; overflow: hidden; }' +
       '.xterm { padding: 12px 16px; }' +
@@ -486,6 +507,7 @@
       const popupFit = new FitAddon();
       popupTerm.loadAddon(popupFit);
       popupTerm.open(popupContainer);
+      attachTerminalExitKeys(popupTerm, EXIT_HINT_ID);
       popupFit.fit();
 
       // ── Toolbar references ──
@@ -541,12 +563,13 @@
           '; }';
         doc.head.appendChild(newStyle);
 
-        // Update toolbar button colors
-        const toolbarBtns = doc.querySelectorAll('.toolbar-btn');
+        // Update toolbar button and text colors
+        const toolbarBtns = doc.querySelectorAll(
+          '.toolbar-btn, .swatch-btn, .status-text, .dimensions, .exit-hint'
+        );
         toolbarBtns.forEach((btn: Element) => {
           (btn as HTMLElement).style.color = th.foreground;
         });
-        if (dimensionsEl) dimensionsEl.style.color = th.foreground;
 
         // Update active swatch indicator
         Object.entries(swatchBtns).forEach(([key, btn]) => {
@@ -618,7 +641,6 @@
         }
         if (statusText) {
           statusText.textContent = t('terminal.disconnected');
-          statusText.className = 'status-text disconnected';
         }
       };
 
@@ -819,14 +841,14 @@
           {/if}
         </div>
 
-        <!-- Action buttons - tabindex -1 prevents stealing focus from terminal -->
+        <!-- Action buttons - Copy, Expand and Fullscreen hand focus back to the terminal -->
         <div class="flex items-center gap-1">
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
             <button
-              class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
-              style:color="var(--color-base-content)"
-              style:opacity={showThemeMenu ? 1 : MUTED_OPACITY}
+              class="{TOOLBAR_BUTTON_CLASS} {showThemeMenu
+                ? TOOLBAR_ICON_ACTIVE_CLASS
+                : TOOLBAR_ICON_MUTED_CLASS}"
               onclick={() => (showThemeMenu = !showThemeMenu)}
               title={t('terminal.colorTheme')}
               aria-label={t('terminal.colorTheme')}
@@ -896,10 +918,9 @@
           </div>
 
           <button
-            tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
-            style:color="var(--color-base-content)"
-            style:opacity={isCopied ? 1 : MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {isCopied
+              ? TOOLBAR_ICON_ACTIVE_CLASS
+              : TOOLBAR_ICON_MUTED_CLASS}"
             onclick={copyTerminalOutput}
             title={t('terminal.copySelection')}
             aria-label={t('terminal.copySelection')}
@@ -911,9 +932,7 @@
             {/if}
           </button>
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
-            style:color="var(--color-base-content)"
-            style:opacity={MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {TOOLBAR_ICON_MUTED_CLASS}"
             onclick={detachTerminal}
             title={t('terminal.detach')}
             aria-label={t('terminal.detach')}
@@ -921,10 +940,7 @@
             <ExternalLink class="w-3.5 h-3.5" />
           </button>
           <button
-            tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
-            style:color="var(--color-base-content)"
-            style:opacity={MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {TOOLBAR_ICON_MUTED_CLASS}"
             onclick={toggleExpanded}
             title={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
             aria-label={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
@@ -936,10 +952,7 @@
             {/if}
           </button>
           <button
-            tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
-            style:color="var(--color-base-content)"
-            style:opacity={MUTED_OPACITY}
+            class="{TOOLBAR_BUTTON_CLASS} {TOOLBAR_ICON_MUTED_CLASS}"
             onclick={toggleFullscreen}
             title={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
             aria-label={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
@@ -962,6 +975,12 @@
         style:background={activeTheme.background}
         style:height={isExpanded || isFullscreen ? undefined : '480px'}
       ></div>
+      <p
+        id={EXIT_HINT_ID}
+        class="shrink-0 border-t border-[var(--border-100)] px-4 py-1.5 text-xs text-muted"
+      >
+        {t('terminal.keyboardExitHint')}
+      </p>
     </div>
   {/if}
 </div>

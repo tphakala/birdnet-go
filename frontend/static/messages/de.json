@@ -1944,7 +1944,8 @@
     "detach": "In neuem Fenster öffnen",
     "detached": "Terminal ist abgetrennt",
     "detachedDescription": "Das Terminal läuft in einem separaten Fenster. Schließen Sie dieses Fenster, um es hierher zurückzuholen.",
-    "reattach": "Wieder anhängen"
+    "reattach": "Wieder anhängen",
+    "keyboardExitHint": "Esc und danach Tab drücken, um das Terminal zu verlassen"
   },
   "analytics": {
     "hub": {

@@ -1944,7 +1944,8 @@
     "detach": "Megnyitás új ablakban",
     "detached": "Terminal leválasztva",
     "detachedDescription": "A terminal egy külön ablakban fut. Zárja be azt az ablakot a visszatéréshez.",
-    "reattach": "Újracsatlakozás"
+    "reattach": "Újracsatlakozás",
+    "keyboardExitHint": "A terminál elhagyásához nyomja meg az Esc, majd a Tab billentyűt"
   },
   "analytics": {
     "hub": {

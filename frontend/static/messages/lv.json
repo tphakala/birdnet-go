@@ -1944,7 +1944,8 @@
     "detach": "Atvērt jaunā logā",
     "detached": "Terminālis ir atdalīts",
     "detachedDescription": "Terminālis darbojas atsevišķā logā. Aizveriet to logu, lai atgrieztu termināli šeit.",
-    "reattach": "Pievienot atpakaļ"
+    "reattach": "Pievienot atpakaļ",
+    "keyboardExitHint": "Lai atstātu termināli, nospiediet Esc un pēc tam Tab"
   },
   "analytics": {
     "hub": {

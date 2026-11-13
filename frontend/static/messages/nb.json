@@ -1944,7 +1944,8 @@
     "detach": "Åpne i nytt vindu",
     "detached": "Terminal er frakoblet",
     "detachedDescription": "Terminalen kjører i et eget vindu. Lukk det vinduet for å returnere den hit.",
-    "reattach": "Fest til igjen"
+    "reattach": "Fest til igjen",
+    "keyboardExitHint": "Trykk Esc og deretter Tab for å forlate terminalen"
   },
   "analytics": {
     "hub": {
