@@ -836,7 +836,7 @@
           {/if}
         </div>
 
-        <!-- Action buttons - the terminal is refocused by the handlers after each action -->
+        <!-- Action buttons - Copy, Expand and Fullscreen hand focus back to the terminal -->
         <div class="flex items-center gap-1">
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
