@@ -44,7 +44,6 @@
 
   // The brand is not translated, so it is not an i18n key.
   const APP_NAME = 'BirdNET-Go';
-  const TITLE_SEPARATOR = ' - ';
 
   /**
    * Client-side navigation function.
@@ -147,10 +146,9 @@
   // no translation, so it is not shown.
   let documentTitle = $derived.by(() => {
     if (!appInitialized || appError) return APP_NAME;
-    const showsLogin = requireLogin || loginRouteActive;
-    const key = showsLogin ? 'auth.loginTitle' : pageTitleKey;
-    const page = showsLogin ? t(key) : pageTitle;
-    return !page || page === key ? APP_NAME : `${page}${TITLE_SEPARATOR}${APP_NAME}`;
+    const key = requireLogin || loginRouteActive ? 'auth.loginTitle' : pageTitleKey;
+    const page = t(key);
+    return !page || page === key ? APP_NAME : `${page} - ${APP_NAME}`;
   });
 
   // Route configuration for better maintainability

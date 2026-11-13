@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/svelte';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // Only the document title is under test: the layout and every page are replaced by stubs.
 vi.mock('./lib/desktop/layouts/RootLayout.svelte', () => ({ default: () => {} }));
@@ -46,20 +45,12 @@ const HELP_PATH = '/ui/help';
 const DASHBOARD_PATH = '/ui/dashboard';
 const UNTRANSLATED_KEY = 'navigation.about';
 
-const SRC_LIB_DIR = fileURLToPath(new URL('./lib', import.meta.url));
+const SRC_LIB_DIR = join(import.meta.dirname, 'lib');
 
 // The test i18n mock returns the key for an unknown key, like the real t(); every other key
 // gets a distinct, recognizable translation.
 function translateKnown(key: string): string {
   return key === UNTRANSLATED_KEY ? key : `[${key}]`;
-}
-
-function collectSvelteFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap(name => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return collectSvelteFiles(path);
-    return path.endsWith('.svelte') ? [path] : [];
-  });
 }
 
 const originalT = vi.mocked(t).getMockImplementation();
@@ -102,8 +93,14 @@ describe('App document title', () => {
 
 describe('document title writers', () => {
   it('has no <title> element inside a svelte:head outside App.svelte', () => {
-    const offenders = collectSvelteFiles(SRC_LIB_DIR).filter(file =>
-      /<svelte:head>[\s\S]*?<title[\s>][\s\S]*?<\/svelte:head>/.test(readFileSync(file, 'utf8'))
+    const files = readdirSync(SRC_LIB_DIR, { recursive: true, encoding: 'utf8' }).filter(file =>
+      file.endsWith('.svelte')
+    );
+    const offenders = files.filter(file =>
+      /<svelte:head>[\s\S]*?<title[\s>][\s\S]*?<\/svelte:head>/.test(
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
+        readFileSync(join(SRC_LIB_DIR, file), 'utf8')
+      )
     );
     expect(offenders).toEqual([]);
   });
