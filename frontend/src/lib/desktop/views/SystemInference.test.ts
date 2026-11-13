@@ -152,18 +152,17 @@ describe('SystemInference', () => {
     cleanup();
   });
 
-  it('shows a loading indicator while the snapshot request is pending', async () => {
+  it('shows a card skeleton, not a spinner, while the snapshot request is pending', async () => {
     // Never-resolving snapshot request keeps the view in its loading state.
     apiGet.mockImplementation(() => new Promise(() => {}));
 
     const { container } = inferenceTest.render({});
 
-    await waitFor(() => {
-      const status = container.querySelector('[role="status"]');
-      expect(status).not.toBeNull();
-    });
+    const skeleton = container.querySelector('[data-testid="inference-skeleton"]');
+    expect(skeleton).not.toBeNull();
     // The mocked i18n returns the key when no translation is registered.
-    expect(container.textContent).toContain('system.inference.loading');
+    expect(skeleton?.textContent).toContain('system.inference.loading');
+    expect(container.querySelector('.animate-spin')).toBeNull();
   });
 
   it('renders the empty state when the snapshot has no models', async () => {
@@ -173,6 +172,7 @@ describe('SystemInference', () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain('system.inference.noModels');
+      expect(container.querySelector('[data-testid="inference-skeleton"]')).toBeNull();
     });
     // No model cards: the empty-state message stands alone.
     expect(container.textContent).not.toContain('system.inference.invocations');

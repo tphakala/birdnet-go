@@ -31,6 +31,7 @@
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
+  import InferenceSkeleton from '$lib/desktop/features/system/components/InferenceSkeleton.svelte';
   import {
     Brain,
     Binary,
@@ -541,17 +542,7 @@
 
 <div class="space-y-4">
   {#if loading}
-    <div
-      class="flex items-center gap-3 p-4 text-sm text-base-content/70"
-      role="status"
-      aria-live="polite"
-    >
-      <span
-        class="animate-spin motion-reduce:animate-none h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
-        aria-hidden="true"
-      ></span>
-      <span>{t('system.inference.loading')}</span>
-    </div>
+    <InferenceSkeleton />
   {:else if error && !snapshot}
     <div
       role="alert"
