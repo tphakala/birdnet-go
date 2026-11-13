@@ -46,7 +46,7 @@ describe('createTerminalExitKeys', () => {
     expect(handler(key('keydown', 'Tab', { shiftKey: true }))).toBe(true);
   });
 
-  it('passes Tab once the window after Escape has elapsed, and not before', () => {
+  it('releases Tab at exactly the window edge and passes it one millisecond later', () => {
     const { handler, advance } = setup();
     handler(key('keydown', 'Escape'));
     advance(TAB_RELEASE_WINDOW_MS);
