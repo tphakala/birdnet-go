@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
 )
 
@@ -31,10 +32,6 @@ const (
 // audioDirNames are sibling directory names that indicate a BirdNET-Pi audio
 // tree next to a birds.db.
 var audioDirNames = []string{birdSongsDirName, extractedDirName, byDateDirName}
-
-// audioTreeLayouts are the supported locations of the by-date clip tree inside
-// an audio root: a live install nests it in "Extracted", a backup does not.
-var audioTreeLayouts = []string{filepath.Join(extractedDirName, byDateDirName), byDateDirName}
 
 // Probe inspects a single birds.db path and returns its candidate metadata. It
 // is the manual-entry counterpart to a Scan hit: the wizard's "validate this
@@ -186,7 +183,7 @@ func resolvesWithin(resolvedBound, path string) bool {
 }
 
 // hasAudioTree reports whether dir holds a non-empty by-date clip tree, in
-// either supported layout (see audioTreeLayouts). The lookup goes through an
+// either supported layout (see imports.AudioTreeLayouts). The lookup goes through an
 // os.Root, as the importer's clip lookups do, so a tree that is only reachable
 // through a symlink leaving dir does not count. One entry is read: an empty
 // skeleton must not win over a populated tree further up, and a large By_Date
@@ -198,7 +195,7 @@ func hasAudioTree(dir string) bool {
 		return false
 	}
 	defer func() { _ = root.Close() }()
-	for _, layout := range audioTreeLayouts {
+	for _, layout := range imports.AudioTreeLayouts {
 		if hasEntries(root, layout) {
 			return true
 		}

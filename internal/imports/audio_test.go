@@ -31,16 +31,21 @@ const comGreatTit = "Great Tit"
 // Returns the path of the created clip file.
 func makeAudioTree(t *testing.T, root, date, comName, fileName string, content []byte) string {
 	t.Helper()
-	dir := filepath.Join(root, "Extracted", "By_Date", date, comName)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	path := filepath.Join(dir, fileName)
-	require.NoError(t, os.WriteFile(path, content, 0o644))
-	return path
+	return makeClip(t, filepath.Join(root, "Extracted", "By_Date"), date, comName, fileName, content)
 }
 
+// makeBackupAudioTree is makeAudioTree for the layout of a BirdNET-Pi backup,
+// which keeps By_Date directly under root: root/By_Date/<date>/<comName>/<fileName>.
 func makeBackupAudioTree(t *testing.T, root, date, comName, fileName string, content []byte) string {
 	t.Helper()
-	dir := filepath.Join(root, "By_Date", date, comName)
+	return makeClip(t, filepath.Join(root, "By_Date"), date, comName, fileName, content)
+}
+
+// makeClip writes a clip file at byDateDir/<date>/<comName>/<fileName> and
+// returns its path.
+func makeClip(t *testing.T, byDateDir, date, comName, fileName string, content []byte) string {
+	t.Helper()
+	dir := filepath.Join(byDateDir, date, comName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	path := filepath.Join(dir, fileName)
 	require.NoError(t, os.WriteFile(path, content, 0o644))
@@ -84,13 +89,25 @@ func walkFiles(t *testing.T, dir string) []string {
 // package-private we use an integration approach.
 
 func TestImport_WithAudio_CopiesClips(t *testing.T) {
+	assertImportCopiesClips(t, makeAudioTree)
+}
+
+func TestImport_WithAudio_CopiesClips_BackupLayout(t *testing.T) {
+	assertImportCopiesClips(t, makeBackupAudioTree)
+}
+
+// assertImportCopiesClips imports one detection whose clip makeTree places in the
+// source audio tree, and checks the clip is copied into the export directory and
+// recorded on the detection.
+func assertImportCopiesClips(t *testing.T, makeTree func(t *testing.T, root, date, comName, fileName string, content []byte) string) {
+	t.Helper()
 	audioSrc := t.TempDir()
 	exportDir := t.TempDir()
 	date := "2025-03-25"
 	comName := "Great Spotted Woodpecker"
 	fileName := "woodpecker.mp3"
 	clipContent := []byte("fake audio content")
-	makeAudioTree(t, audioSrc, date, comName, fileName, clipContent)
+	makeTree(t, audioSrc, date, comName, fileName, clipContent)
 
 	rows := []birdnetPiRow{
 		{
@@ -139,45 +156,6 @@ func TestImport_WithAudio_CopiesClips(t *testing.T) {
 	require.NoError(t, searchErr)
 	require.Len(t, results, 1)
 	assert.Equal(t, relPath, results[0].ClipName, "ClipName must equal the relative clip path")
-}
-
-func TestImport_WithAudio_CopiesClips_BackupLayout(t *testing.T) {
-	audioSrc := t.TempDir()
-	exportDir := t.TempDir()
-	date := "2025-03-25"
-	comName := "Great Spotted Woodpecker"
-	fileName := "woodpecker.mp3"
-	clipContent := []byte("fake audio content")
-	makeBackupAudioTree(t, audioSrc, date, comName, fileName, clipContent)
-
-	rows := []birdnetPiRow{{
-		Date: date, Time: "14:27:32",
-		SciName: "Dendrocopos major", ComName: comName,
-		Confidence: 0.74, Lat: 60.75, Lon: 24.77,
-		Cutoff: 0.7, Sens: 1.25, FileName: fileName,
-	}}
-	dbPath := newFixtureDB(t, rows)
-	src, err := newBirdNetPiSource(t, dbPath)
-	require.NoError(t, err)
-
-	store := newTestStore(t)
-	repo := newDetectionRepo(t, store)
-	stats, err := imports.NewEngine(repo).Run(t.Context(), src, &imports.ImportOptions{
-		SourceNode:     imports.DefaultSourceNode,
-		Location:       time.UTC,
-		BatchSize:      100,
-		IncludeAudio:   true,
-		AudioSourceDir: audioSrc,
-		ClipExportPath: exportDir,
-	}, nil)
-	require.NoError(t, err)
-	assert.Equal(t, 1, stats.Inserted)
-
-	ts := time.Date(2025, 3, 25, 14, 27, 32, 0, time.UTC)
-	relPath := imports.TargetClipRelPathForTest("Dendrocopos major", 0.74, ts, "mp3")
-	data, readErr := os.ReadFile(filepath.Join(exportDir, filepath.FromSlash(relPath)))
-	require.NoError(t, readErr)
-	assert.Equal(t, clipContent, data)
 }
 
 func TestImport_WithAudio_InsufficientDiskSpace_Aborts(t *testing.T) {
