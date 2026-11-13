@@ -531,8 +531,10 @@
             <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
           </div>
           <span
-            class="font-mono tabular-nums text-2xl font-semibold"
-            class:text-muted={!((report?.count_by_status?.skipped ?? 0) > 0)}
+            class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+              ?.skipped ?? 0) > 0
+              ? ''
+              : 'text-[var(--color-base-content)]/70'}"
           >
             {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
           </span>
