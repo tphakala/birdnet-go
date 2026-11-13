@@ -1247,10 +1247,10 @@ describe('Modal', () => {
         expect(document.body).toHaveFocus();
       });
 
-      it('prefers the focused element over an earlier press', async () => {
+      it('prefers the focused element over a press that did not move focus', async () => {
         renderTyped(ModalToggleHost, {});
-        await fireEvent.pointerDown(button('Page button'));
         button('Toggle lower').focus();
+        await fireEvent.pointerDown(button('Page button'));
         await press('Toggle lower');
         await waitFor(() => expect(button('Lower action')).toHaveFocus());
 
