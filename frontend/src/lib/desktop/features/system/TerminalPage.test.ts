@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { get } from 'svelte/store';
@@ -7,7 +7,7 @@ type KeyHandler = (ev: KeyboardEvent) => boolean;
 
 // Every Terminal the page creates, so tests can reach its input and its key handler
 const created = vi.hoisted(() => ({
-  terminals: [] as { textarea?: HTMLTextAreaElement; handler?: (ev: KeyboardEvent) => boolean }[],
+  terminals: [] as { textarea?: HTMLTextAreaElement; handler?: KeyHandler }[],
 }));
 
 vi.mock('@xterm/xterm', () => ({
@@ -50,6 +50,7 @@ vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 vi.mock('@xterm/xterm/css/xterm.css?raw', () => ({ default: '' }));
 
 import { settingsStore } from '$lib/stores/settings';
+import { opacityClasses } from '../../../../test/class-helpers';
 import TerminalPage from './TerminalPage.svelte';
 
 // The test setup returns translation keys as text
@@ -98,7 +99,7 @@ describe('TerminalPage toolbar', () => {
     for (const label of TOOLBAR_BUTTON_LABELS) {
       const button = getByRole('button', { name: label });
       expect(button.style.opacity).toBe('');
-      expect(button.className).not.toMatch(/(^|\s)(hover:)?opacity-/);
+      expect(opacityClasses(button)).toEqual([]);
     }
   });
 
@@ -128,6 +129,11 @@ describe('TerminalPage toolbar', () => {
 });
 
 describe('TerminalPage detached window', () => {
+  afterEach(() => {
+    document.querySelectorAll('iframe').forEach(frame => frame.remove());
+    vi.restoreAllMocks();
+  });
+
   // Foreground colours of the three terminal themes, as computed style reports them
   const DARK_FOREGROUND = 'rgb(169, 177, 214)';
   const TOOLBAR_TEXT_SELECTORS = ['#status-text', '#dimensions', '#terminal-exit-hint'];

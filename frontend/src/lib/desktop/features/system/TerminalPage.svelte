@@ -81,9 +81,8 @@
   /** Id of the keyboard exit hint, referenced by the terminal input's aria-describedby */
   const EXIT_HINT_ID = 'terminal-exit-hint';
   // Toolbar buttons dim their icon through colour alpha (the /70 mirrors MUTED_OPACITY, Tailwind
-  // needs a literal), never element
-  // opacity, which would also fade the focus outline. The outline is a real outline, not a
-  // shadow, so forced-colors mode keeps it.
+  // needs a literal), never element opacity, which would also fade the focus outline. The
+  // outline is a real outline, not a shadow, so forced-colors mode keeps it.
   const TOOLBAR_BUTTON_CLASS =
     'p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]';
   const TOOLBAR_ICON_MUTED_CLASS =
