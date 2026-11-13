@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { get } from 'svelte/store';
 
@@ -124,5 +124,70 @@ describe('TerminalPage toolbar', () => {
     const key = (k: string) => new KeyboardEvent('keydown', { key: k });
     expect(handler?.(key('Escape'))).toBe(true);
     expect(handler?.(key('Tab'))).toBe(false);
+  });
+});
+
+describe('TerminalPage detached window', () => {
+  // Foreground colours of the three terminal themes, as computed style reports them
+  const DARK_FOREGROUND = 'rgb(169, 177, 214)';
+  const TOOLBAR_TEXT_SELECTORS = ['#status-text', '#dimensions', '#terminal-exit-hint'];
+
+  async function detach() {
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        close() {}
+        send() {}
+      }
+    );
+    created.terminals.length = 0;
+    enableTerminal();
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const popup = frame.contentWindow;
+    if (!popup) throw new Error('iframe has no window');
+    vi.spyOn(window, 'open').mockReturnValue(popup);
+
+    const { getByRole } = render(TerminalPage);
+    await tick();
+    await fireEvent.click(getByRole('button', { name: 'terminal.detach' }));
+    // The popup toolbar wiring runs after the popup's DOM settle delay
+    await waitFor(() => expect(popup.document.getElementById('theme-light')).not.toBeNull());
+    await waitFor(() => expect(created.terminals.length).toBeGreaterThan(1));
+    return popup.document;
+  }
+
+  // Computed colour and opacity of each toolbar text element
+  function toolbarText(doc: Document) {
+    return TOOLBAR_TEXT_SELECTORS.map(selector => {
+      const el = doc.querySelector(selector);
+      if (!el) throw new Error(`missing ${selector}`);
+      const style = doc.defaultView?.getComputedStyle(el);
+      return { selector, color: style?.color, opacity: style?.opacity };
+    });
+  }
+
+  const colors = (doc: Document) => toolbarText(doc).map(t => t.color);
+  const all = (color: string) => TOOLBAR_TEXT_SELECTORS.map(() => color);
+
+  it('draws every toolbar text in the active theme foreground and follows theme switches', async () => {
+    const doc = await detach();
+    expect(colors(doc)).toEqual(all(DARK_FOREGROUND));
+
+    doc.getElementById('theme-light')?.click();
+    expect(colors(doc)).toEqual(all('rgb(56, 58, 66)'));
+
+    doc.getElementById('theme-hc')?.click();
+    expect(colors(doc)).toEqual(all('rgb(0, 255, 0)'));
+
+    doc.getElementById('theme-dark')?.click();
+    expect(colors(doc)).toEqual(all(DARK_FOREGROUND));
+  });
+
+  it('keeps toolbar text at full opacity so it reaches 4.5:1', async () => {
+    const doc = await detach();
+    expect(toolbarText(doc).map(t => t.opacity === '' || t.opacity === '1')).toEqual(
+      TOOLBAR_TEXT_SELECTORS.map(() => true)
+    );
   });
 });

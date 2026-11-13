@@ -400,12 +400,10 @@
       '.status-dot.connected { background: #10b981; animation: pulse 2s infinite; }' +
       '.status-dot.disconnected { background: #ef4444; }' +
       '@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }' +
-      '.status-text { font-size: 11px; font-weight: 500; font-family: system-ui, sans-serif; }' +
-      '.status-text.connected { color: #10b981; }' +
-      '.status-text.disconnected { color: #ef4444; }' +
-      '.dimensions { font-size: 10px; font-family: monospace; opacity: ' +
-      MUTED_OPACITY +
-      '; color: ' +
+      '.status-text { font-size: 11px; font-weight: 500; font-family: system-ui, sans-serif; color: ' +
+      theme.foreground +
+      '; }' +
+      '.dimensions { font-size: 10px; font-family: monospace; color: ' +
       theme.foreground +
       '; }' +
       '.exit-hint { font-size: 11px; font-family: system-ui, sans-serif; color: ' +
@@ -564,12 +562,13 @@
           '; }';
         doc.head.appendChild(newStyle);
 
-        // Update toolbar button and hint colors
-        const toolbarBtns = doc.querySelectorAll('.toolbar-btn, .exit-hint');
+        // Update toolbar button and text colors
+        const toolbarBtns = doc.querySelectorAll(
+          '.toolbar-btn, .status-text, .dimensions, .exit-hint'
+        );
         toolbarBtns.forEach((btn: Element) => {
           (btn as HTMLElement).style.color = th.foreground;
         });
-        if (dimensionsEl) dimensionsEl.style.color = th.foreground;
 
         // Update active swatch indicator
         Object.entries(swatchBtns).forEach(([key, btn]) => {
