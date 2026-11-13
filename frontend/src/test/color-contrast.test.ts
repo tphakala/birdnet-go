@@ -93,6 +93,46 @@ function blockBody(css: string, selector: string): string {
   return css.slice(start, end);
 }
 
+/**
+ * Bodies of every rule written as `selector { ... }` in `source`. A compound selector that ends
+ * in `selector` (`.a .text-error { ... }`) matches too.
+ */
+function ruleBodies(source: string, selector: string): string[] {
+  const bodies: string[] = [];
+  const opener = `${selector} {`;
+  let from = 0;
+  for (;;) {
+    const start = source.indexOf(opener, from);
+    if (start < 0) {
+      return bodies;
+    }
+    const bodyStart = start + opener.length;
+    const end = source.indexOf('}', bodyStart);
+    if (end < 0) {
+      throw new Error(`rule "${selector}" has no closing brace`);
+    }
+    bodies.push(source.slice(bodyStart, end));
+    from = end;
+  }
+}
+
+/** Values of the `color:` declarations (not `background-color:`) across rule bodies. */
+function colorValues(bodies: string[]): string[] {
+  return bodies.flatMap(body =>
+    [...body.matchAll(/(?:^|[\s;{])color:\s*([^;}]+)/g)].map(match => match[1].trim())
+  );
+}
+
+/** Per-channel steps of the colour grid the sweep tests sample. */
+const CHANNEL_STEPS = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
+
+/** Every colour of the CHANNEL_STEPS grid as a hex string (6 x 6 x 6 colours). */
+const GRID_COLORS = CHANNEL_STEPS.flatMap(r =>
+  CHANNEL_STEPS.flatMap(g =>
+    CHANNEL_STEPS.map(b => `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`)
+  )
+);
+
 /** Hex value of custom property `name` in a block body, or null when it is not set to a hex. */
 function findVar(body: string, name: string): string | null {
   // eslint-disable-next-line security/detect-non-literal-regexp -- name is one of the fixed custom property names used by the callers
@@ -485,7 +525,7 @@ describe('Accessibility: data visualization tokens', () => {
   }
 
   it('no color scheme overrides a visualization token', () => {
-    // Schemes change only primary and accent; the viz tokens must hold under every scheme.
+    // Schemes change only primary, accent and --text-primary; the viz tokens must hold under every scheme.
     expect(readFileSync(join(stylesDir, 'schemes.css'), 'utf8')).not.toMatch(/--viz-/);
   });
 });
@@ -493,29 +533,6 @@ describe('Accessibility: data visualization tokens', () => {
 describe('Status text rules', () => {
   const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
   const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
-
-  /**
-   * Bodies of every rule written as `selector { ... }` in `source`. A compound selector that ends
-   * in `selector` (`.a .text-error { ... }`) matches too.
-   */
-  function ruleBodies(source: string, selector: string): string[] {
-    const bodies: string[] = [];
-    const opener = `${selector} {`;
-    let from = 0;
-    for (;;) {
-      const start = source.indexOf(opener, from);
-      if (start < 0) {
-        return bodies;
-      }
-      const bodyStart = start + opener.length;
-      const end = source.indexOf('}', bodyStart);
-      if (end < 0) {
-        throw new Error(`rule "${selector}" has no closing brace`);
-      }
-      bodies.push(source.slice(bodyStart, end));
-      from = end;
-    }
-  }
 
   for (const { status, token, fill } of TEXT_TOKENS) {
     const tintedSelectors = [`.alert-${status}`, `.badge-status-${status}`];
@@ -724,17 +741,8 @@ describe('SelectDropdown option states in every color scheme', () => {
   }
 
   it('custom scheme: option text and outline pass for any primary color', () => {
-    const channel = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
-    const toHex = (n: number) => n.toString(16).padStart(2, '0');
-    const primaries = ['#2563eb', '#3b82f6'];
-    for (const r of channel) {
-      for (const g of channel) {
-        for (const b of channel) {
-          primaries.push(`#${toHex(r)}${toHex(g)}${toHex(b)}`);
-        }
-      }
-    }
-    expect(primaries).toHaveLength(216 + 2);
+    const primaries = ['#2563eb', '#3b82f6', ...GRID_COLORS];
+    expect(primaries).toHaveLength(CHANNEL_STEPS.length ** 3 + 2);
 
     for (const theme of ['light', 'dark'] as const) {
       for (const primary of primaries) {
@@ -1049,8 +1057,9 @@ describe('Primary and accent content in every color scheme', () => {
   }
 
   /**
-   * Raw token value of a scheme in a theme, mirroring the cascade: the dark scheme block, then
-   * the scheme block, then the theme block, then @theme.
+   * Raw token value of a scheme in a theme: the dark scheme block, then the scheme block, then
+   * the theme block, then @theme. This reads the source files and assumes schemes.css loads after
+   * the theme blocks, as main.js imports it (checked by a test below).
    */
   function tokenOf(scheme: string, theme: Theme, name: string): string {
     const candidates = [
@@ -1152,17 +1161,17 @@ describe('Primary and accent content in every color scheme', () => {
     // Surfaces do not depend on the scheme; any scheme resolves them from the theme blocks.
     const SURFACE_SCHEME = 'blue';
 
-    /** Body of the first `selector { ... }` rule in tailwind.css. */
-    function ruleBody(selector: string): string {
-      const start = tailwindCss.indexOf(`${selector} {`);
-      expect(start, `${selector} rule found`).toBeGreaterThanOrEqual(0);
-      return tailwindCss.slice(start, tailwindCss.indexOf('}', start));
+    /** Bodies of every rule for `selector` in tailwind.css; fails when there is none. */
+    function activeBodies(selector: string): string[] {
+      const bodies = ruleBodies(tailwindCss, selector);
+      expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+      return bodies;
     }
 
     /** Tint fraction of the primary fill that an active rule puts behind the text. */
     function tintFraction(selector: string): number {
       const match = /color-mix\(in oklch, var\(--color-primary\) (\d+)%, transparent\)/.exec(
-        ruleBody(selector)
+        activeBodies(selector).join('\n')
       );
       expect(match, `${selector} tints --color-primary`).not.toBeNull();
       return Number(match?.[1]) / 100;
@@ -1172,7 +1181,12 @@ describe('Primary and accent content in every color scheme', () => {
 
     const surfacesOf = (theme: Theme) => SURFACES.map(name => colorOf(SURFACE_SCHEME, theme, name));
 
-    /** Lowest ratio of `text` on the surfaces and on a tint of `fill` over each. */
+    /**
+     * Lowest ratio of `text` on the surfaces and on a tint of `fill` over each. The CSS mixes in
+     * oklch with transparent, which keeps the fill colour and sets its alpha to the tint share, so
+     * blending in sRGB bytes gives the same tint (checked against a full oklch mix: same worst
+     * ratios to three decimals).
+     */
     function worstRatio(text: string, fill: string, surfaces: string[]): number {
       return Math.min(
         ...surfaces.flatMap(surface => [
@@ -1184,10 +1198,29 @@ describe('Primary and accent content in every color scheme', () => {
 
     for (const selector of ACTIVE_RULES) {
       it(`${selector} colours its text with ${TEXT_TOKEN} and uses the shared tint`, () => {
-        expect(ruleBody(selector)).toContain(`color: var(${TEXT_TOKEN});`);
+        // Every rule for the class, so a later override or duplicate with another colour fails.
+        expect(new Set(colorValues(activeBodies(selector)))).toEqual(
+          new Set([`var(${TEXT_TOKEN})`])
+        );
         expect(tintFraction(selector)).toBe(TINT);
       });
     }
+
+    it('colorValues reads every color declaration and ignores background-color', () => {
+      const bodies = [
+        'background-color: red; color: var(--text-primary);',
+        '\n    color: #fff;\n    background-color: blue',
+      ];
+      expect(colorValues(bodies)).toEqual(['var(--text-primary)', '#fff']);
+    });
+
+    it('imports schemes.css after tailwind.css, so the scheme blocks win over the theme blocks', () => {
+      const main = readFileSync(join(srcDir, 'main.js'), 'utf8');
+      const tailwindAt = main.indexOf("'./styles/tailwind.css'");
+      const schemesAt = main.indexOf("'./styles/schemes.css'");
+      expect(tailwindAt, 'tailwind.css import').toBeGreaterThanOrEqual(0);
+      expect(schemesAt, 'schemes.css import').toBeGreaterThan(tailwindAt);
+    });
 
     for (const scheme of FIXED_SCHEMES) {
       for (const theme of ['light', 'dark'] as const) {
@@ -1222,17 +1255,12 @@ describe('Primary and accent content in every color scheme', () => {
       });
     }
 
-    it('custom scheme: the token is base-content, which passes on the tint for any primary color', () => {
+    it('custom scheme: the token is base-content, which passes on the tint over a 6x6x6 colour grid', () => {
       expect(blockBody(schemesCss, "\n[data-scheme='custom']")).toMatch(
         /--text-primary:\s*var\(--color-base-content\);/
       );
-      const channel = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
-      const fills = channel.flatMap(r =>
-        channel.flatMap(g =>
-          channel.map(b => `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`)
-        )
-      );
-      expect(fills).toHaveLength(216);
+      const fills = GRID_COLORS;
+      expect(fills).toHaveLength(CHANNEL_STEPS.length ** 3);
       for (const theme of ['light', 'dark'] as const) {
         const text = colorOf(SURFACE_SCHEME, theme, '--color-base-content');
         const surfaces = surfacesOf(theme);
@@ -1364,20 +1392,14 @@ describe('Custom scheme hover and pressed fills', () => {
   });
 
   it('keeps at least the rest contrast on hover and pressed for any custom colour', () => {
-    const channel = ['00', '33', '66', '99', 'cc', 'ff'];
-    for (const r of channel) {
-      for (const g of channel) {
-        for (const b of channel) {
-          const primary = `#${r}${g}${b}`;
-          const content = contentFor(primary);
-          const shade = content === '#ffffff' ? '#000000' : '#ffffff';
-          const rest = getContrastRatio(content, primary);
-          const hover = getContrastRatio(content, applyOpacity(primary, shade, 0.85));
-          const active = getContrastRatio(content, applyOpacity(primary, shade, 0.7));
-          expect(hover, `${primary} hover`).toBeGreaterThanOrEqual(rest - 0.01);
-          expect(active, `${primary} pressed`).toBeGreaterThanOrEqual(rest - 0.01);
-        }
-      }
+    for (const primary of GRID_COLORS) {
+      const content = contentFor(primary);
+      const shade = content === '#ffffff' ? '#000000' : '#ffffff';
+      const rest = getContrastRatio(content, primary);
+      const hover = getContrastRatio(content, applyOpacity(primary, shade, 0.85));
+      const active = getContrastRatio(content, applyOpacity(primary, shade, 0.7));
+      expect(hover, `${primary} hover`).toBeGreaterThanOrEqual(rest - 0.01);
+      expect(active, `${primary} pressed`).toBeGreaterThanOrEqual(rest - 0.01);
     }
   });
 
