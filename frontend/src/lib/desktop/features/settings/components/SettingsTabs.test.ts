@@ -40,3 +40,20 @@ describe('SettingsTabs change indicator', () => {
     expect(clean).toHaveAccessibleDescription('');
   });
 });
+
+describe('SettingsTabs tablist label', () => {
+  it('names the tablist settings.tabs.navigation by default', () => {
+    renderTabs([tab('one', false)]);
+
+    expect(screen.getByRole('tablist', { name: 'settings.tabs.navigation' })).toBeInTheDocument();
+  });
+
+  it('names the tablist by ariaLabel when given', () => {
+    render(SettingsTabs, {
+      props: { tabs: [tab('one', false)], activeTab: 'one', showActions: false, ariaLabel: 'Own' },
+    });
+
+    expect(screen.getByRole('tablist', { name: 'Own' })).toBeInTheDocument();
+    expect(screen.queryByRole('tablist', { name: 'settings.tabs.navigation' })).toBeNull();
+  });
+});

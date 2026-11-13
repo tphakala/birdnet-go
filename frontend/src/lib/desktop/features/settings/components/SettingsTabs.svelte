@@ -21,6 +21,7 @@
   - onTabChange: Callback when tab changes
   - onReset: Callback after all settings are reset
   - showActions: Whether to show the save/reset actions bar (default: true)
+  - ariaLabel: Accessible name of the tablist (default: the shared settings tabs label)
   - class: Additional CSS classes
 
   @component
@@ -50,6 +51,7 @@
     onTabChange?: (_tabId: string) => void;
     onReset?: () => void;
     showActions?: boolean;
+    ariaLabel?: string;
     class?: string;
   }
 
@@ -61,6 +63,7 @@
     onTabChange,
     onReset,
     showActions = true,
+    ariaLabel,
     class: className,
   }: Props = $props();
 
@@ -150,7 +153,7 @@
   <div
     class="tabs border-b border-[var(--color-base-300)] mb-6"
     role="tablist"
-    aria-label={t('settings.tabs.navigation')}
+    aria-label={ariaLabel ?? t('settings.tabs.navigation')}
   >
     {#each tabs as tab, index (tab.id)}
       {@const isActive = selectedTab === tab.id}
