@@ -141,7 +141,8 @@
       "visitEbirdLink": "Åbn eBird.org i en ny fane",
       "learnEbirdTaxonomyLink": "Åbn eBird Taxonomy i en ny fane",
       "resizeHandle": "Træk for at ændre størrelse",
-      "imageCredit": "Billedkreditering: {name}"
+      "imageCredit": "Billedkreditering: {name}",
+      "opensInNewTab": "åbner i en ny fane"
     },
     "labels": {
       "confidence": "Sikkerhed",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Installerede",
-        "available": "Tilgængelige"
+        "available": "Tilgængelige",
+        "navigationAria": "Faner i modelgalleriet"
       },
       "loading": "Indlæser modeller...",
       "retry": "Prøv igen",

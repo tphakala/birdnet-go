@@ -139,6 +139,7 @@ export type TranslationKey =
   | 'common.aria.learnEbirdTaxonomyLink'
   | 'common.aria.resizeHandle'
   | 'common.aria.imageCredit' // params: name
+  | 'common.aria.opensInNewTab'
   | 'common.labels.confidence'
   | 'common.labels.github'
   | 'common.values.yes'
@@ -4219,6 +4220,7 @@ export type TranslationKey =
   | 'analysis.gallery.reasons.backendOnnxUnavailable'
   | 'analysis.gallery.tabs.installed'
   | 'analysis.gallery.tabs.available'
+  | 'analysis.gallery.tabs.navigationAria'
   | 'analysis.gallery.loading'
   | 'analysis.gallery.retry'
   | 'analysis.gallery.builtIn'

@@ -141,7 +141,8 @@
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
       "resizeHandle": "Húzza az átméretezéshez",
-      "imageCredit": "Kép forrása: {name}"
+      "imageCredit": "Kép forrása: {name}",
+      "opensInNewTab": "új lapon nyílik meg"
     },
     "labels": {
       "confidence": "Megbízhatóság",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Telepített",
-        "available": "Elérhető"
+        "available": "Elérhető",
+        "navigationAria": "Modellgaléria lapjai"
       },
       "loading": "Modellek betöltése...",
       "retry": "Újra",

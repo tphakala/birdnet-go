@@ -141,7 +141,8 @@
       "visitEbirdLink": "Open eBird.org in een nieuwe tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab",
       "resizeHandle": "Sleep om te vergroten/verkleinen",
-      "imageCredit": "Foto door: {name}"
+      "imageCredit": "Foto door: {name}",
+      "opensInNewTab": "opent in een nieuw tabblad"
     },
     "labels": {
       "confidence": "Betrouwbaarheid",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Geïnstalleerd",
-        "available": "Beschikbaar"
+        "available": "Beschikbaar",
+        "navigationAria": "Tabbladen van de modelgalerij"
       },
       "loading": "Modellen laden...",
       "retry": "Opnieuw proberen",

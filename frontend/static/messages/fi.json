@@ -141,7 +141,8 @@
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
       "resizeHandle": "Vedä muuttaaksesi kokoa",
-      "imageCredit": "Kuvan luotto: {name}"
+      "imageCredit": "Kuvan luotto: {name}",
+      "opensInNewTab": "avautuu uudelle välilehdelle"
     },
     "labels": {
       "confidence": "Luottamus",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Asennetut",
-        "available": "Saatavilla"
+        "available": "Saatavilla",
+        "navigationAria": "Malligallerian välilehdet"
       },
       "loading": "Ladataan malleja...",
       "retry": "Yritä uudelleen",

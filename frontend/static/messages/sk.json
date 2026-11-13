@@ -141,7 +141,8 @@
       "visitEbirdLink": "Otvoriť eBird.org v novej karte",
       "learnEbirdTaxonomyLink": "Otvoriť taxonómiu eBird v novej karte",
       "resizeHandle": "Potiahnutím zmeníte veľkosť",
-      "imageCredit": "Autor obrázka: {name}"
+      "imageCredit": "Autor obrázka: {name}",
+      "opensInNewTab": "otvorí sa na novej karte"
     },
     "labels": {
       "confidence": "Istota",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Nainštalované",
-        "available": "Dostupné"
+        "available": "Dostupné",
+        "navigationAria": "Karty galérie modelov"
       },
       "loading": "Načítavajú sa modely...",
       "retry": "Skúsiť znova",
