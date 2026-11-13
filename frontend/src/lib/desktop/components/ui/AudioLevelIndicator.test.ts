@@ -168,7 +168,11 @@ describe('AudioLevelIndicator start and stop', () => {
 
     const trigger = screen.getByRole('button', { name: /media\.audio\.levelFor/ });
 
-    expect(trigger).toHaveClass('focus-visible:outline-2', 'focus-visible:outline-offset-2');
+    expect(trigger).toHaveClass(
+      'focus-visible:outline-2',
+      'focus-visible:outline-[var(--color-primary)]',
+      'focus-visible:outline-offset-2'
+    );
     expect(trigger).not.toHaveClass('focus:outline-hidden');
   });
 
