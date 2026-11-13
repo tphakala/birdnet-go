@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
 import { CHANNEL_STABLE } from '$lib/utils/variantSelection';
 
@@ -621,5 +621,97 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
     // built-in badge and the baseline hardware chip. (The review dialog, also in the
     // DOM, renders it again for the offer's from-variant, so assert a lower bound.)
     expect(screen.getAllByText('analysis.gallery.builtIn').length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('AnalysisSettingsPage model gallery cards', () => {
+  const REGION_ROW_SELECTORS = [
+    '.model-card-header',
+    '.model-card-description',
+    '.model-card-details',
+    '.model-card-footer',
+  ];
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+  });
+
+  // The same kinds of card (preview, incompatible) on each tab, plus a built-in card on
+  // the Installed tab.
+  function cardEntries(): CatalogEntry[] {
+    const preview = { channel: 'preview', buildLabel: 'b42' } as const;
+    return [
+      birdEntry({ id: 'inst-builtin', name: 'Builtin', installed: true, permanent: true }),
+      birdEntry({ id: 'inst-preview', name: 'Preview Installed', installed: true, ...preview }),
+      birdEntry({ id: 'inst-bad', name: 'Bad Installed', installed: true, compatible: false }),
+      birdEntry({ id: 'avail-preview', name: 'Preview Available', ...preview }),
+      birdEntry({ id: 'avail-bad', name: 'Bad Available', compatible: false }),
+    ];
+  }
+
+  function cardNamed(name: string): HTMLElement {
+    return screen.getByRole('article', { name });
+  }
+
+  // Which of the card's regions are rendered, by the class ModelCard gives each
+  function regionsOf(card: HTMLElement): string[] {
+    return REGION_ROW_SELECTORS.filter(selector => card.querySelector(selector) !== null);
+  }
+
+  it('names the two tablists differently', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: cardEntries() });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await screen.findByRole('article', { name: 'Builtin' });
+
+    const names = screen.getAllByRole('tablist').map(list => list.getAttribute('aria-label'));
+    expect(names).toEqual(['settings.tabs.navigation', 'analysis.gallery.tabs.navigationAria']);
+  });
+
+  it('renders both tabs through ModelCard with the same card structure', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: cardEntries() });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await screen.findByRole('article', { name: 'Builtin' });
+
+    const installed = ['Builtin', 'Preview Installed', 'Bad Installed'].map(cardNamed);
+    expect(document.querySelectorAll('article.model-card')).toHaveLength(installed.length);
+    // Built-in card: the footer carries the built-in pill instead of buttons
+    expect(
+      within(cardNamed('Builtin')).queryByRole('button', { name: /reinstall|remove/ })
+    ).toBeNull();
+    // Incompatible card explains itself in a status notice
+    expect(within(cardNamed('Bad Installed')).getByRole('status')).toHaveTextContent(
+      'analysis.gallery.entryIncompatible'
+    );
+    expect(cardNamed('Preview Installed')).toHaveTextContent('analysis.gallery.preview.badge');
+    const installedStructure = installed.map(regionsOf);
+
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    const previewCard = await screen.findByRole('article', { name: 'Preview Available' });
+    const available = [previewCard, cardNamed('Bad Available')];
+    expect(document.querySelectorAll('article.model-card')).toHaveLength(available.length);
+    expect(within(previewCard).getByRole('note')).toHaveTextContent(
+      'analysis.gallery.preview.cardNotice'
+    );
+    expect(previewCard).toHaveTextContent('analysis.gallery.preview.badge');
+    expect(within(cardNamed('Bad Available')).getByRole('status')).toHaveTextContent(
+      'analysis.gallery.entryIncompatible'
+    );
+    expect(
+      within(cardNamed('Bad Available')).getByRole('button', {
+        name: /analysis\.gallery\.install Bad Available/,
+      })
+    ).toHaveAttribute('aria-disabled', 'true');
+
+    // Each card renders all of the regions
+    for (const structure of [...installedStructure, ...available.map(regionsOf)]) {
+      expect(structure).toEqual(REGION_ROW_SELECTORS);
+    }
   });
 });

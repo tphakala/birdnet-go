@@ -31,7 +31,6 @@
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import type {
     CatalogEntry,
-    CatalogVariant,
     DownloadProgress,
     InstalledModel,
     ModelRegionsResponse,
@@ -70,6 +69,8 @@
     savedReadout,
     type CadenceReadoutRow,
   } from '$lib/desktop/features/settings/utils/fpCadence';
+  import ModelCardGrid from '$lib/desktop/features/settings/components/ModelCardGrid.svelte';
+  import type { ModelCardAction } from '$lib/desktop/features/settings/components/ModelCard.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -107,12 +108,10 @@
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import {
     pickPreselectedVariant,
-    translateReason,
     normalizeRegionMode,
     DEFAULT_REGION_MODE,
     GLOBAL_REGION_MODE,
     optimizeOffers,
-    variantHardwareLabel,
     CHANNEL_PREVIEW,
     type OptimizeOffer,
   } from '$lib/utils/variantSelection';
@@ -127,23 +126,15 @@
     Shield,
     ShieldAlert,
     Package,
-    BrainCircuit,
     AlertTriangle,
     TriangleAlert,
     Loader2,
     RefreshCw,
-    Radar,
-    Globe,
     XCircle,
     X,
-    Check,
     Sparkles,
     Settings as SettingsIcon,
   } from '@lucide/svelte';
-
-  import logoBirdnet from '$lib/assets/logos/logo-birdnet.png';
-  import logoGoogle from '$lib/assets/logos/logo-google.png';
-  import logoJyu from '$lib/assets/logos/logo-jyu.jpeg';
 
   const logger = loggers.settings;
 
@@ -173,33 +164,6 @@
     'md:[&>*]:row-span-4 md:[&>*]:grid md:[&>*]:grid-rows-subgrid',
     'md:[&>*>.form-control]:row-span-3 md:[&>*>.form-control]:grid md:[&>*>.form-control]:grid-rows-subgrid',
   ].join(' ');
-
-  const MODEL_LOGOS: Record<string, string> = {
-    birdnet: logoBirdnet,
-    perch: logoGoogle,
-    bsg: logoJyu,
-  };
-
-  function getModelLogo(id: string): string | null {
-    for (const [prefix, logo] of Object.entries(MODEL_LOGOS)) {
-      if (id.startsWith(prefix)) return logo;
-    }
-    return null;
-  }
-
-  // Render an entry-level incompatibility code (e.g. "backend.onnx_unavailable")
-  // through the same i18n reason path the variant picker uses, falling back to a
-  // generic localized line when the code is absent or has no translation, so a
-  // structured code never surfaces to the user as a raw dotted string. The
-  // fallback is cause-neutral on purpose: it is only reached when the code is
-  // missing or unmapped, which is exactly when the specific cause is not known.
-  // Entry-level codes carry no interpolation args (unlike variant reasons), so
-  // undefined args are passed; a future parameterized entry-level code would need
-  // an args field on CatalogEntryResponse.IncompatibleReason and a change here.
-  function entryIncompatibleText(code: string | undefined): string {
-    const fallback = t('analysis.gallery.entryIncompatible');
-    return code ? translateReason(code, undefined, fallback) : fallback;
-  }
 
   // ── Page-level tab state ──────────────────────────────────────────────
   type PageTab = 'settings' | 'models';
@@ -246,6 +210,17 @@
   // action gate uses this rather than an ad-hoc subset of the three ids.
   const galleryActionInFlight = $derived(
     installingId !== null || reinstallingId !== null || deletingId !== null
+  );
+
+  // The one gallery action running, with the card it runs on. The three ids are never
+  // set together: every assignment sits behind a galleryActionInFlight guard.
+  const activeGalleryAction = $derived.by(
+    (): { entryId: string; action: ModelCardAction } | null => {
+      if (deletingId !== null) return { entryId: deletingId, action: 'remove' };
+      if (reinstallingId !== null) return { entryId: reinstallingId, action: 'reinstall' };
+      if (installingId !== null) return { entryId: installingId, action: 'install' };
+      return null;
+    }
   );
 
   // Shared DOM id for the "actions paused" status line rendered while any gallery
@@ -522,6 +497,7 @@
   // host-recommended variant differs from the installed one and is compatible.
   const offers = $derived(optimizeOffers(catalog));
   const offerByEntry = $derived(new Map(offers.map(o => [o.entry.id, o])));
+  const optimizeEntryIds = $derived(new Set(offers.map(o => o.entry.id)));
 
   // Session-scoped banner dismissal, guarded so a private-window/blocked
   // sessionStorage never throws (see frontend/AGENTS.md).
@@ -619,31 +595,6 @@
     lastInstallingId = current;
   });
 
-  // Choose which variant a card should describe: the installed variant on the
-  // Installed tab, the host-recommended (else default) variant on the Available tab.
-  // Returns null for a flat (variant-less) entry.
-  function displayVariantFor(
-    entry: CatalogEntry,
-    mode: 'available' | 'installed'
-  ): CatalogVariant | null {
-    const variants = entry.variants ?? [];
-    if (variants.length === 0) return null;
-    if (mode === 'installed') {
-      return variants.find(v => v.id === entry.installedVariantId) ?? null;
-    }
-    return (
-      variants.find(v => v.id === entry.recommendedVariantId) ??
-      variants.find(v => v.default) ??
-      null
-    );
-  }
-
-  // The region display for a variant-bearing entry's card: the variant's region
-  // name (localized), or the "Global" label when the variant is global.
-  function displayRegionName(variant: CatalogVariant | null): string {
-    if (!variant?.region) return t('analysis.gallery.regionGlobal');
-    return regionNameMap.get(variant.region) ?? variant.region;
-  }
   const availableWildlife = $derived(
     catalog.filter(e => !e.installed && e.category === 'wildlife')
   );
@@ -1684,6 +1635,22 @@
     startReinstall(entry.id, entry.name);
   }
 
+  // A card's action button was used. Install and the Optimize swap both go through the
+  // license dialog, which picks the variant.
+  function handleCardAction(action: ModelCardAction, entry: CatalogEntry) {
+    switch (action) {
+      case 'install':
+        openLicenseDialog(entry);
+        break;
+      case 'reinstall':
+        handleReinstall(entry);
+        break;
+      case 'remove':
+        openRemoveDialog(entry);
+        break;
+    }
+  }
+
   // The reinstall body, extracted so a failed reinstall's Retry can re-run it.
   async function startReinstall(modelId: string, modelName: string) {
     // Defensive boundary: callers already gate on galleryActionInFlight.
@@ -1768,30 +1735,6 @@
     const el = document.getElementById(HUGGINGFACE_ENDPOINT_ID);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el?.focus();
-  }
-
-  /** Compute download percentage for progress bar */
-  function progressPercent(p: DownloadProgress): number {
-    if (p.totalBytes <= 0) return 0;
-    return Math.min(100, Math.round((p.downloadedBytes / p.totalBytes) * 100));
-  }
-
-  /** Human-readable status label */
-  function statusLabel(status: DownloadProgress['status']): string {
-    switch (status) {
-      case 'downloading':
-        return t('analysis.gallery.progress.downloading');
-      case 'verifying':
-        return t('analysis.gallery.progress.verifying');
-      case 'loading':
-        return t('analysis.gallery.progress.loading');
-      case 'complete':
-        return t('analysis.gallery.progress.complete');
-      case 'failed':
-        return t('analysis.gallery.progress.failed');
-      default:
-        return '';
-    }
   }
 </script>
 
@@ -2581,6 +2524,7 @@
         queryParam="modelTab"
         defaultTab="installed"
         showActions={false}
+        ariaLabel={t('analysis.gallery.tabs.navigationAria')}
       />
     </SettingsSection>
 
@@ -2655,43 +2599,6 @@
   </div>
 {/snippet}
 
-<!-- Variant-aware metadata rows for a gallery card: region, species count, and a
-     friendly hardware chip, all describing the RELEVANT variant (the installed one
-     on the Installed tab, the recommended one on the Available tab) rather than the
-     entry-level globals. Flat (variant-less) entries keep the entry region/species. -->
-{#snippet cardMetaRows(entry: CatalogEntry, mode: 'available' | 'installed')}
-  {@const dv = displayVariantFor(entry, mode)}
-  {#if entry.variants && entry.variants.length > 0}
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
-    <div class="text-[var(--color-base-content)]/80">{displayRegionName(dv)}</div>
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
-    <div class="text-[var(--color-base-content)]/80">
-      {t('analysis.gallery.species', { count: dv?.speciesCount ?? entry.speciesCount })}
-    </div>
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.hardwareLabel')}</div>
-    <div>
-      {#if dv}
-        <span
-          class="inline-flex items-center gap-1 rounded-full bg-[var(--color-base-300)] px-2 py-0.5 text-xs text-[var(--color-base-content)]"
-        >
-          {variantHardwareLabel(dv)}
-        </span>
-      {:else}
-        <span class="text-[var(--color-base-content)]/80">-</span>
-      {/if}
-    </div>
-  {:else}
-    {#if entry.region}
-      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
-      <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
-    {/if}
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
-    <div class="text-[var(--color-base-content)]/80">
-      {t('analysis.gallery.species', { count: entry.speciesCount })}
-    </div>
-  {/if}
-{/snippet}
-
 {#snippet installedTabContent()}
   <div class="space-y-4">
     {#if loading}
@@ -2704,288 +2611,20 @@
     {:else if catalogError}
       {@render catalogErrorBanner()}
     {:else}
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <!-- Installed models. The permanent built-in classifier (BirdNET v2.4) sorts
-             first and renders a built-in badge instead of Remove/Reinstall; every
-             installed model with a better host-recommended variant shows an Optimize
-             action. -->
-        {#each installedEntries as entry (entry.id)}
-          {@const isDeleting = deletingId === entry.id}
-          {@const isReinstalling = reinstallingId === entry.id}
-          {@const reinstallProgress = isReinstalling ? downloadProgress : null}
-          <!-- "Paused" = another gallery action is running, so THIS button is
-               cross-disabled (vs its own in-progress spinner). aria-disabled keeps
-               it tab-focusable to read the reason; native disabled stays for the
-               button's own running state. -->
-          {@const reinstallPaused = galleryActionInFlight && !isReinstalling}
-          {@const removePaused = galleryActionInFlight && !isDeleting}
-          {@const offer = offerByEntry.get(entry.id)}
-          {@const isSwapping = installingId === entry.id}
-          {@const optimizePaused = galleryActionInFlight && !isSwapping}
-          {@const cardProgress = reinstallProgress ?? (isSwapping ? downloadProgress : null)}
-          {@const logo = getModelLogo(entry.id)}
-          <div
-            class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
-          >
-            <div class="flex items-start gap-3">
-              {#if logo}
-                <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
-              {:else}
-                <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                  {#if entry.category === 'geomodel'}
-                    <Globe size={24} class="text-[var(--color-primary)]" />
-                  {:else if entry.category === 'bat'}
-                    <Radar size={24} class="text-[var(--color-primary)]" />
-                  {:else}
-                    <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-                  {/if}
-                </div>
-              {/if}
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-                    {entry.name}
-                  </h4>
-                  {#if entry.channel === CHANNEL_PREVIEW}
-                    <span
-                      class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
-                    >
-                      {t('analysis.gallery.preview.badge')}
-                    </span>
-                  {/if}
-                  {#if entry.buildLabel}
-                    <span class="font-mono text-xs text-[var(--color-base-content)]/70">
-                      {t('analysis.gallery.preview.buildLabel', {
-                        version: entry.version,
-                        build: entry.buildLabel,
-                      })}
-                    </span>
-                  {/if}
-                </div>
-                <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
-                  {entry.description}
-                </p>
-                {#if entry.upstreamUrl}
-                  <a
-                    href={entry.upstreamUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
-                  >
-                    {entry.author}
-                  </a>
-                {:else}
-                  <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
-                {/if}
-              </div>
-            </div>
-            <!-- Progress bar (shown during reinstall, not for companion entries) -->
-            {#if cardProgress}
-              <div class="mt-3 space-y-1.5">
-                {#if cardProgress.status === 'complete'}
-                  <div
-                    class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]"
-                  >
-                    <Check class="h-4 w-4" />
-                    <span
-                      >{isSwapping
-                        ? t('analysis.gallery.progress.complete')
-                        : t('analysis.gallery.reinstallComplete')}</span
-                    >
-                  </div>
-                {:else}
-                  <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
-                    <div
-                      class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-                      style:width="{progressPercent(cardProgress)}%"
-                    ></div>
-                  </div>
-                  <div
-                    class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80"
-                  >
-                    <span>
-                      {statusLabel(
-                        cardProgress.status
-                      )}{#if cardProgress.status === 'downloading' && cardProgress.totalFiles > 1}
-                        ({cardProgress.currentFile}/{cardProgress.totalFiles})
-                      {/if}
-                    </span>
-                    {#if cardProgress.status === 'downloading' && cardProgress.totalBytes > 0}
-                      <span>
-                        {formatBytes(cardProgress.downloadedBytes)} / {formatBytes(
-                          cardProgress.totalBytes
-                        )}
-                      </span>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-            <!-- Incompatible warning for installed models -->
-            {#if !entry.compatible}
-              <div
-                class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm"
-                role="status"
-              >
-                <XCircle
-                  class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]"
-                  aria-hidden="true"
-                />
-                <span class="text-[var(--color-base-content)]"
-                  >{entryIncompatibleText(entry.incompatibleReason)}</span
-                >
-              </div>
-            {/if}
-            <!-- Metadata grid -->
-            <div
-              class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
-            >
-              {@render cardMetaRows(entry, 'installed')}
-              <div class="text-[var(--color-base-content)]/80">
-                {t('analysis.gallery.license.license')}
-              </div>
-              <div>
-                {#if entry.commercialUse}
-                  <span
-                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-                    title={t('analysis.gallery.license.commercialUseAllowed')}
-                  >
-                    <Shield class="size-3" />
-                    {entry.license}
-                  </span>
-                {:else}
-                  <span
-                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-                    title={t('analysis.gallery.license.nonCommercialOnly')}
-                  >
-                    <ShieldAlert class="size-3" />
-                    {entry.license}
-                  </span>
-                {/if}
-              </div>
-            </div>
-            <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
-            {#if entry.hasGeomodel && entry.category !== 'geomodel'}
-              <div class="mt-2">
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
-                >
-                  {t('analysis.gallery.geomodelBadge')}
-                </span>
-              </div>
-            {/if}
-            <!-- Optimize badge: a faster/better-matched build is available here. -->
-            {#if offer}
-              <div class="mt-2">
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
-                  title={t('analysis.gallery.optimize.badgeTitle')}
-                >
-                  <Sparkles class="size-3" aria-hidden="true" />
-                  {t('analysis.gallery.optimize.badgeTitle')}
-                </span>
-              </div>
-            {/if}
-            <!-- Action footer. The permanent built-in classifier shows a built-in
-                 badge instead of Remove and hides Reinstall; only its variant can be
-                 swapped (the Optimize action). -->
-            <div class="mt-3 flex items-center justify-end gap-2">
-              {#if offer}
-                <button
-                  type="button"
-                  onclick={e => {
-                    if (optimizePaused) {
-                      e.preventDefault();
-                      return;
-                    }
-                    openLicenseDialog(entry);
-                  }}
-                  disabled={isSwapping}
-                  aria-disabled={optimizePaused ? 'true' : undefined}
-                  aria-describedby={optimizePaused ? GALLERY_ACTION_STATUS_ID : undefined}
-                  title={optimizePaused ? t('analysis.gallery.actionInProgress') : undefined}
-                  class={cn(
-                    'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
-                    optimizePaused
-                      ? 'cursor-not-allowed opacity-50'
-                      : 'hover:not-disabled:bg-[var(--color-primary-hover)]'
-                  )}
-                  aria-label="{t('analysis.gallery.optimize.swap')} {entry.name}"
-                >
-                  <Sparkles class="size-3.5" aria-hidden="true" />
-                  {t('analysis.gallery.optimize.swap')}
-                </button>
-              {/if}
-              {#if entry.permanent}
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
-                >
-                  {t('analysis.gallery.builtIn')}
-                </span>
-              {:else}
-                <button
-                  type="button"
-                  onclick={e => {
-                    if (reinstallPaused) {
-                      e.preventDefault();
-                      return;
-                    }
-                    handleReinstall(entry);
-                  }}
-                  disabled={isReinstalling}
-                  aria-disabled={reinstallPaused ? 'true' : undefined}
-                  aria-describedby={reinstallPaused ? GALLERY_ACTION_STATUS_ID : undefined}
-                  title={reinstallPaused ? t('analysis.gallery.actionInProgress') : undefined}
-                  class={cn(
-                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 transition-colors',
-                    isReinstalling || reinstallPaused
-                      ? 'opacity-50'
-                      : 'hover:bg-[var(--color-base-300)]',
-                    reinstallPaused && 'cursor-not-allowed'
-                  )}
-                  aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
-                >
-                  {#if isReinstalling}
-                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-                    {t('analysis.gallery.reinstalling')}
-                  {:else}
-                    <RefreshCw class="size-3.5" />
-                    {t('analysis.gallery.reinstall')}
-                  {/if}
-                </button>
-                <button
-                  type="button"
-                  onclick={e => {
-                    if (removePaused) {
-                      e.preventDefault();
-                      return;
-                    }
-                    openRemoveDialog(entry);
-                  }}
-                  disabled={isDeleting}
-                  aria-disabled={removePaused ? 'true' : undefined}
-                  aria-describedby={removePaused ? GALLERY_ACTION_STATUS_ID : undefined}
-                  title={removePaused ? t('analysis.gallery.actionInProgress') : undefined}
-                  class={cn(
-                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] transition-colors',
-                    isDeleting || removePaused ? 'opacity-50' : 'hover:bg-[var(--color-error)]/10',
-                    removePaused && 'cursor-not-allowed'
-                  )}
-                  aria-label="{t('analysis.gallery.remove')} {entry.name}"
-                >
-                  {#if isDeleting}
-                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-                    {t('analysis.gallery.removing')}
-                  {:else}
-                    <Trash2 class="size-3.5" />
-                    {t('analysis.gallery.remove')}
-                  {/if}
-                </button>
-              {/if}
-            </div>
-          </div>
-        {/each}
-      </div>
+      <!-- Installed models. The permanent built-in classifier (BirdNET v2.4) sorts
+           first and renders a built-in badge instead of Remove/Reinstall; every
+           installed model with a better host-recommended variant shows an Optimize
+           action. -->
+      <ModelCardGrid
+        mode="installed"
+        entries={installedEntries}
+        regionNames={regionNameMap}
+        activeAction={activeGalleryAction}
+        progress={downloadProgress}
+        pausedReasonId={GALLERY_ACTION_STATUS_ID}
+        {optimizeEntryIds}
+        onAction={handleCardAction}
+      />
 
       {#if installedEntries.length === 0}
         <p class="py-4 text-center text-sm text-[var(--color-base-content)]/80">
@@ -2993,217 +2632,6 @@
         </p>
       {/if}
     {/if}
-  </div>
-{/snippet}
-
-{#snippet modelCard(entry: CatalogEntry)}
-  {@const isInstalling = installingId === entry.id}
-  {@const progress = isInstalling ? downloadProgress : null}
-  <!-- Paused only when this Install would otherwise be available: another action
-       is running, this one is not, and the entry is compatible. Incompatible
-       entries keep their permanent native-disabled state (explained by the banner
-       above), never a transient "action in progress" reason. -->
-  {@const installPaused = galleryActionInFlight && !isInstalling && entry.compatible}
-  {@const logo = getModelLogo(entry.id)}
-  <div
-    class={cn(
-      'flex h-full flex-col rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4',
-      !entry.compatible && 'opacity-60'
-    )}
-  >
-    <!-- Header: logo + name/description/author -->
-    <div class="flex items-start gap-3">
-      {#if logo}
-        <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
-      {:else}
-        <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-          {#if entry.category === 'geomodel'}
-            <Globe size={24} class="text-[var(--color-primary)]" />
-          {:else if entry.category === 'bat'}
-            <Radar size={24} class="text-[var(--color-primary)]" />
-          {:else}
-            <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-          {/if}
-        </div>
-      {/if}
-      <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-            {entry.name}
-          </h4>
-          {#if entry.channel === CHANNEL_PREVIEW}
-            <span
-              class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
-            >
-              {t('analysis.gallery.preview.badge')}
-            </span>
-          {/if}
-          {#if entry.buildLabel}
-            <span class="font-mono text-xs text-[var(--color-base-content)]/70">
-              {t('analysis.gallery.preview.buildLabel', {
-                version: entry.version,
-                build: entry.buildLabel,
-              })}
-            </span>
-          {/if}
-        </div>
-        <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
-          {entry.description}
-        </p>
-        {#if entry.upstreamUrl}
-          <a
-            href={entry.upstreamUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
-          >
-            {entry.author}
-          </a>
-        {:else}
-          <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Developer-preview notice: v3.0 and any future preview build are flagged as
-         not the final GA release so users know what they are installing. -->
-    {#if entry.channel === CHANNEL_PREVIEW}
-      <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-xs"
-        role="note"
-      >
-        <TriangleAlert
-          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
-          aria-hidden="true"
-        />
-        <span class="text-[var(--color-base-content)]"
-          >{t('analysis.gallery.preview.cardNotice')}</span
-        >
-      </div>
-    {/if}
-
-    <!-- Progress bar (shown during install, not for companion entries) -->
-    {#if progress}
-      <div class="mt-3 space-y-1.5">
-        {#if progress.status === 'complete'}
-          <div class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]">
-            <Check class="h-4 w-4" />
-            <span>{t('analysis.gallery.progress.complete')}</span>
-          </div>
-        {:else}
-          <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
-            <div
-              class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-              style:width="{progressPercent(progress)}%"
-            ></div>
-          </div>
-          <div
-            class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80"
-          >
-            <span>
-              {statusLabel(
-                progress.status
-              )}{#if progress.status === 'downloading' && progress.totalFiles > 1}
-                ({progress.currentFile}/{progress.totalFiles})
-              {/if}
-            </span>
-            {#if progress.status === 'downloading' && progress.totalBytes > 0}
-              <span>
-                {formatBytes(progress.downloadedBytes)} / {formatBytes(progress.totalBytes)}
-              </span>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Incompatible warning banner -->
-    {#if !entry.compatible}
-      <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
-        role="status"
-      >
-        <TriangleAlert
-          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
-          aria-hidden="true"
-        />
-        <span class="text-[var(--color-base-content)]"
-          >{entryIncompatibleText(entry.incompatibleReason)}</span
-        >
-      </div>
-    {/if}
-
-    <!-- Metadata grid -->
-    <div
-      class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
-    >
-      {@render cardMetaRows(entry, 'available')}
-      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.license.license')}</div>
-      <div>
-        {#if entry.commercialUse}
-          <span
-            class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-            title={t('analysis.gallery.license.commercialUseAllowed')}
-          >
-            <Shield class="size-3" />
-            {entry.license}
-          </span>
-        {:else}
-          <span
-            class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-            title={t('analysis.gallery.license.nonCommercialOnly')}
-          >
-            <ShieldAlert class="size-3" />
-            {entry.license}
-          </span>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
-    {#if entry.hasGeomodel && entry.category !== 'geomodel'}
-      <div class="mt-2">
-        <span
-          class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
-        >
-          {t('analysis.gallery.geomodelBadge')}
-        </span>
-      </div>
-    {/if}
-
-    <!-- Action footer (pushed to bottom via mt-auto) -->
-    <div class="mt-auto flex items-center justify-end pt-3">
-      <button
-        type="button"
-        onclick={e => {
-          if (installPaused) {
-            e.preventDefault();
-            return;
-          }
-          openLicenseDialog(entry);
-        }}
-        disabled={!entry.compatible || isInstalling}
-        aria-disabled={installPaused ? 'true' : undefined}
-        aria-describedby={installPaused ? GALLERY_ACTION_STATUS_ID : undefined}
-        title={installPaused ? t('analysis.gallery.actionInProgress') : undefined}
-        class={cn(
-          'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
-          !entry.compatible || isInstalling || installPaused
-            ? 'opacity-50'
-            : 'hover:bg-[var(--color-primary-hover)]',
-          installPaused && 'cursor-not-allowed'
-        )}
-        aria-label="{t('analysis.gallery.install')} {entry.name}"
-      >
-        {#if isInstalling}
-          <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-          {t('analysis.gallery.installing')}
-        {:else}
-          <Download class="size-3.5" />
-          {t('analysis.gallery.install')}
-        {/if}
-      </button>
-    </div>
   </div>
 {/snippet}
 
@@ -3233,11 +2661,15 @@
               >
                 {t('analysis.gallery.categories.wildlife')}
               </h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {#each availableWildlife as entry (entry.id)}
-                  {@render modelCard(entry)}
-                {/each}
-              </div>
+              <ModelCardGrid
+                mode="available"
+                entries={availableWildlife}
+                regionNames={regionNameMap}
+                activeAction={activeGalleryAction}
+                progress={downloadProgress}
+                pausedReasonId={GALLERY_ACTION_STATUS_ID}
+                onAction={handleCardAction}
+              />
             </div>
           {/if}
 
@@ -3248,11 +2680,15 @@
               >
                 {t('analysis.gallery.categories.bird')}
               </h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {#each availableBirds as entry (entry.id)}
-                  {@render modelCard(entry)}
-                {/each}
-              </div>
+              <ModelCardGrid
+                mode="available"
+                entries={availableBirds}
+                regionNames={regionNameMap}
+                activeAction={activeGalleryAction}
+                progress={downloadProgress}
+                pausedReasonId={GALLERY_ACTION_STATUS_ID}
+                onAction={handleCardAction}
+              />
             </div>
           {/if}
 
@@ -3263,11 +2699,15 @@
               >
                 {t('analysis.gallery.categories.bat')}
               </h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {#each availableBats as entry (entry.id)}
-                  {@render modelCard(entry)}
-                {/each}
-              </div>
+              <ModelCardGrid
+                mode="available"
+                entries={availableBats}
+                regionNames={regionNameMap}
+                activeAction={activeGalleryAction}
+                progress={downloadProgress}
+                pausedReasonId={GALLERY_ACTION_STATUS_ID}
+                onAction={handleCardAction}
+              />
             </div>
           {/if}
         </div>
@@ -3279,11 +2719,15 @@
           <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
             {t('analysis.gallery.sections.geomodel')}
           </h2>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableGeomodels as entry (entry.id)}
-              {@render modelCard(entry)}
-            {/each}
-          </div>
+          <ModelCardGrid
+            mode="available"
+            entries={availableGeomodels}
+            regionNames={regionNameMap}
+            activeAction={activeGalleryAction}
+            progress={downloadProgress}
+            pausedReasonId={GALLERY_ACTION_STATUS_ID}
+            onAction={handleCardAction}
+          />
         </div>
       {/if}
 
@@ -3372,12 +2816,12 @@
               >
               <td class="px-4 py-1 text-right align-top">
                 {#if licenseModel.commercialUse}
-                  <span class="inline-flex items-center gap-1 text-[var(--color-success)]">
+                  <span class="inline-flex items-center gap-1 text-[var(--text-success)]">
                     <Shield class="size-3.5" />
                     {t('analysis.gallery.license.allowed')}
                   </span>
                 {:else}
-                  <span class="inline-flex items-center gap-1 text-[var(--color-warning)]">
+                  <span class="inline-flex items-center gap-1 text-[var(--text-warning)]">
                     <ShieldAlert class="size-3.5" />
                     {t('analysis.gallery.license.notAllowed')}
                   </span>
