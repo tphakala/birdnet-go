@@ -1,20 +1,22 @@
 /* ================================================
    COLOR SCHEMES
-   Each scheme overrides --color-primary-* and
-   --color-accent-*. Status colors, base/surface
-   tones, and neutrals are universal.
+   Each scheme overrides --color-primary-*,
+   --color-accent-* and --text-primary. Status
+   colors, base/surface tones, and neutrals are
+   universal.
 
    Hover/active variants use color-mix() to
    auto-derive from the base primary color.
    ================================================ */
 
 /* --- Blue (default) ---
-   No overrides needed, @theme values in tailwind.css
-   already define the blue scheme. This selector exists
-   only for explicitness and to match the data-scheme
-   attribute set by the scheme store. */
+   No overrides needed: the @theme values in tailwind.css
+   define the blue primary and accent, and the light and
+   dark theme blocks there define its --text-primary. This
+   selector exists only for explicitness and to match the
+   data-scheme attribute set by the scheme store. */
 [data-scheme='blue'] {
-  /* Uses @theme defaults */
+  /* Uses the @theme and theme block defaults */
 }
 
 /* --- Forest (green) ---

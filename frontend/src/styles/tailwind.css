@@ -116,8 +116,8 @@
 [data-theme='light'] {
   color-scheme: light;
 
-  /* Color variables are now registered in @theme above.
-     Only non-color tokens remain here. */
+  /* Color variables are now registered in @theme above. Only non-color tokens and the
+     text tokens (--text-*, including --text-primary) remain here. */
 
   /* Surface colors */
   --surface-100: #ffffff;
@@ -138,7 +138,7 @@
   --text-primary: #1e40af; /* blue-800 - primary-hue text (active sidebar item), same rule; schemes.css overrides it per scheme */
 
   /* Data visualization: chart series and meter fills (Meter.svelte, sparklines, legends).
-     Theme tokens, not scheme tokens: schemes.css changes only primary and accent, so these
+     Theme tokens, not scheme tokens: schemes.css changes only primary, accent and --text-primary, so these
      hold under every color scheme, custom included. Every fill reaches 3:1 on --surface-100
      and on --viz-track (color-contrast.test.ts). Series 2 to 7 also stay apart from each other
      under protanopia and deuteranopia, so any of them can share a chart; series 1 and 8 are
