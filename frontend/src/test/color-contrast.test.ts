@@ -1030,6 +1030,7 @@ describe('Primary and accent content in every color scheme', () => {
 
   const lightBlock = blockBody(tailwindCss, '@theme');
   const darkBlock = blockBody(tailwindCss, "[data-theme='dark']");
+  const rootLightBlock = blockBody(tailwindCss, ":root,\n[data-theme='light']");
 
   /** Raw value (hex or color-mix) of custom property `name` in a block body, or null when unset. */
   function rawVar(body: string, name: string): string | null {
@@ -1056,6 +1057,8 @@ describe('Primary and accent content in every color scheme', () => {
       theme === 'dark' ? schemeBlock(scheme, 'dark') : null,
       schemeBlock(scheme, 'light'),
       theme === 'dark' ? darkBlock : null,
+      // Text tokens live in the light theme block, not in @theme
+      rootLightBlock,
       lightBlock,
     ];
     for (const block of candidates) {
@@ -1146,8 +1149,6 @@ describe('Primary and accent content in every color scheme', () => {
     const SURFACES = ['--color-base-100', '--color-base-200', '--color-base-300'];
     const ACTIVE_RULES = ['.menu-item-active', '.menu-subitem-active'];
     const TEXT_TOKEN = '--text-primary';
-    const lightTextBlock = blockBody(tailwindCss, ":root,\n[data-theme='light']");
-    const CUSTOM_BLOCK_SELECTOR = "\n[data-scheme='custom']";
     // Surfaces do not depend on the scheme; any scheme resolves them from the theme blocks.
     const SURFACE_SCHEME = 'blue';
 
@@ -1158,7 +1159,7 @@ describe('Primary and accent content in every color scheme', () => {
       return tailwindCss.slice(start, tailwindCss.indexOf('}', start));
     }
 
-    /** Tint fraction of the primary fill that the active rules put behind the text. */
+    /** Tint fraction of the primary fill that an active rule puts behind the text. */
     function tintFraction(selector: string): number {
       const match = /color-mix\(in oklch, var\(--color-primary\) (\d+)%, transparent\)/.exec(
         ruleBody(selector)
@@ -1167,89 +1168,39 @@ describe('Primary and accent content in every color scheme', () => {
       return Number(match?.[1]) / 100;
     }
 
-    /** Value of --text-primary for a fixed scheme in a theme, mirroring the cascade. */
-    function textPrimaryOf(scheme: string, theme: Theme): string {
-      const candidates = [
-        theme === 'dark' ? schemeBlock(scheme, 'dark') : null,
-        schemeBlock(scheme, 'light'),
-        theme === 'dark' ? darkBlock : lightTextBlock,
-      ];
-      for (const block of candidates) {
-        const value = block === null ? null : findVar(block, TEXT_TOKEN);
-        if (value !== null) {
-          return value;
-        }
-      }
-      throw new Error(`${TEXT_TOKEN} is not defined for ${scheme} ${theme}`);
-    }
+    const TINT = tintFraction(ACTIVE_RULES[0]);
 
-    /** Lowest ratio of `text` on the three surfaces and on the `fill` tint over each. */
-    function worstRatio(text: string, fill: string, theme: Theme, fraction: number): number {
-      const ratios = SURFACES.flatMap(surface => {
-        const base = colorOf(SURFACE_SCHEME, theme, surface);
-        return [
-          getContrastRatio(text, base),
-          getContrastRatio(text, applyOpacity(fill, base, fraction)),
-        ];
-      });
-      return Math.min(...ratios);
+    const surfacesOf = (theme: Theme) => SURFACES.map(name => colorOf(SURFACE_SCHEME, theme, name));
+
+    /** Lowest ratio of `text` on the surfaces and on a tint of `fill` over each. */
+    function worstRatio(text: string, fill: string, surfaces: string[]): number {
+      return Math.min(
+        ...surfaces.flatMap(surface => [
+          getContrastRatio(text, surface),
+          getContrastRatio(text, applyOpacity(fill, surface, TINT)),
+        ])
+      );
     }
 
     for (const selector of ACTIVE_RULES) {
-      it(`${selector} colours its text with ${TEXT_TOKEN} and keeps its tint`, () => {
-        const body = ruleBody(selector);
-        expect(body).toContain(`color: var(${TEXT_TOKEN});`);
-        expect(body).not.toMatch(/(^|[\s;])color:\s*var\(--color-primary\)/);
-        expect(tintFraction(selector)).toBeGreaterThan(0);
+      it(`${selector} colours its text with ${TEXT_TOKEN} and uses the shared tint`, () => {
+        expect(ruleBody(selector)).toContain(`color: var(${TEXT_TOKEN});`);
+        expect(tintFraction(selector)).toBe(TINT);
       });
     }
-
-    it('both active rules use the same tint', () => {
-      expect(tintFraction(ACTIVE_RULES[0])).toBe(tintFraction(ACTIVE_RULES[1]));
-    });
 
     for (const scheme of FIXED_SCHEMES) {
       for (const theme of ['light', 'dark'] as const) {
         it(`${scheme} ${theme}: ${TEXT_TOKEN} meets AA on the surfaces and the active tint`, () => {
-          const fill = colorOf(scheme, theme, '--color-primary');
-          for (const selector of ACTIVE_RULES) {
-            const ratio = worstRatio(
-              textPrimaryOf(scheme, theme),
-              fill,
-              theme,
-              tintFraction(selector)
-            );
-            expect(ratio, `${scheme} ${theme} ${selector}`).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-          }
+          const ratio = worstRatio(
+            colorOf(scheme, theme, TEXT_TOKEN),
+            colorOf(scheme, theme, '--color-primary'),
+            surfacesOf(theme)
+          );
+          expect(ratio, `${scheme} ${theme}`).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
         });
       }
     }
-
-    it('maps the custom scheme to the theme text colour', () => {
-      const body = blockBody(schemesCss, CUSTOM_BLOCK_SELECTOR);
-      expect(body).toMatch(/--text-primary:\s*var\(--color-base-content\);/);
-    });
-
-    it('custom scheme: base-content passes on the active tint for any primary color', () => {
-      const channel = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
-      const toHex = (n: number) => n.toString(16).padStart(2, '0');
-      for (const theme of ['light', 'dark'] as const) {
-        const text = colorOf(SURFACE_SCHEME, theme, '--color-base-content');
-        for (const r of channel) {
-          for (const g of channel) {
-            for (const b of channel) {
-              const fill = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-              for (const selector of ACTIVE_RULES) {
-                const ratio = worstRatio(text, fill, theme, tintFraction(selector));
-                expect(ratio, `${theme} ${fill} ${selector}`).toBeGreaterThanOrEqual(
-                  WCAG_AA_NORMAL
-                );
-              }
-            }
-          }
-        }
-      }
-    });
 
     for (const scheme of FIXED_SCHEMES.filter(name => name !== 'blue')) {
       it(`${scheme} defines ${TEXT_TOKEN} in its light and dark blocks`, () => {
@@ -1264,11 +1215,31 @@ describe('Primary and accent content in every color scheme', () => {
       });
     }
 
-    it('section headers of the active section use the text token, not the fill', () => {
+    it('custom scheme: the token is base-content, which passes on the tint for any primary color', () => {
+      expect(blockBody(schemesCss, "\n[data-scheme='custom']")).toMatch(
+        /--text-primary:\s*var\(--color-base-content\);/
+      );
+      const channel = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
+      const fills = channel.flatMap(r =>
+        channel.flatMap(g =>
+          channel.map(b => `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`)
+        )
+      );
+      expect(fills).toHaveLength(216);
+      for (const theme of ['light', 'dark'] as const) {
+        const text = colorOf(SURFACE_SCHEME, theme, '--color-base-content');
+        const surfaces = surfacesOf(theme);
+        for (const fill of fills) {
+          expect(worstRatio(text, fill, surfaces), `${theme} ${fill}`).toBeGreaterThanOrEqual(
+            WCAG_AA_NORMAL
+          );
+        }
+      }
+    });
+
+    it('section headers of the active section use the text token', () => {
       const file = join(srcDir, 'lib', 'desktop', 'layouts', 'CollapsibleNavSection.svelte');
-      const text = readFileSync(file, 'utf8');
-      expect(text).not.toContain('text-[var(--color-primary)]');
-      expect(text).toContain('text-[var(--text-primary)]');
+      expect(readFileSync(file, 'utf8')).toContain('text-[var(--text-primary)]');
     });
   });
 

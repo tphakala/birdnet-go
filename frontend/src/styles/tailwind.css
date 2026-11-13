@@ -235,7 +235,7 @@
   --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
   --text-info: #38bdf8; /* sky-400 - info text, same rule */
-  --text-primary: #60a5fa; /* blue-400 - primary-hue text (active sidebar item), same rule; schemes.css overrides it per scheme */
+  --text-primary: #60a5fa; /* blue-400 - primary-hue text, same rule as the light block */
 
   /* Data visualization, same rules as the light block */
   --viz-track: #1e293b; /* slate-800 */
