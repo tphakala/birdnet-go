@@ -6,6 +6,6 @@ const LOCATION_SEGMENT = /[^.\-:/]*[.\-:/]|[^.\-:/]+/g;
  * break between segments, but not after the last. Joining the segments gives back the input
  * exactly. An empty string gives no segments; a string without separators gives one.
  */
-export function splitHostSegments(location: string): string[] {
+export function splitLocationSegments(location: string): string[] {
   return location.match(LOCATION_SEGMENT) ?? [];
 }

@@ -3,7 +3,7 @@
   import { Download, Database } from '@lucide/svelte';
   import DetectionRateChart from './DetectionRateChart.svelte';
   import type { HourlyCount } from '$lib/types/database';
-  import { splitHostSegments } from './hostBreaks';
+  import { splitLocationSegments } from './locationBreaks';
 
   interface Props {
     data: HourlyCount[];
@@ -20,7 +20,7 @@
     counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 0
   );
   let maxCount = $derived(counts.length > 0 ? Math.max(...counts) : 0);
-  let hostSegments = $derived(splitHostSegments(mysqlHost ?? ''));
+  let locationSegments = $derived(splitLocationSegments(mysqlHost ?? ''));
 </script>
 
 <div
@@ -70,8 +70,8 @@
             <span class="text-muted">{t('system.database.dashboard.detectionRate.mysqlHost')}</span>
           </div>
           <div class="mt-1 min-w-0 font-mono text-xs font-medium wrap-anywhere">
-            {#each hostSegments as segment, index (index)}{segment}{#if index < hostSegments.length - 1}<wbr
-                />{/if}{/each}
+            {#each locationSegments as segment, index (index)}{#if index > 0}<wbr
+                />{/if}{segment}{/each}
           </div>
           <p class="mt-2 text-[10px] text-muted">
             {t('system.database.dashboard.detectionRate.mysqlBackupNote')}

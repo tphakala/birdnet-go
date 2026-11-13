@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { splitHostSegments } from './hostBreaks';
+import { splitLocationSegments } from './locationBreaks';
 
-describe('splitHostSegments', () => {
+describe('splitLocationSegments', () => {
   it('returns no segments for an empty string', () => {
-    expect(splitHostSegments('')).toEqual([]);
+    expect(splitLocationSegments('')).toEqual([]);
   });
 
   it('keeps a string without separators as one segment', () => {
-    expect(splitHostSegments('localhost')).toEqual(['localhost']);
+    expect(splitLocationSegments('localhost')).toEqual(['localhost']);
   });
 
   it('breaks a host, port and database after every separator but the last', () => {
-    expect(splitHostSegments('mysql.internal.example.org:3306/birdnet_production')).toEqual([
+    expect(splitLocationSegments('mysql.internal.example.org:3306/birdnet_production')).toEqual([
       'mysql.',
       'internal.',
       'example.',
@@ -22,7 +22,7 @@ describe('splitHostSegments', () => {
   });
 
   it('breaks after hyphens', () => {
-    expect(splitHostSegments('db-primary.example.lan:3306/birdnet')).toEqual([
+    expect(splitLocationSegments('db-primary.example.lan:3306/birdnet')).toEqual([
       'db-',
       'primary.',
       'example.',
@@ -33,7 +33,7 @@ describe('splitHostSegments', () => {
   });
 
   it('keeps an IPv4 address with a port and database apart from the port digits', () => {
-    expect(splitHostSegments('192.168.4.10:3306/birdnet')).toEqual([
+    expect(splitLocationSegments('192.168.4.10:3306/birdnet')).toEqual([
       '192.',
       '168.',
       '4.',
@@ -44,19 +44,25 @@ describe('splitHostSegments', () => {
   });
 
   it('keeps a trailing separator on the last segment without an empty one', () => {
-    expect(splitHostSegments('example.org:3306/')).toEqual(['example.', 'org:', '3306/']);
+    expect(splitLocationSegments('example.org:3306/')).toEqual(['example.', 'org:', '3306/']);
   });
 
   it('keeps consecutive separators as single-character segments', () => {
-    expect(splitHostSegments('a..b')).toEqual(['a.', '.', 'b']);
+    expect(splitLocationSegments('a..b')).toEqual(['a.', '.', 'b']);
   });
 
   it('splits an IPv6 literal after each colon and never inside the port', () => {
-    expect(splitHostSegments('[::1]:3306/birdnet')).toEqual(['[:', ':', '1]:', '3306/', 'birdnet']);
+    expect(splitLocationSegments('[::1]:3306/birdnet')).toEqual([
+      '[:',
+      ':',
+      '1]:',
+      '3306/',
+      'birdnet',
+    ]);
   });
 
   it('keeps unicode text intact', () => {
-    expect(splitHostSegments('päivä.äö:3306/tietokanta')).toEqual([
+    expect(splitLocationSegments('päivä.äö:3306/tietokanta')).toEqual([
       'päivä.',
       'äö:',
       '3306/',
@@ -65,9 +71,8 @@ describe('splitHostSegments', () => {
   });
 
   it('keeps a long database name with underscores as one segment', () => {
-    const database = 'birdnet_production_archive_2024_q4_detections';
-    expect(database).toHaveLength(45);
-    expect(splitHostSegments(`db.example.lan:3306/${database}`)).toEqual([
+    const database = 'birdnet_production_archive_2024_q4_hours';
+    expect(splitLocationSegments(`db.example.lan:3306/${database}`)).toEqual([
       'db.',
       'example.',
       'lan:',
@@ -78,6 +83,6 @@ describe('splitHostSegments', () => {
 
   it('keeps an 80 character string without separators as one segment', () => {
     const text = 'a'.repeat(80);
-    expect(splitHostSegments(text)).toEqual([text]);
+    expect(splitLocationSegments(text)).toEqual([text]);
   });
 });
