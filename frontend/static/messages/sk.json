@@ -207,7 +207,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Nastavenia - BirdNET-Go",
     "pageNotFound": "404 - Stránka sa nenašla",
     "serverError": "500 - Interná chyba servera",
     "componentError": "Chyba načítania komponentu",
@@ -1945,7 +1944,8 @@
     "detach": "Otvoriť v novom okne",
     "detached": "Terminál je odpojený",
     "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
-    "reattach": "Pripojiť späť"
+    "reattach": "Pripojiť späť",
+    "keyboardExitHint": "Ak chcete opustiť terminál, stlačte Esc a potom Tab"
   },
   "analytics": {
     "hub": {

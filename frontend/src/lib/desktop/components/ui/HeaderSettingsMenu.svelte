@@ -87,6 +87,9 @@
 
   function handleResetDashboard() {
     isOpen = false;
+    // The focused menu item unmounts with the menu; focus the trigger first so the
+    // confirmation records it as the place to return to
+    buttonRef?.focus();
     showResetConfirm = true;
   }
 

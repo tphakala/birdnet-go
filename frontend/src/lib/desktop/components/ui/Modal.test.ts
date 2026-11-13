@@ -16,6 +16,9 @@ import ModalToggleHost from './Modal.toggle.test.svelte';
 import ModalSelectHost from './Modal.select.test.svelte';
 import ModalCardsHost from './Modal.cards.test.svelte';
 
+// MouseEvent.button of a secondary (right) button press
+const SECONDARY_BUTTON = 2;
+
 function blurActiveElement() {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 }
@@ -1218,6 +1221,180 @@ describe('Modal', () => {
 
       expect(bar).toHaveFocus();
       svg.remove();
+    });
+
+    // Safari and iPadOS do not focus a clicked button: activeElement stays body, so the
+    // element the user pressed is the only record of where the dialog was opened from.
+    describe('opened by a press that did not focus the button', () => {
+      async function openAndCloseLower() {
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        await press('Toggle lower');
+      }
+
+      it('returns focus to the pressed button', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        expect(document.body).toHaveFocus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Toggle lower')).toHaveFocus();
+      });
+
+      it('leaves focus on body when the last press hit plain page content', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        await fireEvent.pointerDown(document.body);
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('prefers the focused element over a press that did not move focus', async () => {
+        renderTyped(ModalToggleHost, {});
+        button('Toggle lower').focus();
+        await fireEvent.pointerDown(button('Page button'));
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Toggle lower')).toHaveFocus();
+      });
+
+      it('forgets the press once focus moved to another element', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Page button'));
+        button('Toggle upper').focus();
+        button('Toggle upper').blur();
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('does not return focus to a pressed control that is inside the dialog being opened', async () => {
+        renderTyped(ModalToggleHost, {});
+        // The closed dialog stays in the page; a press can land on one of its controls
+        const inside = screen.getByRole('button', { name: 'Lower action', hidden: true });
+        await fireEvent.pointerDown(inside);
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        const focusSpy = vi.spyOn(inside, 'focus');
+
+        await press('Toggle lower');
+
+        expect(focusSpy).not.toHaveBeenCalled();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('keeps the earlier opener when reopened with focus on a control of its own dialog', async () => {
+        renderTyped(ModalToggleHost, {});
+        button('Page button').focus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        await press('Toggle lower');
+        // The closed dialog stays in the page; focus can be left on one of its controls
+        screen.getByRole('button', { name: 'Lower action', hidden: true }).focus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Page button')).toHaveFocus();
+      });
+
+      it('does not take plain content inside a tabindex=-1 wrapper as the opener', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        await fireEvent.pointerDown(screen.getByText('Wrapper text'));
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('returns focus to the control pressed through a tabindex=-1 child', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(screen.getByTestId('page-button-icon'));
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Page button')).toHaveFocus();
+      });
+
+      it('does not take a focusable region around a tabindex=-1 wrapper as the opener', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        await fireEvent.pointerDown(screen.getByText('Inner wrapper text'));
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('does not take a disabled button as the opener', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        const disabled = screen.getByRole('button', { name: 'Disabled button' });
+        await fireEvent.pointerDown(disabled);
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        const focusSpy = vi.spyOn(disabled, 'focus');
+
+        await press('Toggle lower');
+
+        expect(focusSpy).not.toHaveBeenCalled();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('forgets a press that was cancelled, as when a scroll starts on the button', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'));
+        await fireEvent.pointerCancel(button('Toggle lower'));
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('ignores a press with a non-primary button', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Toggle lower'), { button: SECONDARY_BUTTON });
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('does not reuse the opener of an earlier open when nothing is focused at reopen', async () => {
+        renderTyped(ModalToggleHost, {});
+        button('Page button').focus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        await press('Toggle lower');
+        expect(button('Page button')).toHaveFocus();
+        button('Page button').blur();
+        // A document with no focused element at all reports a null activeElement
+        const activeSpy = vi.spyOn(document, 'activeElement', 'get').mockReturnValue(null);
+        try {
+          await press('Toggle lower');
+        } finally {
+          activeSpy.mockRestore();
+        }
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(document.body).toHaveFocus();
+      });
+
+      it('keeps the press on a control that then lost focus without a focus move', async () => {
+        renderTyped(ModalToggleHost, {});
+        button('Page button').focus();
+        await fireEvent.pointerDown(button('Page button'));
+        button('Page button').blur();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Page button')).toHaveFocus();
+      });
     });
   });
 

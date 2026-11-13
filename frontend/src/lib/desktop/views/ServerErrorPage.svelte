@@ -29,10 +29,6 @@
   let loginUrl = $derived(buildLoginUrl(navigation.currentPath + navigation.currentSearch));
 </script>
 
-<svelte:head>
-  <title>{t('pageTitle.serverError')}</title>
-</svelte:head>
-
 <div class={cn('col-span-12 min-h-[60vh] flex items-center justify-center', className)}>
   <div class="text-center p-8 rounded-lg bg-[var(--color-base-100)] shadow-lg max-w-4xl w-full">
     <h1 class="text-6xl font-bold text-[var(--color-base-content)] mb-4">{t('error.500.code')}</h1>

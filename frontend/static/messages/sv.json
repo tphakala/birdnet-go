@@ -207,7 +207,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Inställningar - BirdNET-Go",
     "pageNotFound": "404 - Sidan hittades inte",
     "serverError": "500 - Internt serverfel",
     "componentError": "Komponentladdningsfel",
@@ -1945,7 +1944,8 @@
     "detach": "Öppna i nytt fönster",
     "detached": "Terminalen är frikopplad",
     "detachedDescription": "Terminalen körs i ett separat fönster. Stäng det fönstret för att återställa den här.",
-    "reattach": "Återanslut"
+    "reattach": "Återanslut",
+    "keyboardExitHint": "Tryck på Esc och sedan Tab för att lämna terminalen"
   },
   "analytics": {
     "hub": {

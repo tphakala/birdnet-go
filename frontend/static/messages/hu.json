@@ -207,7 +207,6 @@
     "hoursShort": "ó"
   },
   "pageTitle": {
-    "settings": "Beállítások - BirdNET-Go",
     "pageNotFound": "404 - Az oldal nem található",
     "serverError": "500 - Belső szerverhiba",
     "componentError": "Komponens betöltési hiba",
@@ -1945,7 +1944,8 @@
     "detach": "Megnyitás új ablakban",
     "detached": "Terminal leválasztva",
     "detachedDescription": "A terminal egy külön ablakban fut. Zárja be azt az ablakot a visszatéréshez.",
-    "reattach": "Újracsatlakozás"
+    "reattach": "Újracsatlakozás",
+    "keyboardExitHint": "A terminál elhagyásához nyomja meg az Esc, majd a Tab billentyűt"
   },
   "analytics": {
     "hub": {

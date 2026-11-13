@@ -207,7 +207,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Impostazioni - BirdNET-Go",
     "pageNotFound": "404 - Pagina non trovata",
     "serverError": "500 - Errore interno del server",
     "componentError": "Errore caricamento componente",
@@ -1945,7 +1944,8 @@
     "detach": "Apri in nuova finestra",
     "detached": "Terminale separato",
     "detachedDescription": "Il terminale è in esecuzione in una finestra separata. Chiudere quella finestra per riportarlo qui.",
-    "reattach": "Riattacca"
+    "reattach": "Riattacca",
+    "keyboardExitHint": "Premere Esc e poi Tab per uscire dal terminale"
   },
   "analytics": {
     "hub": {
