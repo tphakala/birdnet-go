@@ -1202,6 +1202,13 @@ describe('Primary and accent content in every color scheme', () => {
       }
     }
 
+    it('lists every scheme that schemes.css defines, so none escapes the loops above', () => {
+      const defined = new Set(
+        [...schemesCss.matchAll(/\[data-scheme=["']?([^"'\]]+)["']?\]/g)].map(m => m[1])
+      );
+      expect([...defined].sort()).toEqual([...FIXED_SCHEMES, 'custom'].sort());
+    });
+
     for (const scheme of FIXED_SCHEMES.filter(name => name !== 'blue')) {
       it(`${scheme} defines ${TEXT_TOKEN} in its light and dark blocks`, () => {
         for (const theme of ['light', 'dark'] as const) {
@@ -1237,9 +1244,11 @@ describe('Primary and accent content in every color scheme', () => {
       }
     });
 
-    it('section headers of the active section use the text token', () => {
+    it('every active section header class list uses the text token', () => {
       const file = join(srcDir, 'lib', 'desktop', 'layouts', 'CollapsibleNavSection.svelte');
-      expect(readFileSync(file, 'utf8')).toContain('text-[var(--text-primary)]');
+      const active = [...readFileSync(file, 'utf8').matchAll(/routeActive \? '([^']+)'/g)];
+      expect(active.length, 'active header class lists found').toBeGreaterThan(0);
+      expect(active.map(match => match[1])).toEqual(active.map(() => 'text-[var(--text-primary)]'));
     });
   });
 
