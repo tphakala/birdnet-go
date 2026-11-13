@@ -111,6 +111,16 @@ describe('ModelCard', () => {
       expect(screen.getByText('analysis.gallery.optimize.badgeTitle')).toBeInTheDocument();
     });
 
+    it('ignores an offer on an Available card, which only installs', () => {
+      renderCard({ entry: entry(), mode: 'available', optimizeAvailable: true });
+
+      expect(button('analysis.gallery.install')).toBeEnabled();
+      expect(
+        screen.queryByRole('button', { name: /analysis\.gallery\.optimize\.swap/ })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText('analysis.gallery.optimize.badgeTitle')).not.toBeInTheDocument();
+    });
+
     it('shows neither Optimize nor the note without an offer', () => {
       renderCard({ entry: entry({ installed: true }), mode: 'installed' });
 
@@ -414,6 +424,12 @@ describe('ModelCard', () => {
         'analysis.gallery.hardware.gpuNvidia'
       );
       expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.species', { count: '700' });
+    });
+
+    it('shows the raw region slug when its name is not known', () => {
+      renderCard({ entry: withVariants, mode: 'installed', regionNames: new Map() });
+
+      expect(detailsValue('analysis.gallery.regionLabel').textContent.trim()).toBe('eu');
     });
 
     it('describes the recommended variant on the Available tab', () => {
