@@ -88,15 +88,15 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
     }
 
     it.each([
-      ['keyboard activation', pressWithKeyboard, 'Cancel', dismissWithCancel],
-      ['keyboard activation', pressWithKeyboard, 'Escape', dismissWithEscape],
-      ['a press that does not focus the item', pressWithoutFocus, 'Cancel', dismissWithCancel],
-      ['a press that does not focus the item', pressWithoutFocus, 'Escape', dismissWithEscape],
+      ['keyboard activation', 'Cancel', pressWithKeyboard, dismissWithCancel],
+      ['keyboard activation', 'Escape', pressWithKeyboard, dismissWithEscape],
+      ['a press that does not focus the item', 'Cancel', pressWithoutFocus, dismissWithCancel],
+      ['a press that does not focus the item', 'Escape', pressWithoutFocus, dismissWithEscape],
     ])(
       'returns to the settings menu button after %s and %s',
-      async (_press, press, _dismiss, dismiss) => {
+      async (_pressName, _dismissName, press, dismiss) => {
         const menu = await renderAndOpen({ securityEnabled: false });
-        await press(menu.getByText(RESET_LABEL).closest('button') as HTMLButtonElement);
+        await press(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
         const trigger = screen.getByRole('button', { name: MENU_LABEL });
 
         await dismiss();
