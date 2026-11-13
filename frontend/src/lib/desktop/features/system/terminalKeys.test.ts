@@ -93,27 +93,24 @@ describe('createTerminalExitKeys', () => {
     }
   );
 
-  it('does not arm the exit on an Escape pressed while composing', () => {
+  it.each([
+    ['isComposing', 'Escape', { isComposing: true }],
+    ['the Process key', 'Process', {}],
+    ['keyCode 229', 'Escape', { keyCode: 229 }],
+  ] as const)('does not arm the exit on %s', (_name, k, init) => {
     const { handler } = setup();
-    expect(handler(key('keydown', 'Escape', { isComposing: true }))).toBe(true);
+    expect(handler(key('keydown', k, init))).toBe(true);
     expect(handler(key('keydown', 'Tab'))).toBe(true);
   });
 
-  it('does not release Tab pressed while composing, and drops the armed Escape', () => {
+  it.each([
+    ['isComposing', 'Tab', { isComposing: true }],
+    ['the Process key', 'Process', {}],
+    ['keyCode 229', 'Tab', { keyCode: 229 }],
+  ] as const)('does not release Tab and drops the armed Escape on %s', (_name, k, init) => {
     const { handler } = setup();
     handler(key('keydown', 'Escape'));
-    expect(handler(key('keydown', 'Tab', { isComposing: true }))).toBe(true);
-    expect(handler(key('keydown', 'Tab'))).toBe(true);
-  });
-
-  it('drops an armed Escape on an input method Process key or keyCode 229', () => {
-    const { handler } = setup();
-    handler(key('keydown', 'Escape'));
-    expect(handler(key('keydown', 'Process'))).toBe(true);
-    expect(handler(key('keydown', 'Tab'))).toBe(true);
-
-    // keyCode 229 on Escape itself must not arm
-    expect(handler(key('keydown', 'Escape', { keyCode: 229 }))).toBe(true);
+    expect(handler(key('keydown', k, init))).toBe(true);
     expect(handler(key('keydown', 'Tab'))).toBe(true);
   });
 

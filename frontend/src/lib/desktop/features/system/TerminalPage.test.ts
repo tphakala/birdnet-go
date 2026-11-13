@@ -73,6 +73,10 @@ import { opacityClasses } from '../../../../test/class-helpers';
 import TerminalPage from './TerminalPage.svelte';
 
 // The test setup returns translation keys as text
+function key(k: string) {
+  return new KeyboardEvent('keydown', { key: k });
+}
+
 const TOOLBAR_BUTTON_LABELS = [
   'terminal.colorTheme',
   'terminal.copySelection',
@@ -158,7 +162,6 @@ describe('TerminalPage toolbar', () => {
     expect(hint?.textContent.trim()).toBe('terminal.keyboardExitHint');
 
     const handler: KeyHandler | undefined = terminal.handler;
-    const key = (k: string) => new KeyboardEvent('keydown', { key: k });
     expect(handler?.(key('Escape'))).toBe(true);
     expect(handler?.(key('Tab'))).toBe(false);
   });
@@ -167,7 +170,6 @@ describe('TerminalPage toolbar', () => {
     render(TerminalPage);
     await tick();
     const [terminal] = created.terminals;
-    const key = (k: string) => new KeyboardEvent('keydown', { key: k });
 
     terminal.handler?.(key('Escape'));
     terminal.textarea?.dispatchEvent(new FocusEvent('blur'));
@@ -223,8 +225,15 @@ describe('TerminalPage detached window', () => {
 
   // Foreground colours of the three terminal themes, as computed style reports them
   const DARK_FOREGROUND = 'rgb(169, 177, 214)';
-  const SWATCH_IDS = ['theme-dark', 'theme-light', 'theme-hc'];
-  const TOOLBAR_TEXT_SELECTORS = ['#status-text', '#dimensions', '#terminal-exit-hint'];
+  // Every popup element drawn in the theme foreground: status texts and the theme swatch buttons
+  const TOOLBAR_TEXT_SELECTORS = [
+    '#status-text',
+    '#dimensions',
+    '#terminal-exit-hint',
+    '#theme-dark',
+    '#theme-light',
+    '#theme-hc',
+  ];
 
   async function detach() {
     vi.stubGlobal(
@@ -293,8 +302,8 @@ describe('TerminalPage detached window', () => {
     expect(hint?.textContent.trim()).toBe('terminal.keyboardExitHint');
 
     const handler: KeyHandler | undefined = popupTerminal.handler;
-    expect(handler?.(new KeyboardEvent('keydown', { key: 'Escape' }))).toBe(true);
-    expect(handler?.(new KeyboardEvent('keydown', { key: 'Tab' }))).toBe(false);
+    expect(handler?.(key('Escape'))).toBe(true);
+    expect(handler?.(key('Tab'))).toBe(false);
   });
 
   it('draws a full-strength outline on a focused popup toolbar or swatch button', async () => {
@@ -312,28 +321,9 @@ describe('TerminalPage detached window', () => {
     expect(focusRule?.cssText).toContain('outline: 2px solid currentColor');
   });
 
-  it('draws theme swatch buttons in the theme foreground so the ring follows it', async () => {
-    const doc = await detach();
-    const swatchColors = () =>
-      SWATCH_IDS.map(id => {
-        const button = doc.getElementById(id);
-        if (!button) throw new Error(`missing ${id}`);
-        return doc.defaultView?.getComputedStyle(button).color;
-      });
-    const all = (color: string) => SWATCH_IDS.map(() => color);
-    expect(swatchColors()).toEqual(all(DARK_FOREGROUND));
-
-    doc.getElementById('theme-light')?.click();
-    expect(swatchColors()).toEqual(all('rgb(56, 58, 66)'));
-
-    doc.getElementById('theme-hc')?.click();
-    expect(swatchColors()).toEqual(all('rgb(0, 255, 0)'));
-  });
-
   it('forgets an armed Escape when the detached terminal input loses focus', async () => {
     await detach();
     const popupTerminal = created.terminals[1];
-    const key = (k: string) => new KeyboardEvent('keydown', { key: k });
 
     popupTerminal.handler?.(key('Escape'));
     popupTerminal.textarea?.dispatchEvent(new FocusEvent('blur'));
