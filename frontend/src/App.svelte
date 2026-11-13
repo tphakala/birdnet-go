@@ -45,6 +45,8 @@
   // The brand is not translated, so it is not an i18n key.
   const APP_NAME = 'BirdNET-Go';
   const SETTINGS_TITLE_KEY = 'navigation.settings';
+  const LOGIN_TITLE_KEY = 'auth.loginTitle';
+  const TITLE_SEPARATOR = ' - ';
 
   /**
    * Client-side navigation function.
@@ -149,7 +151,7 @@
   let documentTitle = $derived.by(() => {
     if (!appInitialized || appError) return APP_NAME;
     const showsLogin = requireLogin || loginRouteActive;
-    const key = showsLogin ? 'auth.loginTitle' : pageTitleKey;
+    const key = showsLogin ? LOGIN_TITLE_KEY : pageTitleKey;
     const page = t(key);
     if (!page || page === key) return APP_NAME;
     // The generic error page shows its code, so the tab carries it too.
@@ -158,7 +160,7 @@
     const inSettings =
       !showsLogin && currentRoute === 'settings' && pageTitleKey !== SETTINGS_TITLE_KEY;
     const parts = [code, page, inSettings ? t(SETTINGS_TITLE_KEY) : null, APP_NAME];
-    return parts.filter(Boolean).join(' - ');
+    return parts.filter(Boolean).join(TITLE_SEPARATOR);
   });
 
   // Route configuration for better maintainability
@@ -170,7 +172,7 @@
   }
 
   const routeConfigs: RouteConfig[] = [
-    { route: 'login', page: 'login', titleKey: 'auth.loginTitle', component: '' },
+    { route: 'login', page: 'login', titleKey: LOGIN_TITLE_KEY, component: '' },
     { route: 'dashboard', page: 'dashboard', titleKey: 'navigation.dashboard', component: '' },
     {
       route: 'live-stream',
