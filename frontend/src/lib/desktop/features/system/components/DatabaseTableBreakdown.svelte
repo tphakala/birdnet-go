@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { ChevronDown, ChevronUp, ChevronsUpDown } from '@lucide/svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
   import type { TableStats } from '$lib/types/database';
 
@@ -81,36 +81,14 @@
       <thead>
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
-            <th
-              scope="col"
-              tabindex="0"
-              aria-sort={sortColumn === col.key
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
-              onclick={() => toggleSort(col.key)}
-              onkeydown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort(col.key);
-                }
-              }}
-            >
-              <div class="flex items-center gap-1">
-                {col.label}
-                {#if sortColumn === col.key}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
-            </th>
+            <SortableHeader
+              label={col.label}
+              field={col.key}
+              activeField={sortColumn}
+              direction={sortDirection}
+              onSort={toggleSort}
+              className="p-0 text-xs font-medium text-muted select-none [&>button]:w-full [&>button]:px-3 [&>button]:py-2 [&>button]:focus-visible:outline-2 [&>button]:focus-visible:-outline-offset-2 [&>button]:focus-visible:outline-[var(--color-primary)]"
+            />
           {/each}
           <th scope="col" class="text-left py-2 px-3 text-xs font-medium text-muted">
             {t('system.database.dashboard.tables.usage')}

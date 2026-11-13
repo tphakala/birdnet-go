@@ -24,6 +24,8 @@
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
+  import { generateId } from '$lib/utils/uuid';
+  import { radioGroupKeys } from '$lib/utils/radioGroupKeys';
 
   type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
   type HealthCategory =
@@ -103,6 +105,9 @@
   }
 
   let selectedWindow = $state<string>(safeGetWindow());
+
+  // Id of the "Running diagnostics" text that explains why Refresh and the window selector wait.
+  const RUN_STATUS_ID = generateId('health-run-status');
 
   function toggleExpand(checkName: string) {
     const next = new Set(expandedChecks);
@@ -281,6 +286,7 @@
   }
 
   function selectWindow(w: string) {
+    if (running) return;
     selectedWindow = w;
     try {
       localStorage.setItem('health-eval-window', w);
@@ -558,9 +564,7 @@
       <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
         {t('health.diagnostics')}
       </h3>
-      <div
-        class="flex items-center gap-3 text-xs text-[var(--color-base-content)] opacity-60 shrink-0"
-      >
+      <div class="flex items-center gap-3 text-xs text-muted shrink-0">
         {#if error}
           <span
             role="alert"
@@ -570,7 +574,7 @@
             <XCircle class="size-3.5" />
             {error}
           </span>
-        {:else if report}
+        {:else if report && !running}
           <span
             class="flex items-center gap-1.5"
             title={new Date(report.started_at).toLocaleString()}
@@ -581,7 +585,7 @@
             <span class="opacity-60">· {report.duration_ms.toFixed(0)}ms</span>
           </span>
         {:else if running}
-          <span class="flex items-center gap-1.5">
+          <span id={RUN_STATUS_ID} class="flex items-center gap-1.5">
             <Loader2 class="size-3.5 animate-spin" />
             {t('health.running')}
           </span>
@@ -589,10 +593,11 @@
         <button
           type="button"
           onclick={() => runDiagnostics(true)}
-          disabled={running}
+          aria-disabled={running ? 'true' : undefined}
+          aria-describedby={running ? RUN_STATUS_ID : undefined}
           aria-label={t('health.refresh')}
           title={t('health.refresh')}
-          class="inline-flex items-center justify-center size-8 rounded-md transition-colors hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center size-8 rounded-md transition-colors not-aria-disabled:hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
         >
           <RefreshCw class="size-4 {running ? 'animate-spin' : ''}" />
         </button>
@@ -608,18 +613,21 @@
           class="inline-flex rounded-md border border-[var(--color-base-300)] overflow-hidden"
           role="radiogroup"
           aria-label={t('health.window.label')}
+          use:radioGroupKeys
         >
           {#each windowPresets as w (w)}
             <button
               type="button"
               role="radio"
               aria-checked={selectedWindow === w}
-              disabled={running}
+              tabindex={selectedWindow === w ? 0 : -1}
+              aria-disabled={running ? 'true' : undefined}
+              aria-describedby={running ? RUN_STATUS_ID : undefined}
               onclick={() => selectWindow(w)}
-              class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 {selectedWindow ===
+              class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-base-content)] focus-visible:shadow-[inset_0_0_0_4px_var(--color-primary-content)] aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
                 ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
-                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
+                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] not-aria-disabled:hover:bg-[var(--color-base-300)]'}"
             >
               {t(`health.window.${w}`)}
             </button>
