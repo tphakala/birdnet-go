@@ -1272,6 +1272,21 @@ describe('Modal', () => {
         expect(document.body).toHaveFocus();
       });
 
+      it('does not return focus to a pressed control that is inside the dialog being opened', async () => {
+        renderTyped(ModalToggleHost, {});
+        // The closed dialog stays in the page; a press can land on one of its controls
+        const inside = screen.getByRole('button', { name: 'Lower action', hidden: true });
+        await fireEvent.pointerDown(inside);
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        const focusSpy = vi.spyOn(inside, 'focus');
+
+        await press('Toggle lower');
+
+        expect(focusSpy).not.toHaveBeenCalled();
+        expect(document.body).toHaveFocus();
+      });
+
       it('keeps the press on a control that then lost focus without a focus move', async () => {
         renderTyped(ModalToggleHost, {});
         button('Page button').focus();
