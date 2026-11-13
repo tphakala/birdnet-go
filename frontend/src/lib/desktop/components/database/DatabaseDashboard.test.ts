@@ -1475,4 +1475,28 @@ describe('DatabaseDashboard v2-only overview layout', () => {
     );
     expect(emptyGrid).toBeUndefined();
   });
+
+  it.each([
+    {
+      name: 'MySQL overview with only SQLite details',
+      payload: { ...sqliteOverview, engine: 'mysql', location: MYSQL_LOCATION },
+      wrongCard: () => t('system.database.dashboard.details.title'),
+    },
+    {
+      name: 'SQLite overview with only MySQL details',
+      payload: { ...mysqlOverview, engine: 'sqlite' },
+      wrongCard: () => t('system.database.dashboard.connectionPool.title'),
+    },
+  ])('shows no engine cards for a $name', async ({ payload, wrongCard }) => {
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: payload });
+
+    const { container } = renderTyped(DatabaseDashboard);
+
+    await screen.findByRole('heading', { name: rateTitle() });
+    expect(screen.queryByRole('heading', { name: wrongCard() })).not.toBeInTheDocument();
+    const emptyGrid = Array.from(container.querySelectorAll('div.grid')).find(
+      grid => grid.children.length === 0
+    );
+    expect(emptyGrid).toBeUndefined();
+  });
 });
