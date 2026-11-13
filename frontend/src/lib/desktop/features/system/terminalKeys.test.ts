@@ -77,11 +77,14 @@ describe('createTerminalExitKeys', () => {
     expect(handler(key('keydown', 'Tab'))).toBe(true);
   });
 
-  it('does not release Tab combined with Ctrl, Alt or Meta', () => {
-    const { handler } = setup();
-    handler(key('keydown', 'Escape'));
-    expect(handler(key('keydown', 'Tab', { altKey: true }))).toBe(true);
-  });
+  it.each(['ctrlKey', 'altKey', 'metaKey'] as const)(
+    'does not release Tab combined with %s',
+    modifier => {
+      const { handler } = setup();
+      handler(key('keydown', 'Escape'));
+      expect(handler(key('keydown', 'Tab', { [modifier]: true }))).toBe(true);
+    }
+  );
 
   it('always passes keyup and keypress events', () => {
     const { handler } = setup();

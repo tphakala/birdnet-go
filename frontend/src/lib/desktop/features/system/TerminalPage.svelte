@@ -22,7 +22,7 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { settingsStore } from '$lib/stores/settings';
-  import { createTerminalExitKeys } from './terminalKeys';
+  import { attachTerminalExitKeys } from './terminalKeys';
   import {
     TerminalSquare,
     WifiOff,
@@ -175,8 +175,7 @@
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalContainer);
-    term.attachCustomKeyEventHandler(createTerminalExitKeys());
-    term.textarea?.setAttribute('aria-describedby', EXIT_HINT_ID);
+    attachTerminalExitKeys(term, EXIT_HINT_ID);
     fitAddon.fit();
 
     // Track terminal dimensions
@@ -503,8 +502,7 @@
       const popupFit = new FitAddon();
       popupTerm.loadAddon(popupFit);
       popupTerm.open(popupContainer);
-      popupTerm.attachCustomKeyEventHandler(createTerminalExitKeys());
-      popupTerm.textarea?.setAttribute('aria-describedby', EXIT_HINT_ID);
+      attachTerminalExitKeys(popupTerm, EXIT_HINT_ID);
       popupFit.fit();
 
       // ── Toolbar references ──

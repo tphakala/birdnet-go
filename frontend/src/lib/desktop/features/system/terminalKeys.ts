@@ -8,6 +8,8 @@
  * not handled by xterm, so the browser moves focus as it normally would.
  */
 
+import type { Terminal } from '@xterm/xterm';
+
 /** How long after Escape a Tab or Shift+Tab still leaves the terminal. */
 export const TAB_RELEASE_WINDOW_MS = 2000;
 
@@ -37,7 +39,7 @@ export function createTerminalExitKeys(
     const armedAt = escapeAt;
     escapeAt = null;
 
-    if (ev.key === KEY_ESCAPE && !hasCommandModifier && !ev.shiftKey) {
+    if (ev.key === KEY_ESCAPE && !hasCommandModifier) {
       escapeAt = now();
       return true;
     }
@@ -53,4 +55,14 @@ export function createTerminalExitKeys(
 
     return true;
   };
+}
+
+/**
+ * Give a terminal the Escape-then-Tab exit and point its input at the hint
+ * that explains it. Call after `term.open()`, since the input textarea is
+ * created there.
+ */
+export function attachTerminalExitKeys(term: Terminal, hintId: string): void {
+  term.attachCustomKeyEventHandler(createTerminalExitKeys());
+  term.textarea?.setAttribute('aria-describedby', hintId);
 }
