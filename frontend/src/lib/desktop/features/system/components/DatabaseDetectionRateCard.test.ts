@@ -7,8 +7,9 @@ import DatabaseDetectionRateCard from './DatabaseDetectionRateCard.svelte';
 const createBackupLabel = () => t('system.database.dashboard.detectionRate.createBackup');
 const mysqlNoteLabel = () => t('system.database.dashboard.detectionRate.mysqlBackupNote');
 
-// The card is one flex row whose children are the chart column and, when the engine has one,
-// the side panel. An empty side panel would add a bordered strip without any label.
+// The card is one flex container (a column below the @xl container width, a row from it).
+// Its children are the chart column and, when the engine has one, the side panel. An empty
+// side panel would add a bordered strip without any label.
 function layoutColumnCount(container: HTMLElement): number {
   return container.firstElementChild?.firstElementChild?.children.length ?? 0;
 }
