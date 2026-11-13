@@ -37,6 +37,7 @@ const MIGRATED_FILES = [
   'lib/desktop/features/system/components/DatabaseSqliteDetails.svelte',
   'lib/desktop/features/import-export/pages/ImportExportPage.svelte',
   'lib/desktop/features/import-export/components/ImportActivityCard.svelte',
+  'lib/desktop/features/system/components/RestartCard.svelte',
 ];
 
 /** Body text at or above this opacity (percent) still reaches 4.5:1 on the base surfaces. */
