@@ -50,6 +50,27 @@ describe('DatabaseDetectionRateCard side panel', () => {
     expect(screen.queryByText(createBackupLabel())).not.toBeInTheDocument();
   });
 
+  it('renders the host text unchanged and offers break points after separators', () => {
+    const host = 'mysql.internal.example.org:3306';
+    renderTyped(DatabaseDetectionRateCard, {
+      props: { data: [], engine: 'mysql', mysqlHost: host },
+    });
+
+    const hostElement = screen.getByText(host);
+    expect(hostElement.textContent).toBe(host);
+    expect(hostElement.querySelectorAll('wbr')).toHaveLength(4);
+  });
+
+  it('renders host markup as text only', () => {
+    const host = '<img src=x onerror=alert(1)>.example:3306';
+    const { container } = renderTyped(DatabaseDetectionRateCard, {
+      props: { data: [], engine: 'mysql', mysqlHost: host },
+    });
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText(host).textContent).toBe(host);
+  });
+
   it('renders zero min, average and maximum labels for empty data', () => {
     renderTyped(DatabaseDetectionRateCard, { props: { data: [], engine: 'mysql' } });
 
