@@ -4,7 +4,9 @@ import { tick } from 'svelte';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Only the document title is under test: the layout and every page are replaced by stubs.
+// Only the document title is under test: the layout, the wizard and the pages App imports
+// statically are replaced by stubs. Lazily loaded pages are never rendered, because the stubbed
+// layout renders no children.
 vi.mock('./lib/desktop/layouts/RootLayout.svelte', () => ({ default: () => {} }));
 vi.mock('./lib/desktop/features/dashboard/pages/DashboardPage.svelte', () => ({
   default: () => {},
@@ -22,15 +24,16 @@ vi.mock('./lib/utils/logger', async importOriginal => {
 });
 
 // The state the mocked initApp leaves behind; a test changes it before rendering.
-const startup = vi.hoisted(() => {
+const { state: startup, defaultSecurity: DEFAULT_SECURITY } = vi.hoisted(() => {
+  const defaultSecurity = { enabled: false, accessAllowed: true, privateMode: false };
   const state: {
     security: { enabled: boolean; accessAllowed: boolean; privateMode: boolean };
     error: string | null;
   } = {
-    security: { enabled: false, accessAllowed: true, privateMode: false },
+    security: { ...defaultSecurity },
     error: null,
   };
-  return state;
+  return { state, defaultSecurity };
 });
 
 vi.mock('./lib/stores/appState.svelte', async importOriginal => {
@@ -62,20 +65,23 @@ const ERROR_CODE = '403';
 const INIT_ERROR = 'init failed';
 const NOTIFICATIONS_PATH = '/ui/notifications';
 const SETTINGS_BASE = '/ui/settings';
-const SETTINGS_SUBPAGES = [
-  'main',
-  'userinterface',
-  'audio',
-  'detectionfilters',
-  'integrations',
-  'security',
-  'species',
-  'notifications',
-  'support',
-];
-const UNTRANSLATED_KEY = 'navigation.about';
+const EMPTY_TRANSLATION = '';
+const SRC_DIR = import.meta.dirname;
+const SETTINGS_VIEW_PATH = join(SRC_DIR, 'lib/desktop/views/Settings.svelte');
+const SETTINGS_SECTION_MAP_RE = /const sectionMap[^=]*=\s*\{([^}]*)\}/;
+const OBJECT_KEY_RE = /^\s*(\w+)\s*:/gm;
+const SETTINGS_NAME_PATTERN = /^\[settings\.sections\.\w+\] - \[navigation\.settings\] - /;
 
-const SRC_LIB_DIR = join(import.meta.dirname, 'lib');
+// The URL segments Settings.svelte maps to a section, so a section added there without a title
+// in App.svelte fails the subpage test below.
+function settingsSubpagesFromView(): string[] {
+   
+  const map = SETTINGS_SECTION_MAP_RE.exec(readFileSync(SETTINGS_VIEW_PATH, 'utf8'));
+  return Array.from((map?.[1] ?? '').matchAll(OBJECT_KEY_RE), match => match[1]);
+}
+const SETTINGS_SUBPAGES = settingsSubpagesFromView();
+const UNTRANSLATED_KEY = 'navigation.about';
+const SETTINGS_KEY = 'navigation.settings';
 
 // The test i18n mock returns the key for an unknown key, like the real t(); every other key
 // gets a distinct, recognizable translation.
@@ -87,9 +93,11 @@ const originalT = vi.mocked(t).getMockImplementation();
 
 describe('App document title', () => {
   beforeEach(() => {
-    startup.security = { enabled: false, accessAllowed: true, privateMode: false };
+    startup.security = { ...DEFAULT_SECURITY };
     startup.error = null;
+    Object.assign(appState.security, DEFAULT_SECURITY);
     appState.initialized = false;
+    appState.loading = false;
     appState.error = null;
     vi.mocked(t).mockImplementation(translateKnown);
     document.title = '';
@@ -97,6 +105,7 @@ describe('App document title', () => {
 
   afterEach(() => {
     window.location.search = '';
+    vi.mocked(t).mockReset();
     if (originalT) vi.mocked(t).mockImplementation(originalT);
     navigation.redirect(DASHBOARD_PATH);
   });
@@ -174,13 +183,14 @@ describe('App document title', () => {
     navigation.redirect(NOTIFICATIONS_PATH);
     renderTyped(App);
     await waitFor(() => expect(document.title).toBe(`[navigation.notifications] - ${APP_NAME}`));
+    expect(SETTINGS_SUBPAGES).toContain('main');
     const titles = [document.title];
 
     for (const subpage of SETTINGS_SUBPAGES) {
       const previous = document.title;
       navigation.navigate(`${SETTINGS_BASE}/${subpage}`);
       await waitFor(() => expect(document.title).not.toBe(previous));
-      expect(document.title).toMatch(/^\[settings\.sections\.\w+\] - \[navigation\.settings\] - /);
+      expect(document.title).toMatch(SETTINGS_NAME_PATTERN);
       titles.push(document.title);
     }
 
@@ -188,9 +198,7 @@ describe('App document title', () => {
   });
 
   it('keeps the section before Settings whatever the translations are', async () => {
-    vi.mocked(t).mockImplementation(key =>
-      key === 'navigation.settings' ? 'Einstellungen' : `<${key}>`
-    );
+    vi.mocked(t).mockImplementation(key => (key === SETTINGS_KEY ? 'Einstellungen' : `<${key}>`));
     navigation.redirect(`${SETTINGS_BASE}/audio`);
     renderTyped(App);
     await waitFor(() =>
@@ -204,24 +212,105 @@ describe('App document title', () => {
     await waitFor(() => expect(document.title).toBe(`[navigation.settings] - ${APP_NAME}`));
   });
 
-  it('shows only the app name when the page title has no translation', async () => {
-    navigation.redirect(ABOUT_PATH);
+  it('drops the Settings suffix when Settings has no translation', async () => {
+    vi.mocked(t).mockImplementation(key => (key === SETTINGS_KEY ? key : `[${key}]`));
+    navigation.redirect(`${SETTINGS_BASE}/audio`);
     renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[settings.sections.audio] - ${APP_NAME}`));
+  });
+
+  it.each([
+    ['the key itself', UNTRANSLATED_KEY],
+    ['an empty string', EMPTY_TRANSLATION],
+  ])('shows only the app name when the page title translates to %s', async (_label, value) => {
+    vi.mocked(t).mockImplementation(key => (key === UNTRANSLATED_KEY ? value : `[${key}]`));
+    navigation.redirect(HELP_PATH);
+    renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[navigation.helpAndSupport] - ${APP_NAME}`));
+
+    navigation.navigate(ABOUT_PATH);
     await waitFor(() => expect(document.title).toBe(APP_NAME));
   });
 });
 
+const TITLE_IN_HEAD_RE = /<svelte:head\b[^>]*>(?:(?!<\/svelte:head>)[\s\S])*?<title(?=[\s/>])/;
+const TITLE_ASSIGNMENT_RE = /\bdocument\.title\s*=(?!=)/;
+const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
+const SCRIPT_COMMENT_RE = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
+const APP_COMPONENT = 'App.svelte';
+const TEST_FILE_RE = /\.(?:test|spec)\.[cm]?[jt]s$|(?:^|[\\/])test[\\/]/;
+const SOURCE_FILE_RE = /\.(?:svelte|ts|js)$/;
+
+function hasTitleInHead(source: string): boolean {
+  return TITLE_IN_HEAD_RE.test(source.replace(HTML_COMMENT_RE, ''));
+}
+
+function assignsDocumentTitle(source: string): boolean {
+  return TITLE_ASSIGNMENT_RE.test(
+    source.replace(HTML_COMMENT_RE, '').replace(SCRIPT_COMMENT_RE, '')
+  );
+}
+
+function sourceFiles(): string[] {
+   
+  return readdirSync(SRC_DIR, { recursive: true, encoding: 'utf8' }).filter(file =>
+    SOURCE_FILE_RE.test(file)
+  );
+}
+
+function offendersOf(files: string[], matches: (source: string) => boolean): string[] {
+  return files.filter(file =>
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the source tree
+    matches(readFileSync(join(SRC_DIR, file), 'utf8'))
+  );
+}
+
 describe('document title writers', () => {
   it('has no <title> element inside a svelte:head outside App.svelte', () => {
-    const files = readdirSync(SRC_LIB_DIR, { recursive: true, encoding: 'utf8' }).filter(file =>
-      file.endsWith('.svelte')
+    const components = sourceFiles().filter(
+      file => file.endsWith('.svelte') && file !== APP_COMPONENT
     );
-    const offenders = files.filter(file =>
-      /<svelte:head>(?:(?!<\/svelte:head>)[\s\S])*?<title[\s>]/.test(
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
-        readFileSync(join(SRC_LIB_DIR, file), 'utf8')
-      )
+    expect(offendersOf(components, hasTitleInHead)).toEqual([]);
+  });
+
+  it('has no imperative document.title assignment outside App.svelte and tests', () => {
+    const files = sourceFiles().filter(file => file !== APP_COMPONENT && !TEST_FILE_RE.test(file));
+    expect(offendersOf(files, assignsDocumentTitle)).toEqual([]);
+  });
+
+  describe('scan rules', () => {
+    it.each([
+      '<svelte:head>\n  <title>x</title>\n</svelte:head>',
+      '<svelte:head data-x="1" >\n<meta name="a" />\n<title >x</title></svelte:head>',
+      '<svelte:head><title/></svelte:head>',
+      '<!-- note --><svelte:head><title>x</title></svelte:head>',
+    ])('flags a title in the head: %j', source => {
+      expect(hasTitleInHead(source)).toBe(true);
+    });
+
+    it.each([
+      '<!-- <svelte:head><title>x</title></svelte:head> -->',
+      '<svelte:head><meta name="a" /></svelte:head><title>x</title>',
+      '<svelte:head><titled /></svelte:head>',
+    ])('ignores a title that is not in the head: %j', source => {
+      expect(hasTitleInHead(source)).toBe(false);
+    });
+
+    it.each(['document.title = x;', 'document.title=x', "  document.title\n    = 'a'"])(
+      'flags an assignment: %j',
+      source => {
+        expect(assignsDocumentTitle(source)).toBe(true);
+      }
     );
-    expect(offenders).toEqual([]);
+
+    it.each([
+      'const a = document.title;',
+      'if (document.title === x) {}',
+      '// document.title = x',
+      '/* document.title = x */',
+      '<!-- document.title = x -->',
+    ])('ignores a read or a comment: %j', source => {
+      expect(assignsDocumentTitle(source)).toBe(false);
+    });
   });
 });

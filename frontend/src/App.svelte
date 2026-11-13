@@ -144,24 +144,30 @@
   let appLoading = $derived(appState.loading);
   let appError = $derived(appState.error);
 
-  // The single writer of document.title: "<Page> - BirdNET-Go". A settings section adds Settings
-  // after the section and a generic error page puts its code in front. While the shell is not
-  // shown (loading, or the load failed) only the app name is known. A title that equals its key
-  // has no translation, so it is not shown.
+  // The single writer of document.title: "<Page> - BirdNET-Go". The precedence mirrors the
+  // template: while loading only the app name shows, then the login screen, then an init error
+  // (app name only). A settings section adds Settings after the section and a generic error page
+  // puts its code in front. A title that equals its key has no translation, so it is dropped.
   let documentTitle = $derived.by(() => {
-    if (!appInitialized || appError) return APP_NAME;
+    if (appLoading || (!appInitialized && !appError)) return APP_NAME;
     const showsLogin = requireLogin || loginRouteActive;
-    const key = showsLogin ? LOGIN_TITLE_KEY : pageTitleKey;
-    const page = t(key);
-    if (!page || page === key) return APP_NAME;
+    if (appError && !showsLogin) return APP_NAME;
+    const page = translated(showsLogin ? LOGIN_TITLE_KEY : pageTitleKey);
+    if (!page) return APP_NAME;
     // The generic error page shows its code, so the tab carries it too.
     const code = !showsLogin && currentRoute === 'error-generic' ? dynamicErrorCode : null;
     // A settings section is named after the section only, so the tab says it is part of Settings.
     const inSettings =
       !showsLogin && currentRoute === 'settings' && pageTitleKey !== SETTINGS_TITLE_KEY;
-    const parts = [code, page, inSettings ? t(SETTINGS_TITLE_KEY) : null, APP_NAME];
+    const parts = [code, page, inSettings ? translated(SETTINGS_TITLE_KEY) : null, APP_NAME];
     return parts.filter(Boolean).join(TITLE_SEPARATOR);
   });
+
+  // The translation of a key, or null when it has none (the lookup returns the key itself).
+  function translated(key: string): string | null {
+    const value = t(key);
+    return value && value !== key ? value : null;
+  }
 
   // Route configuration for better maintainability
   interface RouteConfig {
@@ -268,11 +274,12 @@
       titleKey: 'health.title',
       component: 'system-health',
     },
-    { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
+    { route: 'settings', page: 'settings', titleKey: SETTINGS_TITLE_KEY, component: 'settings' },
   ];
 
   // Settings subpage title keys
   const settingsSubpages: Record<string, string> = {
+    '/analysis': 'settings.sections.analysis',
     '/main': 'settings.sections.node',
     '/userinterface': 'settings.sections.userinterface',
     '/audio': 'settings.sections.audio',
