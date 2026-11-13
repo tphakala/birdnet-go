@@ -120,8 +120,10 @@ type CatalogEntryResponse struct {
 	SpeciesCount  int    `json:"speciesCount"`
 	Version       string `json:"version"`
 	// Channel is the release channel: "stable" for a GA build, "preview" for a
-	// developer-preview build the gallery flags as not the final release. Always
-	// populated (defaults to "stable") so the frontend never has to guess.
+	// developer-preview build the gallery flags as not the final release, and
+	// "experimental" for a published model whose performance in BirdNET-Go is not
+	// proven yet. Always populated (defaults to "stable") so the frontend never has
+	// to guess.
 	Channel string `json:"channel"`
 	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
 	// channel (e.g. "preview3.1"); omitted for stable releases.

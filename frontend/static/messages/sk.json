@@ -5833,6 +5833,11 @@
         "cardNotice": "Vývojársky náhľad, nejde o finálnu verziu. Ide o rané zostavenie na testovanie; výsledky sa pred stabilnou verziou môžu zmeniť.",
         "dialogNotice": "Inštalujete vývojársky náhľad ({build}). Je vhodný na vyskúšanie, ale zatiaľ sa neodporúča ako váš jediný klasifikátor."
       },
+      "experimental": {
+        "badge": "Experimentálny",
+        "cardNotice": "V BirdNET-Go experimentálny. Model je zverejnený, ale jeho výkon v BirdNET-Go zatiaľ nie je preukázaný, takže výsledky môžu byť menej spoľahlivé.",
+        "dialogNotice": "Inštalujete model, ktorý je v BirdNET-Go experimentálny. Jeho výkon zatiaľ nie je preukázaný, preto skontrolujte jeho detekcie skôr, než sa naň spoľahnete."
+      },
       "entryIncompatible": "Tento model nie je v tomto systéme k dispozícii.",
       "regionGlobal": "Globálny",
       "hardwareLabel": "Hardvér",

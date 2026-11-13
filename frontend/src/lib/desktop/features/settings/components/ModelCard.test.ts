@@ -5,7 +5,7 @@ import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
 import type { CatalogVariant } from '$lib/types/models';
-import { CHANNEL_PREVIEW } from '$lib/utils/variantSelection';
+import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW } from '$lib/utils/variantSelection';
 import {
   catalogEntry as entry,
   downloadProgress as progress,
@@ -349,6 +349,35 @@ describe('ModelCard', () => {
       unmount();
 
       renderCard({ entry: { ...preview, installed: true }, mode: 'installed' });
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('experimental', () => {
+    it.each(['available', 'installed'] as const)('shows the pill on a %s card', mode => {
+      renderCard({ entry: entry({ channel: CHANNEL_EXPERIMENTAL, installed: true }), mode });
+
+      expect(screen.getByText('analysis.gallery.experimental.badge')).toBeInTheDocument();
+      expect(screen.queryByText('analysis.gallery.preview.badge')).not.toBeInTheDocument();
+    });
+
+    it('adds the experimental notice on the Available tab only', () => {
+      const experimental = entry({ channel: CHANNEL_EXPERIMENTAL });
+      const { unmount } = renderCard({ entry: experimental, mode: 'available' });
+      expect(screen.getByRole('note')).toHaveTextContent(
+        'analysis.gallery.experimental.cardNotice'
+      );
+      unmount();
+
+      renderCard({ entry: { ...experimental, installed: true }, mode: 'installed' });
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    });
+
+    it('shows no channel pill or notice on a stable card', () => {
+      renderCard({ entry: entry({ channel: 'stable' }), mode: 'available' });
+
+      expect(screen.queryByText('analysis.gallery.experimental.badge')).not.toBeInTheDocument();
+      expect(screen.queryByText('analysis.gallery.preview.badge')).not.toBeInTheDocument();
       expect(screen.queryByRole('note')).not.toBeInTheDocument();
     });
   });

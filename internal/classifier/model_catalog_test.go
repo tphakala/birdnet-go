@@ -894,6 +894,11 @@ func TestEmbeddedCatalog_BSGBat(t *testing.T) {
 	assert.Equal(t, "CC-BY-4.0", entry.License)
 	assert.Equal(t, ModelRegistry[RegistryIDBSGBat].NumSpecies, entry.SpeciesCount)
 
+	// The model covers European bats only, and its performance in BirdNET-Go is not
+	// proven yet, so the gallery must not present it as global or as a stable release.
+	assert.Equal(t, "Europe", entry.Region)
+	assert.Equal(t, ChannelExperimental, entry.Channel)
+
 	files := map[string]CatalogFile{}
 	for _, f := range entry.Files {
 		files[f.Role] = f

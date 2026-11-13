@@ -115,6 +115,7 @@
     DEFAULT_REGION_MODE,
     GLOBAL_REGION_MODE,
     optimizeOffers,
+    CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
     type OptimizeOffer,
   } from '$lib/utils/variantSelection';
@@ -269,6 +270,19 @@
   const licenseDownloadSize = $derived(
     licenseSelectedVariant?.sizeBytes ?? licenseModel?.totalSizeBytes ?? 0
   );
+  // The notice the license dialog shows for a non-stable release channel
+  const licenseChannelNotice = $derived.by(() => {
+    switch (licenseModel?.channel) {
+      case CHANNEL_PREVIEW:
+        return t('analysis.gallery.preview.dialogNotice', {
+          build: licenseModel.buildLabel ?? licenseModel.version,
+        });
+      case CHANNEL_EXPERIMENTAL:
+        return t('analysis.gallery.experimental.dialogNotice');
+      default:
+        return null;
+    }
+  });
   // Block install when the selected variant cannot run on this host (e.g. every
   // variant is incompatible, so the preselected one is blocked). The default
   // path preselects a compatible variant, so this only fires in the all-blocked case.
@@ -2748,7 +2762,7 @@
       <h3 id="license-dialog-title" class="text-lg font-semibold text-[var(--color-base-content)]">
         {t('analysis.gallery.license.title')}
       </h3>
-      {#if licenseModel.channel === CHANNEL_PREVIEW}
+      {#if licenseChannelNotice}
         <div
           class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
           role="note"
@@ -2757,11 +2771,7 @@
             class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
             aria-hidden="true"
           />
-          <span class="text-[var(--color-base-content)]">
-            {t('analysis.gallery.preview.dialogNotice', {
-              build: licenseModel.buildLabel ?? licenseModel.version,
-            })}
-          </span>
+          <span class="text-[var(--color-base-content)]">{licenseChannelNotice}</span>
         </div>
       {/if}
       <div class="mt-4 space-y-3">

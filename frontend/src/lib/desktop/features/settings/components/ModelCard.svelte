@@ -65,6 +65,7 @@
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import { generateId } from '$lib/utils/uuid';
   import {
+    CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
     translateReason,
     variantHardwareLabel,
@@ -165,7 +166,23 @@
       ? entry.upstreamUrl
       : null
   );
-  const isPreview = $derived(entry.channel === CHANNEL_PREVIEW);
+  // The pill and the Available-tab notice that flag a non-stable release channel
+  const channelCopy = $derived.by(() => {
+    switch (entry.channel) {
+      case CHANNEL_PREVIEW:
+        return {
+          badge: t('analysis.gallery.preview.badge'),
+          notice: t('analysis.gallery.preview.cardNotice'),
+        };
+      case CHANNEL_EXPERIMENTAL:
+        return {
+          badge: t('analysis.gallery.experimental.badge'),
+          notice: t('analysis.gallery.experimental.cardNotice'),
+        };
+      default:
+        return null;
+    }
+  });
   const hasVariants = $derived((entry.variants ?? []).length > 0);
   const shownVariant = $derived(displayVariantFor(entry, mode));
   // The shown variant's localized region name. A variant without a region (a hardware
@@ -181,8 +198,8 @@
   const inFlight = $derived(actionInFlight || busy !== null);
   // Available cards dim the logo of an entry this host cannot run; the text keeps full contrast
   const unavailable = $derived(mode === 'available' && !entry.compatible);
-  const showPreviewNotice = $derived(mode === 'available' && isPreview);
-  const hasNotices = $derived(showPreviewNotice || !entry.compatible || progress !== null);
+  const channelNoticeText = $derived(mode === 'available' ? (channelCopy?.notice ?? null) : null);
+  const hasNotices = $derived(channelNoticeText !== null || !entry.compatible || progress !== null);
   const showGeomodel = $derived(entry.hasGeomodel && entry.category !== 'geomodel');
   const showOptimize = $derived(mode === 'installed' && optimizeAvailable);
   // The completion line; empty while nothing has completed. The page announces it through its own live region
@@ -334,12 +351,12 @@
         <h4 id={titleId} class="text-sm font-semibold text-[var(--color-base-content)]">
           {entry.name}
         </h4>
-        {#if isPreview}
+        {#if channelCopy}
           <StatusPill
             variant="warning"
             size="sm"
             showDot={false}
-            label={t('analysis.gallery.preview.badge')}
+            label={channelCopy.badge}
             className="whitespace-nowrap"
           />
         {/if}
@@ -382,8 +399,8 @@
 
   {#if hasNotices}
     <div class="model-card-notices">
-      {#if showPreviewNotice}
-        {@render notice('warning', t('analysis.gallery.preview.cardNotice'), 'note', undefined)}
+      {#if channelNoticeText}
+        {@render notice('warning', channelNoticeText, 'note', undefined)}
       {/if}
       {#if !entry.compatible}
         {@render notice(

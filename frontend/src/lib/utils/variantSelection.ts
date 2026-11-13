@@ -263,6 +263,14 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
 export const CHANNEL_PREVIEW = 'preview';
 
 /**
+ * The catalog release channel marking a published model whose performance in
+ * BirdNET-Go is not proven yet. The gallery flags an entry on this channel with an
+ * EXPERIMENTAL badge and a notice. Mirrors the Go `classifier.ChannelExperimental`
+ * constant.
+ */
+export const CHANNEL_EXPERIMENTAL = 'experimental';
+
+/**
  * The catalog release channel marking a stable (GA) build, the default an entry
  * without an explicit channel resolves to. Mirrors the Go `classifier.ChannelStable`
  * constant.

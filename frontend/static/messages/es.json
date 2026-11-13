@@ -5833,6 +5833,11 @@
         "cardNotice": "Vista previa para desarrolladores, no es la versión final. Esta es una versión preliminar para pruebas; los resultados pueden cambiar antes de la versión estable.",
         "dialogNotice": "Estás instalando una versión preliminar para desarrolladores ({build}). Está bien para probarla, pero aún no se recomienda como tu único clasificador."
       },
+      "experimental": {
+        "badge": "Experimental",
+        "cardNotice": "Experimental en BirdNET-Go. El modelo está publicado, pero su rendimiento en BirdNET-Go aún no está demostrado, por lo que los resultados pueden ser menos fiables.",
+        "dialogNotice": "Está instalando un modelo experimental en BirdNET-Go. Su rendimiento aún no está demostrado, así que revise sus detecciones antes de fiarse de él."
+      },
       "entryIncompatible": "Este modelo no está disponible en este sistema.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

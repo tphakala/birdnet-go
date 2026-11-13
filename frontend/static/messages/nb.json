@@ -5833,6 +5833,11 @@
         "cardNotice": "Forhåndsvisning for utviklere, ikke den endelige utgivelsen. Dette er et tidlig bygg for testing; resultatene kan endre seg før den stabile versjonen.",
         "dialogNotice": "Du installerer en forhåndsvisning for utviklere ({build}). Fin til å prøve ut, men anbefales ikke som din eneste klassifikator ennå."
       },
+      "experimental": {
+        "badge": "Eksperimentell",
+        "cardNotice": "Eksperimentell i BirdNET-Go. Modellen er utgitt, men ytelsen i BirdNET-Go er ennå ikke bevist, så resultatene kan være mindre pålitelige.",
+        "dialogNotice": "Du installerer en modell som er eksperimentell i BirdNET-Go. Ytelsen er ennå ikke bevist, så kontroller registreringene før du stoler på dem."
+      },
       "entryIncompatible": "Denne modellen er ikke tilgjengelig på dette systemet.",
       "regionGlobal": "Global",
       "hardwareLabel": "Maskinvare",
