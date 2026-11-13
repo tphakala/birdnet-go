@@ -20,10 +20,16 @@ vi.mock('./lib/utils/logger', async importOriginal => {
 });
 
 // The state the mocked initApp leaves behind; a test changes it before rendering.
-const startup = vi.hoisted(() => ({
-  security: { enabled: false, accessAllowed: true, privateMode: false },
-  error: null as string | null,
-}));
+const startup = vi.hoisted(() => {
+  const state: {
+    security: { enabled: boolean; accessAllowed: boolean; privateMode: boolean };
+    error: string | null;
+  } = {
+    security: { enabled: false, accessAllowed: true, privateMode: false },
+    error: null,
+  };
+  return state;
+});
 
 vi.mock('./lib/stores/appState.svelte', async importOriginal => {
   const original = await importOriginal<typeof import('./lib/stores/appState.svelte')>();
