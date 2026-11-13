@@ -78,4 +78,12 @@ describe('SystemHealth tile numerals', () => {
       expect(zero).not.toHaveClass(token);
     }
   );
+
+  it('colours the Healthy numeral with the success text token', async () => {
+    mocks.post.mockResolvedValue(report({ healthy: TOTAL_CHECKS }));
+    render(SystemHealth);
+
+    const numeral = await loadedNumeral('health.summary.healthy', TOTAL_CHECKS);
+    expect(numeral).toHaveClass('text-[var(--text-success)]');
+  });
 });
