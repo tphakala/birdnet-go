@@ -1288,6 +1288,22 @@ describe('Modal', () => {
         expect(document.body).toHaveFocus();
       });
 
+      it('keeps the earlier opener when reopened with focus on a control of its own dialog', async () => {
+        renderTyped(ModalToggleHost, {});
+        button('Page button').focus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+        await press('Toggle lower');
+        // The closed dialog stays in the page; focus can be left on one of its controls
+        screen.getByRole('button', { name: 'Lower action', hidden: true }).focus();
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(button('Page button')).toHaveFocus();
+      });
+
       it('does not take plain content inside a tabindex=-1 wrapper as the opener', async () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));
