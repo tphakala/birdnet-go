@@ -152,18 +152,38 @@ describe('SystemInference', () => {
     cleanup();
   });
 
-  it('shows a loading indicator while the snapshot request is pending', async () => {
+  it('shows a card skeleton, not a spinner, while the snapshot request is pending', async () => {
     // Never-resolving snapshot request keeps the view in its loading state.
     apiGet.mockImplementation(() => new Promise(() => {}));
 
     const { container } = inferenceTest.render({});
 
-    await waitFor(() => {
-      const status = container.querySelector('[role="status"]');
-      expect(status).not.toBeNull();
-    });
+    const skeleton = container.querySelector<HTMLElement>('[data-testid="inference-skeleton"]');
+    expect(skeleton).not.toBeNull();
+    expect(container.querySelector('.animate-spin')).toBeNull();
+
+    // One polite status region whose label is visible text, not screen reader only.
     // The mocked i18n returns the key when no translation is registered.
-    expect(container.textContent).toContain('system.inference.loading');
+    expect(skeleton?.getAttribute('role')).toBe('status');
+    const label = Array.from(skeleton?.querySelectorAll('*') ?? []).find(
+      el => el.children.length === 0 && el.textContent === 'system.inference.loading'
+    );
+    expect(label).toBeDefined();
+    expect(label?.closest('.sr-only')).toBeNull();
+
+    // Every placeholder bar is hidden from assistive technology and stops pulsing under
+    // reduced motion; the label stays exposed.
+    const bars = Array.from(skeleton?.querySelectorAll('.animate-pulse') ?? []);
+    expect(bars.length).toBeGreaterThan(0);
+    for (const bar of bars) {
+      expect(bar.getAttribute('aria-hidden')).toBe('true');
+      expect(bar.classList.contains('motion-reduce:animate-none')).toBe(true);
+      // jsdom has no layout, so pin the classes that let a bar shrink inside a narrow card
+      expect(bar.classList.contains('max-w-full')).toBe(true);
+      expect(bar.classList.contains('min-w-0')).toBe(true);
+      expect(bar.contains(label ?? null)).toBe(false);
+    }
+    expect(label?.closest('[aria-hidden="true"]')).toBeNull();
   });
 
   it('renders the empty state when the snapshot has no models', async () => {
@@ -173,6 +193,7 @@ describe('SystemInference', () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain('system.inference.noModels');
+      expect(container.querySelector('[data-testid="inference-skeleton"]')).toBeNull();
     });
     // No model cards: the empty-state message stands alone.
     expect(container.textContent).not.toContain('system.inference.invocations');
