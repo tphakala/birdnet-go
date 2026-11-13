@@ -168,6 +168,24 @@ describe('App document title', () => {
     expect(document.title).toBe(APP_NAME);
   });
 
+  it('shows only the app name while the app is loading again', async () => {
+    navigation.redirect(DASHBOARD_PATH);
+    renderTyped(App);
+    await waitFor(() => expect(document.title).toBe(`[navigation.dashboard] - ${APP_NAME}`));
+
+    appState.loading = true;
+    await waitFor(() => expect(document.title).toBe(APP_NAME));
+  });
+
+  it('titles the login screen when the app failed to load for a visitor who is not allowed in', async () => {
+    startup.security = { enabled: true, accessAllowed: false, privateMode: true };
+    startup.error = INIT_ERROR;
+    navigation.redirect(DASHBOARD_PATH);
+    renderTyped(App);
+    await waitFor(() => expect(appState.error).toBe(INIT_ERROR));
+    await waitFor(() => expect(document.title).toBe(`[auth.loginTitle] - ${APP_NAME}`));
+  });
+
   it('keeps the error code in the title of a generic error page', async () => {
     // The test environment replaces window.location with a plain object, which App reads.
     window.location.search = `?error=${ERROR_CODE}`;
