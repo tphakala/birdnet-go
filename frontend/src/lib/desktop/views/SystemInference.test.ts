@@ -178,6 +178,9 @@ describe('SystemInference', () => {
     for (const bar of bars) {
       expect(bar.getAttribute('aria-hidden')).toBe('true');
       expect(bar.classList.contains('motion-reduce:animate-none')).toBe(true);
+      // jsdom has no layout, so pin the classes that let a bar shrink inside a narrow card
+      expect(bar.classList.contains('max-w-full')).toBe(true);
+      expect(bar.classList.contains('min-w-0')).toBe(true);
       expect(bar.contains(label ?? null)).toBe(false);
     }
     expect(label?.closest('[aria-hidden="true"]')).toBeNull();

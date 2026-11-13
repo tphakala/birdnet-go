@@ -14,7 +14,8 @@
 
   const CARD_CLASS =
     'bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm';
-  const BAR_CLASS = 'rounded bg-[var(--color-base-300)] animate-pulse motion-reduce:animate-none';
+  const BAR_CLASS =
+    'min-w-0 max-w-full rounded bg-[var(--color-base-300)] animate-pulse motion-reduce:animate-none';
   /** Value widths for the hardware rows, varied so the bars do not read as a table. */
   const HARDWARE_VALUE_WIDTHS = ['w-56', 'w-48', 'w-40', 'w-12', 'w-16', 'w-32'];
 </script>
@@ -41,7 +42,7 @@
     <!-- Hardware -->
     <div class={CARD_CLASS}>
       {@render bar('h-3 w-24 mb-3')}
-      <div class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2.5">
+      <div class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5">
         {#each HARDWARE_VALUE_WIDTHS as width (width)}
           {@render bar('h-4 w-28')}
           {@render bar(`h-4 ${width}`)}
@@ -86,18 +87,23 @@
         {@render bar('h-10 w-full')}
       </div>
 
-      <!-- Last heard: two columns of rows -->
+      <!-- Last heard: title, hint, then two columns of rows. The rows keep the loaded
+           feed's minimum height so the cards below do not jump when it fills in. -->
       <div class="space-y-2">
         {@render bar('h-3 w-24')}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-2">
+        {@render bar('h-2.5 w-3/4')}
+        <div class="grid min-h-[12rem] grid-cols-1 content-start lg:grid-cols-2 gap-x-6 gap-y-2">
           <div class="space-y-2">{@render bars(4, 'h-3 w-full')}</div>
           <div class="space-y-2">{@render bars(4, 'h-3 w-full')}</div>
         </div>
       </div>
 
-      <!-- Approx RAM and sources -->
+      <!-- Approx RAM, then the sources label and chips -->
       {@render bar('h-3 w-40')}
-      <div class="flex gap-1.5">{@render bars(2, 'h-5 w-28 rounded-full')}</div>
+      <div class="space-y-1">
+        {@render bar('h-3 w-16')}
+        <div class="flex gap-1.5">{@render bars(2, 'h-5 w-28 rounded-full')}</div>
+      </div>
     </div>
   </div>
 </div>
