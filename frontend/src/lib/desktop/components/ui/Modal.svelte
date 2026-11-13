@@ -122,9 +122,6 @@
     return key !== null && key === radioGroupKey(b);
   }
 
-  // Elements a press can land on that take focus: the opener candidates
-  const PRESSABLE_SELECTOR = 'button, a[href], input, select, textarea, summary, [tabindex]';
-
   // The focusable element of the last press, while focus has not moved since and no press
   // landed on plain content after it. Safari and iPadOS do not focus a clicked button, so
   // document.activeElement is body when a dialog opens from one; this is then the opener.
@@ -137,7 +134,7 @@
         const target = event.target;
         pressedElement =
           target instanceof HTMLElement || target instanceof SVGElement
-            ? target.closest<HTMLElement | SVGElement>(PRESSABLE_SELECTOR)
+            ? target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR)
             : null;
       },
       true
