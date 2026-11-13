@@ -24,13 +24,13 @@
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
+  import { textColorFor } from '$lib/utils/statusTextColor';
   import type {
     HealthStatus,
     HealthCategory,
     DiagnosticsResult,
     DiagnosticsReport,
   } from '$lib/types/diagnostics.types';
-  import { textColorFor } from '$lib/utils/statusTextColor';
 
   interface SparklineBucket {
     t: string;
