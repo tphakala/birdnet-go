@@ -160,13 +160,13 @@
         </div>
         <div class="flex items-center gap-1">
           {#if status === 'connected'}
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium"
+            <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
+            <span class="text-xs text-[var(--text-success)] font-medium"
               >{t('system.database.stats.connected')}</span
             >
           {:else}
-            <span class="w-2 h-2 rounded-full bg-red-500"></span>
-            <span class="text-xs text-red-600 dark:text-red-400 font-medium"
+            <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
+            <span class="text-xs text-[var(--text-error)] font-medium"
               >{t('system.database.stats.disconnected')}</span
             >
           {/if}

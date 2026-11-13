@@ -758,8 +758,8 @@
     <div class="flex flex-col items-center justify-center h-full gap-4">
       <WifiOff class="size-12 opacity-60" />
       <div class="text-center">
-        <p class="text-lg font-medium opacity-60">{t('terminal.disabled')}</p>
-        <p class="text-sm mt-1 opacity-60">{t('terminal.disabledDescription')}</p>
+        <p class="text-lg font-medium text-muted">{t('terminal.disabled')}</p>
+        <p class="text-sm mt-1 text-muted">{t('terminal.disabledDescription')}</p>
         <a
           href={buildAppUrl(SETTINGS_ROUTES.securityTerminal)}
           onclick={handleAppLinkClick}
@@ -771,7 +771,7 @@
     </div>
   {:else if isDetached}
     <!-- Detached state - terminal is in a separate window -->
-    <div class="flex flex-col items-center justify-center h-full gap-4 opacity-60">
+    <div class="flex flex-col items-center justify-center h-full gap-4 text-muted">
       <ExternalLink class="size-12" />
       <div class="text-center">
         <p class="text-lg font-medium">{t('terminal.detached')}</p>
@@ -822,8 +822,8 @@
               role="status"
               aria-live="polite"
               class="text-xs font-medium {isConnected
-                ? 'text-[var(--color-success)]'
-                : 'text-[var(--color-error)]'}"
+                ? 'text-[var(--text-success)]'
+                : 'text-[var(--text-error)]'}"
             >
               {statusMessage}
             </span>

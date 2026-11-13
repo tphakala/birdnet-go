@@ -132,6 +132,17 @@ describe('ImportActivityCard', () => {
     expect(MockReconnectingEventSource).not.toHaveBeenCalled();
   });
 
+  it('keeps the empty state title at full strength above its muted description', async () => {
+    vi.mocked(api.get).mockResolvedValue(idleStatus);
+    renderCard();
+
+    const title = await screen.findByText('system.importExport.activity.empty.title');
+    expect(title.className).not.toMatch(/\/\d+/);
+    expect(screen.getByText('system.importExport.activity.empty.description')).toHaveClass(
+      'text-muted'
+    );
+  });
+
   it('shows progress and subscribes to the SSE stream while running', async () => {
     vi.mocked(api.get).mockResolvedValue(runningStatus);
     renderCard();

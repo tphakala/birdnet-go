@@ -35,11 +35,11 @@
   <div class="flex flex-wrap gap-3">
     <button
       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-             bg-amber-500/15 text-amber-700 dark:text-amber-300
-             border border-amber-500/30
-             hover:bg-amber-500/25 active:bg-amber-500/35
+             bg-[var(--color-warning)]/15 text-[var(--text-warning)]
+             border border-[var(--color-warning)]/30
+             hover:bg-[var(--color-warning)]/25 active:bg-[var(--color-warning)]/30
              disabled:opacity-50 disabled:cursor-not-allowed
-             focus-visible:ring-2 focus-visible:ring-amber-500/50
+             focus-visible:ring-2 focus-visible:ring-[var(--color-warning)]/50
              transition-colors cursor-pointer"
       disabled={restartInProgress.value}
       onclick={() => (confirmType = 'binary')}
@@ -51,11 +51,11 @@
     {#if restartState.container_restart_available}
       <button
         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-               bg-red-500/15 text-red-700 dark:text-red-300
-               border border-red-500/30
-               hover:bg-red-500/25 active:bg-red-500/35
+               bg-[var(--color-error)]/15 text-[var(--text-error)]
+               border border-[var(--color-error)]/30
+               hover:bg-[var(--color-error)]/25 active:bg-[var(--color-error)]/30
                disabled:opacity-50 disabled:cursor-not-allowed
-               focus-visible:ring-2 focus-visible:ring-red-500/50
+               focus-visible:ring-2 focus-visible:ring-[var(--color-error)]/50
                transition-colors cursor-pointer"
         disabled={restartInProgress.value}
         onclick={() => (confirmType = 'container')}

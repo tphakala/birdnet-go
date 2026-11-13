@@ -213,13 +213,13 @@
 <Card>
   <h3
     id="import-activity-heading"
-    class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60 mb-3"
+    class="text-xs font-semibold uppercase tracking-wider text-muted mb-3"
   >
     {t('system.importExport.activity.sectionTitle')}
   </h3>
 
   {#if view === 'loading'}
-    <div class="flex items-center gap-2 text-sm text-[var(--color-base-content)]/60">
+    <div class="flex items-center gap-2 text-sm text-muted">
       <LoadingSpinner size="sm" />
       {t('system.importExport.loading')}
     </div>
@@ -232,7 +232,7 @@
         <span class="text-sm font-medium text-[var(--color-base-content)]">
           {t('system.importExport.progress.runningLabel')}
           {#if progress?.phase && progress.phase !== 'done'}
-            <span class="text-[var(--color-base-content)]/60">
+            <span class="text-muted">
               - {t(`system.importExport.progress.phase.${progress.phase}`)}
             </span>
           {/if}
@@ -276,13 +276,13 @@
     <div class="space-y-4">
       <div class="flex items-center gap-2">
         {#if finalKind === 'success'}
-          <CheckCircle2 class="size-5 text-[var(--color-success)]" aria-hidden="true" />
+          <CheckCircle2 class="size-5 text-[var(--text-success)]" aria-hidden="true" />
         {:else if finalKind === 'cancelled'}
-          <CircleSlash class="size-5 text-[var(--color-base-content)]/50" aria-hidden="true" />
+          <CircleSlash class="size-5 text-muted" aria-hidden="true" />
         {:else if finalKind === 'interrupted'}
-          <Unplug class="size-5 text-[var(--color-warning)]" aria-hidden="true" />
+          <Unplug class="size-5 text-[var(--text-warning)]" aria-hidden="true" />
         {:else}
-          <XCircle class="size-5 text-[var(--color-error)]" aria-hidden="true" />
+          <XCircle class="size-5 text-[var(--text-error)]" aria-hidden="true" />
         {/if}
         <span class="text-sm font-medium text-[var(--color-base-content)]">
           {t(doneTitleKey(finalKind))}
@@ -303,7 +303,7 @@
         </div>
       {/if}
       {#if finalKind === 'interrupted'}
-        <p class="text-sm text-[var(--color-base-content)]/70">
+        <p class="text-sm text-muted">
           {t('system.importExport.done.interruptedDescription')}
         </p>
       {/if}
@@ -318,11 +318,11 @@
     </div>
   {:else}
     <div class="flex flex-col items-center text-center py-6 gap-2">
-      <Activity class="size-8 text-[var(--color-base-content)]/25" aria-hidden="true" />
-      <p class="text-sm font-medium text-[var(--color-base-content)]/70">
+      <Activity class="size-8 text-muted" aria-hidden="true" />
+      <p class="text-sm font-medium text-[var(--color-base-content)]">
         {t('system.importExport.activity.empty.title')}
       </p>
-      <p class="text-xs text-[var(--color-base-content)]/50 max-w-48">
+      <p class="text-xs text-muted max-w-48">
         {t('system.importExport.activity.empty.description')}
       </p>
     </div>

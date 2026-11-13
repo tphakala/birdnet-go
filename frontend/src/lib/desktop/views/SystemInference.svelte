@@ -879,7 +879,7 @@
                 <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
               {:else if !vad.available}
                 <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                <span class="text-xs text-amber-700 dark:text-amber-400"
+                <span class="text-xs text-[var(--text-warning)]"
                   >{t('system.inference.vad.unavailable')}</span
                 >
               {:else if vad.loaded}
@@ -887,7 +887,7 @@
                   class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
                   aria-hidden="true"
                 />
-                <span class="text-xs text-green-600 dark:text-green-400"
+                <span class="text-xs text-[var(--text-success)]"
                   >{t('system.inference.vad.active')}</span
                 >
               {:else}
@@ -1069,7 +1069,7 @@
                     title={t('system.inference.sourcesDegradedTooltip')}
                   >
                     <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                    <span class="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <span class="text-xs font-medium text-[var(--text-warning)]">
                       {t('system.inference.sourcesDegraded', {
                         count: downCount,
                         total: model.sources.length,
@@ -1104,7 +1104,7 @@
                     title={t('system.inference.pausedScheduleHelp')}
                   >
                     <Pause class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                    <span class="text-xs text-amber-700 dark:text-amber-400">
+                    <span class="text-xs text-[var(--text-warning)]">
                       {t('system.inference.paused')}{#if model.scheduleLabel}<span
                           class="text-muted">&nbsp;({model.scheduleLabel})</span
                         >{/if}
@@ -1146,7 +1146,7 @@
                         class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
-                      <span class="text-xs text-green-600 dark:text-green-400"
+                      <span class="text-xs text-[var(--text-success)]"
                         >{t('system.inference.active')}</span
                       >
                     {:else}
