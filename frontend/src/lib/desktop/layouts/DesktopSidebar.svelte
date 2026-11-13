@@ -585,7 +585,7 @@ Performance Optimizations:
         {#if !isCollapsed}
           <button
             onclick={toggleSidebar}
-            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
+            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-muted hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
             aria-label={t('navigation.collapseSidebar')}
             title={t('navigation.collapseSidebar')}
           >
@@ -597,7 +597,7 @@ Performance Optimizations:
       {#if isCollapsed}
         <button
           onclick={toggleSidebar}
-          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
+          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-muted hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
           aria-label={t('navigation.expandSidebar')}
           title={t('navigation.expandSidebar')}
         >

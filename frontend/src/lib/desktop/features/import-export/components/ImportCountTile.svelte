@@ -18,11 +18,11 @@
       case 'default':
         return 'text-[var(--color-base-content)]';
       case 'muted':
-        return 'text-[var(--color-base-content)]/60';
+        return 'text-muted';
       case 'success':
-        return 'text-[var(--color-success)]';
+        return 'text-[var(--text-success)]';
       case 'error':
-        return 'text-[var(--color-error)]';
+        return 'text-[var(--text-error)]';
     }
   }
 
@@ -52,7 +52,7 @@
   <div class="{valueClass(size)} {toneClass(tone)}">
     {formatNumber(value)}
   </div>
-  <div class="text-xs text-[var(--color-base-content)]/60">
+  <div class="text-xs text-muted">
     {label}
   </div>
 </div>

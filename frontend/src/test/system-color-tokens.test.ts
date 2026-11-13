@@ -14,12 +14,16 @@
  * 3. a `--color-<palette>-<shade>` variable (text-[var(--color-red-500)]);
  * 4. a status fill used as text (text-[var(--color-success|warning|error|info)]): the fills are
  *    for backgrounds, borders and dots, the text tokens are --text-success and its siblings;
- * 5. faded body text: text-[var(--color-base-content)]/NN, text-base-content/NN or a plain
- *    opacity-NN with NN under FADED_TEXT_MIN_PERCENT, which drops muted text below 4.5:1 (use
- *    text-muted). Variant forms such as disabled:opacity-50 pass: they style a disabled
- *    control, which WCAG exempts;
+ * 5. faded body text: text-[var(--color-base-content)]/NN, text-base-content/NN, opacity-NN,
+ *    opacity-[0.NN] or a literal opacity in a style, with NN under FADED_TEXT_MIN_PERCENT, which
+ *    drops muted text below 4.5:1 (use text-muted). Only the disabled: and aria-disabled:
+ *    variants pass: they style a disabled control, which WCAG exempts. Any other variant
+ *    (dark:, hover:, md:) styles an enabled state and is flagged;
  * 6. a status fill reaching the text through a style: `style:color` that is not a text token, base
  *    content or textColorFor(...), and `color: var(--color-success|warning|error|info)`.
+ *
+ * Comments (HTML, block and line) are removed before scanning, so prose may name a hex or a
+ * utility.
  *
  * Not scanned: white, black, transparent, colour functions (rgb(), hsl(), oklch()), CSS
  * named colours, and any file not in the list.
@@ -37,6 +41,7 @@ const MIGRATED_FILES = [
   'lib/desktop/features/system/components/DatabaseSqliteDetails.svelte',
   'lib/desktop/features/import-export/pages/ImportExportPage.svelte',
   'lib/desktop/features/import-export/components/ImportActivityCard.svelte',
+  'lib/desktop/features/import-export/components/ImportCountTile.svelte',
   'lib/desktop/features/system/components/RestartCard.svelte',
 ];
 
@@ -90,28 +95,83 @@ const STYLE_COLOR_NOT_TOKEN =
   /style:color=(?:\{(?!textColorFor\()|["'](?!var\(--(?:text-|color-base-content)))/g;
 // color: var(--color-success) in a style attribute (background-color does not match)
 const STYLE_COLOR_FILL = /(?<![\w-])color:\s*var\(--color-(?:success|warning|error|info)\)/g;
-// Unprefixed faded text: base-content with an opacity suffix, or a plain opacity utility (also as
-// a Svelte class: directive). A variant prefix (disabled:, hover:) does not match.
-const FADED_BASE_CONTENT =
-  /(?<![\w:-])text-(?:\[var\(--color-base-content\)\]|base-content)\/(\d{1,3})(?![\d%])/g;
-const FADED_OPACITY = /(?:(?<![\w:-])|(?<=\bclass:))opacity-(\d{1,3})(?![\d%])/g;
+// Faded text, three forms sharing the groups variants (optional), value and unit (optional):
+// base-content with an opacity suffix or an opacity utility (also as a Svelte class: directive),
+// whose bare value is a percent; opacity-[0.5] or opacity-[50%]; and a literal opacity in a style
+// (style:opacity="0.5", style="opacity: .5"), where a bare value is a fraction. Only disabled and
+// aria-disabled variants are exempt, see isDisabledVariant.
+const FADED_VARIANTS = String.raw`(?<variants>(?:[^\s:"'{}]+:)*)`;
+const FADED_FORMS: { pattern: RegExp; bareValueIsPercent: boolean }[] = [
+  {
+    pattern: new RegExp(
+      String.raw`(?<![\w:-])${FADED_VARIANTS}(?:text-(?:\[var\(--color-base-content\)\]|base-content)\/|opacity-)(?<value>\d{1,3})(?![\d%])`,
+      'g'
+    ),
+    bareValueIsPercent: true,
+  },
+  {
+    pattern: new RegExp(
+      String.raw`(?<![\w:-])${FADED_VARIANTS}opacity-\[(?<value>\d*\.?\d+)(?<unit>%?)\]`,
+      'g'
+    ),
+    bareValueIsPercent: false,
+  },
+  {
+    pattern: /(?<![\w-])(?:style:opacity=["{]?|opacity:\s*)(?<value>\d*\.?\d+)(?<unit>%?)/g,
+    bareValueIsPercent: false,
+  },
+];
+const DISABLED_VARIANT = /(?:^|:)(?:aria-)?disabled:/;
+const PERCENT_PER_FRACTION = 100;
+
+/** True when the variants include disabled: or aria-disabled:, which WCAG exempts from contrast. */
+function isDisabledVariant(variants = ''): boolean {
+  return DISABLED_VARIANT.test(variants);
+}
+
+/** The opacity as a percent: a % unit or a percent-valued form is taken as is, else a fraction. */
+function percentOf(value: string, unit = '', bareValueIsPercent: boolean): number {
+  return unit || bareValueIsPercent ? Number(value) : Number(value) * PERCENT_PER_FRACTION;
+}
+
+/** True when a fade at this percent is visible text that drops below the contrast minimum. */
+function isTooFaded(percent: number): boolean {
+  return percent > 0 && percent < FADED_TEXT_MIN_PERCENT;
+}
+
+/** Removes HTML, block and line comments, keeping every newline so line numbers stay true. */
+function stripComments(source: string): string {
+  const blank = (comment: string) => comment.replace(/[^\n]/g, '');
+  return source
+    .replace(/<!--[\s\S]*?-->/g, blank)
+    .replace(/\/\*[\s\S]*?\*\//g, blank)
+    .replace(/(?<![:\w])\/\/.*$/gm, '');
+}
 
 /** Colors written outside the tokens, with their line numbers. */
 function findRawColors(source: string): string[] {
   const hits: string[] = [];
-  source.split('\n').forEach((line, index) => {
-    for (const match of line.matchAll(HEX_COLOR)) hits.push(`${index + 1}: ${match[0]}`);
-    for (const match of line.matchAll(PALETTE_CLASS)) hits.push(`${index + 1}: ${match[0]}`);
-    for (const match of line.matchAll(PALETTE_VAR)) hits.push(`${index + 1}: ${match[0]}`);
-    for (const match of line.matchAll(STATUS_FILL_TEXT)) hits.push(`${index + 1}: ${match[0]}`);
-    for (const match of line.matchAll(STYLE_COLOR_NOT_TOKEN))
-      hits.push(`${index + 1}: ${match[0]}`);
-    for (const match of line.matchAll(STYLE_COLOR_FILL)) hits.push(`${index + 1}: ${match[0]}`);
-    for (const match of [...line.matchAll(FADED_BASE_CONTENT), ...line.matchAll(FADED_OPACITY)]) {
-      const percent = Number(match[1]);
-      if (percent > 0 && percent < FADED_TEXT_MIN_PERCENT) hits.push(`${index + 1}: ${match[0]}`);
-    }
-  });
+  stripComments(source)
+    .split('\n')
+    .forEach((line, index) => {
+      for (const match of line.matchAll(HEX_COLOR)) hits.push(`${index + 1}: ${match[0]}`);
+      for (const match of line.matchAll(PALETTE_CLASS)) hits.push(`${index + 1}: ${match[0]}`);
+      for (const match of line.matchAll(PALETTE_VAR)) hits.push(`${index + 1}: ${match[0]}`);
+      for (const match of line.matchAll(STATUS_FILL_TEXT)) hits.push(`${index + 1}: ${match[0]}`);
+      for (const match of line.matchAll(STYLE_COLOR_NOT_TOKEN))
+        hits.push(`${index + 1}: ${match[0]}`);
+      for (const match of line.matchAll(STYLE_COLOR_FILL)) hits.push(`${index + 1}: ${match[0]}`);
+      for (const { pattern, bareValueIsPercent } of FADED_FORMS) {
+        for (const match of line.matchAll(pattern)) {
+          const { variants, value, unit } = match.groups ?? {};
+          if (
+            !isDisabledVariant(variants) &&
+            isTooFaded(percentOf(value, unit, bareValueIsPercent))
+          )
+            hits.push(`${index + 1}: ${match[0]}`);
+        }
+      }
+    });
   return hits;
 }
 
@@ -152,6 +212,17 @@ describe('System page colors', () => {
     ['base content theme utility faded', 'class="text-base-content/60"'],
     ['faded text by opacity utility', 'class="text-xs opacity-60 truncate"'],
     ['a faded Svelte class directive', 'class:opacity-40={count === 0}'],
+    ['a faded dark variant', 'class="dark:opacity-50"'],
+    ['a faded variant on base content', 'class="dark:text-base-content/50"'],
+    ['a faded variant stack', 'class="dark:hover:opacity-30"'],
+    ['an arbitrary fraction opacity', 'class="opacity-[0.5]"'],
+    ['an arbitrary leading dot opacity', 'class="opacity-[.4]"'],
+    ['an arbitrary percent opacity', 'class="opacity-[50%]"'],
+    ['an arbitrary opacity behind a variant', 'class="dark:opacity-[0.5]"'],
+    ['a style directive opacity', 'style:opacity="0.5"'],
+    ['a style directive expression opacity', 'style:opacity={0.4}'],
+    ['a style attribute opacity', 'style="opacity: 0.5"'],
+    ['a style attribute percent opacity', 'style="opacity: 50%"'],
   ])('flags %s', (_name, source) => {
     expect(findRawColors(source)).toHaveLength(1);
   });
@@ -181,6 +252,16 @@ describe('System page colors', () => {
     ['a status text token', 'class="text-[var(--text-success)] text-[var(--text-warning)]"'],
     ['text at the faded limit', 'class="text-[var(--color-base-content)]/70 opacity-70"'],
     ['a variant opacity', 'class="disabled:opacity-50 hover:opacity-80 opacity-100"'],
+    ['an aria-disabled opacity', 'class="aria-disabled:opacity-50"'],
+    ['a disabled opacity behind another variant', 'class="hover:disabled:opacity-50"'],
+    ['an arbitrary opacity at the limit', 'class="opacity-[0.7] opacity-[70%]"'],
+    ['a disabled arbitrary opacity', 'class="disabled:opacity-[0.4]"'],
+    ['a style opacity at the limit', 'style="opacity: 0.7" style:opacity={1}'],
+    ['a transition on opacity', 'style="transition: opacity 0.3s"'],
+    ['a hex in an HTML comment', '<!-- was #f59e0b, text-slate-500 -->'],
+    ['a hex in a block comment', '/* was #f59e0b, opacity-50 */'],
+    ['a hex in a multi line block comment', '/*\n * text-red-500\n */'],
+    ['a palette class in a line comment', '// was text-amber-400'],
     ['a hidden element', 'class="opacity-0"'],
   ])('passes %s', (_name, source) => {
     expect(findRawColors(source)).toEqual([]);

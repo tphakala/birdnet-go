@@ -303,7 +303,7 @@
         </div>
       {/if}
       {#if finalKind === 'interrupted'}
-        <p class="text-sm text-[var(--color-base-content)]/70">
+        <p class="text-sm text-muted">
           {t('system.importExport.done.interruptedDescription')}
         </p>
       {/if}

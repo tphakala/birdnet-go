@@ -24,6 +24,7 @@
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
+  import { textColorFor } from '$lib/utils/statusTextColor';
 
   type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
   type HealthCategory =
@@ -220,17 +221,6 @@
       default:
         return 'var(--color-base-content)';
     }
-  }
-
-  /** The text token for a status fill: badge text uses it, the tinted background keeps the fill. */
-  const TEXT_TOKEN_FOR_FILL: Record<string, string> = {
-    'var(--color-error)': 'var(--text-error)',
-    'var(--color-warning)': 'var(--text-warning)',
-    'var(--color-success)': 'var(--text-success)',
-  };
-
-  function textColorFor(fill: string): string {
-    return TEXT_TOKEN_FOR_FILL[fill] ?? fill;
   }
 
   function formatTimeAgo(isoTime: string): string {
@@ -788,7 +778,7 @@
                         <Clock class="size-3.5 text-muted" />
                         <span class="text-xs font-medium">
                           {t('health.detail.lastEvent')}:
-                          <span class="opacity-70" title={String(result.details.last_event)}>
+                          <span class="text-muted" title={String(result.details.last_event)}>
                             {formatTimeAgo(String(result.details.last_event))}
                           </span>
                         </span>
