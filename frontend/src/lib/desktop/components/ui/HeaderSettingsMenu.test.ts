@@ -67,45 +67,42 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
   describe('focus after the Reset Dashboard confirmation closes', () => {
     const CANCEL_LABEL = t('common.buttons.cancel');
 
-    async function openConfirmFrom(press: (item: HTMLElement) => Promise<void>) {
-      const menu = await renderAndOpen({ securityEnabled: false });
-      await press(menu.getByText(RESET_LABEL).closest('button') as HTMLButtonElement);
-      return screen.getByRole('button', { name: MENU_LABEL });
+    async function pressWithKeyboard(item: HTMLElement) {
+      item.focus();
+      await fireEvent.click(item);
+    }
+
+    // Safari and iPadOS do not focus a pressed button
+    async function pressWithoutFocus(item: HTMLElement) {
+      await fireEvent.pointerDown(item);
+      await fireEvent.click(item);
+    }
+
+    async function dismissWithCancel() {
+      await fireEvent.click(await screen.findByRole('button', { name: CANCEL_LABEL }));
+    }
+
+    async function dismissWithEscape() {
+      await screen.findByRole('button', { name: CANCEL_LABEL });
+      await fireEvent.keyDown(document, { key: 'Escape' });
     }
 
     it.each([
-      [
-        'keyboard activation',
-        async (item: HTMLElement) => {
-          item.focus();
-          await fireEvent.click(item);
-        },
-      ],
-      [
-        'a press that does not focus the item (Safari)',
-        async (item: HTMLElement) => {
-          await fireEvent.pointerDown(item);
-          await fireEvent.click(item);
-        },
-      ],
-    ])('returns to the settings menu button when cancelled after %s', async (_name, press) => {
-      const trigger = await openConfirmFrom(press);
+      ['keyboard activation', pressWithKeyboard, 'Cancel', dismissWithCancel],
+      ['keyboard activation', pressWithKeyboard, 'Escape', dismissWithEscape],
+      ['a press that does not focus the item', pressWithoutFocus, 'Cancel', dismissWithCancel],
+      ['a press that does not focus the item', pressWithoutFocus, 'Escape', dismissWithEscape],
+    ])(
+      'returns to the settings menu button after %s and %s',
+      async (_press, press, _dismiss, dismiss) => {
+        const menu = await renderAndOpen({ securityEnabled: false });
+        await press(menu.getByText(RESET_LABEL).closest('button') as HTMLButtonElement);
+        const trigger = screen.getByRole('button', { name: MENU_LABEL });
 
-      await fireEvent.click(await screen.findByRole('button', { name: CANCEL_LABEL }));
+        await dismiss();
 
-      await waitFor(() => expect(trigger).toHaveFocus());
-    });
-
-    it('returns to the settings menu button when dismissed with Escape', async () => {
-      const trigger = await openConfirmFrom(async item => {
-        item.focus();
-        await fireEvent.click(item);
-      });
-      await screen.findByRole('button', { name: CANCEL_LABEL });
-
-      await fireEvent.keyDown(document, { key: 'Escape' });
-
-      await waitFor(() => expect(trigger).toHaveFocus());
-    });
+        await waitFor(() => expect(trigger).toHaveFocus());
+      }
+    );
   });
 });
