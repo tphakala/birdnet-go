@@ -70,7 +70,10 @@
     type CadenceReadoutRow,
   } from '$lib/desktop/features/settings/utils/fpCadence';
   import ModelCardGrid from '$lib/desktop/features/settings/components/ModelCardGrid.svelte';
-  import type { ModelCardAction } from '$lib/desktop/features/settings/components/ModelCard.svelte';
+  import type {
+    ModelCardAction,
+    ModelCardMode,
+  } from '$lib/desktop/features/settings/components/ModelCard.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -204,14 +207,6 @@
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // One shared "any gallery action in flight" predicate. Install and reinstall
-  // share the single downloadProgress state and progressCleanup subscription, so
-  // starting a second action while one runs can strand the first's UI state; every
-  // action gate uses this rather than an ad-hoc subset of the three ids.
-  const galleryActionInFlight = $derived(
-    installingId !== null || reinstallingId !== null || deletingId !== null
-  );
-
   // The one gallery action running, with the card it runs on. The three ids are never
   // set together: every assignment sits behind a galleryActionInFlight guard.
   const activeGalleryAction = $derived.by(
@@ -222,6 +217,12 @@
       return null;
     }
   );
+
+  // One shared "any gallery action in flight" predicate. Install and reinstall
+  // share the single downloadProgress state and progressCleanup subscription, so
+  // starting a second action while one runs can strand the first's UI state; every
+  // action gate uses this rather than an ad-hoc subset of the three ids.
+  const galleryActionInFlight = $derived(activeGalleryAction !== null);
 
   // Shared DOM id for the "actions paused" status line rendered while any gallery
   // action is in flight. Every cross-action-disabled button points its
@@ -2599,6 +2600,23 @@
   </div>
 {/snippet}
 
+{#snippet galleryGrid(
+  entries: CatalogEntry[],
+  mode: ModelCardMode,
+  optimizeIds?: ReadonlySet<string>
+)}
+  <ModelCardGrid
+    {mode}
+    {entries}
+    regionNames={regionNameMap}
+    activeAction={activeGalleryAction}
+    progress={downloadProgress}
+    pausedReasonId={GALLERY_ACTION_STATUS_ID}
+    optimizeEntryIds={optimizeIds}
+    onAction={handleCardAction}
+  />
+{/snippet}
+
 {#snippet installedTabContent()}
   <div class="space-y-4">
     {#if loading}
@@ -2615,16 +2633,7 @@
            first and renders a built-in badge instead of Remove/Reinstall; every
            installed model with a better host-recommended variant shows an Optimize
            action. -->
-      <ModelCardGrid
-        mode="installed"
-        entries={installedEntries}
-        regionNames={regionNameMap}
-        activeAction={activeGalleryAction}
-        progress={downloadProgress}
-        pausedReasonId={GALLERY_ACTION_STATUS_ID}
-        {optimizeEntryIds}
-        onAction={handleCardAction}
-      />
+      {@render galleryGrid(installedEntries, 'installed', optimizeEntryIds)}
 
       {#if installedEntries.length === 0}
         <p class="py-4 text-center text-sm text-[var(--color-base-content)]/80">
@@ -2661,15 +2670,7 @@
               >
                 {t('analysis.gallery.categories.wildlife')}
               </h3>
-              <ModelCardGrid
-                mode="available"
-                entries={availableWildlife}
-                regionNames={regionNameMap}
-                activeAction={activeGalleryAction}
-                progress={downloadProgress}
-                pausedReasonId={GALLERY_ACTION_STATUS_ID}
-                onAction={handleCardAction}
-              />
+              {@render galleryGrid(availableWildlife, 'available')}
             </div>
           {/if}
 
@@ -2680,15 +2681,7 @@
               >
                 {t('analysis.gallery.categories.bird')}
               </h3>
-              <ModelCardGrid
-                mode="available"
-                entries={availableBirds}
-                regionNames={regionNameMap}
-                activeAction={activeGalleryAction}
-                progress={downloadProgress}
-                pausedReasonId={GALLERY_ACTION_STATUS_ID}
-                onAction={handleCardAction}
-              />
+              {@render galleryGrid(availableBirds, 'available')}
             </div>
           {/if}
 
@@ -2699,15 +2692,7 @@
               >
                 {t('analysis.gallery.categories.bat')}
               </h3>
-              <ModelCardGrid
-                mode="available"
-                entries={availableBats}
-                regionNames={regionNameMap}
-                activeAction={activeGalleryAction}
-                progress={downloadProgress}
-                pausedReasonId={GALLERY_ACTION_STATUS_ID}
-                onAction={handleCardAction}
-              />
+              {@render galleryGrid(availableBats, 'available')}
             </div>
           {/if}
         </div>
@@ -2719,15 +2704,7 @@
           <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
             {t('analysis.gallery.sections.geomodel')}
           </h2>
-          <ModelCardGrid
-            mode="available"
-            entries={availableGeomodels}
-            regionNames={regionNameMap}
-            activeAction={activeGalleryAction}
-            progress={downloadProgress}
-            pausedReasonId={GALLERY_ACTION_STATUS_ID}
-            onAction={handleCardAction}
-          />
+          {@render galleryGrid(availableGeomodels, 'available')}
         </div>
       {/if}
 
