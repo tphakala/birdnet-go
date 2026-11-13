@@ -244,7 +244,7 @@
     }
   }
 
-  /* Keyframes must be at top level — lightningcss (Vite 8 default CSS minifier)
+  /* Keyframes must be at top level: lightningcss (Vite 8 default CSS minifier)
      does not support @keyframes nested inside selector rule blocks */
   @keyframes fadeIn {
     from {
