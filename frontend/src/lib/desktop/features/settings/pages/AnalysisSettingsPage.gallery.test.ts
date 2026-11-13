@@ -714,4 +714,114 @@ describe('AnalysisSettingsPage model gallery cards', () => {
       expect(structure).toEqual(REGION_ROW_SELECTORS);
     }
   });
+
+  // A held action leaves its id set: the card it runs on shows the running label and the
+  // other card pauses. Install is started from the Available tab through the license dialog.
+  it.each([
+    ['remove', 'analysis.gallery.remove', 'analysis.gallery.removing'],
+    ['reinstall', 'analysis.gallery.reinstall', 'analysis.gallery.reinstalling'],
+    ['install', 'analysis.gallery.install', 'analysis.gallery.installing'],
+  ] as const)(
+    'marks the card whose %s runs and pauses the other card',
+    async (action, idleLabel, runningLabel) => {
+      const installed = action !== 'install';
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+        catalog: [
+          birdEntry({ id: 'first', name: 'First Model', installed }),
+          birdEntry({ id: 'second', name: 'Second Model', installed }),
+        ],
+      });
+      vi.mocked(modelsApi.uninstallModel).mockImplementation(() => new Promise<void>(() => {}));
+      vi.mocked(modelsApi.reinstallModel).mockImplementation(() => new Promise<void>(() => {}));
+      vi.mocked(modelsApi.installModel).mockImplementation(() => new Promise<void>(() => {}));
+
+      render(AnalysisSettingsPage);
+      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+      if (!installed) {
+        await fireEvent.click(
+          await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+        );
+      }
+      await fireEvent.click(
+        await screen.findByRole('button', { name: `${idleLabel} First Model` })
+      );
+      if (action === 'remove') {
+        // The dialog's own Remove carries no model name
+        await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+      } else if (action === 'install') {
+        await fireEvent.click(
+          await screen.findByRole('button', {
+            name: /analysis\.gallery\.license\.acceptAndInstall/,
+          })
+        );
+      }
+
+      const running = await screen.findByRole('button', { name: `${runningLabel} First Model` });
+      expect(running).toHaveAttribute('aria-disabled', 'true');
+      const other = screen.getByRole('button', { name: `${idleLabel} Second Model` });
+      expect(other).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByRole('button', { name: `${runningLabel} Second Model` })).toBeNull();
+    }
+  );
+
+  it('shows localized region names from the fetched regions on the Installed tab and in every Available section', async () => {
+    const variant = {
+      id: 'v-eu',
+      region: 'eu',
+      speciesCount: 10,
+      default: true,
+      installed: true,
+      sizeBytes: 1,
+      compatible: true,
+      recommended: true,
+    };
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+      modelRegion: 'auto',
+      locationConfigured: false,
+      resolved: { slug: '', source: 'global', ambiguous: false },
+      regions: [
+        {
+          slug: 'eu',
+          name: 'Europe',
+          group: 'europe',
+          groupDisplay: 'Europe',
+          tier: 1,
+          countries: { core: [], partial: [] },
+        },
+      ],
+      families: [],
+    });
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({
+          id: 'inst-eu',
+          name: 'Installed Regional',
+          installed: true,
+          variants: [variant],
+          installedVariantId: 'v-eu',
+        }),
+        ...(['wildlife', 'bird', 'bat', 'geomodel'] as const).map(category =>
+          birdEntry({
+            id: `avail-${category}`,
+            name: `Available ${category}`,
+            category,
+            variants: [{ ...variant, installed: false }],
+            recommendedVariantId: 'v-eu',
+          })
+        ),
+      ],
+    });
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await waitFor(() => expect(cardNamed('Installed Regional')).toHaveTextContent('Europe'));
+
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await waitFor(() => expect(cardNamed('Available geomodel')).toHaveTextContent('Europe'));
+    for (const category of ['wildlife', 'bird', 'bat', 'geomodel']) {
+      expect(cardNamed(`Available ${category}`)).toHaveTextContent('Europe');
+    }
+  });
 });
