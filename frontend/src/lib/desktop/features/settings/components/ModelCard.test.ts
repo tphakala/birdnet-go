@@ -100,6 +100,14 @@ describe('ModelCard', () => {
       expect(screen.getByRole('status')).toHaveTextContent('analysis.gallery.entryIncompatible');
     });
 
+    it('describes a disabled Install by the incompatibility notice', () => {
+      renderCard({ entry: entry({ compatible: false }), mode: 'available' });
+
+      expect(button('analysis.gallery.install')).toHaveAccessibleDescription(
+        'analysis.gallery.entryIncompatible'
+      );
+    });
+
     it('offers Reinstall and Remove on an installed entry', () => {
       renderCard({ entry: entry({ installed: true }), mode: 'installed' });
 

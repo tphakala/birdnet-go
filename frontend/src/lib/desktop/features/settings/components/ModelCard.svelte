@@ -115,6 +115,7 @@
   const PERCENT = 100;
 
   const titleId = generateId('model-card-title');
+  const incompatibleNoticeId = generateId('model-card-incompatible');
 
   function getModelLogo(id: string): string | null {
     for (const [prefix, logo] of Object.entries(MODEL_LOGOS)) {
@@ -214,6 +215,8 @@
     /** Another action runs: focusable, described, click ignored. */
     paused: boolean;
     running: boolean;
+    /** id of the visible text that explains a native disabled state. */
+    describedBy?: string;
   }
 
   const installAction = $derived<ActionSpec>({
@@ -226,6 +229,7 @@
     // Incompatible entries keep their permanent native-disabled state, explained on the card
     paused: inFlight && busy !== 'install' && entry.compatible,
     running: busy === 'install',
+    describedBy: entry.compatible ? undefined : incompatibleNoticeId,
   });
 
   const optimizeAction = $derived<ActionSpec>({
@@ -268,7 +272,7 @@
     size="sm"
     disabled={spec.disabled}
     aria-disabled={spec.paused ? 'true' : undefined}
-    aria-describedby={spec.paused ? pausedReasonId : undefined}
+    aria-describedby={spec.paused ? pausedReasonId : spec.describedBy}
     title={spec.paused ? t('analysis.gallery.actionInProgress') : undefined}
     aria-label="{spec.label} {entry.name}"
     onclick={() => {
@@ -290,9 +294,10 @@
   tone: 'warning' | 'error',
   Icon: LucideIcon,
   text: string,
-  role: 'note' | 'status'
+  role: 'note' | 'status',
+  id: string | undefined
 )}
-  <div class="model-card-notice" data-tone={tone} {role}>
+  <div {id} class="model-card-notice" data-tone={tone} {role}>
     <Icon class="model-card-notice-icon size-4 shrink-0" aria-hidden="true" />
     <span>{text}</span>
   </div>
@@ -377,7 +382,13 @@
   {#if hasNotices}
     <div class="model-card-notices">
       {#if showPreviewNotice}
-        {@render notice('warning', TriangleAlert, t('analysis.gallery.preview.cardNotice'), 'note')}
+        {@render notice(
+          'warning',
+          TriangleAlert,
+          t('analysis.gallery.preview.cardNotice'),
+          'note',
+          undefined
+        )}
       {/if}
       {#if !entry.compatible}
         {#if mode === 'installed'}
@@ -385,14 +396,16 @@
             'error',
             XCircle,
             entryIncompatibleText(entry.incompatibleReason),
-            'status'
+            'status',
+            undefined
           )}
         {:else}
           {@render notice(
             'warning',
             TriangleAlert,
             entryIncompatibleText(entry.incompatibleReason),
-            'status'
+            'status',
+            incompatibleNoticeId
           )}
         {/if}
       {/if}
