@@ -141,7 +141,8 @@
       "visitEbirdLink": "Abrir eBird.org em uma nova aba",
       "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "resizeHandle": "Arraste para redimensionar",
-      "imageCredit": "Crédito da imagem: {name}"
+      "imageCredit": "Crédito da imagem: {name}",
+      "opensInNewTab": "abre em uma nova aba"
     },
     "labels": {
       "confidence": "Confiança",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Instalados",
-        "available": "Disponíveis"
+        "available": "Disponíveis",
+        "navigationAria": "Abas da galeria de modelos"
       },
       "loading": "Carregando modelos...",
       "retry": "Tentar novamente",

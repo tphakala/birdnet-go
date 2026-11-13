@@ -141,7 +141,8 @@
       "visitEbirdLink": "Otwórz eBird.org w nowej karcie",
       "learnEbirdTaxonomyLink": "Otwórz Taksonomię eBird w nowej karcie",
       "resizeHandle": "Przeciągnij, aby zmienić rozmiar",
-      "imageCredit": "Autor zdjęcia: {name}"
+      "imageCredit": "Autor zdjęcia: {name}",
+      "opensInNewTab": "otwiera się w nowej karcie"
     },
     "labels": {
       "confidence": "Pewność",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Zainstalowane",
-        "available": "Dostępne"
+        "available": "Dostępne",
+        "navigationAria": "Karty galerii modeli"
       },
       "loading": "Ładowanie modeli...",
       "retry": "Ponów",

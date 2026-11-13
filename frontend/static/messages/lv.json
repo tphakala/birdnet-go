@@ -141,7 +141,8 @@
       "visitEbirdLink": "Atvērt eBird.org jaunā cilnē",
       "learnEbirdTaxonomyLink": "Atvērt eBird taksonomiju jaunā cilnē",
       "resizeHandle": "Velciet, lai mainītu izmēru",
-      "imageCredit": "Attēla autors: {name}"
+      "imageCredit": "Attēla autors: {name}",
+      "opensInNewTab": "atveras jaunā cilnē"
     },
     "labels": {
       "confidence": "Ticamība",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Instalētie",
-        "available": "Pieejamie"
+        "available": "Pieejamie",
+        "navigationAria": "Modeļu galerijas cilnes"
       },
       "loading": "Ielādē modeļus...",
       "retry": "Mēģināt vēlreiz",

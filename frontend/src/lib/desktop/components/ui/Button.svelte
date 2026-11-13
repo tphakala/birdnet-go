@@ -70,11 +70,11 @@
     primary:
       'bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] hover:border-[var(--color-primary-hover)] active:bg-[var(--color-primary-hover)] active:border-[var(--color-primary-hover)]',
     success:
-      'bg-[var(--color-success)]/15 text-[var(--color-success)] border border-[var(--color-success)]/25 hover:bg-[var(--color-success)]/25 active:bg-[var(--color-success)]/35',
+      'bg-[var(--color-success)]/15 text-[var(--text-success)] border border-[var(--color-success)]/25 hover:bg-[var(--color-success)]/25 active:bg-[var(--color-success)]/35',
     warning:
-      'bg-[var(--color-warning)]/15 text-[var(--color-warning)] border border-[var(--color-warning)]/25 hover:bg-[var(--color-warning)]/25 active:bg-[var(--color-warning)]/35',
+      'bg-[var(--color-warning)]/15 text-[var(--text-warning)] border border-[var(--color-warning)]/25 hover:bg-[var(--color-warning)]/25 active:bg-[var(--color-warning)]/35',
     error:
-      'bg-[var(--color-error)]/15 text-[var(--color-error)] border border-[var(--color-error)]/25 hover:bg-[var(--color-error)]/25 active:bg-[var(--color-error)]/35',
+      'bg-[var(--color-error)]/15 text-[var(--text-error)] border border-[var(--color-error)]/25 hover:border-[var(--color-error)]/50 active:border-[var(--color-error)]/70',
     ghost:
       'bg-transparent text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] active:bg-[var(--color-base-300)]',
   };
@@ -90,11 +90,11 @@
     primary:
       'bg-[var(--color-primary)]/50 text-[var(--color-primary-content)] border border-transparent',
     success:
-      'bg-[var(--color-success)]/8 text-[var(--color-success)]/50 border border-[var(--color-success)]/12',
+      'bg-[var(--color-success)]/8 text-[var(--text-success)]/50 border border-[var(--color-success)]/12',
     warning:
-      'bg-[var(--color-warning)]/8 text-[var(--color-warning)]/50 border border-[var(--color-warning)]/12',
+      'bg-[var(--color-warning)]/8 text-[var(--text-warning)]/50 border border-[var(--color-warning)]/12',
     error:
-      'bg-[var(--color-error)]/8 text-[var(--color-error)]/50 border border-[var(--color-error)]/12',
+      'bg-[var(--color-error)]/8 text-[var(--text-error)]/50 border border-[var(--color-error)]/12',
     ghost: 'bg-transparent text-[var(--color-base-content)]/50',
   };
 

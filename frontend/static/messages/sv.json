@@ -141,7 +141,8 @@
       "visitEbirdLink": "Öppna eBird.org i en ny flik",
       "learnEbirdTaxonomyLink": "Öppna eBird Taxonomy i en ny flik",
       "resizeHandle": "Dra för att ändra storlek",
-      "imageCredit": "Bildrättigheter: {name}"
+      "imageCredit": "Bildrättigheter: {name}",
+      "opensInNewTab": "öppnas i en ny flik"
     },
     "labels": {
       "confidence": "Konfidens",
@@ -5760,7 +5761,8 @@
       },
       "tabs": {
         "installed": "Installerade",
-        "available": "Tillgängliga"
+        "available": "Tillgängliga",
+        "navigationAria": "Flikar i modellgalleriet"
       },
       "loading": "Laddar modeller...",
       "retry": "Försök igen",

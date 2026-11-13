@@ -44,6 +44,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 ### Data Display
 
+- [ExpandableText](#expandabletext) - Text clamped to a few lines with a Show more toggle
 - [SettingsCard](#settingscard) - Configuration settings card
 - [SettingsSection](#settingssection) - Settings organization
 
@@ -602,6 +603,40 @@ interface Props {
 - Default or custom icons
 - Optional action button
 - Flexible content
+
+---
+
+### ExpandableText
+
+**File**: `ExpandableText.svelte`
+
+Text clamped to a few lines, with a Show more / Show less button that appears only when the text is actually cut off. Use it for catalog or user text of unknown length in a fixed-size card; the whole text stays in the DOM and the accessibility tree, collapsing only clamps it.
+
+```typescript
+interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'class'> {
+  text: string;
+  lines?: 2 | 3 | 4; // lines shown while collapsed, default 3
+  subject?: string; // appended to the toggle's accessible name
+  className?: string; // root element
+  textClassName?: string; // the paragraph
+}
+```
+
+**Usage:**
+
+```svelte
+<ExpandableText
+  text={entry.description}
+  subject={entry.name}
+  textClassName="text-xs text-[var(--color-base-content)]/80"
+/>
+```
+
+**Features:**
+
+- Measures overflow while collapsed, at mount, when the text or `lines` change, when the paragraph is resized and when a web font finishes loading, so the toggle follows the layout
+- Native button with `aria-expanded` and `aria-controls`; the visible label leads its accessible name, and `subject` tells toggles on several cards apart
+- Expansion belongs to the text that was expanded: any other `text` starts collapsed
 
 ---
 

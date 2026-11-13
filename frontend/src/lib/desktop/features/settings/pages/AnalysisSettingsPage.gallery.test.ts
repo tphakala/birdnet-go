@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
-import { CHANNEL_STABLE } from '$lib/utils/variantSelection';
+import { catalogEntry as birdEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
 
 // Page-level coverage for the model-gallery install-error split:
 // a failed install must NOT blank the grid (installError is a separate banner from
@@ -108,27 +108,6 @@ beforeEach(() => {
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).
 const NETWORK_ERROR = 'HTTP request failed for https://huggingface.co/model: connection refused';
-
-function birdEntry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
-  return {
-    id: 'test-bird',
-    name: 'Test Bird Model',
-    description: 'A test bird classifier',
-    author: 'Tester',
-    license: 'CC-BY-NC-4.0',
-    commercialUse: false,
-    category: 'bird',
-    region: '',
-    speciesCount: 100,
-    version: '1.0',
-    channel: CHANNEL_STABLE,
-    installed: false,
-    compatible: true,
-    totalSizeBytes: 1_000_000,
-    hasGeomodel: false,
-    ...overrides,
-  };
-}
 
 async function gotoAvailableTab(): Promise<void> {
   // Top-level Models tab, then the Available gallery sub-tab (i18n mock echoes keys).
@@ -621,5 +600,274 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
     // built-in badge and the baseline hardware chip. (The review dialog, also in the
     // DOM, renders it again for the offer's from-variant, so assert a lower bound.)
     expect(screen.getAllByText('analysis.gallery.builtIn').length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('AnalysisSettingsPage model gallery cards', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+  });
+
+  afterEach(() => {
+    // Some tests hold an action open with a never-settling mock, others stream progress: put
+    // these shared mocks back to the bare ones the module mock starts with
+    for (const mock of [
+      modelsApi.uninstallModel,
+      modelsApi.reinstallModel,
+      modelsApi.installModel,
+      modelsApi.subscribeInstallProgress,
+    ]) {
+      vi.mocked(mock).mockReset();
+    }
+  });
+
+  // The same kinds of card (preview, incompatible) on each tab, plus a built-in card on
+  // the Installed tab.
+  function cardEntries(): CatalogEntry[] {
+    const preview = { channel: 'preview', buildLabel: 'b42' } as const;
+    return [
+      birdEntry({ id: 'inst-builtin', name: 'Builtin', installed: true, permanent: true }),
+      birdEntry({ id: 'inst-preview', name: 'Preview Installed', installed: true, ...preview }),
+      birdEntry({ id: 'inst-bad', name: 'Bad Installed', installed: true, compatible: false }),
+      birdEntry({ id: 'avail-preview', name: 'Preview Available', ...preview }),
+      birdEntry({ id: 'avail-bad', name: 'Bad Available', compatible: false }),
+    ];
+  }
+
+  function cardNamed(name: string): HTMLElement {
+    return screen.getByRole('article', { name });
+  }
+
+  // A card's notice, found by its data-tone attribute
+  function noticeOf(card: HTMLElement): HTMLElement {
+    const found = card.querySelector('[data-tone]');
+    if (!(found instanceof HTMLElement)) throw new Error('the card shows no notice');
+    return found;
+  }
+
+  it('names the two tablists differently', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: cardEntries() });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await screen.findByRole('article', { name: 'Builtin' });
+
+    const names = screen.getAllByRole('tablist').map(list => list.getAttribute('aria-label'));
+    expect(names).toEqual(['settings.tabs.navigation', 'analysis.gallery.tabs.navigationAria']);
+  });
+
+  it('renders both tabs through ModelCard, one article per entry', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: cardEntries() });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await screen.findByRole('article', { name: 'Builtin' });
+
+    const installed = ['Builtin', 'Preview Installed', 'Bad Installed'].map(cardNamed);
+    expect(screen.getAllByRole('article')).toHaveLength(installed.length);
+    // Built-in card: the footer carries the built-in pill instead of buttons
+    expect(
+      within(cardNamed('Builtin')).queryByRole('button', { name: /reinstall|remove/ })
+    ).toBeNull();
+    // Incompatible card explains itself in a status notice
+    expect(noticeOf(cardNamed('Bad Installed'))).toHaveTextContent(
+      'analysis.gallery.entryIncompatible'
+    );
+    expect(cardNamed('Preview Installed')).toHaveTextContent('analysis.gallery.preview.badge');
+
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    const previewCard = await screen.findByRole('article', { name: 'Preview Available' });
+    const available = [previewCard, cardNamed('Bad Available')];
+    expect(screen.getAllByRole('article')).toHaveLength(available.length);
+    expect(within(previewCard).getByRole('note')).toHaveTextContent(
+      'analysis.gallery.preview.cardNotice'
+    );
+    expect(previewCard).toHaveTextContent('analysis.gallery.preview.badge');
+    expect(noticeOf(cardNamed('Bad Available'))).toHaveTextContent(
+      'analysis.gallery.entryIncompatible'
+    );
+    expect(
+      within(cardNamed('Bad Available')).getByRole('button', {
+        name: /analysis\.gallery\.install Bad Available/,
+      })
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  // A held action leaves its id set: the card it runs on shows the running label and the
+  // other card pauses. Install is started from the Available tab through the license dialog.
+  it.each([
+    ['remove', 'analysis.gallery.remove', 'analysis.gallery.removing'],
+    ['reinstall', 'analysis.gallery.reinstall', 'analysis.gallery.reinstalling'],
+    ['install', 'analysis.gallery.install', 'analysis.gallery.installing'],
+  ] as const)(
+    'marks the card whose %s runs and pauses the other card',
+    async (action, idleLabel, runningLabel) => {
+      const installed = action !== 'install';
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+        catalog: [
+          birdEntry({ id: 'first', name: 'First Model', installed }),
+          birdEntry({ id: 'second', name: 'Second Model', installed }),
+        ],
+      });
+      vi.mocked(modelsApi.uninstallModel).mockImplementation(() => new Promise<void>(() => {}));
+      vi.mocked(modelsApi.reinstallModel).mockImplementation(() => new Promise<void>(() => {}));
+      vi.mocked(modelsApi.installModel).mockImplementation(() => new Promise<void>(() => {}));
+
+      render(AnalysisSettingsPage);
+      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+      if (!installed) {
+        await fireEvent.click(
+          await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+        );
+      }
+      await fireEvent.click(
+        await screen.findByRole('button', { name: `${idleLabel} First Model` })
+      );
+      if (action === 'remove') {
+        // The dialog's own Remove carries no model name
+        await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+      } else if (action === 'install') {
+        await fireEvent.click(
+          await screen.findByRole('button', {
+            name: /analysis\.gallery\.license\.acceptAndInstall/,
+          })
+        );
+      }
+
+      const running = await screen.findByRole('button', { name: `${runningLabel} First Model` });
+      expect(running).toHaveAttribute('aria-disabled', 'true');
+      const other = screen.getByRole('button', { name: `${idleLabel} Second Model` });
+      expect(other).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByRole('button', { name: `${runningLabel} Second Model` })).toBeNull();
+    }
+  );
+
+  it('shows the download progress of a running install on its own card only', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({ id: 'first', name: 'First Model' }),
+        birdEntry({ id: 'second', name: 'Second Model' }),
+      ],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation((_id, onProgress) => {
+      onProgress(downloadProgress({ catalogId: 'first' }));
+      return () => {};
+    });
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'analysis.gallery.install First Model' })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+
+    expect(await within(cardNamed('First Model')).findByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '50'
+    );
+    expect(within(cardNamed('Second Model')).queryByRole('progressbar')).toBeNull();
+  });
+
+  it('announces a finished install through the page live region, also after a tab switch', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'first', name: 'First Model' })],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation((_id, onProgress) => {
+      onProgress(downloadProgress({ catalogId: 'first', status: 'complete' }));
+      return () => {};
+    });
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'analysis.gallery.install First Model' })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+    const announced = await screen.findByText('analysis.gallery.progress.complete', {
+      selector: '[role="status"]',
+    });
+
+    // The running card unmounts with its tab; the announcement is not tied to it
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.installed/ })
+    );
+    expect(announced).toBeInTheDocument();
+    expect(announced).toHaveTextContent('analysis.gallery.progress.complete');
+  });
+
+  it('shows localized region names from the fetched regions on the Installed tab and in every Available section', async () => {
+    const variant = {
+      id: 'v-eu',
+      region: 'eu',
+      speciesCount: 10,
+      default: true,
+      installed: true,
+      sizeBytes: 1,
+      compatible: true,
+      recommended: true,
+    };
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+      modelRegion: 'auto',
+      locationConfigured: false,
+      resolved: { slug: '', source: 'global', ambiguous: false },
+      regions: [
+        {
+          slug: 'eu',
+          name: 'Europe',
+          group: 'europe',
+          groupDisplay: 'Europe',
+          tier: 1,
+          countries: { core: [], partial: [] },
+        },
+      ],
+      families: [],
+    });
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({
+          id: 'inst-eu',
+          name: 'Installed Regional',
+          installed: true,
+          variants: [variant],
+          installedVariantId: 'v-eu',
+        }),
+        ...(['wildlife', 'bird', 'bat', 'geomodel'] as const).map(category =>
+          birdEntry({
+            id: `avail-${category}`,
+            name: `Available ${category}`,
+            category,
+            variants: [{ ...variant, installed: false }],
+            recommendedVariantId: 'v-eu',
+          })
+        ),
+      ],
+    });
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await waitFor(() => expect(cardNamed('Installed Regional')).toHaveTextContent('Europe'));
+
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await waitFor(() => expect(cardNamed('Available geomodel')).toHaveTextContent('Europe'));
+    for (const category of ['wildlife', 'bird', 'bat', 'geomodel']) {
+      expect(cardNamed(`Available ${category}`)).toHaveTextContent('Europe');
+    }
   });
 });
