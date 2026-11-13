@@ -6,7 +6,7 @@ export const DETECTION_RATE_CHART_HEIGHT = 100;
 
 /**
  * Turns a measured container width into the width the chart draws at.
- * Widths below the minimum, including unmeasured (0), negative and non-finite ones, are raised to it.
+ * A width below the minimum, an unmeasured one (0), a negative one or a non-finite one becomes the minimum.
  */
 export function clampChartWidth(measured: number): number {
   if (!Number.isFinite(measured)) return DETECTION_RATE_CHART_MIN_WIDTH;
