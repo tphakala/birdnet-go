@@ -40,6 +40,7 @@ vi.mock('@xterm/xterm', () => ({
     focus() {
       this.focusCount++;
     }
+    write() {}
     dispose() {}
     onData() {
       return { dispose() {} };
@@ -189,16 +190,18 @@ describe('TerminalPage toolbar', () => {
     await waitFor(() => expect(terminal.focusCount).toBe(2));
 
     // jsdom has no Fullscreen API: stand in for the browser entering fullscreen
-    const element = HTMLElement.prototype as { requestFullscreen?: () => Promise<void> };
-    element.requestFullscreen = () => {
-      document.dispatchEvent(new Event('fullscreenchange'));
-      return Promise.resolve();
-    };
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: () => {
+        document.dispatchEvent(new Event('fullscreenchange'));
+        return Promise.resolve();
+      },
+    });
     try {
       await fireEvent.click(getByRole('button', { name: 'terminal.fullscreen' }));
       await waitFor(() => expect(terminal.focusCount).toBe(3));
     } finally {
-      delete element.requestFullscreen;
+      Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
     }
   });
 
@@ -235,10 +238,18 @@ describe('TerminalPage detached window', () => {
     '#theme-hc',
   ];
 
+  // Every socket the page opens; the last one belongs to the popup
+  const sockets: { onclose?: () => void }[] = [];
+
   async function detach() {
+    sockets.length = 0;
     vi.stubGlobal(
       'WebSocket',
       class {
+        onclose?: () => void;
+        constructor() {
+          sockets.push(this);
+        }
         close() {}
         send() {}
       }
@@ -304,6 +315,25 @@ describe('TerminalPage detached window', () => {
     const handler: KeyHandler | undefined = popupTerminal.handler;
     expect(handler?.(key('Escape'))).toBe(true);
     expect(handler?.(key('Tab'))).toBe(false);
+  });
+
+  it('lets the popup toolbar grow and wrap instead of clipping a long hint', async () => {
+    const doc = await detach();
+    const toolbarRule = [...doc.styleSheets]
+      .flatMap(sheet => [...sheet.cssRules])
+      .find(rule => 'selectorText' in rule && rule.selectorText === '#toolbar');
+    expect(toolbarRule?.cssText).toContain('min-height: 40px');
+    expect(toolbarRule?.cssText).toContain('flex-wrap: wrap');
+    expect(toolbarRule?.cssText).not.toMatch(/(^|[\s{;])height:/);
+  });
+
+  it('keeps the status text class when the popup connection closes', async () => {
+    const doc = await detach();
+    sockets.at(-1)?.onclose?.();
+
+    const status = doc.getElementById('status-text');
+    expect(status?.textContent).toBe('terminal.disconnected');
+    expect(status?.className).toBe('status-text');
   });
 
   it('draws a full-strength outline on a focused popup toolbar or swatch button', async () => {
