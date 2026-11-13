@@ -319,7 +319,7 @@
   {:else}
     <div class="flex flex-col items-center text-center py-6 gap-2">
       <Activity class="size-8 text-muted" aria-hidden="true" />
-      <p class="text-sm font-medium text-[var(--color-base-content)]/70">
+      <p class="text-sm font-medium text-[var(--color-base-content)]">
         {t('system.importExport.activity.empty.title')}
       </p>
       <p class="text-xs text-muted max-w-48">
