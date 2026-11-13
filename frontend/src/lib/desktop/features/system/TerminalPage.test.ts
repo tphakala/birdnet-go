@@ -234,12 +234,14 @@ describe('TerminalPage detached window', () => {
     expect(handler?.(new KeyboardEvent('keydown', { key: 'Tab' }))).toBe(false);
   });
 
-  it('lifts a focused popup toolbar button to full opacity', async () => {
+  it('draws a full-strength outline on a focused popup toolbar button', async () => {
     const doc = await detach();
     // Rules come from the popup's own window, so test them by shape, not by instanceof
     const focusRule = [...doc.styleSheets]
       .flatMap(sheet => [...sheet.cssRules])
       .find(rule => 'selectorText' in rule && rule.selectorText === '.toolbar-btn:focus-visible');
     expect(focusRule?.cssText).toContain('opacity: 1');
+    // A real outline, so forced colors still draws the ring
+    expect(focusRule?.cssText).toContain('outline: 2px solid');
   });
 });
