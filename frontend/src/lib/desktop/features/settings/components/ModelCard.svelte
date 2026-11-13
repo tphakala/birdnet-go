@@ -183,7 +183,7 @@
   const hasNotices = $derived(showPreviewNotice || !entry.compatible || progress !== null);
   const showGeomodel = $derived(entry.hasGeomodel && entry.category !== 'geomodel');
   const showOptimize = $derived(mode === 'installed' && optimizeAvailable);
-  // The completion line; empty while nothing has completed. Shown, and announced through the live region
+  // The completion line; empty while nothing has completed. The page announces it through its own live region
   const completeText = $derived(
     progress?.status === 'complete'
       ? busy === 'reinstall'
@@ -303,8 +303,6 @@
 {/snippet}
 
 <article class="model-card" aria-labelledby={titleId}>
-  <!-- Always rendered, so a screen reader hears its text change when an install completes; a line mounted together with its text is often not announced (see frontend/AGENTS.md, Accessibility) -->
-  <span class="sr-only" role="status">{completeText}</span>
   <header class="model-card-header">
     {#if logo}
       <img

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
 import { catalogEntry as birdEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
@@ -611,6 +611,19 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
   });
 
+  afterEach(() => {
+    // Some tests hold an action open with a never-settling mock, others stream progress: put
+    // these shared mocks back to the bare ones the module mock starts with
+    for (const mock of [
+      modelsApi.uninstallModel,
+      modelsApi.reinstallModel,
+      modelsApi.installModel,
+      modelsApi.subscribeInstallProgress,
+    ]) {
+      vi.mocked(mock).mockReset();
+    }
+  });
+
   // The same kinds of card (preview, incompatible) on each tab, plus a built-in card on
   // the Installed tab.
   function cardEntries(): CatalogEntry[] {
@@ -628,8 +641,7 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     return screen.getByRole('article', { name });
   }
 
-  // A card's notice, found by its data-tone attribute: its role is not unique on the card,
-  // which also carries a live region for the completion announcement
+  // A card's notice, found by its data-tone attribute
   function noticeOf(card: HTMLElement): HTMLElement {
     const found = card.querySelector('[data-tone]');
     if (!(found instanceof HTMLElement)) throw new Error('the card shows no notice');
@@ -763,6 +775,39 @@ describe('AnalysisSettingsPage model gallery cards', () => {
       '50'
     );
     expect(within(cardNamed('Second Model')).queryByRole('progressbar')).toBeNull();
+  });
+
+  it('announces a finished install through the page live region, also after a tab switch', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'first', name: 'First Model' })],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation((_id, onProgress) => {
+      onProgress(downloadProgress({ catalogId: 'first', status: 'complete' }));
+      return () => {};
+    });
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'analysis.gallery.install First Model' })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+    const announced = await screen.findByText('analysis.gallery.progress.complete', {
+      selector: '[role="status"]',
+    });
+
+    // The running card unmounts with its tab; the announcement is not tied to it
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.installed/ })
+    );
+    expect(announced).toBeInTheDocument();
+    expect(announced).toHaveTextContent('analysis.gallery.progress.complete');
   });
 
   it('shows localized region names from the fetched regions on the Installed tab and in every Available section', async () => {

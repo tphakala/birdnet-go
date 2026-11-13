@@ -223,6 +223,16 @@
   // starting a second action while one runs can strand the first's UI state; every
   // action gate uses this rather than an ad-hoc subset of the three ids.
   const galleryActionInFlight = $derived(activeGalleryAction !== null);
+  // The completion line of a finished install, reinstall or swap, announced by the live region
+  // in the Models tab. That region lives on the page, not on a card, so it still reaches a
+  // screen reader when the user switches gallery tabs and the running card is unmounted.
+  const galleryCompleteText = $derived(
+    downloadProgress?.status === 'complete'
+      ? reinstallingId !== null
+        ? t('analysis.gallery.reinstallComplete')
+        : t('analysis.gallery.progress.complete')
+      : ''
+  );
 
   // Shared DOM id for the "actions paused" status line rendered while any gallery
   // action is in flight. Every cross-action-disabled button points its
@@ -2475,6 +2485,11 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Always rendered, so a screen reader hears its text change when an install completes;
+           a line mounted together with its text is often not announced (see frontend/AGENTS.md,
+           Accessibility). -->
+      <span class="sr-only" role="status">{galleryCompleteText}</span>
 
       {#if galleryActionInFlight}
         <!-- One shared, live status line naming why the other cards' actions are
