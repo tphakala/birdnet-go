@@ -80,7 +80,8 @@
   const POPUP_RECONNECT_DELAY_MS = 100;
   /** Id of the keyboard exit hint, referenced by the terminal input's aria-describedby */
   const EXIT_HINT_ID = 'terminal-exit-hint';
-  // Toolbar buttons dim their icon through colour alpha (70%, see MUTED_OPACITY), never element
+  // Toolbar buttons dim their icon through colour alpha (the /70 mirrors MUTED_OPACITY, Tailwind
+  // needs a literal), never element
   // opacity, which would also fade the focus outline. The outline is a real outline, not a
   // shadow, so forced-colors mode keeps it.
   const TOOLBAR_BUTTON_CLASS =
@@ -436,6 +437,7 @@
       MUTED_OPACITY +
       '; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
       '.toolbar-btn:hover { opacity: 1; background: rgba(128,128,128,0.15); }' +
+      '.toolbar-btn:focus-visible { opacity: 1; outline: 2px solid currentColor; outline-offset: 1px; }' +
       '.toolbar-btn.copied { opacity: 1; color: #10b981; }' +
       '#terminal { flex: 1; min-height: 0; overflow: hidden; }' +
       '.xterm { padding: 12px 16px; }' +

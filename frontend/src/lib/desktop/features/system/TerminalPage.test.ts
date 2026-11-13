@@ -64,13 +64,6 @@ describe('TerminalPage toolbar', () => {
         close() {}
       }
     );
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        disconnect() {}
-      }
-    );
     enableTerminal();
   });
 
