@@ -14,9 +14,10 @@
  * 3. a `--color-<palette>-<shade>` variable (text-[var(--color-red-500)]);
  * 4. a status fill used as text (text-[var(--color-success|warning|error|info)]): the fills are
  *    for backgrounds, borders and dots, the text tokens are --text-success and its siblings;
- * 5. faded body text: text-[var(--color-base-content)]/NN or a plain opacity-NN with NN under
- *    FADED_TEXT_MIN_PERCENT, which drops muted text below 4.5:1 (use text-muted). Variant forms
- *    such as disabled:opacity-50 pass: they style a disabled control, which WCAG exempts.
+ * 5. faded body text: text-[var(--color-base-content)]/NN, text-base-content/NN or a plain
+ *    opacity-NN with NN under FADED_TEXT_MIN_PERCENT, which drops muted text below 4.5:1 (use
+ *    text-muted). Variant forms such as disabled:opacity-50 pass: they style a disabled
+ *    control, which WCAG exempts.
  *
  * Not scanned: white, black, transparent, colour functions (rgb(), hsl(), oklch()), CSS
  * named colours, and any file not in the list.
@@ -81,7 +82,8 @@ const PALETTE_VAR = new RegExp(`--color-(?:${PALETTE_ALTERNATION})-\\d{2,3}\\b`,
 const STATUS_FILL_TEXT = /(?<![\w-])text-\[var\(--color-(?:success|warning|error|info)\)\]/g;
 // Unprefixed faded text: base-content with an opacity suffix, or a plain opacity utility (also as
 // a Svelte class: directive). A variant prefix (disabled:, hover:) does not match.
-const FADED_BASE_CONTENT = /(?<![\w:-])text-\[var\(--color-base-content\)\]\/(\d{1,3})(?![\d%])/g;
+const FADED_BASE_CONTENT =
+  /(?<![\w:-])text-(?:\[var\(--color-base-content\)\]|base-content)\/(\d{1,3})(?![\d%])/g;
 const FADED_OPACITY = /(?:(?<![\w:-])|(?<=\bclass:))opacity-(\d{1,3})(?![\d%])/g;
 
 /** Colors written outside the tokens, with their line numbers. */
@@ -131,6 +133,7 @@ describe('System page colors', () => {
     ['an error fill used as text behind a variant', 'class="hover:text-[var(--color-error)]"'],
     ['an info fill used as text with opacity', 'class="text-[var(--color-info)]/80"'],
     ['base content faded by an opacity suffix', 'class="text-[var(--color-base-content)]/60"'],
+    ['base content theme utility faded', 'class="text-base-content/60"'],
     ['faded text by opacity utility', 'class="text-xs opacity-60 truncate"'],
     ['a faded Svelte class directive', 'class:opacity-40={count === 0}'],
   ])('flags %s', (_name, source) => {
