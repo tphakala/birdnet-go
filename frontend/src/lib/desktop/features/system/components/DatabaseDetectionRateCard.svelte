@@ -64,7 +64,7 @@
             {t('system.database.dashboard.detectionRate.createBackup')}
           </button>
         {:else}
-          <!-- MySQL: Host info + backup note -->
+          <!-- MySQL: host, port and database name plus backup note -->
           <div class="flex items-center gap-2 text-sm">
             <Database class="w-3.5 h-3.5 shrink-0 text-muted" />
             <span class="text-muted">{t('system.database.dashboard.detectionRate.mysqlHost')}</span>

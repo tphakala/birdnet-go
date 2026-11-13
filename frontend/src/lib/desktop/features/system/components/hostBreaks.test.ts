@@ -6,32 +6,45 @@ describe('splitHostSegments', () => {
     expect(splitHostSegments('')).toEqual([]);
   });
 
-  it('keeps a host without separators as one segment', () => {
+  it('keeps a string without separators as one segment', () => {
     expect(splitHostSegments('localhost')).toEqual(['localhost']);
   });
 
-  it('closes every segment but the last with its separator', () => {
-    expect(splitHostSegments('mysql.internal.example.org:3306')).toEqual([
+  it('breaks a host, port and database after every separator but the last', () => {
+    expect(splitHostSegments('mysql.internal.example.org:3306/birdnet_production')).toEqual([
       'mysql.',
       'internal.',
       'example.',
       'org:',
-      '3306',
+      '3306/',
+      'birdnet_production',
     ]);
   });
 
   it('breaks after hyphens', () => {
-    expect(splitHostSegments('db-primary.example.lan:3306')).toEqual([
+    expect(splitHostSegments('db-primary.example.lan:3306/birdnet')).toEqual([
       'db-',
       'primary.',
       'example.',
       'lan:',
-      '3306',
+      '3306/',
+      'birdnet',
+    ]);
+  });
+
+  it('keeps an IPv4 address with a port and database apart from the port digits', () => {
+    expect(splitHostSegments('192.168.4.10:3306/birdnet')).toEqual([
+      '192.',
+      '168.',
+      '4.',
+      '10:',
+      '3306/',
+      'birdnet',
     ]);
   });
 
   it('keeps a trailing separator on the last segment without an empty one', () => {
-    expect(splitHostSegments('example.org:')).toEqual(['example.', 'org:']);
+    expect(splitHostSegments('example.org:3306/')).toEqual(['example.', 'org:', '3306/']);
   });
 
   it('keeps consecutive separators as single-character segments', () => {
@@ -39,15 +52,32 @@ describe('splitHostSegments', () => {
   });
 
   it('splits an IPv6 literal after each colon and never inside the port', () => {
-    expect(splitHostSegments('[::1]:3306')).toEqual(['[:', ':', '1]:', '3306']);
+    expect(splitHostSegments('[::1]:3306/birdnet')).toEqual(['[:', ':', '1]:', '3306/', 'birdnet']);
   });
 
-  it('keeps unicode hosts intact', () => {
-    expect(splitHostSegments('päivä.äö')).toEqual(['päivä.', 'äö']);
+  it('keeps unicode text intact', () => {
+    expect(splitHostSegments('päivä.äö:3306/tietokanta')).toEqual([
+      'päivä.',
+      'äö:',
+      '3306/',
+      'tietokanta',
+    ]);
   });
 
-  it('keeps an 80 character host without separators as one segment', () => {
-    const host = 'a'.repeat(80);
-    expect(splitHostSegments(host)).toEqual([host]);
+  it('keeps a long database name with underscores as one segment', () => {
+    const database = 'birdnet_production_archive_2024_q4_detections';
+    expect(database).toHaveLength(45);
+    expect(splitHostSegments(`db.example.lan:3306/${database}`)).toEqual([
+      'db.',
+      'example.',
+      'lan:',
+      '3306/',
+      database,
+    ]);
+  });
+
+  it('keeps an 80 character string without separators as one segment', () => {
+    const text = 'a'.repeat(80);
+    expect(splitHostSegments(text)).toEqual([text]);
   });
 });

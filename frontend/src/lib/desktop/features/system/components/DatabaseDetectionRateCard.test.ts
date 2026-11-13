@@ -41,28 +41,33 @@ describe('DatabaseDetectionRateCard side panel', () => {
 
   it('shows the host and the backup note for MySQL and no backup button', () => {
     const { container } = renderTyped(DatabaseDetectionRateCard, {
-      props: { data: [], engine: 'mysql', mysqlHost: 'db.example.test:3306', onBackup: vi.fn() },
+      props: {
+        data: [],
+        engine: 'mysql',
+        mysqlHost: 'db.example.test:3306/birdnet',
+        onBackup: vi.fn(),
+      },
     });
 
     expect(layoutColumnCount(container)).toBe(2);
-    expect(screen.getByText('db.example.test:3306')).toBeInTheDocument();
+    expect(screen.getByText('db.example.test:3306/birdnet')).toBeInTheDocument();
     expect(screen.getByText(mysqlNoteLabel())).toBeInTheDocument();
     expect(screen.queryByText(createBackupLabel())).not.toBeInTheDocument();
   });
 
-  it('renders the host text unchanged and offers break points after separators', () => {
-    const host = 'mysql.internal.example.org:3306';
+  it('renders the location text unchanged and offers break points after separators', () => {
+    const host = 'mysql.internal.example.org:3306/birdnet_production';
     renderTyped(DatabaseDetectionRateCard, {
       props: { data: [], engine: 'mysql', mysqlHost: host },
     });
 
     const hostElement = screen.getByText(host);
     expect(hostElement.textContent).toBe(host);
-    expect(hostElement.querySelectorAll('wbr')).toHaveLength(4);
+    expect(hostElement.querySelectorAll('wbr')).toHaveLength(5);
   });
 
   it('renders host markup as text only', () => {
-    const host = '<img src=x onerror=alert(1)>.example:3306';
+    const host = '<img src=x onerror=alert(1)>.example:3306/birdnet';
     const { container } = renderTyped(DatabaseDetectionRateCard, {
       props: { data: [], engine: 'mysql', mysqlHost: host },
     });
