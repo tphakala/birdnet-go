@@ -138,8 +138,11 @@ describe('radioGroupKeys', () => {
     });
     radios[0].focus();
 
-    await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
-    matches.mockRestore();
+    try {
+      await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
+    } finally {
+      matches.mockRestore();
+    }
 
     expect(checkedLabel(radios)).toBe('b');
     expect(document.activeElement).toBe(radios[1]);

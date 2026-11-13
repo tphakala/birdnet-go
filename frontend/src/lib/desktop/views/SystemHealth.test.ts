@@ -241,13 +241,11 @@ describe('SystemHealth keyboard and run state', () => {
     finish(report(TOTAL_CHECKS));
   });
 
-  it('has no accessibility violations in the diagnostics header', async () => {
+  it('has no accessibility violations', async () => {
     mocks.post.mockResolvedValue(report(TOTAL_CHECKS));
-    render(SystemHealth);
+    const { container } = render(SystemHealth);
     await screen.findByText('health.metricFooter.allPassing');
 
-    const group = screen.getByRole('radiogroup').closest('div')?.parentElement;
-    if (!group) throw new Error('window selector container not found');
-    expect((await runAxeTest(group)).violations).toEqual([]);
+    expect((await runAxeTest(container)).violations).toEqual([]);
   });
 });
