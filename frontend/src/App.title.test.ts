@@ -162,12 +162,11 @@ describe('App document title', () => {
     const titles = [document.title];
 
     for (const subpage of SETTINGS_SUBPAGES) {
+      const previous = document.title;
       navigation.navigate(`${SETTINGS_BASE}/${subpage}`);
-      await waitFor(() => expect(document.title).toContain('[navigation.settings]'));
+      await waitFor(() => expect(document.title).not.toBe(previous));
       expect(document.title).toMatch(/^\[settings\.sections\.\w+\] - \[navigation\.settings\] - /);
       titles.push(document.title);
-      navigation.navigate(HELP_PATH);
-      await waitFor(() => expect(document.title).not.toContain('[navigation.settings]'));
     }
 
     expect(new Set(titles).size).toBe(titles.length);
