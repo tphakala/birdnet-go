@@ -39,7 +39,6 @@ export const radioGroupKeys: Action<HTMLElement> = node => {
 
     const radios = Array.from(node.querySelectorAll<HTMLElement>(RADIO_SELECTOR));
     const start = radios.findIndex(radio => radio === current);
-    if (start < 0) return;
 
     event.preventDefault();
     for (let offset = 1; offset < radios.length; offset++) {

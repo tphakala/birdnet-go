@@ -38,14 +38,14 @@ describe('radioGroupKeys', () => {
     document.body.replaceChildren();
   });
 
-  async function setup(labels: string[], ariaDisabled: string[] = []) {
+  function setup(labels: string[], ariaDisabled: string[] = []) {
     const built = buildGroup(labels, ariaDisabled);
     cleanup = built.destroy;
     return built;
   }
 
   it('moves selection and focus to the next radio on ArrowRight and ArrowDown', async () => {
-    const { radios } = await setup(['a', 'b', 'c']);
+    const { radios } = setup(['a', 'b', 'c']);
     radios[0].focus();
 
     await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
@@ -58,7 +58,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('moves to the previous radio on ArrowLeft and ArrowUp', async () => {
-    const { radios } = await setup(['a', 'b', 'c']);
+    const { radios } = setup(['a', 'b', 'c']);
     radios[2].focus();
 
     await fireEvent.keyDown(radios[2], { key: 'ArrowLeft' });
@@ -70,7 +70,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('wraps at both ends', async () => {
-    const { radios } = await setup(['a', 'b', 'c']);
+    const { radios } = setup(['a', 'b', 'c']);
     radios[2].focus();
     await fireEvent.keyDown(radios[2], { key: 'ArrowRight' });
     expect(checkedLabel(radios)).toBe('a');
@@ -82,7 +82,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('skips an aria-disabled radio', async () => {
-    const { radios } = await setup(['a', 'b', 'c'], ['b']);
+    const { radios } = setup(['a', 'b', 'c'], ['b']);
     radios[0].focus();
     await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
     expect(checkedLabel(radios)).toBe('c');
@@ -90,7 +90,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('leaves selection and focus alone when every other radio is aria-disabled', async () => {
-    const { radios } = await setup(['a', 'b', 'c'], ['b', 'c']);
+    const { radios } = setup(['a', 'b', 'c'], ['b', 'c']);
     radios[0].focus();
     await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
     expect(checkedLabel(radios)).toBe('a');
@@ -98,7 +98,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('ignores an arrow pressed with Alt, Ctrl or Meta so browser shortcuts keep working', async () => {
-    const { radios } = await setup(['a', 'b', 'c']);
+    const { radios } = setup(['a', 'b', 'c']);
     radios[0].focus();
     await fireEvent.keyDown(radios[0], { key: 'ArrowLeft', altKey: true });
     await fireEvent.keyDown(radios[0], { key: 'ArrowRight', ctrlKey: true });
@@ -108,7 +108,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('prevents the default scroll of a handled arrow key only', async () => {
-    const { radios } = await setup(['a', 'b']);
+    const { radios } = setup(['a', 'b']);
     radios[0].focus();
     const handled = new KeyboardEvent('keydown', {
       key: 'ArrowRight',
@@ -124,7 +124,7 @@ describe('radioGroupKeys', () => {
   });
 
   it('stops handling keys after destroy', async () => {
-    const { radios, destroy } = await setup(['a', 'b']);
+    const { radios, destroy } = setup(['a', 'b']);
     destroy();
     radios[0].focus();
     await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });

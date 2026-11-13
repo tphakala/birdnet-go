@@ -286,6 +286,7 @@
   }
 
   function selectWindow(w: string) {
+    if (running) return;
     selectedWindow = w;
     try {
       localStorage.setItem('health-eval-window', w);
@@ -624,10 +625,7 @@
               aria-checked={selectedWindow === w}
               tabindex={selectedWindow === w ? 0 : -1}
               aria-disabled={running ? 'true' : undefined}
-              onclick={() => {
-                if (running) return;
-                selectWindow(w);
-              }}
+              onclick={() => selectWindow(w)}
               class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
                 ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
