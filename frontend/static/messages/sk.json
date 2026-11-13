@@ -1945,7 +1945,8 @@
     "detach": "Otvoriť v novom okne",
     "detached": "Terminál je odpojený",
     "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
-    "reattach": "Pripojiť späť"
+    "reattach": "Pripojiť späť",
+    "keyboardExitHint": "Ak chcete opustiť terminál, stlačte Esc a potom Tab"
   },
   "analytics": {
     "hub": {

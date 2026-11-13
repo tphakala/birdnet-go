@@ -1,0 +1,56 @@
+/**
+ * terminalKeys.ts - keyboard exit from the xterm terminal.
+ *
+ * xterm consumes Tab and Shift+Tab (the shell uses them for completion), so a
+ * keyboard user who tabs into the terminal cannot leave it. The handler made
+ * here implements the "Escape, then Tab" convention: Escape still reaches the
+ * shell, and a Tab or Shift+Tab pressed within TAB_RELEASE_WINDOW_MS of it is
+ * not handled by xterm, so the browser moves focus as it normally would.
+ */
+
+/** How long after Escape a Tab or Shift+Tab still leaves the terminal. */
+export const TAB_RELEASE_WINDOW_MS = 2000;
+
+const KEY_ESCAPE = 'Escape';
+const KEY_TAB = 'Tab';
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(['Shift', 'Control', 'Alt', 'Meta']);
+
+/**
+ * Create a handler for `Terminal.attachCustomKeyEventHandler`. It returns
+ * `true` when xterm should process the key and `false` when the key must be
+ * left to the browser (focus moves). Each terminal needs its own handler.
+ *
+ * @param now Clock in milliseconds, injectable for tests.
+ */
+export function createTerminalExitKeys(
+  now: () => number = Date.now
+): (ev: KeyboardEvent) => boolean {
+  let escapeAt: number | null = null;
+
+  return (ev: KeyboardEvent): boolean => {
+    if (ev.type !== 'keydown') return true;
+
+    // Pressing Shift for Shift+Tab is part of the sequence, not a new key.
+    if (MODIFIER_KEYS.has(ev.key)) return true;
+
+    const hasCommandModifier = ev.ctrlKey || ev.altKey || ev.metaKey;
+    const armedAt = escapeAt;
+    escapeAt = null;
+
+    if (ev.key === KEY_ESCAPE && !hasCommandModifier && !ev.shiftKey) {
+      escapeAt = now();
+      return true;
+    }
+
+    if (
+      ev.key === KEY_TAB &&
+      !hasCommandModifier &&
+      armedAt !== null &&
+      now() - armedAt <= TAB_RELEASE_WINDOW_MS
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+}

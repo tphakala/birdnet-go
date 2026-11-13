@@ -1516,6 +1516,7 @@ export type TranslationKey =
   | 'terminal.detached'
   | 'terminal.detachedDescription'
   | 'terminal.reattach'
+  | 'terminal.keyboardExitHint'
   | 'analytics.hub.tabs.patterns'
   | 'analytics.hub.tabs.trends'
   | 'analytics.hub.tabs.biodiversity'

@@ -22,6 +22,7 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { settingsStore } from '$lib/stores/settings';
+  import { createTerminalExitKeys } from './terminalKeys';
   import {
     TerminalSquare,
     WifiOff,
@@ -77,6 +78,10 @@
   const POPUP_WINDOW_FEATURES = 'width=900,height=600,menubar=no,toolbar=no,location=no,status=no';
   const POPUP_DOM_SETTLE_MS = 50;
   const POPUP_RECONNECT_DELAY_MS = 100;
+  /** Id of the keyboard exit hint, referenced by the terminal input's aria-describedby */
+  const EXIT_HINT_ID = 'terminal-exit-hint';
+  const FOCUS_RING_CLASS =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]';
   /** Minimum opacity for secondary/muted text elements (WCAG AA compliant) */
   const MUTED_OPACITY = 0.7;
 
@@ -170,6 +175,8 @@
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalContainer);
+    term.attachCustomKeyEventHandler(createTerminalExitKeys());
+    term.textarea?.setAttribute('aria-describedby', EXIT_HINT_ID);
     fitAddon.fit();
 
     // Track terminal dimensions
@@ -324,7 +331,7 @@
       '<!DOCTYPE html><html lang="' +
       (document.documentElement.lang || 'en') +
       '"><head><meta charset="UTF-8"/>' +
-      '<title>BirdNET-Go \u2014 ' +
+      '<title>BirdNET-Go - ' +
       t('terminal.title') +
       '</title></head>' +
       '<body>' +
@@ -337,6 +344,11 @@
       '</span>' +
       '</div>' +
       '<span id="dimensions" class="dimensions"></span>' +
+      '<span id="' +
+      EXIT_HINT_ID +
+      '" class="exit-hint">' +
+      t('terminal.keyboardExitHint') +
+      '</span>' +
       '</div>' +
       '<div class="toolbar-right">' +
       '<div class="theme-swatches">' +
@@ -389,6 +401,11 @@
       MUTED_OPACITY +
       '; color: ' +
       theme.foreground +
+      '; }' +
+      '.exit-hint { font-size: 11px; font-family: system-ui, sans-serif; color: ' +
+      theme.foreground +
+      '; opacity: ' +
+      MUTED_OPACITY +
       '; }' +
       '.theme-swatches { display: flex; gap: 4px; }' +
       '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }' +
@@ -486,6 +503,8 @@
       const popupFit = new FitAddon();
       popupTerm.loadAddon(popupFit);
       popupTerm.open(popupContainer);
+      popupTerm.attachCustomKeyEventHandler(createTerminalExitKeys());
+      popupTerm.textarea?.setAttribute('aria-describedby', EXIT_HINT_ID);
       popupFit.fit();
 
       // ── Toolbar references ──
@@ -819,12 +838,12 @@
           {/if}
         </div>
 
-        <!-- Action buttons - tabindex -1 prevents stealing focus from terminal -->
+        <!-- Action buttons - the terminal is refocused by the handlers after each action -->
         <div class="flex items-center gap-1">
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
             <button
-              class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
+              class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
               style:color="var(--color-base-content)"
               style:opacity={showThemeMenu ? 1 : MUTED_OPACITY}
               onclick={() => (showThemeMenu = !showThemeMenu)}
@@ -896,8 +915,7 @@
           </div>
 
           <button
-            tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
             style:color="var(--color-base-content)"
             style:opacity={isCopied ? 1 : MUTED_OPACITY}
             onclick={copyTerminalOutput}
@@ -911,7 +929,7 @@
             {/if}
           </button>
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
             style:color="var(--color-base-content)"
             style:opacity={MUTED_OPACITY}
             onclick={detachTerminal}
@@ -921,8 +939,7 @@
             <ExternalLink class="w-3.5 h-3.5" />
           </button>
           <button
-            tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
             style:color="var(--color-base-content)"
             style:opacity={MUTED_OPACITY}
             onclick={toggleExpanded}
@@ -936,8 +953,7 @@
             {/if}
           </button>
           <button
-            tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80 {FOCUS_RING_CLASS}"
             style:color="var(--color-base-content)"
             style:opacity={MUTED_OPACITY}
             onclick={toggleFullscreen}
@@ -962,6 +978,12 @@
         style:background={activeTheme.background}
         style:height={isExpanded || isFullscreen ? undefined : '480px'}
       ></div>
+      <p
+        id={EXIT_HINT_ID}
+        class="shrink-0 border-t border-[var(--border-100)] px-4 py-1.5 text-xs text-muted"
+      >
+        {t('terminal.keyboardExitHint')}
+      </p>
     </div>
   {/if}
 </div>

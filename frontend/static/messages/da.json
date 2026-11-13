@@ -1945,7 +1945,8 @@
     "detach": "Åbn i nyt vindue",
     "detached": "Terminal er løsrevet",
     "detachedDescription": "Terminalen kører i et separat vindue. Luk det vindue for at vende tilbage hertil.",
-    "reattach": "Tilknyt igen"
+    "reattach": "Tilknyt igen",
+    "keyboardExitHint": "Tryk på Esc og derefter Tab for at forlade terminalen"
   },
   "analytics": {
     "hub": {

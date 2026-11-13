@@ -1945,7 +1945,8 @@
     "detach": "Ouvrir dans une nouvelle fenêtre",
     "detached": "Terminal détaché",
     "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici.",
-    "reattach": "Rattacher"
+    "reattach": "Rattacher",
+    "keyboardExitHint": "Appuyez sur Échap, puis sur Tab pour quitter le terminal"
   },
   "analytics": {
     "hub": {

@@ -1945,7 +1945,8 @@
     "detach": "Openen in nieuw venster",
     "detached": "Terminal is losgekoppeld",
     "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen.",
-    "reattach": "Opnieuw koppelen"
+    "reattach": "Opnieuw koppelen",
+    "keyboardExitHint": "Druk op Esc en daarna op Tab om de terminal te verlaten"
   },
   "analytics": {
     "hub": {
