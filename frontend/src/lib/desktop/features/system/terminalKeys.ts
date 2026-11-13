@@ -19,8 +19,6 @@ export const TAB_RELEASE_WINDOW_MS = 2000;
 
 const KEY_ESCAPE = 'Escape';
 const KEY_TAB = 'Tab';
-/** `KeyboardEvent.key` reported while an input method processes a key. */
-const KEY_PROCESS = 'Process';
 /** Legacy `keyCode` reported for keys consumed by an input method. */
 const KEYCODE_IME_PROCESSING = 229;
 const MODIFIER_KEYS: ReadonlySet<string> = new Set(['Shift', 'Control', 'Alt', 'Meta']);
@@ -48,7 +46,7 @@ export function createTerminalExitKeys(now: () => number = Date.now): TerminalEx
     if (ev.type !== 'keydown') return true;
 
     // Composition keys belong to the input method; xterm handles them itself.
-    if (ev.isComposing || ev.key === KEY_PROCESS || ev.keyCode === KEYCODE_IME_PROCESSING) {
+    if (ev.isComposing || ev.keyCode === KEYCODE_IME_PROCESSING) {
       escapeAt = null;
       return true;
     }

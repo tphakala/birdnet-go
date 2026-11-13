@@ -95,7 +95,6 @@ describe('createTerminalExitKeys', () => {
 
   it.each([
     ['isComposing', 'Escape', { isComposing: true }],
-    ['the Process key', 'Process', {}],
     ['keyCode 229', 'Escape', { keyCode: 229 }],
   ] as const)('does not arm the exit on %s', (_name, k, init) => {
     const { handler } = setup();
@@ -105,7 +104,6 @@ describe('createTerminalExitKeys', () => {
 
   it.each([
     ['isComposing', 'Tab', { isComposing: true }],
-    ['the Process key', 'Process', {}],
     ['keyCode 229', 'Tab', { keyCode: 229 }],
   ] as const)('does not release Tab and drops the armed Escape on %s', (_name, k, init) => {
     const { handler } = setup();
