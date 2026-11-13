@@ -48,6 +48,14 @@ describe('SettingsTabs tablist label', () => {
     expect(screen.getByRole('tablist', { name: 'settings.tabs.navigation' })).toBeInTheDocument();
   });
 
+  it('names the tablist settings.tabs.navigation when ariaLabel is empty', () => {
+    render(SettingsTabs, {
+      props: { tabs: [tab('one', false)], activeTab: 'one', showActions: false, ariaLabel: '' },
+    });
+
+    expect(screen.getByRole('tablist', { name: 'settings.tabs.navigation' })).toBeInTheDocument();
+  });
+
   it('names the tablist by ariaLabel when given', () => {
     render(SettingsTabs, {
       props: { tabs: [tab('one', false)], activeTab: 'one', showActions: false, ariaLabel: 'Own' },

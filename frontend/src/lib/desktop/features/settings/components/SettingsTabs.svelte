@@ -153,7 +153,7 @@
   <div
     class="tabs border-b border-[var(--color-base-300)] mb-6"
     role="tablist"
-    aria-label={ariaLabel ?? t('settings.tabs.navigation')}
+    aria-label={ariaLabel || t('settings.tabs.navigation')}
   >
     {#each tabs as tab, index (tab.id)}
       {@const isActive = selectedTab === tab.id}
