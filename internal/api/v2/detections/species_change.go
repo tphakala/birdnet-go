@@ -42,10 +42,12 @@ type SpeciesChangeRequest struct {
 
 // ChangeDetectionSpecies handles PUT /api/v2/detections/:id/species. It sets the
 // species of a detection as a reviewer's correction and answers 200 with
-// {"status":"success"}, also for the species the detection already has. It answers
-// 409 unless the enhanced (v2) database is in use and for a locked detection, 400
-// for an id that is not a positive integer that fits in 32 bits, an unreadable
-// body, a missing name and an unknown species, and 404 for a missing detection.
+// {"status":"success"}, also for the species the detection already has unless it is
+// locked. It answers 409 unless the enhanced (v2) database is in use and for a
+// locked detection (checked before the species is looked up), 400 for an id that is
+// not a positive integer that fits in 32 bits, an unreadable body, a missing name, a
+// name without a species part and an unknown species, and 404 for a missing
+// detection.
 func (c *Handler) ChangeDetectionSpecies(ctx echo.Context) error {
 	if c.speciesChanger == nil || !datastoreV2.IsEnhancedDatabase() {
 		return c.respondEnhancedDatabaseRequired(ctx, speciesChangeV2RequiredMessage, speciesChangeV2RequiredLog)

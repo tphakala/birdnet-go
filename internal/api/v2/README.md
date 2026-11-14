@@ -373,16 +373,16 @@ written best-effort).
 detection as a reviewer's correction, on the enhanced (v2) database only. The detection takes the detecting
 model's label for that species (by name or taxonomic alias); confidence, clip and times are unchanged, and the
 detection is marked reviewed as `correct`. The first change records the model's own pick, and later changes
-keep it. A request for the species the detection already has changes nothing and answers 200. The success
+keep it. A request for the species the detection already has changes nothing and answers 200, except that a locked detection answers 409 first. The success
 body is `{"status":"success"}`.
 
 - `originalSpecies`: list, recent and single detection responses carry `originalSpecies` (`scientificName`,
   `commonName`, `speciesCode`) once a reviewer has changed the species, also after it was changed back. Its
   confidence is the detection's `confidence`. It is omitted when the species was never changed and on the
   legacy database. `POST /search` does not carry it.
-- Status codes: `409` when the enhanced database is not in use and for a locked detection, `400` for an id
-  that is not a positive integer that fits in 32 bits, a body that cannot be read, a missing name and an
-  unknown species, `404` when the detection does not exist, and `500` for a database error.
+- Status codes: `409` when the enhanced database is not in use and for a locked detection (checked before the species is looked up), `400` for an id
+  that is not a positive integer that fits in 32 bits, a body that cannot be read, a missing name, a name
+  without a species part and an unknown species, `404` when the detection does not exist, and `500` for a database error.
 - Limitations: the new-species flags (`isNewSpecies`, `daysSinceFirstSeen` and the yearly and seasonal ones)
   of the changed detection and of both species can stay as they were until the species tracker next
   re-syncs from the database. Nothing already published is retracted or sent again: MQTT, BirdWeather, SSE
