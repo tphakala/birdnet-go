@@ -1576,24 +1576,39 @@ func (r *detectionRepository) GetCommentsByDetectionIDs(ctx context.Context, det
 // Locks
 // ============================================================================
 
+// mysqlShareLockClause makes the SELECT of the lock insert a locking read on
+// MySQL and MariaDB. Without it, MariaDB with innodb_snapshot_isolation on
+// (its default in 11.8 and 12.3) fails the loser of two concurrent locks at
+// READ COMMITTED with Error 1020 instead of letting it skip the duplicate.
+// MariaDB 10.11 does not accept the FOR SHARE spelling.
+const mysqlShareLockClause = "LOCK IN SHARE MODE "
+
 // Lock prevents modification/deletion of a detection.
-// Uses an atomic INSERT...SELECT...WHERE NOT EXISTS to avoid TOCTOU races.
-// Idempotent: locking an already-locked detection succeeds silently.
-// Returns ErrDetectionNotFound only if the detection does not exist.
+// One statement inserts the lock row only if the detection exists and skips the
+// insert when the row is already there (a repeated or concurrent lock), so the
+// first lock time is kept. Idempotent: locking an already-locked detection
+// succeeds silently. Returns ErrDetectionNotFound only if the detection does
+// not exist.
 //
 // The lock time is the application's clock, sent as a parameter. A server-side
 // CURRENT_TIMESTAMP is in the database server's zone on MySQL and MariaDB and reads
 // back as another instant when that zone differs from the process zone.
 func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error {
+	shareLock := ""
+	if r.isMySQL {
+		shareLock = mysqlShareLockClause
+	}
+	query := fmt.Sprintf("INSERT INTO %s (detection_id, locked_at) SELECT ?, ? FROM %s WHERE %s.id = ? %s%s",
+		r.locksTable(), r.tableName(), r.tableName(), shareLock, onConflictSkipSQL(r.isMySQL, detectionIDColumn))
 	return datastore.RetryOnLock(ctx, "v2_lock_detection", func() error {
 		now := time.Now()
-		result := r.db.WithContext(ctx).Exec(
-			fmt.Sprintf("INSERT INTO %s (detection_id, locked_at) SELECT ?, ? FROM %s WHERE %s.id = ? AND NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = ?)",
-				r.locksTable(), r.tableName(), r.tableName(), r.locksTable(), r.locksTable()),
-			detectionID, now, detectionID, detectionID)
+		result := r.db.WithContext(ctx).Exec(query, detectionID, now, detectionID)
 		if result.Error != nil {
 			return result.Error
 		}
+		// 0 rows means the detection is missing or, where the driver reports a
+		// skipped duplicate as 0 (SQLite, MySQL without clientFoundRows), that it
+		// is already locked; the Exists check tells them apart.
 		if result.RowsAffected == 0 {
 			exists, err := r.Exists(ctx, detectionID)
 			if err != nil {
