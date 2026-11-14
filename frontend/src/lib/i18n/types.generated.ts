@@ -767,6 +767,7 @@ export type TranslationKey =
   | 'detections.detail.conditions.feelsLike'
   | 'detections.detail.conditions.moonLit' // params: percent
   | 'detections.detail.conditions.windFrom' // params: direction
+  | 'detections.detail.conditions.cloudCover'
   | 'detections.detail.conditions.precipitation'
   | 'detections.detail.conditions.observedAt' // params: time
   | 'detections.detail.conditions.notObserved'

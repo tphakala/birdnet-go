@@ -45,13 +45,13 @@ describe('ConditionsCard weather tiles', () => {
   // (internal/weather/provider_wunderground.go), so a recorded hour shows 0 % for it.
   it('shows 0 for cloud cover of a recorded hour when the API left it out', () => {
     renderCard({ hourly: { time: '03:00', temperature: 2, clouds: 40 } });
-    expect(tileValue('detections.weather.labels.cloudCover')).toBe('40%');
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('40%');
   });
 
   it('shows 0 % cloud cover for a recorded hour that left it out', () => {
     renderCard({ hourly: { time: '03:00', temperature: 2 } });
 
-    expect(tileValue('detections.weather.labels.cloudCover')).toBe('0%');
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('0%');
   });
 
   it('shows dashes for the empty hourly object the API sends when it has no data', () => {
@@ -59,7 +59,7 @@ describe('ConditionsCard weather tiles', () => {
 
     expect(tileValue('detections.detail.conditions.precipitation')).toBe('-');
     expect(tileValue('detections.weather.labels.wind')).toBe('-');
-    expect(tileValue('detections.weather.labels.cloudCover')).toBe('-');
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('-');
     expect(tileValue('detections.detail.conditions.feelsLike')).toBe('-');
     // The weather line must not read 0 degrees.
     expect(document.querySelector('.dd-weather-temp')?.textContent.trim()).toBe('-');
@@ -95,7 +95,7 @@ describe('ConditionsCard weather tiles', () => {
     renderCard({});
 
     expect(tileValue('detections.detail.conditions.precipitation')).toBe('-');
-    expect(tileValue('detections.weather.labels.cloudCover')).toBe('-');
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('-');
   });
 
   // The arrow icon rests pointing up, so a wind from 0 degrees (north) blows south: down.

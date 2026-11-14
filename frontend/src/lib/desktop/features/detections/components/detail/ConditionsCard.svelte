@@ -284,7 +284,7 @@
     {
       key: 'clouds',
       icon: Cloud,
-      label: t('detections.weather.labels.cloudCover'),
+      label: t('detections.detail.conditions.cloudCover'),
       value: clouds !== undefined ? String(clouds) : MISSING,
       unit: clouds !== undefined ? '%' : undefined,
     },
