@@ -951,7 +951,7 @@
         "sunrise": "Sunrise",
         "sunset": "Sunset",
         "activityLegend": "{species} activity by hour, all time",
-        "feelsLike": "Sajūtu temperatūra",
+        "feelsLike": "Jūtas kā",
         "moonLit": "{percent}% lit",
         "windFrom": "Vējš no {direction}",
         "precipitation": "Precipitation",
