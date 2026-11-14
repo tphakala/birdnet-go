@@ -1615,6 +1615,48 @@ describe('DatabaseDashboard initial load', () => {
     }
   });
 
+  it('shows the overview error without waiting for the legacy status', async () => {
+    const legacy = deferred<unknown>();
+    serve({
+      [STATUS_URL]: v2OnlyStatus,
+      [OVERVIEW_URL]: apiError('overview failed', 500),
+      [LEGACY_STATUS_URL]: legacy.promise,
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    // The legacy status is still pending; the failed overview must not hide behind the skeleton
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+    expect(screen.getByRole('alert')).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+  });
+
+  it('shows the skeleton, not an error, when the view switches to v2-only before the overview answers', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // The migration view does not wait for the overview, so the page loads while it is pending
+      const overviewRequest = deferred<unknown>();
+      serve({ [STATUS_URL]: migratingStatus, [OVERVIEW_URL]: overviewRequest.promise });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('button', { name: t('system.database.migration.actions.pause') });
+
+      serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: overviewRequest.promise });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      await waitFor(() => expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument());
+      expect(
+        screen.queryByText(t('system.database.dashboard.fetchFailed'))
+      ).not.toBeInTheDocument();
+
+      overviewRequest.resolve(overview);
+      await screen.findByRole('heading', { name: tablesTitle() });
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the cleanup card content on screen while the cleanup polls the legacy status', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

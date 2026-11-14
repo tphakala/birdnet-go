@@ -430,7 +430,7 @@
   let firstLoadPending = $derived(
     migrationStatus.loading ||
       (isV2OnlyMode
-        ? overviewLoading || !legacySettled
+        ? overviewLoading || (!overviewError && !legacySettled)
         : legacyStats.loading || v2Stats.loading || backupJobsLoading)
   );
   // Latched: once the page has loaded, refreshes, polls and a later view change never
@@ -742,7 +742,10 @@
     <DatabaseDashboardSkeleton />
   {:else if isV2OnlyMode}
     <!-- OPERATIONAL DASHBOARD VIEW -->
-    {#if overviewError || !overview}
+    {#if overviewLoading && !overview}
+      <!-- Reached when the page loaded in the migration view and switched before the overview answered -->
+      <DatabaseDashboardSkeleton />
+    {:else if overviewError || !overview}
       <ErrorAlert
         title={t('system.database.dashboard.fetchFailed')}
         message={overviewError ?? ''}
