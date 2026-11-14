@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
 
@@ -348,4 +349,46 @@ func TestDetectionRepository_ChangeSpecies_RecordsLabelHeldAtUpdateTime(t *testi
 	assert.Equal(t, mallard.ID, got.LabelID)
 	require.NotNil(t, got.OriginalLabelID)
 	assert.Equal(t, gadwall.ID, *got.OriginalLabelID, "the original is the label the row held at update time")
+}
+
+// TestDetectionRepository_ChangeSpecies_ReviewFailureRollsBackLabel pins that the
+// label update and the review upsert are one transaction: the review insert runs
+// on the transaction's handle, and when it fails the detection keeps its label,
+// its original stays NULL and its review is as it was.
+func TestDetectionRepository_ChangeSpecies_ReviewFailureRollsBackLabel(t *testing.T) {
+	const callbackName = "test:fail_review_insert"
+	errReviewInsert := errors.NewStd("review insert failed")
+
+	db, repo := speciesTestDB(t)
+	ctx := t.Context()
+	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+	createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
+	det := speciesTestDetection(t, db, teal)
+	require.NoError(t, repo.SaveReview(ctx, &entities.DetectionReview{
+		DetectionID: det.ID, Verified: entities.VerificationFalsePositive,
+	}))
+
+	// Registered after the seeding above, which also goes through the review upsert.
+	// It runs before the statement's own transaction handling, so a statement on the
+	// pool is failed here instead of waiting for the connection the transaction holds.
+	var onTransaction atomic.Bool
+	require.NoError(t, db.Callback().Create().Before("gorm:begin_transaction").Register(callbackName, func(tx *gorm.DB) {
+		if !strings.HasSuffix(tx.Statement.Table, tableDetectionReviews) {
+			return
+		}
+		_, inTransaction := tx.Statement.ConnPool.(gorm.TxCommitter)
+		onTransaction.Store(inTransaction)
+		_ = tx.AddError(errReviewInsert)
+	}))
+	t.Cleanup(func() { require.NoError(t, db.Callback().Create().Remove(callbackName)) })
+
+	require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard), errReviewInsert)
+
+	assert.True(t, onTransaction.Load(), "the review insert runs on the transaction of the label update")
+	got, err := repo.Get(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, *det, *got, "the label update is rolled back with the failed review")
+	review, err := repo.GetReview(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, entities.VerificationFalsePositive, review.Verified)
 }
