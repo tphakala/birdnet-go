@@ -355,6 +355,18 @@ type DetectionRepository interface {
 	// Returns ErrDetectionNotFound if id does not exist.
 	GetNeighborIDs(ctx context.Context, id uint) (*DetectionNeighbors, error)
 
+	// GetSpeciesStats returns the all-time statistics of one species. The species
+	// is the scientific name extracted from scientificName (see
+	// detection.ExtractScientificName), matched across every model's labels as
+	// LabelMatchForScientificName does, which are the labels GetNeighborIDs walks,
+	// so a label stored in the legacy "ScientificName_CommonName" form belongs to
+	// the species too. Detections reviewed as false positive are left out of the
+	// count, the times and the confidences, as in GetSpeciesSummary; the review
+	// counts cover every reviewed detection. A name with no species part, a name
+	// no label carries and a species with no detections all return zero
+	// statistics and no error.
+	GetSpeciesStats(ctx context.Context, scientificName string) (*SpeciesStats, error)
+
 	// Exists checks if a detection with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
 
