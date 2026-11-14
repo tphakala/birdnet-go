@@ -257,7 +257,7 @@ func TestDetectionEndpoints_ReadThroughRepository(t *testing.T) {
 // carries the review and lock times as RFC3339 in the result's zone, omits each one
 // that is zero, and that the recent list never carries them.
 func TestGetDetection_ReviewAndLockTimes(t *testing.T) {
-	zone := time.FixedZone("EEST", 2*60*60)
+	zone := time.FixedZone("EET", 2*60*60)
 	firstReviewed := time.Date(2026, 6, 1, 8, 0, 1, 0, zone)
 	lastReviewed := time.Date(2026, 6, 2, 9, 0, 2, 0, zone)
 	locked := time.Date(2026, 6, 3, 10, 0, 3, 0, zone)

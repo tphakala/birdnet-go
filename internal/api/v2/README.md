@@ -333,7 +333,7 @@ last saved: any save moves it, so the same status saved again and a species chan
 earlier than `firstReviewedAt` (they are equal for a review saved once). `lockedAt` is when the current lock
 was set; unlocking removes it and locking again starts a new time. Each is omitted without a review or lock
 and on the legacy database. List, recent and `POST /search` responses do not carry them. A review or lock
-imported from the legacy database carries the times the migration copied. On MySQL and MariaDB these times
+imported from the legacy database can carry the time the migration copied or synced it rather than when it was made. On MySQL and MariaDB these times
 are stored as local wall clock without an offset, unlike `timestamp`, so one saved in the repeated hour at
 the end of daylight saving time can read back an hour early.
 
