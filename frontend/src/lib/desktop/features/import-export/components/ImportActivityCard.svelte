@@ -8,6 +8,8 @@
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
   import { Activity, CheckCircle2, XCircle, CircleSlash, Unplug } from '@lucide/svelte';
   import ImportCountTile from './ImportCountTile.svelte';
@@ -219,9 +221,15 @@
   </h3>
 
   {#if view === 'loading'}
-    <div class="flex items-center gap-2 text-sm text-muted">
-      <LoadingSpinner size="sm" />
-      {t('system.importExport.loading')}
+    <!-- Skeleton of the idle state, the most common answer: icon, then the label in the
+         title slot, then the description lines -->
+    <div class="flex flex-col items-center text-center py-6 gap-2">
+      <Skeleton className="size-8 rounded-lg" />
+      <SkeletonStatus label={t('system.importExport.loading')} className="text-sm font-medium" />
+      <div class="flex flex-col items-center text-xs">
+        <span><Skeleton className="inline-block align-middle h-3 w-44" /></span>
+        <span><Skeleton className="inline-block align-middle h-3 w-32" /></span>
+      </div>
     </div>
   {:else if view === 'loadError'}
     <ErrorAlert message={loadError ?? ''} type="error" />
