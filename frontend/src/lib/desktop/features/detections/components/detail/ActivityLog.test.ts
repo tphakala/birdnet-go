@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import ActivityLog from './ActivityLog.svelte';
 import { t } from '$lib/i18n';
+import { toastActions } from '$lib/stores/toast';
 import type { DetectionDetailData } from './detailTypes';
 
 const base: DetectionDetailData = {
@@ -133,5 +134,126 @@ describe('ActivityLog note while saving', () => {
 
     expect(box.readOnly).toBe(true);
     answer?.(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  });
+});
+
+describe('ActivityLog names and icons', () => {
+  afterEach(() => {
+    cleanup();
+    vi.mocked(t).mockClear();
+  });
+
+  it('names the model’s pick in the detected entry and both species in the change entry', () => {
+    renderLog({
+      ...base,
+      scientificName: 'Turdus philomelos',
+      commonName: 'Song Thrush',
+      verified: 'correct',
+      firstReviewedAt: '2026-11-14T08:00:00+02:00',
+      lastReviewedAt: '2026-11-14T08:00:00+02:00',
+      originalSpecies: {
+        scientificName: 'Turdus merula',
+        commonName: 'Blackbird',
+        speciesCode: 'eurbla',
+      },
+    });
+
+    expect(vi.mocked(t)).toHaveBeenCalledWith('detections.detail.log.detected', {
+      species: 'Blackbird',
+      confidence: 87,
+    });
+    expect(vi.mocked(t)).toHaveBeenCalledWith('detections.detail.log.speciesChanged', {
+      from: 'Blackbird',
+      to: 'Song Thrush',
+    });
+  });
+
+  // The first verdict is not kept, so the first entry must not claim the current one.
+  it('gives the first review a neutral icon and the latest save the verdict’s', () => {
+    const { container } = render(ActivityLog, {
+      props: {
+        detection: {
+          ...base,
+          verified: 'false_positive',
+          firstReviewedAt: '2026-11-14T08:00:00+02:00',
+          lastReviewedAt: '2026-11-14T09:00:00+02:00',
+        },
+        speciesName: 'Song Thrush',
+        canReview: false,
+        onChanged: vi.fn(),
+      },
+    });
+
+    const icons = [...container.querySelectorAll('.dd-log-icon')].map(icon => icon.className);
+    expect(icons[1]).toContain('dd-log-icon-reviewed');
+    expect(icons[1]).not.toContain('dd-log-icon-false_positive');
+    expect(icons[2]).toContain('dd-log-icon-false_positive');
+  });
+});
+
+describe('ActivityLog note form', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.mocked(toastActions.error).mockClear();
+  });
+
+  function renderForm(detection: DetectionDetailData = base) {
+    return render(ActivityLog, {
+      props: { detection, speciesName: 'Song Thrush', canReview: true, onChanged: vi.fn() },
+    });
+  }
+
+  const saveButton = () => screen.getByRole('button', { name: 'detections.detail.log.saveNote' });
+
+  it('stays enabled for an empty note and says why nothing was saved', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    renderForm();
+
+    expect(saveButton()).not.toHaveAttribute('aria-disabled');
+    await fireEvent.click(saveButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('detections.detail.log.noteEmpty');
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a note' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('points the blocked button at the visible reason when the detection is locked', () => {
+    renderForm({ ...base, locked: true });
+
+    const reason = document.getElementById(saveButton().getAttribute('aria-describedby') ?? '');
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(reason?.textContent).toContain('detections.detail.log.lockedHelp');
+  });
+
+  // The page keys the log by detection: stepping away destroys it while a save may be out.
+  it('reports a failed save as a toast when the log was destroyed during the save', async () => {
+    let answer: ((_response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            answer = resolve;
+          })
+      )
+    );
+    const { unmount } = renderForm();
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a note' } });
+    await fireEvent.click(saveButton());
+    await waitFor(() => expect(answer).toBeDefined());
+
+    unmount();
+    answer?.(new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } }));
+
+    await waitFor(() => {
+      expect(vi.mocked(toastActions.error)).toHaveBeenCalledWith(
+        'common.review.errors.commentFailed'
+      );
+    });
   });
 });

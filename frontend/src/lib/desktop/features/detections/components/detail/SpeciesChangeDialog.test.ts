@@ -113,32 +113,73 @@ describe('SpeciesChangeDialog saving', () => {
     });
   });
 
-  it('reports a save to its own detection and leaves the next detection\u2019s dialog open', async () => {
-    const onClose = vi.fn();
-    const onChanged = vi.fn();
-    const { rerender } = render(SpeciesChangeDialog, {
-      props: {
-        isOpen: true,
-        detection,
-        speciesName: 'Blackbird',
-        alternates,
-        predictionModel: 'BirdNET 2.4',
-        blockedReason: '',
-        onClose,
-        onChanged,
-      },
+  // The page keys the dialog by detection, so stepping away destroys the instance while a
+  // save may still be out. Its onClose would close the next detection's dialog.
+  describe('after the dialog was destroyed by a step', () => {
+    async function destroyedDuringSave() {
+      const onClose = vi.fn();
+      const onChanged = vi.fn();
+      const { unmount } = render(SpeciesChangeDialog, {
+        props: {
+          isOpen: true,
+          detection,
+          speciesName: 'Blackbird',
+          alternates,
+          predictionModel: 'BirdNET 2.4',
+          blockedReason: '',
+          onClose,
+          onChanged,
+        },
+      });
+      await fireEvent.click(radio('Song Thrush'));
+      await fireEvent.click(
+        screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+      );
+      await waitFor(() => expect(puts).toHaveLength(1));
+      unmount();
+      return { onClose, onChanged };
+    }
+
+    it('reports the save to its own detection and does not close the next dialog', async () => {
+      const { onClose, onChanged } = await destroyedDuringSave();
+      answerPut?.(json({}));
+
+      await waitFor(() => {
+        expect(onChanged).toHaveBeenCalledWith({
+          detectionId: 7,
+          scientificName: 'Turdus merula',
+          reviewCounts: true,
+        });
+      });
+      expect(onClose).not.toHaveBeenCalled();
     });
+
+    it('reports a failed save as a toast, since the dialog that would show it is gone', async () => {
+      vi.mocked(toastActions.error).mockClear();
+      const { onChanged } = await destroyedDuringSave();
+      answerPut?.(json({}, 500));
+
+      await waitFor(() => {
+        expect(vi.mocked(toastActions.error)).toHaveBeenCalledWith(
+          'detections.detail.species.changeFailed'
+        );
+      });
+      expect(onChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  it('says the legacy database cannot change a species when the save answers 409', async () => {
+    renderDialog();
     await fireEvent.click(radio('Song Thrush'));
     await fireEvent.click(
       screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
     );
+    await waitFor(() => expect(puts).toHaveLength(1));
+    answerPut?.(json({ error: 'conflict' }, 409));
 
-    await rerender({ detection: { ...detection, id: 8 } });
-    answerPut?.(json({}));
-    await waitFor(() => {
-      expect(onChanged).toHaveBeenCalledWith(7);
-    });
-    expect(onClose).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'detections.detail.species.legacyDatabase'
+    );
   });
 });
 
@@ -180,6 +221,11 @@ describe('SpeciesChangeDialog choosing', () => {
 
     expect(screen.getAllByRole('radio', { checked: true })).toHaveLength(1);
     expect(radio('Fieldfare')).toBeChecked();
+    // What the dialog itself marks as picked: one row across both lists, not only the
+    // browser's radio group (which unchecks the others whatever the component holds).
+    const marked = document.querySelectorAll('.dd-species-option-active');
+    expect(marked).toHaveLength(1);
+    expect(marked[0].textContent).toContain('Fieldfare');
     // What is saved is the last pick, from whichever list it came.
     await fireEvent.click(
       screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
@@ -216,6 +262,8 @@ describe('SpeciesChangeDialog choosing', () => {
     );
 
     expect(puts).toEqual([]);
+    // The click is ignored, not turned into a failed save.
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('shows a viewer who cannot change the species plain rows and the reason', () => {

@@ -182,3 +182,42 @@ describe('ReviewPanel Keep switch', () => {
     expect(screen.getByText('common.review.errors.lockStatusFailed')).toBeInTheDocument();
   });
 });
+
+describe('ReviewPanel verdict failure', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.mocked(toastActions.error).mockClear();
+  });
+
+  // After a failed verdict, a later save on the same detection reloads it; the old failure
+  // must not stay in the status line next to the fresh data.
+  it('clears the failure when the same detection is reloaded after another save', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    const { rerender } = render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    expect(await screen.findByText('common.review.errors.verificationFailed')).toBeInTheDocument();
+
+    await rerender({ detection: { ...detection } });
+    expect(screen.queryByText('common.review.errors.verificationFailed')).toBeNull();
+  });
+});

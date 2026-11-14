@@ -22,12 +22,26 @@ export interface ModelContribution {
 export interface DetectionDetailData extends Detection {
   modelContributions?: ModelContribution[];
   clipDenoised?: boolean;
-  /** Time of the first review (RFC3339). */
+  /** Time the review was first stored (RFC3339); absent without a review. */
   firstReviewedAt?: string;
-  /** Time of the latest review change (RFC3339). */
+  /**
+   * Time the review was last saved (RFC3339), never before firstReviewedAt. Any save
+   * moves it (the same verdict again, a species change), so a difference from
+   * firstReviewedAt does not mean the verdict changed.
+   */
   lastReviewedAt?: string;
-  /** Time the detection was locked (RFC3339). */
+  /** Time the current lock was set (RFC3339); absent while unlocked. */
   lockedAt?: string;
+}
+
+/** What a panel tells the page after a save on a detection went through. */
+export interface SavedChange {
+  /** The detection the save was made on, which may no longer be the one shown. */
+  detectionId: number;
+  /** The species whose review counts the save may have changed. */
+  scientificName: string;
+  /** True when the save may have changed that species' correct and false positive counts. */
+  reviewCounts: boolean;
 }
 
 /** GET /api/v2/detections/:id/neighbors */

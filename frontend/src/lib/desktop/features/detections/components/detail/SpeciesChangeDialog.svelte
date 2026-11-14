@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
   import { Check } from '@lucide/svelte';
+  import { onDestroy } from 'svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
@@ -29,7 +30,7 @@
   import { rankPredictions, toLocalizedPredictions } from '$lib/utils/speciesPredictions';
   import { generateId } from '$lib/utils/uuid';
   import { formatScore } from './detailFormat';
-  import type { AlternatePrediction, DetectionDetailData } from './detailTypes';
+  import type { AlternatePrediction, DetectionDetailData, SavedChange } from './detailTypes';
   import { loadSpeciesCatalog, type CatalogScope, type CatalogSpecies } from './speciesCatalog';
 
   interface Props {
@@ -43,8 +44,8 @@
     /** Why the species cannot be changed now; empty when the viewer may change it. */
     blockedReason: string;
     onClose: () => void;
-    /** Called with the detection's id after a change to it was saved, so the page can reload it. */
-    onChanged: (_detectionId: number) => void;
+    /** Called after a change to a detection was saved, so the page can reload it. */
+    onChanged: (_change: SavedChange) => void;
   }
 
   let {
@@ -68,6 +69,8 @@
   const choiceName = generateId('species-choice');
   // The server's answer for a species it has no label row for yet.
   const HTTP_BAD_REQUEST = 400;
+  // The answer on the legacy database, which cannot change a species.
+  const HTTP_CONFLICT = 409;
 
   type CatalogState = 'loading' | 'ready' | 'failed';
 
@@ -177,11 +180,30 @@
     }))
   );
 
+  // The dialog is keyed by detection: stepping away destroys it while a save may still be
+  // out, and the page's close handler would then close the next detection's dialog.
+  let destroyed = false;
+  onDestroy(() => {
+    destroyed = true;
+  });
+
+  function failureMessage(error: unknown, chosen: CatalogSpecies): string {
+    if (error instanceof ApiError && error.status === HTTP_BAD_REQUEST) {
+      return t('detections.detail.species.notKnownHere', { species: chosen.commonName });
+    }
+    if (error instanceof ApiError && error.status === HTTP_CONFLICT) {
+      return t('detections.detail.species.legacyDatabase');
+    }
+    return t('detections.detail.species.changeFailed');
+  }
+
   async function confirm() {
     // The species sent is the one named afterwards, whatever is picked while it saves.
     const chosen = selected;
     if (!chosen || saving || !canChange) return;
+    // What the save is made on, read once: the page may show another detection by the time it answers.
     const id = detection.id;
+    const previousSpecies = detection.scientificName;
     saving = true;
     errorMessage = '';
     try {
@@ -189,16 +211,14 @@
         scientificName: chosen.scientificName,
       });
       toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
-      onChanged(id);
-      // A dialog left for another detection while it saved does not close the next one.
-      if (detection.id === id) onClose();
+      onChanged({ detectionId: id, scientificName: previousSpecies, reviewCounts: true });
+      if (!destroyed) onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
-      if (detection.id !== id) return;
-      errorMessage =
-        error instanceof ApiError && error.status === HTTP_BAD_REQUEST
-          ? t('detections.detail.species.notKnownHere', { species: chosen.commonName })
-          : t('detections.detail.species.changeFailed');
+      const message = failureMessage(error, chosen);
+      // A dialog already gone has nowhere to show it.
+      if (destroyed) toastActions.error(message);
+      else errorMessage = message;
     } finally {
       saving = false;
     }

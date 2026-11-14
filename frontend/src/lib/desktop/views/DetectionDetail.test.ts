@@ -84,6 +84,17 @@ function stubApi(routes: [string, unknown][]): Call[] {
   return calls;
 }
 
+/** The neighbours answer of a detection on the current database format. */
+function neighborsOf(id: number) {
+  return {
+    detectionId: id,
+    previous: id - 1,
+    next: id + 1,
+    previousSameSpecies: null,
+    nextSameSpecies: null,
+  };
+}
+
 /** Lets pending promise callbacks and the DOM update after them run. */
 async function settle() {
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -203,7 +214,14 @@ describe('DetectionDetail panels', () => {
       ],
       [
         '/api/v2/weather/detection/10',
-        { hourly: { temperature: 12, weather_desc: 'clear sky', humidity: 55 } },
+        {
+          hourly: {
+            time: '2024-01-01T10:00:00Z',
+            temperature: 12,
+            weather_desc: 'clear sky',
+            humidity: 55,
+          },
+        },
       ],
     ]);
 
@@ -616,10 +634,11 @@ describe('DetectionDetail neighbours', () => {
     const { container } = detailTest.render({ detectionId: '95' });
 
     await waitFor(() => {
-      expect(screen.getAllByRole('link', { name: 'dataDisplay.table.error' })).toHaveLength(4);
+      expect(container.querySelectorAll('.dd-nav-step[aria-disabled="true"]')).toHaveLength(4);
     });
-    for (const link of screen.getAllByRole('link', { name: 'dataDisplay.table.error' })) {
-      expect(link).toHaveAttribute('aria-disabled', 'true');
+    // The reason is in each link's name (DetailNavBar's own test checks the names differ).
+    for (const link of container.querySelectorAll('.dd-nav-step')) {
+      expect(link.getAttribute('aria-label')).toContain('detections.detail.nav.stepFailed');
     }
     expect(container.querySelector('.dd-nav-groups')).toHaveAttribute('aria-busy', 'false');
   });
@@ -672,6 +691,7 @@ describe('DetectionDetail species dialog', () => {
   // and Confirm then changed the species of a detection it was not opened for.
   it('closes when another detection is shown', async () => {
     stubApi([
+      ['/neighbors', neighborsOf(98)],
       ['/api/v2/detections/98', makeDetection({ id: 98 })],
       ['/api/v2/detections/99', makeDetection({ id: 99 })],
     ]);
@@ -827,6 +847,8 @@ describe('DetectionDetail loading paths', () => {
     }
     expect(container.querySelector('nav')).not.toBeNull();
     expect(inertAncestors).toEqual([]);
+    // The links the user stepped with are still there, so their focus stays.
+    expect(container.querySelectorAll('.dd-nav-step')).toHaveLength(4);
   });
 
   it('keeps the detection on screen, with no error, when a refresh fails', async () => {
@@ -897,6 +919,148 @@ describe('DetectionDetail loading paths', () => {
 
     expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
     expect(count(calls, 'species?scientific_name=')).toBe(1);
+  });
+});
+
+describe('DetectionDetail stepping back to a detection with a save out', () => {
+  // Regression: the step's request for the saved detection may have been sent before the save
+  // went through; refreshing in place would then leave its old verdict on screen for good.
+  it('starts the step again when the save finishes for the detection being stepped to', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    let loads = 0;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/60/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      [
+        '/api/v2/detections/60',
+        (call: Call) => {
+          if (!call.url.endsWith('/api/v2/detections/60')) return Promise.resolve(jsonResponse({}));
+          loads += 1;
+          // The step back (second load) never answers on its own: it was sent before the save.
+          if (loads === 2) return new Promise<Response>(() => {});
+          return Promise.resolve(
+            jsonResponse(
+              makeDetection({ id: 60, verified: loads === 1 ? 'unverified' : 'correct' })
+            )
+          );
+        },
+      ],
+      ['/api/v2/detections/61', makeDetection({ id: 61, date: '2024-03-03' })],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '60' });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '61' });
+    await waitFor(() => expect(count(calls, '/api/v2/detections/61')).toBeGreaterThan(0));
+    await settle();
+    await rerender({ detectionId: '60' });
+    await waitFor(() => expect(loads).toBe(2));
+
+    answerReview?.(jsonResponse({}));
+
+    await waitFor(() => expect(loads).toBe(3));
+    // The step's own loads ran again: the detection's sun times were asked for once at
+    // the first load and once more by the restarted step, not skipped by an in-place reload.
+    await waitFor(() => expect(count(calls, '/api/v2/weather/sun/2024-01-01')).toBe(2));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+      ).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+});
+
+describe('DetectionDetail conditions after a step', () => {
+  // The previous detection's weather and sun must not read as the new detection's.
+  it('shows placeholders, not the previous weather, until the new answers arrive', async () => {
+    stubApi([
+      [
+        '/api/v2/weather/detection/80',
+        { hourly: { time: '2024-01-01T10:00:00Z', temperature: 11, weather_icon: '01' } },
+      ],
+      ['/api/v2/weather/detection/81', () => new Promise<Response>(() => {})],
+      ['/api/v2/detections/80', makeDetection({ id: 80 })],
+      ['/api/v2/detections/81', makeDetection({ id: 81 })],
+    ]);
+
+    const { container, rerender } = detailTest.render({ detectionId: '80' });
+    await waitFor(() => {
+      expect(container.querySelector('.dd-weather-temp')?.textContent).toContain('11');
+    });
+
+    await rerender({ detectionId: '81' });
+    await waitFor(() => {
+      expect(container.querySelector('#species-heading')).not.toBeNull();
+      expect(container.querySelector('.dd-grid-top')).not.toHaveClass('dd-switching');
+    });
+
+    const temperature = container.querySelector('.dd-weather-temp');
+    expect(temperature?.textContent).not.toContain('11');
+    expect(temperature?.querySelector('[data-skeleton]')).not.toBeNull();
+  });
+});
+
+describe('DetectionDetail answers of the wrong shape', () => {
+  it('treats a detection body that is not an object as a failed load', async () => {
+    stubApi([['/api/v2/detections/90', []]]);
+
+    detailTest.render({ detectionId: '90' });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('detections.errors.loadFailed');
+  });
+
+  it('reads weather, neighbours and daily bodies of the wrong shape as no answer', async () => {
+    stubApi([
+      ['/api/v2/detections/91/neighbors', null],
+      ['/api/v2/weather/detection/91', { hourly: 'warm' }],
+      ['/api/v2/analytics/time/daily', [1, 2]],
+      ['/api/v2/detections/91', makeDetection({ id: 91 })],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '91' });
+
+    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
+    await waitFor(() => {
+      expect(container.querySelector('[data-skeleton]')).toBeNull();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('DetectionDetail species change before the database format is known', () => {
+  it('offers the change only once the neighbours route has answered', async () => {
+    let answerNeighbors: ((_response: Response) => void) | undefined;
+    stubApi([
+      [
+        '/neighbors',
+        () =>
+          new Promise<Response>(resolve => {
+            answerNeighbors = resolve;
+          }),
+      ],
+      ['/api/v2/detections/92', makeDetection({ id: 92 })],
+    ]);
+
+    detailTest.render({ detectionId: '92' });
+    const wrongSpecies = await screen.findByRole('button', {
+      name: /detections\.detail\.review\.wrongSpecies/,
+    });
+    expect(wrongSpecies).toHaveAttribute('aria-disabled', 'true');
+    const reason = document.getElementById(wrongSpecies.getAttribute('aria-describedby') ?? '');
+    expect(reason?.textContent).toContain('detections.detail.review.databaseChecking');
+
+    answerNeighbors?.(jsonResponse(neighborsOf(92)));
+    await waitFor(() => {
+      expect(wrongSpecies).not.toHaveAttribute('aria-disabled');
+    });
   });
 });
 

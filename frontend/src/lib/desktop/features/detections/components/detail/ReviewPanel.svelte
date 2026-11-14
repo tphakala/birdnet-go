@@ -23,7 +23,7 @@
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
   import DetailCard from './DetailCard.svelte';
-  import type { DetectionDetailData } from './detailTypes';
+  import type { DetectionDetailData, SavedChange } from './detailTypes';
 
   type Verdict = 'correct' | 'false_positive';
 
@@ -38,8 +38,8 @@
     grow?: boolean;
     /** Opens the species dialog. */
     onWrongSpecies: () => void;
-    /** Called with the detection's id after a change to it was saved, so the page can reload it. */
-    onChanged: (_detectionId: number) => void;
+    /** Called after a change was saved, so the page can reload the detection. */
+    onChanged: (_change: SavedChange) => void;
   }
 
   let {
@@ -84,6 +84,13 @@
     if (lockTarget !== null && detection.locked === lockTarget) lockTarget = null;
   });
 
+  // The detection was reloaded (after a later save went through): an earlier failure's
+  // message no longer describes it. Only the reload is tracked, not the message.
+  $effect(() => {
+    void detection;
+    errorMessage = '';
+  });
+
   function fail(message: string) {
     errorMessage = message;
     toastActions.error(message);
@@ -93,6 +100,7 @@
     if (verdictBlocked || saving !== null || detection.verified === verdict) return;
     // The detection the change is saved on, kept for when the save answers.
     const id = detection.id;
+    const scientificName = detection.scientificName;
     saving = verdict;
     errorMessage = '';
     try {
@@ -102,7 +110,7 @@
           ? t('detections.detail.review.savedCorrect')
           : t('detections.detail.review.savedFalsePositive')
       );
-      onChanged(id);
+      onChanged({ detectionId: id, scientificName, reviewCounts: true });
     } catch (error) {
       logger.error('Failed to save verdict', error, { action: 'review' });
       fail(t('common.review.errors.verificationFailed'));
@@ -115,12 +123,13 @@
   async function setLocked(locked: boolean) {
     if (locked === keepValue || !canReview || saving !== null) return;
     const id = detection.id;
+    const scientificName = detection.scientificName;
     saving = 'lock';
     errorMessage = '';
     lockTarget = locked;
     try {
       await api.post(`/api/v2/detections/${id}/lock`, { locked });
-      onChanged(id);
+      onChanged({ detectionId: id, scientificName, reviewCounts: false });
     } catch (error) {
       logger.error('Failed to change lock', error, { action: 'lock' });
       lockTarget = null;

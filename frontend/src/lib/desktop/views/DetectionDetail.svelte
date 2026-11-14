@@ -34,6 +34,19 @@
   import SpeciesStatsCard from '$lib/desktop/features/detections/components/detail/SpeciesStatsCard.svelte';
   import { formatModelLabel } from '$lib/desktop/features/detections/components/detail/detailFormat';
   import {
+    isDailyCounts,
+    isDetectionDetail,
+    isDetectionNeighbors,
+    isDetectionPredictions,
+    isDetectionWeather,
+    isHourlyBuckets,
+    isSpeciesRarity,
+    isSunTimes,
+    isTaxonomy,
+    parseImageAttribution,
+    searchTotal,
+  } from '$lib/desktop/features/detections/components/detail/detailGuards';
+  import {
     dailyWindowStart,
     detectionMinute,
     nearestSunEvent,
@@ -47,6 +60,7 @@
     DetectionPredictions,
     DetectionWeather,
     HourlyBucket,
+    SavedChange,
     SpeciesRarity,
     SpeciesReviewCounts,
     SpeciesSummary,
@@ -58,6 +72,7 @@
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { api } from '$lib/utils/api';
   import { hasReviewPermission } from '$lib/utils/auth';
+  import { isPlainObject } from '$lib/utils/security';
   import { getLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
@@ -92,14 +107,18 @@
   let rarity = $state<SpeciesRarity | null>(null);
   let taxonomy = $state<TaxonomyHierarchy | null>(null);
   let imageAttribution = $state<ImageAttribution | null>(null);
-  let weather = $state<DetectionWeather | null>(null);
-  let sun = $state<SunTimes | null>(null);
+  // The weather and sun answers by what they belong to (the detection's id, its date), so a
+  // detection never shows the previous one's. A key with a null value answered "none".
+  let weatherAnswers = $state<Record<string, DetectionWeather | null>>({});
+  let sunAnswers = $state<Record<string, SunTimes | null>>({});
   let neighbors = $state<DetectionNeighbors | null>(null);
   let predictions = $state<DetectionPredictions | null>(null);
   let hourlyActivity = $state<HourlyBucket[] | null>(null);
   let dailyCounts = $state<DailyCounts | null>(null);
   let speciesSummary = $state<SpeciesSummary | null>(null);
   let reviewCounts = $state<SpeciesReviewCounts | null>(null);
+  // The species whose data (and review counts) the page holds; empty before the first load.
+  let speciesDataFor = '';
 
   // Which requests are out, so a card can tell "still loading" from "not recorded".
   let loading = $state({
@@ -128,9 +147,6 @@
   // - lists: neighbours, predictions and daily counts, which also change with the species;
   // - species and attribution: tied to the species, kept while stepping within one species.
   let detectionController: AbortController | null = null;
-  // A save was made on the page whose effect on the review counts is not known yet: the
-  // next detection to arrive recounts them (a refresh only when its verdict changed).
-  let recountPending = false;
   // Number of the latest review count request.
   let reviewCountsRequest = 0;
   let relatedController: AbortController | null = null;
@@ -172,16 +188,27 @@
 
   // Why the species cannot be changed, the most pressing reason first; empty when it can.
   // The review panel shows the same reason as its status line.
+  // The database format is known once the neighbours route has answered; a change is not
+  // offered before that, since the legacy database refuses it.
   let speciesBlockedReason = $derived.by(() => {
     if (!canReview) return t('detections.detail.review.loginRequired');
     if (detection?.locked) return t('detections.detail.review.lockedHelp');
     if (enhancedDatabase === false) return t('detections.detail.review.legacyHelp');
+    if (enhancedDatabase === null) {
+      return neighborsFailed
+        ? t('detections.detail.review.databaseUnknown')
+        : t('detections.detail.review.databaseChecking');
+    }
     return '';
   });
 
+  // The answers that belong to the detection shown; null while they are out or when there are none.
+  let shownWeather = $derived(detection ? (weatherAnswers[String(detection.id)] ?? null) : null);
+  let shownSun = $derived(detection ? (sunAnswers[detection.date] ?? null) : null);
+
   let sunOffset = $derived.by(() => {
     if (!detection) return null;
-    const times = sunEventTimes(sun, weather);
+    const times = sunEventTimes(shownSun, shownWeather);
     return nearestSunEvent(
       detectionMinute(detection),
       wallClockMinutes(times.sunrise),
@@ -302,12 +329,16 @@
       if (!response.ok) {
         throw new Error(errorMessageForStatus(response.status));
       }
-      const data = (await response.json()) as DetectionDetailData;
+      const body: unknown = await response.json();
       if (signal.aborted) return;
+      if (!isDetectionDetail(body)) {
+        throw new Error(t('detections.errors.loadFailed', { status: response.status }));
+      }
+      const data = body;
 
-      const speciesChanged = detection?.scientificName !== data.scientificName;
-      const verdictChanged = detection?.verified !== data.verified;
+      const speciesChanged = speciesDataFor !== data.scientificName;
       detection = data;
+      pruneAnswers(data);
 
       if (related && lists) {
         loadSun(data, related);
@@ -320,14 +351,8 @@
         loadDaily(data, listsController.signal);
       }
 
-      // A new verdict changes the species' review counts; a note or lock does not. A
-      // step cannot tell what the save on the detection it left changed, so it recounts.
-      if (speciesChanged) {
-        loadSpeciesData(data);
-      } else if (recountPending && (!refresh || verdictChanged) && speciesController) {
-        void loadReviewCounts(data.scientificName, speciesController.signal);
-      }
-      recountPending = false;
+      // The species data is loaded when the species changes; a step within one species keeps it.
+      if (speciesChanged) loadSpeciesData(data);
     } catch (error) {
       if (isAbort(error, signal)) return;
       logger.error('Error fetching detection:', error);
@@ -345,36 +370,54 @@
   }
 
   /**
-   * Reloads the detection a change was saved on, in place. A save on a detection
-   * the page is leaving or has left does not reload the one now shown: a refresh
-   * would cancel a step still loading, and the step brings its detection with all
-   * its data. Such a save may still have changed the species' review counts, so
-   * they are counted again, now or when the step's detection arrives.
+   * A change was saved on a detection. Its species' review counts are counted again when
+   * the page holds that species' data, whichever detection is shown now. The detection
+   * itself is reloaded only when it is the one the page is on:
+   * - shown and settled: reloaded in place, keeping what is on screen if that fails;
+   * - being stepped to: the step's request may have been sent before the save went
+   *   through, so the whole step starts again, with its sun times and daily counts;
+   * - already left: nothing to reload, a step brings its own detection.
    */
-  function refreshDetection(savedId: number) {
-    recountPending = true;
-    if (!resolvedDetectionId || !detection) return;
-    if (savedId === detection.id && !isLoadingDetection) {
-      void fetchDetection(resolvedDetectionId, true);
-      return;
+  function onSaved(change: SavedChange) {
+    if (change.reviewCounts && change.scientificName === speciesDataFor && speciesController) {
+      void loadReviewCounts(change.scientificName, speciesController.signal);
     }
-    if (!isLoadingDetection && speciesController) {
-      recountPending = false;
-      void loadReviewCounts(detection.scientificName, speciesController.signal);
+    if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) return;
+    void fetchDetection(resolvedDetectionId, !isLoadingDetection);
+  }
+
+  /** Drops the answers of detections and days the page has moved on from. */
+  function pruneAnswers(shown: DetectionDetailData) {
+    const id = String(shown.id);
+    for (const key of Object.keys(weatherAnswers)) {
+      // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys
+      if (key !== id) delete weatherAnswers[key];
+    }
+    for (const key of Object.keys(sunAnswers)) {
+      // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys
+      if (key !== shown.date) delete sunAnswers[key];
     }
   }
 
   /**
-   * GET a JSON document; null when the request fails or the server has no answer.
+   * GET a JSON document; null when the request fails, the server has no answer or the
+   * answer is not the shape `isShape` accepts.
    * Plain fetch on purpose: the shared API client reports every unexpected answer
    * to error tracking, and these routes answer 404 (no weather for the time) and
    * 400 (no species row for a sound class) in normal use.
    */
-  async function loadJson<T>(path: string, signal: AbortSignal): Promise<T | null> {
+  async function loadJson<T>(
+    path: string,
+    signal: AbortSignal,
+    isShape: (_value: unknown) => _value is T
+  ): Promise<T | null> {
     try {
       const response = await fetch(buildAppUrl(path), { signal });
       if (signal.aborted || !response.ok) return null;
-      return (await response.json()) as T;
+      const body: unknown = await response.json();
+      if (isShape(body)) return body;
+      logger.error('Unexpected shape of detection detail data', undefined, { path });
+      return null;
     } catch (error) {
       if (!isAbort(error, signal)) {
         logger.error('Error loading detection detail data:', error, { path });
@@ -391,12 +434,13 @@
   function load<T>(
     path: string,
     signal: AbortSignal,
+    isShape: (_value: unknown) => _value is T,
     assign: (_value: T | null) => void,
     key?: LoadingKey
   ) {
     // eslint-disable-next-line security/detect-object-injection -- key is a typed union
     if (key) loading[key] = true;
-    void loadJson<T>(path, signal).then(value => {
+    void loadJson(path, signal, isShape).then(value => {
       if (signal.aborted) return;
       assign(value);
       // eslint-disable-next-line security/detect-object-injection -- key is a typed union
@@ -405,21 +449,31 @@
   }
 
   /**
-   * The weather at the detection. It keeps showing the previous detection's
-   * values until the new ones arrive, so the card keeps its size during a step.
+   * The weather at the detection. The detection shown keeps the weather it has until
+   * its own answer arrives; the next detection shows placeholders instead of it.
    */
   function loadWeather(id: string, signal: AbortSignal) {
-    load<DetectionWeather>(
+    load(
       `/api/v2/weather/detection/${id}`,
       signal,
-      value => (weather = value),
+      isDetectionWeather,
+      // eslint-disable-next-line security/detect-object-injection -- id passed isValidDetectionId
+      value => (weatherAnswers[id] = value),
       'weather'
     );
   }
 
   /** Sunrise and sunset of the detection's day. */
   function loadSun(det: DetectionDetailData, signal: AbortSignal) {
-    load<SunTimes>(`/api/v2/weather/sun/${det.date}`, signal, value => (sun = value), 'sun');
+    const { date } = det;
+    load(
+      `/api/v2/weather/sun/${date}`,
+      signal,
+      isSunTimes,
+      // eslint-disable-next-line security/detect-object-injection -- date comes from the detection's date field
+      value => (sunAnswers[date] = value),
+      'sun'
+    );
   }
 
   /**
@@ -431,9 +485,10 @@
     neighborsFailed = false;
     predictions = null;
     void loadNeighbors(id, signal);
-    load<DetectionPredictions>(
+    load(
       `/api/v2/detections/${id}/predictions`,
       signal,
+      isDetectionPredictions,
       value => (predictions = value)
     );
   }
@@ -444,9 +499,10 @@
     dailyCounts = null;
     const species = encodeURIComponent(det.scientificName);
     const start = dailyWindowStart(det.date, DAILY_WINDOW_DAYS);
-    load<DailyCounts>(
+    load(
       `/api/v2/analytics/time/daily?start_date=${start}&end_date=${det.date}&species=${species}`,
       signal,
+      isDailyCounts,
       value => (dailyCounts = value),
       'daily'
     );
@@ -472,9 +528,14 @@
         neighborsFailed = true;
         return;
       }
-      const data = (await response.json()) as DetectionNeighbors;
+      const body: unknown = await response.json();
       if (signal.aborted) return;
-      neighbors = data;
+      if (!isDetectionNeighbors(body)) {
+        logger.error('Unexpected shape of detection neighbours');
+        neighborsFailed = true;
+        return;
+      }
+      neighbors = body;
       steppingAvailable = true;
       enhancedDatabase = true;
     } catch (error) {
@@ -487,12 +548,12 @@
   /** Counts the species' detections reviewers marked correct and false positive. */
   async function loadReviewCounts(scientificName: string, signal: AbortSignal) {
     const count = async (verifiedStatus: string): Promise<number> => {
-      const result = await api.post<{ total?: number }>(
+      const result = await api.post<unknown>(
         '/api/v2/search',
         { speciesScientific: [scientificName], verifiedStatus, page: 1 },
         { signal }
       );
-      return result.total ?? 0;
+      return searchTotal(result);
     };
     // Counts asked for later (after a verdict) win over earlier ones still out.
     reviewCountsRequest += 1;
@@ -513,6 +574,16 @@
     loading.reviews = false;
   }
 
+  /** The body of GET /api/v2/species: an object that may hold a rarity block. */
+  function isSpeciesAnswer(value: unknown): value is { rarity?: unknown } {
+    return isPlainObject(value);
+  }
+
+  /** The body of GET /api/v2/species/taxonomy: an object that may hold a taxonomy block. */
+  function isTaxonomyAnswer(value: unknown): value is { taxonomy?: unknown } {
+    return isPlainObject(value);
+  }
+
   /**
    * Loads the data tied to the detection's species. Called only when the species
    * changes, so stepping through detections of one species keeps what is loaded.
@@ -520,6 +591,7 @@
   function loadSpeciesData(det: DetectionDetailData) {
     speciesController = renew(speciesController);
     const { signal } = speciesController;
+    speciesDataFor = det.scientificName;
 
     rarity = null;
     taxonomy = null;
@@ -530,21 +602,24 @@
 
     const species = encodeURIComponent(det.scientificName);
 
-    load<{ rarity?: SpeciesRarity }>(
+    load(
       `/api/v2/species?scientific_name=${species}`,
       signal,
-      value => (rarity = value?.rarity ?? null),
+      isSpeciesAnswer,
+      value => (rarity = isSpeciesRarity(value?.rarity) ? value.rarity : null),
       'rarity'
     );
-    load<{ taxonomy?: TaxonomyHierarchy }>(
+    load(
       `/api/v2/species/taxonomy?scientific_name=${species}`,
       signal,
-      value => (taxonomy = value?.taxonomy ?? null)
+      isTaxonomyAnswer,
+      value => (taxonomy = isTaxonomy(value?.taxonomy) ? value.taxonomy : null)
     );
-    load<HourlyBucket[]>(
+    load(
       `/api/v2/analytics/time/distribution/hourly?start_date=${ACTIVITY_START_DATE}&end_date=${getLocalDateString()}&species=${species}`,
       signal,
-      value => (hourlyActivity = Array.isArray(value) ? value : null),
+      isHourlyBuckets,
+      value => (hourlyActivity = value),
       'hourly'
     );
 
@@ -601,9 +676,9 @@
       const response = await fetch(url, { signal });
       if (signal.aborted) return;
       if (response.ok) {
-        const data = (await response.json()) as ImageAttribution;
+        const body: unknown = await response.json();
         if (signal.aborted) return;
-        imageAttribution = data;
+        imageAttribution = parseImageAttribution(body);
         return;
       }
       // 503 means the image is still being resolved in the background, not that
@@ -687,14 +762,14 @@
             {speciesBlockedReason}
             grow
             onWrongSpecies={() => (speciesDialogOpen = true)}
-            onChanged={refreshDetection}
+            onChanged={onSaved}
           />
         {/key}
       </div>
       <ConditionsCard
         {detection}
-        {weather}
-        {sun}
+        weather={shownWeather}
+        sun={shownSun}
         {hourlyActivity}
         weatherLoading={loading.weather || loading.sun}
         activityLoading={loading.hourly}
@@ -716,12 +791,7 @@
       <div class="dd-column">
         <ModelsCard contributions={detection.modelContributions} />
         {#key detection.id}
-          <ActivityLog
-            {detection}
-            speciesName={displayName}
-            {canReview}
-            onChanged={refreshDetection}
-          />
+          <ActivityLog {detection} speciesName={displayName} {canReview} onChanged={onSaved} />
         {/key}
       </div>
       <div class="dd-column">
@@ -749,7 +819,7 @@
         {predictionModel}
         blockedReason={speciesBlockedReason}
         onClose={() => (speciesDialogOpen = false)}
-        onChanged={refreshDetection}
+        onChanged={onSaved}
       />
     {/key}
   {:else if isLoadingDetection}

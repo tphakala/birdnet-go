@@ -9,7 +9,17 @@
   states the verdict at that moment, not that the verdict changed.
 -->
 <script lang="ts">
-  import { ArrowLeftRight, AudioLines, Check, Lock, MessageSquare, Radar, X } from '@lucide/svelte';
+  import {
+    ArrowLeftRight,
+    AudioLines,
+    Check,
+    ClipboardCheck,
+    Lock,
+    MessageSquare,
+    Radar,
+    X,
+  } from '@lucide/svelte';
+  import { onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
   import { api } from '$lib/utils/api';
@@ -18,11 +28,11 @@
   import { generateId } from '$lib/utils/uuid';
   import DetailCard from './DetailCard.svelte';
   import { replacedModelPick, toPercent } from './detailFormat';
-  import { wallClockDateTime, wallClockTime } from './detailTime';
-  import type { DetectionDetailData } from './detailTypes';
+  import { formatCalendarDateTime, wallClockTime } from './detailTime';
+  import type { DetectionDetailData, SavedChange } from './detailTypes';
 
   type EntryKind =
-    'detected' | 'clip' | 'correct' | 'false_positive' | 'species' | 'locked' | 'note';
+    'detected' | 'clip' | 'reviewed' | 'correct' | 'false_positive' | 'species' | 'locked' | 'note';
 
   interface Entry {
     key: string;
@@ -38,8 +48,8 @@
     detection: DetectionDetailData;
     speciesName: string;
     canReview: boolean;
-    /** Called with the detection's id after a note was saved, so the page can reload it. */
-    onChanged: (_detectionId: number) => void;
+    /** Called after a note was saved, so the page can reload the detection. */
+    onChanged: (_change: SavedChange) => void;
   }
 
   let { detection, speciesName, canReview, onChanged }: Props = $props();
@@ -48,6 +58,7 @@
   const ENTRY_ICONS: Record<EntryKind, typeof Radar> = {
     detected: Radar,
     clip: AudioLines,
+    reviewed: ClipboardCheck,
     correct: Check,
     false_positive: X,
     species: ArrowLeftRight,
@@ -56,10 +67,13 @@
   };
   const noteId = generateId('detail-note');
   const noteHelpId = generateId('detail-note-help');
+  const noteEmptyId = generateId('detail-note-empty');
 
   let note = $state('');
   let saving = $state(false);
   let errorMessage = $state<string | null>(null);
+  // Set when Add note is pressed with nothing written; cleared by typing.
+  let emptyNote = $state(false);
 
   // The model's own species, when a reviewer changed it to another; empty otherwise.
   let originalSpeciesName = $derived.by(() => {
@@ -110,7 +124,8 @@
       if (savedAgain && firstReviewedAt) {
         list.push({
           key: 'review-first',
-          kind: detection.verified,
+          // The first verdict is not kept, so this entry names no verdict.
+          kind: 'reviewed',
           at: firstReviewedAt,
           title: t('detections.detail.log.firstReviewed'),
         });
@@ -152,7 +167,9 @@
         at: comment.createdAt,
         title: t('detections.detail.log.noteAdded'),
         detail: edited
-          ? t('detections.detail.log.noteEdited', { time: wallClockDateTime(comment.updatedAt) })
+          ? t('detections.detail.log.noteEdited', {
+              time: formatCalendarDateTime(comment.updatedAt),
+            })
           : undefined,
         body: comment.entry,
       });
@@ -167,21 +184,36 @@
     });
   });
 
+  // The panel is keyed by detection: stepping away destroys it while a save may still be
+  // out. Such a save can no longer show its failure here, so it is reported as a toast.
+  let destroyed = false;
+  onDestroy(() => {
+    destroyed = true;
+  });
+
   async function addNote() {
+    if (saving || detection.locked) return;
     const text = note.trim();
-    if (!text || saving || detection.locked) return;
+    if (!text) {
+      emptyNote = true;
+      return;
+    }
     // The detection the note is saved on, kept for when the save answers.
     const id = detection.id;
+    const scientificName = detection.scientificName;
     saving = true;
     errorMessage = null;
+    emptyNote = false;
     try {
       await api.post(`/api/v2/detections/${id}/review`, { comment: text });
       note = '';
       toastActions.success(t('detections.detail.log.noteAdded'));
-      onChanged(id);
+      onChanged({ detectionId: id, scientificName, reviewCounts: false });
     } catch (error) {
       logger.error('Failed to add note', error, { action: 'note' });
-      errorMessage = t('common.review.errors.commentFailed');
+      const message = t('common.review.errors.commentFailed');
+      errorMessage = message;
+      if (destroyed) toastActions.error(message);
     } finally {
       saving = false;
     }
@@ -198,7 +230,7 @@
         </span>
         <div class="dd-log-content">
           <p class="dd-log-time">
-            {entry.at ? wallClockDateTime(entry.at) : t('detections.detail.log.timeUnknown')}
+            {entry.at ? formatCalendarDateTime(entry.at) : t('detections.detail.log.timeUnknown')}
           </p>
           <p class="dd-log-title">{entry.title}</p>
           {#if entry.detail}
@@ -228,9 +260,16 @@
         bind:value={note}
         placeholder={t('common.review.form.commentPlaceholder')}
         readonly={detection.locked || saving}
-        aria-describedby={detection.locked ? noteHelpId : undefined}></textarea>
+        aria-describedby={detection.locked ? noteHelpId : emptyNote ? noteEmptyId : undefined}
+        aria-invalid={emptyNote ? 'true' : undefined}
+        oninput={() => (emptyNote = false)}></textarea>
       {#if detection.locked}
         <p id={noteHelpId} class="dd-note-help">{t('detections.detail.log.lockedHelp')}</p>
+      {/if}
+      {#if emptyNote}
+        <p id={noteEmptyId} class="dd-note-error" role="alert">
+          {t('detections.detail.log.noteEmpty')}
+        </p>
       {/if}
       {#if errorMessage}
         <p class="dd-note-error" role="alert">{errorMessage}</p>
@@ -239,7 +278,8 @@
         <button
           type="submit"
           class="dd-note-submit focus-ring"
-          aria-disabled={!note.trim() || saving || detection.locked ? 'true' : undefined}
+          aria-disabled={saving || detection.locked ? 'true' : undefined}
+          aria-describedby={detection.locked ? noteHelpId : undefined}
         >
           {saving ? t('detections.detail.review.saving') : t('detections.detail.log.saveNote')}
         </button>
