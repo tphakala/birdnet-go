@@ -259,10 +259,14 @@ func originalPickCandidate(r *detectionPkg.Result, primaryKey string) *predictio
 }
 
 // commonNameUnresolved reports whether a common name is missing or is only the
-// scientific name the datastore falls back to for a species it cannot name.
+// scientific name the datastore falls back to for a species it cannot name. That
+// stand-in is the stored scientific name verbatim, so the comparison is exact after
+// trimming: a localized name that differs from the scientific name only in case is
+// a real name. A localized name that is byte-identical to the scientific name cannot
+// be told from a stand-in.
 func commonNameUnresolved(commonName, scientificName string) bool {
 	commonName = strings.TrimSpace(commonName)
-	return commonName == "" || strings.EqualFold(commonName, strings.TrimSpace(scientificName))
+	return commonName == "" || commonName == strings.TrimSpace(scientificName)
 }
 
 // isFiniteConfidence reports whether a confidence is a usable number: neither NaN
@@ -286,13 +290,15 @@ func parseDetectionID(ctx echo.Context) (uint64, error) {
 
 // fillFrom completes the original entry from stored rows of its species, ranked so
 // the result does not depend on input order: the first resolved common name and the
-// first non-empty code win. A stand-in common name that no row replaces follows the
-// entry's canonical scientific name, under which it is shown.
+// first non-empty code win, and common names are trimmed. A stand-in common name
+// that no row replaces follows the entry's canonical scientific name, under which it
+// is shown.
 func (c *predictionCandidate) fillFrom(rows []*predictionCandidate) {
+	c.commonName = strings.TrimSpace(c.commonName)
 	slices.SortFunc(rows, comparePredictionCandidates)
 	for _, row := range rows {
 		if commonNameUnresolved(c.commonName, c.name) && !commonNameUnresolved(row.commonName, row.name) {
-			c.commonName = row.commonName
+			c.commonName = strings.TrimSpace(row.commonName)
 		}
 		if c.code == "" {
 			c.code = row.code

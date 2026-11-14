@@ -396,8 +396,8 @@ alternate species the detecting model scored for one detection. `modelPrediction
 model, today at most one, with `modelName`, `modelVersion`, `modelVariant`, `modelType` and `predictions`.
 `predictions` is never empty, and `modelPredictions` is `[]` when nothing remains after filtering. Each
 prediction has `scientificName` (the current, canonical name), `commonName`, `speciesCode` and
-`confidence`, and `original` (only on one entry, see below), ordered by confidence descending, then by
-scientific name.
+`confidence`, and `original` (on at most one entry, and absent when the species was never changed or was
+changed back; see below), ordered by confidence descending, then by scientific name.
 
 - Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
   below every non-dog alternate that remains, and is kept when none remains. This is a heuristic: the classifier adds one past its top results so that

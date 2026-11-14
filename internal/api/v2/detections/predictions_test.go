@@ -423,12 +423,14 @@ func TestGetDetectionPredictions_PublicRoute(t *testing.T) {
 }
 
 const (
-	predTestOrigConf   = 0.55
-	predTestOrigCommon = "Eurasian Blackbird"
-	predTestOrigCode   = "eurbla"
-	predTestHumanClass = "Human vocal"
-	predTestCough      = "Cough"
-	predTestDoveCommon = "Laughing Dove"
+	predTestOrigConf      = 0.55
+	predTestOrigCommon    = "Eurasian Blackbird"
+	predTestOrigCode      = "eurbla"
+	predTestHumanClass    = "Human vocal"
+	predTestCough         = "Cough"
+	predTestDoveCommon    = "Laughing Dove"
+	predTestTzacatl       = "Amazilia tzacatl"
+	predTestTzacatlCommon = "Amazilia Tzacatl"
 )
 
 // changedPrimary is a detection whose species was changed from original to current.
@@ -525,6 +527,39 @@ func TestGetDetectionPredictions_OriginalPick(t *testing.T) {
 				{ScientificName: predTestPrimaryNew, CommonName: predTestPrimaryNew, Confidence: predTestOrigConf, Original: true},
 				{ScientificName: predTestRaven, Confidence: predTestMid},
 			},
+		},
+		{
+			// A localized name that differs from the scientific name only in case is a
+			// real name; only the verbatim scientific name is a stand-in.
+			name: "a resolved original common name differing only in case is kept", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestTzacatl, CommonName: predTestTzacatlCommon}, conf: predTestOrigConf,
+			want: []PredictionResponse{{
+				ScientificName: predTestTzacatl, CommonName: predTestTzacatlCommon, Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a stored row common name differing only in case is a resolved name", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestTzacatl, CommonName: predTestTzacatl}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestTzacatl, predTestTzacatlCommon, "", predTestLow)},
+			want: []PredictionResponse{{
+				ScientificName: predTestTzacatl, CommonName: predTestTzacatlCommon, Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a whitespace only original common name stays empty", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryNew, CommonName: "  "}, conf: predTestOrigConf,
+			want: []PredictionResponse{{ScientificName: predTestPrimaryNew, Confidence: predTestOrigConf, Original: true}},
+		},
+		{
+			name: "a whitespace only row common name neither fills nor blocks", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, "  ", "", predTestMid),
+				predRow(predTestPrimaryNew, predTestDoveCommon, "", predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon, Confidence: predTestOrigConf, Original: true,
+			}},
 		},
 		{
 			name: "a resolved common name is not overwritten by a stored row", current: predTestMallard,
