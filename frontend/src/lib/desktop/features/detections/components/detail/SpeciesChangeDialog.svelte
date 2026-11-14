@@ -178,26 +178,24 @@
   );
 
   async function confirm() {
-    // The species sent is the one named afterwards, whatever is picked while it saves.
-    const chosen = selected;
-    if (!chosen || saving || !canChange) return;
+    if (!selected || saving || !canChange) return;
     const id = detection.id;
     saving = true;
     errorMessage = '';
     try {
       await api.put(`/api/v2/detections/${id}/species`, {
-        scientificName: chosen.scientificName,
+        scientificName: selected.scientificName,
       });
-      toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
+      toastActions.success(
+        t('detections.detail.species.changed', { species: selected.commonName })
+      );
       onChanged(id);
-      // A dialog left for another detection while it saved does not close the next one.
-      if (detection.id === id) onClose();
+      onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
-      if (detection.id !== id) return;
       errorMessage =
         error instanceof ApiError && error.status === HTTP_BAD_REQUEST
-          ? t('detections.detail.species.notKnownHere', { species: chosen.commonName })
+          ? t('detections.detail.species.notKnownHere', { species: selected.commonName })
           : t('detections.detail.species.changeFailed');
     } finally {
       saving = false;
