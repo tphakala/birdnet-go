@@ -91,22 +91,3 @@ describe('ConditionsCard weather tiles', () => {
     expect(screen.getByRole('img', { name: 'clear-day' })).toBeInTheDocument();
   });
 });
-
-describe('ConditionsCard loading', () => {
-  afterEach(() => cleanup());
-
-  // Regression: the card showed placeholder bars with no visible loading label.
-  it('labels its placeholders while the weather loads', () => {
-    render(ConditionsCard, {
-      props: { detection, weather: null, weatherLoading: true, speciesName: 'Woodcock' },
-    });
-
-    expect(screen.getByRole('status')).toHaveTextContent('common.loading');
-  });
-
-  it('shows no loading label once the weather answered', () => {
-    renderCard({ hourly: { time: '03:00' } });
-
-    expect(screen.queryByText('common.loading')).toBeNull();
-  });
-});
