@@ -237,8 +237,7 @@ func (r *detectionRepository) Update(ctx context.Context, id uint, updates map[s
 		// Use WHERE NOT EXISTS to combine lock check with update
 		result := r.db.WithContext(ctx).Table(r.tableName()).
 			Where("id = ?", id).
-			Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = ?)",
-				r.locksTable(), r.locksTable()), id).
+			Where(r.notLockedCondition(), id).
 			Updates(updates)
 		if result.Error != nil {
 			return result.Error
@@ -261,6 +260,13 @@ func (r *detectionRepository) Update(ctx context.Context, id uint, updates map[s
 		return ErrDetectionLocked
 	}
 	return nil
+}
+
+// notLockedCondition is the WHERE condition that holds for a detection without a
+// lock row. Its one argument is the detection ID.
+func (r *detectionRepository) notLockedCondition() string {
+	return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = ?)",
+		r.locksTable(), r.locksTable())
 }
 
 // columnClipSampleRate is the detections column holding the clip's sample rate (Hz).
@@ -1320,18 +1326,23 @@ func (r *detectionRepository) DeletePredictions(ctx context.Context, detectionID
 // Idempotent: re-saving updates the verified status and timestamp.
 func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.DetectionReview) error {
 	return datastore.RetryOnLock(ctx, "v2_save_review", func() error {
-		now := time.Now()
-		review.UpdatedAt = now
-		return r.db.WithContext(ctx).Table(r.reviewsTable()).
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "detection_id"}},
-				DoUpdates: clause.Assignments(map[string]any{
-					"verified":   string(review.Verified),
-					"updated_at": now,
-				}),
-			}).
-			Create(review).Error
+		return r.upsertReview(r.db.WithContext(ctx), review)
 	}, r.metrics)
+}
+
+// upsertReview creates or updates a review on db, which may be a transaction.
+func (r *detectionRepository) upsertReview(db *gorm.DB, review *entities.DetectionReview) error {
+	now := time.Now()
+	review.UpdatedAt = now
+	return db.Table(r.reviewsTable()).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "detection_id"}},
+			DoUpdates: clause.Assignments(map[string]any{
+				"verified":   string(review.Verified),
+				"updated_at": now,
+			}),
+		}).
+		Create(review).Error
 }
 
 // GetReview retrieves the review for a detection.
