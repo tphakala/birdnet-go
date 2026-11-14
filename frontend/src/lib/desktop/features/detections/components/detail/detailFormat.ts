@@ -31,8 +31,9 @@ export function formatScore(score: number): string {
 
 // Number formats by locale and options, built once: charts format many values per update.
 const numberFormats = new Map<string, Intl.NumberFormat>();
-// The most fraction digits Intl.NumberFormat accepts.
-const MAX_FRACTION_DIGITS = 100;
+// The most fraction digits every supported browser's Intl.NumberFormat accepts (newer ones
+// allow 100, older ones throw above 20).
+const MAX_FRACTION_DIGITS = 20;
 
 function numberFormat(minimumFractionDigits?: number): Intl.NumberFormat {
   const locale = getLocale();
@@ -56,8 +57,9 @@ function numberFormat(minimumFractionDigits?: number): Intl.NumberFormat {
 /**
  * A number with one decimal in the UI language ("4.5", "4,5"). With
  * `minimumDigits` 0 a whole number has none ("48", "44.1"); with more than 1,
- * that many decimals. The minimum is taken as a whole number from 0 to 100; a
- * value that is not a number counts as 1.
+ * that many decimals. The minimum is cut to a whole number from 0 to 20; a
+ * minimum that is not a finite number counts as 1. The value may be any number:
+ * negative, above 100, NaN and the infinities format without throwing.
  */
 export function formatDecimal(value: number, minimumDigits = 1): string {
   const digits = Number.isFinite(minimumDigits)
@@ -84,12 +86,16 @@ export function formatPercent(share: number | undefined | null, fallback = ''): 
 /**
  * Height of a bar in a small bar chart, in percent of the chart: its count's
  * share of the tallest bar (`peak`) scaled to `scale`, and never shorter than a
- * sliver when the count is above zero. 0 when the peak is not above 0 or either is
- * not a finite number.
+ * sliver when the count is above zero. The result is always finite and from 0 to
+ * `scale`: it is 0 when the count is not above 0 or is not a finite number, when
+ * the peak is not above 0 or not finite, or when the scale is not above 0 or not
+ * finite (the scale then defaults to 100).
  */
 export function barHeight(count: number, peak: number, scale = PERCENT): number {
-  if (!(peak > 0) || !Number.isFinite(count)) return 0;
-  return Math.max((count / peak) * scale, count > 0 ? MIN_BAR_PERCENT : 0);
+  if (!Number.isFinite(count) || !Number.isFinite(peak) || count <= 0 || peak <= 0) return 0;
+  const top = Number.isFinite(scale) && scale > 0 ? scale : PERCENT;
+  const height = Math.max((count / peak) * top, Math.min(MIN_BAR_PERCENT, top));
+  return Math.min(height, top);
 }
 
 /**

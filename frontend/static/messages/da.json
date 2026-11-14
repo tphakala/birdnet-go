@@ -895,6 +895,7 @@
         "confirmEmpty": "Change species",
         "changed": "Species changed to {species}",
         "changeFailed": "The species could not be changed. Please try again.",
+        "legacyDatabase": "The species cannot be changed on the legacy database format.",
         "notKnownHere": "{species} has never been detected or predicted at this station, so it cannot be chosen yet.",
         "predictionsTitle": "Other predictions",
         "noPredictions": "The model stored no other predictions for this recording.",
@@ -924,7 +925,9 @@
         "olderSpecies": "Older detection of {species}",
         "noOlderSpecies": "No older detection of {species}",
         "newerSpecies": "Newer detection of {species}",
-        "noNewerSpecies": "No newer detection of {species}"
+        "noNewerSpecies": "No newer detection of {species}",
+        "stepLoading": "{label}: checking for neighbouring detections",
+        "stepFailed": "{label}: could not check for neighbouring detections"
       },
       "identity": {
         "confidence": "Confidence",
@@ -958,6 +961,24 @@
         "observedAt": "Weather observation from {time}",
         "notObserved": "No weather observation for this time"
       },
+      "compass": {
+        "n": "N",
+        "nne": "NNE",
+        "ne": "NE",
+        "ene": "ENE",
+        "e": "E",
+        "ese": "ESE",
+        "se": "SE",
+        "sse": "SSE",
+        "s": "S",
+        "ssw": "SSW",
+        "sw": "SW",
+        "wsw": "WSW",
+        "w": "W",
+        "wnw": "WNW",
+        "nw": "NW",
+        "nnw": "NNW"
+      },
       "review": {
         "title": "Review",
         "autosave": "Saved as soon as you choose",
@@ -974,6 +995,8 @@
         "ignoredSpecies": "{species} is now ignored",
         "wrongSpecies": "Wrong species...",
         "legacyHelp": "Changing the species needs the current database format.",
+        "databaseChecking": "Checking whether the species can be changed.",
+        "databaseUnknown": "The species cannot be changed until the database format is known.",
         "ignoreShort": "Ignore species",
         "ignoredShort": "Species ignored"
       },
@@ -1034,6 +1057,7 @@
         "addNote": "Add a note",
         "saveNote": "Add note",
         "lockedHelp": "Notes cannot be added while the detection is kept (locked).",
+        "noteEmpty": "Write a note before adding it.",
         "speciesChanged": "Species changed from {from} to {to}"
       }
     },

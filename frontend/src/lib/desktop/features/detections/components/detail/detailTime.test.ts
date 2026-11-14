@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  compassPoint,
+  compassPointKey,
   dayPercent,
+  formatCalendarDate,
+  formatCalendarDateTime,
   nearestSunEvent,
   secondsBetween,
+  sunEventTimes,
   wallClockDate,
-  wallClockDateTime,
   wallClockMinutes,
   wallClockTime,
 } from './detailTime';
@@ -17,7 +19,9 @@ describe('wall clock fields', () => {
     expect(wallClockTime('2026-11-14T02:57:03+13:45')).toBe('02:57');
     expect(wallClockTime('2026-11-14T02:57:03+13:45', true)).toBe('02:57:03');
     expect(wallClockDate('2026-11-14T02:57:03+13:45')).toBe('2026-11-14');
-    expect(wallClockDateTime('2026-11-14T02:57:03+13:45')).toBe('2026-11-14 02:57');
+    const dateTime = formatCalendarDateTime('2026-11-14T02:57:03+13:45');
+    expect(dateTime.endsWith(' 02:57')).toBe(true);
+    expect(dateTime).toBe(`${formatCalendarDate('2026-11-14')} 02:57`);
   });
 
   it('keeps seconds through fractional seconds', () => {
@@ -137,12 +141,31 @@ describe('nearestSunEvent', () => {
   });
 });
 
-describe('compassPoint', () => {
-  it('names bearings on the 16-point compass', () => {
-    expect(compassPoint(0)).toBe('N');
-    expect(compassPoint(290)).toBe('WNW');
-    expect(compassPoint(180)).toBe('S');
-    expect(compassPoint(359)).toBe('N');
-    expect(compassPoint(-90)).toBe('W');
+describe('compassPointKey', () => {
+  it.each([
+    [0, 'n'],
+    [11, 'n'],
+    [12, 'nne'],
+    [90, 'e'],
+    [180, 's'],
+    [290, 'wnw'],
+    [359, 'n'],
+    [360, 'n'],
+    [-90, 'w'],
+    [Number.NaN, 'n'],
+    [Number.POSITIVE_INFINITY, 'n'],
+  ])('names %s degrees %s', (degrees, key) => {
+    expect(compassPointKey(degrees)).toBe(key);
+  });
+});
+
+describe('sunEventTimes', () => {
+  it('prefers the sun endpoint and falls back to the weather provider per event', () => {
+    const weather = { daily: { sunrise: 'T07:00:00+02:00', sunset: 'T16:00:00+02:00' } };
+    expect(sunEventTimes({ date: 'd', sunrise: 'T08:00:00+02:00' }, weather)).toEqual({
+      sunrise: 'T08:00:00+02:00',
+      sunset: 'T16:00:00+02:00',
+    });
+    expect(sunEventTimes(null, null)).toEqual({ sunrise: undefined, sunset: undefined });
   });
 });

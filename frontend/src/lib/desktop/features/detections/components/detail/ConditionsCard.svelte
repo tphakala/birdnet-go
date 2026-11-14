@@ -18,7 +18,7 @@
     CloudRain,
     Droplets,
     Gauge,
-    Navigation,
+    Navigation2,
     Sunrise,
     Sunset,
     Thermometer,
@@ -44,7 +44,7 @@
   import { barHeight, formatCount, formatDecimal, PERCENT } from './detailFormat';
   import {
     MINUTES_PER_DAY,
-    compassPoint,
+    compassPointKey,
     dayPercent,
     detectionMinute,
     MINUTES_PER_HOUR,
@@ -84,8 +84,7 @@
 
   const HOURS_PER_DAY = 24;
   const HALF_TURN_DEGREES = 180;
-  // The Navigation icon's arrow points north-east when not rotated.
-  const NAVIGATION_ICON_DEGREES = 45;
+  // The Navigation2 icon's arrow points up (north) when not rotated.
   const AXIS_HOURS = [0, 6, 12, 18, 24];
   const MISSING = '-';
   // Share of the strip height where the horizon line sits, measured from the top.
@@ -100,8 +99,10 @@
 
   let units = $derived<TemperatureUnit>(detection.weather?.units ?? 'metric');
   let hourly = $derived(weather?.hourly);
-  // Nothing to show yet, but the answer is still on its way: placeholders instead of dashes.
+  // The loading flag covers the weather and the sun times together; whichever of the two
+  // has not arrived yet is still on its way, and shows placeholders instead of dashes.
   let weatherPending = $derived(weatherLoading && weather === null);
+  let sunPending = $derived(weatherLoading && sun === null);
 
   let sunTimes = $derived(sunEventTimes(sun, weather));
   let moment = $derived(detectionMinute(detection));
@@ -180,32 +181,35 @@
 
   let detectionHour = $derived(moment === null ? -1 : Math.floor(moment / MINUTES_PER_HOUR));
 
-  let temperature = $derived(hourly?.temperature ?? detection.weather?.temperature);
-  // The weather API leaves out a value of zero, so with an observation for the hour a
-  // missing precipitation, wind speed or wind direction is zero. An hour without data
-  // still comes as an hourly object, without a time. Cloud cover is not read as zero: one
-  // provider never reports it, and its missing value cannot be told from a clear sky.
+  // The weather API leaves out values of zero, so with an observation for the hour (the
+  // hourly object has a time) a missing precipitation, wind speed or wind direction is zero.
+  // An hour without data still comes as an hourly object with no time and a temperature and
+  // feels-like of 0, so nothing from it is read then. Cloud cover is zero when left out of a
+  // recorded hour; one provider never sets it (internal/weather/provider_wunderground.go),
+  // so there a clear sky and a missing value look the same.
   let observed = $derived(Boolean(hourly?.time));
-  let precipitation = $derived(observed ? (hourly?.precipitation ?? 0) : undefined);
-  let clouds = $derived(hourly?.clouds);
-  let windSpeed = $derived(
-    observed ? (hourly?.wind_speed ?? 0) : (hourly?.wind_speed ?? detection.weather?.windSpeed)
+  let temperature = $derived(
+    observed
+      ? (hourly?.temperature ?? detection.weather?.temperature)
+      : detection.weather?.temperature
   );
+  let feelsLike = $derived(observed ? hourly?.feels_like : undefined);
+  let precipitation = $derived(observed ? (hourly?.precipitation ?? 0) : undefined);
+  let clouds = $derived(observed ? (hourly?.clouds ?? 0) : undefined);
+  let windSpeed = $derived(observed ? (hourly?.wind_speed ?? 0) : detection.weather?.windSpeed);
   let windGust = $derived(hourly?.wind_gust ?? detection.weather?.windGust);
   let humidity = $derived(hourly?.humidity ?? detection.weather?.humidity);
   let description = $derived(hourly?.weather_desc ?? detection.weather?.description);
   let iconCode = $derived(hourly?.weather_icon ?? detection.weather?.weatherIcon ?? '');
   let hasWeather = $derived(temperature !== undefined || Boolean(description));
 
+  // The stored icon code has no day or night mark, so the day or night comes from the sun
+  // times when they are known, else from the time of day the API or the detection carries.
+  let dayOrNight = $derived(
+    sunSpan ? (sunIsUp ? 'day' : 'night') : (weather?.time_of_day ?? detection.timeOfDay)
+  );
   let conditionIcon = $derived(
-    hasWeather
-      ? // Without sun times the icon code's own day or night mark decides.
-        getBasmiliusIconName(
-          iconCode,
-          description,
-          sunSpan ? (sunIsUp ? 'day' : 'night') : undefined
-        )
-      : 'not-available'
+    hasWeather ? getBasmiliusIconName(iconCode, description, dayOrNight) : 'not-available'
   );
 
   // Speeds keep one decimal below this and are whole from it up, so the wind and its
@@ -244,8 +248,8 @@
     suffix?: string;
   }
 
-  // A direction only for moving air: north is 0, which the API leaves out.
-  let windDeg = $derived(observed && windSpeed ? (hourly?.wind_deg ?? 0) : undefined);
+  // A direction only for a recorded hour; north is 0, which the API leaves out.
+  let windDeg = $derived(observed ? (hourly?.wind_deg ?? 0) : undefined);
   let windUnit = $derived(windSpeed === undefined ? undefined : ` ${getWindSpeedUnit(units)}`);
 
   // The six tiles, always: a value that was not recorded shows a dash. The wind tile's
@@ -254,9 +258,11 @@
     windDeg !== undefined
       ? {
           key: 'wind',
-          icon: Navigation,
-          rotate: windDeg + HALF_TURN_DEGREES - NAVIGATION_ICON_DEGREES,
-          label: t('detections.detail.conditions.windFrom', { direction: compassPoint(windDeg) }),
+          icon: Navigation2,
+          rotate: windDeg + HALF_TURN_DEGREES,
+          label: t('detections.detail.conditions.windFrom', {
+            direction: t(`detections.detail.compass.${compassPointKey(windDeg)}`),
+          }),
           value: windValue,
           unit: windUnit,
         }
@@ -300,10 +306,7 @@
       key: 'feelsLike',
       icon: Thermometer,
       label: t('detections.detail.conditions.feelsLike'),
-      value:
-        hourly?.feels_like !== undefined
-          ? formatTemperatureCompact(hourly.feels_like, units)
-          : MISSING,
+      value: feelsLike !== undefined ? formatTemperatureCompact(feelsLike, units) : MISSING,
     },
   ]);
 
@@ -321,7 +324,7 @@
   <span class="dd-sky-legend-item">
     <Icon class="size-3.5" />
     {label}
-    {#if !wallClockTime(time) && weatherPending}
+    {#if !wallClockTime(time) && sunPending}
       <Skeleton inline className="h-3 w-9" />
     {:else}
       <strong>{wallClockTime(time) || MISSING}</strong>
@@ -332,7 +335,7 @@
 <DetailCard title={t('detections.detail.conditions.title')} fill={true}>
   {#snippet header()}
     <!-- The one visible label while the card's own data loads. -->
-    {#if weatherPending || (activityLoading && hourlyActivity === null)}
+    {#if weatherPending || sunPending || (activityLoading && hourlyActivity === null)}
       <SkeletonStatus label={t('common.loading')} className="ml-auto text-xs" />
     {/if}
   {/snippet}

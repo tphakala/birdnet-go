@@ -713,6 +713,7 @@ export type TranslationKey =
   | 'detections.detail.species.confirmEmpty'
   | 'detections.detail.species.changed' // params: species
   | 'detections.detail.species.changeFailed'
+  | 'detections.detail.species.legacyDatabase'
   | 'detections.detail.species.notKnownHere' // params: species
   | 'detections.detail.species.predictionsTitle'
   | 'detections.detail.species.noPredictions'
@@ -739,6 +740,8 @@ export type TranslationKey =
   | 'detections.detail.nav.noOlderSpecies' // params: species
   | 'detections.detail.nav.newerSpecies' // params: species
   | 'detections.detail.nav.noNewerSpecies' // params: species
+  | 'detections.detail.nav.stepLoading' // params: label
+  | 'detections.detail.nav.stepFailed' // params: label
   | 'detections.detail.identity.confidence'
   | 'detections.detail.identity.date'
   | 'detections.detail.identity.time'
@@ -767,6 +770,22 @@ export type TranslationKey =
   | 'detections.detail.conditions.precipitation'
   | 'detections.detail.conditions.observedAt' // params: time
   | 'detections.detail.conditions.notObserved'
+  | 'detections.detail.compass.n'
+  | 'detections.detail.compass.nne'
+  | 'detections.detail.compass.ne'
+  | 'detections.detail.compass.ene'
+  | 'detections.detail.compass.e'
+  | 'detections.detail.compass.ese'
+  | 'detections.detail.compass.se'
+  | 'detections.detail.compass.sse'
+  | 'detections.detail.compass.s'
+  | 'detections.detail.compass.ssw'
+  | 'detections.detail.compass.sw'
+  | 'detections.detail.compass.wsw'
+  | 'detections.detail.compass.w'
+  | 'detections.detail.compass.wnw'
+  | 'detections.detail.compass.nw'
+  | 'detections.detail.compass.nnw'
   | 'detections.detail.review.title'
   | 'detections.detail.review.autosave'
   | 'detections.detail.review.question' // params: species
@@ -782,6 +801,8 @@ export type TranslationKey =
   | 'detections.detail.review.ignoredSpecies' // params: species
   | 'detections.detail.review.wrongSpecies'
   | 'detections.detail.review.legacyHelp'
+  | 'detections.detail.review.databaseChecking'
+  | 'detections.detail.review.databaseUnknown'
   | 'detections.detail.review.ignoreShort'
   | 'detections.detail.review.ignoredShort'
   | 'detections.detail.models.title'
@@ -834,6 +855,7 @@ export type TranslationKey =
   | 'detections.detail.log.addNote'
   | 'detections.detail.log.saveNote'
   | 'detections.detail.log.lockedHelp'
+  | 'detections.detail.log.noteEmpty'
   | 'detections.detail.log.speciesChanged' // params: from, to
   | 'detections.headers.dateTime'
   | 'detections.headers.weather'
@@ -4721,6 +4743,8 @@ export type TranslationParams = {
   'detections.detail.nav.noOlderSpecies': { species: string | number };
   'detections.detail.nav.newerSpecies': { species: string | number };
   'detections.detail.nav.noNewerSpecies': { species: string | number };
+  'detections.detail.nav.stepLoading': { label: string | number };
+  'detections.detail.nav.stepFailed': { label: string | number };
   'detections.detail.identity.beforeSunrise': { hours: string | number; minutes: string | number };
   'detections.detail.identity.afterSunrise': { hours: string | number; minutes: string | number };
   'detections.detail.identity.beforeSunset': { hours: string | number; minutes: string | number };

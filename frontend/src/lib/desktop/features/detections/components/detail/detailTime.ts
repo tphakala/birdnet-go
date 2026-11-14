@@ -61,13 +61,6 @@ export function wallClockDate(timestamp: string | undefined | null): string {
   return match ? match[0] : '';
 }
 
-/** "YYYY-MM-DD HH:MM" of an RFC3339 timestamp in station time. */
-export function wallClockDateTime(timestamp: string | undefined | null): string {
-  const date = wallClockDate(timestamp);
-  const time = wallClockTime(timestamp);
-  return [date, time].filter(Boolean).join(' ');
-}
-
 const LONG_DATE: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   day: 'numeric',
@@ -88,6 +81,16 @@ export function formatCalendarDate(date: string | undefined | null, short = fals
   if (!match) return date;
   const value = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   return value.toLocaleDateString(getLocale(), short ? SHORT_DATE : LONG_DATE);
+}
+
+/**
+ * The date and the station clock ("HH:MM") of an RFC3339 timestamp, the date in the
+ * UI language. Empty when the timestamp has neither.
+ */
+export function formatCalendarDateTime(timestamp: string | undefined | null): string {
+  const date = formatCalendarDate(wallClockDate(timestamp));
+  const time = wallClockTime(timestamp);
+  return [date, time].filter(Boolean).join(' ');
 }
 
 /** Seconds between two RFC3339 timestamps, or null when either is unparsable. */
@@ -183,29 +186,35 @@ export function nearestSunEvent(
 }
 
 const COMPASS_POINTS = [
-  'N',
-  'NNE',
-  'NE',
-  'ENE',
-  'E',
-  'ESE',
-  'SE',
-  'SSE',
-  'S',
-  'SSW',
-  'SW',
-  'WSW',
-  'W',
-  'WNW',
-  'NW',
-  'NNW',
+  'n',
+  'nne',
+  'ne',
+  'ene',
+  'e',
+  'ese',
+  'se',
+  'sse',
+  's',
+  'ssw',
+  'sw',
+  'wsw',
+  'w',
+  'wnw',
+  'nw',
+  'nnw',
 ] as const;
 const FULL_CIRCLE_DEGREES = 360;
+const NORTH_POINT = COMPASS_POINTS[0];
 
-/** The 16-point compass name of a bearing in degrees. */
-export function compassPoint(degrees: number): string {
+/**
+ * The 16-point compass name of a bearing in degrees, as the lowercase key
+ * ("n", "wnw") of its `detections.detail.compass.*` translation. A bearing that
+ * is not a finite number reads as north.
+ */
+export function compassPointKey(degrees: number): (typeof COMPASS_POINTS)[number] {
+  if (!Number.isFinite(degrees)) return NORTH_POINT;
   const step = FULL_CIRCLE_DEGREES / COMPASS_POINTS.length;
   const normalized = ((degrees % FULL_CIRCLE_DEGREES) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES;
   const index = Math.round(normalized / step) % COMPASS_POINTS.length;
-  return COMPASS_POINTS.at(index) ?? 'N';
+  return COMPASS_POINTS.at(index) ?? NORTH_POINT;
 }
