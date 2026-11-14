@@ -109,7 +109,7 @@ function statsOf(correct: number, falsePositive: number, total = 10) {
   return {
     scientificName: 'Default scientific',
     count: total,
-    firstHeard: '2024-01-01T10:00:00Z',
+    firstHeard: '2023-05-02T10:00:00Z',
     lastHeard: '2024-01-01T10:00:00Z',
     avgConfidence: 0.8,
     maxConfidence: 0.9,
@@ -745,9 +745,39 @@ describe('DetectionDetail species statistics', () => {
     await waitFor(() => {
       expect(statValue('detections.detail.stats.total')).toMatch(/1.?234/);
     });
+    expect(statValue('detections.detail.stats.firstHeard')).toMatch(/2023/);
+    expect(statValue('detections.detail.stats.lastHeard')).toMatch(/2024/);
+    expect(statValue('detections.detail.stats.avgConfidence')).toBe('80%');
     expect(statValue('detections.detail.stats.maxConfidence')).toBe('90%');
     // Three correct and one false positive: the bar splits 75 to 25.
     expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('75%');
+  });
+
+  it('shows placeholders, not dashes, while the statistics are on their way', async () => {
+    stubApi([
+      ['/api/v2/detections/75', makeDetection({ id: 75 })],
+      [STATS, () => new Promise<Response>(() => {})],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '75' });
+    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
+    await settle();
+
+    for (const label of [
+      'detections.detail.stats.total',
+      'detections.detail.stats.firstHeard',
+      'detections.detail.stats.lastHeard',
+      'detections.detail.stats.avgConfidence',
+      'detections.detail.stats.maxConfidence',
+    ]) {
+      const value = screen.getByText(label).nextElementSibling;
+      expect(value?.querySelector('[data-skeleton]')).not.toBeNull();
+      expect(value?.textContent.trim()).toBe('');
+    }
+    expect(container.querySelector('.dd-reviews-legend [data-skeleton]')).not.toBeNull();
+    // The card's header says it is loading.
+    const card = container.querySelector('.dd-stats')?.closest('section');
+    expect(card?.querySelector('[role="status"]')?.textContent).toBe('common.loading');
   });
 
   it('asks for the statistics of the detection’s own species', async () => {

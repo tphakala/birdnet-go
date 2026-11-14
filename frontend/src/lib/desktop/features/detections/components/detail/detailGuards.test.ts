@@ -120,17 +120,34 @@ describe('shape guards', () => {
     expect(parseImageAttribution(null)).toBeNull();
   });
 
-  // Times and confidences are null for a species without detections, never absent.
-  it('refuses species statistics that leave a nullable field out', () => {
-    expect(
-      isSpeciesStats({
-        scientificName: 'A b',
-        count: 0,
-        firstHeard: null,
-        lastHeard: null,
-        avgConfidence: null,
-        reviews: { correct: 0, falsePositive: 0 },
-      })
-    ).toBe(false);
+  const goodStats = {
+    scientificName: 'A b',
+    count: 3,
+    firstHeard: '2026-01-01T00:00:00Z',
+    lastHeard: '2026-02-01T00:00:00Z',
+    avgConfidence: 0.5,
+    maxConfidence: 0.9,
+    reviews: { correct: 1, falsePositive: 0 },
+  };
+
+  // Each field on its own, so every check of the guard is needed: the page reads all of them.
+  it.each([
+    ['a scientific name that is not text', { scientificName: 3 }],
+    ['a count that is not a number', { count: '3' }],
+    ['a first heard time that is not text', { firstHeard: 5 }],
+    ['a last heard time that is not text', { lastHeard: false }],
+    ['an average confidence that is not a number', { avgConfidence: '0.5' }],
+    ['a highest confidence that is not a number', { maxConfidence: '0.9' }],
+    ['no review counts', { reviews: null }],
+    ['a correct count that is not a number', { reviews: { correct: '1', falsePositive: 0 } }],
+    ['a false positive count that is missing', { reviews: { correct: 1 } }],
+    // Times and confidences are null for a species without detections, never absent.
+    ['no first heard time', { firstHeard: undefined }],
+    ['no last heard time', { lastHeard: undefined }],
+    ['no average confidence', { avgConfidence: undefined }],
+    ['no highest confidence', { maxConfidence: undefined }],
+  ])('refuses species statistics with %s', (_name, change) => {
+    expect(isSpeciesStats(goodStats)).toBe(true);
+    expect(isSpeciesStats({ ...goodStats, ...change })).toBe(false);
   });
 });
