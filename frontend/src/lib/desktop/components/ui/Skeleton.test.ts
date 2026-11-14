@@ -37,4 +37,10 @@ describe('Skeleton', () => {
     expect(bar).toHaveClass('inline-block', 'align-middle', 'h-3', 'w-8');
     expect(bar).not.toHaveClass('block');
   });
+
+  it('keeps a class passed as class', () => {
+    const { container } = renderTyped(Skeleton, { props: { class: 'h-4 w-20' } });
+
+    expect(container.querySelector('[data-skeleton]')).toHaveClass('h-4', 'w-20', 'animate-pulse');
+  });
 });

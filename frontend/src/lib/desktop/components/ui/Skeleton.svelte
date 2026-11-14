@@ -17,11 +17,13 @@
   interface Props extends HTMLAttributes<HTMLElement> {
     /** Size and shape of the bar, merged after the base classes. */
     className?: string;
+    /** Merged like className, for callers that use the Svelte attribute name. */
+    class?: string;
     /** Render inline on a line of text (vertically centred) instead of as a block. */
     inline?: boolean;
   }
 
-  let { className = '', inline = false, ...rest }: Props = $props();
+  let { className = '', class: classProp = '', inline = false, ...rest }: Props = $props();
 
   const BASE_CLASS =
     'min-w-0 max-w-full rounded bg-[var(--color-base-300)] animate-pulse motion-reduce:animate-none';
@@ -35,5 +37,5 @@
   {...rest}
   data-skeleton
   aria-hidden="true"
-  class={cn(BASE_CLASS, inline ? DISPLAY_INLINE : DISPLAY_BLOCK, className)}
+  class={cn(BASE_CLASS, inline ? DISPLAY_INLINE : DISPLAY_BLOCK, className, classProp)}
 ></span>

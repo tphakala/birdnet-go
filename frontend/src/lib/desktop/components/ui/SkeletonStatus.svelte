@@ -16,9 +16,11 @@
     /** Visible loading text, for example `t('common.loading')`. */
     label: string;
     className?: string;
+    /** Merged like className, for callers that use the Svelte attribute name. */
+    class?: string;
   }
 
-  let { label, className = '', ...rest }: Props = $props();
+  let { label, className = '', class: classProp = '', ...rest }: Props = $props();
 </script>
 
-<span {...rest} role="status" class={cn('text-muted', className)}>{label}</span>
+<span {...rest} role="status" class={cn('text-muted', className, classProp)}>{label}</span>

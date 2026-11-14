@@ -13,4 +13,10 @@ describe('SkeletonStatus', () => {
     expect(status).not.toHaveAttribute('aria-hidden');
     expect(status).toHaveClass('text-xs');
   });
+
+  it('keeps a class passed as class', () => {
+    renderTyped(SkeletonStatus, { props: { label: 'Loading...', class: 'text-sm' } });
+
+    expect(screen.getByRole('status')).toHaveClass('text-sm', 'text-muted');
+  });
 });
