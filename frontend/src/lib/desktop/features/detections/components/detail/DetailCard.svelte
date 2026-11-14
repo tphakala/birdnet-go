@@ -40,7 +40,7 @@
 </script>
 
 <section class="dd-card" class:dd-card-grow={grow}>
-  {#if title || header}
+  {#if title || subtitle || header}
     <header class="dd-card-header">
       {#if title}
         <h2 class="dd-card-title">{title}</h2>
