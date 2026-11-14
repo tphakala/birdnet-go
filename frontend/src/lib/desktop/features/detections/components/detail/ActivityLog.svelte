@@ -48,8 +48,11 @@
     detection: DetectionDetailData;
     speciesName: string;
     canReview: boolean;
-    /** Called after a note was saved, so the page can reload the detection. */
-    onChanged: (_change: SavedChange) => void;
+    /**
+     * Called after a note was saved, so the page can reload the detection. The page may
+     * answer with a promise that settles when that reload does: false when it failed.
+     */
+    onChanged: (_change: SavedChange) => Promise<boolean> | void;
   }
 
   let { detection, speciesName, canReview, onChanged }: Props = $props();
@@ -203,17 +206,26 @@
     emptyNote = false;
     try {
       await api.post(`/api/v2/detections/${id}/review`, { comment: text });
-      note = '';
-      toastActions.success(t('detections.detail.log.noteAdded'));
-      onChanged({ detectionId: id, scientificName, speciesStats: false });
     } catch (error) {
       logger.error('Failed to add note', error, { action: 'note' });
-      const message = t('common.review.errors.commentFailed');
-      errorMessage = message;
-      if (destroyed) toastActions.error(message);
+      showError(t('common.review.errors.commentFailed'));
+      saving = false;
+      return;
+    }
+    note = '';
+    toastActions.success(t('detections.detail.log.noteAdded'));
+    // The form stays busy until the page's reload settles, so a second note does not race it.
+    try {
+      const reloaded = await onChanged({ detectionId: id, scientificName, speciesStats: false });
+      if (reloaded === false) showError(t('detections.detail.review.reloadFailed'));
     } finally {
       saving = false;
     }
+  }
+
+  function showError(message: string) {
+    errorMessage = message;
+    if (destroyed) toastActions.error(message);
   }
 </script>
 

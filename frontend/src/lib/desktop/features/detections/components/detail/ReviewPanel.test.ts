@@ -259,6 +259,55 @@ describe('ReviewPanel Keep switch', () => {
   });
 });
 
+describe('ReviewPanel verdict reload', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.mocked(toastActions.error).mockClear();
+  });
+
+  // Regression: the verdict buttons were free again before the page's reload landed.
+  it('stays busy until the page reload settles, and says so when it failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    let settleReload: ((_reloaded: boolean) => void) | undefined;
+    const onChanged = vi.fn(
+      () =>
+        new Promise<boolean>(resolve => {
+          settleReload = resolve;
+        })
+    );
+    render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged,
+      },
+    });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(screen.getByText('detections.detail.review.saving')).toBeInTheDocument();
+
+    settleReload?.(false);
+    await waitFor(() => {
+      expect(screen.getByText('detections.detail.review.reloadFailed')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('detections.detail.review.saving')).toBeNull();
+  });
+});
+
 describe('ReviewPanel verdict failure', () => {
   afterEach(() => {
     cleanup();

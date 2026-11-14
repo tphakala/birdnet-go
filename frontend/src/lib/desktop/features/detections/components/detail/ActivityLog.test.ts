@@ -108,6 +108,41 @@ describe('ActivityLog note while saving', () => {
     expect(box.readOnly).toBe(true);
     answer?.(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
   });
+
+  // Regression: the form was free again before the page's reload landed, so a second note
+  // could be saved while the first one's reload was still out.
+  it('stays busy until the page reload settles, and says so when it failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    let settleReload: ((_reloaded: boolean) => void) | undefined;
+    const onChanged = vi.fn(
+      () =>
+        new Promise<boolean>(resolve => {
+          settleReload = resolve;
+        })
+    );
+    render(ActivityLog, {
+      props: { detection: base, speciesName: 'Song Thrush', canReview: true, onChanged },
+    });
+    const box = screen.getByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
+    await fireEvent.input(box, { target: { value: 'First note' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'detections.detail.log.saveNote' }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+
+    expect(box.readOnly).toBe(true);
+
+    settleReload?.(false);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'detections.detail.review.reloadFailed'
+    );
+    expect(box.readOnly).toBe(false);
+  });
 });
 
 describe('ActivityLog times', () => {

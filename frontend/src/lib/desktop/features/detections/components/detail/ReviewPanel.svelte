@@ -104,15 +104,22 @@
     errorMessage = '';
     try {
       await api.post(`/api/v2/detections/${id}/review`, { verified: verdict });
-      toastActions.success(
-        verdict === 'correct'
-          ? t('detections.detail.review.savedCorrect')
-          : t('detections.detail.review.savedFalsePositive')
-      );
-      onChanged({ detectionId: id, scientificName, speciesStats: true });
     } catch (error) {
       logger.error('Failed to save verdict', error, { action: 'review' });
+      saving = null;
       fail(t('common.review.errors.verificationFailed'));
+      return;
+    }
+    toastActions.success(
+      verdict === 'correct'
+        ? t('detections.detail.review.savedCorrect')
+        : t('detections.detail.review.savedFalsePositive')
+    );
+    // The panel stays busy until the page's reload settles, so it never offers a choice
+    // against the detection as it was before the save.
+    try {
+      const reloaded = await onChanged({ detectionId: id, scientificName, speciesStats: true });
+      if (reloaded === false) fail(t('detections.detail.review.reloadFailed'));
     } finally {
       saving = null;
     }
