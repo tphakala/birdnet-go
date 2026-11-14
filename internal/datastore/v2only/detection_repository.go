@@ -92,11 +92,7 @@ func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id strin
 			continue
 		}
 		results = append(results, detection.AdditionalResult{
-			Species: detection.Species{
-				ScientificName: sci,
-				CommonName:     r.ds.resolveCommonName(sci),
-				Code:           r.ds.speciesCodeMap[sci],
-			},
+			Species:    r.ds.speciesForName(sci),
 			Confidence: pred.Confidence,
 		})
 	}

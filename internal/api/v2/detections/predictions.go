@@ -152,13 +152,11 @@ func comparePredictionCandidates(a, b *predictionCandidate) int {
 // result is dropped with it), and sorts by confidence descending then species key.
 //
 // When a reviewer changed the species, r.OriginalSpecies is the model's own pick and
-// it is listed as an extra entry marked original, with the detection's confidence.
-// There is none when it is the current species, has no species part in its name, or
-// the detection's confidence is not finite; the rows are then handled as for an
-// unchanged detection. The entry is exempt from the human and dog filters and does
-// not take part in the dog comparison, so it never changes how the other rows are
-// handled. Stored rows of its species only fill its missing common name and code.
-// The result is the same for any input order.
+// it is listed as an extra entry marked original, with the detection's confidence
+// (see originalPickCandidate for when there is none). The entry is exempt from the
+// human and dog filters and does not take part in the dog comparison, so it never
+// changes how the other rows are handled. Stored rows of its species only fill its
+// missing common name and code. The result is the same for any input order.
 func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResult) []PredictionResponse {
 	primaryKey := speciesindex.CanonicalKey(r.Species.ScientificName)
 	original := originalPickCandidate(r, primaryKey)
@@ -260,6 +258,6 @@ func originalPickCandidate(r *detectionPkg.Result, primaryKey string) *predictio
 	}
 	return &predictionCandidate{
 		name: name, key: key, commonName: r.OriginalSpecies.CommonName, code: r.OriginalSpecies.Code,
-		confidence: r.Confidence, dog: vocalization.IsDog(name),
+		confidence: r.Confidence,
 	}
 }

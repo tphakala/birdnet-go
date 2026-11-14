@@ -1227,6 +1227,16 @@ type detectionFields struct {
 	model detection.ModelInfo
 }
 
+// speciesForName returns the species for a non-empty scientific name, with its common
+// name and species code resolved from the name maps built at startup.
+func (ds *Datastore) speciesForName(scientificName string) detection.Species {
+	return detection.Species{
+		ScientificName: scientificName,
+		CommonName:     ds.resolveCommonName(scientificName),
+		Code:           ds.speciesCodeMap[scientificName],
+	}
+}
+
 // decodeDetection derives the detectionFields of det. The instant comes from the stored
 // detected_at column and never from formatted text. det must not be nil.
 // Common name is looked up from the name maps which are built at startup. When the label is not
@@ -1255,11 +1265,7 @@ func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detectio
 	// lookup, so a list read never costs a query per row.
 	if det.OriginalLabel != nil {
 		if name := detection.ExtractScientificName(det.OriginalLabel.ScientificName); name != "" {
-			f.originalSpecies = detection.Species{
-				ScientificName: name,
-				CommonName:     ds.resolveCommonName(name),
-				Code:           ds.speciesCodeMap[name],
-			}
+			f.originalSpecies = ds.speciesForName(name)
 		}
 	}
 
