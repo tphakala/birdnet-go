@@ -42,6 +42,41 @@ describe('loadSpeciesCatalog', () => {
     ]);
   });
 
+  // Regression: the answer was trusted to have the expected shape, so one malformed entry
+  // threw and lost the whole list.
+  it('leaves out malformed entries and keeps the rest', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          respond(200, {
+            species: [
+              null,
+              'Parus major',
+              { scientificName: 7 },
+              { scientificName: 'Anas crecca' },
+            ],
+          })
+        )
+      )
+    );
+    const { loadSpeciesCatalog } = await freshCatalog();
+
+    await expect(loadSpeciesCatalog('range')).resolves.toEqual([
+      { scientificName: 'Anas crecca', commonName: 'Anas crecca' },
+    ]);
+  });
+
+  it('reads an answer without a species list as an empty list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(respond(200, null)))
+    );
+    const { loadSpeciesCatalog } = await freshCatalog();
+
+    await expect(loadSpeciesCatalog('all')).resolves.toEqual([]);
+  });
+
   it('requests a list once and shares it', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(respond(200, { species: [] })));
     vi.stubGlobal('fetch', fetchMock);
