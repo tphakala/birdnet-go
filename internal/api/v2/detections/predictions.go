@@ -67,8 +67,9 @@ type PredictionResponse struct {
 // the alternate species the detecting model scored for one detection, without the
 // detected species, human sound classes and a dog class that only the filter
 // preserved. When a reviewer changed the species, the model's own pick is listed
-// too, marked original, whatever those rules say. It answers 409 unless the enhanced (v2) database is in use, and 400
-// for an id that is not a positive integer that fits in 32 bits.
+// too, marked original, whatever those rules say. It answers 409 unless the enhanced
+// (v2) database is in use, and 400 for an id that is not a positive integer that fits
+// in 32 bits.
 func (c *Handler) GetDetectionPredictions(ctx echo.Context) error {
 	if c.V2Manager == nil || !datastoreV2.IsEnhancedDatabase() {
 		return c.respondEnhancedDatabaseRequired(ctx, predictionsV2RequiredMessage, predictionsV2RequiredLog)
@@ -159,6 +160,7 @@ func comparePredictionCandidates(a, b *predictionCandidate) int {
 // missing code and its unresolved common name (empty, or the scientific name the
 // datastore falls back to) when the row's own common name is resolved. A stand-in
 // common name that no row replaces follows the entry's canonical scientific name.
+//
 // The result is the same for any input order.
 func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResult) []PredictionResponse {
 	primaryKey := speciesindex.CanonicalKey(r.Species.ScientificName)
@@ -222,21 +224,7 @@ func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResu
 	}
 
 	if original != nil {
-		// Ranked order again, so the filled values do not depend on input order.
-		slices.SortFunc(originalRows, comparePredictionCandidates)
-		for _, row := range originalRows {
-			if commonNameUnresolved(original.commonName, original.name) && !commonNameUnresolved(row.commonName, row.name) {
-				original.commonName = row.commonName
-			}
-			if original.code == "" {
-				original.code = row.code
-			}
-		}
-		// The entry is shown under the canonical spelling of its name, so a stand-in
-		// common name that is still the stored scientific name follows it.
-		if original.commonName != "" && commonNameUnresolved(original.commonName, original.name) {
-			original.commonName = openfauna.CanonicalName(original.name)
-		}
+		original.fillFrom(originalRows)
 		entries = append(entries, original)
 		slices.SortFunc(entries, comparePredictionCandidates)
 	}
@@ -294,4 +282,23 @@ func parseDetectionID(ctx echo.Context) (uint64, error) {
 		return 0, errors.NewStd("detection id must be positive")
 	}
 	return n, nil
+}
+
+// fillFrom completes the original entry from stored rows of its species, ranked so
+// the result does not depend on input order: the first resolved common name and the
+// first non-empty code win. A stand-in common name that no row replaces follows the
+// entry's canonical scientific name, under which it is shown.
+func (c *predictionCandidate) fillFrom(rows []*predictionCandidate) {
+	slices.SortFunc(rows, comparePredictionCandidates)
+	for _, row := range rows {
+		if commonNameUnresolved(c.commonName, c.name) && !commonNameUnresolved(row.commonName, row.name) {
+			c.commonName = row.commonName
+		}
+		if c.code == "" {
+			c.code = row.code
+		}
+	}
+	if c.commonName != "" && commonNameUnresolved(c.commonName, c.name) {
+		c.commonName = openfauna.CanonicalName(c.name)
+	}
 }
