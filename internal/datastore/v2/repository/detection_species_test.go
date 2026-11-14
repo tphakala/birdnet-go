@@ -14,6 +14,7 @@ import (
 const (
 	speciesTestBirdnet    = uint(1)
 	speciesTestPerch      = uint(2)
+	speciesTestThirdModel = uint(3)
 	speciesTestTeal       = "Anas crecca"
 	speciesTestMallard    = "Anas platyrhynchos"
 	speciesTestGadwall    = "Mareca strepera"
@@ -160,6 +161,12 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 			LabelTypeID: animalLabelType, TaxonomicClassID: new(mammalClass),
 		}
 		require.NoError(t, db.Table(tableLabels).Create(perchMallard).Error)
+		// A newer label of the same species from a third model, with other values:
+		// copying from anything but the oldest label would show in the created label.
+		newerMallard := &entities.Label{
+			ScientificName: speciesTestMallard, ModelID: speciesTestThirdModel, LabelTypeID: animalLabelType + 1,
+		}
+		require.NoError(t, db.Table(tableLabels).Create(newerMallard).Error)
 		det := speciesTestDetection(t, db, teal)
 
 		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
@@ -170,6 +177,7 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 		var created entities.Label
 		require.NoError(t, db.Table(tableLabels).First(&created, got.LabelID).Error)
 		assert.NotEqual(t, perchMallard.ID, created.ID, "the detection must not take another model's label")
+		assert.NotEqual(t, newerMallard.ID, created.ID, "the detection must not take another model's label")
 		assert.Equal(t, speciesTestMallard, created.ScientificName)
 		assert.Equal(t, speciesTestBirdnet, created.ModelID)
 		assert.Equal(t, animalLabelType, created.LabelTypeID, "the label type is copied from the existing label")
