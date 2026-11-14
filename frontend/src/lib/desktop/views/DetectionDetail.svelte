@@ -41,8 +41,8 @@
     isDetectionWeather,
     isHourlyBuckets,
     isSpeciesRarity,
-    isSunTimes,
     isSpeciesStats,
+    isSunTimes,
     isTaxonomy,
     parseImageAttribution,
   } from '$lib/desktop/features/detections/components/detail/detailGuards';

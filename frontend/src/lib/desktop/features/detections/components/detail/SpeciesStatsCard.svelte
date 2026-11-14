@@ -191,7 +191,7 @@
     </div>
   </dl>
 
-  {#if reviews || pending.stats}
+  {#if stats || pending.stats}
     <div class="dd-reviews">
       <div class="dd-reviews-head">
         <span>{t('detections.detail.stats.reviewsTitle')}</span>
