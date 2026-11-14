@@ -326,6 +326,24 @@ type DetectionRepository interface {
 	// the detections table with ai_models. Returns "bird" if not found.
 	GetModelType(ctx context.Context, id uint) (string, error)
 
+	// ChangeSpecies sets the species of a detection to scientificName as a
+	// reviewer's correction. Of the detection row only label_id and
+	// original_label_id change: the first change records the model's own pick in
+	// original_label_id and later changes keep it, also when the species is
+	// changed back. The detection is marked reviewed as correct in the same
+	// transaction. The new label is the detection's own model's label for the
+	// species, matched by name or by a taxonomic alias of it; when only other
+	// models have a label of that name, one is created for the detection's model
+	// with their label type and taxonomic class; that label is made before the
+	// guarded update and stays, as a valid label of the model, if the detection is
+	// locked or deleted in between. A request for the species the detection's
+	// current label already stands for is a no-op that writes nothing, whatever
+	// the spelling requested and whichever of the model's labels of the species
+	// the detection holds. Returns ErrDetectionNotFound if id does not exist,
+	// ErrDetectionLocked if it is locked, and ErrLabelNotFound if the name is
+	// empty or has no species part, or no model has a label for the species.
+	ChangeSpecies(ctx context.Context, id uint, scientificName string) error
+
 	// Exists checks if a detection with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
 

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 SCRIPT_VERSION = "1.4.0"
-SCHEMA_VERSION = "v2-2026-11-12"
+SCHEMA_VERSION = "v2-2026-11-14"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -62,7 +62,8 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "id", "model_id", "label_id", "source_id", "detected_at",
         "begin_time", "end_time", "confidence", "latitude", "longitude",
         "clip_name", "spectrogram_clip_name", "clip_sample_rate",
-        "clip_denoised", "processing_time_ms", "unlikely", "legacy_id",
+        "clip_denoised", "original_label_id", "processing_time_ms", "unlikely",
+        "legacy_id",
     ],
     "detection_predictions": [
         "id", "detection_id", "label_id", "confidence", "rank",
@@ -310,6 +311,7 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             spectrogram_clip_name VARCHAR(500),
             clip_sample_rate INTEGER,
             clip_denoised NUMERIC,
+            original_label_id INTEGER,
             processing_time_ms INTEGER,
             unlikely NUMERIC NOT NULL DEFAULT 0,
             legacy_id INTEGER,
@@ -397,6 +399,7 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "spectrogram_clip_name": "TEXT",
         "clip_sample_rate": "INTEGER",
         "clip_denoised": "NUMERIC",
+        "original_label_id": "INTEGER",
         "processing_time_ms": "INTEGER",
         "unlikely": "NUMERIC NOT NULL DEFAULT 0",
         "legacy_id": "INTEGER",
