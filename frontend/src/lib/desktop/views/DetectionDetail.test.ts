@@ -906,6 +906,28 @@ describe('DetectionDetail species statistics', () => {
     expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('75%');
   });
 
+  // A failed load for the next species must not leave the previous species' figures under its name.
+  it('shows dashes, not the previous species\u2019 statistics, when the next species\u2019 load fails', async () => {
+    const calls = stubApi([
+      ['/api/v2/detections/85', makeDetection({ id: 85, scientificName: 'Turdus merula' })],
+      ['/api/v2/detections/86', makeDetection({ id: 86, scientificName: 'Erithacus rubecula' })],
+      [`${STATS}?scientific_name=Turdus%20merula`, statsOf(0, 0, 40)],
+      [`${STATS}?scientific_name=Erithacus`, () => Promise.resolve(jsonResponse({}, 500))],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '85' });
+    await waitFor(() => {
+      expect(statValue('detections.detail.stats.total')).toBe('40');
+    });
+    await rerender({ detectionId: '86' });
+    await waitFor(() => {
+      expect(count(calls, `${STATS}?scientific_name=Erithacus`)).toBe(1);
+    });
+    await settle();
+
+    expect(statValue('detections.detail.stats.total')).toBe('-');
+  });
+
   // A species change through the dialog moves the detection to another species: the card
   // shows the new species' statistics, not the old totals.
   it('shows the new species’ statistics after a species change', async () => {
