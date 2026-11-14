@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Endre art",
         "current": "For øyeblikket identifisert som",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Modellens andre prediksjoner",
+        "search": "Søk arter",
         "loadingList": "Laster artslisten...",
         "listFailed": "Kunne ikke laste artslisten. Lukk denne dialogboksen og prøv igjen.",
         "noMatches": "Ingen arter samsvarer.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Endre art",
         "changed": "Art endret til {species}",
         "changeFailed": "Kunne ikke endre art. Prøv igjen.",
-        "legacyDatabase": "Arten kan ikke endres på det eldre databaseformatet.",
+        "conflict": "Arten kan ikke endres nå: registreringen er beholdt (låst), eller det eldre databaseformatet er i bruk.",
         "notKnownHere": "{species} har aldri blitt registrert eller forutsagt ved denne stasjonen, så den kan ikke velges ennå.",
         "predictionsTitle": "Andre prediksjoner",
         "noPredictions": "Modellen lagret ingen andre prediksjoner for dette opptaket.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: kunne ikke se etter nærliggende registreringer"
       },
       "identity": {
-        "confidence": "Sikkerhet",
         "date": "Dato",
         "time": "Tid",
         "beforeSunrise": "{hours} t {minutes} min før soloppgang",
@@ -990,7 +989,7 @@
         "savedCorrect": "Merket som korrekt",
         "savedFalsePositive": "Merket som falsk positiv",
         "loginRequired": "Logg inn for å gjennomgå denne registreringen.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Registreringer som beholdes kan ikke endres. Slå av Behold dette opptaket først.",
         "keep": "Behold dette opptaket",
         "keepHelp": "Registreringer som beholdes slettes aldri ved opprydding.",
         "ignoredSpecies": "{species} er nå ignorert",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Aktivitetslogg",
-        "subtitle": "Alt som har skjedd med denne registreringen",
+        "subtitle": "Hva som har skjedd med denne registreringen",
         "detected": "Registrert {species} med {confidence}% sikkerhet",
         "captureWindow": "Opptaksvindu {begin}-{end}",
         "clipSaved": "Opptak lagret",

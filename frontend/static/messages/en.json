@@ -895,7 +895,7 @@
         "confirmEmpty": "Change species",
         "changed": "Species changed to {species}",
         "changeFailed": "The species could not be changed. Please try again.",
-        "legacyDatabase": "The species cannot be changed on the legacy database format.",
+        "conflict": "The species cannot be changed now: the detection is kept (locked), or the legacy database format is in use.",
         "notKnownHere": "{species} has never been detected or predicted at this station, so it cannot be chosen yet.",
         "predictionsTitle": "Other predictions",
         "noPredictions": "The model stored no other predictions for this recording.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: could not check for neighbouring detections"
       },
       "identity": {
-        "confidence": "Confidence",
         "date": "Date",
         "time": "Time",
         "beforeSunrise": "{hours} h {minutes} min before sunrise",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Activity log",
-        "subtitle": "Everything that has happened to this detection",
+        "subtitle": "What has happened to this detection",
         "detected": "Detected {species} at {confidence}% confidence",
         "captureWindow": "Capture window {begin}-{end}",
         "clipSaved": "Recording saved",

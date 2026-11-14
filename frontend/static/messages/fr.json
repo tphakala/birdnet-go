@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Changer d'espèce",
         "current": "Actuellement identifié comme",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Autres prédictions du modèle",
+        "search": "Rechercher des espèces",
         "loadingList": "Chargement de la liste des espèces...",
         "listFailed": "La liste des espèces n'a pas pu être chargée. Fermez cette fenêtre et réessayez.",
         "noMatches": "Aucune espèce correspondante.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Changer d'espèce",
         "changed": "Espèce remplacée par {species}",
         "changeFailed": "Impossible de modifier l'espèce. Veuillez réessayer.",
-        "legacyDatabase": "L'espèce ne peut pas être modifiée avec l'ancien format de base de données.",
+        "conflict": "L'espèce ne peut pas être modifiée maintenant : la détection est conservée (verrouillée), ou l'ancien format de base de données est utilisé.",
         "notKnownHere": "L'espèce {species} n'a jamais été détectée ni prédite à cette station et ne peut donc pas encore être sélectionnée.",
         "predictionsTitle": "Autres prédictions",
         "noPredictions": "Le modèle n'a enregistré aucune autre prédiction pour cet enregistrement.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label} : impossible de vérifier les détections voisines"
       },
       "identity": {
-        "confidence": "Confiance",
         "date": "Date",
         "time": "Heure",
         "beforeSunrise": "{hours} h {minutes} min avant le lever du soleil",
@@ -990,7 +989,7 @@
         "savedCorrect": "Marqué comme correct",
         "savedFalsePositive": "Marqué comme faux positif",
         "loginRequired": "Connectez-vous pour vérifier cette détection.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Les détections conservées ne peuvent pas être modifiées. Désactivez d'abord Conserver cet enregistrement.",
         "keep": "Conserver cet enregistrement",
         "keepHelp": "Les détections conservées ne sont jamais supprimées lors du nettoyage.",
         "ignoredSpecies": "L'espèce {species} est désormais ignorée",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Journal d'activité",
-        "subtitle": "Tout ce qui s'est passé pour cette détection",
+        "subtitle": "Ce qui s'est passé pour cette détection",
         "detected": "Espèce {species} détectée avec une confiance de {confidence} %",
         "captureWindow": "Fenêtre de capture {begin}-{end}",
         "clipSaved": "Enregistrement sauvegardé",

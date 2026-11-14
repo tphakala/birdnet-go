@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Vaihda laji",
         "current": "Tunnistettu tällä hetkellä lajiksi",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Mallin muut ennusteet",
+        "search": "Hae lajeja",
         "loadingList": "Ladataan lajiluetteloa...",
         "listFailed": "Lajiluetteloa ei voitu ladata. Sulje tämä ikkuna ja yritä uudelleen.",
         "noMatches": "Yksikään laji ei täsmää.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Vaihda laji",
         "changed": "Lajiksi vaihdettu {species}",
         "changeFailed": "Lajia ei voitu vaihtaa. Yritä uudelleen.",
-        "legacyDatabase": "Lajia ei voi vaihtaa vanhassa tietokantamuodossa.",
+        "conflict": "Lajia ei voi nyt vaihtaa: havainto on säilytetty (lukittu) tai käytössä on vanha tietokantamuoto.",
         "notKnownHere": "Lajia {species} ei ole koskaan havaittu tai ennustettu tällä asemalla, joten sitä ei voi vielä valita.",
         "predictionsTitle": "Muut ennusteet",
         "noPredictions": "Malli ei tallentanut muita ennusteita tälle tallenteelle.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: vierekkäisten havaintojen tarkistus epäonnistui"
       },
       "identity": {
-        "confidence": "Luottamus",
         "date": "Päivämäärä",
         "time": "Aika",
         "beforeSunrise": "{hours} h {minutes} min ennen auringonnousua",
@@ -990,7 +989,7 @@
         "savedCorrect": "Merkitty oikeaksi",
         "savedFalsePositive": "Merkitty virheelliseksi",
         "loginRequired": "Kirjaudu sisään tarkistaaksesi tämän havainnon.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Säilytettyjä havaintoja ei voi muuttaa. Poista ensin Säilytä tämä tallenne käytöstä.",
         "keep": "Säilytä tämä tallenne",
         "keepHelp": "Säilytettyjä havaintoja ei koskaan poisteta siivouksessa.",
         "ignoredSpecies": "{species} ohitetaan tästä lähtien",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Toimintaloki",
-        "subtitle": "Kaikki tähän havaintoon liittyvät tapahtumat",
+        "subtitle": "Mitä tälle havainnolle on tapahtunut",
         "detected": "Havaittu {species} luottamuksella {confidence} %",
         "captureWindow": "Tallennusikkuna {begin}-{end}",
         "clipSaved": "Tallenne tallennettu",

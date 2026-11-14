@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Byt art",
         "current": "Nuvarande identifierad som",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Modellens andra förutsägelser",
+        "search": "Sök arter",
         "loadingList": "Laddar artlistan...",
         "listFailed": "Det gick inte att ladda artlistan. Stäng denna dialogruta och försök igen.",
         "noMatches": "Inga arter matchar.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Byt art",
         "changed": "Art ändrad till {species}",
         "changeFailed": "Det gick inte att byta art. Försök igen.",
-        "legacyDatabase": "Arten kan inte ändras i det gamla databasformatet.",
+        "conflict": "Arten kan inte ändras nu: detekteringen är sparad (låst), eller så används det gamla databasformatet.",
         "notKnownHere": "{species} har aldrig detekterats eller förutspåtts vid denna station och kan därför inte väljas ännu.",
         "predictionsTitle": "Andra förutsägelser",
         "noPredictions": "Modellen sparade inga andra förutsägelser för den här inspelningen.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: kunde inte söka efter intilliggande detekteringar"
       },
       "identity": {
-        "confidence": "Konfidens",
         "date": "Datum",
         "time": "Tid",
         "beforeSunrise": "{hours} tim {minutes} min före soluppgången",
@@ -990,7 +989,7 @@
         "savedCorrect": "Markerad som korrekt",
         "savedFalsePositive": "Markerad som falskt positiv",
         "loginRequired": "Logga in för att granska denna detektering.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Sparade detekteringar kan inte ändras. Slå av Behåll denna inspelning först.",
         "keep": "Behåll denna inspelning",
         "keepHelp": "Sparade detekteringar tas aldrig bort vid rensning.",
         "ignoredSpecies": "{species} ignoreras nu",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Aktivitetslogg",
-        "subtitle": "Allt som har hänt med denna detektering",
+        "subtitle": "Vad som har hänt med denna detektering",
         "detected": "Detekterade {species} med {confidence}% konfidens",
         "captureWindow": "Inspelningsfönster {begin}-{end}",
         "clipSaved": "Inspelning sparad",

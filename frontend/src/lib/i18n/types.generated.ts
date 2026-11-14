@@ -713,7 +713,7 @@ export type TranslationKey =
   | 'detections.detail.species.confirmEmpty'
   | 'detections.detail.species.changed' // params: species
   | 'detections.detail.species.changeFailed'
-  | 'detections.detail.species.legacyDatabase'
+  | 'detections.detail.species.conflict'
   | 'detections.detail.species.notKnownHere' // params: species
   | 'detections.detail.species.predictionsTitle'
   | 'detections.detail.species.noPredictions'
@@ -742,7 +742,6 @@ export type TranslationKey =
   | 'detections.detail.nav.noNewerSpecies' // params: species
   | 'detections.detail.nav.stepLoading' // params: label
   | 'detections.detail.nav.stepFailed' // params: label
-  | 'detections.detail.identity.confidence'
   | 'detections.detail.identity.date'
   | 'detections.detail.identity.time'
   | 'detections.detail.identity.beforeSunrise' // params: hours, minutes

@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Cambia specie",
         "current": "Attualmente identificato come",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Altre previsioni del modello",
+        "search": "Cerca specie",
         "loadingList": "Caricamento elenco specie...",
         "listFailed": "Impossibile caricare l'elenco delle specie. Chiudi questa finestra e riprova.",
         "noMatches": "Nessuna specie corrispondente.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Cambia specie",
         "changed": "Specie cambiata in {species}",
         "changeFailed": "Impossibile cambiare la specie. Riprova.",
-        "legacyDatabase": "La specie non può essere cambiata con il vecchio formato di database.",
+        "conflict": "La specie non può essere cambiata ora: il rilevamento è conservato (bloccato) oppure è in uso il vecchio formato di database.",
         "notKnownHere": "La specie {species} non è mai stata rilevata né prevista in questa stazione, quindi non può ancora essere selezionata.",
         "predictionsTitle": "Altre previsioni",
         "noPredictions": "Il modello non ha salvato altre previsioni per questa registrazione.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: impossibile verificare i rilevamenti vicini"
       },
       "identity": {
-        "confidence": "Confidenza",
         "date": "Data",
         "time": "Ora",
         "beforeSunrise": "{hours} h {minutes} min prima dell'alba",
@@ -990,7 +989,7 @@
         "savedCorrect": "Contrassegnato come corretto",
         "savedFalsePositive": "Contrassegnato come falso positivo",
         "loginRequired": "Accedi per revisionare questo rilevamento.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "I rilevamenti conservati non possono essere modificati. Disattiva prima Conserva questa registrazione.",
         "keep": "Conserva questa registrazione",
         "keepHelp": "I rilevamenti conservati non vengono mai eliminati dalla pulizia.",
         "ignoredSpecies": "La specie {species} ora è ignorata",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Registro attività",
-        "subtitle": "Tutto ciò che è accaduto a questo rilevamento",
+        "subtitle": "Cosa è accaduto a questo rilevamento",
         "detected": "Rilevamento di {species} con confidenza del {confidence}%",
         "captureWindow": "Finestra di acquisizione {begin}-{end}",
         "clipSaved": "Registrazione salvata",

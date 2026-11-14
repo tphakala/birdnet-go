@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Art ändern",
         "current": "Aktuell bestimmt als",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Weitere Vorhersagen des Modells",
+        "search": "Arten suchen",
         "loadingList": "Artenliste wird geladen...",
         "listFailed": "Die Artenliste konnte nicht geladen werden. Schließen Sie dieses Fenster und versuchen Sie es erneut.",
         "noMatches": "Keine passenden Arten.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Art ändern",
         "changed": "Art zu {species} geändert",
         "changeFailed": "Die Art konnte nicht geändert werden. Bitte versuchen Sie es erneut.",
-        "legacyDatabase": "Im alten Datenbankformat kann die Art nicht geändert werden.",
+        "conflict": "Die Art kann jetzt nicht geändert werden: Die Erkennung wird behalten (gesperrt), oder es wird das alte Datenbankformat verwendet.",
         "notKnownHere": "{species} wurde an dieser Station noch nie erkannt oder vorhergesagt und kann daher noch nicht ausgewählt werden.",
         "predictionsTitle": "Weitere Vorhersagen",
         "noPredictions": "Das Modell hat für diese Aufnahme keine weiteren Vorhersagen gespeichert.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: benachbarte Erkennungen konnten nicht geprüft werden"
       },
       "identity": {
-        "confidence": "Konfidenz",
         "date": "Datum",
         "time": "Zeit",
         "beforeSunrise": "{hours} Std. {minutes} Min. vor Sonnenaufgang",
@@ -990,7 +989,7 @@
         "savedCorrect": "Als korrekt markiert",
         "savedFalsePositive": "Als falsch positiv markiert",
         "loginRequired": "Melden Sie sich an, um diese Erkennung zu überprüfen.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Behaltene Erkennungen können nicht geändert werden. Deaktivieren Sie zuerst Diese Aufnahme behalten.",
         "keep": "Diese Aufnahme behalten",
         "keepHelp": "Behaltene Erkennungen werden bei der Bereinigung nie entfernt.",
         "ignoredSpecies": "{species} wird jetzt ignoriert",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Aktivitätsprotokoll",
-        "subtitle": "Alles, was mit dieser Erkennung passiert ist",
+        "subtitle": "Was mit dieser Erkennung passiert ist",
         "detected": "{species} mit {confidence} % Konfidenz erkannt",
         "captureWindow": "Aufnahmefenster {begin}-{end}",
         "clipSaved": "Aufnahme gespeichert",

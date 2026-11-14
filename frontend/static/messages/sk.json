@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Zmeniť druh",
         "current": "Momentálne určené ako",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Ďalšie predpovede modelu",
+        "search": "Hľadať druhy",
         "loadingList": "Načítava sa zoznam druhov...",
         "listFailed": "Zoznam druhov sa nepodarilo načítať. Zatvorte toto okno a skúste to znova.",
         "noMatches": "Žiadny druh nezodpovedá.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Zmeniť druh",
         "changed": "Druh bol zmenený na {species}",
         "changeFailed": "Druh sa nepodarilo zmeniť. Skúste to znova.",
-        "legacyDatabase": "V starom formáte databázy nie je možné zmeniť druh.",
+        "conflict": "Druh teraz nie je možné zmeniť: detekcia je ponechaná (uzamknutá) alebo sa používa starý formát databázy.",
         "notKnownHere": "Druh {species} ešte nebol na tejto stanici nikdy detegovaný ani predpovedaný, preto ho zatiaľ nemožno vybrať.",
         "predictionsTitle": "Ďalšie predpovede",
         "noPredictions": "Model pre túto nahrávku neuložil žiadne ďalšie predpovede.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: nepodarilo sa skontrolovať susedné detekcie"
       },
       "identity": {
-        "confidence": "Istota",
         "date": "Dátum",
         "time": "Čas",
         "beforeSunrise": "{hours} h {minutes} min pred východom slnka",
@@ -990,7 +989,7 @@
         "savedCorrect": "Označené ako správne",
         "savedFalsePositive": "Označené ako falošne pozitívne",
         "loginRequired": "Prihláste sa, aby ste mohli skontrolovať túto detekciu.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Ponechané detekcie nie je možné meniť. Najprv vypnite Ponechať túto nahrávku.",
         "keep": "Ponechať túto nahrávku",
         "keepHelp": "Ponechané detekcie sa pri čistení nikdy neodstránia.",
         "ignoredSpecies": "Druh {species} je teraz ignorovaný",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Denník aktivity",
-        "subtitle": "Všetko, čo sa s touto detekciou stalo",
+        "subtitle": "Čo sa s touto detekciou stalo",
         "detected": "Detegovaný druh {species} s {confidence}% istotou",
         "captureWindow": "Okno zachytenia {begin}-{end}",
         "clipSaved": "Nahrávka uložená",

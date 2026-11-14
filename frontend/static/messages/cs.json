@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Změnit druh",
         "current": "Aktuálně určeno jako",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Další předpovědi modelu",
+        "search": "Hledat druhy",
         "loadingList": "Načítání seznamu druhů...",
         "listFailed": "Seznam druhů se nepodařilo načíst. Zavřete toto okno a zkuste to znovu.",
         "noMatches": "Žádný druh neodpovídá.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Změnit druh",
         "changed": "Druh změněn na {species}",
         "changeFailed": "Druh se nepodařilo změnit. Zkuste to prosím znovu.",
-        "legacyDatabase": "Ve starém formátu databáze nelze druh změnit.",
+        "conflict": "Druh nyní nelze změnit: detekce je ponechána (uzamčena), nebo se používá starý formát databáze.",
         "notKnownHere": "Druh {species} nebyl na této stanici nikdy detekován ani předpovězen, takže jej zatím nelze vybrat.",
         "predictionsTitle": "Další předpovědi",
         "noPredictions": "Model pro tuto nahrávku neuložil žádné další předpovědi.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: nepodařilo se zkontrolovat sousední detekce"
       },
       "identity": {
-        "confidence": "Spolehlivost",
         "date": "Datum",
         "time": "Čas",
         "beforeSunrise": "{hours} h {minutes} min před východem slunce",
@@ -990,7 +989,7 @@
         "savedCorrect": "Označeno jako správné",
         "savedFalsePositive": "Označeno jako falešně pozitivní",
         "loginRequired": "Pro kontrolu této detekce se přihlaste.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Ponechané detekce nelze měnit. Nejprve vypněte Ponechat tuto nahrávku.",
         "keep": "Ponechat tuto nahrávku",
         "keepHelp": "Ponechané detekce se při úklidu nikdy neodstraní.",
         "ignoredSpecies": "Druh {species} je nyní ignorován",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Záznam aktivit",
-        "subtitle": "Vše, co se s touto detekcí stalo",
+        "subtitle": "Co se s touto detekcí stalo",
         "detected": "Detekován druh {species} se spolehlivostí {confidence} %",
         "captureWindow": "Okno záznamu {begin}-{end}",
         "clipSaved": "Nahrávka uložena",

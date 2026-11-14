@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Faj módosítása",
         "current": "Jelenleg azonosítva mint",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "A modell egyéb előrejelzései",
+        "search": "Fajok keresése",
         "loadingList": "Fajlista betöltése...",
         "listFailed": "A fajlista betöltése sikertelen. Zárja be ezt az ablakot, és próbálja újra.",
         "noMatches": "Nincs egyező faj.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Faj módosítása",
         "changed": "Faj módosítva erre: {species}",
         "changeFailed": "A faj módosítása sikertelen. Próbálja újra.",
-        "legacyDatabase": "A régi adatbázis-formátumban a faj nem módosítható.",
+        "conflict": "A faj most nem módosítható: az észlelés meg van tartva (zárolva), vagy a régi adatbázis-formátum van használatban.",
         "notKnownHere": "A(z) {species} még sosem fordult elő és nem is volt előrejelezve ennél az állomásnál, ezért még nem választható ki.",
         "predictionsTitle": "Egyéb előrejelzések",
         "noPredictions": "A modell nem tárolt más előrejelzést ehhez a felvételhez.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: nem sikerült ellenőrizni a szomszédos észleléseket"
       },
       "identity": {
-        "confidence": "Megbízhatóság",
         "date": "Dátum",
         "time": "Időpont",
         "beforeSunrise": "{hours} óra {minutes} perc napkelte előtt",
@@ -990,7 +989,7 @@
         "savedCorrect": "Helyesként megjelölve",
         "savedFalsePositive": "Hamis pozitívként megjelölve",
         "loginRequired": "Jelentkezzen be az észlelés ellenőrzéséhez.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "A megtartott észlelések nem módosíthatók. Előbb kapcsolja ki a Felvétel megtartása opciót.",
         "keep": "Felvétel megtartása",
         "keepHelp": "A megtartott észleléseket a karbantartás sosem törli.",
         "ignoredSpecies": "{species} mostantól figyelmen kívül hagyva",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Tevékenységnapló",
-        "subtitle": "Minden, ami ezzel az észleléssel történt",
+        "subtitle": "Mi történt ezzel az észleléssel",
         "detected": "{species} észlelve {confidence}% megbízhatósággal",
         "captureWindow": "Rögzítési ablak {begin}-{end}",
         "clipSaved": "Felvétel mentve",

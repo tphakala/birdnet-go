@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Soort wijzigen",
         "current": "Momenteel herkend als",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Andere voorspellingen van het model",
+        "search": "Zoek soorten",
         "loadingList": "Soortenlijst laden...",
         "listFailed": "De soortenlijst kon niet worden geladen. Sluit dit venster en probeer het opnieuw.",
         "noMatches": "Geen overeenkomende soorten.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Soort wijzigen",
         "changed": "Soort gewijzigd naar {species}",
         "changeFailed": "De soort kon niet worden gewijzigd. Probeer het opnieuw.",
-        "legacyDatabase": "De soort kan niet worden gewijzigd bij het oude databaseformaat.",
+        "conflict": "De soort kan nu niet worden gewijzigd: de detectie is bewaard (vergrendeld), of het oude databaseformaat is in gebruik.",
         "notKnownHere": "{species} is op dit station nog nooit gedetecteerd of voorspeld en kan daarom nog niet worden gekozen.",
         "predictionsTitle": "Overige voorspellingen",
         "noPredictions": "Het model heeft geen andere voorspellingen voor deze opname opgeslagen.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: kon niet controleren op aangrenzende detecties"
       },
       "identity": {
-        "confidence": "Betrouwbaarheid",
         "date": "Datum",
         "time": "Tijd",
         "beforeSunrise": "{hours} u {minutes} min voor zonsopgang",
@@ -990,7 +989,7 @@
         "savedCorrect": "Gemarkeerd als juist",
         "savedFalsePositive": "Gemarkeerd als fout-positief",
         "loginRequired": "Log in om deze detectie te beoordelen.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Bewaarde detecties kunnen niet worden gewijzigd. Schakel eerst Deze opname bewaren uit.",
         "keep": "Deze opname bewaren",
         "keepHelp": "Bewaarde detecties worden nooit verwijderd bij opschoning.",
         "ignoredSpecies": "{species} wordt nu genegeerd",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Activiteitenlog",
-        "subtitle": "Alles wat er met deze detectie is gebeurd",
+        "subtitle": "Wat er met deze detectie is gebeurd",
         "detected": "{species} gedetecteerd met {confidence}% betrouwbaarheid",
         "captureWindow": "Opnamevenster {begin}-{end}",
         "clipSaved": "Opname opgeslagen",

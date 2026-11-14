@@ -208,7 +208,7 @@
               })}
             </span>
             <span class="dd-identity-confidence-label" aria-hidden="true"
-              >{t('detections.detail.identity.confidence')}</span
+              >{t('common.labels.confidence')}</span
             >
           </div>
         </div>

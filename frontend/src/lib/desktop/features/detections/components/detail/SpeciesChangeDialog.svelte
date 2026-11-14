@@ -70,7 +70,7 @@
   const choiceName = generateId('species-choice');
   // The server's answer for a species it has no label row for yet.
   const HTTP_BAD_REQUEST = 400;
-  // The answer on the legacy database, which cannot change a species.
+  // The answer when the legacy database is in use and when the detection is locked.
   const HTTP_CONFLICT = 409;
 
   type CatalogState = 'loading' | 'ready' | 'failed';
@@ -132,6 +132,9 @@
     );
   });
 
+  // The species the predictions list above already offers; a search does not list them twice.
+  let predicted = $derived(new Set(alternates.map(item => item.scientificName)));
+
   // The detection's own species is left out, since it cannot be changed to itself.
   // A name the reviewer sees that starts with the query ranks first (rankPredictions'
   // "local" tier): typing "ta" lists "tavi" before a species whose Latin name starts
@@ -142,7 +145,7 @@
     return rankPredictions(options, query, {
       limit: MAX_RESULTS,
       isLocal: option => (option.normalizedLabel ?? '').startsWith(needle),
-      exclude: option => option.value === detection.scientificName,
+      exclude: option => option.value === detection.scientificName || predicted.has(option.value),
     }).map(option => ({ scientificName: option.value, commonName: option.label }));
   });
 
@@ -193,7 +196,7 @@
       return t('detections.detail.species.notKnownHere', { species: chosen.commonName });
     }
     if (error instanceof ApiError && error.status === HTTP_CONFLICT) {
-      return t('detections.detail.species.legacyDatabase');
+      return t('detections.detail.species.conflict');
     }
     return t('detections.detail.species.changeFailed');
   }

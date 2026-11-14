@@ -27,6 +27,7 @@ const alternates: AlternatePrediction[] = [
 // The range list is loaded once per page (module cache), so every test serves the same one.
 const rangeSpecies = [
   { scientificName: 'Turdus merula', commonName: 'Blackbird' },
+  { scientificName: 'Turdus philomelos', commonName: 'Song Thrush' },
   { scientificName: 'Turdus pilaris', commonName: 'Fieldfare' },
   { scientificName: 'Turdus viscivorus', commonName: 'Mistle Thrush' },
 ];
@@ -178,7 +179,7 @@ describe('SpeciesChangeDialog saving', () => {
     answerPut?.(json({ error: 'conflict' }, 409));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'detections.detail.species.legacyDatabase'
+      'detections.detail.species.conflict'
     );
   });
 });
@@ -259,6 +260,15 @@ describe('SpeciesChangeDialog choosing', () => {
 
     await loadSpeciesSummary('Turdus merula');
     expect(summaryRequests).toBe(2);
+  });
+
+  it('does not list a predicted species again among the search results', async () => {
+    renderDialog();
+    await search('Turdus');
+
+    await screen.findByRole('radio', { name: /Fieldfare/ });
+    // Song Thrush is a prediction and also in the catalog: one row, in the predictions list.
+    expect(screen.getAllByRole('radio', { name: /Song Thrush/ })).toHaveLength(1);
   });
 
   it('never offers the detection\u2019s own species in the results', async () => {

@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Mainīt sugu",
         "current": "Pašlaik identificēta kā",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Citas modeļa prognozes",
+        "search": "Meklēt sugas",
         "loadingList": "Ielādē sugu sarakstu...",
         "listFailed": "Neizdevās ielādēt sugu sarakstu. Aizveriet šo logu un mēģiniet vēlreiz.",
         "noMatches": "Nav atbilstošu sugu.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Mainīt sugu",
         "changed": "Suga nomainīta uz {species}",
         "changeFailed": "Neizdevās nomainīt sugu. Lūdzu, mēģiniet vēlreiz.",
-        "legacyDatabase": "Mantotajā datubāzes formātā sugu nevar mainīt.",
+        "conflict": "Sugu pašlaik nevar mainīt: noteikšana ir paturēta (bloķēta), vai arī tiek izmantots mantotais datubāzes formāts.",
         "notKnownHere": "Suga {species} šajā stacijā vēl nekad nav tikusi noteikta vai prognozēta, tāpēc to vēl nevar izvēlēties.",
         "predictionsTitle": "Citas prognozes",
         "noPredictions": "Modelis šim ierakstam nav saglabājis citas prognozes.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: neizdevās pārbaudīt blakus esošās noteikšanas"
       },
       "identity": {
-        "confidence": "Ticamība",
         "date": "Datums",
         "time": "Laiks",
         "beforeSunrise": "{hours} st {minutes} min pirms saullēkta",
@@ -990,7 +989,7 @@
         "savedCorrect": "Atzīmēts kā pareizs",
         "savedFalsePositive": "Atzīmēts kā kļūdaini pozitīvs",
         "loginRequired": "Piesakieties, lai pārskatītu šo noteikšanu.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Paturētās noteikšanas nevar mainīt. Vispirms izslēdziet Paturēt šo ierakstu.",
         "keep": "Paturēt šo ierakstu",
         "keepHelp": "Paturētās noteikšanas nekad netiek dzēstas tīrīšanas laikā.",
         "ignoredSpecies": "Suga {species} tagad tiek ignorēta",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Darbību žurnāls",
-        "subtitle": "Viss, kas noticis ar šo noteikšanu",
+        "subtitle": "Kas noticis ar šo noteikšanu",
         "detected": "Noteikta suga {species} ar {confidence}% ticamību",
         "captureWindow": "Tveršanas logs {begin}-{end}",
         "clipSaved": "Ieraksts saglabāts",

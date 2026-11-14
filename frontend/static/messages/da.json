@@ -884,8 +884,8 @@
       "species": {
         "dialogTitle": "Skift art",
         "current": "Aktuelt identificeret som",
-        "fromPredictions": "Other predictions for this recording",
-        "search": "Search all species",
+        "fromPredictions": "Modellens andre forudsigelser",
+        "search": "Søg arter",
         "loadingList": "Indlæser artslisten...",
         "listFailed": "Artslisten kunne ikke indlæses. Luk denne dialog, og prøv igen.",
         "noMatches": "Ingen arter matcher.",
@@ -895,7 +895,7 @@
         "confirmEmpty": "Skift art",
         "changed": "Art ændret til {species}",
         "changeFailed": "Arten kunne ikke ændres. Prøv igen.",
-        "legacyDatabase": "Arten kan ikke ændres i det gamle databaseformat.",
+        "conflict": "Arten kan ikke ændres nu: registreringen er bevaret (låst), eller det gamle databaseformat er i brug.",
         "notKnownHere": "{species} er aldrig blevet registreret eller forudsagt på denne station, så den kan ikke vælges endnu.",
         "predictionsTitle": "Andre forudsigelser",
         "noPredictions": "Modellen gemte ingen andre forudsigelser for denne optagelse.",
@@ -930,7 +930,6 @@
         "stepFailed": "{label}: kunne ikke søge efter tilstødende registreringer"
       },
       "identity": {
-        "confidence": "Sikkerhed",
         "date": "Dato",
         "time": "Tid",
         "beforeSunrise": "{hours} t {minutes} min før solopgang",
@@ -990,7 +989,7 @@
         "savedCorrect": "Markeret som korrekt",
         "savedFalsePositive": "Markeret som falsk positiv",
         "loginRequired": "Log ind for at gennemgå denne registrering.",
-        "lockedHelp": "This detection is kept (locked). Turn off Keep this recording to change the verdict.",
+        "lockedHelp": "Bevarede registreringer kan ikke ændres. Slå Behold denne optagelse fra først.",
         "keep": "Behold denne optagelse",
         "keepHelp": "Bevarede registreringer slettes aldrig ved oprydning.",
         "ignoredSpecies": "{species} ignoreres nu",
@@ -1044,7 +1043,7 @@
       },
       "log": {
         "title": "Aktivitetslog",
-        "subtitle": "Alt, hvad der er sket med denne registrering",
+        "subtitle": "Hvad der er sket med denne registrering",
         "detected": "Registreret {species} med {confidence}% sikkerhed",
         "captureWindow": "Optagelsesvindue {begin}-{end}",
         "clipSaved": "Optagelse gemt",
