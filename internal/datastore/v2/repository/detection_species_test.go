@@ -210,6 +210,23 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 		assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created for an alias of an existing one")
 	})
 
+	t.Run("an exact name wins over an older alias of the same species", func(t *testing.T) {
+		db, repo := speciesTestDB(t)
+		ctx := t.Context()
+		teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+		createTestLabel(t, db, speciesTestDoveOld, speciesTestBirdnet)
+		exact := createTestLabel(t, db, speciesTestDoveNew, speciesTestBirdnet)
+		det := speciesTestDetection(t, db, teal)
+		labelsBefore := speciesTestLabelCount(t, db)
+
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestDoveNew))
+
+		got, err := repo.Get(ctx, det.ID)
+		require.NoError(t, err)
+		assert.Equal(t, exact.ID, got.LabelID, "the label of the requested spelling is taken, not an older alias")
+		assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created")
+	})
+
 	t.Run("the oldest of a model's aliases of one species is taken", func(t *testing.T) {
 		db, repo := speciesTestDB(t)
 		ctx := t.Context()
