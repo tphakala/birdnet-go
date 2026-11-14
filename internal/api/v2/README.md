@@ -581,14 +581,14 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 
 ### Species (`species/species.go`)
 
-| Method | Route                         | Handler                  | Auth | Description                                                       |
-| ------ | ----------------------------- | ------------------------ | ---- | ----------------------------------------------------------------- |
-| GET    | `/species`                    | `GetSpeciesInfo`         | ❌   | Get extended species information including rarity status          |
-| GET    | `/species/all`                | `GetAllSpecies`          | ❌   | Get all BirdNET species labels (not filtered by location)         |
-| GET    | `/species/taxonomy`           | `GetSpeciesTaxonomy`     | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
-| GET    | `/species/:code/thumbnail`    | `GetSpeciesThumbnail`    | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
-| GET    | `/species/dictionary/:locale` | `ServeSpeciesDictionary` | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
-| GET    | `/species/stats`              | `GetSpeciesStats`        | ❌   | Detection statistics of one species (enhanced database only)      |
+| Method | Route                         | Handler                  | Auth | Description                                                                   |
+| ------ | ----------------------------- | ------------------------ | ---- | ----------------------------------------------------------------------------- |
+| GET    | `/species`                    | `GetSpeciesInfo`         | ❌   | Get extended species information including rarity status                      |
+| GET    | `/species/all`                | `GetAllSpecies`          | ❌   | Get all BirdNET species labels (not filtered by location)                     |
+| GET    | `/species/taxonomy`           | `GetSpeciesTaxonomy`     | ❌   | Get detailed taxonomy data with subspecies and hierarchy                      |
+| GET    | `/species/:code/thumbnail`    | `GetSpeciesThumbnail`    | ❌   | Get bird thumbnail image by species code (redirects to image URL)             |
+| GET    | `/species/dictionary/:locale` | `ServeSpeciesDictionary` | ❌   | Precompressed per-locale species name dictionary (gzip JSON)                  |
+| GET    | `/species/stats`              | `GetSpeciesStats`        | ❌   | Species statistics, enhanced database only (in `detections/species_stats.go`) |
 
 **Sound classes.** `scientific_name` on `/species` and `/species/taxonomy` also accepts a sound class name as detections report it ("Dog", "Human vocal", "Church_bell"). `/species` answers with the names only, and `/species/taxonomy` with `metadata.source` set to "unresolved", a `metadata.note` saying it is a sound class, and no `taxonomy`. `GET /taxonomy/tree/:scientific_name` answers 404 "Species not found" for a sound class. Any other name that is shorter than 3 characters or has no space answers 400.
 

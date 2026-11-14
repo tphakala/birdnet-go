@@ -91,26 +91,24 @@ func (c *Handler) GetSpeciesStats(ctx echo.Context) error {
 	resp := SpeciesStatsResponse{
 		ScientificName: species,
 		Count:          stats.Detections,
-		FirstHeard:     stationTimeOrNil(stats.FirstDetectedAt),
-		LastHeard:      stationTimeOrNil(stats.LastDetectedAt),
 		Reviews: SpeciesReviewCounts{
 			Correct:       stats.CorrectReviews,
 			FalsePositive: stats.FalsePositiveReviews,
 		},
 	}
 	if stats.Detections > 0 {
+		resp.FirstHeard = stationTime(stats.FirstDetectedAt)
+		resp.LastHeard = stationTime(stats.LastDetectedAt)
 		resp.AvgConfidence = &stats.AvgConfidence
 		resp.MaxConfidence = &stats.MaxConfidence
 	}
 	return ctx.JSON(http.StatusOK, resp)
 }
 
-// stationTimeOrNil renders Unix seconds as RFC3339 in the station zone, like a
-// detection's timestamp. A non-positive epoch means no such detection and is nil.
-func stationTimeOrNil(epoch int64) *string {
-	if epoch <= 0 {
-		return nil
-	}
+// stationTime renders Unix seconds as RFC3339 in the station zone, like a
+// detection's timestamp. Any epoch is rendered as is, including 0 and instants
+// before 1970; the caller leaves the time out when there is no detection.
+func stationTime(epoch int64) *string {
 	formatted := time.Unix(epoch, 0).In(datastore.Timezone()).Format(time.RFC3339)
 	return &formatted
 }

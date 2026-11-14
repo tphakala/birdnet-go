@@ -22,15 +22,16 @@ import (
 )
 
 const (
-	statsTestSpecies    = "Parus major"
-	statsTestPaddedName = "  Parus major_Great Tit  "
-	statsTestFirstEpoch = int64(1_700_000_000)
-	statsTestLastEpoch  = int64(1_760_000_000)
-	statsTestAvg        = 0.5
-	statsTestMax        = 0.75
-	statsTestCorrect    = 4
-	statsTestFalsePos   = 2
-	statsTestCount      = 10
+	statsTestSpecies      = "Parus major"
+	statsTestPaddedName   = "  Parus major_Great Tit  "
+	statsTestFirstEpoch   = int64(1_700_000_000)
+	statsTestLastEpoch    = int64(1_760_000_000)
+	statsTestAvg          = 0.5
+	statsTestMax          = 0.75
+	statsTestCorrect      = 4
+	statsTestFalsePos     = 2
+	statsTestCount        = 10
+	statsTestPre1970Epoch = int64(-86_400)
 )
 
 // fakeSpeciesStatsReader is a speciesStatsReader with a canned result. It records
@@ -89,6 +90,12 @@ func TestGetSpeciesStats(t *testing.T) {
 			"zero statistics",
 			repository.SpeciesStats{},
 			fmt.Sprintf(`{"scientificName":%q,"count":0,"firstHeard":null,"lastHeard":null,"avgConfidence":null,"maxConfidence":null,"reviews":{"correct":0,"falsePositive":0}}`, statsTestSpecies),
+		},
+		{
+			"times at and before the epoch",
+			repository.SpeciesStats{Detections: 1, FirstDetectedAt: statsTestPre1970Epoch, LastDetectedAt: 0, AvgConfidence: statsTestAvg, MaxConfidence: statsTestMax},
+			fmt.Sprintf(`{"scientificName":%q,"count":1,"firstHeard":%q,"lastHeard":%q,"avgConfidence":%v,"maxConfidence":%v,"reviews":{"correct":0,"falsePositive":0}}`,
+				statsTestSpecies, localRFC3339(statsTestPre1970Epoch), localRFC3339(0), statsTestAvg, statsTestMax),
 		},
 	}
 	for _, tt := range tests {

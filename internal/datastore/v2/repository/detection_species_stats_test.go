@@ -151,6 +151,7 @@ func TestGetSpeciesStats_Edges(t *testing.T) {
 	t.Run("no label carries the name", func(t *testing.T) {
 		db := setupInsightsTestDB(t)
 		repo := NewDetectionRepository(db, nil, false, false)
+		seedDetection(t, db, seedLabel(t, db, statsSpeciesB), 1000, 0.9)
 		got, err := repo.GetSpeciesStats(t.Context(), "Nonexistent species")
 		require.NoError(t, err)
 		assert.Equal(t, &SpeciesStats{}, got)
@@ -159,6 +160,7 @@ func TestGetSpeciesStats_Edges(t *testing.T) {
 	t.Run("a label with no detections", func(t *testing.T) {
 		db := setupInsightsTestDB(t)
 		repo := NewDetectionRepository(db, nil, false, false)
+		seedDetection(t, db, seedLabel(t, db, statsSpeciesB), 1000, 0.9)
 		seedLabel(t, db, statsSpeciesA)
 		got, err := repo.GetSpeciesStats(t.Context(), statsSpeciesA)
 		require.NoError(t, err)
