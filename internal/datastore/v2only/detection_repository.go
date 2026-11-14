@@ -44,13 +44,16 @@ func (r *detectionRepository) Save(ctx context.Context, result *detection.Result
 	return nil
 }
 
-// Get retrieves a detection by ID with the instant stored for it.
+// Get retrieves a detection by ID with the instant stored for it, plus the review and
+// lock times, which no list read returns.
 func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Result, error) {
 	det, err := r.ds.getDetection(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get detection %s: %w", id, err)
 	}
-	return r.ds.detectionToResult(ctx, det), nil
+	result := r.ds.detectionToResult(ctx, det)
+	r.ds.setReviewAndLockTimes(result, det)
+	return result, nil
 }
 
 // GetAdditionalResults returns the stored alternate predictions of a detection. The

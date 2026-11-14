@@ -253,6 +253,82 @@ func TestDetectionEndpoints_ReadThroughRepository(t *testing.T) {
 	})
 }
 
+// TestGetDetection_ReviewAndLockTimes verifies that the single detection response
+// carries the review and lock times as RFC3339 in the result's zone, omits each one
+// that is zero, and that the recent list never carries them.
+func TestGetDetection_ReviewAndLockTimes(t *testing.T) {
+	zone := time.FixedZone("EET", 2*60*60)
+	firstReviewed := time.Date(2026, 6, 1, 8, 0, 1, 0, zone)
+	lastReviewed := time.Date(2026, 6, 2, 9, 0, 2, 0, zone)
+	locked := time.Date(2026, 6, 3, 10, 0, 3, 0, zone)
+	result := func(withTimes bool) *detection.Result {
+		r := &detection.Result{
+			ID: 1, Timestamp: time.Date(2026, 6, 1, 7, 0, 0, 0, zone),
+			AudioSource: detection.AudioSource{ID: "realtime", SafeString: "realtime", DisplayName: "realtime"},
+			Species:     detection.Species{Code: "PARMAJ", ScientificName: "Parus major", CommonName: "Great Tit"},
+			Confidence:  0.9,
+		}
+		if withTimes {
+			r.FirstReviewedAt, r.LastReviewedAt, r.LockedAt = firstReviewed, lastReviewed, locked
+		}
+		return r
+	}
+	timeKeys := []string{"firstReviewedAt", "lastReviewedAt", "lockedAt"}
+	getDetection1 := func(t *testing.T, e *echo.Echo, h *Handler) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/1", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id")
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+		require.NoError(t, h.GetDetection(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		return rec
+	}
+
+	t.Run("reviewed and locked", func(t *testing.T) {
+		e, mockDS, repo, h := detectionsRepoHandler(t)
+		repo.EXPECT().Get(mock.Anything, "1").Return(result(true), nil)
+		mockDS.EXPECT().GetHourlyWeather(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+		rec := getDetection1(t, e, h)
+		var resp DetectionResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "2026-06-01T08:00:01+02:00", resp.FirstReviewedAt)
+		assert.Equal(t, "2026-06-02T09:00:02+02:00", resp.LastReviewedAt)
+		assert.Equal(t, "2026-06-03T10:00:03+02:00", resp.LockedAt)
+	})
+
+	t.Run("neither", func(t *testing.T) {
+		e, mockDS, repo, h := detectionsRepoHandler(t)
+		repo.EXPECT().Get(mock.Anything, "1").Return(result(false), nil)
+		mockDS.EXPECT().GetHourlyWeather(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+		rec := getDetection1(t, e, h)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		for _, key := range timeKeys {
+			assert.NotContains(t, body, key)
+		}
+	})
+
+	t.Run("recent does not carry them", func(t *testing.T) {
+		e, _, repo, h := detectionsRepoHandler(t)
+		repo.EXPECT().GetRecent(mock.Anything, 5).Return([]*detection.Result{result(true)}, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent?limit=5", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/recent")
+		require.NoError(t, h.GetRecentDetections(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		require.Len(t, body, 1)
+		for _, key := range timeKeys {
+			assert.NotContains(t, body[0], key)
+		}
+	})
+}
+
 // TestGetDetection_NotFound verifies that a detection missing from either store
 // answers 404: the legacy bridge reports gorm.ErrRecordNotFound and the v2
 // repository reports repository.ErrDetectionNotFound.

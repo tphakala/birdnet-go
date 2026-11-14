@@ -187,6 +187,11 @@ type DetectionResponse struct {
 	IsNewSpecies       bool                        `json:"isNewSpecies,omitempty"`       // First seen within tracking window
 	DaysSinceFirstSeen int                         `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 
+	// FirstReviewedAt, LastReviewedAt and LockedAt are RFC3339 times in the station zone, set only by GET /detections/:id on the enhanced database. FirstReviewedAt is when the review was first stored, LastReviewedAt when it was last saved (never earlier than FirstReviewedAt), LockedAt when the current lock was set. Each is omitted without a review or lock.
+	FirstReviewedAt string `json:"firstReviewedAt,omitempty"`
+	LastReviewedAt  string `json:"lastReviewedAt,omitempty"`
+	LockedAt        string `json:"lockedAt,omitempty"`
+
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
 	IsNewThisSeason bool   `json:"isNewThisSeason,omitempty"` // First time this season
@@ -1293,6 +1298,8 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 // but no stored clip sample rate it reads that clip's header once, waiting at most
 // clipRateResponseBudget, stores the rate, and returns it as clipSampleRate; when
 // the wait is exceeded or the clip cannot be read the field is omitted.
+// It alone also returns the review and lock times (firstReviewedAt, lastReviewedAt,
+// lockedAt) the repository read set; no list, recent or search response carries them.
 func (c *Handler) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
 	reqCtx := ctx.Request().Context()
@@ -1315,11 +1322,23 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	resp := []DetectionResponse{c.resultToDetectionResponse(r, true, weatherCache)}
+	resp[0].FirstReviewedAt = formatOptionalTime(r.FirstReviewedAt)
+	resp[0].LastReviewedAt = formatOptionalTime(r.LastReviewedAt)
+	resp[0].LockedAt = formatOptionalTime(r.LockedAt)
 	c.attachModelContributions(reqCtx, resp)
 	if !c.isClientAuthenticated(ctx) {
 		resp[0].Source = nil
 	}
 	return ctx.JSON(http.StatusOK, resp[0])
+}
+
+// formatOptionalTime formats t as RFC3339, or returns an empty string for the zero
+// time so the response field is omitted.
+func formatOptionalTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // GetRecentDetections returns the most recent detections
