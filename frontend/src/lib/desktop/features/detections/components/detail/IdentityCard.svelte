@@ -20,7 +20,7 @@
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import DetailCard from './DetailCard.svelte';
-  import { formatPercent, toPercent } from './detailFormat';
+  import { formatPercent, replacedModelPick, toPercent } from './detailFormat';
   import { formatCalendarDate, type SunOffset } from './detailTime';
   import type { DetectionDetailData, SpeciesRarity, TaxonomyHierarchy } from './detailTypes';
 
@@ -72,10 +72,7 @@
   );
 
   // True when a reviewer replaced the model's species with another.
-  let speciesSetByReviewer = $derived(
-    detection.originalSpecies !== undefined &&
-      detection.originalSpecies.scientificName !== detection.scientificName
-  );
+  let speciesSetByReviewer = $derived(replacedModelPick(detection) !== null);
 
   // Any other time of day (night, dusk, dawn) shows the moon.
   const TIME_OF_DAY_ICONS = new Map<string, typeof Sun>([

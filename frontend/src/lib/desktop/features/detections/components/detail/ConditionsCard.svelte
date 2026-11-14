@@ -46,6 +46,7 @@
     compassPoint,
     dayPercent,
     detectionMinute,
+    MINUTES_PER_HOUR,
     sunEventTimes,
     wallClockMinutes,
     wallClockTime,
@@ -83,7 +84,6 @@
   const HOURS_PER_DAY = 24;
   const HALF_TURN_DEGREES = 180;
   const AXIS_HOURS = [0, 6, 12, 18, 24];
-  const MINUTES_PER_HOUR = 60;
   const MISSING = '-';
   // Share of the strip height where the horizon line sits, measured from the top.
   const HORIZON_PERCENT = 62;
@@ -172,7 +172,7 @@
     }
     const peak = Math.max(...counts);
     if (peak === 0) return null;
-    return counts.map((count, hour) => ({ hour, count, share: count / peak }));
+    return counts.map((count, hour) => ({ hour, count, peak }));
   });
 
   let detectionHour = $derived(moment === null ? -1 : Math.floor(moment / MINUTES_PER_HOUR));
@@ -206,65 +206,64 @@
     return `${speed(windSpeed)}${gust} ${getWindSpeedUnit(units)}`;
   });
 
+  interface Tile {
+    key: string;
+    icon: typeof Wind;
+    label: string;
+    value: string;
+    /** Rotation of the icon in degrees, for the wind arrow. */
+    rotate?: number;
+    suffix?: string;
+  }
+
+  let windDeg = $derived(hourly?.wind_deg);
+
   // The six tiles, always: a value that was not recorded shows a dash. The wind tile's
   // arrow points the way the wind blows, when the direction is known.
-  let tiles = $derived([
-    {
-      key: 'wind',
-      icon: hourly?.wind_deg !== undefined ? Navigation : Wind,
-      rotate: hourly?.wind_deg !== undefined ? hourly.wind_deg + HALF_TURN_DEGREES : undefined,
-      label:
-        hourly?.wind_deg !== undefined
-          ? t('detections.detail.conditions.windFrom', {
-              direction: compassPoint(hourly.wind_deg),
-            })
-          : t('detections.weather.labels.wind'),
-      value: windValue,
-      suffix: '',
-    },
+  let tiles = $derived<Tile[]>([
+    windDeg !== undefined
+      ? {
+          key: 'wind',
+          icon: Navigation,
+          rotate: windDeg + HALF_TURN_DEGREES,
+          label: t('detections.detail.conditions.windFrom', { direction: compassPoint(windDeg) }),
+          value: windValue,
+        }
+      : { key: 'wind', icon: Wind, label: t('detections.weather.labels.wind'), value: windValue },
     {
       key: 'precipitation',
       icon: CloudRain,
-      rotate: undefined,
       label: t('detections.detail.conditions.precipitation'),
       value:
         hourly?.precipitation !== undefined ? `${formatDecimal(hourly.precipitation)} mm` : MISSING,
-      suffix: hourly?.precipitation && hourly.precipitation_type ? hourly.precipitation_type : '',
+      suffix: hourly?.precipitation ? hourly.precipitation_type : undefined,
     },
     {
       key: 'clouds',
       icon: Cloud,
-      rotate: undefined,
       label: t('detections.weather.labels.cloudCover'),
       value: hourly?.clouds !== undefined ? `${hourly.clouds}%` : MISSING,
-      suffix: '',
     },
     {
       key: 'humidity',
       icon: Droplets,
-      rotate: undefined,
       label: t('detections.weather.labels.humidity'),
       value: humidity !== undefined ? `${humidity}%` : MISSING,
-      suffix: '',
     },
     {
       key: 'pressure',
       icon: Gauge,
-      rotate: undefined,
       label: t('detections.weather.labels.pressure'),
       value: hourly?.pressure ? `${hourly.pressure} hPa` : MISSING,
-      suffix: '',
     },
     {
       key: 'feelsLike',
       icon: Thermometer,
-      rotate: undefined,
       label: t('detections.detail.conditions.feelsLike'),
       value:
         hourly?.feels_like !== undefined
           ? formatTemperatureCompact(hourly.feels_like, units)
           : MISSING,
-      suffix: '',
     },
   ]);
 
@@ -322,7 +321,7 @@
               <span
                 class="dd-activity-bar"
                 class:dd-activity-bar-now={bar.hour === detectionHour}
-                style:height="{barHeight(bar.share, bar.count, ACTIVITY_MAX_PERCENT)}%"
+                style:height="{barHeight(bar.count, bar.peak, ACTIVITY_MAX_PERCENT)}%"
                 title="{hourLabel(bar.hour)}  {bar.count}"
               ></span>
             {/each}

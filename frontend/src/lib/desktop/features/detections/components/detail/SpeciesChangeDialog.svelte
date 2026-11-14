@@ -164,12 +164,18 @@
     return () => globalThis.clearTimeout(timer);
   });
 
-  function alternateSpecies(item: AlternatePrediction): CatalogSpecies {
-    return {
-      scientificName: item.scientificName,
-      commonName: localizeSpeciesName(item.scientificName, item.commonName),
-    };
-  }
+  // The model's other predictions as rows: the species in the UI language, the score,
+  // and whether it was the model's own pick.
+  let alternateRows = $derived(
+    alternates.map((item: AlternatePrediction) => ({
+      species: {
+        scientificName: item.scientificName,
+        commonName: localizeSpeciesName(item.scientificName, item.commonName),
+      },
+      detail: formatScore(item.confidence),
+      original: item.original === true,
+    }))
+  );
 
   async function confirm() {
     if (!selected || saving || !canChange) return;
@@ -196,7 +202,7 @@
   }
 </script>
 
-<!-- One row: a radio choice for a reviewer, a plain list item otherwise. -->
+<!-- The names and score of one row, shared by the plain rows and the choices. -->
 {#snippet names(item: CatalogSpecies, detail: string, original: boolean)}
   <span class="dd-species-names">
     <span class="dd-species-common">{item.commonName}</span>
@@ -210,6 +216,7 @@
   {/if}
 {/snippet}
 
+<!-- A row a reviewer can pick: one radio of the dialog's single group. -->
 {#snippet choice(item: CatalogSpecies, detail: string, original: boolean)}
   {@const active = selected?.scientificName === item.scientificName}
   <label class="dd-species-option" class:dd-species-option-active={active}>
@@ -255,15 +262,11 @@
 
       {#if !canChange}
         <h4 class="dd-species-heading">{@render predictionsHeading()}</h4>
-        {#if alternates.length > 0}
+        {#if alternateRows.length > 0}
           <ul class="dd-species-list dd-species-alternates">
-            {#each alternates as item (item.scientificName)}
+            {#each alternateRows as row (row.species.scientificName)}
               <li class="dd-species-option dd-species-option-static">
-                {@render names(
-                  alternateSpecies(item),
-                  formatScore(item.confidence),
-                  item.original === true
-                )}
+                {@render names(row.species, row.detail, row.original)}
               </li>
             {/each}
           </ul>
@@ -274,14 +277,10 @@
       {:else}
         <fieldset class="dd-species-group">
           <legend class="dd-species-heading">{@render predictionsHeading()}</legend>
-          {#if alternates.length > 0}
+          {#if alternateRows.length > 0}
             <div class="dd-species-list dd-species-alternates">
-              {#each alternates as item (item.scientificName)}
-                {@render choice(
-                  alternateSpecies(item),
-                  formatScore(item.confidence),
-                  item.original === true
-                )}
+              {#each alternateRows as row (row.species.scientificName)}
+                {@render choice(row.species, row.detail, row.original)}
               {/each}
             </div>
           {:else}

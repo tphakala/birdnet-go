@@ -56,6 +56,7 @@
   {#snippet header()}
     <div class="dd-rec">
       <div class="dd-rec-main">
+        <!-- DetailCard styles this class: the title sits in this header's own layout. -->
         <h2 class="dd-card-title">{t('detections.media.title')}</h2>
         <dl class="dd-rec-facts">
           {#if captureWindow}

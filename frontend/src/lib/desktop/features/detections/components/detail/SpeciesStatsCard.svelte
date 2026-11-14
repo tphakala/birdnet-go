@@ -13,7 +13,7 @@
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import DetailCard from './DetailCard.svelte';
   import { barHeight, formatCount, formatPercent, PERCENT, toPercent } from './detailFormat';
-  import { dailyWindowStart, formatCalendarDate, wallClockDate } from './detailTime';
+  import { dailyWindowStart, formatCalendarDate } from './detailTime';
   import type {
     DailyCounts,
     DetectionDetailData,
@@ -34,7 +34,7 @@
     /** How reviewers judged this species' detections; null until known. */
     reviews?: SpeciesReviewCounts | null;
     /** Which parts are still being requested; each shows placeholders until it answers. */
-    loading?: { rarity: boolean; summary: boolean; daily: boolean; reviews: boolean };
+    loading?: Partial<Record<'rarity' | 'summary' | 'daily' | 'reviews', boolean>>;
   }
 
   let {
@@ -45,7 +45,7 @@
     daily = null,
     dailyDays,
     reviews = null,
-    loading = { rarity: false, summary: false, daily: false, reviews: false },
+    loading = {},
   }: Props = $props();
 
   // A species is called out as often rejected once at least this many of its
@@ -56,10 +56,10 @@
 
   // Placeholders stand in for a part only while it has nothing to show yet.
   let pending = $derived({
-    rarity: loading.rarity && rarity === null,
-    summary: loading.summary && summary === null,
-    daily: loading.daily && daily === null,
-    reviews: loading.reviews && reviews === null,
+    rarity: Boolean(loading.rarity) && rarity === null,
+    summary: Boolean(loading.summary) && summary === null,
+    daily: Boolean(loading.daily) && daily === null,
+    reviews: Boolean(loading.reviews) && reviews === null,
   });
   let anyPending = $derived(Object.values(pending).some(Boolean));
 
@@ -83,16 +83,34 @@
       // A malformed detection date leaves the chart out.
       return [];
     }
-    const peak = Math.max(1, ...bars.map(bar => bar.count));
-    return bars.map(bar => ({ ...bar, share: bar.count / peak }));
+    return bars;
   });
+
+  let dailyPeak = $derived(Math.max(1, ...dailyBars.map(bar => bar.count)));
+
+  let rarityText = $derived(
+    rarity ? `${t(`species.rarity.statuses.${rarity.status}`)}, ${formatPercent(rarity.score)}` : ''
+  );
+  // The track is a meter only once there is a score to show.
+  let meterAttributes = $derived(
+    rarity
+      ? {
+          role: 'meter',
+          'aria-valuemin': 0,
+          'aria-valuemax': PERCENT,
+          'aria-valuenow': toPercent(rarity.score),
+          'aria-valuetext': rarityText,
+          'aria-label': t('detections.detail.stats.rangeScore'),
+        }
+      : {}
+  );
 
   let windowTotal = $derived(dailyBars.reduce((sum, bar) => sum + bar.count, 0));
 
   let speciesUrl = $derived(buildSpeciesDetectionUrl(detection.scientificName, detection.date));
 
   function heard(timestamp: string | undefined): string {
-    return timestamp ? formatCalendarDate(wallClockDate(timestamp)) : MISSING;
+    return timestamp ? formatCalendarDate(timestamp) : MISSING;
   }
 </script>
 
@@ -125,17 +143,7 @@
           <Skeleton inline className="h-3 w-24" />
         {/if}
       </div>
-      <div
-        class="dd-rarity-track"
-        role={rarity ? 'meter' : undefined}
-        aria-valuemin={rarity ? 0 : undefined}
-        aria-valuemax={rarity ? 100 : undefined}
-        aria-valuenow={rarity ? toPercent(rarity.score) : undefined}
-        aria-valuetext={rarity
-          ? `${t(`species.rarity.statuses.${rarity.status}`)}, ${formatPercent(rarity.score)}`
-          : undefined}
-        aria-label={rarity ? t('detections.detail.stats.rangeScore') : undefined}
-      >
+      <div class="dd-rarity-track" {...meterAttributes}>
         {#if rarity}
           <span class="dd-rarity-fill" style:width="{rarity.score * PERCENT}%"></span>
         {/if}
@@ -240,7 +248,7 @@
             <span
               class="dd-daily-bar"
               class:dd-daily-bar-now={bar.date === detection.date}
-              style:height="{barHeight(bar.share, bar.count)}%"
+              style:height="{barHeight(bar.count, dailyPeak)}%"
               title="{bar.label}  {bar.count}"
             ></span>
           {/each}

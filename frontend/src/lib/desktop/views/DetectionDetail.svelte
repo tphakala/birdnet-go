@@ -267,13 +267,18 @@
     const controller = detectionController;
     const { signal } = controller;
 
+    // The signals of the requests started beside this detection, for those that follow it.
+    let related: AbortSignal | null = null;
+    let lists: AbortSignal | null = null;
     if (!refresh) {
       isLoadingDetection = true;
       detectionError = null;
       relatedController = renew(relatedController);
       listsController = renew(listsController);
-      loadWeather(id, relatedController.signal);
-      loadLists(id, listsController.signal);
+      related = relatedController.signal;
+      lists = listsController.signal;
+      loadWeather(id, related);
+      loadLists(id, lists);
     }
 
     try {
@@ -291,9 +296,9 @@
       const verdictChanged = detection?.verified !== data.verified;
       detection = data;
 
-      if (!refresh) {
-        if (relatedController) loadSun(data, relatedController.signal);
-        if (listsController) loadDaily(data, listsController.signal);
+      if (related && lists) {
+        loadSun(data, related);
+        loadDaily(data, lists);
       } else if (speciesChanged) {
         // A reviewer changed the species: the lists that depend on it are stale.
         // Weather and sun times belong to the detection and its date, and stay.
@@ -637,7 +642,7 @@
           speciesName={displayName}
           {canReview}
           {speciesBlockedReason}
-          grow={true}
+          grow
           onWrongSpecies={() => (speciesDialogOpen = true)}
           onChanged={refreshDetection}
         />
@@ -682,12 +687,7 @@
           daily={dailyCounts}
           dailyDays={DAILY_WINDOW_DAYS}
           reviews={reviewCounts}
-          loading={{
-            rarity: loading.rarity,
-            summary: loading.summary,
-            daily: loading.daily,
-            reviews: loading.reviews,
-          }}
+          {loading}
         />
       </div>
     </div>

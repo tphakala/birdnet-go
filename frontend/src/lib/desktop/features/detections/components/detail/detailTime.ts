@@ -11,7 +11,7 @@ import { PERCENT } from './detailFormat';
 import type { DetectionDetailData, DetectionWeather, SunTimes } from './detailTypes';
 
 export const MINUTES_PER_DAY = 1440;
-const MINUTES_PER_HOUR = 60;
+export const MINUTES_PER_HOUR = 60;
 const SECONDS_PER_MINUTE = 60;
 const MS_PER_SECOND = 1000;
 
@@ -77,7 +77,8 @@ const LONG_DATE: Intl.DateTimeFormatOptions = {
 const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
 
 /**
- * A calendar date in the UI language ("Sat, Nov 14, 2026" in English); with
+ * A calendar date ("YYYY-MM-DD", or the date part of an RFC3339 timestamp in
+ * station time) in the UI language ("Sat, Nov 14, 2026" in English); with
  * `short`, the day and month only. The date is built from its fields, so the
  * browser's zone cannot shift the day.
  */

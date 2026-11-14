@@ -15,7 +15,7 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { generateId } from '$lib/utils/uuid';
   import DetailCard from './DetailCard.svelte';
-  import { toPercent } from './detailFormat';
+  import { replacedModelPick, toPercent } from './detailFormat';
   import { wallClockDateTime, wallClockTime } from './detailTime';
   import type { DetectionDetailData } from './detailTypes';
 
@@ -60,9 +60,8 @@
 
   // The model's own species, when a reviewer changed it to another; empty otherwise.
   let originalSpeciesName = $derived.by(() => {
-    const original = detection.originalSpecies;
-    if (!original || original.scientificName === detection.scientificName) return '';
-    return localizeSpeciesName(original.scientificName, original.commonName);
+    const original = replacedModelPick(detection);
+    return original ? localizeSpeciesName(original.scientificName, original.commonName) : '';
   });
 
   let entries = $derived.by(() => {

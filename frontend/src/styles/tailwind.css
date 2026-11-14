@@ -132,10 +132,6 @@
 
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
-
-  /* Secondary text at 70% of the body text colour: labels, captions and notes. It follows
-     --color-base-content, so it holds under every scheme; 4.5:1 or more on base-100 and base-200. */
-  --text-subtle: color-mix(in srgb, var(--color-base-content) 70%, transparent);
   --text-error: #991b1b; /* red-800 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
   --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #92400e; /* amber-800 - warning text, same rule */
@@ -236,10 +232,6 @@
 
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
-
-  /* Secondary text at 70% of the body text colour: labels, captions and notes. It follows
-     --color-base-content, so it holds under every scheme; 4.5:1 or more on base-100 and base-200. */
-  --text-subtle: color-mix(in srgb, var(--color-base-content) 70%, transparent);
   --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
   --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
@@ -265,6 +257,13 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+}
+
+/* Secondary text at 70% of the body text colour: labels, captions and notes. It follows
+   --color-base-content, so one definition holds in both themes and every scheme; 4.5:1 or
+   more on base-100 and base-200. Not in @theme, where --text-* names font sizes. */
+:root {
+  --text-subtle: color-mix(in srgb, var(--color-base-content) 70%, transparent);
 }
 
 /* ============================================
@@ -346,14 +345,10 @@
     cursor: not-allowed;
   }
 
-  .btn:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
-
-  /* The keyboard focus ring of a custom control, the same as a .btn's: one width, colour
-     and offset everywhere. Never pair it with opacity on the element, which would fade
-     the ring; dim a blocked control by colour instead. */
+  /* .focus-ring gives a custom control the same keyboard focus ring as a .btn. Never pair
+     it with opacity on the element, which would fade the ring; dim a blocked control by
+     colour instead. */
+  .btn:focus-visible,
   .focus-ring:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;

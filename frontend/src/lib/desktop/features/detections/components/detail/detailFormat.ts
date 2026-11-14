@@ -3,6 +3,8 @@
  * follow the UI language chosen in the app, not the browser's.
  */
 import { getLocale } from '$lib/i18n';
+import type { OriginalSpecies } from '$lib/types/detection.types';
+import type { DetectionDetailData } from './detailTypes';
 
 /** A share from 0 to 1 times this is a percentage. */
 export const PERCENT = 100;
@@ -27,20 +29,36 @@ export function formatScore(score: number): string {
   return `${Math.round(percent)}%`;
 }
 
+// Number formats by locale and options, built once: charts format many values per update.
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+function numberFormat(minimumFractionDigits?: number): Intl.NumberFormat {
+  const locale = getLocale();
+  const key = `${locale}|${minimumFractionDigits ?? ''}`;
+  let format = numberFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(
+      locale,
+      minimumFractionDigits === undefined
+        ? undefined
+        : { minimumFractionDigits, maximumFractionDigits: 1 }
+    );
+    numberFormats.set(key, format);
+  }
+  return format;
+}
+
 /**
  * A number with one decimal in the UI language ("4.5", "4,5"). With
  * `minimumDigits` 0 a whole number has none ("48", "44.1").
  */
 export function formatDecimal(value: number, minimumDigits = 1): string {
-  return new Intl.NumberFormat(getLocale(), {
-    minimumFractionDigits: minimumDigits,
-    maximumFractionDigits: 1,
-  }).format(value);
+  return numberFormat(minimumDigits).format(value);
 }
 
 /** A whole number in the UI language, with its digit grouping ("12,345", "12 345"). */
 export function formatCount(value: number): string {
-  return new Intl.NumberFormat(getLocale()).format(value);
+  return numberFormat().format(value);
 }
 
 /** A share from 0 to 1 as a whole percentage number. */
@@ -54,12 +72,23 @@ export function formatPercent(share: number | undefined | null, fallback = ''): 
 }
 
 /**
- * Height of a bar in a small bar chart, in percent of the chart: its share of
- * the tallest bar scaled to `scale`, and never shorter than a sliver when the
- * count is above zero.
+ * Height of a bar in a small bar chart, in percent of the chart: its count's
+ * share of the tallest bar (`peak`) scaled to `scale`, and never shorter than a
+ * sliver when the count is above zero.
  */
-export function barHeight(share: number, count: number, scale = PERCENT): number {
-  return Math.max(share * scale, count > 0 ? MIN_BAR_PERCENT : 0);
+export function barHeight(count: number, peak: number, scale = PERCENT): number {
+  return Math.max((count / peak) * scale, count > 0 ? MIN_BAR_PERCENT : 0);
+}
+
+/**
+ * The model's own species when a reviewer changed the detection to another one;
+ * null when it was never changed or was changed back.
+ */
+export function replacedModelPick(
+  detection: Pick<DetectionDetailData, 'scientificName' | 'originalSpecies'>
+): OriginalSpecies | null {
+  const original = detection.originalSpecies;
+  return original && original.scientificName !== detection.scientificName ? original : null;
 }
 
 /** "BirdNET 2.4", with the variant in parentheses unless it is the default one. */
