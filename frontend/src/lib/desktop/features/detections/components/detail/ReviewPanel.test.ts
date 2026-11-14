@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import ReviewPanel from './ReviewPanel.svelte';
+import { toastActions } from '$lib/stores/toast';
 import type { DetectionDetailData } from './detailTypes';
 
 const detection: DetectionDetailData = {
@@ -139,5 +140,45 @@ describe('ReviewPanel ignore species', () => {
     expect(
       screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
     ).toBeInTheDocument();
+  });
+});
+
+describe('ReviewPanel Keep switch', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.mocked(toastActions.error).mockClear();
+  });
+
+  it('shows the saved state again, and the error once, when the lock request fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+    const keep = screen.getByRole<HTMLInputElement>('switch');
+
+    await fireEvent.click(keep);
+
+    await waitFor(() => {
+      expect(vi.mocked(toastActions.error)).toHaveBeenCalledOnce();
+    });
+    await waitFor(() => {
+      expect(keep.checked).toBe(false);
+    });
+    expect(screen.getByText('common.review.errors.lockStatusFailed')).toBeInTheDocument();
   });
 });
