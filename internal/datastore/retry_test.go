@@ -223,6 +223,8 @@ func TestIsTransientDBError(t *testing.T) {
 		{name: "wrapped non-transient", err: fmt.Errorf("outer: %w", fmt.Errorf("connection refused")), expected: false},
 		{name: "sqlite3 BUSY code", err: sqlite3.Error{Code: sqlite3.ErrBusy}, expected: true},
 		{name: "sqlite3 LOCKED code", err: sqlite3.Error{Code: sqlite3.ErrLocked}, expected: true},
+		{name: "sqlite3 extended BUSY_SNAPSHOT code", err: sqlite3.Error{Code: sqlite3.ErrNo(sqliteBusySnapshot)}, expected: true},
+		{name: "sqlite3 extended LOCKED_SHAREDCACHE code", err: sqlite3.Error{Code: sqlite3.ErrNo(sqliteLockedSharedCache)}, expected: true},
 		{name: "sqlite3 constraint code", err: sqlite3.Error{Code: sqlite3.ErrConstraint}, expected: false},
 		{name: "mysql 1205 with non-English message", err: &gomysql.MySQLError{Number: mysqlErrLockWaitTimeout, Message: "Aikakatkaisu lukon odotuksessa"}, expected: true},
 		{name: "wrapped mysql 1213 with non-English message", err: fmt.Errorf("save: %w", &gomysql.MySQLError{Number: mysqlErrLockDeadlock, Message: "Umpikuja havaittu"}), expected: true},
@@ -281,6 +283,24 @@ func TestRetryHelpers_DomainLockedErrorIsNotRetried(t *testing.T) {
 			assert.Equal(t, 1, calls, "RetryTransactionOnLock must not retry a domain error")
 		})
 	}
+}
+
+// Extended SQLite result codes (primary code in the low byte), used to check
+// that the classifier masks them down to BUSY and LOCKED.
+const (
+	sqliteBusySnapshot      = 517 // SQLITE_BUSY_SNAPSHOT
+	sqliteLockedSharedCache = 262 // SQLITE_LOCKED_SHAREDCACHE
+)
+
+func TestStateError_EscalatesTypedDeadlockWithoutEnglishText(t *testing.T) {
+	t.Parallel()
+
+	cause := &gomysql.MySQLError{Number: mysqlErrLockDeadlock, Message: "Umpikuja havaittu"}
+	err := stateError(cause, "test_op", "transaction")
+
+	var enhanced *errors.EnhancedError
+	require.ErrorAs(t, err, &enhanced)
+	assert.Equal(t, errors.PriorityHigh, enhanced.GetPriority())
 }
 
 func TestRetryOnLock_RecordsMetricsOnRetry(t *testing.T) {

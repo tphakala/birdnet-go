@@ -18,6 +18,10 @@ const (
 	mysqlErrLockWaitTimeout uint16 = 1205
 	// mysqlErrLockDeadlock is MySQL/MariaDB ER_LOCK_DEADLOCK (1213).
 	mysqlErrLockDeadlock uint16 = 1213
+
+	// sqliteResultCodeMask keeps the primary SQLite result code, dropping the
+	// extended bits (for example SQLITE_BUSY_SNAPSHOT is 517, primary BUSY is 5).
+	sqliteResultCodeMask = 0xff
 )
 
 var (
@@ -118,7 +122,7 @@ func stateError(err error, operation, stateType string, context ...any) error {
 
 	// Escalate priority for critical state errors
 	initRegexPatterns()
-	if deadlockPattern.MatchString(err.Error()) || corruptionPattern.MatchString(err.Error()) {
+	if isDeadlock(err) || corruptionPattern.MatchString(err.Error()) {
 		priority = errors.PriorityHigh
 	}
 
@@ -246,16 +250,19 @@ func isDeadlock(err error) bool {
 }
 
 // isDatabaseLocked checks if an error indicates database lock conditions. A
-// SQLite driver error is recognised by its result code (BUSY, LOCKED); the
+// SQLite driver error is recognised by its primary result code (BUSY, LOCKED;
+// extended codes are masked down to it); the
 // driver message text is the fallback for errors whose type was lost.
 func isDatabaseLocked(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	if sqliteErr, ok := errors.AsType[sqlite3.Error](err); ok &&
-		(sqliteErr.Code == sqlite3.ErrBusy || sqliteErr.Code == sqlite3.ErrLocked) {
-		return true
+	if sqliteErr, ok := errors.AsType[sqlite3.Error](err); ok {
+		switch sqlite3.ErrNo(int(sqliteErr.Code) & sqliteResultCodeMask) {
+		case sqlite3.ErrBusy, sqlite3.ErrLocked:
+			return true
+		}
 	}
 
 	initRegexPatterns()
