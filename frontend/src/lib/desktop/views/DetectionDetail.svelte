@@ -203,7 +203,7 @@
 
   let sunOffset = $derived.by(() => {
     if (!detection) return null;
-    const times = sunEventTimes(shownSun, shownWeather);
+    const times = sunEventTimes(shownSun, shownWeather, detection.timestamp);
     return nearestSunEvent(
       detectionMinute(detection),
       wallClockMinutes(times.sunrise),

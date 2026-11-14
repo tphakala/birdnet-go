@@ -48,6 +48,7 @@
     compassPointKey,
     dayPercent,
     detectionMinute,
+    inOffsetOf,
     MINUTES_PER_HOUR,
     sunEventTimes,
     wallClockMinutes,
@@ -119,7 +120,8 @@
   let weatherPending = $derived(weatherLoading && weather === null);
   let sunPending = $derived(weatherLoading && sun === null);
 
-  let sunTimes = $derived(sunEventTimes(sun, weather));
+  // Written in the detection's UTC offset, so their clock fields share its day axis.
+  let sunTimes = $derived(sunEventTimes(sun, weather, detection.timestamp));
   let moment = $derived(detectionMinute(detection));
 
   // Sun events as minutes of the station's day; null without a usable sunrise and sunset.
@@ -131,8 +133,8 @@
     return {
       sunrise,
       sunset,
-      dawn: wallClockMinutes(sun?.civil_dawn) ?? sunrise,
-      dusk: wallClockMinutes(sun?.civil_dusk) ?? sunset,
+      dawn: wallClockMinutes(inOffsetOf(sun?.civil_dawn, detection.timestamp)) ?? sunrise,
+      dusk: wallClockMinutes(inOffsetOf(sun?.civil_dusk, detection.timestamp)) ?? sunset,
     };
   });
 

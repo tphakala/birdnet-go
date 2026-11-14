@@ -122,14 +122,46 @@ export function detectionMinute(
   return wallClockMinutes(detection.timestamp ?? `T${detection.time}`);
 }
 
-/** Sunrise and sunset of a detection's day: the sun endpoint first, the weather provider's as a fallback. */
+// The UTC offset at the end of an RFC3339 timestamp: "Z", "+02:00" or "-0530".
+const OFFSET_PATTERN = /(Z|([+-])(\d\d):?(\d\d))$/;
+const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND;
+// Length of "YYYY-MM-DDTHH:MM:SS" in an ISO string.
+const ISO_SECONDS_LENGTH = 19;
+
+/**
+ * An RFC3339 timestamp written in the UTC offset of another one (`reference`), the same
+ * instant, so the clock fields of the two can be compared. The sun endpoint writes its
+ * times in the zone of the station's coordinates, which can differ from the zone a
+ * detection's timestamp carries. Returned as given when either has no usable offset.
+ */
+export function inOffsetOf(
+  timestamp: string | undefined,
+  reference: string | undefined | null
+): string | undefined {
+  if (!timestamp || !reference) return timestamp;
+  const offset = OFFSET_PATTERN.exec(reference);
+  const instant = Date.parse(timestamp);
+  if (!offset || Number.isNaN(instant) || !OFFSET_PATTERN.test(timestamp)) return timestamp;
+  const sign = offset[2] === '-' ? -1 : 1;
+  const minutes =
+    offset[1] === 'Z' ? 0 : sign * (Number(offset[3]) * MINUTES_PER_HOUR + Number(offset[4]));
+  const local = new Date(instant + minutes * MS_PER_MINUTE).toISOString();
+  return local.slice(0, ISO_SECONDS_LENGTH) + offset[1];
+}
+
+/**
+ * Sunrise and sunset of a detection's day: the sun endpoint first, the weather provider's
+ * as a fallback, each written in the UTC offset of `reference` (the detection's timestamp)
+ * when it is given.
+ */
 export function sunEventTimes(
   sun: SunTimes | null | undefined,
-  weather: DetectionWeather | null | undefined
+  weather: DetectionWeather | null | undefined,
+  reference?: string | null
 ): { sunrise?: string; sunset?: string } {
   return {
-    sunrise: sun?.sunrise ?? weather?.daily?.sunrise,
-    sunset: sun?.sunset ?? weather?.daily?.sunset,
+    sunrise: inOffsetOf(sun?.sunrise ?? weather?.daily?.sunrise, reference),
+    sunset: inOffsetOf(sun?.sunset ?? weather?.daily?.sunset, reference),
   };
 }
 

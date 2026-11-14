@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   compassPointKey,
   dayPercent,
+  detectionMinute,
   formatCalendarDate,
   formatCalendarDateTime,
+  inOffsetOf,
   nearestSunEvent,
   secondsBetween,
   sunEventTimes,
@@ -167,5 +169,45 @@ describe('sunEventTimes', () => {
       sunset: 'T16:00:00+02:00',
     });
     expect(sunEventTimes(null, null)).toEqual({ sunrise: undefined, sunset: undefined });
+  });
+});
+
+// The sun endpoint writes its times in the zone of the station's coordinates, which can
+// differ from the zone of the detection's timestamp: the clock fields of the two then
+// count the difference between the offsets as time.
+describe('sun times in the detection offset', () => {
+  const detectedAt = '2026-11-14T06:30:00Z';
+
+  it('writes a time in the offset of another timestamp', () => {
+    expect(inOffsetOf('2026-11-14T08:00:00+02:00', detectedAt)).toBe('2026-11-14T06:00:00Z');
+    expect(inOffsetOf('2026-11-14T06:00:00Z', '2026-11-14T08:30:00+02:00')).toBe(
+      '2026-11-14T08:00:00+02:00'
+    );
+    expect(inOffsetOf('2026-11-14T22:30:00-05:00', '2026-11-14T12:00:00+09:30')).toBe(
+      '2026-11-15T13:00:00+09:30'
+    );
+  });
+
+  it('leaves a time as it is when either side has no usable offset', () => {
+    expect(inOffsetOf('T08:00:00+02:00', detectedAt)).toBe('T08:00:00+02:00');
+    expect(inOffsetOf('2026-11-14T08:00:00+02:00', undefined)).toBe('2026-11-14T08:00:00+02:00');
+    expect(inOffsetOf(undefined, detectedAt)).toBeUndefined();
+  });
+
+  it('measures a detection 30 minutes after a sunrise written in another offset', () => {
+    const times = sunEventTimes(
+      { date: '2026-11-14', sunrise: '2026-11-14T08:00:00+02:00' },
+      { daily: { sunset: '2026-11-14T17:00:00+02:00' } },
+      detectedAt
+    );
+
+    expect(times).toEqual({ sunrise: '2026-11-14T06:00:00Z', sunset: '2026-11-14T15:00:00Z' });
+    expect(
+      nearestSunEvent(
+        detectionMinute({ timestamp: detectedAt, time: '06:30:00' }),
+        wallClockMinutes(times.sunrise),
+        wallClockMinutes(times.sunset)
+      )
+    ).toEqual({ event: 'sunrise', before: false, hours: 0, minutes: 30 });
   });
 });
