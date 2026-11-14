@@ -107,9 +107,11 @@ func TestDetectionRepository_ChangeSpecies_ReadsLoadOriginalLabel(t *testing.T) 
 	require.NoError(t, db.AutoMigrate(&entities.DetectionComment{}), "failed to migrate comments table")
 	ctx := t.Context()
 	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
-	createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
+	mallard := createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
 	changed := speciesTestDetection(t, db, teal)
-	untouched := speciesTestDetection(t, db, teal)
+	// No other row holds the original label, so the read finds it only through the
+	// changed row's original id.
+	untouched := speciesTestDetection(t, db, mallard)
 	require.NoError(t, repo.ChangeSpecies(ctx, changed.ID, speciesTestMallard))
 
 	got, err := repo.GetWithRelations(ctx, changed.ID)
