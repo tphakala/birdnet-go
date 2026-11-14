@@ -25,14 +25,14 @@ const (
 
 // ChangeSpecies sets the species of a detection as a reviewer's correction.
 //
-// Every read and the label resolution run before the transaction. The
-// transaction holds two statements: the UPDATE of label_id and original_label_id,
-// guarded by the lock check, and the review upsert. The UPDATE is the first
-// statement of the transaction so that, on MySQL and MariaDB, no snapshot taken by
-// an earlier read can hide a lock or a delete committed meanwhile. Whether the
-// detection is missing or locked is decided after the transaction, as Update does,
-// so the retry helper, which reads the word "locked" in an error as a busy
-// database, never sees ErrDetectionLocked.
+// The reads of the detection, its lock and the label run before the
+// transaction. The transaction holds two statements: the UPDATE of label_id and
+// original_label_id, guarded by the lock check, and the review upsert. The UPDATE
+// is the first statement of the transaction so that, on MySQL and MariaDB, no
+// snapshot taken by an earlier read can hide a lock or a delete committed
+// meanwhile. A detection deleted or locked after those reads is told apart after
+// the transaction, as Update does, so the retry helper, which reads the word
+// "locked" in an error as a busy database, never sees ErrDetectionLocked.
 func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scientificName string) error {
 	scientificName = strings.TrimSpace(scientificName)
 	if scientificName == "" {
