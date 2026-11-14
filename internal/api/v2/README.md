@@ -463,6 +463,40 @@ Every key is always present, and a neighbor that does not exist is `null`.
 - Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive integer
   that fits in 32 bits, `404` when the detection does not exist, and `500` for a database error.
 
+**Species statistics.** `GET /api/v2/species/stats?scientific_name=Parus%20major` returns the all-time statistics of
+one species. The handler is `detections/species_stats.go`, because it reads the detection store.
+
+```json
+{
+  "scientificName": "Parus major",
+  "count": 1234,
+  "firstHeard": "2024-03-01T06:12:44+02:00",
+  "lastHeard": "2026-11-14T09:01:10+02:00",
+  "avgConfidence": 0.71,
+  "maxConfidence": 0.98,
+  "reviews": { "correct": 12, "falsePositive": 3 }
+}
+```
+
+Every key is always present. `firstHeard`, `lastHeard`, `avgConfidence` and `maxConfidence` are `null` when `count`
+is 0.
+
+- False positives: `count`, the two times and the two confidences leave out detections reviewed as false positive,
+  by the rule `/analytics/species/summary` uses. `reviews` counts the reviewed detections, so
+  `count + reviews.falsePositive` is every stored detection of the species and `reviews.correct` is part of `count`.
+- Scope: all time and all models. There is no date range parameter.
+- Species matching: send the scientific name as detection responses carry it, with the same spelling and letter
+  case. It is matched across the labels of every model, including labels stored in the legacy
+  `ScientificName_CommonName` form, the same labels the same-species neighbors walk. Unlike
+  `/analytics/species/summary`, which lists a species once per stored label spelling, the legacy and the bare form
+  are one result here. Two spellings of one species, such as a former and a current name, are counted separately.
+- Times: the stored instant as RFC3339 in the station zone, like a detection's `timestamp`. Confidences are 0 to 1.
+- A name no detection was ever stored under answers `200` with zeros and nulls, not `404`.
+- Status codes: `409` when the enhanced database is not in use (a client can fall back to
+  `/analytics/species/summary` there), `400` for a missing name or a name without a species part, and `500` for a
+  database error.
+- Cost: proportional to the number of detections of the species.
+
 ### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                                                                                                    |
@@ -554,6 +588,7 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 | GET    | `/species/taxonomy`           | `GetSpeciesTaxonomy`     | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
 | GET    | `/species/:code/thumbnail`    | `GetSpeciesThumbnail`    | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale` | `ServeSpeciesDictionary` | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
+| GET    | `/species/stats`              | `GetSpeciesStats`        | ❌   | Detection statistics of one species (enhanced database only)      |
 
 **Sound classes.** `scientific_name` on `/species` and `/species/taxonomy` also accepts a sound class name as detections report it ("Dog", "Human vocal", "Church_bell"). `/species` answers with the names only, and `/species/taxonomy` with `metadata.source` set to "unresolved", a `metadata.note` saying it is a sound class, and no `taxonomy`. `GET /taxonomy/tree/:scientific_name` answers 404 "Species not found" for a sound class. Any other name that is shorter than 3 characters or has no space answers 400.
 
