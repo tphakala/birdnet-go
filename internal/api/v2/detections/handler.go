@@ -88,6 +88,10 @@ type Handler struct {
 	// contributions reads stored model contributions for the detection responses.
 	// It is nil unless the enhanced v2 database is active; see RegisterDetectionRoutes.
 	contributions modelContributionReader
+
+	// speciesChanger changes the species of a detection. It is nil unless the
+	// enhanced v2 database is active; see RegisterDetectionRoutes.
+	speciesChanger speciesChanger
 }
 
 // New constructs the detections domain handler around the shared core and the
@@ -156,12 +160,15 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 		return
 	}
 
-	// Model contributions are keyed by v2 detection IDs. In migration mode a
-	// manager exists but the notes carry legacy IDs, so the reader is built only
-	// when the enhanced database is active (c.DS and this manager then share one
-	// database).
+	// Model contributions and species changes are keyed by v2 detection IDs. In
+	// migration mode a manager exists but the notes carry legacy IDs, so the
+	// repository is built only when the enhanced database is active (c.DS and this
+	// manager then share one database). The species change lives on the v2
+	// repository only, not on c.Repo, which the legacy store also implements.
 	if c.V2Manager != nil && datastoreV2.IsEnhancedDatabase() {
-		c.contributions = repository.NewDetectionRepository(c.V2Manager.DB(), nil, c.V2Manager.TablePrefix() != "", c.V2Manager.IsMySQL())
+		v2Repo := repository.NewDetectionRepository(c.V2Manager.DB(), nil, c.V2Manager.TablePrefix() != "", c.V2Manager.IsMySQL())
+		c.contributions = v2Repo
+		c.speciesChanger = v2Repo
 	}
 
 	// DetectionCache is initialized by the constructor (NewWithOptions); do not
@@ -182,6 +189,7 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 	detectionGroup := g.Group("/detections", c.AuthMiddleware)
 	detectionGroup.DELETE("/:id", c.DeleteDetection)
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
+	detectionGroup.PUT("/:id/species", c.ChangeDetectionSpecies)
 	detectionGroup.POST("/:id/lock", c.LockDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)

@@ -581,6 +581,32 @@ func TestResultToDetectionResponse_ClipDenoised(t *testing.T) {
 	assert.NotContains(t, string(body), "clipDenoised", "a clip that was not denoised omits the field")
 }
 
+func TestResultToDetectionResponse_OriginalSpecies(t *testing.T) {
+	_, _, h := setupTestEnvironment(t)
+	original := detection.Species{ScientificName: "Turdus merula", CommonName: "Eurasian Blackbird", Code: "eurbla"}
+	const wantJSON = `"originalSpecies":{"scientificName":"Turdus merula","commonName":"Eurasian Blackbird","speciesCode":"eurbla"}`
+
+	changed := &detection.Result{Species: detection.Species{ScientificName: "Parus major"}, OriginalSpecies: original}
+	resp := h.resultToDetectionResponse(changed, false, nil)
+	require.NotNil(t, resp.OriginalSpecies)
+	body, err := json.Marshal(resp)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), wantJSON)
+	assert.Equal(t, original, changed.OriginalSpecies, "the shared result is not written through")
+
+	// Changed back: the original equals the current species and is still reported.
+	resp = h.resultToDetectionResponse(&detection.Result{Species: original, OriginalSpecies: original}, false, nil)
+	body, err = json.Marshal(resp)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), wantJSON)
+
+	resp = h.resultToDetectionResponse(&detection.Result{Species: original}, false, nil)
+	assert.Nil(t, resp.OriginalSpecies)
+	body, err = json.Marshal(resp)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "originalSpecies", "a detection whose species was never changed omits the field")
+}
+
 // TestGetDetection_LazyFill_WorkTimeoutAndDetach verifies the shared work is
 // bounded by clipRateWorkTimeout and does not follow the request context.
 func TestGetDetection_LazyFill_WorkTimeoutAndDetach(t *testing.T) {

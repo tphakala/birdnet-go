@@ -1201,6 +1201,10 @@ type detectionFields struct {
 	commonName string
 	// speciesCode is the eBird species code for scientificName, or empty.
 	speciesCode string
+	// originalSpecies is the model's own pick of a detection whose species was changed.
+	// It is zero when the species was never changed, when the original label is not
+	// preloaded and when its scientific name is empty.
+	originalSpecies detection.Species
 	// clipName and spectrogramClipName are empty when the column is NULL.
 	clipName            string
 	spectrogramClipName string
@@ -1226,7 +1230,8 @@ type detectionFields struct {
 // decodeDetection derives the detectionFields of det. The instant comes from the stored
 // detected_at column and never from formatted text. det must not be nil.
 // Common name is looked up from the name maps which are built at startup. When the label is not
-// preloaded it is fetched from the label repository with ctx.
+// preloaded it is fetched from the label repository with ctx. The original species is read from
+// the preloaded original label only.
 func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detection) detectionFields {
 	f := detectionFields{}
 
@@ -1245,6 +1250,18 @@ func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detectio
 	// Look up common name from pre-built map, fallback to scientific name
 	f.commonName = ds.resolveCommonName(f.scientificName)
 	f.speciesCode = ds.speciesCodeMap[f.scientificName]
+
+	// The original pick comes from the preloaded label only; there is no fallback
+	// lookup, so a list read never costs a query per row.
+	if det.OriginalLabel != nil {
+		if name := detection.ExtractScientificName(det.OriginalLabel.ScientificName); name != "" {
+			f.originalSpecies = detection.Species{
+				ScientificName: name,
+				CommonName:     ds.resolveCommonName(name),
+				Code:           ds.speciesCodeMap[name],
+			}
+		}
+	}
 
 	if det.ClipName != nil {
 		f.clipName = *det.ClipName
@@ -2583,7 +2600,7 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 	return records, int(total), nil
 }
 
-// loadDetectionRelations loads Label, Source, Model, Review, Lock, and Comments for detections.
+// loadDetectionRelations loads Label, original Label, Source, Model, Review, Lock, and Comments for detections.
 // Uses batch queries to minimize database round-trips.
 func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
@@ -2599,6 +2616,9 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	for i, det := range dets {
 		detectionIDs[i] = det.ID
 		labelIDSet[det.LabelID] = struct{}{}
+		if det.OriginalLabelID != nil {
+			labelIDSet[*det.OriginalLabelID] = struct{}{}
+		}
 		modelIDSet[det.ModelID] = struct{}{}
 		if det.SourceID != nil {
 			sourceIDSet[*det.SourceID] = struct{}{}
@@ -2657,6 +2677,11 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	for _, det := range dets {
 		if label, ok := labelMap[det.LabelID]; ok {
 			det.Label = label
+		}
+		if det.OriginalLabelID != nil {
+			if label, ok := labelMap[*det.OriginalLabelID]; ok {
+				det.OriginalLabel = label
+			}
 		}
 		if det.SourceID != nil {
 			if source, ok := sourceMap[*det.SourceID]; ok {

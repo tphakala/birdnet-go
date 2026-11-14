@@ -145,6 +145,14 @@ type CommentResponse struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// OriginalSpeciesResponse is the species the model itself picked for a detection
+// whose species a reviewer changed.
+type OriginalSpeciesResponse struct {
+	ScientificName string `json:"scientificName"`
+	CommonName     string `json:"commonName"`
+	SpeciesCode    string `json:"speciesCode"`
+}
+
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
 	ID             uint        `json:"id"`
@@ -158,7 +166,9 @@ type DetectionResponse struct {
 	ScientificName string      `json:"scientificName"`
 	CommonName     string      `json:"commonName"`
 	Confidence     float64     `json:"confidence"`
-	ClipName       string      `json:"clipName,omitempty"` // Audio clip filename (basename only, no path); empty when no clip exists
+	// OriginalSpecies is the model's own pick, present once a reviewer has changed the species and also after it was changed back; its confidence is confidence. It is omitted on the legacy database and for a species that was never changed.
+	OriginalSpecies *OriginalSpeciesResponse `json:"originalSpecies,omitempty"`
+	ClipName        string                   `json:"clipName,omitempty"` // Audio clip filename (basename only, no path); empty when no clip exists
 	// SpectrogramOnly is true when the audio clip was removed by retention but a spectrogram image was kept; the frontend shows the image without playback
 	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
 	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
@@ -807,7 +817,8 @@ func (c *Handler) convertResultsToDetectionResponses(ctx context.Context, result
 // r.Timestamp is the stored instant, so the two detections of a repeated DST hour keep their
 // own UTC offsets even though their date and time text is identical. The legacy bridge can
 // only rebuild the instant from offset-free text, so it gives both the first occurrence's
-// offset. It never writes through r, which the page cache may share.
+// offset. OriginalSpecies is carried over when r has one. It never writes through r, which the
+// page cache may share.
 //
 // A legacy-store row whose date and time text does not parse never reaches here: the
 // legacy bridge fails the read (list: 500, detail: 404). That is accepted legacy
@@ -835,6 +846,14 @@ func (c *Handler) resultToDetectionResponse(r *detectionPkg.Result, includeWeath
 		ClipDenoised:    r.ClipDenoised,
 		Locked:          r.Locked,
 		Unlikely:        r.Unlikely,
+	}
+
+	if r.OriginalSpecies.ScientificName != "" {
+		detection.OriginalSpecies = &OriginalSpeciesResponse{
+			ScientificName: r.OriginalSpecies.ScientificName,
+			CommonName:     r.OriginalSpecies.CommonName,
+			SpeciesCode:    r.OriginalSpecies.Code,
+		}
 	}
 
 	// populate source info if available

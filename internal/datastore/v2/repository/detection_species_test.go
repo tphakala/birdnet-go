@@ -99,6 +99,47 @@ func TestDetectionRepository_ChangeSpecies_KeepsOriginalAcrossChanges(t *testing
 	}
 }
 
+// TestDetectionRepository_ChangeSpecies_ReadsLoadOriginalLabel pins that the single
+// and the batch relation loaders attach the label of the model's original pick, only
+// to a changed detection, and that a deleted label row is not an error.
+func TestDetectionRepository_ChangeSpecies_ReadsLoadOriginalLabel(t *testing.T) {
+	db, repo := speciesTestDB(t)
+	require.NoError(t, db.AutoMigrate(&entities.DetectionComment{}), "failed to migrate comments table")
+	ctx := t.Context()
+	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+	createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
+	changed := speciesTestDetection(t, db, teal)
+	untouched := speciesTestDetection(t, db, teal)
+	require.NoError(t, repo.ChangeSpecies(ctx, changed.ID, speciesTestMallard))
+
+	got, err := repo.GetWithRelations(ctx, changed.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.OriginalLabel)
+	assert.Equal(t, teal.ID, got.OriginalLabel.ID)
+	got, err = repo.GetWithRelations(ctx, untouched.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.OriginalLabel)
+
+	recent, err := repo.GetRecent(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, recent, 2)
+	for _, d := range recent {
+		if d.ID == changed.ID {
+			require.NotNil(t, d.OriginalLabel)
+			assert.Equal(t, teal.ID, d.OriginalLabel.ID)
+		} else {
+			assert.Nil(t, d.OriginalLabel)
+		}
+	}
+
+	// A label row that is gone leaves the original unset instead of failing the read.
+	require.NoError(t, db.Exec("PRAGMA foreign_keys = OFF").Error)
+	require.NoError(t, db.Delete(&entities.Label{}, teal.ID).Error)
+	got, err = repo.GetWithRelations(ctx, changed.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.OriginalLabel)
+}
+
 // TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows pins that the
 // outcome does not depend on the detection's prediction rows and that they are
 // never written: the legacy case holds the old label as a prediction row, which

@@ -11,8 +11,8 @@ import (
 // detected_at instant in the station zone, never parsed back from formatted Date and
 // Time text, so both occurrences of a repeated DST hour keep their own offset. The
 // other fields match what the datastore.Interface bridge returns for the same row,
-// except ClipDenoised, which only this mapping reads (the legacy note has no such
-// field). det must not be nil.
+// except ClipDenoised and OriginalSpecies, which only this mapping reads (the legacy
+// note has no such fields). det must not be nil.
 func (ds *Datastore) detectionToResult(ctx context.Context, det *entities.Detection) *detection.Result {
 	f := ds.decodeDetection(ctx, det)
 
@@ -32,6 +32,7 @@ func (ds *Datastore) detectionToResult(ctx context.Context, det *entities.Detect
 			CommonName:     f.commonName,
 			Code:           f.speciesCode,
 		},
+		OriginalSpecies:     f.originalSpecies,
 		Confidence:          det.Confidence,
 		Latitude:            f.latitude,
 		Longitude:           f.longitude,

@@ -110,6 +110,12 @@ type Result struct {
 	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
 
+	// OriginalSpecies is the model's own pick, set once a reviewer has changed the
+	// species and kept when it is changed back. It is zero when the species was never
+	// changed. Only the enhanced (v2) database reads set it and saves ignore it. Its
+	// confidence is Confidence.
+	OriginalSpecies Species
+
 	// Review status (populated from DB relations when loaded)
 	Verified string
 	Locked   bool
