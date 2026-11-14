@@ -1062,6 +1062,12 @@ func assertGetReviewAndLockTimes(t *testing.T, ds *Datastore) *entities.Detectio
 	res = get()
 	assert.True(t, res.LastReviewedAt.Equal(res.FirstReviewedAt), "lastReviewedAt must not precede firstReviewedAt")
 
+	// Locking an already locked detection keeps the original lock time.
+	require.NoError(t, ds.manager.DB().Model(&entities.DetectionLock{}).
+		Where("detection_id = ?", det.ID).UpdateColumns(map[string]any{"locked_at": fixed}).Error)
+	require.NoError(t, ds.LockNote(id))
+	assert.True(t, get().LockedAt.Equal(fixed), "a second lock must keep the original lockedAt")
+
 	// Unlocking removes the lock time and keeps the review times; locking again sets it.
 	require.NoError(t, ds.UnlockNote(id))
 	res = get()
