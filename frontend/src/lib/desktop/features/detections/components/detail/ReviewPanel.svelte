@@ -141,15 +141,18 @@
 
   async function ignoreSpecies() {
     if (!canIgnore || saving !== null || ignored) return;
+    const id = detection.id;
     const species = detection.scientificName;
     saving = 'ignore';
     errorMessage = '';
     try {
-      await api.post(`/api/v2/detections/${detection.id}/review`, {
+      await api.post(`/api/v2/detections/${id}/review`, {
         verified: 'false_positive',
         ignore_species: detection.commonName,
       });
       ignoredSpecies = species;
+      // Saving the review again moves its last-saved time, which the activity log shows.
+      onChanged({ detectionId: id, scientificName: species, reviewCounts: false });
       toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });

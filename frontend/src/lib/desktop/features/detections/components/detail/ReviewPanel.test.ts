@@ -143,6 +143,47 @@ describe('ReviewPanel ignore species', () => {
   });
 });
 
+describe('ReviewPanel ignore species reload', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('tells the page which detection was saved, so it reloads the last-saved time', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    const onChanged = vi.fn();
+    render(ReviewPanel, {
+      props: {
+        detection: { ...detection, verified: 'false_positive' },
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged,
+      },
+    });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
+    );
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledWith({
+        detectionId: 7,
+        scientificName: 'Scolopax rusticola',
+        reviewCounts: false,
+      });
+    });
+  });
+});
+
 describe('ReviewPanel Keep switch', () => {
   afterEach(() => {
     cleanup();
