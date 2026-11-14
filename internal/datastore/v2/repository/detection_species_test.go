@@ -519,3 +519,29 @@ func TestDetectionRepository_ChangeSpecies_EmptyKey(t *testing.T) {
 		})
 	}
 }
+
+// TestDetectionRepository_ChangeSpecies_CurrentLabelGone pins that a detection
+// whose current label row no longer exists can still be changed: the comparison
+// with the current species is skipped, and the original is the id the row held.
+func TestDetectionRepository_ChangeSpecies_CurrentLabelGone(t *testing.T) {
+	db, repo := speciesTestDB(t)
+	ctx := t.Context()
+	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+	mallard := createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
+	det := speciesTestDetection(t, db, teal)
+	require.NoError(t, db.Table(tableLabels).Delete(&entities.Label{}, teal.ID).Error)
+	labelsBefore := speciesTestLabelCount(t, db)
+
+	require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
+
+	want := *det
+	want.LabelID = mallard.ID
+	want.OriginalLabelID = new(teal.ID)
+	got, err := repo.Get(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, want, *got)
+	review, err := repo.GetReview(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, entities.VerificationCorrect, review.Verified)
+	assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created")
+}
