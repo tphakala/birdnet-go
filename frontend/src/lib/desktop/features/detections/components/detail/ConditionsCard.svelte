@@ -40,7 +40,7 @@
     translateWeatherCondition,
   } from '$lib/utils/weather';
   import DetailCard from './DetailCard.svelte';
-  import { barHeight, formatDecimal, PERCENT } from './detailFormat';
+  import { barHeight, formatCount, formatDecimal, PERCENT } from './detailFormat';
   import {
     MINUTES_PER_DAY,
     compassPoint,
@@ -191,8 +191,15 @@
       : 'not-available'
   );
 
+  // Speeds keep one decimal below this and are whole from it up, so the wind and its
+  // gust fit their tile with the unit.
+  const WHOLE_SPEED_FROM = 10;
+
   function speed(value: number): string {
-    return formatDecimal(convertWindSpeed(value, units));
+    const converted = convertWindSpeed(value, units);
+    return converted < WHOLE_SPEED_FROM
+      ? formatDecimal(converted)
+      : formatCount(Math.round(converted));
   }
 
   function hourLabel(hour: number): string {
@@ -203,20 +210,25 @@
   let windValue = $derived.by(() => {
     if (windSpeed === undefined) return MISSING;
     const gust = windGust !== undefined ? ` (${speed(windGust)})` : '';
-    return `${speed(windSpeed)}${gust} ${getWindSpeedUnit(units)}`;
+    return `${speed(windSpeed)}${gust}`;
   });
 
   interface Tile {
     key: string;
     icon: typeof Wind;
     label: string;
+    /** The number, or a dash when it was not recorded. */
     value: string;
+    /** Unit after the number, with its own leading space where it has one; kept whole
+        when the number has to be cut. */
+    unit?: string;
     /** Rotation of the icon in degrees, for the wind arrow. */
     rotate?: number;
     suffix?: string;
   }
 
   let windDeg = $derived(hourly?.wind_deg);
+  let windUnit = $derived(windSpeed === undefined ? undefined : ` ${getWindSpeedUnit(units)}`);
 
   // The six tiles, always: a value that was not recorded shows a dash. The wind tile's
   // arrow points the way the wind blows, when the direction is known.
@@ -228,33 +240,43 @@
           rotate: windDeg + HALF_TURN_DEGREES,
           label: t('detections.detail.conditions.windFrom', { direction: compassPoint(windDeg) }),
           value: windValue,
+          unit: windUnit,
         }
-      : { key: 'wind', icon: Wind, label: t('detections.weather.labels.wind'), value: windValue },
+      : {
+          key: 'wind',
+          icon: Wind,
+          label: t('detections.weather.labels.wind'),
+          value: windValue,
+          unit: windUnit,
+        },
     {
       key: 'precipitation',
       icon: CloudRain,
       label: t('detections.detail.conditions.precipitation'),
-      value:
-        hourly?.precipitation !== undefined ? `${formatDecimal(hourly.precipitation)} mm` : MISSING,
+      value: hourly?.precipitation !== undefined ? formatDecimal(hourly.precipitation) : MISSING,
+      unit: hourly?.precipitation !== undefined ? ' mm' : undefined,
       suffix: hourly?.precipitation ? hourly.precipitation_type : undefined,
     },
     {
       key: 'clouds',
       icon: Cloud,
       label: t('detections.weather.labels.cloudCover'),
-      value: hourly?.clouds !== undefined ? `${hourly.clouds}%` : MISSING,
+      value: hourly?.clouds !== undefined ? String(hourly.clouds) : MISSING,
+      unit: hourly?.clouds !== undefined ? '%' : undefined,
     },
     {
       key: 'humidity',
       icon: Droplets,
       label: t('detections.weather.labels.humidity'),
-      value: humidity !== undefined ? `${humidity}%` : MISSING,
+      value: humidity !== undefined ? String(humidity) : MISSING,
+      unit: humidity !== undefined ? '%' : undefined,
     },
     {
       key: 'pressure',
       icon: Gauge,
       label: t('detections.weather.labels.pressure'),
-      value: hourly?.pressure ? `${hourly.pressure} hPa` : MISSING,
+      value: hourly?.pressure ? String(hourly.pressure) : MISSING,
+      unit: hourly?.pressure ? ' hPa' : undefined,
     },
     {
       key: 'feelsLike',
@@ -443,7 +465,9 @@
             {#if tile.value === MISSING && weatherPending}
               <Skeleton inline className="h-3 w-12" />
             {:else}
-              {tile.value}{#if tile.suffix}<span class="dd-tile-suffix">{tile.suffix}</span>{/if}
+              <span class="dd-tile-number">{tile.value}</span>{#if tile.unit}<span
+                  class="dd-tile-unit">{tile.unit}</span
+                >{/if}{#if tile.suffix}<span class="dd-tile-suffix">{tile.suffix}</span>{/if}
             {/if}
           </dd>
         </div>
@@ -725,8 +749,9 @@
     margin-top: 0.625rem;
   }
 
-  /* In a narrow card the six tiles sit two to a row, so their values fit. */
-  @container dd-conditions (max-width: 23rem) {
+  /* In a narrow card the six tiles sit two to a row, so a wind speed with its gust and
+     unit fits. Three to a row need a 24.5rem card body (the 1440 px layout has 25rem). */
+  @container dd-conditions (width < 24.5rem) {
     .dd-tiles {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -762,20 +787,36 @@
     color: var(--text-subtle);
   }
 
+  /* One line: the number gives way first, the unit never does. */
   .dd-tile-value {
-    overflow: hidden;
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
     font-size: 0.875rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1.125rem;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  .dd-tile-number {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dd-tile-unit {
+    flex: 0 0 auto;
+    white-space: pre;
+  }
+
   .dd-tile-suffix {
+    min-width: 0;
     margin-left: 0.25rem;
+    overflow: hidden;
     font-size: 0.6875rem;
     font-weight: 400;
+    text-overflow: ellipsis;
     color: var(--text-subtle);
   }
 

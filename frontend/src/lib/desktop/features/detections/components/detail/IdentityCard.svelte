@@ -72,6 +72,17 @@
   );
 
   // True when a reviewer replaced the model's species with another.
+  // The image provider's value for an author or licence it could not find: left out.
+  const UNKNOWN_ATTRIBUTION = 'Unknown';
+  const known = (value: string | undefined) =>
+    value && value !== UNKNOWN_ATTRIBUTION ? value : '';
+  let creditAuthor = $derived(known(imageAttribution?.authorName));
+  let creditLicense = $derived(known(imageAttribution?.licenseName));
+  // A licence link from the provider is followed only when it is a web address.
+  let creditLicenseUrl = $derived(
+    /^https?:\/\//i.test(imageAttribution?.licenseURL ?? '') ? imageAttribution?.licenseURL : ''
+  );
+
   let speciesSetByReviewer = $derived(replacedModelPick(detection) !== null);
 
   // Any other time of day (night, dusk, dawn) shows the moon.
@@ -142,19 +153,21 @@
           onerror={handleBirdImageError}
           loading="eager"
         />
-        {#if imageAttribution?.authorName}
+        {#if creditAuthor || creditLicense}
           <div class="dd-identity-credit">
             <Camera size={10} aria-hidden="true" />
-            <span class="dd-identity-credit-author">{imageAttribution.authorName}</span>
-            {#if imageAttribution.licenseName}
+            {#if creditAuthor}
+              <span class="dd-identity-credit-author">{creditAuthor}</span>
+            {/if}
+            {#if creditAuthor && creditLicense}
               <span aria-hidden="true">·</span>
-              {#if imageAttribution.licenseURL}
-                <a href={imageAttribution.licenseURL} target="_blank" rel="noopener noreferrer"
-                  >{imageAttribution.licenseName}</a
-                >
-              {:else}
-                <span>{imageAttribution.licenseName}</span>
-              {/if}
+            {/if}
+            {#if creditLicense && creditLicenseUrl}
+              <a href={creditLicenseUrl} target="_blank" rel="noopener noreferrer"
+                >{creditLicense}</a
+              >
+            {:else if creditLicense}
+              <span>{creditLicense}</span>
             {/if}
           </div>
         {/if}

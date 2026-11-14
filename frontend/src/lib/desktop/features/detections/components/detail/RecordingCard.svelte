@@ -41,6 +41,14 @@
 
   let lengthSeconds = $derived(secondsBetween(detection.beginTime, detection.endTime));
 
+  let fileName = $derived.by(() => {
+    const name = detection.clipName ?? '';
+    const dot = name.lastIndexOf('.');
+    return dot > 0
+      ? { stem: name.slice(0, dot), extension: name.slice(dot) }
+      : { stem: name, extension: '' };
+  });
+
   let format = $derived.by(() => {
     const dot = detection.clipName?.lastIndexOf('.') ?? -1;
     const extension =
@@ -90,7 +98,10 @@
           {#if detection.clipName}
             <div class="dd-rec-fact dd-rec-fact-file">
               <dt>{t('detections.detail.clip.file')}</dt>
-              <dd title={detection.clipName}>{detection.clipName}</dd>
+              <!-- A long name is cut before its extension, which always shows. -->
+              <dd title={detection.clipName}>
+                <span class="dd-rec-file-stem">{fileName.stem}</span>{fileName.extension}
+              </dd>
             </div>
           {/if}
         </dl>
@@ -189,11 +200,16 @@
   }
 
   .dd-rec-fact-file dd {
+    display: flex;
     max-width: 22rem;
-    overflow: hidden;
     font-weight: 400;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .dd-rec-file-stem {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .dd-rec-note {

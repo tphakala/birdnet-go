@@ -765,12 +765,15 @@
 </div>
 
 <style>
+  /* The page is the container its layout switches on: the width it gets, not the
+     window's, which also holds the sidebar when it is open. */
   .dd-page {
     display: flex;
     flex-direction: column;
     gap: 1rem;
     width: 100%;
     min-width: 0;
+    container: dd-page / inline-size;
   }
 
   /* The page's two-column rows: the top row (identity and review beside time and
@@ -814,9 +817,11 @@
     height: calc(2rem + 2px);
   }
 
-  /* Page breakpoint: one column at 1100 px and below. DetailNavBar puts its trail and
-     step links on separate lines at the same width. */
-  @media (max-width: 1100px) {
+  /* Page breakpoint: one column when the page is narrower than 64rem. Below that the
+     left column leaves the identity card too little room for a species name, its chips
+     and the review buttons on one row. DetailNavBar puts its trail and step links on
+     separate lines at the same width. */
+  @container dd-page (width < 64rem) {
     .dd-grid {
       grid-template-columns: minmax(0, 1fr);
     }

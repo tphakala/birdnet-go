@@ -337,6 +337,13 @@
     border-top: 1px solid var(--border-100);
   }
 
+  /* Without a range score the totals open the card: no divider and no space above them. */
+  .dd-stats:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
   .dd-stat {
     display: flex;
     flex-direction: column;

@@ -237,10 +237,10 @@
     background-color: transparent;
   }
 
-  /* In a narrow window the trail and the step groups each take their own line, at
-     every detection, so the trail has room and nothing depends on its length.
-     The page grid switches to one column at the same width (DetectionDetail.svelte). */
-  @media (max-width: 1100px) {
+  /* On a narrow page the trail and the step groups each take their own line, at every
+     detection, so the trail has room and nothing depends on its length. The page grid
+     switches to one column at the same width (DetectionDetail.svelte, container dd-page). */
+  @container dd-page (width < 64rem) {
     .dd-nav {
       flex-direction: column;
       align-items: stretch;
