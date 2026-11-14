@@ -221,20 +221,31 @@
     border-radius: var(--radius-field);
   }
 
-  /* Fixed width, so the arrow after the label never moves with the text. */
+  /* The all-detections label is the same text on every detection, so it takes the width
+     of its words in the UI language: the arrow after it stays in place from one detection
+     to the next, and the words are never cut. */
   .dd-nav-group-label {
-    width: 6.5rem;
+    min-width: 6.5rem;
     padding: 0 0.25rem;
-    overflow: hidden;
     font-size: 0.75rem;
     text-align: center;
-    text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-subtle);
   }
 
+  /* A species name changes with the detection, so its label has a fixed width and a long
+     name takes a second line inside the group's height instead of being cut. Only a name
+     longer than two lines ends in an ellipsis; the page heading names the species in full. */
   .dd-nav-group-species {
+    display: -webkit-box;
     width: 9rem;
+    overflow: hidden;
+    line-height: 1rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 
   .dd-nav-step {

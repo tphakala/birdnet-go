@@ -54,57 +54,60 @@
   {#if rows.length === 0}
     <p class="dd-models-empty">{t('detections.detail.models.empty')}</p>
   {:else}
-    <ul class="dd-models">
-      {#each rows as row (`${row.modelName}-${row.modelVersion}-${row.modelVariant ?? ''}`)}
-        {@const hit = row.hitCount > 0}
-        <li class="dd-model" class:dd-model-miss={!hit}>
-          <div class="dd-model-name">
-            <span class="dd-model-dot" class:dd-model-dot-hit={hit} aria-hidden="true"></span>
-            <span class="dd-model-title">
-              {formatModelLabel(row.modelName, row.modelVersion, row.modelVariant)}
-            </span>
-            {#if row.modelType}
-              <span class="dd-model-type">{row.modelType}</span>
-            {/if}
-          </div>
-          {#if hit}
-            <div class="dd-model-hits">
-              {t('detections.detail.models.hits', { count: row.hitCount })}
+    <div class="dd-models-box">
+      <ul class="dd-models">
+        {#each rows as row (`${row.modelName}-${row.modelVersion}-${row.modelVariant ?? ''}`)}
+          {@const hit = row.hitCount > 0}
+          <li class="dd-model" class:dd-model-miss={!hit}>
+            <div class="dd-model-name">
+              <span class="dd-model-dot" class:dd-model-dot-hit={hit} aria-hidden="true"></span>
+              <span class="dd-model-title">
+                {formatModelLabel(row.modelName, row.modelVersion, row.modelVariant)}
+              </span>
+              {#if row.modelType}
+                <span class="dd-model-type">{row.modelType}</span>
+              {/if}
             </div>
-            <div class="dd-model-range">
-              {#if row.minConfidence !== undefined && row.maxConfidence !== undefined}
-                <div class="dd-range-track" aria-hidden="true">
+            {#if hit}
+              <div class="dd-model-hits">
+                {t('detections.detail.models.hits', { count: row.hitCount })}
+              </div>
+              <div class="dd-model-range">
+                {#if row.minConfidence !== undefined && row.maxConfidence !== undefined}
+                  <div class="dd-range-track" aria-hidden="true">
+                    <span
+                      class="dd-range-span"
+                      style:left="{row.minConfidence * PERCENT}%"
+                      style:width="{Math.max(
+                        (row.maxConfidence - row.minConfidence) * PERCENT,
+                        MIN_SPAN_PERCENT
+                      )}%"
+                    ></span>
+                    {#if row.meanConfidence !== undefined}
+                      <span class="dd-range-mean" style:left="{row.meanConfidence * PERCENT}%"
+                      ></span>
+                    {/if}
+                  </div>
+                {/if}
+                <span class="dd-model-confidence">{confidenceText(row)}</span>
+              </div>
+              <div class="dd-model-times">
+                {#if row.hitCount > 1 && row.meanConfidence !== undefined}
                   <span
-                    class="dd-range-span"
-                    style:left="{row.minConfidence * PERCENT}%"
-                    style:width="{Math.max(
-                      (row.maxConfidence - row.minConfidence) * PERCENT,
-                      MIN_SPAN_PERCENT
-                    )}%"
-                  ></span>
-                  {#if row.meanConfidence !== undefined}
-                    <span class="dd-range-mean" style:left="{row.meanConfidence * PERCENT}%"></span>
-                  {/if}
-                </div>
-              {/if}
-              <span class="dd-model-confidence">{confidenceText(row)}</span>
-            </div>
-            <div class="dd-model-times">
-              {#if row.hitCount > 1 && row.meanConfidence !== undefined}
-                <span
-                  >{t('detections.detail.models.mean', {
-                    value: formatPercent(row.meanConfidence),
-                  })}</span
-                >
-              {/if}
-              <span>{hitTimes(row)}</span>
-            </div>
-          {:else}
-            <div class="dd-model-nohit">{t('detections.detail.models.noHit')}</div>
-          {/if}
-        </li>
-      {/each}
-    </ul>
+                    >{t('detections.detail.models.mean', {
+                      value: formatPercent(row.meanConfidence),
+                    })}</span
+                  >
+                {/if}
+                <span>{hitTimes(row)}</span>
+              </div>
+            {:else}
+              <div class="dd-model-nohit">{t('detections.detail.models.noHit')}</div>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </div>
   {/if}
 </DetailCard>
 
@@ -114,17 +117,26 @@
     color: var(--text-subtle);
   }
 
-  .dd-models {
-    display: flex;
-    flex-direction: column;
+  .dd-models-box {
     container: dd-models / inline-size;
+  }
+
+  /* The rows share the list's columns, so the hit count column is as wide as its longest
+     text in the UI language and the range bars start at one line in every row. */
+  .dd-models {
+    display: grid;
+    grid-template-columns:
+      minmax(12rem, 1.3fr) minmax(4rem, max-content) minmax(7rem, 1.4fr)
+      minmax(7rem, auto);
+    column-gap: 0.875rem;
   }
 
   .dd-model {
     display: grid;
-    grid-template-columns: minmax(12rem, 1.3fr) 4rem minmax(7rem, 1.4fr) minmax(7rem, auto);
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
     align-items: center;
-    gap: 0.25rem 0.875rem;
+    row-gap: 0.25rem;
     padding: 0.5rem 0;
     font-size: 0.875rem;
     border-top: 1px solid var(--border-100);
@@ -243,10 +255,16 @@
 
   /* Stacked rows: in a narrow window (one page column), and in any card too narrow for
      the four columns. Their minimum is 12 + 4 + 7 + 7rem plus three 0.875rem gaps,
-     32.625rem: the half-width column of a window with the sidebar open, from 1101 to
-     about 1275 px wide, is narrower. The two rules hold the same declarations; container
-     and media queries cannot share one block. */
+     32.625rem (the hit count column grows with a longer text, up to about 6rem in the
+     longest languages, which every two-column page still has room for): the half-width
+     column of a window with the sidebar open, from 1101 to about 1275 px wide, is
+     narrower. The two rules hold the same declarations; container and media queries
+     cannot share one block. */
   @media (max-width: 900px) {
+    .dd-models {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
     .dd-model {
       grid-template-columns: minmax(0, 1fr) auto;
     }
@@ -263,6 +281,10 @@
   }
 
   @container dd-models (width < 32.625rem) {
+    .dd-models {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
     .dd-model {
       grid-template-columns: minmax(0, 1fr) auto;
     }

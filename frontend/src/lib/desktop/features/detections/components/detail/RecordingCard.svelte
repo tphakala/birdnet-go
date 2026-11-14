@@ -200,9 +200,10 @@
     font-weight: 500;
   }
 
+  /* As wide as the name: the facts wrap, so a long name takes a line of its own and is
+     cut only where the card is narrower than the name. */
   .dd-rec-fact-file dd {
     display: flex;
-    max-width: 22rem;
     font-weight: 400;
     white-space: nowrap;
   }

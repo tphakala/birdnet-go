@@ -279,7 +279,7 @@
             <FactIcon class="size-3.5" />
             <span class="sr-only">{t('detections.detail.identity.timeOfDay')}</span>
           </dt>
-          <dd class="dd-fact-text" title={timeOfDayText}>{timeOfDayText}</dd>
+          <dd class="dd-fact-text">{timeOfDayText}</dd>
         </div>
       {/if}
       {#if detection.source}
@@ -442,14 +442,16 @@
     color: var(--text-subtle);
   }
 
-  /* One row. Chips that do not fit are cut at the edge of the card. */
+  /* One row of a fixed height while the chips fit on it. Chips longer than the row
+     (long words in some languages, many chips in a narrow card) wrap to a second
+     row and the card grows, rather than a chip being cut at the card's edge. */
   .dd-identity-chips {
     display: flex;
     flex: 0 0 auto;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.375rem;
-    height: 1.625rem;
-    overflow: hidden;
+    gap: 0.25rem 0.375rem;
+    min-height: 1.625rem;
   }
 
   .dd-identity-chips > :global(*) {
@@ -470,9 +472,11 @@
     background-color: var(--color-base-200);
   }
 
+  /* The chip's own text colour, which meets contrast on every chip colour; the weight
+     sets the value apart. */
   .dd-chip-value {
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    opacity: 0.8;
   }
 
   .dd-chip-rarity-rare,
@@ -497,7 +501,7 @@
      narrow one, two rows of two. Either way every row holds facts. */
   .dd-identity-facts {
     display: grid;
-    grid-template-rows: repeat(2, var(--dd-fact-height));
+    grid-template-rows: repeat(2, minmax(var(--dd-fact-height), auto));
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.25rem 1.25rem;
     padding-top: 0.625rem;
@@ -509,7 +513,7 @@
 
   @container dd-identity (min-width: 38rem) {
     .dd-identity-facts {
-      grid-template-rows: var(--dd-fact-height);
+      grid-template-rows: minmax(var(--dd-fact-height), auto);
       grid-template-columns: auto auto minmax(0, 1fr) auto;
     }
   }
@@ -519,7 +523,7 @@
     align-items: center;
     gap: 0.375rem;
     min-width: 0;
-    height: var(--dd-fact-height);
+    min-height: var(--dd-fact-height);
     white-space: nowrap;
   }
 
@@ -543,9 +547,10 @@
     font-weight: 600;
   }
 
+  /* The time of day is never cut: where the row has no room for it (a long date or
+     wording in some languages), it takes a second line and the card grows. */
   .dd-fact-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
   }
 
   @media (max-width: 900px) {

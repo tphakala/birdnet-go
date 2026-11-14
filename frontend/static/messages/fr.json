@@ -996,7 +996,7 @@
         "loginRequired": "Connectez-vous pour vérifier cette détection.",
         "lockedHelp": "Les détections conservées ne peuvent pas être modifiées. Désactivez d'abord Conserver cet enregistrement.",
         "keep": "Conserver cet enregistrement",
-        "keepHelp": "Les détections conservées ne sont jamais supprimées lors du nettoyage.",
+        "keepHelp": "Le nettoyage ne supprime jamais les détections conservées.",
         "ignoredSpecies": "L'espèce {species} est désormais ignorée",
         "wrongSpecies": "Mauvaise espèce...",
         "legacyHelp": "Le changement d'espèce nécessite le format de base de données actuel.",
