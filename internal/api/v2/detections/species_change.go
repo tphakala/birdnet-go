@@ -4,7 +4,6 @@ package detections
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -52,8 +51,8 @@ func (c *Handler) ChangeDetectionSpecies(ctx echo.Context) error {
 		return c.respondEnhancedDatabaseRequired(ctx, speciesChangeV2RequiredMessage, speciesChangeV2RequiredLog)
 	}
 
-	n, err := strconv.ParseUint(ctx.Param("id"), 10, detectionIDBits)
-	if err != nil || n == 0 {
+	n, err := parseDetectionID(ctx)
+	if err != nil {
 		return c.HandleError(ctx, err, invalidDetectionIDMessage, http.StatusBadRequest)
 	}
 

@@ -1258,8 +1258,8 @@ func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detectio
 	}
 
 	// Look up common name from pre-built map, fallback to scientific name
-	f.commonName = ds.resolveCommonName(f.scientificName)
-	f.speciesCode = ds.speciesCodeMap[f.scientificName]
+	primary := ds.speciesForName(f.scientificName)
+	f.commonName, f.speciesCode = primary.CommonName, primary.Code
 
 	// The original pick comes from the preloaded label only; there is no fallback
 	// lookup, so a list read never costs a query per row.
@@ -2685,9 +2685,7 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 			det.Label = label
 		}
 		if det.OriginalLabelID != nil {
-			if label, ok := labelMap[*det.OriginalLabelID]; ok {
-				det.OriginalLabel = label
-			}
+			det.OriginalLabel = labelMap[*det.OriginalLabelID]
 		}
 		if det.SourceID != nil {
 			if source, ok := sourceMap[*det.SourceID]; ok {

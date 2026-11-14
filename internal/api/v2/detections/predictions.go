@@ -74,8 +74,8 @@ func (c *Handler) GetDetectionPredictions(ctx echo.Context) error {
 		return c.respondEnhancedDatabaseRequired(ctx, predictionsV2RequiredMessage, predictionsV2RequiredLog)
 	}
 
-	n, err := strconv.ParseUint(ctx.Param("id"), 10, detectionIDBits)
-	if err != nil || n == 0 {
+	n, err := parseDetectionID(ctx)
+	if err != nil {
 		return c.HandleError(ctx, err, invalidDetectionIDMessage, http.StatusBadRequest)
 	}
 	// Read the validated number, so the id that was checked is the id that is read.
@@ -166,7 +166,7 @@ func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResu
 	var originalRows []*predictionCandidate
 	for _, row := range rows {
 		name := strings.TrimSpace(row.Species.ScientificName)
-		if name == "" || math.IsNaN(row.Confidence) || math.IsInf(row.Confidence, 0) {
+		if name == "" || !isFiniteConfidence(row.Confidence) {
 			continue
 		}
 		key := speciesindex.CanonicalKey(name)
@@ -254,7 +254,7 @@ func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResu
 func originalPickCandidate(r *detectionPkg.Result, primaryKey string) *predictionCandidate {
 	name := strings.TrimSpace(r.OriginalSpecies.ScientificName)
 	key := speciesindex.CanonicalKey(name)
-	if name == "" || key == "" || key == primaryKey || math.IsNaN(r.Confidence) || math.IsInf(r.Confidence, 0) {
+	if name == "" || key == "" || key == primaryKey || !isFiniteConfidence(r.Confidence) {
 		return nil
 	}
 	return &predictionCandidate{
@@ -268,4 +268,23 @@ func originalPickCandidate(r *detectionPkg.Result, primaryKey string) *predictio
 func commonNameUnresolved(commonName, scientificName string) bool {
 	commonName = strings.TrimSpace(commonName)
 	return commonName == "" || strings.EqualFold(commonName, strings.TrimSpace(scientificName))
+}
+
+// isFiniteConfidence reports whether a confidence is a usable number: neither NaN
+// nor infinite, which would also make the JSON encoding fail.
+func isFiniteConfidence(confidence float64) bool {
+	return !math.IsNaN(confidence) && !math.IsInf(confidence, 0)
+}
+
+// parseDetectionID reads the :id parameter of a detection route. It accepts only a
+// positive integer that fits in detectionIDBits bits; any other value is an error.
+func parseDetectionID(ctx echo.Context) (uint64, error) {
+	n, err := strconv.ParseUint(ctx.Param("id"), 10, detectionIDBits)
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, errors.NewStd("detection id must be positive")
+	}
+	return n, nil
 }
