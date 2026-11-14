@@ -488,6 +488,46 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
         self.assertEqual(fix.status, "applied", fix.details)
         self.assertEqual(row, ("a.png", 48000, 1, 7))
 
+    def test_missing_original_label_column_is_added_by_fix(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TABLE detections (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model_id INTEGER, label_id INTEGER, source_id INTEGER, "
+            "detected_at INTEGER, begin_time INTEGER, end_time INTEGER, "
+            "confidence REAL, latitude REAL, longitude REAL, "
+            "clip_name VARCHAR(500), spectrogram_clip_name VARCHAR(500), "
+            "clip_sample_rate INTEGER, clip_denoised NUMERIC, "
+            "processing_time_ms INTEGER, unlikely NUMERIC, legacy_id INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO detections (model_id, label_id, detected_at, "
+            "confidence, unlikely) VALUES (1, 1, 1000, 0.9, 0)"
+        )
+        conn.commit()
+        conn.close()
+
+        doctor, report, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "fail")
+        self.assertTrue(check.fixable)
+        report.checks.append(check)
+
+        conn = sqlite3.connect(self.path)
+        try:
+            fix = doctor._fix_schema_contamination(conn, report)
+            # PRAGMA table_info columns: (cid, name, type, notnull, dflt_value, pk)
+            columns = {
+                row[1]: row for row in conn.execute("PRAGMA table_info(detections)")
+            }
+            rows = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
+        finally:
+            conn.close()
+
+        self.assertEqual(fix.status, "applied", fix.details)
+        self.assertEqual(
+            columns["original_label_id"][2:4], ("INTEGER", 0)
+        )
+        self.assertEqual(rows, 1)
+
     def test_privacy_rollup_fk_orphan_is_reported(self):
         conn = sqlite3.connect(self.path)
         conn.execute("CREATE TABLE audio_sources (id INTEGER PRIMARY KEY)")
