@@ -263,3 +263,18 @@ type NewSpeciesData struct {
 	// Confidence is the confidence score of the first detection.
 	Confidence float64
 }
+
+// DetectionNeighbors holds the IDs of the detections next to one detection in
+// record ID order. A zero ID means there is no such detection (IDs start at 1).
+type DetectionNeighbors struct {
+	// Previous is the greatest detection ID below the detection's.
+	Previous uint
+	// Next is the smallest detection ID above the detection's.
+	Next uint
+	// PreviousSameSpecies is the greatest ID below the detection's among
+	// detections of the same species.
+	PreviousSameSpecies uint
+	// NextSameSpecies is the smallest ID above the detection's among detections
+	// of the same species.
+	NextSameSpecies uint
+}

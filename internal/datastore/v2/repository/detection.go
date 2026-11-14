@@ -344,6 +344,17 @@ type DetectionRepository interface {
 	// empty or has no species part, or no model has a label for the species.
 	ChangeSpecies(ctx context.Context, id uint, scientificName string) error
 
+	// GetNeighborIDs returns the nearest lower and higher detection ID overall
+	// and among detections of the same species, for stepping through detections
+	// in record ID order. Same species means the scientific name extracted from the
+	// detection's label (see detection.ExtractScientificName), matched across every
+	// model's labels as LabelMatchForScientificName does, so a label stored in the
+	// legacy "ScientificName_CommonName" form belongs to the species too. A
+	// detection whose label no longer exists, or whose label has no species part
+	// (empty or "_Common"), gets the overall neighbors only.
+	// Returns ErrDetectionNotFound if id does not exist.
+	GetNeighborIDs(ctx context.Context, id uint) (*DetectionNeighbors, error)
+
 	// Exists checks if a detection with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
 
