@@ -3,10 +3,10 @@
   header and a body.
 
   - `title` is the small uppercase eyebrow heading; `subtitle` is short muted
-    text after it. `header` adds content after the title, or replaces the whole
-    header row when there is no title.
+    text after it, shown with or without a title. `header` adds content after
+    the title and subtitle, and is the whole header row when there are neither.
   - `padding` sets the body padding: `default` under a header, `snug` for a
-    compact panel under a header, `even` for a card without a header.
+    compact panel under a header, `even` for a card with no header row.
   - `fill` lays the body out as a column, so a child can take the card's
     remaining height; `grow` lets the card itself take the remaining height of a
     column it sits in.
@@ -18,7 +18,7 @@
     title?: string;
     /** Short text shown after the title, in muted colour. */
     subtitle?: string;
-    /** Header content after the title; the whole header row when there is no title. */
+    /** Header content after the title and subtitle; the whole header row without them. */
     header?: Snippet;
     padding?: 'default' | 'snug' | 'even';
     /** Lays the body out as a column, so a child can grow to the card's height. */
