@@ -221,6 +221,13 @@
     return /^[a-zA-Z0-9_-]+$/.test(id);
   }
 
+  // The server reads "007" as detection 7, and the page compares ids as strings (the
+  // answers it keeps, the detection a save was made on), so a numeric id is written
+  // the way the server numbers it.
+  function canonicalDetectionId(id: string): string {
+    return /^\d+$/.test(id) ? String(Number(id)) : id;
+  }
+
   // Resolve detection ID from the URL if not provided via prop
   $effect(() => {
     if (!detectionIdProp) {
@@ -229,13 +236,13 @@
       if (detectionIndex !== -1 && pathParts[detectionIndex + 1]) {
         const candidateId = pathParts[detectionIndex + 1];
         if (isValidDetectionId(candidateId)) {
-          resolvedDetectionId = candidateId;
+          resolvedDetectionId = canonicalDetectionId(candidateId);
         } else {
           detectionError = t('detections.errors.noIdProvided');
         }
       }
     } else if (isValidDetectionId(detectionIdProp)) {
-      resolvedDetectionId = detectionIdProp;
+      resolvedDetectionId = canonicalDetectionId(detectionIdProp);
     } else {
       detectionError = t('detections.errors.noIdProvided');
     }
