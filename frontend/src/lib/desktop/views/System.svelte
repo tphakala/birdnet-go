@@ -323,6 +323,8 @@
           cached: data.memory_cached,
           usedPercent: data.memory_usage_percent,
         };
+        // A poll that answers clears a failed first load, as a Retry would
+        settleSection(resourcesSection);
       } catch {
         // Silently ignore polling failures
       }

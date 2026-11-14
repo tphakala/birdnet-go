@@ -9,6 +9,8 @@ import { deferred } from '../../../test/async-helpers';
 import System from './System.svelte';
 
 const SLOW_REFRESH_MS = 30_000;
+/** The polling fallback's interval, used when the metrics history endpoint is missing. */
+const POLLING_INTERVAL_MS = 5_000;
 const OVERVIEW_PATH = '/ui/system';
 const DATABASE_PATH = '/ui/system/database';
 
@@ -330,6 +332,21 @@ describe('System view', () => {
     expect(memoryTile.queryByText(/avail/i)).not.toBeInTheDocument();
     // The headline, used / total and available
     expect(memoryTile.getAllByText('-')).toHaveLength(3);
+  });
+
+  it('clears a failed resources section once the polling fallback answers', async () => {
+    // No history endpoint, so the view polls the resources endpoint instead
+    failWith(RESOURCES_URL, 500);
+    failWith(HISTORY_REQUEST, 500);
+    await mountAt(OVERVIEW_PATH);
+
+    const storage = () => within(cardTitled(t('system.storage.title')));
+    expect(storage().getByRole('alert')).toBeInTheDocument();
+
+    await advance(POLLING_INTERVAL_MS);
+
+    expect(storage().queryByRole('alert')).not.toBeInTheDocument();
+    expect(storage().getByText(t('system.storage.ram'))).toBeInTheDocument();
   });
 
   it('keeps the loaded data on screen through a slow or failed refresh', async () => {
