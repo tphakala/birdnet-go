@@ -45,6 +45,7 @@ const MIGRATED_FILES = [
   'lib/desktop/features/import-export/components/ImportCountTile.svelte',
   'lib/desktop/layouts/DesktopSidebar.svelte',
   'lib/desktop/features/system/components/RestartCard.svelte',
+  'lib/desktop/features/system/components/DatabaseDashboardSkeleton.svelte',
 ];
 
 /** Body text at or above this opacity (percent) still reaches 4.5:1 on the base surfaces. */

@@ -5,6 +5,7 @@ import { runAxeTest } from '$lib/utils/axe-utils';
 import SystemHealth from './SystemHealth.svelte';
 
 const TOTAL_CHECKS = 5;
+const RESULTS_SKELETON_ID = 'health-results-skeleton';
 
 const mocks = vi.hoisted(() => ({ post: vi.fn() }));
 
@@ -49,6 +50,74 @@ describe('SystemHealth Healthy tile footer', () => {
 
     await screen.findByText('health.metricFooter.allPassing');
     expect(t).not.toHaveBeenCalledWith('health.metricFooter.healthyOfTotal', expect.anything());
+  });
+});
+
+describe('SystemHealth first run', () => {
+  afterEach(() => {
+    cleanup();
+    mocks.post.mockReset();
+  });
+
+  /** Holds the mount run until the returned functions settle it. */
+  function renderWithPendingFirstRun() {
+    let finish: (value: ReturnType<typeof report>) => void = () => {};
+    let fail: (reason: Error) => void = () => {};
+    mocks.post.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        finish = resolve;
+        fail = reject;
+      })
+    );
+    const view = render(SystemHealth);
+    return { ...view, finish, fail };
+  }
+
+  it('shows a skeleton of the results and the tile counts until the first report arrives', async () => {
+    const { container, finish } = renderWithPendingFirstRun();
+
+    await screen.findByTestId(RESULTS_SKELETON_ID);
+    // One label for the whole page, in the run status beside Refresh
+    const statuses = screen.getAllByRole('status');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toHaveTextContent('health.running');
+    // The tile footers hold bars, not a running label of their own: one visible label
+    // beside Refresh, plus the screen reader text of the status region
+    const visibleLabels = screen
+      .getAllByText('health.running')
+      .filter(label => !label.classList.contains('sr-only'));
+    expect(visibleLabels).toHaveLength(1);
+    // The status region speaks for it, so the visible label is not read twice
+    expect(visibleLabels[0]).toHaveAttribute('aria-hidden', 'true');
+    // The run status spinner and the Refresh icon spin, and stop under reduced motion
+    const spinners = container.querySelectorAll('.animate-spin');
+    expect(spinners).toHaveLength(2);
+    for (const spinner of spinners) {
+      expect(spinner).toHaveClass('motion-reduce:animate-none');
+    }
+    const numeral = screen
+      .getByText('health.summary.healthy')
+      .closest('.flex-wrap')
+      ?.querySelector('.font-mono');
+    expect(numeral?.querySelector('[data-skeleton]')).not.toBeNull();
+    expect(container).not.toHaveTextContent('…');
+
+    finish(report(TOTAL_CHECKS));
+
+    await screen.findByText('health.metricFooter.allPassing');
+    expect(screen.queryByTestId(RESULTS_SKELETON_ID)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-skeleton]')).toBeNull();
+  });
+
+  it('replaces the skeleton with the error when the first run fails', async () => {
+    const { container, fail } = renderWithPendingFirstRun();
+    await screen.findByTestId(RESULTS_SKELETON_ID);
+
+    fail(new Error('network down'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('health.errors.fetchFailed');
+    expect(screen.queryByTestId(RESULTS_SKELETON_ID)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-skeleton]')).toBeNull();
   });
 });
 
@@ -176,12 +245,16 @@ describe('SystemHealth keyboard and run state', () => {
   it('keeps the radios and Refresh focusable and explains the wait while a run is active', async () => {
     const { finish } = await renderWithPendingRun();
     const refresh = screen.getByRole('button', { name: 'health.refresh' });
+    // The status region is already mounted and empty, so the run it reports is announced
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(/^$/);
     refresh.focus();
     await fireEvent.click(refresh);
 
     await waitFor(() => expect(refresh).toHaveAttribute('aria-disabled', 'true'));
     const describedBy = refresh.getAttribute('aria-describedby') ?? '';
     const running = document.getElementById(describedBy);
+    expect(running).toBe(status);
     expect(running).toHaveTextContent('health.running');
     expect(refresh).not.toBeDisabled();
     expect(document.activeElement).toBe(refresh);
@@ -191,6 +264,9 @@ describe('SystemHealth keyboard and run state', () => {
       expect(radio).toHaveAttribute('aria-describedby', describedBy);
     }
     expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-describedby');
+    // A rerun keeps the last report on screen: no skeleton comes back
+    expect(screen.queryByTestId(RESULTS_SKELETON_ID)).not.toBeInTheDocument();
+    expect(document.querySelector('[data-skeleton]')).toBeNull();
 
     finish(report(TOTAL_CHECKS));
     await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));

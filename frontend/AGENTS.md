@@ -274,12 +274,15 @@ and `--text-primary` does the same for every fixed scheme in both themes;
   labelled indicator; a bare spinner is not enough. Fetching, saving and
   processing are distinct states with distinct labels.
 - Every page, and every card that loads its own data, shows a skeleton of its
-  final layout while it loads, not a spinner in a corner. The skeleton mirrors
-  the loaded layout (same grid, card chrome and minimum heights) so nothing
-  jumps when the data arrives, keeps one visible labelled `role="status"`
-  indicator, marks each placeholder bar `aria-hidden="true"`, stops pulsing
-  under `motion-reduce`, and lets bars shrink (`min-w-0 max-w-full`) so none
-  overflows a card at tablet and desktop widths. Use
+  final layout while it loads, not a spinner in a corner. Build it from the
+  `Skeleton` (one bar) and `SkeletonStatus` (the label) primitives in
+  `src/lib/desktop/components/ui/`, which hide each bar from assistive
+  technology, stop the pulse under `motion-reduce` and let bars shrink
+  (`min-w-0 max-w-full`). The skeleton mirrors the loaded layout (same grid,
+  card chrome and minimum heights) so nothing jumps when the data arrives, and
+  has exactly one visible loading label (a `SkeletonStatus`, or a status region the view already shows), placed where a line of loaded text
+  appears so it adds no height. Show it only on the first load: a refresh or a
+  poll never brings it back, and a failed load replaces it with an error. Use
   `src/lib/desktop/features/system/components/InferenceSkeleton.svelte` as the
   reference. Many existing pages still show a spinner; give a page a skeleton
   when you change its loading state.

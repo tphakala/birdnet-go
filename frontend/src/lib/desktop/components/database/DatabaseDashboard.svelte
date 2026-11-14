@@ -18,6 +18,7 @@
   import DatabaseMysqlInnodbCard from '$lib/desktop/features/system/components/DatabaseMysqlInnodbCard.svelte';
   import DatabaseDetectionRateCard from '$lib/desktop/features/system/components/DatabaseDetectionRateCard.svelte';
   import DatabaseTableBreakdown from '$lib/desktop/features/system/components/DatabaseTableBreakdown.svelte';
+  import DatabaseDashboardSkeleton from '$lib/desktop/features/system/components/DatabaseDashboardSkeleton.svelte';
 
   // Migration view components
   import DatabaseMigrationMetricStrip from '$lib/desktop/features/system/components/DatabaseMigrationMetricStrip.svelte';
@@ -404,6 +405,8 @@
   }
 
   let backupJobs = $state<BackupJob[]>([]);
+  /** True until the first backup jobs request settles; polls never set it again. */
+  let backupJobsLoading = $state(true);
   let backupCreating = $state(false);
   let backupJobsError = $state<string | null>(null);
   let backupCreateError = $state<string | null>(null);
@@ -415,8 +418,33 @@
       backupJobsError = null;
     } catch (e) {
       backupJobsError = apiErrorMessage(e);
+    } finally {
+      backupJobsLoading = false;
     }
   }
+
+  // --- Initial load ---
+  // The page shows one skeleton until the first requests its cards read have answered (the
+  // status; then the overview and legacy status, or the stats and backups of the migration
+  // view), so no card shows a placeholder value (Disconnected, No backups) or pops in late.
+  // A failed overview ends it at once: its error replaces the cards that need the legacy status.
+  let legacySettled = $derived(legacyStatus.data !== null || legacyStatus.error !== null);
+  let firstLoadPending = $derived(
+    migrationStatus.loading ||
+      (isV2OnlyMode
+        ? overviewLoading || (!overviewError && !legacySettled)
+        : legacyStats.loading || v2Stats.loading || backupJobsLoading)
+  );
+  // Latched: once the page has loaded, refreshes and polls never bring the page skeleton
+  // back. A later switch to v2-only whose overview has not answered yet shows the dashboard
+  // skeleton inside that view instead (see the template)
+  let initialLoadDone = $state(false);
+  $effect(() => {
+    // Read nothing once latched, so polls stop re-running this effect
+    if (initialLoadDone) return;
+    if (!firstLoadPending) initialLoadDone = true;
+  });
+  let showSkeleton = $derived(!initialLoadDone && firstLoadPending);
 
   async function createBackup(): Promise<void> {
     backupCreating = true;
@@ -713,21 +741,13 @@
     />
   {/if}
 
-  {#if migrationStatus.loading}
-    <!-- Loading state (waiting for migration status to determine view) -->
-    <div class="flex items-center justify-center py-16" role="status">
-      <div class="text-sm text-muted">
-        {t('system.database.dashboard.loading')}
-      </div>
-    </div>
+  {#if showSkeleton}
+    <DatabaseDashboardSkeleton />
   {:else if isV2OnlyMode}
     <!-- OPERATIONAL DASHBOARD VIEW -->
-    {#if overviewLoading}
-      <div class="flex items-center justify-center py-16" role="status">
-        <div class="text-sm text-muted">
-          {t('system.database.dashboard.loading')}
-        </div>
-      </div>
+    {#if overviewLoading && !overview}
+      <!-- Reached when the page loaded in the migration view and switched before the overview answered -->
+      <DatabaseDashboardSkeleton />
     {:else if overviewError || !overview}
       <ErrorAlert
         title={t('system.database.dashboard.fetchFailed')}
@@ -807,7 +827,7 @@
               cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
               cleanupError={migrationStatus.data?.cleanup_error ?? ''}
               cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-              isLoading={legacyStatus.loading || cleanupLoading}
+              isLoading={cleanupLoading}
               onDelete={() => (showCleanupDialog = true)}
             />
           {/if}

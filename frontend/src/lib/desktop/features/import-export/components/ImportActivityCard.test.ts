@@ -296,10 +296,11 @@ describe('ImportActivityCard', () => {
 
   it('shows a load error when the status request fails', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('network down'));
-    renderCard();
+    const { container } = renderCard();
     await waitFor(() => {
       expect(screen.getByText('system.importExport.errors.loadFailed')).toBeInTheDocument();
     });
+    expect(container.querySelector('[data-skeleton]')).toBeNull();
   });
 
   it('shows loading, not the empty state, while retrying after a failed load', async () => {
@@ -315,9 +316,12 @@ describe('ImportActivityCard', () => {
     vi.mocked(api.get).mockImplementation(() => new Promise(() => {}));
     await rerender({ onOpenWizard, refreshSignal: 1 });
     await waitFor(() => {
-      expect(screen.getByText('system.importExport.loading')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('system.importExport.loading');
     });
     expect(screen.queryByText('system.importExport.activity.empty.title')).not.toBeInTheDocument();
+    // A skeleton of the idle layout, not a spinner
+    expect(document.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
+    expect(document.querySelector('.animate-spin')).toBeNull();
   });
 
   it('refetches status when refreshSignal changes', async () => {

@@ -127,10 +127,12 @@ describe('StatsCard', () => {
       },
     });
 
-    const skeletons = container.querySelectorAll('.skeleton');
-    expect(skeletons).toHaveLength(2);
+    const skeletons = container.querySelectorAll('[data-skeleton]');
+    expect(skeletons).toHaveLength(1);
     expect(screen.queryByText('0')).not.toBeInTheDocument();
     expect(screen.queryByText('Loading')).not.toBeInTheDocument();
+    // The bars are decorative; one visible label says the card is loading
+    expect(screen.getByRole('status')).toHaveTextContent('common.loading');
   });
 
   it('renders loading state with sub label', () => {
@@ -144,8 +146,9 @@ describe('StatsCard', () => {
       },
     });
 
-    const skeletons = container.querySelectorAll('.skeleton');
-    expect(skeletons).toHaveLength(3);
+    const skeletons = container.querySelectorAll('[data-skeleton]');
+    expect(skeletons).toHaveLength(2);
+    expect(screen.getByRole('status')).toHaveTextContent('common.loading');
   });
 
   it('renders as link when href provided', () => {

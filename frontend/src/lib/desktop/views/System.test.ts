@@ -9,6 +9,8 @@ import { deferred } from '../../../test/async-helpers';
 import System from './System.svelte';
 
 const SLOW_REFRESH_MS = 30_000;
+/** The polling fallback's interval; the view polls when the metrics history request fails. */
+const POLLING_INTERVAL_MS = 5_000;
 const OVERVIEW_PATH = '/ui/system';
 const DATABASE_PATH = '/ui/system/database';
 
@@ -17,6 +19,11 @@ const DISKS_URL = '/api/v2/system/disks';
 const PROCESSES_URL = '/api/v2/system/processes';
 const ALL_PROCESSES_URL = `${PROCESSES_URL}?all=true`;
 const SLOW_URLS = [INFO_URL, DISKS_URL, PROCESSES_URL];
+const RESOURCES_URL = '/api/v2/system/resources';
+const TEMPERATURE_URL = '/api/v2/system/temperature/cpu';
+const HISTORY_URL = '/api/v2/system/metrics/history';
+/** The history request of a host with no models; held by its full URL, query included. */
+const HISTORY_REQUEST = `${HISTORY_URL}?points=60&metrics=cpu.total,memory.used_percent,cpu.temperature`;
 
 // jsdom has no EventSource; count what the view opens and closes
 const stream = vi.hoisted(() => ({ opened: 0, closed: 0 }));
@@ -48,15 +55,12 @@ const defaultBodies: Array<[string, unknown]> = [
   ],
   [PROCESSES_URL, [{ pid: 1, name: 'main', status: 'running', cpu: 2, memory: 4096, uptime: 60 }]],
   [INFO_URL, { os_display: 'Linux', hostname: 'host', uptime_seconds: 100, num_cpu: 4 }],
-  [DISKS_URL, []],
-  [
-    '/api/v2/system/resources',
-    { cpu_usage_percent: 1, memory_total: 100, memory_usage_percent: 10 },
-  ],
-  ['/api/v2/system/temperature/cpu', { is_available: false }],
+  [DISKS_URL, [{ mountpoint: '/data', total: 1000, used: 400, usage_percent: 40 }]],
+  [RESOURCES_URL, { cpu_usage_percent: 1, memory_total: 100, memory_usage_percent: 10 }],
+  [TEMPERATURE_URL, { is_available: false }],
   ['/api/v2/settings/birdnet', { overlap: 0 }],
   ['/api/v2/system/models', []],
-  ['/api/v2/system/metrics/history', { metrics: {} }],
+  [HISTORY_URL, { metrics: {} }],
 ];
 
 let requests: string[] = [];
@@ -119,6 +123,21 @@ async function goTo(path: string) {
   navigation.navigate(path);
   flushSync();
   await flush();
+}
+
+/**
+ * The card or metric tile whose title is this text. Every card and tile of the overview has
+ * a rounded-xl surface.
+ */
+function cardTitled(title: string): HTMLElement {
+  const card = screen.getByText(title).closest<HTMLElement>('.rounded-xl');
+  if (!card) throw new Error(`No card titled ${title}`);
+  return card;
+}
+
+/** Loading labels on the page; each is the visible text of a status region. */
+function loadingLabels(): HTMLElement[] {
+  return screen.queryAllByText(t('common.loading'));
 }
 
 async function mountAt(path: string) {
@@ -192,6 +211,247 @@ describe('System view', () => {
     expect(count(PROCESSES_URL)).toBe(2);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveTextContent('BirdNET-Go');
+  });
+
+  it.each([
+    {
+      section: 'system info',
+      url: INFO_URL,
+      cards: () => [t('system.systemInfo.title'), t('system.metrics.cpu')],
+      value: 'Linux',
+    },
+    {
+      section: 'disks',
+      url: DISKS_URL,
+      cards: () => [t('system.storage.title')],
+      value: '/data',
+    },
+    {
+      section: 'resources',
+      url: RESOURCES_URL,
+      cards: () => [t('system.metrics.cpu'), t('system.metrics.memory'), t('system.storage.title')],
+      value: '10.0%',
+    },
+    {
+      // The details card waits too, so its temperature row does not pop in
+      section: 'temperature',
+      url: TEMPERATURE_URL,
+      cards: () => [t('system.metrics.temperature'), t('system.systemInfo.title')],
+      value: t('system.metrics.tempUnavailable'),
+    },
+  ])('shows a labelled skeleton until the $section answers', async ({ url, cards, value }) => {
+    const release = hold(url);
+    await mountAt(OVERVIEW_PATH);
+
+    for (const title of cards()) {
+      const label = within(cardTitled(title)).getByText(t('common.loading'));
+      expect(label).toHaveAttribute('role', 'status');
+    }
+    expect(screen.queryByText(value)).not.toBeInTheDocument();
+
+    release();
+    await flush();
+
+    expect(loadingLabels()).toHaveLength(0);
+    expect(screen.getAllByText(value).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the inference tile loading until the metrics history answers', async () => {
+    const release = hold(HISTORY_REQUEST);
+    await mountAt(OVERVIEW_PATH);
+
+    expect(screen.queryByText(t('system.metrics.noInference'))).not.toBeInTheDocument();
+    expect(
+      within(cardTitled(t('system.metrics.inference'))).getByText(t('common.loading'))
+    ).toBeInTheDocument();
+    // The memory tile does not wait for the history: it shows the resources reading
+    expect(within(cardTitled(t('system.metrics.memory'))).getByText('10.0%')).toBeInTheDocument();
+
+    release();
+    await flush();
+
+    expect(screen.getByText(t('system.metrics.noInference'))).toBeInTheDocument();
+    expect(loadingLabels()).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      section: 'system info',
+      url: INFO_URL,
+      card: () => t('system.systemInfo.title'),
+      error: 'system.errors.systemInfo',
+      value: 'Linux',
+    },
+    {
+      section: 'disks',
+      url: DISKS_URL,
+      card: () => t('system.storage.title'),
+      error: 'system.errors.diskUsage',
+      value: '/data',
+    },
+    {
+      section: 'resources',
+      url: RESOURCES_URL,
+      card: () => t('system.storage.title'),
+      error: 'system.errors.memoryUsage',
+      value: t('system.storage.ram'),
+    },
+  ])(
+    'replaces the $section skeleton with an error that Retry clears',
+    async ({ url, card, error, value }) => {
+      failWith(url, 500);
+      await mountAt(OVERVIEW_PATH);
+
+      const alert = within(cardTitled(card())).getByRole('alert');
+      expect(t).toHaveBeenCalledWith(error, { error: 'errors.api.serverError' });
+      expect(within(cardTitled(card())).queryByText(t('common.loading'))).not.toBeInTheDocument();
+
+      // A keyboard user is on Retry; once the alert goes, focus lands on the card
+      const retry = within(alert).getByRole('button', { name: t('common.retry') });
+      retry.focus();
+      await fireEvent.click(retry);
+      await flush();
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getAllByText(value).length).toBeGreaterThan(0);
+      expect(cardTitled(card())).toHaveFocus();
+    }
+  );
+
+  it.each([
+    { failed: 'disks', loading: 'memory', failUrl: DISKS_URL, holdUrl: RESOURCES_URL },
+    { failed: 'memory', loading: 'disks', failUrl: RESOURCES_URL, holdUrl: DISKS_URL },
+  ])(
+    'keeps the storage loading label while the $loading part loads beside a $failed error',
+    async ({ failUrl, holdUrl }) => {
+      failWith(failUrl, 500);
+      const release = hold(holdUrl);
+      await mountAt(OVERVIEW_PATH);
+
+      const storage = within(cardTitled(t('system.storage.title')));
+      expect(storage.getByRole('alert')).toBeInTheDocument();
+      expect(storage.getByText(t('common.loading'))).toHaveAttribute('role', 'status');
+
+      release();
+      await flush();
+      expect(storage.queryByText(t('common.loading'))).not.toBeInTheDocument();
+    }
+  );
+
+  it.each([
+    { request: 'temperature answers 404', url: TEMPERATURE_URL, status: 404 },
+    { request: 'temperature fails', url: TEMPERATURE_URL, status: 500 },
+  ])('ends the temperature skeleton when the $request', async ({ url, status }) => {
+    failWith(url, status);
+    await mountAt(OVERVIEW_PATH);
+
+    const tile = within(cardTitled(t('system.metrics.temperature')));
+    expect(tile.queryByText(t('common.loading'))).not.toBeInTheDocument();
+    expect(tile.getByText(t('system.metrics.tempUnavailable'))).toBeInTheDocument();
+    expect(
+      within(cardTitled(t('system.systemInfo.title'))).queryByText(t('common.loading'))
+    ).not.toBeInTheDocument();
+  });
+
+  it('ends the inference skeleton when the metrics history fails', async () => {
+    failWith(HISTORY_REQUEST, 500);
+    await mountAt(OVERVIEW_PATH);
+
+    const tile = within(cardTitled(t('system.metrics.inference')));
+    expect(tile.queryByText(t('common.loading'))).not.toBeInTheDocument();
+    expect(tile.getByText(t('system.metrics.noInference'))).toBeInTheDocument();
+  });
+
+  it('shows a dash, never a zero, in the metric tiles whose source failed', async () => {
+    failWith(INFO_URL, 500);
+    failWith(RESOURCES_URL, 500);
+    await mountAt(OVERVIEW_PATH);
+
+    // The history has no points, so the headline percent has no source either
+    const cpuTile = within(cardTitled(t('system.metrics.cpu')));
+    expect(cpuTile.queryByText('0.0%')).not.toBeInTheDocument();
+    expect(cpuTile.queryByText(`0 ${t('system.metrics.cores')}`)).not.toBeInTheDocument();
+    // The headline and the cores footer
+    expect(cpuTile.getAllByText('-')).toHaveLength(2);
+
+    const memoryTile = within(cardTitled(t('system.metrics.memory')));
+    expect(memoryTile.queryByText('0.0%')).not.toBeInTheDocument();
+    expect(memoryTile.queryByText(/^0 B/)).not.toBeInTheDocument();
+    expect(memoryTile.queryByText(/avail/i)).not.toBeInTheDocument();
+    // The headline, used / total and available
+    expect(memoryTile.getAllByText('-')).toHaveLength(3);
+  });
+
+  it('keeps the inference footer reserved when no model has data', async () => {
+    await mountAt(OVERVIEW_PATH);
+
+    // The two-line footer the skeleton reserves stays in the no-data state, so the row keeps its height
+    const tile = cardTitled(t('system.metrics.inference'));
+    expect(within(tile).getByText(t('system.metrics.noInference'))).toBeInTheDocument();
+    expect(tile.querySelector('[class*="min-h-[calc(2lh"]')).not.toBeNull();
+  });
+
+  it('clears a failed resources section once the polling fallback answers', async () => {
+    // The history request fails, so the view polls the resources endpoint instead
+    failWith(RESOURCES_URL, 500);
+    failWith(HISTORY_REQUEST, 500);
+    await mountAt(OVERVIEW_PATH);
+
+    const storage = () => within(cardTitled(t('system.storage.title')));
+    expect(storage().getByRole('alert')).toBeInTheDocument();
+
+    await advance(POLLING_INTERVAL_MS);
+
+    expect(storage().queryByRole('alert')).not.toBeInTheDocument();
+    expect(storage().getByText(t('system.storage.ram'))).toBeInTheDocument();
+  });
+
+  it('shows the history reading in the headlines when the resources load failed', async () => {
+    const at = '2026-01-01T00:00:00Z';
+    const history: [string, unknown] = [
+      HISTORY_REQUEST,
+      {
+        metrics: {
+          'cpu.total': [{ timestamp: at, value: 42 }],
+          'memory.used_percent': [{ timestamp: at, value: 55 }],
+        },
+      },
+    ];
+    // Ahead of the generic history body, so this test's points win
+    defaultBodies.unshift(history);
+    try {
+      failWith(RESOURCES_URL, 500);
+      await mountAt(OVERVIEW_PATH);
+
+      // A real reading beats the dash that stands in for a failed load with no history
+      expect(within(cardTitled(t('system.metrics.cpu'))).getByText('42.0%')).toBeInTheDocument();
+      expect(within(cardTitled(t('system.metrics.memory'))).getByText('55.0%')).toBeInTheDocument();
+    } finally {
+      defaultBodies.splice(defaultBodies.indexOf(history), 1);
+    }
+  });
+
+  it('keeps the loaded data on screen through a slow or failed refresh', async () => {
+    await mountAt(OVERVIEW_PATH);
+    expect(screen.getByText('Linux')).toBeInTheDocument();
+
+    const releaseInfo = hold(INFO_URL);
+    const releaseDisks = hold(DISKS_URL);
+    await advance(SLOW_REFRESH_MS);
+    expect(count(INFO_URL)).toBe(2);
+    expect(loadingLabels()).toHaveLength(0);
+    expect(screen.getByText('Linux')).toBeInTheDocument();
+    releaseInfo();
+    releaseDisks();
+    await flush();
+
+    failWith(INFO_URL, 500);
+    failWith(DISKS_URL, 500);
+    await advance(SLOW_REFRESH_MS);
+    expect(count(INFO_URL)).toBe(3);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Linux')).toBeInTheDocument();
+    expect(screen.getByText('/data')).toBeInTheDocument();
   });
 
   it('refreshes system info, disks and processes every 30 s on the overview only', async () => {

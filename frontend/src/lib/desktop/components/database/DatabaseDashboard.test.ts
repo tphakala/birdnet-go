@@ -32,6 +32,7 @@ import { ApiError } from '$lib/utils/api';
 import { connectionState } from '$lib/stores/connectionState.svelte';
 import DatabaseDashboard from './DatabaseDashboard.svelte';
 import { renderTyped } from '../../../../test/render-helpers';
+import { deferred } from '../../../../test/async-helpers';
 
 const STATUS_URL = '/api/v2/system/database/migration/status';
 const PREREQUISITES_URL = '/api/v2/system/database/migration/prerequisites';
@@ -46,6 +47,8 @@ const CLEANUP_URL = '/api/v2/system/database/legacy/cleanup';
 const STATUS_POLL_INTERVAL_MS = 2000;
 const PREREQUISITES_POLL_INTERVAL_MS = 2000;
 const NOT_CONFIGURED = 'Migration is not configured';
+const SKELETON_TEST_ID = 'database-skeleton';
+const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
 
 const idleStatus = {
   state: 'idle',
@@ -195,6 +198,9 @@ describe('DatabaseDashboard migration errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(t('system.database.migration.errors.fetchFailed'));
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
+    // The alert sits above the views, so it alone does not prove the skeleton went away
+    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
   });
 
   it('shows a translated message when the status request fails without an API error', async () => {
@@ -1498,5 +1504,216 @@ describe('DatabaseDashboard v2-only overview layout', () => {
       grid => grid.children.length === 0
     );
     expect(emptyGrid).toBeUndefined();
+  });
+});
+
+describe('DatabaseDashboard initial load', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+  });
+
+  /** Lets pending promise callbacks and the renders they cause run. */
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  it.each([
+    { last: 'overview', first: 'legacy status' },
+    { last: 'legacy status', first: 'overview' },
+  ])(
+    'keeps one skeleton until the status, overview and legacy status of the v2-only view answered, with the $last last',
+    async ({ last }) => {
+      const status = deferred<unknown>();
+      const overviewRequest = deferred<unknown>();
+      const legacy = deferred<unknown>();
+      serve({
+        [STATUS_URL]: status.promise,
+        [OVERVIEW_URL]: overviewRequest.promise,
+        [LEGACY_STATUS_URL]: legacy.promise,
+      });
+      const answerOverview = () => overviewRequest.resolve(overview);
+      const answerLegacy = () => legacy.resolve(cleanableLegacy);
+      const [answerFirst, answerLast] =
+        last === 'overview' ? [answerLegacy, answerOverview] : [answerOverview, answerLegacy];
+
+      renderTyped(DatabaseDashboard);
+
+      const skeleton = screen.getByTestId(SKELETON_TEST_ID);
+      expect(within(skeleton).getByRole('status')).toHaveTextContent(
+        t('system.database.dashboard.loading')
+      );
+
+      status.resolve(v2OnlyStatus);
+      // The legacy status is only requested once the status says the install is v2-only
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
+
+      answerFirst();
+      await settle();
+      // One request is still pending, so the page keeps the same skeleton
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
+
+      answerLast();
+      await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+      // The cleanup card arrives with the rest of the page, not after it
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: t('system.database.legacy.cleanup.title') })
+      ).toBeInTheDocument();
+    }
+  );
+
+  it('keeps the skeleton until the migration status answers, even after the other requests', async () => {
+    const status = deferred<unknown>();
+    serve({ [STATUS_URL]: status.promise });
+
+    renderTyped(DatabaseDashboard);
+    // Every other first request answers while the status is still pending
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(BACKUP_JOBS_URL));
+    await settle();
+    await settle();
+    expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument();
+    expect(screen.queryByText(t('system.database.stats.connected'))).not.toBeInTheDocument();
+
+    status.resolve(v2OnlyStatus);
+    await screen.findByRole('heading', { name: tablesTitle() });
+    expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { request: 'legacy stats', url: LEGACY_STATS_URL, value: databaseStats },
+    { request: 'v2 stats', url: V2_STATS_URL, value: databaseStats },
+    { request: 'backup jobs', url: BACKUP_JOBS_URL, value: { jobs: [] } },
+  ])(
+    'shows no disconnected database or missing backups while the migration view waits for the $request',
+    async ({ url, value }) => {
+      const pending = deferred<unknown>();
+      serve({ [STATUS_URL]: idleStatus, [url]: pending.promise });
+
+      renderTyped(DatabaseDashboard);
+
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(STATUS_URL));
+      await settle();
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument();
+      expect(screen.queryByText(t('system.database.stats.disconnected'))).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(t('system.database.backup.history.noBackups'))
+      ).not.toBeInTheDocument();
+
+      pending.resolve(value);
+
+      await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+      expect(screen.getAllByText(t('system.database.stats.connected')).length).toBeGreaterThan(0);
+    }
+  );
+
+  it('does not bring the skeleton back when the overview refreshes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serve({ [STATUS_URL]: v2OnlyStatus });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('heading', { name: tablesTitle() });
+
+      const refresh = deferred<unknown>();
+      serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: refresh.promise });
+      const overviewRequests = () => apiGet.mock.calls.filter(([url]) => url === OVERVIEW_URL);
+      const before = overviewRequests().length;
+      await vi.advanceTimersByTimeAsync(OVERVIEW_REFRESH_INTERVAL_MS);
+
+      expect(overviewRequests().length).toBeGreaterThan(before);
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not bring the skeleton back when a polled migration switches to the v2-only view', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serve({ [STATUS_URL]: migratingStatus });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('button', { name: t('system.database.migration.actions.pause') });
+
+      // The poll reports the cutover; the v2-only view then waits for the legacy status
+      const legacy = deferred<unknown>();
+      serve({ [STATUS_URL]: v2OnlyStatus, [LEGACY_STATUS_URL]: legacy.promise });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the overview error without waiting for the legacy status', async () => {
+    const legacy = deferred<unknown>();
+    serve({
+      [STATUS_URL]: v2OnlyStatus,
+      [OVERVIEW_URL]: apiError('overview failed', 500),
+      [LEGACY_STATUS_URL]: legacy.promise,
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    // The legacy status is still pending; the failed overview must not hide behind the skeleton
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+    expect(screen.getByRole('alert')).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+  });
+
+  it('shows the skeleton, not an error, when the view switches to v2-only before the overview answers', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // The migration view does not wait for the overview, so the page loads while it is pending
+      const overviewRequest = deferred<unknown>();
+      serve({ [STATUS_URL]: migratingStatus, [OVERVIEW_URL]: overviewRequest.promise });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('button', { name: t('system.database.migration.actions.pause') });
+
+      serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: overviewRequest.promise });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      await waitFor(() => expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument());
+      expect(
+        screen.queryByText(t('system.database.dashboard.fetchFailed'))
+      ).not.toBeInTheDocument();
+
+      overviewRequest.resolve(overview);
+      await screen.findByRole('heading', { name: tablesTitle() });
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the cleanup card content on screen while the cleanup polls the legacy status', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const cleaning = { ...v2OnlyStatus, cleanup_state: 'in_progress' } satisfies MigrationStatus;
+      serve({ [STATUS_URL]: cleaning });
+
+      renderTyped(DatabaseDashboard);
+      // The card body: what the legacy database holds and why deleting it is safe
+      const details = () => screen.queryByText(t('system.database.legacy.cleanup.recommendation'));
+      await waitFor(() => expect(details()).toBeInTheDocument());
+
+      const legacy = deferred<unknown>();
+      serve({ [STATUS_URL]: cleaning, [LEGACY_STATUS_URL]: legacy.promise });
+      const legacyRequests = () => apiGet.mock.calls.filter(([url]) => url === LEGACY_STATUS_URL);
+      const before = legacyRequests().length;
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      // The poll is in flight; the card must not swap its content for a spinner every 2 s
+      expect(legacyRequests().length).toBeGreaterThan(before);
+      expect(details()).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
