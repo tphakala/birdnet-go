@@ -125,6 +125,7 @@ func TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows(t *testin
 			teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
 			mallard := createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
 			det := speciesTestDetection(t, db, teal)
+			sibling := speciesTestDetection(t, db, teal)
 			if rows := tt.rows(det.ID, teal, mallard); len(rows) > 0 {
 				require.NoError(t, repo.SavePredictionsBatch(ctx, rows))
 			}
@@ -141,6 +142,9 @@ func TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows(t *testin
 			after, err := repo.GetPredictions(ctx, det.ID)
 			require.NoError(t, err)
 			assert.Equal(t, before, after, "prediction rows are neither read for the result nor written")
+			gotSibling, err := repo.Get(ctx, sibling.ID)
+			require.NoError(t, err)
+			assert.Equal(t, *sibling, *gotSibling, "another detection of the same label is left as it is")
 			review, err := repo.GetReview(ctx, det.ID)
 			require.NoError(t, err, "a first change creates the review of an unreviewed detection")
 			assert.Equal(t, entities.VerificationCorrect, review.Verified)
