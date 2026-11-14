@@ -134,14 +134,11 @@ func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName s
 		return nil, fmt.Errorf("load model labels: %w", err)
 	}
 	species := speciesindex.CanonicalKey(scientificName)
-	var alias *entities.Label
-	for _, candidate := range modelLabels {
-		if speciesindex.CanonicalKey(candidate.ScientificName) == species && (alias == nil || candidate.ID < alias.ID) {
-			alias = candidate
-		}
-	}
-	if alias != nil {
-		return alias, nil
+	aliases := slices.DeleteFunc(modelLabels, func(candidate *entities.Label) bool {
+		return speciesindex.CanonicalKey(candidate.ScientificName) != species
+	})
+	if len(aliases) > 0 {
+		return oldestLabel(aliases), nil
 	}
 
 	known, err := labels.GetByScientificName(ctx, scientificName)
@@ -151,10 +148,16 @@ func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName s
 	if len(known) == 0 {
 		return nil, ErrLabelNotFound
 	}
-	oldest := slices.MinFunc(known, func(a, b *entities.Label) int { return cmp.Compare(a.ID, b.ID) })
+	oldest := oldestLabel(known)
 	label, err = labels.GetOrCreate(ctx, oldest.ScientificName, modelID, oldest.LabelTypeID, oldest.TaxonomicClassID)
 	if err != nil {
 		return nil, fmt.Errorf("create species label: %w", err)
 	}
 	return label, nil
+}
+
+// oldestLabel returns the label with the lowest ID, which is the oldest. labels
+// must not be empty.
+func oldestLabel(labels []*entities.Label) *entities.Label {
+	return slices.MinFunc(labels, func(a, b *entities.Label) int { return cmp.Compare(a.ID, b.ID) })
 }
