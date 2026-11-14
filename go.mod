@@ -26,7 +26,7 @@ require (
 	github.com/markbates/goth v1.82.0
 	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/moby/moby/api v1.56.1
-	github.com/nicholas-fedor/shoutrrr v0.22.1
+	github.com/nicholas-fedor/shoutrrr v0.23.0
 	github.com/pkg/sftp v1.13.12
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
