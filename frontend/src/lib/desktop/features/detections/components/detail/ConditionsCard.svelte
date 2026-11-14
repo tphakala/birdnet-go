@@ -83,6 +83,8 @@
 
   const HOURS_PER_DAY = 24;
   const HALF_TURN_DEGREES = 180;
+  // The Navigation icon's arrow points north-east when not rotated.
+  const NAVIGATION_ICON_DEGREES = 45;
   const AXIS_HOURS = [0, 6, 12, 18, 24];
   const MISSING = '-';
   // Share of the strip height where the horizon line sits, measured from the top.
@@ -178,7 +180,16 @@
   let detectionHour = $derived(moment === null ? -1 : Math.floor(moment / MINUTES_PER_HOUR));
 
   let temperature = $derived(hourly?.temperature ?? detection.weather?.temperature);
-  let windSpeed = $derived(hourly?.wind_speed ?? detection.weather?.windSpeed);
+  // The weather API leaves out a value of zero, so with an observation for the hour a
+  // missing precipitation, wind speed or wind direction is zero. An hour without data
+  // still comes as an hourly object, without a time. Cloud cover is not read as zero: one
+  // provider never reports it, and its missing value cannot be told from a clear sky.
+  let observed = $derived(Boolean(hourly?.time));
+  let precipitation = $derived(observed ? (hourly?.precipitation ?? 0) : undefined);
+  let clouds = $derived(hourly?.clouds);
+  let windSpeed = $derived(
+    observed ? (hourly?.wind_speed ?? 0) : (hourly?.wind_speed ?? detection.weather?.windSpeed)
+  );
   let windGust = $derived(hourly?.wind_gust ?? detection.weather?.windGust);
   let humidity = $derived(hourly?.humidity ?? detection.weather?.humidity);
   let description = $derived(hourly?.weather_desc ?? detection.weather?.description);
@@ -187,7 +198,12 @@
 
   let conditionIcon = $derived(
     hasWeather
-      ? getBasmiliusIconName(iconCode, description, sunIsUp ? 'day' : 'night')
+      ? // Without sun times the icon code's own day or night mark decides.
+        getBasmiliusIconName(
+          iconCode,
+          description,
+          sunSpan ? (sunIsUp ? 'day' : 'night') : undefined
+        )
       : 'not-available'
   );
 
@@ -227,7 +243,8 @@
     suffix?: string;
   }
 
-  let windDeg = $derived(hourly?.wind_deg);
+  // A direction only for moving air: north is 0, which the API leaves out.
+  let windDeg = $derived(observed && windSpeed ? (hourly?.wind_deg ?? 0) : undefined);
   let windUnit = $derived(windSpeed === undefined ? undefined : ` ${getWindSpeedUnit(units)}`);
 
   // The six tiles, always: a value that was not recorded shows a dash. The wind tile's
@@ -237,7 +254,7 @@
       ? {
           key: 'wind',
           icon: Navigation,
-          rotate: windDeg + HALF_TURN_DEGREES,
+          rotate: windDeg + HALF_TURN_DEGREES - NAVIGATION_ICON_DEGREES,
           label: t('detections.detail.conditions.windFrom', { direction: compassPoint(windDeg) }),
           value: windValue,
           unit: windUnit,
@@ -253,16 +270,16 @@
       key: 'precipitation',
       icon: CloudRain,
       label: t('detections.detail.conditions.precipitation'),
-      value: hourly?.precipitation !== undefined ? formatDecimal(hourly.precipitation) : MISSING,
-      unit: hourly?.precipitation !== undefined ? ' mm' : undefined,
-      suffix: hourly?.precipitation ? hourly.precipitation_type : undefined,
+      value: precipitation !== undefined ? formatDecimal(precipitation) : MISSING,
+      unit: precipitation !== undefined ? ' mm' : undefined,
+      suffix: precipitation ? hourly?.precipitation_type : undefined,
     },
     {
       key: 'clouds',
       icon: Cloud,
       label: t('detections.weather.labels.cloudCover'),
-      value: hourly?.clouds !== undefined ? String(hourly.clouds) : MISSING,
-      unit: hourly?.clouds !== undefined ? '%' : undefined,
+      value: clouds !== undefined ? String(clouds) : MISSING,
+      unit: clouds !== undefined ? '%' : undefined,
     },
     {
       key: 'humidity',
