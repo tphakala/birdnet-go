@@ -1969,13 +1969,16 @@ class DatabaseDoctor:
         if "notes" in tables:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                # Only update rows where a matching label actually exists
-                # (prevents setting label_id to NULL)
+                # Labels are per model, so only a label of the detection's
+                # own model qualifies. Only update rows where such a label
+                # exists (prevents setting label_id to NULL and keeps
+                # detections.model_id paired with the label's model_id).
                 cur = conn.execute(
                     "UPDATE detections SET label_id = ("
                     "  SELECT l.id FROM labels l"
                     "  JOIN notes n ON n.id = detections.legacy_id"
                     "  WHERE l.scientific_name = n.scientific_name"
+                    "  AND l.model_id = detections.model_id"
                     "  LIMIT 1"
                     ") WHERE label_id NOT IN (SELECT id FROM labels)"
                     "  AND legacy_id IS NOT NULL"
@@ -1984,6 +1987,7 @@ class DatabaseDoctor:
                     "    SELECT 1 FROM labels l"
                     "    JOIN notes n ON n.id = detections.legacy_id"
                     "    WHERE l.scientific_name = n.scientific_name"
+                    "    AND l.model_id = detections.model_id"
                     "  )"
                 )
                 recovered = cur.rowcount

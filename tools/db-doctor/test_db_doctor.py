@@ -582,5 +582,73 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
         )
 
 
+class OrphanedLabelFixTest(unittest.TestCase):
+    """The orphaned label repair must keep detections.model_id and the label's
+    model_id paired: labels are per model, so a name can exist in several."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "birdnet.db")
+
+    def _run_fix(self, labels, detections):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TABLE labels (id INTEGER PRIMARY KEY, "
+            "scientific_name TEXT NOT NULL, model_id INTEGER NOT NULL, "
+            "UNIQUE (scientific_name, model_id))"
+        )
+        conn.execute(
+            "CREATE TABLE detections (id INTEGER PRIMARY KEY, "
+            "model_id INTEGER NOT NULL, label_id INTEGER NOT NULL, "
+            "legacy_id INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE notes (id INTEGER PRIMARY KEY, scientific_name TEXT)"
+        )
+        conn.execute("INSERT INTO notes VALUES (1, 'Parus major')")
+        conn.executemany("INSERT INTO labels VALUES (?, ?, ?)", labels)
+        conn.executemany("INSERT INTO detections VALUES (?, ?, ?, ?)", detections)
+        conn.commit()
+        conn.close()
+
+        doctor = db_doctor.DatabaseDoctor(self.path)
+        report = db_doctor.DiagnosticReport(db_path=self.path)
+        ro = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
+            report.tables_present = doctor._get_tables(ro)
+            report.checks.append(doctor._check_foreign_keys(ro, report))
+        finally:
+            ro.close()
+
+        conn = sqlite3.connect(self.path)
+        try:
+            result = doctor._fix_orphaned_labels(conn, report)
+            label_id = conn.execute(
+                "SELECT label_id FROM detections WHERE id = 1"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        return result, label_id
+
+    def test_repair_picks_the_label_of_the_detections_model(self):
+        # The other model's label has the lower id and the lower model_id,
+        # so an unrestricted lookup picks it by rowid or by index order.
+        result, label_id = self._run_fix(
+            labels=[(10, "Parus major", 1), (20, "Parus major", 2)],
+            detections=[(1, 2, 999, 1)],
+        )
+        self.assertEqual(label_id, 20)
+        self.assertEqual(result.rows_affected, 1)
+
+    def test_repair_leaves_the_row_orphaned_when_only_another_model_has_the_label(self):
+        result, label_id = self._run_fix(
+            labels=[(10, "Parus major", 2)],
+            detections=[(1, 1, 999, 1)],
+        )
+        self.assertEqual(label_id, 999)
+        self.assertEqual(result.rows_affected, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
