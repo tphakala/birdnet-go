@@ -11,10 +11,12 @@ import (
 	"time"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 const (
@@ -35,6 +37,8 @@ const (
 	lockRaceMissingID uint = 99999999
 	// lockRaceLabelName is the species of the seeded label.
 	lockRaceLabelName = "Parus major"
+	// lockRaceRetryMetric is the counter RetryOnLock increments for every retry.
+	lockRaceRetryMetric = "datastore_db_transaction_retries_total"
 	// lockRaceWaitQuery finds a transaction that is blocked on a row lock.
 	lockRaceWaitQuery = "SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_mysql_thread_id = ? AND trx_state = 'LOCK WAIT'"
 )
@@ -96,7 +100,12 @@ func TestMySQL_Lock_ConcurrentLocksOfOneDetection(t *testing.T) {
 				require.NoError(t, db.Create(d).Error)
 				return d.ID
 			}
-			repo := repository.NewDetectionRepository(db, nil, useV2Prefix, true)
+			// Real metrics, so a lock error that RetryOnLock retries and hides
+			// (a deadlock on MySQL) still shows up as a counted retry.
+			reg := prometheus.NewRegistry()
+			lockMetrics, err := metrics.NewDatastoreMetrics(reg)
+			require.NoError(t, err)
+			repo := repository.NewDetectionRepository(db, lockMetrics, useV2Prefix, true)
 			lockRows := func(id uint) []entities.DetectionLock {
 				var locks []entities.DetectionLock
 				require.NoError(t, db.Where("detection_id = ?", id).Find(&locks).Error)
@@ -161,6 +170,7 @@ func TestMySQL_Lock_ConcurrentLocksOfOneDetection(t *testing.T) {
 					}
 					assert.Len(t, lockRows(id), 1)
 				}
+				assert.Zero(t, retryCount(t, reg), "concurrent locks must not hit a lock error that RetryOnLock retries")
 			})
 
 			t.Run("a missing detection is not found", func(t *testing.T) {
@@ -169,4 +179,21 @@ func TestMySQL_Lock_ConcurrentLocksOfOneDetection(t *testing.T) {
 			})
 		})
 	}
+}
+
+// retryCount sums the lock retry counter over all label combinations.
+func retryCount(t *testing.T, reg *prometheus.Registry) float64 {
+	t.Helper()
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	var total float64
+	for _, f := range families {
+		if f.GetName() != lockRaceRetryMetric {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			total += m.GetCounter().GetValue()
+		}
+	}
+	return total
 }
