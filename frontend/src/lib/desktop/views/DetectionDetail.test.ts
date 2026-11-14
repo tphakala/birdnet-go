@@ -633,6 +633,48 @@ describe('DetectionDetail neighbours', () => {
   });
 });
 
+describe('DetectionDetail daily counts', () => {
+  // Regression: after a step the stats card kept drawing the previous detection's daily
+  // counts, under the new species' name, until the new counts answered.
+  it('does not show the previous detection\u2019s daily counts while the new ones load', async () => {
+    const calls = stubApi([
+      ['/api/v2/detections/96', makeDetection({ id: 96, scientificName: 'Turdus merula' })],
+      [
+        '/api/v2/detections/97',
+        makeDetection({ id: 97, scientificName: 'Erithacus rubecula', date: '2024-03-01' }),
+      ],
+      [
+        'species=Turdus%20merula',
+        (call: Call) =>
+          call.url.includes('/analytics/time/daily')
+            ? Promise.resolve(jsonResponse({ data: [{ date: '2024-01-01', count: 7 }] }))
+            : Promise.resolve(jsonResponse({})),
+      ],
+      [
+        'species=Erithacus%20rubecula',
+        (call: Call) =>
+          call.url.includes('/analytics/time/daily')
+            ? new Promise<Response>(() => {})
+            : Promise.resolve(jsonResponse({})),
+      ],
+    ]);
+
+    const { container, rerender } = detailTest.render({ detectionId: '96' });
+    await waitFor(() => {
+      expect(container.querySelectorAll('.dd-daily-bar').length).toBeGreaterThan(0);
+    });
+
+    await rerender({ detectionId: '97' });
+    await waitFor(() => {
+      expect(count(calls, 'species=Erithacus%20rubecula')).toBeGreaterThan(0);
+    });
+    await settle();
+
+    expect(container.querySelector('.dd-daily-bar')).toBeNull();
+    expect(container.querySelector('.dd-daily-bars [data-skeleton]')).not.toBeNull();
+  });
+});
+
 describe('DetectionDetail review counts', () => {
   // Regression: the counts asked for after a verdict shared the species request's signal
   // with the first counts, so a slow first answer arriving last put the old counts back.

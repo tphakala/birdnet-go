@@ -434,6 +434,8 @@
 
   /** The species' detections per day for the weeks up to the detection. */
   function loadDaily(det: DetectionDetailData, signal: AbortSignal) {
+    // Counts for another window or species are not shown while these load.
+    dailyCounts = null;
     const species = encodeURIComponent(det.scientificName);
     const start = dailyWindowStart(det.date, DAILY_WINDOW_DAYS);
     load<DailyCounts>(

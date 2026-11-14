@@ -48,3 +48,26 @@ describe('SpeciesStatsCard often-rejected warning', () => {
     expect(warning()).toBeNull();
   });
 });
+
+describe('SpeciesStatsCard daily counts', () => {
+  afterEach(() => cleanup());
+
+  // Regression: counts that did not load were drawn as an empty chart with a total of 0.
+  it('shows the 30 day total as not recorded, and no chart, when the counts did not load', () => {
+    const { container } = render(SpeciesStatsCard, {
+      props: { detection, speciesName: 'Eurasian Woodcock', dailyDays: 30, daily: null },
+    });
+
+    const total = screen.getByText('detections.detail.stats.windowTotal').nextElementSibling;
+    expect(total?.textContent.trim()).toBe('-');
+    expect(container.querySelector('.dd-daily')).toBeNull();
+  });
+
+  it('draws zero days as bars when the counts loaded empty', () => {
+    const { container } = render(SpeciesStatsCard, {
+      props: { detection, speciesName: 'Eurasian Woodcock', dailyDays: 30, daily: { data: [] } },
+    });
+
+    expect(container.querySelectorAll('.dd-daily-bar')).toHaveLength(30);
+  });
+});

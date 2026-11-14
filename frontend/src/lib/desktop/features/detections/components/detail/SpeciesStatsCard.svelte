@@ -167,7 +167,9 @@
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.windowTotal', { days: dailyDays })}</dt>
-      <dd>{@render value(pending.daily, formatCount(windowTotal))}</dd>
+      <dd>
+        {@render value(pending.daily, daily ? formatCount(windowTotal) : MISSING)}
+      </dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.firstHeard')}</dt>
@@ -234,7 +236,8 @@
     </div>
   {/if}
 
-  {#if dailyBars.length > 0}
+  <!-- Left out when the daily counts did not load: no bars is not the same as zero. -->
+  {#if dailyBars.length > 0 && (daily || pending.daily)}
     <div class="dd-daily">
       <div class="dd-daily-head">
         <span>{t('detections.detail.stats.dailyTitle', { days: dailyDays })}</span>
