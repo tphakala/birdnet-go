@@ -191,6 +191,38 @@ describe('SpeciesChangeDialog saving', () => {
     });
   });
 
+  // The dialog closes after a change, so a reload of the detection that then fails is
+  // reported where the user can see it.
+  it('reports a failed reload after a saved change as a toast, once', async () => {
+    vi.mocked(toastActions.error).mockClear();
+    const onChanged = vi.fn(() => Promise.resolve(false));
+    render(SpeciesChangeDialog, {
+      props: {
+        isOpen: true,
+        detection,
+        speciesName: 'Blackbird',
+        alternates,
+        predictionModel: 'BirdNET 2.4',
+        blockedReason: '',
+        onClose: vi.fn(),
+        onChanged,
+      },
+    });
+    await fireEvent.click(radio('Song Thrush'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+    );
+    await waitFor(() => expect(puts).toHaveLength(1));
+    answerPut?.(json({}));
+
+    await waitFor(() => {
+      expect(vi.mocked(toastActions.error)).toHaveBeenCalledWith(
+        'detections.detail.review.reloadFailed'
+      );
+    });
+    expect(vi.mocked(toastActions.error)).toHaveBeenCalledOnce();
+  });
+
   it('reports a failed save as a toast when the dialog was closed while it saved', async () => {
     vi.mocked(toastActions.error).mockClear();
     const props = {

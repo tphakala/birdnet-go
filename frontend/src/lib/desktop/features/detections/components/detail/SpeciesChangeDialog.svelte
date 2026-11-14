@@ -49,8 +49,11 @@
     /** Why the species cannot be changed now; empty when the viewer may change it. */
     blockedReason: string;
     onClose: () => void;
-    /** Called after a change to a detection was saved, so the page can reload it. */
-    onChanged: (_change: SavedChange) => void;
+    /**
+     * Called after a change to a detection was saved, so the page can reload it. The page
+     * may answer with a promise that settles when that reload does: false when it failed.
+     */
+    onChanged: (_change: SavedChange) => Promise<boolean> | void;
   }
 
   let {
@@ -228,22 +231,28 @@
       await api.put(`/api/v2/detections/${id}/species`, {
         scientificName: chosen.scientificName,
       });
-      toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
-      // The detection moved from one species to another, so both species' statistics
-      // changed, whichever detection the page shows by now.
-      onChanged({
-        detectionId: id,
-        scientificName: previousSpecies,
-        changedTo: chosen.scientificName,
-        speciesStats: true,
-      });
-      if (!destroyed) onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
       const message = failureMessage(error, chosen);
       // A dialog already gone or closed has nowhere to show it.
       if (destroyed || !isOpen) toastActions.error(message);
       else errorMessage = message;
+      saving = false;
+      return;
+    }
+    toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
+    // The detection moved from one species to another, so both species' statistics
+    // changed, whichever detection the page shows by now.
+    const reload = onChanged({
+      detectionId: id,
+      scientificName: previousSpecies,
+      changedTo: chosen.scientificName,
+      speciesStats: true,
+    });
+    if (!destroyed) onClose();
+    // The dialog is closed by now, so a reload that fails is reported as a toast.
+    try {
+      if ((await reload) === false) toastActions.error(t('detections.detail.review.reloadFailed'));
     } finally {
       saving = false;
     }
