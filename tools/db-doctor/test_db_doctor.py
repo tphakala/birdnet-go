@@ -640,6 +640,8 @@ class OrphanedLabelFixTest(unittest.TestCase):
         )
         self.assertEqual(label_id, 20)
         self.assertEqual(result.rows_affected, 1)
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(result.message, "recovered 1 via legacy notes")
 
     def test_repair_leaves_the_row_orphaned_when_only_another_model_has_the_label(self):
         result, label_id = self._run_fix(
@@ -648,6 +650,26 @@ class OrphanedLabelFixTest(unittest.TestCase):
         )
         self.assertEqual(label_id, 999)
         self.assertEqual(result.rows_affected, 0)
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(
+            result.message, "1 still orphaned (manual intervention needed)"
+        )
+
+    def test_repair_counts_rows_of_a_model_without_the_label_as_remaining(self):
+        # Detection 1 (model 2) has a label of its own model; detection 2
+        # (model 3) does not, so only detection 1 is repaired.
+        result, label_id = self._run_fix(
+            labels=[(10, "Parus major", 1), (20, "Parus major", 2)],
+            detections=[(1, 2, 999, 1), (2, 3, 998, 1)],
+        )
+        self.assertEqual(label_id, 20)
+        self.assertEqual(result.rows_affected, 1)
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(
+            result.message,
+            "recovered 1 via legacy notes; 1 still orphaned "
+            "(manual intervention needed)",
+        )
 
 
 if __name__ == "__main__":
