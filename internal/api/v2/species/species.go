@@ -842,6 +842,9 @@ const (
 	// eBird consulted but also unable to resolve the species: eBird is already
 	// enabled, so do not tell the user to configure it.
 	taxonomyUnresolvedNoteEBirdOn = "species not found in the embedded taxonomy or eBird"
+	// A sound class ("Dog", "Church_bell") is not a taxon, so no data source can
+	// give it a taxonomy; the note must not recommend one.
+	taxonomySoundClassNote = "sound class, not a species; it has no taxonomy"
 )
 
 // getDetailedTaxonomy retrieves detailed taxonomy information for a species.
@@ -851,7 +854,8 @@ const (
 // never a hard dependency for a basic lookup (#4105). Resolution order:
 //
 //  1. A sound class name ("Dog", "Church_bell") is answered with the unresolved
-//     response before any lookup, because a class is not a taxon. It needs no
+//     response and a sound class note (soundClassTaxonomy) before any lookup,
+//     because a class is not a taxon. It needs no
 //     database, so it is answered even when the database is missing.
 //  2. A missing embedded database (c.TaxonomyDB == nil) is a fatal build/deploy
 //     fault, since the data is compiled in via go:embed and always loads in a
@@ -876,7 +880,7 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 	// A sound class is not a taxon: answer it before any lookup, since the embedded
 	// database has entries named like classes ("Siren", "Car") with an organism's ranks.
 	if soundevent.IsName(scientificName) {
-		return deriveMinimalTaxonomy(scientificName, client != nil), nil
+		return soundClassTaxonomy(scientificName), nil
 	}
 
 	// A nil embedded database is a system fault, not a per-species miss: fail fast
@@ -930,7 +934,7 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 // taxonomy hierarchy. GetSpeciesTaxonomy accepts any string that merely looks like
 // a binomial (a length check plus a space) and any sound class name, and
 // BirdNET-Go's label set includes non-organism classes such as "Human vocal" and
-// "Power tools" (answered here before any lookup), so deriving a genus from the
+// "Power tools" (answered by soundClassTaxonomy before any lookup), so deriving a genus from the
 // first token or asserting Kingdom "Animalia" would fabricate a wrong taxonomy for
 // those. Instead it echoes the requested name and marks the
 // result "unresolved" in metadata: an HTTP 200 that degrades gracefully (#4105) and
@@ -948,6 +952,19 @@ func deriveMinimalTaxonomy(scientificName string, eBirdConfigured bool) *Taxonom
 		Metadata: map[string]any{
 			"source": taxonomySourceUnresolved,
 			"note":   note,
+		},
+	}
+}
+
+// soundClassTaxonomy builds the response for a sound class name: unresolved like
+// deriveMinimalTaxonomy, but with a note that says why, because neither the
+// embedded database nor eBird can give a sound class a taxonomy.
+func soundClassTaxonomy(name string) *TaxonomyInfo {
+	return &TaxonomyInfo{
+		ScientificName: name,
+		Metadata: map[string]any{
+			"source": taxonomySourceUnresolved,
+			"note":   taxonomySoundClassNote,
 		},
 	}
 }

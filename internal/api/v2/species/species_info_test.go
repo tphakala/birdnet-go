@@ -498,6 +498,7 @@ func TestSoundClassLookups(t *testing.T) {
 			meta, ok := tax["metadata"].(map[string]any)
 			require.True(t, ok, "metadata missing: %s", rec.Body.String())
 			assert.Equal(t, taxonomySourceUnresolved, meta["source"])
+			assert.Equal(t, taxonomySoundClassNote, meta["note"], "a class note must not recommend eBird")
 			assert.NotContains(t, tax, "taxonomy")
 
 			rec = serveTaxonomyParam(t, h.GetSpeciesTree, "/api/v2/taxonomy/tree/", "scientific_name", url.PathEscape(tt.query))

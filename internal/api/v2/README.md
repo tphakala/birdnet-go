@@ -555,7 +555,7 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 | GET    | `/species/:code/thumbnail`    | `GetSpeciesThumbnail`    | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale` | `ServeSpeciesDictionary` | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
-**Sound classes.** `scientific_name` on `/species` and `/species/taxonomy` also accepts a sound class name as detections report it ("Dog", "Human vocal", "Church_bell"). `/species` answers with the names only, and `/species/taxonomy` with `metadata.source` set to "unresolved" and no `taxonomy`. `GET /taxonomy/tree/:scientific_name` answers 404 "Species not found" for a sound class. Any other name that is shorter than 3 characters or has no space answers 400.
+**Sound classes.** `scientific_name` on `/species` and `/species/taxonomy` also accepts a sound class name as detections report it ("Dog", "Human vocal", "Church_bell"). `/species` answers with the names only, and `/species/taxonomy` with `metadata.source` set to "unresolved", a `metadata.note` saying it is a sound class, and no `taxonomy`. `GET /taxonomy/tree/:scientific_name` answers 404 "Species not found" for a sound class. Any other name that is shorter than 3 characters or has no space answers 400.
 
 ### Server-Sent Events (`sse/sse.go`)
 
