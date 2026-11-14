@@ -1122,7 +1122,7 @@ describe('DetectionDetail sound classes', () => {
   // The species lookups answer a sound class with its names only and an unresolved taxonomy.
   it('shows a sound class without a rarity chip, taxonomy or error', async () => {
     const { loggers } = await import('$lib/utils/logger');
-    stubApi([
+    const calls = stubApi([
       [
         '/api/v2/detections/90',
         makeDetection({ id: 90, scientificName: 'Dog', commonName: 'Dog' }),
@@ -1138,8 +1138,10 @@ describe('DetectionDetail sound classes', () => {
     await waitFor(() => {
       expect(container.querySelector('#species-heading')?.textContent).toContain('Dog');
     });
+    // Both lookups have been asked, and their answers handled, before the checks.
     await waitFor(() => {
-      expect(container.querySelector('.dd-identity-chips [data-skeleton]')).toBeNull();
+      expect(count(calls, '/api/v2/species?scientific_name=Dog')).toBe(1);
+      expect(count(calls, '/api/v2/species/taxonomy?scientific_name=Dog')).toBe(1);
     });
     await settle();
 
