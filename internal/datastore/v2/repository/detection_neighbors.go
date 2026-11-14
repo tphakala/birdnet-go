@@ -13,6 +13,7 @@ import (
 // Pieces of the neighbor statements.
 const (
 	columnDetectionModelID = "model_id"
+	columnLabelIdentity    = "id, " + columnDetectionModelID
 	selectMaxDetectionID   = "MAX(" + columnDetectionID + ")"
 	selectMinDetectionID   = "MIN(" + columnDetectionID + ")"
 	belowAnchorCondition   = columnDetectionID + " < ?"
@@ -47,7 +48,7 @@ func (r *detectionRepository) GetNeighborIDs(ctx context.Context, id uint) (*Det
 
 	match, args := LabelMatchForScientificName(detection.ExtractScientificName(label.ScientificName))
 	var speciesLabels []entities.Label
-	if err := r.db.WithContext(ctx).Table(r.labelsTable()).Where(match, args...).Find(&speciesLabels).Error; err != nil {
+	if err := r.db.WithContext(ctx).Table(r.labelsTable()).Select(columnLabelIdentity).Where(match, args...).Find(&speciesLabels).Error; err != nil {
 		return nil, fmt.Errorf("load labels of the species: %w", err)
 	}
 	for i := range speciesLabels {
@@ -56,9 +57,7 @@ func (r *detectionRepository) GetNeighborIDs(ctx context.Context, id uint) (*Det
 			return nil, fmt.Errorf("find adjacent detections of the species: %w", err)
 		}
 		neighbors.PreviousSameSpecies = max(neighbors.PreviousSameSpecies, previous)
-		if next != 0 && (neighbors.NextSameSpecies == 0 || next < neighbors.NextSameSpecies) {
-			neighbors.NextSameSpecies = next
-		}
+		neighbors.NextSameSpecies = minNonZero(neighbors.NextSameSpecies, next)
 	}
 	return neighbors, nil
 }
@@ -96,4 +95,15 @@ func (r *detectionRepository) adjacentIDs(ctx context.Context, id uint, label *e
 		return 0, 0, err
 	}
 	return result.PreviousID, result.NextID, nil
+}
+
+// minNonZero returns the smaller of a and b, treating 0 as "no value".
+func minNonZero(a, b uint) uint {
+	if a == 0 {
+		return b
+	}
+	if b == 0 {
+		return a
+	}
+	return min(a, b)
 }
