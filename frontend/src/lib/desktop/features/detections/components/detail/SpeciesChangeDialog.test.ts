@@ -169,7 +169,7 @@ describe('SpeciesChangeDialog saving', () => {
     });
   });
 
-  it('says the legacy database cannot change a species when the save answers 409', async () => {
+  it('says why the species cannot be changed when the save answers 409 (locked or legacy database)', async () => {
     renderDialog();
     await fireEvent.click(radio('Song Thrush'));
     await fireEvent.click(
