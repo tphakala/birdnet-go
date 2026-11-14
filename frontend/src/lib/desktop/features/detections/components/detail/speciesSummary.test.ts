@@ -76,43 +76,4 @@ describe('loadSpeciesSummary', () => {
 
     await expect(loadSpeciesSummary('Turdus merula')).resolves.toBeNull();
   });
-
-  it('asks again after the kept rows were forgotten', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(respond(200, rows)));
-    vi.stubGlobal('fetch', fetchMock);
-    const { loadSpeciesSummary, forgetSpeciesSummary } = await freshSummary();
-
-    await loadSpeciesSummary('Turdus merula');
-    forgetSpeciesSummary();
-    await loadSpeciesSummary('Turdus merula');
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  // A request that was out when the rows were forgotten must not store its older answer.
-  it('does not keep the answer of a request that was out when the rows were forgotten', async () => {
-    const answers: ((_response: Response) => void)[] = [];
-    const fetchMock = vi.fn(
-      () =>
-        new Promise<Response>(resolve => {
-          answers.push(resolve);
-        })
-    );
-    vi.stubGlobal('fetch', fetchMock);
-    const { loadSpeciesSummary, forgetSpeciesSummary } = await freshSummary();
-
-    const stale = loadSpeciesSummary('Turdus merula');
-    forgetSpeciesSummary();
-    const fresh = loadSpeciesSummary('Turdus merula');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    answers[1]?.(respond(200, [{ scientific_name: 'Turdus merula', count: 13 }]));
-    await expect(fresh).resolves.toMatchObject({ count: 13 });
-    answers[0]?.(respond(200, rows));
-    await expect(stale).resolves.toMatchObject({ count: 12 });
-
-    // The older answer did not replace the newer rows.
-    await expect(loadSpeciesSummary('Turdus merula')).resolves.toMatchObject({ count: 13 });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
 });

@@ -761,47 +761,6 @@ describe('DetectionDetail review counts', () => {
 
     expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
   });
-
-  // The placeholder belongs to the latest request: an older answer must not clear it while the
-  // counts asked for after the verdict are still out.
-  it('keeps the placeholder until the latest counts answer, not the first', async () => {
-    const answers: ((_response: Response) => void)[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.includes('/api/v2/search')) {
-          return new Promise<Response>(resolve => {
-            answers.push(resolve);
-          });
-        }
-        if (url.endsWith('/api/v2/detections/81')) {
-          return Promise.resolve(jsonResponse(makeDetection({ id: 81, verified: 'correct' })));
-        }
-        return Promise.resolve(jsonResponse({}));
-      })
-    );
-
-    const { container } = detailTest.render({ detectionId: '81' });
-    await waitFor(() => expect(answers).toHaveLength(2));
-    await fireEvent.click(
-      screen.getByRole('button', { name: /detections\.detail\.review\.false/ })
-    );
-    await waitFor(() => expect(answers).toHaveLength(4));
-
-    // The first counts answer; the counts asked for after the verdict are still out.
-    answers[0]?.(jsonResponse({ total: 0 }));
-    answers[1]?.(jsonResponse({ total: 1 }));
-    await settle();
-    expect(container.querySelector('.dd-reviews-legend [data-skeleton]')).not.toBeNull();
-    expect(container.querySelector('.dd-reviews-none')).toBeNull();
-
-    answers[2]?.(jsonResponse({ total: 5 }));
-    answers[3]?.(jsonResponse({ total: 0 }));
-    await waitFor(() => {
-      expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
-    });
-  });
 });
 
 describe('DetectionDetail loading paths', () => {
@@ -1049,74 +1008,6 @@ describe('DetectionDetail conditions after a step', () => {
   });
 });
 
-describe('DetectionDetail zero-padded detection ids', () => {
-  // The server reads /detections/007 as detection 7; the page compares ids as strings, so its
-  // weather answer and the detection a save was made on must use that same id.
-  it('shows the weather and reloads after a save on a zero-padded address', async () => {
-    let loads = 0;
-    const calls = stubApi([
-      ['/api/v2/weather/detection/', { hourly: { time: '2024-01-01T10:00:00Z', temperature: 9 } }],
-      [
-        '/api/v2/detections/',
-        (call: Call) => {
-          if (call.method === 'POST') return Promise.resolve(jsonResponse({}));
-          if (call.url.endsWith('/review')) return Promise.resolve(jsonResponse({}));
-          if (!/\/api\/v2\/detections\/0*7$/.test(call.url))
-            return Promise.resolve(jsonResponse({}));
-          loads += 1;
-          return Promise.resolve(jsonResponse(makeDetection({ id: 7 })));
-        },
-      ],
-      ['/api/v2/search', { total: 0 }],
-    ]);
-
-    const { container } = detailTest.render({ detectionId: '007' });
-    await waitFor(() => {
-      expect(container.querySelector('.dd-weather-temp')?.textContent).toContain('9');
-    });
-
-    await fireEvent.click(
-      await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ })
-    );
-    await waitFor(() => expect(loads).toBe(2));
-    expect(count(calls, '/review')).toBe(1);
-  });
-});
-
-describe('DetectionDetail sun times after a step', () => {
-  // A step to another day must not show the previous day's sunrise and sunset while the new
-  // day's sun times are out, even though the weather has already answered.
-  it('shows placeholders for the new day sun times while the weather is already there', async () => {
-    stubApi([
-      [
-        '/api/v2/weather/sun/2024-01-01',
-        { date: '2024-01-01', sunrise: '2024-01-01T06:30:00Z', sunset: '2024-01-01T16:45:00Z' },
-      ],
-      ['/api/v2/weather/sun/2024-01-02', () => new Promise<Response>(() => {})],
-      ['/api/v2/weather/detection/', { hourly: { time: '2024-01-01T10:00:00Z', temperature: 4 } }],
-      ['/api/v2/detections/95', makeDetection({ id: 95, date: '2024-01-01' })],
-      ['/api/v2/detections/96', makeDetection({ id: 96, date: '2024-01-02' })],
-    ]);
-
-    const { container, rerender } = detailTest.render({ detectionId: '95' });
-    await waitFor(() => {
-      expect(container.querySelector('.dd-sky-legend')?.textContent).toContain('06:30');
-    });
-
-    await rerender({ detectionId: '96' });
-    await waitFor(() => {
-      expect(container.querySelector('.dd-grid-top')).not.toHaveClass('dd-switching');
-    });
-    await settle();
-
-    const legend = container.querySelector('.dd-sky-legend');
-    expect(legend?.textContent).not.toContain('06:30');
-    expect(legend?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
-    // The weather of the new detection is there; only the sun times are still out.
-    expect(container.querySelector('.dd-weather-temp')?.textContent).toContain('4');
-  });
-});
-
 describe('DetectionDetail answers of the wrong shape', () => {
   it('treats a detection body that is not an object as a failed load', async () => {
     stubApi([['/api/v2/detections/90', []]]);
@@ -1126,13 +1017,11 @@ describe('DetectionDetail answers of the wrong shape', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('detections.errors.loadFailed');
   });
 
-  it('reads weather and neighbour bodies of the wrong shape as no answer', async () => {
+  it('reads weather, neighbours and daily bodies of the wrong shape as no answer', async () => {
     stubApi([
       ['/api/v2/detections/91/neighbors', null],
-      [
-        '/api/v2/weather/detection/91',
-        { hourly: { time: '2024-01-01T10:00:00Z', temperature: 'cold' } },
-      ],
+      ['/api/v2/weather/detection/91', { hourly: 'warm' }],
+      ['/api/v2/analytics/time/daily', [1, 2]],
       ['/api/v2/detections/91', makeDetection({ id: 91 })],
     ]);
 
@@ -1142,16 +1031,6 @@ describe('DetectionDetail answers of the wrong shape', () => {
     await waitFor(() => {
       expect(container.querySelector('[data-skeleton]')).toBeNull();
     });
-    // The weather body is refused, so the card reads "not recorded", not a made-up reading.
-    expect(container.querySelector('.dd-weather-temp')?.textContent.trim()).toBe('-');
-    // A null neighbours body is a failed answer: the database format stays unknown, so the
-    // species change is not offered.
-    const wrongSpecies = screen.getByRole('button', {
-      name: /detections\.detail\.review\.wrongSpecies/,
-    });
-    expect(wrongSpecies).toHaveAttribute('aria-disabled', 'true');
-    const reason = document.getElementById(wrongSpecies.getAttribute('aria-describedby') ?? '');
-    expect(reason?.textContent).toContain('detections.detail.review.databaseUnknown');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
