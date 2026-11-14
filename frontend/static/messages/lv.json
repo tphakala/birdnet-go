@@ -997,6 +997,7 @@
         "lockedHelp": "Paturētās noteikšanas nevar mainīt. Vispirms izslēdziet Paturēt šo ierakstu.",
         "keep": "Paturēt šo ierakstu",
         "keepHelp": "Paturētās noteikšanas nekad netiek dzēstas tīrīšanas laikā.",
+        "reloadFailed": "Saglabāts, bet noteikšanu neizdevās ielādēt vēlreiz. Atjauniniet lapu, lai redzētu izmaiņas.",
         "ignoredSpecies": "Suga {species} tagad tiek ignorēta",
         "wrongSpecies": "Nepareiza suga...",
         "legacyHelp": "Sugas maiņai nepieciešams pašreizējais datubāzes formāts.",

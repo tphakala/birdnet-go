@@ -997,6 +997,7 @@
         "lockedHelp": "Ponechané detekce nelze měnit. Nejprve vypněte Ponechat tuto nahrávku.",
         "keep": "Ponechat tuto nahrávku",
         "keepHelp": "Ponechané detekce se při úklidu nikdy neodstraní.",
+        "reloadFailed": "Uloženo, ale detekci se nepodařilo znovu načíst. Obnovte stránku, abyste změnu viděli.",
         "ignoredSpecies": "Druh {species} je nyní ignorován",
         "wrongSpecies": "Nesprávný druh...",
         "legacyHelp": "Změna druhu vyžaduje aktuální formát databáze.",

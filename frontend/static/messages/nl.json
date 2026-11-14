@@ -997,6 +997,7 @@
         "lockedHelp": "Bewaarde detecties kunnen niet worden gewijzigd. Schakel eerst Deze opname bewaren uit.",
         "keep": "Deze opname bewaren",
         "keepHelp": "Bewaarde detecties worden nooit verwijderd bij opschoning.",
+        "reloadFailed": "Opgeslagen, maar de detectie kon niet opnieuw worden geladen. Ververs de pagina om de wijziging te zien.",
         "ignoredSpecies": "{species} wordt nu genegeerd",
         "wrongSpecies": "Verkeerde soort...",
         "legacyHelp": "Voor het wijzigen van de soort is het huidige databaseformaat nodig.",

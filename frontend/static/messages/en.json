@@ -997,6 +997,7 @@
         "lockedHelp": "Kept detections cannot change. Turn off Keep this recording first.",
         "keep": "Keep this recording",
         "keepHelp": "Kept detections are never removed by cleanup.",
+        "reloadFailed": "Saved, but the detection could not be reloaded. Refresh the page to see the change.",
         "ignoredSpecies": "{species} is now ignored",
         "wrongSpecies": "Wrong species...",
         "legacyHelp": "Changing the species needs the current database format.",

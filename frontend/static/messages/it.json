@@ -997,6 +997,7 @@
         "lockedHelp": "I rilevamenti conservati non possono essere modificati. Disattiva prima Conserva questa registrazione.",
         "keep": "Conserva questa registrazione",
         "keepHelp": "I rilevamenti conservati non vengono mai eliminati dalla pulizia.",
+        "reloadFailed": "Salvato, ma non è stato possibile ricaricare il rilevamento. Aggiorna la pagina per vedere la modifica.",
         "ignoredSpecies": "La specie {species} ora è ignorata",
         "wrongSpecies": "Specie errata...",
         "legacyHelp": "Il cambio della specie richiede il formato attuale del database.",

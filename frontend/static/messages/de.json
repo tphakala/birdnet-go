@@ -997,6 +997,7 @@
         "lockedHelp": "Behaltene Erkennungen können nicht geändert werden. Deaktivieren Sie zuerst Diese Aufnahme behalten.",
         "keep": "Diese Aufnahme behalten",
         "keepHelp": "Behaltene Erkennungen werden bei der Bereinigung nie entfernt.",
+        "reloadFailed": "Gespeichert, aber die Erkennung konnte nicht neu geladen werden. Aktualisieren Sie die Seite, um die Änderung zu sehen.",
         "ignoredSpecies": "{species} wird jetzt ignoriert",
         "wrongSpecies": "Falsche Art...",
         "legacyHelp": "Zum Ändern der Art ist das aktuelle Datenbankformat erforderlich.",

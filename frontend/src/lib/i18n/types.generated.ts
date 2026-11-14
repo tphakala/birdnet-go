@@ -801,6 +801,7 @@ export type TranslationKey =
   | 'detections.detail.review.lockedHelp'
   | 'detections.detail.review.keep'
   | 'detections.detail.review.keepHelp'
+  | 'detections.detail.review.reloadFailed'
   | 'detections.detail.review.ignoredSpecies' // params: species
   | 'detections.detail.review.wrongSpecies'
   | 'detections.detail.review.legacyHelp'

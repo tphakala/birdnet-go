@@ -997,6 +997,7 @@
         "lockedHelp": "As detecções mantidas não podem ser alteradas. Desative primeiro Manter esta gravação.",
         "keep": "Manter esta gravação",
         "keepHelp": "As detecções mantidas nunca são removidas pela limpeza.",
+        "reloadFailed": "Salvo, mas não foi possível recarregar a detecção. Atualize a página para ver a alteração.",
         "ignoredSpecies": "{species} está agora ignorada",
         "wrongSpecies": "Espécie errada...",
         "legacyHelp": "Alterar a espécie requer o formato atual da base de dados.",

@@ -997,6 +997,7 @@
         "lockedHelp": "Registreringer som beholdes kan ikke endres. Slå av Behold dette opptaket først.",
         "keep": "Behold dette opptaket",
         "keepHelp": "Registreringer som beholdes slettes aldri ved opprydding.",
+        "reloadFailed": "Lagret, men registreringen kunne ikke lastes inn på nytt. Oppdater siden for å se endringen.",
         "ignoredSpecies": "{species} er nå ignorert",
         "wrongSpecies": "Feil art...",
         "legacyHelp": "Endring av art krever det gjeldende databaseformatet.",

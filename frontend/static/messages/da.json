@@ -997,6 +997,7 @@
         "lockedHelp": "Bevarede registreringer kan ikke ændres. Slå Behold denne optagelse fra først.",
         "keep": "Behold denne optagelse",
         "keepHelp": "Bevarede registreringer slettes aldrig ved oprydning.",
+        "reloadFailed": "Gemt, men registreringen kunne ikke genindlæses. Genindlæs siden for at se ændringen.",
         "ignoredSpecies": "{species} ignoreres nu",
         "wrongSpecies": "Forkert art...",
         "legacyHelp": "Ændring af arten kræver det aktuelle databaseformat.",

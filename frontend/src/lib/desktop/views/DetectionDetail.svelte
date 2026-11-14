@@ -304,8 +304,11 @@
    *
    * What does not need the detection's answer (weather, neighbours, predictions)
    * is requested at once beside it; what needs its date or species follows it.
+   *
+   * Resolves false when the request failed, true when it loaded or a newer load took
+   * its place.
    */
-  async function fetchDetection(id: string, refresh: boolean) {
+  async function fetchDetection(id: string, refresh: boolean): Promise<boolean> {
     detectionController = renew(detectionController);
     const controller = detectionController;
     const { signal } = controller;
@@ -328,12 +331,12 @@
       const response = await fetch(buildAppUrl(`/api/v2/detections/${id}`), { signal });
       // Check the captured signal, not the shared controller: a newer request may
       // have replaced detectionController, and this stale response must not win.
-      if (signal.aborted) return;
+      if (signal.aborted) return true;
       if (!response.ok) {
         throw new Error(errorMessageForStatus(response.status));
       }
       const body: unknown = await response.json();
-      if (signal.aborted) return;
+      if (signal.aborted) return true;
       if (!isDetectionDetail(body)) {
         throw new Error(t('detections.errors.loadFailed', { status: response.status }));
       }
@@ -356,13 +359,15 @@
 
       // The species data is loaded when the species changes; a step within one species keeps it.
       if (speciesChanged) loadSpeciesData(data);
+      return true;
     } catch (error) {
-      if (isAbort(error, signal)) return;
+      if (isAbort(error, signal)) return true;
       logger.error('Error fetching detection:', error);
-      if (refresh) return;
+      if (refresh) return false;
       detection = null;
       detectionError =
         error instanceof Error ? error.message : t('detections.errors.loadFailed', { status: '' });
+      return false;
     } finally {
       // Only the request that still owns the controller may reset shared state.
       if (detectionController === controller) {
@@ -383,15 +388,18 @@
    * - being stepped to: the step's request may have been sent before the save went
    *   through, so the whole step starts again, with its sun times and daily counts;
    * - already left: nothing to reload, a step brings its own detection.
+   * Resolves false when the reload failed, so a panel can show what the page holds.
    */
-  function onSaved(change: SavedChange) {
+  function onSaved(change: SavedChange): Promise<boolean> {
     const touched = [change.scientificName, change.changedTo];
     if (change.speciesStats && speciesDataFor && touched.includes(speciesDataFor)) {
       loadStats(speciesDataFor);
     }
-    if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) return;
+    if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) {
+      return Promise.resolve(true);
+    }
     if (change.changedTo) speciesDataFor = '';
-    void fetchDetection(resolvedDetectionId, !isLoadingDetection);
+    return fetchDetection(resolvedDetectionId, !isLoadingDetection);
   }
 
   /** Drops the answers of detections and days the page has moved on from. */

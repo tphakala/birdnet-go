@@ -997,6 +997,7 @@
         "lockedHelp": "Las detecciones conservadas no se pueden cambiar. Desactiva primero Conservar esta grabación.",
         "keep": "Conservar esta grabación",
         "keepHelp": "Las detecciones conservadas nunca se eliminan durante la limpieza.",
+        "reloadFailed": "Guardado, pero no se pudo volver a cargar la detección. Actualice la página para ver el cambio.",
         "ignoredSpecies": "{species} ahora se ignora",
         "wrongSpecies": "Especie incorrecta...",
         "legacyHelp": "Cambiar la especie requiere el formato actual de base de datos.",

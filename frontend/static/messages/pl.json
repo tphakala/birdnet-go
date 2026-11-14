@@ -997,6 +997,7 @@
         "lockedHelp": "Zachowanych detekcji nie można zmienić. Najpierw wyłącz Zachowaj to nagranie.",
         "keep": "Zachowaj to nagranie",
         "keepHelp": "Zachowane detekcje nigdy nie są usuwane podczas czyszczenia.",
+        "reloadFailed": "Zapisano, ale nie udało się ponownie załadować detekcji. Odśwież stronę, aby zobaczyć zmianę.",
         "ignoredSpecies": "Gatunek {species} jest teraz ignorowany",
         "wrongSpecies": "Zły gatunek...",
         "legacyHelp": "Zmiana gatunku wymaga aktualnego formatu bazy danych.",

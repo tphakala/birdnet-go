@@ -997,6 +997,7 @@
         "lockedHelp": "A megtartott észlelések nem módosíthatók. Előbb kapcsolja ki a Felvétel megtartása opciót.",
         "keep": "Felvétel megtartása",
         "keepHelp": "A megtartott észleléseket a karbantartás sosem törli.",
+        "reloadFailed": "Mentve, de az észlelést nem sikerült újra betölteni. Frissítse az oldalt a változás megtekintéséhez.",
         "ignoredSpecies": "{species} mostantól figyelmen kívül hagyva",
         "wrongSpecies": "Más faj...",
         "legacyHelp": "A faj módosításához az új adatbázis-formátum szükséges.",

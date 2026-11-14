@@ -997,6 +997,7 @@
         "lockedHelp": "Sparade detekteringar kan inte ändras. Slå av Behåll denna inspelning först.",
         "keep": "Behåll denna inspelning",
         "keepHelp": "Sparade detekteringar tas aldrig bort vid rensning.",
+        "reloadFailed": "Sparat, men detekteringen kunde inte laddas om. Uppdatera sidan för att se ändringen.",
         "ignoredSpecies": "{species} ignoreras nu",
         "wrongSpecies": "Fel art...",
         "legacyHelp": "Att byta art kräver det aktuella databasformatet.",

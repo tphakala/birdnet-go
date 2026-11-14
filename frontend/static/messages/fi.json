@@ -997,6 +997,7 @@
         "lockedHelp": "Säilytettyjä havaintoja ei voi muuttaa. Poista ensin Säilytä tämä tallenne käytöstä.",
         "keep": "Säilytä tämä tallenne",
         "keepHelp": "Säilytettyjä havaintoja ei koskaan poisteta siivouksessa.",
+        "reloadFailed": "Tallennettu, mutta havaintoa ei voitu ladata uudelleen. Päivitä sivu nähdäksesi muutoksen.",
         "ignoredSpecies": "{species} ohitetaan tästä lähtien",
         "wrongSpecies": "Väärä laji...",
         "legacyHelp": "Lajin vaihtaminen edellyttää nykyistä tietokantamuotoa.",

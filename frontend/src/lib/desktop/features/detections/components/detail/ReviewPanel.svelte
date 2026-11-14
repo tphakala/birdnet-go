@@ -38,8 +38,11 @@
     grow?: boolean;
     /** Opens the species dialog. */
     onWrongSpecies: () => void;
-    /** Called after a change was saved, so the page can reload the detection. */
-    onChanged: (_change: SavedChange) => void;
+    /**
+     * Called after a change was saved, so the page can reload the detection. The page may
+     * answer with a promise that settles when that reload does: false when it failed.
+     */
+    onChanged: (_change: SavedChange) => Promise<boolean> | void;
   }
 
   let {
@@ -61,7 +64,8 @@
   // another species, which is not ignored.
   let ignoredSpecies = $state<string | null>(null);
   let ignored = $derived(ignoredSpecies === detection.scientificName);
-  // The Keep state asked for, shown while it is saved and until the reloaded detection has it.
+  // The Keep state asked for, shown while it is saved and while the page reloads the
+  // detection; afterwards the switch shows the state the page holds.
   let lockTarget = $state<boolean | null>(null);
 
   let verdictBlocked = $derived(!canReview || detection.locked);
@@ -77,11 +81,6 @@
     if (errorMessage) return errorMessage;
     if (saving) return t('detections.detail.review.saving');
     return speciesBlockedReason || t('detections.detail.review.autosave');
-  });
-
-  // The reloaded detection has the Keep state that was asked for.
-  $effect(() => {
-    if (lockTarget !== null && detection.locked === lockTarget) lockTarget = null;
   });
 
   // The detection was reloaded (after a later save went through): an earlier failure's
@@ -129,12 +128,20 @@
     lockTarget = locked;
     try {
       await api.post(`/api/v2/detections/${id}/lock`, { locked });
-      onChanged({ detectionId: id, scientificName, speciesStats: false });
     } catch (error) {
       logger.error('Failed to change lock', error, { action: 'lock' });
       lockTarget = null;
+      saving = null;
       fail(t('common.review.errors.lockStatusFailed'));
+      return;
+    }
+    // Saved. The switch keeps the asked state until the page's reload settles, then shows
+    // what the page holds: the rest of the panel and the page read that, not the request.
+    try {
+      const reloaded = await onChanged({ detectionId: id, scientificName, speciesStats: false });
+      if (reloaded === false) fail(t('detections.detail.review.reloadFailed'));
     } finally {
+      lockTarget = null;
       saving = null;
     }
   }

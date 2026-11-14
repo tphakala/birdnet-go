@@ -222,6 +222,41 @@ describe('ReviewPanel Keep switch', () => {
     });
     expect(screen.getByText('common.review.errors.lockStatusFailed')).toBeInTheDocument();
   });
+
+  // Regression: the switch kept the asked value for good when the page could not reload the
+  // detection, while the rest of the page still read the old Keep state.
+  it('ends on the value the page holds, and says so, when the reload after a save fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    const onChanged = vi.fn(() => Promise.resolve(false));
+    render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged,
+      },
+    });
+    const keep = screen.getByRole<HTMLInputElement>('switch');
+
+    await fireEvent.click(keep);
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledOnce();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('detections.detail.review.reloadFailed')).toBeInTheDocument();
+    });
+    expect(keep.checked).toBe(false);
+  });
 });
 
 describe('ReviewPanel verdict failure', () => {

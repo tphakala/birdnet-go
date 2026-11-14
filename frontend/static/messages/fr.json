@@ -997,6 +997,7 @@
         "lockedHelp": "Les détections conservées ne peuvent pas être modifiées. Désactivez d'abord Conserver cet enregistrement.",
         "keep": "Conserver cet enregistrement",
         "keepHelp": "Le nettoyage ne supprime jamais les détections conservées.",
+        "reloadFailed": "Enregistré, mais la détection n'a pas pu être rechargée. Actualisez la page pour voir la modification.",
         "ignoredSpecies": "L'espèce {species} est désormais ignorée",
         "wrongSpecies": "Mauvaise espèce...",
         "legacyHelp": "Le changement d'espèce nécessite le format de base de données actuel.",
