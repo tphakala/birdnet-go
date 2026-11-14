@@ -22,37 +22,16 @@
     time: string;
     /** The neighbours of the detection; null until they are known. */
     neighbors: DetectionNeighbors | null;
-    /** True when the neighbours could not be loaded; the step links then say so. */
-    failed?: boolean;
-    /**
-     * False when the server cannot step between detections; the groups are then left out.
-     * While the neighbours are not known, the step links are blocked under their own names.
-     */
+    /** False when the server cannot step between detections; the groups are then left out. */
     available: boolean;
   }
 
-  let { speciesName, date, time, neighbors, failed = false, available }: Props = $props();
-
-  // The name of a blocked step link: why it cannot step, or its own name while the
-  // neighbours are still being looked up.
-  function blockedLabel(label: string, emptyLabel: string): string {
-    if (failed) return t('dataDisplay.table.error');
-    return neighbors === null ? label : emptyLabel;
-  }
+  let { speciesName, date, time, neighbors, available }: Props = $props();
 
   const listUrl = buildAppUrl('/ui/detections');
 
   function blockClick(event: MouseEvent) {
     event.preventDefault();
-  }
-
-  // A click focuses the link it steps with, as a keyboard step does: Safari does not focus
-  // a clicked link, and focus left in the page would be lost while the next detection loads.
-  function step(event: MouseEvent) {
-    if (event.currentTarget instanceof window.HTMLElement) {
-      event.currentTarget.focus({ preventScroll: true });
-    }
-    handleAppLinkClick(event);
   }
 </script>
 
@@ -63,9 +42,9 @@
     role={id === null ? 'link' : undefined}
     tabindex={id === null ? 0 : undefined}
     aria-disabled={id === null ? 'true' : undefined}
-    aria-label={id === null ? blockedLabel(label, emptyLabel) : label}
-    title={id === null ? blockedLabel(label, emptyLabel) : label}
-    onclick={id === null ? blockClick : step}
+    aria-label={id === null ? emptyLabel : label}
+    title={id === null ? emptyLabel : label}
+    onclick={id === null ? blockClick : handleAppLinkClick}
   >
     {#if older}
       <ChevronLeft class="size-4" />
@@ -92,7 +71,7 @@
   </ol>
 
   {#if available}
-    <div class="dd-nav-groups" aria-busy={neighbors === null && !failed}>
+    <div class="dd-nav-groups" aria-busy={neighbors === null}>
       <div class="dd-nav-group" role="group" aria-label={t('detections.detail.nav.allGroup')}>
         {@render stepLink(
           neighbors?.previous ?? null,
