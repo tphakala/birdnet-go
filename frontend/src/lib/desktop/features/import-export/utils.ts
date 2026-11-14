@@ -1,4 +1,5 @@
 import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
+import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { loggers } from '$lib/utils/logger';
 import type {
   ImportErrorEvent,
@@ -12,7 +13,7 @@ const logger = loggers.ui;
 
 /** Build a detections-filter URL for the BirdNET-Pi source after import. */
 export function buildDetectionsFilterUrl(): string {
-  return '/ui/detections?source=birdnet-pi';
+  return buildAppUrl('/ui/detections?source=birdnet-pi');
 }
 
 /**
@@ -104,7 +105,7 @@ export function connectImportProgressStream(
   jobId: string,
   handlers: ImportProgressStreamHandlers
 ): ReconnectingEventSource {
-  const es = new ReconnectingEventSource(`/api/v2/import/jobs/${jobId}/progress`);
+  const es = new ReconnectingEventSource(buildAppUrl(`/api/v2/import/jobs/${jobId}/progress`));
 
   es.onreconnectfailed = attempts => {
     if (handlers.onStalled && shouldReconcileStalledStream(attempts)) handlers.onStalled();

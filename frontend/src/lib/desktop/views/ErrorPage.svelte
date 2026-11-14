@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
 
@@ -475,7 +476,10 @@
     </h2>
 
     <!-- Link Button -->
-    <a href="/" class="btn btn-primary normal-case text-base font-semibold transition duration-300">
+    <a
+      href={buildAppUrl('/ui/dashboard')}
+      class="btn btn-primary normal-case text-base font-semibold transition duration-300"
+    >
       {t('common.goToDashboard')}
     </a>
   </div>

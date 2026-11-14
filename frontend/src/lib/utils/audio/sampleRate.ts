@@ -2,6 +2,8 @@
  * Shared sample rate constants and utilities for device capabilities.
  */
 
+import { buildAppUrl } from '$lib/utils/urlHelpers';
+
 export const CANDIDATE_SAMPLE_RATES = [48000, 96000, 192000, 256000, 384000] as const;
 
 /** Conventional default capture rate, supported by virtually every device. */
@@ -38,7 +40,9 @@ export async function fetchDeviceCapabilities(
 ): Promise<DeviceCapabilitiesResult> {
   try {
     const response = await fetch(
-      `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
+      buildAppUrl(
+        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`
+      ),
       signal ? { signal } : undefined
     );
 
