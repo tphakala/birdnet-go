@@ -234,6 +234,11 @@ func TestSpeciesAPIValidation(t *testing.T) {
 			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
 			http.StatusBadRequest, "Invalid scientific name format"},
 
+		// Invalid format tests - GetSpeciesTree
+		{"GetSpeciesTree single word", "/api/v2/taxonomy/tree/Turdus", []string{"scientific_name"}, []string{"Turdus"},
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTree },
+			http.StatusBadRequest, "Invalid scientific name format"},
+
 		// Error handling - nil processor
 		{"GetSpeciesThumbnail nil processor", "/api/v2/species/amro/thumbnail", []string{"code"}, []string{"amro"},
 			func(c *Handler) func(echo.Context) error { return c.GetSpeciesThumbnail },

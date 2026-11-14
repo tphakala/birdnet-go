@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // Cache headers for taxonomy endpoints (taxonomy data is static)
@@ -163,6 +164,7 @@ func (c *Handler) GetFamilySpecies(ctx echo.Context) error {
 
 // GetSpeciesTree retrieves the complete taxonomic tree for a species
 // GET /api/v2/taxonomy/tree/:scientific_name
+// A sound class name is accepted but answers 404, since a class has no taxonomy tree.
 func (c *Handler) GetSpeciesTree(ctx echo.Context) error {
 	scientificName := ctx.Param("scientific_name")
 	if scientificName == "" {
@@ -186,12 +188,8 @@ func (c *Handler) GetSpeciesTree(ctx echo.Context) error {
 	}
 	scientificName = strings.TrimSpace(decodedName)
 
-	if len(scientificName) < 3 || !strings.Contains(scientificName, " ") {
-		return c.HandleError(ctx, errors.Newf("invalid scientific name format").
-			Category(errors.CategoryValidation).
-			Context("scientific_name", scientificName).
-			Component("api-taxonomy").
-			Build(), "Invalid scientific name format", http.StatusBadRequest)
+	if err := validateLookupName(scientificName, "api-taxonomy"); err != nil {
+		return c.HandleError(ctx, err, invalidLookupNameMessage, http.StatusBadRequest)
 	}
 
 	// Check if taxonomy database is available
@@ -200,6 +198,16 @@ func (c *Handler) GetSpeciesTree(ctx echo.Context) error {
 			Category(errors.CategorySystem).
 			Component("api-taxonomy").
 			Build(), "Taxonomy database not available", http.StatusServiceUnavailable)
+	}
+
+	// A sound class is not a taxon and has no tree; skip the database, which has
+	// entries named like classes ("Siren").
+	if soundevent.IsName(scientificName) {
+		return c.HandleError(ctx, errors.Newf("sound class has no taxonomy tree").
+			Category(errors.CategoryNotFound).
+			Context("scientific_name", scientificName).
+			Component("api-taxonomy").
+			Build(), "Species not found", http.StatusNotFound)
 	}
 
 	// Get complete species tree

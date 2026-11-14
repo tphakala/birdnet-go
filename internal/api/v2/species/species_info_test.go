@@ -439,3 +439,69 @@ func TestGetSpeciesInfo_Taxonomy(t *testing.T) {
 		apitest.AssertControllerError(t, nil, rec, http.StatusNotFound, wantSpeciesNotFound)
 	})
 }
+
+// TestSoundClassLookups checks that the species, taxonomy and tree lookups answer a
+// sound class name as detections report it, in every shape a class takes, without
+// ever reaching an organism's taxonomy: the embedded taxonomy database holds entries
+// named like classes ("Siren" is an amphibian family), so a lookup would report
+// wrong ranks for them.
+func TestSoundClassLookups(t *testing.T) {
+	// Not parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	core := apitest.NewCore(t)
+	labels := labelCorpus(t)
+	snap := speciesindex.Build(labels, nil, "en")
+
+	// The stub name stands in for the production resolver, which localizes class names.
+	backend := &stubBackend{
+		names: map[string]string{"Siren": "Sireeni"},
+		// The legacy context is the one under which a class reads very_rare today, so
+		// the absent-rarity assertion bites.
+		rc: rarityContexts(labels)[rarityLegacy],
+	}
+	h := New(core, func() *speciesindex.Snapshot { return snap }, nil)
+	h.speciesBackendOverride = backend
+
+	tests := []struct {
+		name       string
+		query      string
+		wantCommon string
+	}{
+		// Single token in the snapshot (as Siren_Siren) and an entry in the taxonomy database.
+		{name: "BirdNET single token", query: "Siren", wantCommon: "Sireeni"},
+		// Perch underscore label, absent from the snapshot.
+		{name: "Perch underscore label", query: "Church_bell", wantCommon: "Church bell"},
+		{name: "BirdNET two words", query: "Human vocal", wantCommon: "Human vocal"},
+		// First token of the multi-word class power_tool, stored by older builds.
+		{name: "legacy first token", query: "Power", wantCommon: "Power"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/species?scientific_name="+url.QueryEscape(tt.query), http.NoBody)
+			rec := httptest.NewRecorder()
+			require.NoError(t, h.GetSpeciesInfo(echo.New().NewContext(req, rec)))
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			var info map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
+			assert.Equal(t, tt.query, info["scientific_name"])
+			assert.Equal(t, tt.wantCommon, info["common_name"])
+			for _, key := range []string{"rarity", "taxonomy", "metadata"} {
+				assert.NotContains(t, info, key)
+			}
+
+			req = httptest.NewRequest(http.MethodGet, "/api/v2/species/taxonomy?scientific_name="+url.QueryEscape(tt.query), http.NoBody)
+			rec = httptest.NewRecorder()
+			require.NoError(t, h.GetSpeciesTaxonomy(echo.New().NewContext(req, rec)))
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			var tax map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &tax))
+			meta, ok := tax["metadata"].(map[string]any)
+			require.True(t, ok, "metadata missing: %s", rec.Body.String())
+			assert.Equal(t, taxonomySourceUnresolved, meta["source"])
+			assert.NotContains(t, tax, "taxonomy")
+
+			rec = serveTaxonomyParam(t, h.GetSpeciesTree, "/api/v2/taxonomy/tree/", "scientific_name", url.PathEscape(tt.query))
+			apitest.AssertControllerError(t, nil, rec, http.StatusNotFound, wantSpeciesNotFound)
+		})
+	}
+}
