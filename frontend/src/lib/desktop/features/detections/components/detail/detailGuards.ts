@@ -77,6 +77,13 @@ const DETECTION_OPTIONAL: Fields = [
   ['firstReviewedAt', 'string'],
   ['lastReviewedAt', 'string'],
   ['lockedAt', 'string'],
+  ['clipSampleRate', 'number'],
+  ['clipDenoised', 'boolean'],
+  ['modelType', 'string'],
+  ['isNewSpecies', 'boolean'],
+  ['isNewThisYear', 'boolean'],
+  ['isNewThisSeason', 'boolean'],
+  ['unlikely', 'boolean'],
 ];
 const VERDICTS: readonly unknown[] = ['correct', 'false_positive', 'unverified'];
 
@@ -136,7 +143,27 @@ export function isDetectionDetail(value: unknown): value is DetectionDetailData 
         ['commonName', 'string'],
         ['speciesCode', 'string'],
       ]));
-  return commentsValid && contributionsValid && originalValid && isDetectionWeatherBlock(value);
+  // The audio source, which the identity card names; the server leaves it out or sends null.
+  const { source } = value;
+  const sourceValid =
+    source === undefined ||
+    source === null ||
+    (isPlainObject(source) &&
+      fieldsMatch(
+        source,
+        [['id', 'string']],
+        [
+          ['type', 'string'],
+          ['displayName', 'string'],
+        ]
+      ));
+  return (
+    commentsValid &&
+    contributionsValid &&
+    originalValid &&
+    sourceValid &&
+    isDetectionWeatherBlock(value)
+  );
 }
 
 const WEATHER_UNITS: readonly unknown[] = ['metric', 'imperial', 'standard'];
@@ -158,6 +185,7 @@ function isDetectionWeatherBlock(detection: Record<string, unknown>): boolean {
         ['windGust', 'number'],
         ['humidity', 'number'],
         ['moonPhaseName', 'string'],
+        ['moonIllumination', 'number'],
       ]
     ) &&
     (weather.units === undefined || WEATHER_UNITS.includes(weather.units))
@@ -203,6 +231,8 @@ export function isSunTimes(value: unknown): value is SunTimes {
       [
         ['sunrise', 'string'],
         ['sunset', 'string'],
+        ['civil_dawn', 'string'],
+        ['civil_dusk', 'string'],
       ]
     )
   );
@@ -228,7 +258,21 @@ export function isDetectionPredictions(value: unknown): value is DetectionPredic
     Array.isArray(modelPredictions) &&
     modelPredictions.every((set: unknown) => {
       if (!isPlainObject(set)) return false;
-      if (!fieldsMatch(set, [['modelName', 'string']], [['modelVersion', 'string']])) return false;
+      if (
+        !fieldsMatch(
+          set,
+          [
+            ['modelName', 'string'],
+            ['modelVersion', 'string'],
+          ],
+          [
+            ['modelVariant', 'string'],
+            ['modelType', 'string'],
+          ]
+        )
+      ) {
+        return false;
+      }
       const { predictions } = set;
       return (
         predictions === undefined ||

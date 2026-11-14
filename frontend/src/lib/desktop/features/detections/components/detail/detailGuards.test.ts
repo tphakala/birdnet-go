@@ -58,7 +58,11 @@ describe('shape guards', () => {
       {
         detectionId: 5,
         modelPredictions: [
-          { modelName: 'BirdNET', predictions: [{ scientificName: 'A b', confidence: 0.2 }] },
+          {
+            modelName: 'BirdNET',
+            modelVersion: '2.4',
+            predictions: [{ scientificName: 'A b', confidence: 0.2 }],
+          },
         ],
       },
       { detectionId: 5, modelPredictions: [{ modelName: 'BirdNET', predictions: [{}] }] },
@@ -120,6 +124,72 @@ describe('shape guards', () => {
     expect(parseImageAttribution(null)).toBeNull();
   });
 
+  // Fields the page's cards read from the detection, each of its type when present.
+  it.each([
+    ['a clip sample rate that is not a number', { clipSampleRate: '48000' }],
+    ['a denoised marker that is not a boolean', { clipDenoised: 'yes' }],
+    ['a model type that is not text', { modelType: 2 }],
+    ['a new species marker that is not a boolean', { isNewSpecies: 1 }],
+    ['a new this year marker that is not a boolean', { isNewThisYear: 'true' }],
+    ['a new this season marker that is not a boolean', { isNewThisSeason: 0 }],
+    ['an unlikely marker that is not a boolean', { unlikely: 'no' }],
+    ['a source that is not an object', { source: 'card' }],
+    ['a source without an id', { source: { type: 'audio_card' } }],
+    ['a source name that is not text', { source: { id: 's1', displayName: 3 } }],
+  ])('refuses a detection with %s', (_name, change) => {
+    expect(
+      isDetectionDetail({
+        ...detection,
+        clipSampleRate: 48000,
+        clipDenoised: true,
+        modelType: 'bird',
+        isNewSpecies: false,
+        isNewThisYear: true,
+        isNewThisSeason: false,
+        unlikely: false,
+        source: { id: 's1', type: 'audio_card', displayName: 'Sound card' },
+      })
+    ).toBe(true);
+    expect(isDetectionDetail({ ...detection, ...change })).toBe(false);
+  });
+
+  it('accepts a detection whose source is null', () => {
+    expect(isDetectionDetail({ ...detection, source: null })).toBe(true);
+  });
+
+  it.each([
+    ['a civil dawn that is not text', { civil_dawn: 5 }],
+    ['a civil dusk that is not text', { civil_dusk: null }],
+  ])('refuses sun times with %s', (_name, change) => {
+    const sun = {
+      date: '2026-11-14',
+      sunrise: '2026-11-14T08:26:00+02:00',
+      sunset: '2026-11-14T15:35:00+02:00',
+      civil_dawn: '2026-11-14T07:43:00+02:00',
+      civil_dusk: '2026-11-14T16:18:00+02:00',
+    };
+    expect(isSunTimes(sun)).toBe(true);
+    expect(isSunTimes({ ...sun, ...change })).toBe(false);
+  });
+
+  it.each([
+    ['no model version', { modelVersion: undefined }],
+    ['a model variant that is not text', { modelVariant: 1 }],
+    ['a model type that is not text', { modelType: false }],
+  ])('refuses a prediction set with %s', (_name, change) => {
+    const set = {
+      modelName: 'BirdNET',
+      modelVersion: '2.4',
+      modelVariant: 'fp32',
+      modelType: 'bird',
+      predictions: [{ scientificName: 'A b', confidence: 0.2 }],
+    };
+    expect(isDetectionPredictions({ detectionId: 5, modelPredictions: [set] })).toBe(true);
+    expect(
+      isDetectionPredictions({ detectionId: 5, modelPredictions: [{ ...set, ...change }] })
+    ).toBe(false);
+  });
+
   const contribution = {
     modelName: 'BirdNET',
     modelVersion: '2.4',
@@ -174,6 +244,7 @@ describe('shape guards', () => {
     humidity: 98,
     units: 'metric',
     moonPhaseName: 'Waxing Crescent',
+    moonIllumination: 24,
   };
 
   // The detection's own weather block fills in what the hourly answer leaves out.
@@ -181,6 +252,7 @@ describe('shape guards', () => {
     ['a wind speed that is not a number', { windSpeed: '2.5' }],
     ['units the formatters do not know', { units: 'kelvin' }],
     ['a moon phase that is not text', { moonPhaseName: 4 }],
+    ['a moon illumination that is not a number', { moonIllumination: '24' }],
   ])('refuses a detection whose weather block has %s', (_name, change) => {
     expect(isDetectionDetail({ ...detection, weather: detectionWeather })).toBe(true);
     expect(isDetectionDetail({ ...detection, weather: { ...detectionWeather, ...change } })).toBe(
