@@ -192,9 +192,20 @@
 
   // Computed values for MetricStrip, derived from history arrays so they
   // stay in sync with both SSE and polling updates
-  let cpuPercent = $derived(cpuHistory.length > 0 ? cpuHistory[cpuHistory.length - 1] : 0);
+  // With no history and a failed resources load there is no reading at all: null, shown as a dash
+  let cpuPercent = $derived(
+    cpuHistory.length > 0
+      ? cpuHistory[cpuHistory.length - 1]
+      : resourcesSection.status === 'failed'
+        ? null
+        : 0
+  );
   let memoryPercent = $derived(
-    memoryHistory.length > 0 ? memoryHistory[memoryHistory.length - 1] : memoryUsage.usedPercent
+    memoryHistory.length > 0
+      ? memoryHistory[memoryHistory.length - 1]
+      : resourcesSection.status === 'failed'
+        ? null
+        : memoryUsage.usedPercent
   );
   let temperatureCelsius = $derived(
     temperatureHistory.length > 0

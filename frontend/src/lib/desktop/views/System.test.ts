@@ -317,14 +317,19 @@ describe('System view', () => {
     failWith(RESOURCES_URL, 500);
     await mountAt(OVERVIEW_PATH);
 
+    // The history has no points, so the headline percent has no source either
     const cpuTile = within(cardTitled(t('system.metrics.cpu')));
+    expect(cpuTile.queryByText('0.0%')).not.toBeInTheDocument();
     expect(cpuTile.queryByText(`0 ${t('system.metrics.cores')}`)).not.toBeInTheDocument();
-    expect(cpuTile.getByText('-')).toBeInTheDocument();
+    // The headline and the cores footer
+    expect(cpuTile.getAllByText('-')).toHaveLength(2);
 
     const memoryTile = within(cardTitled(t('system.metrics.memory')));
+    expect(memoryTile.queryByText('0.0%')).not.toBeInTheDocument();
     expect(memoryTile.queryByText(/^0 B/)).not.toBeInTheDocument();
     expect(memoryTile.queryByText(/avail/i)).not.toBeInTheDocument();
-    expect(memoryTile.getAllByText('-')).toHaveLength(2);
+    // The headline, used / total and available
+    expect(memoryTile.getAllByText('-')).toHaveLength(3);
   });
 
   it('keeps the loaded data on screen through a slow or failed refresh', async () => {

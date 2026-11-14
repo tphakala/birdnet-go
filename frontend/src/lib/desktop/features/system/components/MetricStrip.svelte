@@ -8,11 +8,13 @@
   import type { ModelMetrics } from '$lib/desktop/features/system/types';
 
   interface Props {
-    cpuPercent: number;
+    /** Null when there is no reading: no history and the resources could not load. */
+    cpuPercent: number | null;
     /** Null when the system info could not load; the tile then shows a dash. */
     cpuCores: number | null;
     cpuHistory: number[];
-    memoryPercent: number;
+    /** Null when there is no reading: no history and the resources could not load. */
+    memoryPercent: number | null;
     /** Null when the resources could not load; the tile then shows dashes, never zeros. */
     memoryUsed: number | null;
     memoryTotal: number | null;
@@ -143,7 +145,9 @@
         {#if cpuLoading}
           {@render loadingValue()}
         {:else}
-          <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
+          <span class="font-mono tabular-nums text-lg font-semibold"
+            >{cpuPercent === null ? '-' : `${cpuPercent.toFixed(1)}%`}</span
+          >
         {/if}
       </div>
       {#if cpuLoading}
@@ -174,7 +178,7 @@
           {@render loadingValue()}
         {:else}
           <span class="font-mono tabular-nums text-lg font-semibold"
-            >{memoryPercent.toFixed(1)}%</span
+            >{memoryPercent === null ? '-' : `${memoryPercent.toFixed(1)}%`}</span
           >
         {/if}
       </div>
