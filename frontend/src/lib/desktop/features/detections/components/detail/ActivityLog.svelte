@@ -3,8 +3,10 @@
   itself, the saved clip, review and lock changes, and notes. Reviewers can add
   a note at the end.
 
-  The backend keeps the time of the first review and of the latest change, not
-  every change in between, so the log shows those two moments.
+  The backend keeps the time of the first review and of the latest save of the
+  review, not every save in between, so the log shows those two moments. Any save
+  moves the latest one (the same verdict saved again, a species change), so it
+  states the verdict at that moment, not that the verdict changed.
 -->
 <script lang="ts">
   import { ArrowLeftRight, AudioLines, Check, Lock, MessageSquare, Radar, X } from '@lucide/svelte';
@@ -101,23 +103,23 @@
         detection.verified === 'correct'
           ? t('common.review.status.verifiedCorrect')
           : t('common.review.status.falsePositive');
-      const { reviewedAt, reviewUpdatedAt } = detection;
-      const changed = Boolean(reviewedAt && reviewUpdatedAt && reviewedAt !== reviewUpdatedAt);
-      if (changed && reviewedAt) {
+      const { firstReviewedAt, lastReviewedAt } = detection;
+      const savedAgain = Boolean(
+        firstReviewedAt && lastReviewedAt && firstReviewedAt !== lastReviewedAt
+      );
+      if (savedAgain && firstReviewedAt) {
         list.push({
           key: 'review-first',
           kind: detection.verified,
-          at: reviewedAt,
+          at: firstReviewedAt,
           title: t('detections.detail.log.firstReviewed'),
         });
       }
       list.push({
         key: 'review',
         kind: detection.verified,
-        at: detection.reviewUpdatedAt ?? detection.reviewedAt ?? '',
-        title: changed
-          ? t('detections.detail.log.reviewChanged', { status: statusLabel })
-          : t('detections.detail.log.reviewed', { status: statusLabel }),
+        at: detection.lastReviewedAt ?? detection.firstReviewedAt ?? '',
+        title: t('detections.detail.log.reviewed', { status: statusLabel }),
       });
     }
 
@@ -125,7 +127,7 @@
       list.push({
         key: 'species',
         kind: 'species',
-        at: detection.reviewUpdatedAt ?? detection.reviewedAt ?? '',
+        at: detection.lastReviewedAt ?? detection.firstReviewedAt ?? '',
         title: t('detections.detail.log.speciesChanged', {
           from: originalSpeciesName,
           to: speciesName,

@@ -23,9 +23,9 @@ export interface DetectionDetailData extends Detection {
   modelContributions?: ModelContribution[];
   clipDenoised?: boolean;
   /** Time of the first review (RFC3339). */
-  reviewedAt?: string;
+  firstReviewedAt?: string;
   /** Time of the latest review change (RFC3339). */
-  reviewUpdatedAt?: string;
+  lastReviewedAt?: string;
   /** Time the detection was locked (RFC3339). */
   lockedAt?: string;
 }
