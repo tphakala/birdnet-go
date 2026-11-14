@@ -132,7 +132,8 @@
       <div class="flex-1">
         {#if loading}
           <!-- The label stands where the loaded label line is, in the card's own text colour, so
-               the loading card is as tall as the loaded one (28 + 8 + 20 = the 36 + 20 loaded) -->
+               the loading card is as tall as the loaded value and label (28 + 8 + 20 = the 36 + 20
+               loaded); a trend row, when the card has one, still arrives with the data -->
           <div class="space-y-2">
             <Skeleton className="h-7 w-24" />
             <SkeletonStatus
