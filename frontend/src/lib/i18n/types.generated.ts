@@ -708,7 +708,29 @@ export type TranslationKey =
   | 'detections.titles.species' // params: species, date
   | 'detections.titles.search' // params: query
   | 'detections.titles.allDetections' // params: date
-  | 'detections.detail.species'
+  | 'detections.detail.species.dialogTitle'
+  | 'detections.detail.species.current'
+  | 'detections.detail.species.fromPredictions'
+  | 'detections.detail.species.search'
+  | 'detections.detail.species.loadingList'
+  | 'detections.detail.species.listFailed'
+  | 'detections.detail.species.noMatches'
+  | 'detections.detail.species.effect'
+  | 'detections.detail.species.pickFirst'
+  | 'detections.detail.species.confirm' // params: species
+  | 'detections.detail.species.confirmEmpty'
+  | 'detections.detail.species.changed' // params: species
+  | 'detections.detail.species.changeFailed'
+  | 'detections.detail.species.notKnownHere' // params: species
+  | 'detections.detail.species.predictionsTitle'
+  | 'detections.detail.species.noPredictions'
+  | 'detections.detail.species.allSpecies'
+  | 'detections.detail.species.searchRangePlaceholder'
+  | 'detections.detail.species.searchAllPlaceholder'
+  | 'detections.detail.species.searchHintRange' // params: count
+  | 'detections.detail.species.searchHintAll' // params: count
+  | 'detections.detail.species.noMatchesInRange'
+  | 'detections.detail.species.modelPick'
   | 'detections.detail.observation'
   | 'detections.detail.aria.downloadAudioClip' // params: name
   | 'detections.detail.aria.audioRecordingFor' // params: name
@@ -724,6 +746,115 @@ export type TranslationKey =
   | 'detections.detail.aria.tabsHeading'
   | 'detections.detail.aria.tabList'
   | 'detections.detail.aria.speciesHeadingSuffix'
+  | 'detections.detail.nav.label'
+  | 'detections.detail.nav.back'
+  | 'detections.detail.nav.allGroup'
+  | 'detections.detail.nav.older'
+  | 'detections.detail.nav.noOlder'
+  | 'detections.detail.nav.newer'
+  | 'detections.detail.nav.noNewer'
+  | 'detections.detail.nav.speciesGroup' // params: species
+  | 'detections.detail.nav.olderSpecies' // params: species
+  | 'detections.detail.nav.noOlderSpecies' // params: species
+  | 'detections.detail.nav.newerSpecies' // params: species
+  | 'detections.detail.nav.noNewerSpecies' // params: species
+  | 'detections.detail.identity.confidence'
+  | 'detections.detail.identity.date'
+  | 'detections.detail.identity.time'
+  | 'detections.detail.identity.beforeSunrise' // params: hours, minutes
+  | 'detections.detail.identity.afterSunrise' // params: hours, minutes
+  | 'detections.detail.identity.beforeSunset' // params: hours, minutes
+  | 'detections.detail.identity.afterSunset' // params: hours, minutes
+  | 'detections.detail.identity.setByReviewer'
+  | 'detections.detail.identity.timeOfDay'
+  | 'detections.detail.identity.minutesBeforeSunrise' // params: minutes
+  | 'detections.detail.identity.minutesAfterSunrise' // params: minutes
+  | 'detections.detail.identity.minutesBeforeSunset' // params: minutes
+  | 'detections.detail.identity.minutesAfterSunset' // params: minutes
+  | 'detections.detail.identity.predictionsUnknown'
+  | 'detections.detail.identity.predictionsNone'
+  | 'detections.detail.identity.predictionsCount' // params: count
+  | 'detections.detail.conditions.title'
+  | 'detections.detail.conditions.skyLabel' // params: time, sunrise, sunset
+  | 'detections.detail.conditions.activityLabel' // params: species
+  | 'detections.detail.conditions.sunrise'
+  | 'detections.detail.conditions.sunset'
+  | 'detections.detail.conditions.activityLegend' // params: species
+  | 'detections.detail.conditions.feelsLike'
+  | 'detections.detail.conditions.moonLit' // params: percent
+  | 'detections.detail.conditions.windFrom' // params: direction
+  | 'detections.detail.conditions.precipitation'
+  | 'detections.detail.conditions.observedAt' // params: time
+  | 'detections.detail.conditions.notObserved'
+  | 'detections.detail.review.title'
+  | 'detections.detail.review.autosave'
+  | 'detections.detail.review.question' // params: species
+  | 'detections.detail.review.correct'
+  | 'detections.detail.review.falsePositive'
+  | 'detections.detail.review.saving'
+  | 'detections.detail.review.savedCorrect'
+  | 'detections.detail.review.savedFalsePositive'
+  | 'detections.detail.review.loginRequired'
+  | 'detections.detail.review.lockedHelp'
+  | 'detections.detail.review.keep'
+  | 'detections.detail.review.keepHelp'
+  | 'detections.detail.review.ignoredSpecies' // params: species
+  | 'detections.detail.review.wrongSpecies'
+  | 'detections.detail.review.legacyHelp'
+  | 'detections.detail.review.ignoreShort'
+  | 'detections.detail.review.ignoredShort'
+  | 'detections.detail.models.title'
+  | 'detections.detail.models.summary' // params: hit, total
+  | 'detections.detail.models.empty'
+  | 'detections.detail.models.hits' // params: count
+  | 'detections.detail.models.mean' // params: value
+  | 'detections.detail.models.noHit'
+  | 'detections.detail.stats.title'
+  | 'detections.detail.stats.rangeScore'
+  | 'detections.detail.stats.rangeScoreNote' // params: date
+  | 'detections.detail.stats.rangeScoreNoteToday'
+  | 'detections.detail.stats.total'
+  | 'detections.detail.stats.windowTotal' // params: days
+  | 'detections.detail.stats.firstHeard'
+  | 'detections.detail.stats.lastHeard'
+  | 'detections.detail.stats.avgConfidence'
+  | 'detections.detail.stats.maxConfidence'
+  | 'detections.detail.stats.dailyTitle' // params: days
+  | 'detections.detail.stats.dailyLabel' // params: count, days
+  | 'detections.detail.stats.allThisDay' // params: species
+  | 'detections.detail.stats.reviewsTitle'
+  | 'detections.detail.stats.reviewsCount' // params: count
+  | 'detections.detail.stats.reviewsCorrect' // params: count
+  | 'detections.detail.stats.reviewsFalse' // params: count
+  | 'detections.detail.stats.oftenRejected' // params: percent
+  | 'detections.detail.stats.reviewsNone'
+  | 'detections.detail.clip.window'
+  | 'detections.detail.clip.length'
+  | 'detections.detail.clip.seconds' // params: count
+  | 'detections.detail.clip.format'
+  | 'detections.detail.clip.denoised'
+  | 'detections.detail.clip.denoisedYes'
+  | 'detections.detail.clip.denoisedNo'
+  | 'detections.detail.clip.file'
+  | 'detections.detail.clip.audioRemoved'
+  | 'detections.detail.clip.noClip'
+  | 'detections.detail.log.title'
+  | 'detections.detail.log.subtitle'
+  | 'detections.detail.log.detected' // params: species, confidence
+  | 'detections.detail.log.captureWindow' // params: begin, end
+  | 'detections.detail.log.clipSaved'
+  | 'detections.detail.log.clipSavedDenoised'
+  | 'detections.detail.log.firstReviewed'
+  | 'detections.detail.log.reviewed' // params: status
+  | 'detections.detail.log.reviewChanged' // params: status
+  | 'detections.detail.log.locked'
+  | 'detections.detail.log.noteAdded'
+  | 'detections.detail.log.noteEdited' // params: time
+  | 'detections.detail.log.timeUnknown'
+  | 'detections.detail.log.addNote'
+  | 'detections.detail.log.saveNote'
+  | 'detections.detail.log.lockedHelp'
+  | 'detections.detail.log.speciesChanged' // params: from, to
   | 'detections.headers.dateTime'
   | 'detections.headers.weather'
   | 'detections.headers.source'
@@ -4613,9 +4744,59 @@ export type TranslationParams = {
   'detections.titles.species': { species: string | number; date: string | number };
   'detections.titles.search': { query: string | number };
   'detections.titles.allDetections': { date: string | number };
+  'detections.detail.species.confirm': { species: string | number };
+  'detections.detail.species.changed': { species: string | number };
+  'detections.detail.species.notKnownHere': { species: string | number };
+  'detections.detail.species.searchHintRange': { count: string | number };
+  'detections.detail.species.searchHintAll': { count: string | number };
   'detections.detail.aria.downloadAudioClip': { name: string | number };
   'detections.detail.aria.audioRecordingFor': { name: string | number };
   'detections.detail.aria.confidence': { confidence: string | number };
+  'detections.detail.nav.speciesGroup': { species: string | number };
+  'detections.detail.nav.olderSpecies': { species: string | number };
+  'detections.detail.nav.noOlderSpecies': { species: string | number };
+  'detections.detail.nav.newerSpecies': { species: string | number };
+  'detections.detail.nav.noNewerSpecies': { species: string | number };
+  'detections.detail.identity.beforeSunrise': { hours: string | number; minutes: string | number };
+  'detections.detail.identity.afterSunrise': { hours: string | number; minutes: string | number };
+  'detections.detail.identity.beforeSunset': { hours: string | number; minutes: string | number };
+  'detections.detail.identity.afterSunset': { hours: string | number; minutes: string | number };
+  'detections.detail.identity.minutesBeforeSunrise': { minutes: string | number };
+  'detections.detail.identity.minutesAfterSunrise': { minutes: string | number };
+  'detections.detail.identity.minutesBeforeSunset': { minutes: string | number };
+  'detections.detail.identity.minutesAfterSunset': { minutes: string | number };
+  'detections.detail.identity.predictionsCount': { count: string | number };
+  'detections.detail.conditions.skyLabel': {
+    time: string | number;
+    sunrise: string | number;
+    sunset: string | number;
+  };
+  'detections.detail.conditions.activityLabel': { species: string | number };
+  'detections.detail.conditions.activityLegend': { species: string | number };
+  'detections.detail.conditions.moonLit': { percent: string | number };
+  'detections.detail.conditions.windFrom': { direction: string | number };
+  'detections.detail.conditions.observedAt': { time: string | number };
+  'detections.detail.review.question': { species: string | number };
+  'detections.detail.review.ignoredSpecies': { species: string | number };
+  'detections.detail.models.summary': { hit: string | number; total: string | number };
+  'detections.detail.models.hits': { count: string | number };
+  'detections.detail.models.mean': { value: string | number };
+  'detections.detail.stats.rangeScoreNote': { date: string | number };
+  'detections.detail.stats.windowTotal': { days: string | number };
+  'detections.detail.stats.dailyTitle': { days: string | number };
+  'detections.detail.stats.dailyLabel': { count: string | number; days: string | number };
+  'detections.detail.stats.allThisDay': { species: string | number };
+  'detections.detail.stats.reviewsCount': { count: string | number };
+  'detections.detail.stats.reviewsCorrect': { count: string | number };
+  'detections.detail.stats.reviewsFalse': { count: string | number };
+  'detections.detail.stats.oftenRejected': { percent: string | number };
+  'detections.detail.clip.seconds': { count: string | number };
+  'detections.detail.log.detected': { species: string | number; confidence: string | number };
+  'detections.detail.log.captureWindow': { begin: string | number; end: string | number };
+  'detections.detail.log.reviewed': { status: string | number };
+  'detections.detail.log.reviewChanged': { status: string | number };
+  'detections.detail.log.noteEdited': { time: string | number };
+  'detections.detail.log.speciesChanged': { from: string | number; to: string | number };
   'detections.pagination.showing': {
     from: string | number;
     to: string | number;
