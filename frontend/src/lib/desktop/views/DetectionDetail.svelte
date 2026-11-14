@@ -116,6 +116,8 @@
   // Whether the server can step between detections. It cannot on the legacy
   // database format, where the navigation groups are left out.
   let steppingAvailable = $state(true);
+  // True when the neighbours request failed for the detection shown.
+  let neighborsFailed = $state(false);
   // Whether the server runs the current database format; null until a route that
   // depends on it has answered. Kept across detections: it does not change.
   let enhancedDatabase = $state<boolean | null>(null);
@@ -126,6 +128,11 @@
   // - lists: neighbours, predictions and daily counts, which also change with the species;
   // - species and attribution: tied to the species, kept while stepping within one species.
   let detectionController: AbortController | null = null;
+  // A save was made on the page whose effect on the review counts is not known yet: the
+  // next detection to arrive recounts them (a refresh only when its verdict changed).
+  let recountPending = false;
+  // Number of the latest review count request.
+  let reviewCountsRequest = 0;
   let relatedController: AbortController | null = null;
   let listsController: AbortController | null = null;
   let speciesController: AbortController | null = null;
@@ -137,6 +144,12 @@
 
   // The species dialog: the model's other predictions, and the place to change the species.
   let speciesDialogOpen = $state(false);
+
+  // The dialog belongs to the detection it was opened on; another detection closes it.
+  $effect(() => {
+    void resolvedDetectionId;
+    speciesDialogOpen = false;
+  });
 
   // The detecting model's predictions; it is the one model that stores them.
   let predictionSet = $derived(predictions?.modelPredictions?.at(0) ?? null);
@@ -307,12 +320,14 @@
         loadDaily(data, listsController.signal);
       }
 
+      // A new verdict changes the species' review counts; a note or lock does not. A
+      // step cannot tell what the save on the detection it left changed, so it recounts.
       if (speciesChanged) {
         loadSpeciesData(data);
-      } else if (refresh && verdictChanged && speciesController) {
-        // A new verdict changes the species' review counts; a note or lock does not.
+      } else if (recountPending && (!refresh || verdictChanged) && speciesController) {
         void loadReviewCounts(data.scientificName, speciesController.signal);
       }
+      recountPending = false;
     } catch (error) {
       if (isAbort(error, signal)) return;
       logger.error('Error fetching detection:', error);
@@ -329,10 +344,23 @@
     }
   }
 
-  /** Reloads the current detection after a change made on this page. */
-  function refreshDetection() {
-    if (resolvedDetectionId) {
+  /**
+   * Reloads the detection a change was saved on, in place. A save on a detection
+   * the page is leaving or has left does not reload the one now shown: a refresh
+   * would cancel a step still loading, and the step brings its detection with all
+   * its data. Such a save may still have changed the species' review counts, so
+   * they are counted again, now or when the step's detection arrives.
+   */
+  function refreshDetection(savedId: number) {
+    recountPending = true;
+    if (!resolvedDetectionId || !detection) return;
+    if (savedId === detection.id && !isLoadingDetection) {
       void fetchDetection(resolvedDetectionId, true);
+      return;
+    }
+    if (!isLoadingDetection && speciesController) {
+      recountPending = false;
+      void loadReviewCounts(detection.scientificName, speciesController.signal);
     }
   }
 
@@ -400,6 +428,7 @@
    */
   function loadLists(id: string, signal: AbortSignal) {
     neighbors = null;
+    neighborsFailed = false;
     predictions = null;
     void loadNeighbors(id, signal);
     load<DetectionPredictions>(
@@ -432,11 +461,15 @@
     try {
       const response = await fetch(buildAppUrl(`/api/v2/detections/${id}/neighbors`), { signal });
       if (signal.aborted) return;
+      // Only the legacy database cannot step at all; another failed answer leaves the
+      // links in place, blocked, so the one in focus stays.
       if (response.status === HTTP_CONFLICT) {
         enhancedDatabase = false;
+        steppingAvailable = false;
+        return;
       }
       if (!response.ok) {
-        steppingAvailable = false;
+        neighborsFailed = true;
         return;
       }
       const data = (await response.json()) as DetectionNeighbors;
@@ -447,7 +480,7 @@
     } catch (error) {
       if (isAbort(error, signal)) return;
       logger.error('Error loading detection neighbours:', error);
-      steppingAvailable = false;
+      neighborsFailed = true;
     }
   }
 
@@ -461,16 +494,20 @@
       );
       return result.total ?? 0;
     };
+    // Counts asked for later (after a verdict) win over earlier ones still out.
+    reviewCountsRequest += 1;
+    const request = reviewCountsRequest;
+    const latest = () => !signal.aborted && request === reviewCountsRequest;
     loading.reviews = true;
     try {
       const [correct, falsePositive] = await Promise.all([
         count('correct'),
         count('false_positive'),
       ]);
-      if (signal.aborted) return;
+      if (!latest()) return;
       reviewCounts = { correct, falsePositive };
     } catch (error) {
-      if (isAbort(error, signal)) return;
+      if (!latest() || isAbort(error, signal)) return;
       logger.error('Error loading species review counts:', error);
     }
     loading.reviews = false;
@@ -617,6 +654,7 @@
       date={detection.date}
       time={detection.time}
       {neighbors}
+      failed={neighborsFailed}
       available={steppingAvailable}
     />
 
@@ -639,15 +677,19 @@
           {predictionCount}
           onShowPredictions={() => (speciesDialogOpen = true)}
         />
-        <ReviewPanel
-          {detection}
-          speciesName={displayName}
-          {canReview}
-          {speciesBlockedReason}
-          grow
-          onWrongSpecies={() => (speciesDialogOpen = true)}
-          onChanged={refreshDetection}
-        />
+        <!-- One panel per detection: a draft, an error or a save still out belongs to the
+             detection it was made on and does not carry over to the next. -->
+        {#key detection.id}
+          <ReviewPanel
+            {detection}
+            speciesName={displayName}
+            {canReview}
+            {speciesBlockedReason}
+            grow
+            onWrongSpecies={() => (speciesDialogOpen = true)}
+            onChanged={refreshDetection}
+          />
+        {/key}
       </div>
       <ConditionsCard
         {detection}
@@ -673,12 +715,14 @@
     >
       <div class="dd-column">
         <ModelsCard contributions={detection.modelContributions} />
-        <ActivityLog
-          {detection}
-          speciesName={displayName}
-          {canReview}
-          onChanged={refreshDetection}
-        />
+        {#key detection.id}
+          <ActivityLog
+            {detection}
+            speciesName={displayName}
+            {canReview}
+            onChanged={refreshDetection}
+          />
+        {/key}
       </div>
       <div class="dd-column">
         <SpeciesStatsCard
@@ -694,16 +738,20 @@
       </div>
     </div>
 
-    <SpeciesChangeDialog
-      isOpen={speciesDialogOpen}
-      {detection}
-      speciesName={displayName}
-      {alternates}
-      {predictionModel}
-      blockedReason={speciesBlockedReason}
-      onClose={() => (speciesDialogOpen = false)}
-      onChanged={refreshDetection}
-    />
+    <!-- One dialog per detection, like the review panels: a save still out belongs to
+         the detection it was made on. -->
+    {#key detection.id}
+      <SpeciesChangeDialog
+        isOpen={speciesDialogOpen}
+        {detection}
+        speciesName={displayName}
+        {alternates}
+        {predictionModel}
+        blockedReason={speciesBlockedReason}
+        onClose={() => (speciesDialogOpen = false)}
+        onChanged={refreshDetection}
+      />
+    {/key}
   {:else if isLoadingDetection}
     <!-- First load: the loaded page's grid and card chrome, with bars for content. The
          one visible loading label sits where the breadcrumb will be. -->

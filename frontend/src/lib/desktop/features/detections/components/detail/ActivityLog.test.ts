@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import ActivityLog from './ActivityLog.svelte';
+import { t } from '$lib/i18n';
 import type { DetectionDetailData } from './detailTypes';
 
 const base: DetectionDetailData = {
@@ -28,26 +29,45 @@ function renderLog(detection: DetectionDetailData) {
 describe('ActivityLog entries', () => {
   afterEach(() => cleanup());
 
-  it('lists the first review and the later change, oldest first, after the detection', () => {
+  it('lists the first review and the latest save, oldest first, after the detection', () => {
     const entries = renderLog({
       ...base,
       verified: 'correct',
-      reviewedAt: '2026-11-14T08:00:00+02:00',
-      reviewUpdatedAt: '2026-11-14T09:00:00+02:00',
+      firstReviewedAt: '2026-11-14T08:00:00+02:00',
+      lastReviewedAt: '2026-11-14T09:00:00+02:00',
     });
 
     expect(entries).toHaveLength(3);
     expect(entries[0]).toContain('detections.detail.log.detected');
     expect(entries[1]).toContain('detections.detail.log.firstReviewed');
-    expect(entries[2]).toContain('detections.detail.log.reviewChanged');
+    // The latest save states the verdict; it does not claim the verdict changed, since
+    // any save (a species change, the same verdict again) moves its time.
+    expect(entries[2]).toContain('detections.detail.log.reviewed');
+  });
+
+  it('orders the entries by their time, not by kind', () => {
+    // Kept at 07:00, before the review at 08:00, though lock entries are listed after reviews.
+    const entries = renderLog({
+      ...base,
+      verified: 'correct',
+      locked: true,
+      lockedAt: '2026-11-14T07:00:00+02:00',
+      firstReviewedAt: '2026-11-14T08:00:00+02:00',
+      lastReviewedAt: '2026-11-14T08:00:00+02:00',
+    });
+
+    const locked = entries.findIndex(entry => entry.includes('detections.detail.log.locked'));
+    const reviewed = entries.findIndex(entry => entry.includes('detections.detail.log.reviewed'));
+    expect(locked).toBeGreaterThanOrEqual(0);
+    expect(reviewed).toBeGreaterThan(locked);
   });
 
   it('adds a species change entry when a reviewer replaced the model’s pick', () => {
     const entries = renderLog({
       ...base,
       verified: 'correct',
-      reviewedAt: '2026-11-14T08:00:00+02:00',
-      reviewUpdatedAt: '2026-11-14T08:00:00+02:00',
+      firstReviewedAt: '2026-11-14T08:00:00+02:00',
+      lastReviewedAt: '2026-11-14T08:00:00+02:00',
       originalSpecies: {
         scientificName: 'Turdus merula',
         commonName: 'Blackbird',
@@ -58,6 +78,15 @@ describe('ActivityLog entries', () => {
     expect(entries.some(entry => entry.includes('detections.detail.log.speciesChanged'))).toBe(
       true
     );
+    // The detection entry names what the model heard; the change names both species.
+    expect(vi.mocked(t)).toHaveBeenCalledWith('detections.detail.log.detected', {
+      species: 'Blackbird',
+      confidence: 87,
+    });
+    expect(vi.mocked(t)).toHaveBeenCalledWith('detections.detail.log.speciesChanged', {
+      from: 'Blackbird',
+      to: 'Song Thrush',
+    });
   });
 
   it('adds no species change entry once the species is back to the model’s pick', () => {
@@ -73,5 +102,36 @@ describe('ActivityLog entries', () => {
     expect(entries.some(entry => entry.includes('detections.detail.log.speciesChanged'))).toBe(
       false
     );
+  });
+});
+
+describe('ActivityLog note while saving', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  // Regression: text typed while a note was being saved was wiped when the save finished,
+  // though only the earlier text had been sent.
+  it('holds the note box read-only until the save answers', async () => {
+    let answer: ((_response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            answer = resolve;
+          })
+      )
+    );
+    render(ActivityLog, {
+      props: { detection: base, speciesName: 'Song Thrush', canReview: true, onChanged: vi.fn() },
+    });
+    const box = screen.getByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
+    await fireEvent.input(box, { target: { value: 'First note' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'detections.detail.log.saveNote' }));
+
+    expect(box.readOnly).toBe(true);
+    answer?.(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
   });
 });

@@ -827,7 +827,6 @@ export type TranslationKey =
   | 'detections.detail.log.clipSavedDenoised'
   | 'detections.detail.log.firstReviewed'
   | 'detections.detail.log.reviewed' // params: status
-  | 'detections.detail.log.reviewChanged' // params: status
   | 'detections.detail.log.locked'
   | 'detections.detail.log.noteAdded'
   | 'detections.detail.log.noteEdited' // params: time
@@ -4759,7 +4758,6 @@ export type TranslationParams = {
   'detections.detail.log.detected': { species: string | number; confidence: string | number };
   'detections.detail.log.captureWindow': { begin: string | number; end: string | number };
   'detections.detail.log.reviewed': { status: string | number };
-  'detections.detail.log.reviewChanged': { status: string | number };
   'detections.detail.log.noteEdited': { time: string | number };
   'detections.detail.log.speciesChanged': { from: string | number; to: string | number };
   'detections.pagination.showing': {

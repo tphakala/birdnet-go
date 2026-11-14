@@ -38,8 +38,8 @@
     grow?: boolean;
     /** Opens the species dialog. */
     onWrongSpecies: () => void;
-    /** Called after a change was saved, so the page can reload the detection. */
-    onChanged: () => void;
+    /** Called with the detection's id after a change to it was saved, so the page can reload it. */
+    onChanged: (_detectionId: number) => void;
   }
 
   let {
@@ -57,7 +57,10 @@
 
   let saving = $state<Verdict | 'lock' | 'ignore' | null>(null);
   let errorMessage = $state('');
-  let ignored = $state(false);
+  // The species ignored from this panel; a species change on the same detection names
+  // another species, which is not ignored.
+  let ignoredSpecies = $state<string | null>(null);
+  let ignored = $derived(ignoredSpecies === detection.scientificName);
   // The Keep state asked for, shown while it is saved and until the reloaded detection has it.
   let lockTarget = $state<boolean | null>(null);
 
@@ -76,14 +79,6 @@
     return speciesBlockedReason || t('detections.detail.review.autosave');
   });
 
-  // A different detection starts with a clean panel.
-  $effect(() => {
-    void detection.id;
-    errorMessage = '';
-    ignored = false;
-    lockTarget = null;
-  });
-
   // The reloaded detection has the Keep state that was asked for.
   $effect(() => {
     if (lockTarget !== null && detection.locked === lockTarget) lockTarget = null;
@@ -96,16 +91,18 @@
 
   async function setVerdict(verdict: Verdict) {
     if (verdictBlocked || saving !== null || detection.verified === verdict) return;
+    // The detection the change is saved on, kept for when the save answers.
+    const id = detection.id;
     saving = verdict;
     errorMessage = '';
     try {
-      await api.post(`/api/v2/detections/${detection.id}/review`, { verified: verdict });
+      await api.post(`/api/v2/detections/${id}/review`, { verified: verdict });
       toastActions.success(
         verdict === 'correct'
           ? t('detections.detail.review.savedCorrect')
           : t('detections.detail.review.savedFalsePositive')
       );
-      onChanged();
+      onChanged(id);
     } catch (error) {
       logger.error('Failed to save verdict', error, { action: 'review' });
       fail(t('common.review.errors.verificationFailed'));
@@ -117,12 +114,13 @@
   // A refused change leaves the switch as it was: ToggleField shows the value it is given.
   async function setLocked(locked: boolean) {
     if (locked === keepValue || !canReview || saving !== null) return;
+    const id = detection.id;
     saving = 'lock';
     errorMessage = '';
     lockTarget = locked;
     try {
-      await api.post(`/api/v2/detections/${detection.id}/lock`, { locked });
-      onChanged();
+      await api.post(`/api/v2/detections/${id}/lock`, { locked });
+      onChanged(id);
     } catch (error) {
       logger.error('Failed to change lock', error, { action: 'lock' });
       lockTarget = null;
@@ -134,6 +132,7 @@
 
   async function ignoreSpecies() {
     if (!canIgnore || saving !== null || ignored) return;
+    const species = detection.scientificName;
     saving = 'ignore';
     errorMessage = '';
     try {
@@ -141,7 +140,7 @@
         verified: 'false_positive',
         ignore_species: detection.commonName,
       });
-      ignored = true;
+      ignoredSpecies = species;
       toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });

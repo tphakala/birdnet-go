@@ -39,30 +39,23 @@ function makeDetection(overrides: Partial<Detection>): Detection {
 const FRESH_SCIENTIFIC = 'Fresh-sci-B';
 const STALE_SCIENTIFIC = 'Stale-sci-A';
 
-/** Minimal fetch Response stub carrying a JSON body. */
+/** A fetch Response carrying a JSON body. */
 function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
+  return new Response(JSON.stringify(body), {
     status,
-    statusText: status === 200 ? 'OK' : 'Error',
-    headers: new Headers({ 'content-type': 'application/json' }),
-    json: () => Promise.resolve(body),
-    // Serialize lazily and reject (never throw synchronously) so this
-    // Promise-returning method honors its contract even on a non-serializable body.
-    text: () => {
-      try {
-        return Promise.resolve(JSON.stringify(body));
-      } catch (error) {
-        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    },
-  } as unknown as Response;
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 /** One request the page made: method and path with query. */
 interface Call {
   method: string;
   url: string;
+}
+
+/** A route answer that builds its own Response from the call. */
+function isResponder(value: unknown): value is (_call: Call) => Promise<Response> {
+  return typeof value === 'function';
 }
 
 /**
@@ -79,11 +72,8 @@ function stubApi(routes: [string, unknown][]): Call[] {
       calls.push({ method: init?.method ?? 'GET', url });
       for (const [fragment, answer] of routes) {
         if (url.includes(fragment)) {
-          if (typeof answer === 'function') {
-            return (answer as (_call: Call) => Promise<Response>)({
-              method: init?.method ?? 'GET',
-              url,
-            });
+          if (isResponder(answer)) {
+            return answer({ method: init?.method ?? 'GET', url });
           }
           return Promise.resolve(jsonResponse(answer));
         }
@@ -115,7 +105,7 @@ afterEach(() => {
 
 describe('DetectionDetail loading and errors', () => {
   it('shows one visible loading label in the skeleton until the detection arrives', async () => {
-    let answer!: (_response: Response) => void;
+    let answer: ((_response: Response) => void) | undefined;
     stubApi([
       [
         '/api/v2/detections/5',
@@ -133,7 +123,7 @@ describe('DetectionDetail loading and errors', () => {
     });
     expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
 
-    answer(jsonResponse(makeDetection({ id: 5, commonName: 'Loaded bird' })));
+    answer?.(jsonResponse(makeDetection({ id: 5, commonName: 'Loaded bird' })));
     await waitFor(() => {
       expect(container.querySelector('#species-heading')?.textContent).toContain('Loaded bird');
     });
@@ -160,7 +150,7 @@ describe('DetectionDetail loading and errors', () => {
   // AbortController signal locally and checks the captured signal (not the shared
   // controller reference, which by then points at B's non-aborted controller).
   it('does not let a stale detection response overwrite a newer one', async () => {
-    let resolveStale!: (_response: Response) => void;
+    let resolveStale: ((_response: Response) => void) | undefined;
     const staleResponse = new Promise<Response>(resolve => {
       resolveStale = resolve;
     });
@@ -179,7 +169,7 @@ describe('DetectionDetail loading and errors', () => {
       expect(container.textContent).toContain(FRESH_SCIENTIFIC);
     });
 
-    resolveStale(
+    resolveStale?.(
       jsonResponse(
         makeDetection({ id: 1, scientificName: STALE_SCIENTIFIC, commonName: 'Stale A' })
       )
@@ -293,7 +283,7 @@ describe('DetectionDetail stepping and refreshing', () => {
   // while they are only made again when the species changes, so a step within one
   // species left the range score, taxonomy and statistics empty for good.
   it('keeps the species data loading across a step within the same species', async () => {
-    let answerSpecies!: (_response: Response) => void;
+    let answerSpecies: ((_response: Response) => void) | undefined;
     const speciesAnswer = new Promise<Response>(resolve => {
       answerSpecies = resolve;
     });
@@ -314,7 +304,9 @@ describe('DetectionDetail stepping and refreshing', () => {
     });
     await settle();
 
-    answerSpecies(jsonResponse({ rarity: { status: 'rare', score: 0.05, location_based: true } }));
+    answerSpecies?.(
+      jsonResponse({ rarity: { status: 'rare', score: 0.05, location_based: true } })
+    );
     await waitFor(() => {
       expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
     });
@@ -422,6 +414,217 @@ describe('DetectionDetail stepping and refreshing', () => {
   });
 });
 
+describe('DetectionDetail saves that finish around a step', () => {
+  // Regression: a save on one detection that finished after the user had stepped to the
+  // next one refreshed the new detection in place of its own load, which cancelled that
+  // load, so the new detection never got its sun times.
+  it('lets the step load the new detection when a save on the old one finishes during it', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    let answerNext: ((_response: Response) => void) | undefined;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/60/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      ['/api/v2/detections/60', makeDetection({ id: 60, date: '2024-02-01' })],
+      [
+        '/api/v2/detections/61',
+        () =>
+          new Promise<Response>(resolve => {
+            answerNext = resolve;
+          }),
+      ],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '60' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/weather/sun/2024-02-01')).toBe(1);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '61' });
+    await settle();
+
+    answerReview?.(jsonResponse({}));
+    await settle();
+    answerNext?.(jsonResponse(makeDetection({ id: 61, date: '2024-02-02' })));
+
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/weather/sun/2024-02-02')).toBe(1);
+    });
+  });
+
+  // A save that answers after the user stepped to a detection of the same species still
+  // changes that species' review counts, so the step recounts them.
+  it('recounts the reviews when a save on the old detection finishes during a step', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    let answerNext: ((_response: Response) => void) | undefined;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/62/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      ['/api/v2/detections/62', makeDetection({ id: 62 })],
+      [
+        '/api/v2/detections/63',
+        (call: Call) =>
+          call.url.endsWith('/api/v2/detections/63')
+            ? new Promise<Response>(resolve => {
+                answerNext = resolve;
+              })
+            : Promise.resolve(jsonResponse({})),
+      ],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '62' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '63' });
+    await settle();
+    answerReview?.(jsonResponse({}));
+    await settle();
+    answerNext?.(jsonResponse(makeDetection({ id: 63 })));
+
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(4);
+    });
+  });
+
+  it('recounts the reviews, without reloading the new detection, when a save finishes after the step', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/64/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      ['/api/v2/detections/64', makeDetection({ id: 64 })],
+      ['/api/v2/detections/65', makeDetection({ id: 65 })],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '64' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '65' });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+      ).not.toBeNull();
+    });
+    await settle();
+
+    answerReview?.(jsonResponse({}));
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(4);
+    });
+    expect(calls.filter(call => call.url.endsWith('/api/v2/detections/65')).length).toBe(1);
+  });
+
+  // Regression: a step that cancelled the refresh after a verdict also lost the recount of
+  // the species' reviews, which a step within one species does not make again.
+  it('recounts the reviews when a step cancels the refresh after a verdict', async () => {
+    let answerRefresh: ((_response: Response) => void) | undefined;
+    let loads = 0;
+    const calls = stubApi([
+      ['/api/v2/detections/70/review', {}],
+      [
+        '/api/v2/detections/70',
+        (call: Call) => {
+          if (!call.url.endsWith('/api/v2/detections/70')) return Promise.resolve(jsonResponse({}));
+          loads += 1;
+          if (loads === 1) return Promise.resolve(jsonResponse(makeDetection({ id: 70 })));
+          return new Promise<Response>(resolve => {
+            answerRefresh = resolve;
+          });
+        },
+      ],
+      ['/api/v2/detections/71', makeDetection({ id: 71 })],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '70' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await waitFor(() => {
+      expect(loads).toBe(2);
+    });
+
+    await rerender({ detectionId: '71' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(4);
+    });
+    answerRefresh?.(jsonResponse(makeDetection({ id: 70, verified: 'correct' })));
+  });
+});
+
+describe('DetectionDetail panels per detection', () => {
+  // Regression: the note box kept its draft when the user stepped to the next detection,
+  // so saving it attached the note to a detection it was not written for.
+  it('starts the next detection with an empty note box', async () => {
+    stubApi([
+      ['/api/v2/detections/90', makeDetection({ id: 90 })],
+      ['/api/v2/detections/91', makeDetection({ id: 91 })],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '90' });
+    const box = await screen.findByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
+    await fireEvent.input(box, { target: { value: 'Heard a second call' } });
+    expect(box.value).toBe('Heard a second call');
+
+    await rerender({ detectionId: '91' });
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote').value
+      ).toBe('');
+    });
+  });
+});
+
+describe('DetectionDetail neighbours', () => {
+  // Regression: one failed neighbours request removed the step links for the rest of the
+  // view, and with them the link the user had just stepped with.
+  it('keeps the step links, blocked and saying why, when the neighbours request fails', async () => {
+    stubApi([
+      ['/api/v2/detections/95/neighbors', () => Promise.resolve(jsonResponse({}, 500))],
+      ['/api/v2/detections/95', makeDetection({ id: 95 })],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '95' });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('link', { name: 'dataDisplay.table.error' })).toHaveLength(4);
+    });
+    for (const link of screen.getAllByRole('link', { name: 'dataDisplay.table.error' })) {
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+    }
+    expect(container.querySelector('.dd-nav-groups')).toHaveAttribute('aria-busy', 'false');
+  });
+});
+
 describe('DetectionDetail daily counts', () => {
   // Regression: after a step the stats card kept drawing the previous detection's daily
   // counts, under the new species' name, until the new counts answered.
@@ -461,6 +664,239 @@ describe('DetectionDetail daily counts', () => {
 
     expect(container.querySelector('.dd-daily-bar')).toBeNull();
     expect(container.querySelector('.dd-daily-bars [data-skeleton]')).not.toBeNull();
+  });
+});
+
+describe('DetectionDetail species dialog', () => {
+  // Regression: the dialog stayed open across a change of detection with the earlier pick,
+  // and Confirm then changed the species of a detection it was not opened for.
+  it('closes when another detection is shown', async () => {
+    stubApi([
+      ['/api/v2/detections/98', makeDetection({ id: 98 })],
+      ['/api/v2/detections/99', makeDetection({ id: 99 })],
+    ]);
+    // The Modal stays in the document and shows its open state with the visible class.
+    const dialog = () =>
+      screen.getByRole('dialog', { name: 'detections.detail.species.dialogTitle', hidden: true });
+
+    const { rerender } = detailTest.render({ detectionId: '98' });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /detections\.detail\.review\.wrongSpecies/ })
+    );
+    await waitFor(() => {
+      expect(dialog()).toHaveClass('visible');
+    });
+
+    await rerender({ detectionId: '99' });
+    await waitFor(() => {
+      expect(dialog()).not.toHaveClass('visible');
+    });
+  });
+});
+
+describe('DetectionDetail review counts', () => {
+  // Regression: the counts asked for after a verdict shared the species request's signal
+  // with the first counts, so a slow first answer arriving last put the old counts back.
+  it('keeps the counts asked for after a verdict when the first counts answer later', async () => {
+    const firstAnswers: ((_response: Response) => void)[] = [];
+    let searches = 0;
+    let verified: Detection['verified'] = 'unverified';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('/api/v2/search')) {
+          searches += 1;
+          if (searches <= 2) {
+            return new Promise<Response>(resolve => {
+              firstAnswers.push(resolve);
+            });
+          }
+          const correct = String(init?.body).includes('"correct"');
+          return Promise.resolve(jsonResponse({ total: correct ? 5 : 0 }));
+        }
+        if (url.endsWith('/api/v2/detections/80')) {
+          return Promise.resolve(jsonResponse(makeDetection({ id: 80, verified })));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '80' });
+    await waitFor(() => {
+      expect(searches).toBe(2);
+    });
+    verified = 'correct';
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
+    });
+
+    // The first counts (no reviews correct, one false positive) answer last.
+    firstAnswers[0]?.(jsonResponse({ total: 0 }));
+    firstAnswers[1]?.(jsonResponse({ total: 1 }));
+    await settle();
+
+    expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
+  });
+});
+
+describe('DetectionDetail loading paths', () => {
+  it('does not recount the reviews after a note, which leaves the verdict as it was', async () => {
+    const calls = stubApi([
+      ['/api/v2/detections/110/review', {}],
+      ['/api/v2/detections/110', makeDetection({ id: 110 })],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    detailTest.render({ detectionId: '110' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    const box = await screen.findByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
+    await fireEvent.input(box, { target: { value: 'A note' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'detections.detail.log.saveNote' }));
+    await waitFor(() => {
+      expect(calls.filter(call => call.url.endsWith('/api/v2/detections/110')).length).toBe(2);
+    });
+    await settle();
+
+    expect(count(calls, '/api/v2/search')).toBe(2);
+  });
+
+  it('drops a late answer for the species the page has left', async () => {
+    let answerOld: ((_response: Response) => void) | undefined;
+    stubApi([
+      ['/api/v2/detections/111', makeDetection({ id: 111, scientificName: 'Turdus merula' })],
+      ['/api/v2/detections/112', makeDetection({ id: 112, scientificName: 'Erithacus rubecula' })],
+      [
+        'species?scientific_name=Turdus%20merula',
+        () =>
+          new Promise<Response>(resolve => {
+            answerOld = resolve;
+          }),
+      ],
+      [
+        'species?scientific_name=Erithacus%20rubecula',
+        { rarity: { status: 'rare', score: 0.05, location_based: true } },
+      ],
+    ]);
+
+    const { container, rerender } = detailTest.render({ detectionId: '111' });
+    await waitFor(() => {
+      expect(answerOld).toBeDefined();
+    });
+    await rerender({ detectionId: '112' });
+    await waitFor(() => {
+      expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
+    });
+
+    answerOld?.(jsonResponse({ rarity: { status: 'common', score: 0.9, location_based: true } }));
+    await settle();
+
+    expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
+  });
+
+  it('makes the previous detection inert, and leaves the step links usable, while the next loads', async () => {
+    stubApi([
+      ['/api/v2/detections/113', makeDetection({ id: 113 })],
+      [
+        '/api/v2/detections/114',
+        (call: Call) =>
+          call.url.endsWith('/api/v2/detections/114')
+            ? new Promise<Response>(() => {})
+            : Promise.resolve(jsonResponse({})),
+      ],
+    ]);
+
+    const { container, rerender } = detailTest.render({ detectionId: '113' });
+    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
+    await rerender({ detectionId: '114' });
+    await settle();
+
+    const grids = [...container.querySelectorAll<HTMLElement>('.dd-grid')];
+    expect(grids.length).toBe(2);
+    expect(grids.every(grid => grid.inert)).toBe(true);
+    // Svelte sets inert as a property, which jsdom does not reflect as an attribute, so
+    // the nav's ancestors are checked one by one.
+    const inertAncestors: HTMLElement[] = [];
+    for (let node = container.querySelector('nav'); node; node = node.parentElement) {
+      if (node.inert) inertAncestors.push(node);
+    }
+    expect(container.querySelector('nav')).not.toBeNull();
+    expect(inertAncestors).toEqual([]);
+  });
+
+  it('keeps the detection on screen, with no error, when a refresh fails', async () => {
+    let loads = 0;
+    stubApi([
+      ['/api/v2/detections/115/review', {}],
+      [
+        '/api/v2/detections/115',
+        (call: Call) => {
+          if (!call.url.endsWith('/api/v2/detections/115'))
+            return Promise.resolve(jsonResponse({}));
+          loads += 1;
+          return Promise.resolve(
+            loads === 1
+              ? jsonResponse(makeDetection({ id: 115, commonName: 'Kept bird' }))
+              : jsonResponse({}, 500)
+          );
+        },
+      ],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '115' });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await waitFor(() => {
+      expect(loads).toBe(2);
+    });
+    await settle();
+
+    expect(container.querySelector('#species-heading')?.textContent).toContain('Kept bird');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('leaves no placeholder once every request has failed', async () => {
+    stubApi([
+      ['/api/v2/detections/116/', () => Promise.resolve(jsonResponse({}, 500))],
+      ['/api/v2/detections/116', makeDetection({ id: 116 })],
+      ['/api/v2/', () => Promise.resolve(jsonResponse({}, 404))],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '116' });
+    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
+    await waitFor(() => {
+      expect(container.querySelector('[data-skeleton]')).toBeNull();
+    });
+  });
+
+  it('keeps loaded species data on screen through a step within the species', async () => {
+    const calls = stubApi([
+      ['/api/v2/detections/117', makeDetection({ id: 117, scientificName: 'Turdus merula' })],
+      ['/api/v2/detections/118', makeDetection({ id: 118, scientificName: 'Turdus merula' })],
+      [
+        'species?scientific_name=',
+        { rarity: { status: 'rare', score: 0.05, location_based: true } },
+      ],
+    ]);
+
+    const { container, rerender } = detailTest.render({ detectionId: '117' });
+    await waitFor(() => {
+      expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
+    });
+    await rerender({ detectionId: '118' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/detections/118')).toBeGreaterThan(0);
+    });
+    await settle();
+
+    expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
+    expect(count(calls, 'species?scientific_name=')).toBe(1);
   });
 });
 

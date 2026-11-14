@@ -43,8 +43,8 @@
     /** Why the species cannot be changed now; empty when the viewer may change it. */
     blockedReason: string;
     onClose: () => void;
-    /** Called after the species was changed, so the page can reload the detection. */
-    onChanged: () => void;
+    /** Called with the detection's id after a change to it was saved, so the page can reload it. */
+    onChanged: (_detectionId: number) => void;
   }
 
   let {
@@ -178,23 +178,26 @@
   );
 
   async function confirm() {
-    if (!selected || saving || !canChange) return;
+    // The species sent is the one named afterwards, whatever is picked while it saves.
+    const chosen = selected;
+    if (!chosen || saving || !canChange) return;
+    const id = detection.id;
     saving = true;
     errorMessage = '';
     try {
-      await api.put(`/api/v2/detections/${detection.id}/species`, {
-        scientificName: selected.scientificName,
+      await api.put(`/api/v2/detections/${id}/species`, {
+        scientificName: chosen.scientificName,
       });
-      toastActions.success(
-        t('detections.detail.species.changed', { species: selected.commonName })
-      );
-      onChanged();
-      onClose();
+      toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
+      onChanged(id);
+      // A dialog left for another detection while it saved does not close the next one.
+      if (detection.id === id) onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
+      if (detection.id !== id) return;
       errorMessage =
         error instanceof ApiError && error.status === HTTP_BAD_REQUEST
-          ? t('detections.detail.species.notKnownHere', { species: selected.commonName })
+          ? t('detections.detail.species.notKnownHere', { species: chosen.commonName })
           : t('detections.detail.species.changeFailed');
     } finally {
       saving = false;
