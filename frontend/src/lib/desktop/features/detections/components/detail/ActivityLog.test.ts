@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import ActivityLog from './ActivityLog.svelte';
 import type { DetectionDetailData } from './detailTypes';
 
@@ -73,5 +73,36 @@ describe('ActivityLog entries', () => {
     expect(entries.some(entry => entry.includes('detections.detail.log.speciesChanged'))).toBe(
       false
     );
+  });
+});
+
+describe('ActivityLog note while saving', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  // Regression: text typed while a note was being saved was wiped when the save finished,
+  // though only the earlier text had been sent.
+  it('holds the note box read-only until the save answers', async () => {
+    let answer: ((_response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            answer = resolve;
+          })
+      )
+    );
+    render(ActivityLog, {
+      props: { detection: base, speciesName: 'Song Thrush', canReview: true, onChanged: vi.fn() },
+    });
+    const box = screen.getByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
+    await fireEvent.input(box, { target: { value: 'First note' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'detections.detail.log.saveNote' }));
+
+    expect(box.readOnly).toBe(true);
+    answer?.(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
   });
 });

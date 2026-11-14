@@ -57,7 +57,10 @@
 
   let saving = $state<Verdict | 'lock' | 'ignore' | null>(null);
   let errorMessage = $state('');
-  let ignored = $state(false);
+  // The species ignored from this panel; a species change on the same detection names
+  // another species, which is not ignored.
+  let ignoredSpecies = $state<string | null>(null);
+  let ignored = $derived(ignoredSpecies === detection.scientificName);
   // The Keep state asked for, shown while it is saved and until the reloaded detection has it.
   let lockTarget = $state<boolean | null>(null);
 
@@ -74,14 +77,6 @@
     if (errorMessage) return errorMessage;
     if (saving) return t('detections.detail.review.saving');
     return speciesBlockedReason || t('detections.detail.review.autosave');
-  });
-
-  // A different detection starts with a clean panel.
-  $effect(() => {
-    void detection.id;
-    errorMessage = '';
-    ignored = false;
-    lockTarget = null;
   });
 
   // The reloaded detection has the Keep state that was asked for.
@@ -137,6 +132,7 @@
 
   async function ignoreSpecies() {
     if (!canIgnore || saving !== null || ignored) return;
+    const species = detection.scientificName;
     saving = 'ignore';
     errorMessage = '';
     try {
@@ -144,7 +140,7 @@
         verified: 'false_positive',
         ignore_species: detection.commonName,
       });
-      ignored = true;
+      ignoredSpecies = species;
       toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });

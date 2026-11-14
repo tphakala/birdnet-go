@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import ReviewPanel from './ReviewPanel.svelte';
 import type { DetectionDetailData } from './detailTypes';
 
@@ -57,5 +57,87 @@ describe('ReviewPanel blocked species change', () => {
     expect(button).not.toHaveAttribute('aria-disabled');
     await fireEvent.click(button);
     expect(onWrongSpecies).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ReviewPanel ignore species', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  // Regression: the panel reset itself whenever the page reloaded the same detection (after
+  // a lock or a note), so a species ignored a moment ago was offered for ignoring again.
+  it('keeps the species ignored when the same detection is reloaded', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    const rejected: DetectionDetailData = { ...detection, verified: 'false_positive' };
+    const { rerender } = render(ReviewPanel, {
+      props: {
+        detection: rejected,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'detections.detail.review.ignoredShort' })
+      ).toBeInTheDocument();
+    });
+
+    await rerender({ detection: { ...rejected } });
+    expect(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoredShort' })
+    ).toBeInTheDocument();
+  });
+
+  it('offers to ignore the new species after a species change on the same detection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    const rejected: DetectionDetailData = { ...detection, verified: 'false_positive' };
+    const { rerender } = render(ReviewPanel, {
+      props: {
+        detection: rejected,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'detections.detail.review.ignoredShort' })
+      ).toBeInTheDocument();
+    });
+
+    await rerender({
+      detection: { ...rejected, scientificName: 'Gallinago gallinago', commonName: 'Snipe' },
+    });
+    expect(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
+    ).toBeInTheDocument();
   });
 });
