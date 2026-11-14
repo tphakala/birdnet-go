@@ -38,8 +38,10 @@ export interface DetectionDetailData extends Detection {
 export interface SavedChange {
   /** The detection the save was made on, which may no longer be the one shown. */
   detectionId: number;
-  /** The species whose statistics the save may have changed. */
+  /** The detection's species when the save was made, whose statistics it may have changed. */
   scientificName: string;
+  /** The species a species change moved the detection to; absent for any other save. */
+  changedTo?: string;
   /** True when the save may have changed that species' statistics (a verdict or a species change). */
   speciesStats: boolean;
 }

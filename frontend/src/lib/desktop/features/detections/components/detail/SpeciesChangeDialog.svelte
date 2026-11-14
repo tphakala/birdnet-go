@@ -223,15 +223,20 @@
         scientificName: chosen.scientificName,
       });
       toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
-      // A dialog still open is on the saved detection, whose reload counts the new species;
-      // one already gone left the page free to show another detection of the old species.
-      onChanged({ detectionId: id, scientificName: previousSpecies, speciesStats: destroyed });
+      // The detection moved from one species to another, so both species' statistics
+      // changed, whichever detection the page shows by now.
+      onChanged({
+        detectionId: id,
+        scientificName: previousSpecies,
+        changedTo: chosen.scientificName,
+        speciesStats: true,
+      });
       if (!destroyed) onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
       const message = failureMessage(error, chosen);
-      // A dialog already gone has nowhere to show it.
-      if (destroyed) toastActions.error(message);
+      // A dialog already gone or closed has nowhere to show it.
+      if (destroyed || !isOpen) toastActions.error(message);
       else errorMessage = message;
     } finally {
       saving = false;

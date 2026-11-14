@@ -149,6 +149,7 @@ describe('SpeciesChangeDialog saving', () => {
         expect(onChanged).toHaveBeenCalledWith({
           detectionId: 7,
           scientificName: 'Turdus merula',
+          changedTo: 'Turdus philomelos',
           speciesStats: true,
         });
       });
@@ -166,6 +167,55 @@ describe('SpeciesChangeDialog saving', () => {
         );
       });
       expect(onChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  // A change moves the detection between two species, so both species' statistics change,
+  // whichever detection the page shows by the time the save answers.
+  it('reports both species of a saved change while the dialog is still open', async () => {
+    const { onChanged } = renderDialog();
+    await fireEvent.click(radio('Song Thrush'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+    );
+    await waitFor(() => expect(puts).toHaveLength(1));
+    answerPut?.(json({}));
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledWith({
+        detectionId: 7,
+        scientificName: 'Turdus merula',
+        changedTo: 'Turdus philomelos',
+        speciesStats: true,
+      });
+    });
+  });
+
+  it('reports a failed save as a toast when the dialog was closed while it saved', async () => {
+    vi.mocked(toastActions.error).mockClear();
+    const props = {
+      isOpen: true,
+      detection,
+      speciesName: 'Blackbird',
+      alternates,
+      predictionModel: 'BirdNET 2.4',
+      blockedReason: '',
+      onClose: vi.fn(),
+      onChanged: vi.fn(),
+    };
+    const { rerender } = render(SpeciesChangeDialog, { props });
+    await fireEvent.click(radio('Song Thrush'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+    );
+    await waitFor(() => expect(puts).toHaveLength(1));
+    await rerender({ ...props, isOpen: false });
+    answerPut?.(json({}, 500));
+
+    await waitFor(() => {
+      expect(vi.mocked(toastActions.error)).toHaveBeenCalledWith(
+        'detections.detail.species.changeFailed'
+      );
     });
   });
 

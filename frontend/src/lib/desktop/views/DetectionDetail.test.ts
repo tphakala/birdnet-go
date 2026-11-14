@@ -730,6 +730,111 @@ describe('DetectionDetail species dialog', () => {
   });
 });
 
+describe('DetectionDetail statistics after a species change', () => {
+  const OLD = 'Turdus merula';
+  const NEW = 'Turdus philomelos';
+  const statsTotal = () =>
+    screen.getByText('detections.detail.stats.total').nextElementSibling?.textContent.trim();
+
+  /**
+   * Opens the species dialog on detection 90 (species OLD), picks NEW from the model's
+   * predictions and confirms. The save answers when `answerPut` is called; every reload
+   * of detection 90 after the first stays out, as a refresh that has not answered yet.
+   */
+  async function changeSpecies(extraRoutes: [string, unknown][]) {
+    let answerPut: ((_response: Response) => void) | undefined;
+    let putDone = false;
+    let loads90 = 0;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/90/species',
+        () =>
+          new Promise<Response>(resolve => {
+            answerPut = response => {
+              putDone = true;
+              resolve(response);
+            };
+          }),
+      ],
+      [
+        '/api/v2/detections/90/predictions',
+        {
+          detectionId: 90,
+          modelPredictions: [
+            {
+              modelName: 'BirdNET',
+              modelVersion: '2.4',
+              predictions: [{ scientificName: NEW, commonName: 'Song Thrush', confidence: 0.4 }],
+            },
+          ],
+        },
+      ],
+      ['/neighbors', neighborsOf(90)],
+      [
+        '/api/v2/detections/90',
+        (call: Call) => {
+          if (!call.url.endsWith('/api/v2/detections/90')) {
+            return Promise.resolve(jsonResponse({}));
+          }
+          loads90 += 1;
+          return loads90 === 1
+            ? Promise.resolve(jsonResponse(makeDetection({ id: 90, scientificName: OLD })))
+            : new Promise<Response>(() => {});
+        },
+      ],
+      ...extraRoutes,
+      // Each species' total drops or grows by one once the change is saved.
+      [
+        `${STATS}?scientific_name=Turdus%20merula`,
+        () => Promise.resolve(jsonResponse(statsOf(0, 0, putDone ? 9 : 10))),
+      ],
+      [
+        `${STATS}?scientific_name=Turdus%20philomelos`,
+        () => Promise.resolve(jsonResponse(statsOf(0, 0, putDone ? 6 : 5))),
+      ],
+    ]);
+
+    const view = detailTest.render({ detectionId: '90' });
+    await waitFor(() => expect(statsTotal()).toBe('10'));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /detections\.detail\.review\.wrongSpecies/ })
+    );
+    await fireEvent.click(await screen.findByRole('radio', { name: /Song Thrush/ }));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.species\.confirm/ })
+    );
+    await waitFor(() => expect(count(calls, '/api/v2/detections/90/species')).toBe(1));
+    return { ...view, calls, answerPut: (response: Response) => answerPut?.(response) };
+  }
+
+  // Regression: the step kept the old species' totals, which still counted the moved detection.
+  it('shows the old species\u2019 new total after stepping to another of its detections', async () => {
+    const { rerender, answerPut } = await changeSpecies([
+      ['/api/v2/detections/91', makeDetection({ id: 91, scientificName: OLD })],
+    ]);
+    answerPut(jsonResponse({}));
+    await settle();
+    // The refresh of the changed detection is still out when the user steps on.
+    await rerender({ detectionId: '91' });
+
+    await waitFor(() => expect(statsTotal()).toBe('9'));
+  });
+
+  // Regression: a save that answered after a step to a detection of the new species left
+  // that species' total one short.
+  it('shows the new species\u2019 new total when the save answers after a step to it', async () => {
+    const { rerender, answerPut } = await changeSpecies([
+      ['/api/v2/detections/92', makeDetection({ id: 92, scientificName: NEW })],
+    ]);
+    await rerender({ detectionId: '92' });
+    await waitFor(() => expect(statsTotal()).toBe('5'));
+
+    answerPut(jsonResponse({}));
+
+    await waitFor(() => expect(statsTotal()).toBe('6'));
+  });
+});
+
 describe('DetectionDetail species statistics', () => {
   /** The text of the value under a statistics label. */
   const statValue = (label: string) =>

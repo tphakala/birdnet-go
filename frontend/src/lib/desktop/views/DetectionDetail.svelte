@@ -373,19 +373,24 @@
   }
 
   /**
-   * A change was saved on a detection. Its species' statistics are loaded again when the
-   * page holds that species' data, whichever detection is shown now. The detection
-   * itself is reloaded only when it is the one the page is on:
+   * A change was saved on a detection. The statistics of the species it touched (its
+   * species, and for a species change also the new one) are loaded again when the page
+   * holds that species' data, whichever detection is shown now. After a species change
+   * the page holds no species until the changed detection's reload lands, so a reload that
+   * fails or is cut short by a step leaves the next detection to load its species data
+   * afresh. The detection itself is reloaded only when it is the one the page is on:
    * - shown and settled: reloaded in place, keeping what is on screen if that fails;
    * - being stepped to: the step's request may have been sent before the save went
    *   through, so the whole step starts again, with its sun times and daily counts;
    * - already left: nothing to reload, a step brings its own detection.
    */
   function onSaved(change: SavedChange) {
-    if (change.speciesStats && change.scientificName === speciesDataFor) {
-      loadStats(change.scientificName);
+    const touched = [change.scientificName, change.changedTo];
+    if (change.speciesStats && speciesDataFor && touched.includes(speciesDataFor)) {
+      loadStats(speciesDataFor);
     }
     if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) return;
+    if (change.changedTo) speciesDataFor = '';
     void fetchDetection(resolvedDetectionId, !isLoadingDetection);
   }
 
