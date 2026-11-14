@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '$lib/i18n';
 import { cleanup, render, screen } from '@testing-library/svelte';
 import ConditionsCard from './ConditionsCard.svelte';
@@ -41,13 +41,13 @@ describe('ConditionsCard weather tiles', () => {
     expect(tileValue('detections.detail.conditions.windFrom')).toBe('0.0 m/s');
   });
 
-  // The API leaves out clouds of 0 too, but the Wunderground provider never sets clouds
-  // (internal/weather/provider_wunderground.go), so a recorded hour shows 0 % for it.
-  it('shows 0 for cloud cover of a recorded hour when the API left it out', () => {
+  it('shows the cloud cover the API sent', () => {
     renderCard({ hourly: { time: '03:00', temperature: 2, clouds: 40 } });
     expect(tileValue('detections.detail.conditions.cloudCover')).toBe('40%');
   });
 
+  // The API leaves out clouds of 0, and the Wunderground provider never sets clouds
+  // (internal/weather/provider_wunderground.go), so a recorded hour shows 0 % for it.
   it('shows 0 % cloud cover for a recorded hour that left it out', () => {
     renderCard({ hourly: { time: '03:00', temperature: 2 } });
 
@@ -63,7 +63,7 @@ describe('ConditionsCard weather tiles', () => {
     expect(tileValue('detections.detail.conditions.feelsLike')).toBe('-');
     // The weather line must not read 0 degrees.
     expect(document.querySelector('.dd-weather-temp')?.textContent.trim()).toBe('-');
-    expect(screen.getByRole('img', { name: 'not-available' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'not-available', hidden: true })).toBeInTheDocument();
   });
 
   it('gives no wind direction when only the detection carries a wind speed', () => {
@@ -80,15 +80,18 @@ describe('ConditionsCard weather tiles', () => {
   });
 
   it('shows the wind from north for a recorded hour', () => {
+    vi.mocked(t).mockClear();
     renderCard({ hourly: { time: '03:00', wind_speed: 3 } });
 
     expect(t).toHaveBeenCalledWith('detections.detail.compass.n');
   });
 
   it('names the compass point of the wind direction through t()', () => {
+    vi.mocked(t).mockClear();
     renderCard({ hourly: { time: '03:00', wind_speed: 3, wind_deg: 292 } });
 
     expect(t).toHaveBeenCalledWith('detections.detail.compass.wnw');
+    expect(t).not.toHaveBeenCalledWith('detections.detail.compass.n');
   });
 
   it('shows dashes when there is no observation for the hour', () => {
@@ -121,7 +124,7 @@ describe('ConditionsCard weather tiles', () => {
       time_of_day: 'night',
     });
 
-    expect(screen.getByRole('img', { name: 'clear-night' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'clear-night', hidden: true })).toBeInTheDocument();
   });
 
   it('shows the day icon for a stored code without suffix and a day time of day', () => {
@@ -130,7 +133,7 @@ describe('ConditionsCard weather tiles', () => {
       time_of_day: 'day',
     });
 
-    expect(screen.getByRole('img', { name: 'clear-day' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'clear-day', hidden: true })).toBeInTheDocument();
   });
 
   it('falls back to the detection time of day when the weather has none', () => {
@@ -142,7 +145,7 @@ describe('ConditionsCard weather tiles', () => {
       },
     });
 
-    expect(screen.getByRole('img', { name: 'clear-night' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'clear-night', hidden: true })).toBeInTheDocument();
   });
 });
 
@@ -179,5 +182,19 @@ describe('ConditionsCard loading', () => {
     renderCard({ hourly: { time: '03:00' } });
 
     expect(screen.queryByText('common.loading')).toBeNull();
+  });
+});
+
+describe('ConditionsCard condition icon', () => {
+  afterEach(() => cleanup());
+
+  // The condition line beside the icon says the same in the UI language; the icon's own
+  // name would be the provider's English text or an icon id.
+  it('hides the condition icon from assistive technology', () => {
+    renderCard({ hourly: { time: '03:00', temperature: 2, weather_desc: 'overcast clouds' } });
+
+    expect(screen.queryByRole('img', { name: /overcast clouds/ })).toBeNull();
+    const icon = document.querySelector('.dd-weather-now [role="img"]');
+    expect(icon?.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 });

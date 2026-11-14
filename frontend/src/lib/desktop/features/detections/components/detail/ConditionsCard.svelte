@@ -441,7 +441,11 @@
 
     <!-- Weather at the time -->
     <div class="dd-weather-now">
-      <WeatherSvgIcon icon={conditionIcon} size={48} title={description ?? ''} />
+      <!-- The line beside the icon says the same in the UI language; the icon's own name is
+           the provider's English text or an icon id. -->
+      <span class="contents" aria-hidden="true">
+        <WeatherSvgIcon icon={conditionIcon} size={48} />
+      </span>
       <div class="dd-weather-now-text">
         {#if !hasWeather && weatherPending}
           <span class="dd-weather-temp"><Skeleton inline className="h-6 w-14" /></span>
