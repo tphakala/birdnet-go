@@ -548,6 +548,18 @@ func TestGetDetectionPredictions_OriginalPick(t *testing.T) {
 			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
 		},
 		{
+			name: "changed back under another spelling: no entry", current: predTestPrimaryNew,
+			original: detection.Species{ScientificName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestPrimaryNew, "", "", predTestLow), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
+			name: "changed back under the legacy spelling of the current species: no entry", current: predTestPrimaryOld,
+			original: detection.Species{ScientificName: predTestPrimaryNew}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestPrimaryOld, "", "", predTestLow), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
 			name: "no species part in the stored name: no entry", current: predTestMallard,
 			original: detection.Species{ScientificName: "_Eurasian Blackbird"}, conf: predTestOrigConf,
 			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)},
