@@ -127,7 +127,7 @@ describe('StatsCard', () => {
       },
     });
 
-    const skeletons = container.querySelectorAll('.skeleton');
+    const skeletons = container.querySelectorAll('[data-skeleton]');
     expect(skeletons).toHaveLength(2);
     expect(screen.queryByText('0')).not.toBeInTheDocument();
     expect(screen.queryByText('Loading')).not.toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('StatsCard', () => {
       },
     });
 
-    const skeletons = container.querySelectorAll('.skeleton');
+    const skeletons = container.querySelectorAll('[data-skeleton]');
     expect(skeletons).toHaveLength(3);
   });
 

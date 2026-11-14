@@ -34,6 +34,7 @@
   import type { Snippet } from 'svelte';
   import { TrendingUp, TrendingDown, Minus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
 
   type TrendDirection = 'up' | 'down' | 'neutral';
   type CardVariant =
@@ -129,10 +130,10 @@
       <div class="flex-1">
         {#if loading}
           <div class="space-y-2">
-            <div class="skeleton h-8 w-24"></div>
-            <div class="skeleton h-4 w-32"></div>
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-4 w-32" />
             {#if subLabel}
-              <div class="skeleton h-3 w-28"></div>
+              <Skeleton className="h-3 w-28" />
             {/if}
           </div>
         {:else}

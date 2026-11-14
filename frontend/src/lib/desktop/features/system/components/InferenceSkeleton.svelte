@@ -2,26 +2,25 @@
   InferenceSkeleton - loading placeholder for the AI Models & Inference page.
 
   Mirrors the loaded layout so the page does not jump when the snapshot arrives.
-  One status region carries the visible loading label, shown in the model card
-  header where the loaded card shows its activity state, so the skeleton adds no
-  height of its own. Each bar is hidden from assistive technology and stops
-  pulsing under prefers-reduced-motion.
+  Built from the shared Skeleton bars and one SkeletonStatus label, shown in the
+  model card header where the loaded card shows its activity state, so the
+  skeleton adds no height of its own.
 
   @component
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
 
   const CARD_CLASS =
     'bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm';
-  const BAR_CLASS =
-    'min-w-0 max-w-full rounded bg-[var(--color-base-300)] animate-pulse motion-reduce:animate-none';
   /** Value widths for the hardware rows, varied so the bars do not read as a table. */
   const HARDWARE_VALUE_WIDTHS = ['w-56', 'w-48', 'w-40', 'w-12', 'w-16', 'w-32'];
 </script>
 
 {#snippet bar(sizeClass: string)}
-  <div aria-hidden="true" class="{BAR_CLASS} {sizeClass}"></div>
+  <Skeleton className={sizeClass} />
 {/snippet}
 
 {#snippet bars(count: number, sizeClass: string)}
@@ -37,7 +36,7 @@
   </div>
 {/snippet}
 
-<div class="space-y-4" role="status" data-testid="inference-skeleton">
+<div class="space-y-4" data-testid="inference-skeleton">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
     <!-- Hardware -->
     <div class={CARD_CLASS}>
@@ -74,7 +73,7 @@
         {@render bar('h-4 w-4')}
         {@render bar('h-4 w-40')}
         {@render bar('h-5 w-16 rounded-full')}
-        <span class="ml-auto text-xs text-muted">{t('system.inference.loading')}</span>
+        <SkeletonStatus label={t('system.inference.loading')} className="ml-auto text-xs" />
       </div>
 
       <!-- Spec and stats lines -->
