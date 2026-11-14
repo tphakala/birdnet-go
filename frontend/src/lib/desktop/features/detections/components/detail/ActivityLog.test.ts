@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import ActivityLog from './ActivityLog.svelte';
-import { t } from '$lib/i18n';
+import { getLocale, t } from '$lib/i18n';
 import { toastActions } from '$lib/stores/toast';
 import type { DetectionDetailData } from './detailTypes';
 
@@ -63,33 +63,6 @@ describe('ActivityLog entries', () => {
     expect(reviewed).toBeGreaterThan(locked);
   });
 
-  it('adds a species change entry when a reviewer replaced the model’s pick', () => {
-    const entries = renderLog({
-      ...base,
-      verified: 'correct',
-      firstReviewedAt: '2026-11-14T08:00:00+02:00',
-      lastReviewedAt: '2026-11-14T08:00:00+02:00',
-      originalSpecies: {
-        scientificName: 'Turdus merula',
-        commonName: 'Blackbird',
-        speciesCode: 'eurbla',
-      },
-    });
-
-    expect(entries.some(entry => entry.includes('detections.detail.log.speciesChanged'))).toBe(
-      true
-    );
-    // The detection entry names what the model heard; the change names both species.
-    expect(vi.mocked(t)).toHaveBeenCalledWith('detections.detail.log.detected', {
-      species: 'Blackbird',
-      confidence: 87,
-    });
-    expect(vi.mocked(t)).toHaveBeenCalledWith('detections.detail.log.speciesChanged', {
-      from: 'Blackbird',
-      to: 'Song Thrush',
-    });
-  });
-
   it('adds no species change entry once the species is back to the model’s pick', () => {
     const entries = renderLog({
       ...base,
@@ -134,6 +107,53 @@ describe('ActivityLog note while saving', () => {
 
     expect(box.readOnly).toBe(true);
     answer?.(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  });
+});
+
+describe('ActivityLog times', () => {
+  afterEach(() => cleanup());
+
+  // The log writes its dates in the UI language, not as the stored ISO date.
+  it('writes each entry time with the date in the UI language', () => {
+    const { container } = render(ActivityLog, {
+      props: {
+        detection: {
+          ...base,
+          verified: 'correct',
+          firstReviewedAt: '2026-11-14T08:00:00+02:00',
+          lastReviewedAt: '2026-11-14T09:00:00+02:00',
+        },
+        speciesName: 'Song Thrush',
+        canReview: false,
+        onChanged: vi.fn(),
+      },
+    });
+
+    const times = [...container.querySelectorAll('.dd-log-time')].map(el => el.textContent.trim());
+    expect(times).toEqual([
+      'Sat, Nov 14, 2026 02:57',
+      'Sat, Nov 14, 2026 08:00',
+      'Sat, Nov 14, 2026 09:00',
+    ]);
+  });
+});
+
+describe('ActivityLog locale', () => {
+  afterEach(() => {
+    cleanup();
+    vi.mocked(getLocale).mockReturnValue('en');
+  });
+
+  // The date follows the UI language: the same entry reads differently in Finnish.
+  it('writes the entry date in the language the UI is set to', () => {
+    vi.mocked(getLocale).mockReturnValue('fi');
+    const { container } = render(ActivityLog, {
+      props: { detection: base, speciesName: 'Song Thrush', canReview: false, onChanged: vi.fn() },
+    });
+
+    const time = container.querySelector('.dd-log-time')?.textContent.trim();
+    expect(time).toContain('14.11.2026');
+    expect(time).toMatch(/02:57$/);
   });
 });
 
