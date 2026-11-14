@@ -116,6 +116,8 @@
   // Whether the server can step between detections. It cannot on the legacy
   // database format, where the navigation groups are left out.
   let steppingAvailable = $state(true);
+  // True when the neighbours request failed for the detection shown.
+  let neighborsFailed = $state(false);
   // Whether the server runs the current database format; null until a route that
   // depends on it has answered. Kept across detections: it does not change.
   let enhancedDatabase = $state<boolean | null>(null);
@@ -420,6 +422,7 @@
    */
   function loadLists(id: string, signal: AbortSignal) {
     neighbors = null;
+    neighborsFailed = false;
     predictions = null;
     void loadNeighbors(id, signal);
     load<DetectionPredictions>(
@@ -450,11 +453,15 @@
     try {
       const response = await fetch(buildAppUrl(`/api/v2/detections/${id}/neighbors`), { signal });
       if (signal.aborted) return;
+      // Only the legacy database cannot step at all; another failed answer leaves the
+      // links in place, blocked, so the one in focus stays.
       if (response.status === HTTP_CONFLICT) {
         enhancedDatabase = false;
+        steppingAvailable = false;
+        return;
       }
       if (!response.ok) {
-        steppingAvailable = false;
+        neighborsFailed = true;
         return;
       }
       const data = (await response.json()) as DetectionNeighbors;
@@ -465,7 +472,7 @@
     } catch (error) {
       if (isAbort(error, signal)) return;
       logger.error('Error loading detection neighbours:', error);
-      steppingAvailable = false;
+      neighborsFailed = true;
     }
   }
 
@@ -639,6 +646,7 @@
       date={detection.date}
       time={detection.time}
       {neighbors}
+      failed={neighborsFailed}
       available={steppingAvailable}
     />
 

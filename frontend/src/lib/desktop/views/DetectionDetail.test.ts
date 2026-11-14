@@ -612,6 +612,27 @@ describe('DetectionDetail panels per detection', () => {
   });
 });
 
+describe('DetectionDetail neighbours', () => {
+  // Regression: one failed neighbours request removed the step links for the rest of the
+  // view, and with them the link the user had just stepped with.
+  it('keeps the step links, blocked and saying why, when the neighbours request fails', async () => {
+    stubApi([
+      ['/api/v2/detections/95/neighbors', () => Promise.resolve(jsonResponse({}, 500))],
+      ['/api/v2/detections/95', makeDetection({ id: 95 })],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '95' });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('link', { name: 'dataDisplay.table.error' })).toHaveLength(4);
+    });
+    for (const link of screen.getAllByRole('link', { name: 'dataDisplay.table.error' })) {
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+    }
+    expect(container.querySelector('.dd-nav-groups')).toHaveAttribute('aria-busy', 'false');
+  });
+});
+
 describe('DetectionDetail review counts', () => {
   // Regression: the counts asked for after a verdict shared the species request's signal
   // with the first counts, so a slow first answer arriving last put the old counts back.
