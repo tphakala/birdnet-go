@@ -270,7 +270,8 @@ type ProcessRequest struct {
 // detected species and optionally saves the audio clip if a bird species is
 // detected above the configured threshold.
 //
-// req.Audio is passed through unchanged to the queued classifier.Results. A
+// req.Audio is passed through unchanged to the queued classifier.Results, and
+// so are the window embedding and its space when the model exposes them. A
 // result that cannot be queued is dropped and reported as ErrResultsDropped.
 //
 // ctx is propagated to the model inference call for cancellation and deadlines.
@@ -331,7 +332,8 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	}
 
 	// Run inference on the specified model via the Orchestrator.
-	results, timing, err := bn.PredictModelTimed(ctx, modelID, [][]float32{samples})
+	pred, err := bn.PredictModelTimed(ctx, modelID, [][]float32{samples})
+	results, timing := pred.Results, pred.Timing
 
 	// Record inference duration and lock wait metrics (always, even on error)
 	pm := processMetrics.Load()
@@ -446,6 +448,8 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		ModelID:         modelID,
 		Audio:           req.Audio,
 		Inference:       timing,
+		Embedding:       pred.Embedding.Vector,
+		EmbeddingSpace:  pred.Embedding.Space,
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy

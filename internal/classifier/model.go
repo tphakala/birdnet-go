@@ -201,6 +201,33 @@ type ModelInstance interface {
 	Close() error
 }
 
+// WindowEmbedding is the embedding a model computed for one audio window, with
+// the identifier of the space it lives in and the strongest raw score of the
+// window.
+type WindowEmbedding struct {
+	// Vector is the window's embedding. It is a fresh slice the caller owns.
+	Vector []float32
+	// Space identifies the embedding space Vector belongs to. It is fixed for a
+	// loaded instance. Vectors of different spaces must never be compared.
+	Space string
+	// TopScore is the highest score the model's head produced for the window, on
+	// the same probability-like scale as the confidences in the results and taken
+	// before any confidence threshold is applied, so it does not depend on the
+	// configured detection threshold.
+	TopScore float32
+}
+
+// EmbeddingModel is the optional capability of a ModelInstance that exposes the
+// embedding it computes on the way to its results. Callers discover it with a
+// type assertion; instances without it only implement Predict.
+type EmbeddingModel interface {
+	ModelInstance
+
+	// PredictWithEmbedding behaves like Predict and additionally returns the
+	// window's embedding.
+	PredictWithEmbedding(ctx context.Context, samples [][]float32) ([]datastore.Results, WindowEmbedding, error)
+}
+
 // NameResolver resolves scientific names to common names.
 // Implementations form a chain: BirdNET labels (in-memory) → database/external (future).
 type NameResolver interface {
