@@ -28,6 +28,7 @@
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import WeatherSvgIcon from '$lib/desktop/components/ui/WeatherSvgIcon.svelte';
   import { t } from '$lib/i18n';
+  import { dashboardSettings } from '$lib/stores/settings';
   import {
     convertWindSpeed,
     formatTemperatureCompact,
@@ -106,7 +107,12 @@
   // Height of the busiest hour's bar, in percent of the ground band.
   const ACTIVITY_MAX_PERCENT = 82;
 
-  let units = $derived<TemperatureUnit>(detection.weather?.units ?? 'metric');
+  // The detection's own weather block names its units; without one (an hour with no
+  // weather icon) the values follow the station's display setting, as the dashboard's do.
+  let units = $derived<TemperatureUnit>(
+    detection.weather?.units ??
+      ($dashboardSettings?.temperatureUnit === 'fahrenheit' ? 'imperial' : 'metric')
+  );
   let hourly = $derived(weather?.hourly);
   // The loading flag covers the weather and the sun times together; whichever of the two
   // has not arrived yet is still on its way, and shows placeholders instead of dashes.

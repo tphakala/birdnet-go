@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '$lib/i18n';
 import { cleanup, render, screen } from '@testing-library/svelte';
+import { get } from 'svelte/store';
+import { settingsStore } from '$lib/stores/settings';
 import ConditionsCard from './ConditionsCard.svelte';
 import type { DetectionDetailData, DetectionWeather } from './detailTypes';
 
@@ -58,6 +60,33 @@ describe('ConditionsCard weather tiles', () => {
     });
 
     expect(tileValue('detections.detail.conditions.precipitation')).toBe('0.3 mm');
+  });
+
+  // The detection leaves out its weather block when the hour has no icon, while the weather
+  // answer still has values: those follow the station's unit setting, not metric.
+  it('uses the station\u2019s temperature unit when the detection carries no weather block', () => {
+    const saved = get(settingsStore);
+    const dashboard = saved.formData.realtime?.dashboard;
+    expect(dashboard).toBeDefined();
+    if (!dashboard) return;
+    settingsStore.set({
+      ...saved,
+      formData: {
+        ...saved.formData,
+        realtime: {
+          ...saved.formData.realtime,
+          dashboard: { ...dashboard, temperatureUnit: 'fahrenheit' },
+        },
+      },
+    });
+    try {
+      renderCard({ hourly: { time: '03:00', temperature: 10 } });
+
+      expect(document.querySelector('.dd-weather-temp')?.textContent).toContain('50');
+      expect(document.querySelector('.dd-weather-temp')?.textContent).toContain('F');
+    } finally {
+      settingsStore.set(saved);
+    }
   });
 
   it('shows the cloud cover the API sent', () => {
