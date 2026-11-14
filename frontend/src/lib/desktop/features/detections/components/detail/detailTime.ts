@@ -142,9 +142,10 @@ export interface SunOffset {
 }
 
 /**
- * The nearest sunrise or sunset to a moment, looking one day either side so a
- * detection after midnight is measured against the coming sunrise or the
- * previous evening's sunset (approximated by the same day's times).
+ * The nearest sunrise or sunset to a moment, looking one day either side of each
+ * (approximated by the same day's times), so a detection after midnight is
+ * measured against the previous evening's sunset or the coming sunrise, and
+ * with only one of the two known, against the nearer day's one.
  */
 export function nearestSunEvent(
   moment: number | null,
@@ -153,16 +154,15 @@ export function nearestSunEvent(
 ): SunOffset | null {
   if (moment === null) return null;
   const candidates: { event: SunEvent; at: number }[] = [];
-  if (sunrise !== null) {
+  for (const [event, at] of [
+    ['sunrise', sunrise],
+    ['sunset', sunset],
+  ] as const) {
+    if (at === null) continue;
     candidates.push(
-      { event: 'sunrise', at: sunrise },
-      { event: 'sunrise', at: sunrise + MINUTES_PER_DAY }
-    );
-  }
-  if (sunset !== null) {
-    candidates.push(
-      { event: 'sunset', at: sunset },
-      { event: 'sunset', at: sunset - MINUTES_PER_DAY }
+      { event, at: at - MINUTES_PER_DAY },
+      { event, at },
+      { event, at: at + MINUTES_PER_DAY }
     );
   }
   let best: { event: SunEvent; delta: number } | null = null;

@@ -81,13 +81,45 @@ describe('nearestSunEvent', () => {
     });
   });
 
-  it('measures a detection just after midnight against the previous sunset when it is nearer', () => {
+  it('measures a detection just after midnight against the coming sunrise when it is nearer', () => {
     // 00:10 is 8 h 35 min after the previous evening's sunset and 8 h 16 min before sunrise.
     expect(nearestSunEvent(10, sunrise, sunset)).toEqual({
       event: 'sunrise',
       before: true,
       hours: 8,
       minutes: 16,
+    });
+  });
+
+  it("measures a summer night after midnight against the previous evening's sunset", () => {
+    // Sunset 21:00, sunrise 06:00: at 01:00 the previous sunset is 4 h back, sunrise 5 h ahead.
+    expect(nearestSunEvent(60, 360, 1260)).toEqual({
+      event: 'sunset',
+      before: false,
+      hours: 4,
+      minutes: 0,
+    });
+  });
+
+  it('measures a late evening against the coming sunrise when that is nearer', () => {
+    // Sunrise 02:00, sunset 23:30: at 23:50 the next sunrise is 2 h 10 min ahead.
+    expect(nearestSunEvent(1430, 120, 1410)).toMatchObject({ event: 'sunset', before: false });
+    expect(nearestSunEvent(1430, 120, null)).toEqual({
+      event: 'sunrise',
+      before: true,
+      hours: 2,
+      minutes: 10,
+    });
+  });
+
+  // Regression: with only one sun time known, the event a day earlier was not looked at.
+  it("measures against the previous day's sunrise when only the sunrise is known", () => {
+    // Sunrise 15:35 (polar): at 00:10 the previous sunrise was 8 h 35 min ago.
+    expect(nearestSunEvent(10, 935, null)).toEqual({
+      event: 'sunrise',
+      before: false,
+      hours: 8,
+      minutes: 35,
     });
   });
 
