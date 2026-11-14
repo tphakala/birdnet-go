@@ -306,13 +306,61 @@ describe('System view', () => {
       expect(t).toHaveBeenCalledWith(error, { error: 'errors.api.serverError' });
       expect(within(cardTitled(card())).queryByText(t('common.loading'))).not.toBeInTheDocument();
 
-      await fireEvent.click(within(alert).getByRole('button', { name: t('common.retry') }));
+      // A keyboard user is on Retry; once the alert goes, focus lands on the card
+      const retry = within(alert).getByRole('button', { name: t('common.retry') });
+      retry.focus();
+      await fireEvent.click(retry);
       await flush();
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.getAllByText(value).length).toBeGreaterThan(0);
+      expect(cardTitled(card())).toHaveFocus();
     }
   );
+
+  it.each([
+    { failed: 'disks', loading: 'memory', failUrl: DISKS_URL, holdUrl: RESOURCES_URL },
+    { failed: 'memory', loading: 'disks', failUrl: RESOURCES_URL, holdUrl: DISKS_URL },
+  ])(
+    'keeps the storage loading label while the $loading part loads beside a $failed error',
+    async ({ failUrl, holdUrl }) => {
+      failWith(failUrl, 500);
+      const release = hold(holdUrl);
+      await mountAt(OVERVIEW_PATH);
+
+      const storage = within(cardTitled(t('system.storage.title')));
+      expect(storage.getByRole('alert')).toBeInTheDocument();
+      expect(storage.getByText(t('common.loading'))).toHaveAttribute('role', 'status');
+
+      release();
+      await flush();
+      expect(storage.queryByText(t('common.loading'))).not.toBeInTheDocument();
+    }
+  );
+
+  it.each([
+    { request: 'temperature answers 404', url: TEMPERATURE_URL, status: 404 },
+    { request: 'temperature fails', url: TEMPERATURE_URL, status: 500 },
+  ])('ends the temperature skeleton when the $request', async ({ url, status }) => {
+    failWith(url, status);
+    await mountAt(OVERVIEW_PATH);
+
+    const tile = within(cardTitled(t('system.metrics.temperature')));
+    expect(tile.queryByText(t('common.loading'))).not.toBeInTheDocument();
+    expect(tile.getByText(t('system.metrics.tempUnavailable'))).toBeInTheDocument();
+    expect(
+      within(cardTitled(t('system.systemInfo.title'))).queryByText(t('common.loading'))
+    ).not.toBeInTheDocument();
+  });
+
+  it('ends the inference skeleton when the metrics history fails', async () => {
+    failWith(HISTORY_REQUEST, 500);
+    await mountAt(OVERVIEW_PATH);
+
+    const tile = within(cardTitled(t('system.metrics.inference')));
+    expect(tile.queryByText(t('common.loading'))).not.toBeInTheDocument();
+    expect(tile.getByText(t('system.metrics.noInference'))).toBeInTheDocument();
+  });
 
   it('shows a dash, never a zero, in the metric tiles whose source failed', async () => {
     failWith(INFO_URL, 500);
