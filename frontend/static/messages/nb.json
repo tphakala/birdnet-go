@@ -1027,6 +1027,7 @@
         "clipSavedDenoised": "Recording saved, noise reduced",
         "firstReviewed": "First reviewed",
         "reviewed": "Marked as {status}",
+        "reviewChanged": "Review changed to {status}",
         "locked": "Kept (locked)",
         "noteAdded": "Note added",
         "noteEdited": "Edited {time}",

@@ -28,28 +28,26 @@ function renderLog(detection: DetectionDetailData) {
 describe('ActivityLog entries', () => {
   afterEach(() => cleanup());
 
-  it('lists the first review and the latest save, oldest first, after the detection', () => {
+  it('lists the first review and the later change, oldest first, after the detection', () => {
     const entries = renderLog({
       ...base,
       verified: 'correct',
-      firstReviewedAt: '2026-11-14T08:00:00+02:00',
-      lastReviewedAt: '2026-11-14T09:00:00+02:00',
+      reviewedAt: '2026-11-14T08:00:00+02:00',
+      reviewUpdatedAt: '2026-11-14T09:00:00+02:00',
     });
 
     expect(entries).toHaveLength(3);
     expect(entries[0]).toContain('detections.detail.log.detected');
     expect(entries[1]).toContain('detections.detail.log.firstReviewed');
-    // The latest save states the verdict; it does not claim the verdict changed, since
-    // any save (a species change, the same verdict again) moves its time.
-    expect(entries[2]).toContain('detections.detail.log.reviewed');
+    expect(entries[2]).toContain('detections.detail.log.reviewChanged');
   });
 
   it('adds a species change entry when a reviewer replaced the model’s pick', () => {
     const entries = renderLog({
       ...base,
       verified: 'correct',
-      firstReviewedAt: '2026-11-14T08:00:00+02:00',
-      lastReviewedAt: '2026-11-14T08:00:00+02:00',
+      reviewedAt: '2026-11-14T08:00:00+02:00',
+      reviewUpdatedAt: '2026-11-14T08:00:00+02:00',
       originalSpecies: {
         scientificName: 'Turdus merula',
         commonName: 'Blackbird',
