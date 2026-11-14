@@ -104,10 +104,19 @@ func TestMySQL_ChangeSpecies(t *testing.T) {
 			ctx := t.Context()
 
 			// A to B to A keeps A as the original, with a prediction row for A present.
-			for _, species := range []string{speciesChangeMallardName, speciesChangeTealName, speciesChangeMallardName} {
+			for _, step := range []struct {
+				species string
+				label   *entities.Label
+			}{
+				{speciesChangeMallardName, f.mallard},
+				{speciesChangeTealName, f.teal},
+				{speciesChangeMallardName, f.mallard},
+			} {
+				species := step.species
 				require.NoError(t, f.repo.ChangeSpecies(ctx, f.det.ID, species))
 				got, err := f.repo.Get(ctx, f.det.ID)
 				require.NoError(t, err)
+				assert.Equal(t, step.label.ID, got.LabelID, "the label is the requested species %s", species)
 				require.NotNil(t, got.OriginalLabelID)
 				assert.Equal(t, f.teal.ID, *got.OriginalLabelID, "the original stays the model's pick after a change to %s", species)
 			}
