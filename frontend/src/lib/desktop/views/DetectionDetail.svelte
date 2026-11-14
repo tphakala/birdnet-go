@@ -663,19 +663,15 @@
           {predictionCount}
           onShowPredictions={() => (speciesDialogOpen = true)}
         />
-        <!-- One panel per detection: a draft, an error or a save still out belongs to the
-             detection it was made on and does not carry over to the next. -->
-        {#key detection.id}
-          <ReviewPanel
-            {detection}
-            speciesName={displayName}
-            {canReview}
-            {speciesBlockedReason}
-            grow
-            onWrongSpecies={() => (speciesDialogOpen = true)}
-            onChanged={refreshDetection}
-          />
-        {/key}
+        <ReviewPanel
+          {detection}
+          speciesName={displayName}
+          {canReview}
+          {speciesBlockedReason}
+          grow
+          onWrongSpecies={() => (speciesDialogOpen = true)}
+          onChanged={refreshDetection}
+        />
       </div>
       <ConditionsCard
         {detection}
@@ -701,14 +697,12 @@
     >
       <div class="dd-column">
         <ModelsCard contributions={detection.modelContributions} />
-        {#key detection.id}
-          <ActivityLog
-            {detection}
-            speciesName={displayName}
-            {canReview}
-            onChanged={refreshDetection}
-          />
-        {/key}
+        <ActivityLog
+          {detection}
+          speciesName={displayName}
+          {canReview}
+          onChanged={refreshDetection}
+        />
       </div>
       <div class="dd-column">
         <SpeciesStatsCard

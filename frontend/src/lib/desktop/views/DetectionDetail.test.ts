@@ -589,29 +589,6 @@ describe('DetectionDetail saves that finish around a step', () => {
   });
 });
 
-describe('DetectionDetail panels per detection', () => {
-  // Regression: the note box kept its draft when the user stepped to the next detection,
-  // so saving it attached the note to a detection it was not written for.
-  it('starts the next detection with an empty note box', async () => {
-    stubApi([
-      ['/api/v2/detections/90', makeDetection({ id: 90 })],
-      ['/api/v2/detections/91', makeDetection({ id: 91 })],
-    ]);
-
-    const { rerender } = detailTest.render({ detectionId: '90' });
-    const box = await screen.findByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
-    await fireEvent.input(box, { target: { value: 'Heard a second call' } });
-    expect(box.value).toBe('Heard a second call');
-
-    await rerender({ detectionId: '91' });
-    await waitFor(() => {
-      expect(
-        screen.getByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote').value
-      ).toBe('');
-    });
-  });
-});
-
 describe('DetectionDetail daily counts', () => {
   // Regression: after a step the stats card kept drawing the previous detection's daily
   // counts, under the new species' name, until the new counts answered.

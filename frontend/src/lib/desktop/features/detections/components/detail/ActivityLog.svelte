@@ -225,7 +225,7 @@
         rows="2"
         bind:value={note}
         placeholder={t('common.review.form.commentPlaceholder')}
-        readonly={detection.locked || saving}
+        readonly={detection.locked}
         aria-describedby={detection.locked ? noteHelpId : undefined}></textarea>
       {#if detection.locked}
         <p id={noteHelpId} class="dd-note-help">{t('detections.detail.log.lockedHelp')}</p>
