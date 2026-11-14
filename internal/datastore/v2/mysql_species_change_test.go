@@ -118,6 +118,16 @@ func TestMySQL_ChangeSpecies(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, entities.VerificationCorrect, review.Verified)
 
+			// A detection without a review gets one: the insert branch of the upsert.
+			unreviewed := &entities.Detection{
+				LabelID: f.teal.ID, ModelID: f.det.ModelID, Confidence: speciesChangeConfidence, DetectedAt: speciesChangeDetectedAt,
+			}
+			require.NoError(t, f.mgr.DB().Create(unreviewed).Error)
+			require.NoError(t, f.repo.ChangeSpecies(ctx, unreviewed.ID, speciesChangeMallardName))
+			review, err = f.repo.GetReview(ctx, unreviewed.ID)
+			require.NoError(t, err)
+			assert.Equal(t, entities.VerificationCorrect, review.Verified)
+
 			// A locked detection is refused and left as it is.
 			locked := &entities.Detection{
 				LabelID: f.teal.ID, ModelID: f.det.ModelID, Confidence: speciesChangeConfidence, DetectedAt: speciesChangeDetectedAt,

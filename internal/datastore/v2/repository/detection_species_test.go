@@ -140,6 +140,9 @@ func TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows(t *testin
 			after, err := repo.GetPredictions(ctx, det.ID)
 			require.NoError(t, err)
 			assert.Equal(t, before, after, "prediction rows are neither read for the result nor written")
+			review, err := repo.GetReview(ctx, det.ID)
+			require.NoError(t, err, "a first change creates the review of an unreviewed detection")
+			assert.Equal(t, entities.VerificationCorrect, review.Verified)
 		})
 	}
 }
