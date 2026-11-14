@@ -10,8 +10,14 @@ import _ "embed"
 //go:embed data/translations.csv.gz
 var translationsGz []byte
 
-//go:embed data/metadata.csv.gz
+//go:embed data/metadata.jsonl.gz
 var metadataGz []byte
+
+//go:embed data/sources.json
+var sourcesJSON []byte
+
+//go:embed data/manifest.json
+var manifestJSON []byte
 
 // aliasesJSON is the compiled OpenFauna taxonomic alias map (legacy scientific
 // name -> canonical scientific name). It is small, so it is embedded uncompressed
@@ -25,3 +31,6 @@ var localesList []byte
 
 //go:embed data/SOURCE.txt
 var dataSource []byte
+
+//go:embed supplementary_sources.json
+var supplementarySourcesJSON []byte

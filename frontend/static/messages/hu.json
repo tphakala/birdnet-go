@@ -438,7 +438,8 @@
         "equalizerUpdated": "Hang EQ beállítások frissítve",
         "equalizerFiltersSkipped": "Hang EQ beállítások mentve, de néhány szűrő kimarad ezen a {count, plural, one {forráson} other {forrásokon}}: {sources}. A szűrőnek érvényesnek kell lennie a forrás mintavételi frekvenciáján, és a frekvenciájának annak fele alatt kell lennie.",
         "savedSuccessfully": "Beállítások sikeresen mentve",
-        "saveFailed": "A beállítások mentése sikertelen"
+        "saveFailed": "A beállítások mentése sikertelen",
+        "reconfiguringSpeciesGuide": "Fajútmutató frissítése..."
       },
       "migration": {
         "startedTitle": "Adatbázis migráció elkezdődött",
@@ -2101,7 +2102,68 @@
         "detections": "Észlelések:",
         "confidence": "Megbízhatóság:",
         "first": "Első:"
-      }
+      },
+      "guide": {
+        "title": "Útmutató",
+        "noSimilar": "Nem találhatók hasonló fajok",
+        "loading": "Útmutató betöltése…",
+        "unavailable": "A fajútmutató átmenetileg nem érhető el. Kérjük, próbálja újra később.",
+        "loadFailed": "A fajútmutató betöltése nem sikerült. Kérjük, próbálja újra.",
+        "noGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
+        "expectedness": {
+          "expected": "Itt várható",
+          "uncommon": "Itt szokatlan",
+          "rare": "Itt ritka",
+          "unexpected": "Itt váratlan"
+        },
+        "season": {
+          "spring": "Tavasz",
+          "summer": "Nyár",
+          "autumn": "Ősz",
+          "winter": "Tél",
+          "wet1": "Első esős évszak",
+          "dry1": "Első száraz évszak",
+          "wet2": "Második esős évszak",
+          "dry2": "Második száraz évszak"
+        },
+        "description": "Leírás",
+        "songsAndCalls": "Ének és hangok",
+        "externalLinks": "Külső források",
+        "speciesGuide": "Fajútmutató"
+      },
+      "notes": {
+        "title": "Jegyzetek",
+        "placeholder": "Jegyzet hozzáadása erről a fajról…",
+        "editLabel": "Jegyzet szerkesztése",
+        "save": "Jegyzet mentése",
+        "empty": "Még nincsenek jegyzetek.",
+        "deleteConfirm": "Törli ezt a jegyzetet?",
+        "deleteFailed": "A jegyzet törlése nem sikerült.",
+        "saveFailed": "A jegyzet mentése nem sikerült.",
+        "loadFailed": "A jegyzetek betöltése nem sikerült.",
+        "saveDisabledReason": "Adjon meg jegyzetszöveget a Mentés engedélyezéséhez.",
+        "tooLong": "A jegyzet túl hosszú (legfeljebb {max} karakter).",
+        "truncated": "A {max} legújabb jegyzet látható; a régebbi jegyzetek rejtve vannak."
+      },
+      "similar": {
+        "title": "Hasonló fajok",
+        "empty": "Nem találhatók hasonló fajok.",
+        "versus": "vs {species}",
+        "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
+        "linksOnly": "Csak hivatkozások",
+        "exploreResources": "Nincs összehasonlítási részlet. Források felfedezése:",
+        "cardLoading": "Összehasonlítás betöltése…",
+        "cardNoGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
+        "cardError": "Nem sikerült betölteni ezt a fajt. Próbáljon másikat.",
+        "cardNoSections": "Ehhez a fajhoz nincsenek elérhető összehasonlítási adatok.",
+        "sections": {
+          "appearance": "Megjelenés",
+          "voice": "Hang",
+          "habitat": "Élőhely és elterjedés",
+          "behaviour": "Viselkedés"
+        }
+      },
+      "viewGuide": "Útmutató megtekintése: {species}"
     },
     "advanced": {
       "chartControls": "Diagram vezérlők",
@@ -4870,7 +4932,8 @@
         "appearance": "Megjelenés",
         "language": "Nyelv és terület",
         "visualContent": "Vizuális tartalom",
-        "audioPlayback": "Hang lejátszás"
+        "audioPlayback": "Hang lejátszás",
+        "speciesGuide": "Fajútmutató"
       },
       "appearance": {
         "title": "Megjelenés",
@@ -4898,6 +4961,50 @@
         "denoiseExportPrecedence": "Nem érvényesül, amíg a „Mentett minták zajszűrése” be van kapcsolva (Hangbeállítások, Feldolgozás lap). Ezek a minták már zajszűrtek.",
         "denoiseRedenoiseNote": "A „Mentett minták zajszűrése” bekapcsolt állapotában mentett minták lejátszáskor újra zajszűrésen esnek át. Válassza a Ki lehetőséget egy minta hangbeállításaiban, hogy úgy hallja, ahogyan mentették.",
         "denoiseLossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
+      },
+      "speciesGuide": {
+        "title": "Fajútmutató",
+        "description": "Gazdagítsa az észleléseket rendszertannal, köznevekkel, külső hivatkozásokkal és hasonló fajokkal — offline az OpenFauna révén; a Wikipédia-leírások opcionális online kiegészítők.",
+        "disabledReason": "Először engedélyezze a fajútmutatót",
+        "enabled": {
+          "label": "Fajútmutató engedélyezése",
+          "helpText": "Kontextusfüggő útmutató-információk megjelenítése az észlelési adatoknál és a faj ablakában."
+        },
+        "enableWikipedia": {
+          "label": "Wikipédia-leírások",
+          "helpText": "Cikkleírások lekérése a Wikipédiáról is (internet szükséges). Alapértelmezetten kikapcsolva – a rendszertan, a köznevek és a külső hivatkozások mindig offline működnek az OpenFaunán keresztül."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Kiegészítő hivatkozások",
+          "helpText": "Xeno-canto hangfelvétel-hivatkozások és egy Wikipédia-hivatkozás hozzáadása az offline adathalmaz által nem lefedett fajokhoz. A hivatkozások külső oldalakat nyitnak meg; a háttérben nem töltődnek le adatok."
+        },
+        "warmTopN": {
+          "label": "Leggyakoribb fajok előmelegítése",
+          "helpText": "A legtöbbször észlelt fajok útmutatóinak előtöltése indításkor (a 0 kikapcsolja az előmelegítést)."
+        },
+        "preFetchEnabled": {
+          "label": "Előzetes letöltés észleléskor",
+          "helpText": "Az útmutató lekérése egy faj első észlelésekor, hogy később azonnal betöltődjön."
+        },
+        "sections": {
+          "title": "Útmutató szakaszai"
+        },
+        "showNotes": {
+          "label": "Jegyzetek megjelenítése",
+          "helpText": "Fajonkénti felhasználói jegyzetek engedélyezése."
+        },
+        "showEnrichments": {
+          "label": "Bővítések és hivatkozások megjelenítése",
+          "helpText": "Minőség-, várhatóság- és évszakjelvények, valamint a külső hivatkozások (Wikipédia, iNaturalist, GBIF, eBird) megjelenítése. Kikapcsolva mindezek elrejtésre kerülnek, a hivatkozásokkal együtt."
+        },
+        "showSimilarSpecies": {
+          "label": "Hasonló fajok megjelenítése",
+          "helpText": "A hasonló fajok összehasonlító paneljének megjelenítése."
+        },
+        "showTaxonomy": {
+          "label": "Rendszertan megjelenítése",
+          "helpText": "A rendszertani hierarchia (osztálytól fajig) és az alfajok megjelenítése."
+        }
       }
     },
     "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."
@@ -5428,6 +5535,9 @@
       "conflictData": "Ez a művelet ütközik a meglévő adatokkal.",
       "requestTimeout": "A kérés időtúllépés.",
       "networkError": "Hálózati hiba történt. Kérjük, ellenőrizze a kapcsolatát."
+    },
+    "speciesGuide": {
+      "rateLimit": "Túl sok kérés a fajútmutatóhoz. Kérjük, várjon, mielőtt újra próbálkozik."
     }
   },
   "weather": {
