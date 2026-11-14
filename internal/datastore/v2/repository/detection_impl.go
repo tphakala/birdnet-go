@@ -1580,12 +1580,17 @@ func (r *detectionRepository) GetCommentsByDetectionIDs(ctx context.Context, det
 // Uses an atomic INSERT...SELECT...WHERE NOT EXISTS to avoid TOCTOU races.
 // Idempotent: locking an already-locked detection succeeds silently.
 // Returns ErrDetectionNotFound only if the detection does not exist.
+//
+// The lock time is the application's clock, sent as a parameter. A server-side
+// CURRENT_TIMESTAMP is in the database server's zone on MySQL and MariaDB and reads
+// back as another instant when that zone differs from the process zone.
 func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error {
 	return datastore.RetryOnLock(ctx, "v2_lock_detection", func() error {
+		now := time.Now()
 		result := r.db.WithContext(ctx).Exec(
-			fmt.Sprintf("INSERT INTO %s (detection_id, locked_at) SELECT ?, CURRENT_TIMESTAMP FROM %s WHERE %s.id = ? AND NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = ?)",
+			fmt.Sprintf("INSERT INTO %s (detection_id, locked_at) SELECT ?, ? FROM %s WHERE %s.id = ? AND NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = ?)",
 				r.locksTable(), r.tableName(), r.tableName(), r.locksTable(), r.locksTable()),
-			detectionID, detectionID, detectionID)
+			detectionID, now, detectionID, detectionID)
 		if result.Error != nil {
 			return result.Error
 		}

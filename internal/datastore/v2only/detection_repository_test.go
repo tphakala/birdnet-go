@@ -403,6 +403,12 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 	}{
 		{"Get full", func(r datastore.DetectionRepository) readOutcome {
 			res, err := r.Get(ctx, id)
+			// Only the v2 Get fills the review and lock times, which this detection has;
+			// TestDetectionRepository_GetReadsReviewAndLockTimes pins them. Every other
+			// read, lists included, still compares whole.
+			if res != nil {
+				res.FirstReviewedAt, res.LastReviewedAt, res.LockedAt = time.Time{}, time.Time{}, time.Time{}
+			}
 			return outcome([]*detection.Result{res}, 0, err)
 		}},
 		{"Get bare", func(r datastore.DetectionRepository) readOutcome {
@@ -980,4 +986,118 @@ func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
 		require.NoError(t, err, tt.name)
 		assert.Equal(t, tt.want, got.OriginalSpecies, tt.name)
 	}
+}
+
+// reviewLockTimeTolerance bounds how far a review or lock time read back may be from
+// the moment the test wrote it.
+const reviewLockTimeTolerance = time.Minute
+
+// assertGetReviewAndLockTimes drives one detection through review, lock, unlock and
+// relock with the methods the handlers call and checks the times Get returns after
+// each step. It is shared by the SQLite test and the MySQL/MariaDB integration test,
+// which runs it with a server time zone that differs from the process zone. It returns
+// the detection, left reviewed and locked.
+func assertGetReviewAndLockTimes(t *testing.T, ds *Datastore) *entities.Detection {
+	t.Helper()
+	ctx := t.Context()
+
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	ds.timezone = helsinki
+
+	det := seedDetection(t, ds, "Parus major", time.Now().Add(-time.Hour))
+	id := strconv.FormatUint(uint64(det.ID), 10)
+	repo := NewDetectionRepository(ds)
+	get := func() *detection.Result {
+		t.Helper()
+		res, err := repo.Get(ctx, id)
+		require.NoError(t, err)
+		return res
+	}
+	assertNear := func(got time.Time, what string) {
+		t.Helper()
+		assert.WithinDuration(t, time.Now(), got, reviewLockTimeTolerance, what)
+		assert.Same(t, helsinki, got.Location(), what+" must be in the station zone")
+	}
+	reviewColumns := func(created, updated time.Time) {
+		t.Helper()
+		// UpdateColumns bypasses GORM's update-time tracking, so the values stay as given.
+		require.NoError(t, ds.manager.DB().Model(&entities.DetectionReview{}).
+			Where("detection_id = ?", det.ID).
+			UpdateColumns(map[string]any{"created_at": created, "updated_at": updated}).Error)
+	}
+
+	// A fresh detection has no review and no lock.
+	res := get()
+	assert.True(t, res.FirstReviewedAt.IsZero())
+	assert.True(t, res.LastReviewedAt.IsZero())
+	assert.True(t, res.LockedAt.IsZero())
+
+	// Reviewed once and locked: every time is now, and a review saved once has equal times.
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: det.ID, Verified: "correct"}))
+	require.NoError(t, ds.LockNote(id))
+	res = get()
+	assertNear(res.FirstReviewedAt, "firstReviewedAt")
+	assertNear(res.LastReviewedAt, "lastReviewedAt")
+	assertNear(res.LockedAt, "lockedAt")
+	assert.True(t, res.LastReviewedAt.Equal(res.FirstReviewedAt), "a review saved once has equal times")
+
+	// Saved again with the same status: the first time stays, the last moves.
+	fixed := time.Date(2025, 3, 3, 9, 30, 15, 0, time.UTC)
+	reviewColumns(fixed, fixed)
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: det.ID, Verified: "correct"}))
+	res = get()
+	assert.True(t, res.FirstReviewedAt.Equal(fixed), "firstReviewedAt must keep the first save, got %s", res.FirstReviewedAt)
+	assertNear(res.LastReviewedAt, "lastReviewedAt")
+
+	// A review stored with updated_at just before created_at (saved once by an earlier
+	// version) never reports the last time before the first.
+	reviewColumns(fixed, fixed.Add(-time.Second))
+	res = get()
+	assert.True(t, res.LastReviewedAt.Equal(res.FirstReviewedAt), "lastReviewedAt must not precede firstReviewedAt")
+
+	// Unlocking removes the lock time and keeps the review times; locking again sets it.
+	require.NoError(t, ds.UnlockNote(id))
+	res = get()
+	assert.True(t, res.LockedAt.IsZero())
+	assert.False(t, res.FirstReviewedAt.IsZero())
+	require.NoError(t, ds.LockNote(id))
+	assertNear(get().LockedAt, "lockedAt after relock")
+
+	return det
+}
+
+// TestDetectionRepository_GetReadsReviewAndLockTimes pins that Get returns the review
+// and lock times in the station zone, that no list read does, and that the legacy
+// bridge returns none.
+func TestDetectionRepository_GetReadsReviewAndLockTimes(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	det := assertGetReviewAndLockTimes(t, ds)
+	ctx := t.Context()
+
+	at := time.Unix(det.DetectedAt, 0).In(ds.timezone)
+	date, hour := at.Format(time.DateOnly), at.Format("15")
+	for _, call := range listReadCalls(date, hour) {
+		results, err := call.call(ctx, NewDetectionRepository(ds))
+		require.NoError(t, err, call.name)
+		var found *detection.Result
+		for _, r := range results {
+			if r.ID == det.ID {
+				found = r
+			}
+		}
+		require.NotNil(t, found, "%s must contain the detection", call.name)
+		assert.True(t, found.FirstReviewedAt.IsZero(), call.name)
+		assert.True(t, found.LastReviewedAt.IsZero(), call.name)
+		assert.True(t, found.LockedAt.IsZero(), call.name)
+	}
+
+	bridged, err := datastore.NewDetectionRepository(ds, ds.timezone).Get(ctx, strconv.FormatUint(uint64(det.ID), 10))
+	require.NoError(t, err)
+	assert.True(t, bridged.FirstReviewedAt.IsZero())
+	assert.True(t, bridged.LastReviewedAt.IsZero())
+	assert.True(t, bridged.LockedAt.IsZero())
 }

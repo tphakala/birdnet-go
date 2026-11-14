@@ -326,6 +326,17 @@ at the end of daylight saving time show the same `date` and `time` and differ in
 match and moon phase of a response use the same instant. A legacy database stores only offset-free date and
 time text, so there both detections get the first occurrence's offset.
 
+**Review and lock times.** On the enhanced (v2) database, `GET /detections/:id` carries `firstReviewedAt`,
+`lastReviewedAt` and `lockedAt`, each an RFC3339 time in the station zone, formatted like `timestamp`.
+`firstReviewedAt` is when the detection's review was first stored. `lastReviewedAt` is when the review was
+last saved: any save moves it, so the same status saved again and a species change both do, and it is never
+earlier than `firstReviewedAt` (they are equal for a review saved once). `lockedAt` is when the current lock
+was set; unlocking removes it and locking again starts a new time. Each is omitted without a review or lock
+and on the legacy database. List, recent and `POST /search` responses do not carry them. A review or lock
+imported from the legacy database carries the times the migration copied. On MySQL and MariaDB these times
+are stored as local wall clock without an offset, unlike `timestamp`, so one saved in the repeated hour at
+the end of daylight saving time can read back an hour early.
+
 **Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
 spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
 192 kHz, a 192 kHz clip 0 to 96 kHz). Bat renders carry the `-bat-v3` token in their file name, and a

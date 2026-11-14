@@ -12,7 +12,8 @@ import (
 // Time text, so both occurrences of a repeated DST hour keep their own offset. The
 // other fields match what the datastore.Interface bridge returns for the same row,
 // except ClipDenoised and OriginalSpecies, which only this mapping reads (the legacy
-// note has no such fields). det must not be nil.
+// note has no such fields). It does not set the review and lock times, which only Get
+// sets (see setReviewAndLockTimes). det must not be nil.
 func (ds *Datastore) detectionToResult(ctx context.Context, det *entities.Detection) *detection.Result {
 	f := ds.decodeDetection(ctx, det)
 
@@ -80,4 +81,23 @@ func (ds *Datastore) detectionsToResults(ctx context.Context, dets []*entities.D
 		return nil, err
 	}
 	return results, nil
+}
+
+// setReviewAndLockTimes copies the review and lock times of det onto result, in the
+// station zone. det must come from getDetection, which loads the full review and lock
+// rows; a list read's detection has a lock without its time, which is why
+// detectionToResult does not do this. A review saved once is stored with created_at
+// slightly after updated_at (the two columns are stamped by two clock readings), so the
+// last time is never reported before the first.
+func (ds *Datastore) setReviewAndLockTimes(result *detection.Result, det *entities.Detection) {
+	if det.Review != nil {
+		result.FirstReviewedAt = det.Review.CreatedAt.In(ds.timezone)
+		result.LastReviewedAt = det.Review.UpdatedAt.In(ds.timezone)
+		if result.LastReviewedAt.Before(result.FirstReviewedAt) {
+			result.LastReviewedAt = result.FirstReviewedAt
+		}
+	}
+	if det.Lock != nil {
+		result.LockedAt = det.Lock.LockedAt.In(ds.timezone)
+	}
 }
