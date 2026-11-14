@@ -120,6 +120,74 @@ describe('shape guards', () => {
     expect(parseImageAttribution(null)).toBeNull();
   });
 
+  const contribution = {
+    modelName: 'BirdNET',
+    modelVersion: '2.4',
+    hitCount: 2,
+    modelVariant: 'fp32',
+    modelType: 'bird',
+    minConfidence: 0.4,
+    maxConfidence: 0.9,
+    meanConfidence: 0.6,
+    firstHitAt: '2026-11-14T02:57:00+02:00',
+    lastHitAt: '2026-11-14T02:57:03+02:00',
+  };
+
+  // The Models card reads every one of these fields; each must have its type when present.
+  it.each([
+    ['a model type that is not text', { modelType: 3 }],
+    ['a lowest confidence that is not a number', { minConfidence: '0.4' }],
+    ['a highest confidence that is not a number', { maxConfidence: '0.9' }],
+    ['a mean confidence that is not a number', { meanConfidence: null }],
+  ])('refuses a model contribution with %s', (_name, change) => {
+    expect(isDetectionDetail({ ...detection, modelContributions: [contribution] })).toBe(true);
+    expect(
+      isDetectionDetail({ ...detection, modelContributions: [{ ...contribution, ...change }] })
+    ).toBe(false);
+  });
+
+  const hourly = {
+    time: '2026-11-14T03:00:00+02:00',
+    temperature: 2,
+    pressure: 1006,
+    wind_gust: 5.3,
+    precipitation: 0.3,
+    precipitation_type: 'snow',
+  };
+
+  // The conditions card reads these weather fields; each must have its type when present.
+  it.each([
+    ['a gust that is not a number', { wind_gust: '5.3' }],
+    ['a pressure that is not a number', { pressure: '1006' }],
+    ['a precipitation type that is not text', { precipitation_type: 1 }],
+  ])('refuses an hour of weather with %s', (_name, change) => {
+    expect(isDetectionWeather({ hourly })).toBe(true);
+    expect(isDetectionWeather({ hourly: { ...hourly, ...change } })).toBe(false);
+  });
+
+  const detectionWeather = {
+    weatherIcon: '13n',
+    description: 'light snow',
+    temperature: 1,
+    windSpeed: 2.5,
+    windGust: 5.3,
+    humidity: 98,
+    units: 'metric',
+    moonPhaseName: 'Waxing Crescent',
+  };
+
+  // The detection's own weather block fills in what the hourly answer leaves out.
+  it.each([
+    ['a wind speed that is not a number', { windSpeed: '2.5' }],
+    ['units the formatters do not know', { units: 'kelvin' }],
+    ['a moon phase that is not text', { moonPhaseName: 4 }],
+  ])('refuses a detection whose weather block has %s', (_name, change) => {
+    expect(isDetectionDetail({ ...detection, weather: detectionWeather })).toBe(true);
+    expect(isDetectionDetail({ ...detection, weather: { ...detectionWeather, ...change } })).toBe(
+      false
+    );
+  });
+
   const goodStats = {
     scientificName: 'A b',
     count: 3,

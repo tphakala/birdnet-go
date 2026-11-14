@@ -117,6 +117,10 @@ export function isDetectionDetail(value: unknown): value is DetectionDetailData 
             ],
             [
               ['modelVariant', 'string'],
+              ['modelType', 'string'],
+              ['minConfidence', 'number'],
+              ['maxConfidence', 'number'],
+              ['meanConfidence', 'number'],
               ['firstHitAt', 'string'],
               ['lastHitAt', 'string'],
             ]
@@ -132,7 +136,32 @@ export function isDetectionDetail(value: unknown): value is DetectionDetailData 
         ['commonName', 'string'],
         ['speciesCode', 'string'],
       ]));
-  return commentsValid && contributionsValid && originalValid;
+  return commentsValid && contributionsValid && originalValid && isDetectionWeatherBlock(value);
+}
+
+const WEATHER_UNITS: readonly unknown[] = ['metric', 'imperial', 'standard'];
+
+/** The detection's own weather block, which fills in what the hourly weather leaves out. */
+function isDetectionWeatherBlock(detection: Record<string, unknown>): boolean {
+  const { weather } = detection;
+  if (weather === undefined) return true;
+  return (
+    isPlainObject(weather) &&
+    fieldsMatch(
+      weather,
+      [],
+      [
+        ['weatherIcon', 'string'],
+        ['description', 'string'],
+        ['temperature', 'number'],
+        ['windSpeed', 'number'],
+        ['windGust', 'number'],
+        ['humidity', 'number'],
+        ['moonPhaseName', 'string'],
+      ]
+    ) &&
+    (weather.units === undefined || WEATHER_UNITS.includes(weather.units))
+  );
 }
 
 const HOURLY_OPTIONAL: Fields = [
@@ -142,8 +171,11 @@ const HOURLY_OPTIONAL: Fields = [
   ['humidity', 'number'],
   ['wind_speed', 'number'],
   ['wind_deg', 'number'],
+  ['wind_gust', 'number'],
+  ['pressure', 'number'],
   ['clouds', 'number'],
   ['precipitation', 'number'],
+  ['precipitation_type', 'string'],
   ['weather_icon', 'string'],
   ['weather_desc', 'string'],
 ];
