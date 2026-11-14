@@ -236,6 +236,32 @@ describe('SpeciesChangeDialog choosing', () => {
     });
   });
 
+  // The radio is visually hidden, so the browser scrolls its 1 px box and not its row into
+  // view: arrowing through a long list left the checked row out of sight.
+  it('scrolls the row of a focused radio into view', async () => {
+    const scrolled: Element[] = [];
+    const scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    const prototype = window.HTMLElement.prototype;
+    const original = Object.getOwnPropertyDescriptor(prototype, 'scrollIntoView');
+    Object.defineProperty(prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      renderDialog();
+      await fireEvent.focus(radio('Redwing'));
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scrolled.at(-1)?.textContent).toContain('Redwing');
+      expect(scrolled.at(-1)?.tagName).toBe('LABEL');
+    } finally {
+      if (original) Object.defineProperty(prototype, 'scrollIntoView', original);
+      else Reflect.deleteProperty(prototype, 'scrollIntoView');
+    }
+  });
+
   it('does not list a predicted species again among the search results', async () => {
     renderDialog();
     await search('Turdus');

@@ -76,6 +76,15 @@
 
   let query = $state('');
   let selected = $state<CatalogSpecies | null>(null);
+
+  // The radio is visually hidden, so the browser scrolls its 1 px box into view and not its
+  // row: arrowing through a long list would leave the checked row out of sight. Arrow keys
+  // move focus with the check, so following focus covers both.
+  function revealRow(event: FocusEvent) {
+    if (event.currentTarget instanceof window.HTMLElement) {
+      event.currentTarget.closest('label')?.scrollIntoView({ block: 'nearest' });
+    }
+  }
   // False searches the range filter's species, true every species the models know.
   let allSpecies = $state(false);
   let catalogState = $state<CatalogState>('loading');
@@ -255,6 +264,7 @@
       value={item.scientificName}
       checked={active}
       onchange={() => (selected = item)}
+      onfocus={revealRow}
     />
     <span class="dd-species-check" aria-hidden="true">
       {#if active}<Check class="size-3.5" />{/if}
