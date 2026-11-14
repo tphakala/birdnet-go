@@ -113,7 +113,8 @@ func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scient
 // speciesLabel returns the label of modelID for the species named scientificName.
 // It takes, in this order: the model's label of that exact name; a label of the
 // model whose name is a taxonomic alias of it (the predictions response gives
-// canonical names, which a model's label may store under an older name); a new
+// canonical names, which a model's label may store under an older name), the
+// oldest by label ID when the model holds several spellings of the species; a new
 // label for the model, made when only other models have a label of that name, with
 // the label type and taxonomic class of the oldest of those. A species no model has
 // a label for is ErrLabelNotFound.
@@ -133,10 +134,14 @@ func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName s
 		return nil, fmt.Errorf("load model labels: %w", err)
 	}
 	species := speciesindex.CanonicalKey(scientificName)
+	var alias *entities.Label
 	for _, candidate := range modelLabels {
-		if speciesindex.CanonicalKey(candidate.ScientificName) == species {
-			return candidate, nil
+		if speciesindex.CanonicalKey(candidate.ScientificName) == species && (alias == nil || candidate.ID < alias.ID) {
+			alias = candidate
 		}
+	}
+	if alias != nil {
+		return alias, nil
 	}
 
 	known, err := labels.GetByScientificName(ctx, scientificName)

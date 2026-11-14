@@ -205,6 +205,26 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 		assert.Equal(t, dove.ID, got.LabelID)
 		assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created for an alias of an existing one")
 	})
+
+	t.Run("the oldest of a model's aliases of one species is taken", func(t *testing.T) {
+		db, repo := speciesTestDB(t)
+		ctx := t.Context()
+		teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+		// Two spellings of one species in one model. The older label sorts later by
+		// name, so a pick by name order would take the newer one.
+		oldest := createTestLabel(t, db, speciesTestDoveOld, speciesTestBirdnet)
+		createTestLabel(t, db, speciesTestDoveNew, speciesTestBirdnet)
+		det := speciesTestDetection(t, db, teal)
+		labelsBefore := speciesTestLabelCount(t, db)
+
+		// Neither stored spelling matches this one exactly.
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, strings.ToLower(speciesTestDoveOld)))
+
+		got, err := repo.Get(ctx, det.ID)
+		require.NoError(t, err)
+		assert.Equal(t, oldest.ID, got.LabelID)
+		assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created")
+	})
 }
 
 // TestDetectionRepository_ChangeSpecies_Refused covers the requests that must
