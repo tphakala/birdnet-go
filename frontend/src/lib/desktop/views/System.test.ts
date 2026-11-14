@@ -334,6 +334,15 @@ describe('System view', () => {
     expect(memoryTile.getAllByText('-')).toHaveLength(3);
   });
 
+  it('keeps the inference footer reserved when no model has data', async () => {
+    await mountAt(OVERVIEW_PATH);
+
+    // The two-line footer the skeleton reserves stays in the no-data state, so the row keeps its height
+    const tile = cardTitled(t('system.metrics.inference'));
+    expect(within(tile).getByText(t('system.metrics.noInference'))).toBeInTheDocument();
+    expect(tile.querySelector('[class*="min-h-[calc(2lh"]')).not.toBeNull();
+  });
+
   it('clears a failed resources section once the polling fallback answers', async () => {
     // No history endpoint, so the view polls the resources endpoint instead
     failWith(RESOURCES_URL, 500);

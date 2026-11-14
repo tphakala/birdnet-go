@@ -307,6 +307,7 @@
         <div class="flex-1 min-h-[28px] flex items-center">
           <span class="text-xs text-muted">{t('system.metrics.noInference')}</span>
         </div>
+        <div class="mt-2 text-[10px] {INFERENCE_FOOTER_CLASS}"></div>
       {/if}
     </div>
   </div>
