@@ -5,8 +5,9 @@
   spectrogram image takes the player's place.
 
   The player's own Export menu saves a processed copy or a selected range in a
-  chosen format. The download button is the simple path: the saved recording,
-  one click.
+  chosen format. The download button is the simple path, one click: the
+  recording as the player plays it by default, so with the default playback
+  noise reduction applied when one is set.
 -->
 <script lang="ts">
   import { Download } from '@lucide/svelte';

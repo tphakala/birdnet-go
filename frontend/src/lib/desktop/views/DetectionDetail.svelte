@@ -619,8 +619,8 @@
           attributionRetryTimer = undefined;
           if (!signal.aborted) void fetchImageAttribution(scientificName, attempt + 1);
         }, delay);
-        // Return before the finally block releases the controller, so this
-        // request's signal stays reachable and an abort can cancel the retry.
+        // The finally block still releases the controller; the pending retry is
+        // cancelled through attributionRetryTimer (cancelAttributionRetry).
         return;
       }
     } catch (error) {
