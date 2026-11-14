@@ -87,9 +87,9 @@ export function formatPercent(share: number | undefined | null, fallback = ''): 
  * Height of a bar in a small bar chart, in percent of the chart: its count's
  * share of the tallest bar (`peak`) scaled to `scale`, and never shorter than a
  * sliver when the count is above zero. The result is always finite and from 0 to
- * `scale`: it is 0 when the count is not above 0 or is not a finite number, when
- * the peak is not above 0 or not finite, or when the scale is not above 0 or not
- * finite (the scale then defaults to 100).
+ * `scale`: it is 0 when the count is not above 0 or not finite, or when the peak is
+ * not above 0 or not finite. A scale that is not above 0 or not finite is replaced
+ * by 100, so the bar is then drawn on the full chart.
  */
 export function barHeight(count: number, peak: number, scale = PERCENT): number {
   if (!Number.isFinite(count) || !Number.isFinite(peak) || count <= 0 || peak <= 0) return 0;
