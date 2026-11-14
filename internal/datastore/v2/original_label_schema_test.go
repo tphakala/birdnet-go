@@ -24,6 +24,19 @@ func TestInitialize_AddsOriginalLabelColumn(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, colsWith, "original_label_id")
 
+	// The column is a plain nullable column: an index or a foreign key on it
+	// would make the migration heavier and, on SQLite, a table rebuild.
+	var indexed int64
+	require.NoError(t, db.Raw(
+		"SELECT COUNT(*) FROM pragma_index_list('detections') il "+
+			"JOIN pragma_index_info(il.name) ii WHERE ii.name = 'original_label_id'").Scan(&indexed).Error)
+	require.Zero(t, indexed, "original_label_id has no index")
+	var foreignKeys int64
+	require.NoError(t, db.Raw(
+		"SELECT COUNT(*) FROM pragma_foreign_key_list('detections') WHERE \"from\" = 'original_label_id'").
+		Scan(&foreignKeys).Error)
+	require.Zero(t, foreignKeys, "original_label_id has no foreign key")
+
 	// Simulate a database created before the column existed, with one old row.
 	require.NoError(t, db.Exec("PRAGMA foreign_keys=OFF").Error)
 	require.NoError(t, db.Exec(
