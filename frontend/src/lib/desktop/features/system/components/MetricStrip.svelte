@@ -3,6 +3,8 @@
   import { Cpu, MemoryStick, Thermometer, Brain } from '@lucide/svelte';
   import { formatBytesCompact } from '$lib/utils/formatters';
   import Sparkline from './Sparkline.svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import type { ModelMetrics } from '$lib/desktop/features/system/types';
 
   interface Props {
@@ -20,6 +22,11 @@
     tempSymbol: string;
     models: ModelMetrics[];
     birdnetOverlap: number;
+    /** Each tile shows a skeleton until the first answer its values depend on. */
+    cpuLoading?: boolean;
+    memoryLoading?: boolean;
+    temperatureLoading?: boolean;
+    inferenceLoading?: boolean;
   }
 
   let {
@@ -37,6 +44,10 @@
     tempSymbol,
     models,
     birdnetOverlap,
+    cpuLoading = false,
+    memoryLoading = false,
+    temperatureLoading = false,
+    inferenceLoading = false,
   }: Props = $props();
 
   const sparklineColorCpu = '#3b82f6';
@@ -93,6 +104,21 @@
   });
 </script>
 
+<!-- Loading tile parts: a bar on the value line, a bar in the sparkline area (5:1, the
+     sparkline's view box), and the loading label on the footer line -->
+{#snippet loadingValue()}
+  <span class="text-lg"><Skeleton className="inline-block align-middle h-5 w-16" /></span>
+{/snippet}
+
+{#snippet loadingBody()}
+  <div class="flex-1 min-h-[28px]">
+    <Skeleton className="h-full w-full aspect-5/1" />
+  </div>
+  <div class="flex mt-2 text-[10px]">
+    <SkeletonStatus label={t('common.loading')} />
+  </div>
+{/snippet}
+
 <div class="@container">
   <div class="grid grid-cols-2 @4xl:grid-cols-4 gap-3">
     <!-- CPU -->
@@ -106,15 +132,23 @@
           </div>
           <span class="text-xs font-medium text-muted">{t('system.metrics.cpu')}</span>
         </div>
-        <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
+        {#if cpuLoading}
+          {@render loadingValue()}
+        {:else}
+          <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
+        {/if}
       </div>
-      <div class="flex-1 min-h-[28px]">
-        <Sparkline data={cpuHistory} color={sparklineColorCpu} />
-      </div>
-      <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span>{cpuCores} {t('system.metrics.cores')}</span>
-        <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
-      </div>
+      {#if cpuLoading}
+        {@render loadingBody()}
+      {:else}
+        <div class="flex-1 min-h-[28px]">
+          <Sparkline data={cpuHistory} color={sparklineColorCpu} />
+        </div>
+        <div class="flex justify-between mt-2 text-[10px] text-muted">
+          <span>{cpuCores} {t('system.metrics.cores')}</span>
+          <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
+        </div>
+      {/if}
     </div>
 
     <!-- Memory -->
@@ -128,16 +162,25 @@
           </div>
           <span class="text-xs font-medium text-muted">{t('system.metrics.memory')}</span>
         </div>
-        <span class="font-mono tabular-nums text-lg font-semibold">{memoryPercent.toFixed(1)}%</span
-        >
+        {#if memoryLoading}
+          {@render loadingValue()}
+        {:else}
+          <span class="font-mono tabular-nums text-lg font-semibold"
+            >{memoryPercent.toFixed(1)}%</span
+          >
+        {/if}
       </div>
-      <div class="flex-1 min-h-[28px]">
-        <Sparkline data={memoryHistory} color={sparklineColorMemory} />
-      </div>
-      <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
-        <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
-      </div>
+      {#if memoryLoading}
+        {@render loadingBody()}
+      {:else}
+        <div class="flex-1 min-h-[28px]">
+          <Sparkline data={memoryHistory} color={sparklineColorMemory} />
+        </div>
+        <div class="flex justify-between mt-2 text-[10px] text-muted">
+          <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
+          <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
+        </div>
+      {/if}
     </div>
 
     <!-- Temperature -->
@@ -151,15 +194,21 @@
           </div>
           <span class="text-xs font-medium text-muted">{t('system.metrics.temperature')}</span>
         </div>
-        <span class="font-mono tabular-nums text-lg font-semibold">
-          {#if temperatureAvailable}
-            {temperatureValue.toFixed(1)}{tempSymbol}
-          {:else}
-            -
-          {/if}
-        </span>
+        {#if temperatureLoading}
+          {@render loadingValue()}
+        {:else}
+          <span class="font-mono tabular-nums text-lg font-semibold">
+            {#if temperatureAvailable}
+              {temperatureValue.toFixed(1)}{tempSymbol}
+            {:else}
+              -
+            {/if}
+          </span>
+        {/if}
       </div>
-      {#if temperatureAvailable}
+      {#if temperatureLoading}
+        {@render loadingBody()}
+      {:else if temperatureAvailable}
         <div class="flex-1 min-h-[28px]">
           <Sparkline data={temperatureHistory} color={sparklineColorTemperature} />
         </div>
@@ -202,16 +251,22 @@
               >{t('system.metrics.statusCritical')}</span
             >
           {/if}
-          <span class="font-mono tabular-nums text-lg font-semibold">
-            {#if hasInferenceData}
-              {primaryAvgMs.toFixed(0)}ms
-            {:else}
-              -
-            {/if}
-          </span>
+          {#if inferenceLoading}
+            {@render loadingValue()}
+          {:else}
+            <span class="font-mono tabular-nums text-lg font-semibold">
+              {#if hasInferenceData}
+                {primaryAvgMs.toFixed(0)}ms
+              {:else}
+                -
+              {/if}
+            </span>
+          {/if}
         </div>
       </div>
-      {#if hasInferenceData}
+      {#if inferenceLoading}
+        {@render loadingBody()}
+      {:else if hasInferenceData}
         <div class="flex-1 min-h-[28px]">
           <Sparkline datasets={inferenceDatasets} />
         </div>
