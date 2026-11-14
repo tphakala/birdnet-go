@@ -192,14 +192,6 @@ func (c *Handler) GetSpeciesTree(ctx echo.Context) error {
 		return c.HandleError(ctx, err, invalidLookupNameMessage, http.StatusBadRequest)
 	}
 
-	// Check if taxonomy database is available
-	if c.TaxonomyDB == nil {
-		return c.HandleError(ctx, errors.Newf("taxonomy database not available").
-			Category(errors.CategorySystem).
-			Component("api-taxonomy").
-			Build(), "Taxonomy database not available", http.StatusServiceUnavailable)
-	}
-
 	// A sound class is not a taxon and has no tree; skip the database, which has
 	// entries named like classes ("Siren").
 	if soundevent.IsName(scientificName) {
@@ -208,6 +200,14 @@ func (c *Handler) GetSpeciesTree(ctx echo.Context) error {
 			Context("scientific_name", scientificName).
 			Component("api-taxonomy").
 			Build(), "Species not found", http.StatusNotFound)
+	}
+
+	// Check if taxonomy database is available
+	if c.TaxonomyDB == nil {
+		return c.HandleError(ctx, errors.Newf("taxonomy database not available").
+			Category(errors.CategorySystem).
+			Component("api-taxonomy").
+			Build(), "Taxonomy database not available", http.StatusServiceUnavailable)
 	}
 
 	// Get complete species tree
