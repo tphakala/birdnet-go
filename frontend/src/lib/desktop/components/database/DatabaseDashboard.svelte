@@ -18,6 +18,7 @@
   import DatabaseMysqlInnodbCard from '$lib/desktop/features/system/components/DatabaseMysqlInnodbCard.svelte';
   import DatabaseDetectionRateCard from '$lib/desktop/features/system/components/DatabaseDetectionRateCard.svelte';
   import DatabaseTableBreakdown from '$lib/desktop/features/system/components/DatabaseTableBreakdown.svelte';
+  import DatabaseDashboardSkeleton from '$lib/desktop/features/system/components/DatabaseDashboardSkeleton.svelte';
 
   // Migration view components
   import DatabaseMigrationMetricStrip from '$lib/desktop/features/system/components/DatabaseMigrationMetricStrip.svelte';
@@ -404,6 +405,8 @@
   }
 
   let backupJobs = $state<BackupJob[]>([]);
+  /** True until the first backup jobs request settles; polls never set it again. */
+  let backupJobsLoading = $state(true);
   let backupCreating = $state(false);
   let backupJobsError = $state<string | null>(null);
   let backupCreateError = $state<string | null>(null);
@@ -415,8 +418,28 @@
       backupJobsError = null;
     } catch (e) {
       backupJobsError = apiErrorMessage(e);
+    } finally {
+      backupJobsLoading = false;
     }
   }
+
+  // --- Initial load ---
+  // The page shows one skeleton until every first request of the view it lands on has
+  // answered, so no card shows a placeholder value (Disconnected, No backups) or pops in late
+  let legacySettled = $derived(legacyStatus.data !== null || legacyStatus.error !== null);
+  let firstLoadPending = $derived(
+    migrationStatus.loading ||
+      (isV2OnlyMode
+        ? overviewLoading || !legacySettled
+        : legacyStats.loading || v2Stats.loading || backupJobsLoading)
+  );
+  // Latched: once the page has loaded, refreshes, polls and a later view change never
+  // bring the skeleton back
+  let initialLoadDone = $state(false);
+  $effect(() => {
+    if (!firstLoadPending) initialLoadDone = true;
+  });
+  let showSkeleton = $derived(!initialLoadDone && firstLoadPending);
 
   async function createBackup(): Promise<void> {
     backupCreating = true;
@@ -713,22 +736,11 @@
     />
   {/if}
 
-  {#if migrationStatus.loading}
-    <!-- Loading state (waiting for migration status to determine view) -->
-    <div class="flex items-center justify-center py-16" role="status">
-      <div class="text-sm text-muted">
-        {t('system.database.dashboard.loading')}
-      </div>
-    </div>
+  {#if showSkeleton}
+    <DatabaseDashboardSkeleton />
   {:else if isV2OnlyMode}
     <!-- OPERATIONAL DASHBOARD VIEW -->
-    {#if overviewLoading}
-      <div class="flex items-center justify-center py-16" role="status">
-        <div class="text-sm text-muted">
-          {t('system.database.dashboard.loading')}
-        </div>
-      </div>
-    {:else if overviewError || !overview}
+    {#if overviewError || !overview}
       <ErrorAlert
         title={t('system.database.dashboard.fetchFailed')}
         message={overviewError ?? ''}
@@ -807,7 +819,7 @@
               cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
               cleanupError={migrationStatus.data?.cleanup_error ?? ''}
               cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-              isLoading={legacyStatus.loading || cleanupLoading}
+              isLoading={cleanupLoading}
               onDelete={() => (showCleanupDialog = true)}
             />
           {/if}
