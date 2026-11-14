@@ -70,6 +70,8 @@
 
   let verdictBlocked = $derived(!canReview || detection.locked);
   let speciesBlocked = $derived(speciesBlockedReason !== '');
+  // A species change waits for a save still out: the status line then says it is saving.
+  let wrongSpeciesBlocked = $derived(speciesBlocked || saving !== null);
   let canIgnore = $derived(
     canReview && detection.verified === 'false_positive' && !detection.locked
   );
@@ -177,7 +179,7 @@
   }
 
   function wrongSpecies() {
-    if (!speciesBlocked) onWrongSpecies();
+    if (!wrongSpeciesBlocked) onWrongSpecies();
   }
 </script>
 
@@ -228,8 +230,8 @@
       variant="default"
       size="md"
       aria-haspopup="dialog"
-      aria-disabled={speciesBlocked ? 'true' : undefined}
-      aria-describedby={speciesBlocked ? statusId : undefined}
+      aria-disabled={wrongSpeciesBlocked ? 'true' : undefined}
+      aria-describedby={wrongSpeciesBlocked ? statusId : undefined}
       onclick={wrongSpecies}
     >
       <ArrowLeftRight class="size-4" />

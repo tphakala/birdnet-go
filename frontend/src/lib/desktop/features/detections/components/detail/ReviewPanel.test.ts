@@ -61,6 +61,30 @@ describe('ReviewPanel blocked species change', () => {
   });
 });
 
+describe('ReviewPanel species change during a save', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  // Regression: a species change could start while a verdict was still being saved.
+  it('blocks Wrong species while a verdict is saved', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {}))
+    );
+    const { onWrongSpecies } = renderPanel('');
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await fireEvent.click(wrongSpeciesButton());
+
+    expect(wrongSpeciesButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(onWrongSpecies).not.toHaveBeenCalled();
+  });
+});
+
 describe('ReviewPanel ignore species', () => {
   afterEach(() => {
     cleanup();
