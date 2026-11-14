@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Detections columns a species change writes.
@@ -20,19 +21,21 @@ const (
 	columnLabelID          = "label_id"
 	columnOriginalLabelID  = "original_label_id"
 	changeSpeciesOperation = "v2_change_detection_species"
-	setOriginalIfNullExpr  = "COALESCE(" + columnOriginalLabelID + ", ?)"
+	setOriginalIfNullExpr  = "COALESCE(" + columnOriginalLabelID + ", " + columnLabelID + ")"
 )
 
 // ChangeSpecies sets the species of a detection as a reviewer's correction.
 //
 // The reads of the detection, its lock and the label run before the
 // transaction. The transaction holds two statements: the UPDATE of label_id and
-// original_label_id, guarded by the lock check, and the review upsert. The UPDATE
-// is the first statement of the transaction so that, on MySQL and MariaDB, no
-// snapshot taken by an earlier read can hide a lock or a delete committed
-// meanwhile. A detection deleted or locked after those reads is told apart after
-// the transaction, as Update does, so the retry helper, which reads the word
-// "locked" in an error as a busy database, never sees ErrDetectionLocked.
+// original_label_id, guarded by the lock check, and the review upsert. The
+// original is the label the row holds when the UPDATE runs, not the one read
+// before it. The UPDATE is the first statement of the transaction so that, on
+// MySQL and MariaDB, no snapshot taken by an earlier read can hide a lock or a
+// delete committed meanwhile. A detection deleted or locked after those reads is
+// told apart after the transaction, as Update does, so the retry helper, which
+// reads the word "locked" in an error as a busy database, never sees
+// ErrDetectionLocked.
 func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scientificName string) error {
 	scientificName = strings.TrimSpace(scientificName)
 	if scientificName == "" {
@@ -61,18 +64,21 @@ func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scient
 	var changed bool
 	err = datastore.RetryTransactionOnLock(ctx, r.db, changeSpeciesOperation, func(tx *gorm.DB) error {
 		changed = false
-		// The old label is a bound parameter, never label_id itself: MySQL evaluates
-		// SET left to right and GORM sorts the map keys, so label_id would already
-		// hold the new value. The bound value is only used while original_label_id
-		// is NULL, and then nobody has changed the label since the detection was
-		// stored.
+		// The original is recorded from the row's own label_id, so it is the label
+		// the row holds when the UPDATE runs. The assignments are an ordered list,
+		// not a map, on purpose: MySQL and MariaDB evaluate SET left to right and
+		// see the values already assigned, so original_label_id must come before
+		// label_id or it would record the new label. (SQLite and PostgreSQL read the
+		// old row for every right-hand side.) GORM sorts the keys of an update map
+		// alphabetically, which would put label_id first.
 		result := tx.Table(r.tableName()).
 			Where(columnDetectionID+" = ?", id).
 			Where(r.notLockedCondition(), id).
-			Updates(map[string]any{
-				columnLabelID:         label.ID,
-				columnOriginalLabelID: gorm.Expr(setOriginalIfNullExpr, det.LabelID),
-			})
+			Clauses(clause.Set{
+				{Column: clause.Column{Name: columnOriginalLabelID}, Value: gorm.Expr(setOriginalIfNullExpr)},
+				{Column: clause.Column{Name: columnLabelID}, Value: label.ID},
+			}).
+			Updates(map[string]any{})
 		if result.Error != nil {
 			return fmt.Errorf("set detection label: %w", result.Error)
 		}

@@ -92,9 +92,11 @@ func (f *speciesChangeFixture) injectBeforeDetectionUpdate(t *testing.T, inject 
 
 // TestMySQL_ChangeSpecies runs the species change through the production MySQL
 // DSN under both table layouts. It pins that the original_label_id column exists
-// after Initialize, that the COALESCE assignment keeps the first original whatever
-// the SET order, that the review upsert works inside the transaction, and that a
-// locked or a missing detection is refused.
+// after Initialize, that the COALESCE assignment records the old label and keeps the
+// first original (MySQL evaluates SET left to right, so an UPDATE that assigns
+// label_id first would store the new label as the original), that the review
+// upsert works inside the transaction, and that a locked or a missing detection is
+// refused.
 func TestMySQL_ChangeSpecies(t *testing.T) {
 	for _, useV2Prefix := range []bool{true, false} {
 		t.Run(fmt.Sprintf("useV2Prefix=%t", useV2Prefix), func(t *testing.T) {

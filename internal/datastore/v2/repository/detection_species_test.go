@@ -321,3 +321,28 @@ func TestDetectionRepository_ChangeSpecies_LockOrDeleteDuringChange(t *testing.T
 		require.ErrorIs(t, repo.ChangeSpecies(t.Context(), det.ID, speciesTestMallard), ErrDetectionNotFound)
 	})
 }
+
+// TestDetectionRepository_ChangeSpecies_RecordsLabelHeldAtUpdateTime pins that the
+// original is the label the row holds when the UPDATE runs, not the label the
+// earlier read saw: the label is changed by another writer after the reads and
+// before the UPDATE.
+func TestDetectionRepository_ChangeSpecies_RecordsLabelHeldAtUpdateTime(t *testing.T) {
+	db, repo := speciesTestDB(t)
+	ctx := t.Context()
+	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+	mallard := createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
+	gadwall := createTestLabel(t, db, speciesTestGadwall, speciesTestBirdnet)
+	det := speciesTestDetection(t, db, teal)
+	injectBeforeDetectionUpdate(t, db, func(tx *gorm.DB) {
+		require.NoError(t, tx.Table(tableDetections).Where("id = ?", det.ID).
+			UpdateColumn("label_id", gadwall.ID).Error)
+	})
+
+	require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
+
+	got, err := repo.Get(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, mallard.ID, got.LabelID)
+	require.NotNil(t, got.OriginalLabelID)
+	assert.Equal(t, gadwall.ID, *got.OriginalLabelID, "the original is the label the row held at update time")
+}
