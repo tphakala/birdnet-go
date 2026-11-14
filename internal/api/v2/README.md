@@ -335,7 +335,9 @@ was set; unlocking removes it and locking again starts a new time. Each is omitt
 and on the legacy database. List, recent and `POST /search` responses do not carry them. A review or lock
 imported from the legacy database can carry the time the migration copied or synced it rather than when it was made. On MySQL and MariaDB these times
 are stored as local wall clock without an offset, unlike `timestamp`, so one saved in the repeated hour at
-the end of daylight saving time can read back an hour early.
+the end of daylight saving time can read back an hour early. A lock set by an earlier version was stamped in
+the database server's zone, so where the MySQL or MariaDB server zone differs from the BirdNET-Go zone its
+`lockedAt` is off by that difference; unlocking and locking again corrects it.
 
 **Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
 spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
