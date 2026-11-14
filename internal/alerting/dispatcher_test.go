@@ -517,25 +517,31 @@ func TestDispatcher_DefaultTemplate_MetricMessage(t *testing.T) {
 	assert.Contains(t, call.message, "90")
 }
 
-func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
+// assertDetectionDefaultMessage dispatches a detection rule that has no custom
+// action template and asserts the notification is classified TypeDetection and
+// carries the default "<species> detected with <confidence>% confidence"
+// message. Shared by the new-species and lifer cases, which differ only in the
+// event name, rule identity, and sample species/confidence.
+func assertDetectionDefaultMessage(t *testing.T, ruleID uint, ruleName, nameKey, eventName, species, sciName string, confidence float64, wantConfidence string) {
+	t.Helper()
 	mock := &mockNotifCreator{}
 	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
-		ID:      1,
-		Name:    "New species detected",
-		NameKey: RuleKeyNewSpeciesName,
+		ID:      ruleID,
+		Name:    ruleName,
+		NameKey: nameKey,
 		Actions: []entities.AlertAction{
 			{Target: TargetBell},
 		},
 	}
 	event := &AlertEvent{
 		ObjectType: ObjectTypeDetection,
-		EventName:  EventDetectionNewSpecies,
+		EventName:  eventName,
 		Properties: map[string]any{
-			PropertySpeciesName:    "Eurasian Blue Tit",
-			PropertyScientificName: "Cyanistes caeruleus",
-			PropertyConfidence:     0.923,
+			PropertySpeciesName:    species,
+			PropertyScientificName: sciName,
+			PropertyConfidence:     confidence,
 		},
 		Timestamp: time.Now(),
 	}
@@ -544,12 +550,28 @@ func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
 
 	require.Len(t, mock.keyCalls, 1)
 	call := mock.keyCalls[0]
-	assert.Equal(t, notification.TypeDetection, call.notifType, "detection event should use TypeDetection")
+	assert.Equal(t, notification.TypeDetection, call.notifType, "detection event should use TypeDetection, not TypeWarning")
 	assert.Equal(t, MsgAlertDetectionOccurred, call.messageKey)
-	assert.Equal(t, "Eurasian Blue Tit", call.messageParams["species_name"])
-	assert.Equal(t, "92", call.messageParams["confidence"])
-	assert.Contains(t, call.message, "Eurasian Blue Tit")
-	assert.Contains(t, call.message, "92")
+	assert.Equal(t, species, call.messageParams["species_name"])
+	assert.Equal(t, wantConfidence, call.messageParams["confidence"])
+	assert.Contains(t, call.message, species)
+	assert.Contains(t, call.message, wantConfidence)
+}
+
+func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
+	assertDetectionDefaultMessage(t, 1, "New species detected", RuleKeyNewSpeciesName,
+		EventDetectionNewSpecies, "Eurasian Blue Tit", "Cyanistes caeruleus", 0.923, "92")
+}
+
+// TestDispatcher_DefaultTemplate_LiferMessage guards against detection.lifer
+// being left out of isDetectionEvent()'s event-name check: without it, lifer
+// notifications silently lose both the TypeDetection classification (so the
+// frontend shows them as a plain "warning" instead of a detection card) and
+// the "<species> detected with <confidence>% confidence" default message
+// (they'd get no default message at all, not just a different one).
+func TestDispatcher_DefaultTemplate_LiferMessage(t *testing.T) {
+	assertDetectionDefaultMessage(t, 2, "Lifer detected", RuleKeyLiferName,
+		EventDetectionLifer, "American Woodcock", "Scolopax minor", 0.32, "32")
 }
 
 func TestDispatcher_DefaultTemplate_ErrorMessage_Classified(t *testing.T) {
