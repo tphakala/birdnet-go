@@ -406,6 +406,31 @@ describe('System view', () => {
     expect(storage().getByText(t('system.storage.ram'))).toBeInTheDocument();
   });
 
+  it('shows the history reading in the headlines when the resources load failed', async () => {
+    const at = '2026-01-01T00:00:00Z';
+    const history: [string, unknown] = [
+      HISTORY_REQUEST,
+      {
+        metrics: {
+          'cpu.total': [{ timestamp: at, value: 42 }],
+          'memory.used_percent': [{ timestamp: at, value: 55 }],
+        },
+      },
+    ];
+    // Ahead of the generic history body, so this test's points win
+    defaultBodies.unshift(history);
+    try {
+      failWith(RESOURCES_URL, 500);
+      await mountAt(OVERVIEW_PATH);
+
+      // A real reading beats the dash that stands in for a failed load with no history
+      expect(within(cardTitled(t('system.metrics.cpu'))).getByText('42.0%')).toBeInTheDocument();
+      expect(within(cardTitled(t('system.metrics.memory'))).getByText('55.0%')).toBeInTheDocument();
+    } finally {
+      defaultBodies.splice(defaultBodies.indexOf(history), 1);
+    }
+  });
+
   it('keeps the loaded data on screen through a slow or failed refresh', async () => {
     await mountAt(OVERVIEW_PATH);
     expect(screen.getByText('Linux')).toBeInTheDocument();
