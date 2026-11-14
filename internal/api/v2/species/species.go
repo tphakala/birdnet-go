@@ -5,8 +5,9 @@
 // reads the detection store and is therefore served by the detections domain.
 // The Handler embeds *apicore.Core by pointer so the shared dependencies and
 // helpers (Processor, TaxonomyDB, the EBird() accessor, BirdImageCache,
-// CurrentLocale, HandleError, the logging helpers) promote onto it; the facade constructs one Handler and calls RegisterRoutes to wire the
-// routes in their existing order.
+// CurrentLocale, HandleError, the logging helpers) promote onto it; the facade
+// constructs one Handler and calls RegisterRoutes to wire the routes in their
+// existing order.
 //
 // Two dependencies the species handlers need are owned by other parts of the
 // monolith that have not been extracted yet, so the facade injects them as
