@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { tick } from 'svelte';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { ShieldCheck } from '@lucide/svelte';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ToggleField from './ToggleField.svelte';
+import ToggleFieldAccepting from './ToggleField.accepting.test.svelte';
 import { opacityClasses } from '../../../../test/class-helpers';
 
 const VARIANTS = ['default', 'card', 'inline'] as const;
@@ -365,15 +367,18 @@ describe('ToggleField refused change', () => {
     }
   );
 
-  it('follows the new value when the parent accepts the change', async () => {
+  // The snap-back must restore the value after the parent's update, not before it: a parent
+  // that accepts inside onUpdate keeps the switch on.
+  it('stays on when the parent accepts the change inside onUpdate', async () => {
     const user = userEvent.setup();
-    const { rerender } = render(ToggleField, {
-      props: { label: 'Keep', value: false, onUpdate: vi.fn() },
-    });
+    render(ToggleFieldAccepting);
     const toggle = screen.getByRole<HTMLInputElement>('switch');
+
     await user.click(toggle);
-    await rerender({ label: 'Keep', value: true, onUpdate: vi.fn() });
-    await vi.waitFor(() => expect(toggle.checked).toBe(true));
+
+    await vi.waitFor(() => expect(screen.getByTestId('parent-value')).toHaveTextContent('true'));
+    await tick();
+    expect(toggle.checked).toBe(true);
   });
 });
 
