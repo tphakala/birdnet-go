@@ -33,10 +33,9 @@ const (
 // before it. The UPDATE is the first statement of the transaction so that, on
 // MySQL and MariaDB, no snapshot taken by an earlier read can hide a lock or a
 // delete committed meanwhile. A detection deleted or locked after those reads is
-// told apart after the transaction, as Update does, so the retry helper, which
-// reads the word "locked" in an error as a busy database, never sees
-// ErrDetectionLocked. A request for the species the current label already stands
-// for, compared by canonical key, returns before any label is resolved or made.
+// told apart after the transaction, as Update does. A request for the species
+// the current label already stands for, compared by canonical key, returns
+// before any label is resolved or made.
 func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scientificName string) error {
 	scientificName = strings.TrimSpace(scientificName)
 	// A name without a species part (empty, "_" or "_Blackbird") has an empty key,
