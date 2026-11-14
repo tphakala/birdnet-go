@@ -7,9 +7,17 @@ import (
 	"regexp"
 	"sync"
 
+	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
+)
+
+const (
+	// mysqlErrLockWaitTimeout is MySQL/MariaDB ER_LOCK_WAIT_TIMEOUT (1205).
+	mysqlErrLockWaitTimeout uint16 = 1205
+	// mysqlErrLockDeadlock is MySQL/MariaDB ER_LOCK_DEADLOCK (1213).
+	mysqlErrLockDeadlock uint16 = 1213
 )
 
 var (
@@ -31,9 +39,12 @@ var (
 func initRegexPatterns() {
 	onceRegex.Do(func() {
 		diskFullPattern = regexp.MustCompile(`(?i)(disk full|no space|out of space)`)
-		deadlockPattern = regexp.MustCompile(`(?i)(deadlock detected|lock wait timeout|deadlock found)`)
+		deadlockPattern = regexp.MustCompile(`(?i)(deadlock detected|lock wait timeout exceeded|deadlock found)`)
 		corruptionPattern = regexp.MustCompile(`(?i)(corrupt|malformed|database disk image is malformed|file is not a database)`)
-		lockPattern = regexp.MustCompile(`(?i)(locked|database is locked|database is closed|resource busy|SQLITE_BUSY)`)
+		// The lock and deadlock alternatives are exact driver messages. Never add
+		// a bare word such as "locked" or "lock wait timeout": domain errors and
+		// wrapper text use them and would be retried as a busy database.
+		lockPattern = regexp.MustCompile(`(?i)(database is locked|database table is locked|database schema is locked|database is closed|resource busy|SQLITE_BUSY|SQLITE_LOCKED)`)
 		constraintPattern = regexp.MustCompile(`(?i)(constraint|duplicate|unique constraint|foreign key)`)
 	})
 }
@@ -218,20 +229,33 @@ func IsDatabaseCorruption(err error) bool {
 	return corruptionPattern.MatchString(err.Error())
 }
 
-// isDeadlock checks if an error indicates deadlock conditions
+// isDeadlock checks if an error indicates deadlock conditions. A MySQL or
+// MariaDB driver error is recognised by its number (1205, 1213); the driver
+// message text is the fallback for errors whose type was lost.
 func isDeadlock(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	if isMySQLError(err, mysqlErrLockWaitTimeout) || isMySQLError(err, mysqlErrLockDeadlock) {
+		return true
 	}
 
 	initRegexPatterns()
 	return deadlockPattern.MatchString(err.Error())
 }
 
-// isDatabaseLocked checks if an error indicates database lock conditions
+// isDatabaseLocked checks if an error indicates database lock conditions. A
+// SQLite driver error is recognised by its result code (BUSY, LOCKED); the
+// driver message text is the fallback for errors whose type was lost.
 func isDatabaseLocked(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	if sqliteErr, ok := errors.AsType[sqlite3.Error](err); ok &&
+		(sqliteErr.Code == sqlite3.ErrBusy || sqliteErr.Code == sqlite3.ErrLocked) {
+		return true
 	}
 
 	initRegexPatterns()
