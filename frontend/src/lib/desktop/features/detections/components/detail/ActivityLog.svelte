@@ -36,8 +36,7 @@
     detection: DetectionDetailData;
     speciesName: string;
     canReview: boolean;
-    /** Called with the detection's id after a note was saved, so the page can reload it. */
-    onChanged: (_detectionId: number) => void;
+    onChanged: () => void;
   }
 
   let { detection, speciesName, canReview, onChanged }: Props = $props();
@@ -168,15 +167,13 @@
   async function addNote() {
     const text = note.trim();
     if (!text || saving || detection.locked) return;
-    // The detection the note is saved on, kept for when the save answers.
-    const id = detection.id;
     saving = true;
     errorMessage = null;
     try {
-      await api.post(`/api/v2/detections/${id}/review`, { comment: text });
+      await api.post(`/api/v2/detections/${detection.id}/review`, { comment: text });
       note = '';
       toastActions.success(t('detections.detail.log.noteAdded'));
-      onChanged(id);
+      onChanged();
     } catch (error) {
       logger.error('Failed to add note', error, { action: 'note' });
       errorMessage = t('common.review.errors.commentFailed');

@@ -43,8 +43,8 @@
     /** Why the species cannot be changed now; empty when the viewer may change it. */
     blockedReason: string;
     onClose: () => void;
-    /** Called with the detection's id after a change to it was saved, so the page can reload it. */
-    onChanged: (_detectionId: number) => void;
+    /** Called after the species was changed, so the page can reload the detection. */
+    onChanged: () => void;
   }
 
   let {
@@ -179,17 +179,16 @@
 
   async function confirm() {
     if (!selected || saving || !canChange) return;
-    const id = detection.id;
     saving = true;
     errorMessage = '';
     try {
-      await api.put(`/api/v2/detections/${id}/species`, {
+      await api.put(`/api/v2/detections/${detection.id}/species`, {
         scientificName: selected.scientificName,
       });
       toastActions.success(
         t('detections.detail.species.changed', { species: selected.commonName })
       );
-      onChanged(id);
+      onChanged();
       onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
