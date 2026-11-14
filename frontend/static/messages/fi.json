@@ -953,7 +953,7 @@
         "activityLegend": "{species} activity by hour, all time",
         "feelsLike": "Tuntuu kuin",
         "moonLit": "{percent}% lit",
-        "windFrom": "Tuuli suunnasta {direction}",
+        "windFrom": "Tuuli {direction}",
         "precipitation": "Precipitation",
         "observedAt": "Weather observation from {time}",
         "notObserved": "No weather observation for this time"
