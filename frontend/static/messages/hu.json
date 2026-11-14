@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Felhasználók által ellenőrizve",
         "reviewsCount": "{count, plural, one {# ellenőrzés} other {# ellenőrzés}}",
         "reviewsCorrect": "{count} helyes",
-        "reviewsFalse": "{count} hamis pozitív",
+        "reviewsFalse": "{count, plural, one {# hamis pozitív} other {# hamis pozitív}}",
         "oftenRejected": "Gyakran elutasítva itt: az ellenőrzések {percent}%-a hamis pozitív volt",
         "reviewsNone": "Ennek a fajnak még egyetlen észlelését sem ellenőrizték."
       },

@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Ocenione przez ludzi",
         "reviewsCount": "{count, plural, one {# ocena} few {# oceny} many {# ocen} other {# oceny}}",
         "reviewsCorrect": "{count} poprawnych",
-        "reviewsFalse": "{count} fałszywie pozytywnych",
+        "reviewsFalse": "{count, plural, one {# fałszywie pozytywne} few {# fałszywie pozytywne} many {# fałszywie pozytywnych} other {# fałszywie pozytywnego}}",
         "oftenRejected": "Często odrzucany tutaj: {percent}% ocen to fałszywie pozytywne",
         "reviewsNone": "Żadna detekcja tego gatunku nie została jeszcze oceniona."
       },

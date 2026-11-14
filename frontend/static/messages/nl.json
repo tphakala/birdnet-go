@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Beoordeeld door mensen",
         "reviewsCount": "{count, plural, one {# beoordeling} other {# beoordelingen}}",
         "reviewsCorrect": "{count} juist",
-        "reviewsFalse": "{count} fout-positief",
+        "reviewsFalse": "{count, plural, one {# fout-positief} other {# fout-positieven}}",
         "oftenRejected": "Hier vaak afgekeurd: {percent}% van de beoordelingen was fout-positief",
         "reviewsNone": "Er is nog geen detectie van deze soort beoordeeld."
       },

@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Vérifié par des humains",
         "reviewsCount": "{count, plural, one {# vérification} other {# vérifications}}",
         "reviewsCorrect": "{count} correctes",
-        "reviewsFalse": "{count} faux positifs",
+        "reviewsFalse": "{count, plural, one {# faux positif} other {# faux positifs}}",
         "oftenRejected": "Souvent rejetée ici : {percent} % des vérifications étaient des faux positifs",
         "reviewsNone": "Aucune détection de cette espèce n'a encore été vérifiée."
       },

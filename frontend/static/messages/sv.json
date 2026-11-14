@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Granskade av användare",
         "reviewsCount": "{count, plural, one {# granskning} other {# granskningar}}",
         "reviewsCorrect": "{count} korrekta",
-        "reviewsFalse": "{count} falskt positiva",
+        "reviewsFalse": "{count, plural, one {# falskt positiv} other {# falskt positiva}}",
         "oftenRejected": "Ofta avvisad här: {percent}% av granskningarna var falskt positiva",
         "reviewsNone": "Ingen detektering av denna art har granskats ännu."
       },

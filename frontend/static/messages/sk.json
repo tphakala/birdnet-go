@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Skontrolované ľuďmi",
         "reviewsCount": "{count, plural, one {# kontrola} few {# kontroly} many {# kontroly} other {# kontrol}}",
         "reviewsCorrect": "{count} správnych",
-        "reviewsFalse": "{count} falošne pozitívnych",
+        "reviewsFalse": "{count, plural, one {# falošne pozitívna} few {# falošne pozitívne} many {# falošne pozitívnej} other {# falošne pozitívnych}}",
         "oftenRejected": "Tu často odmietaný: {percent}% kontrol bolo falošne pozitívnych",
         "reviewsNone": "Zatiaľ nebola skontrolovaná žiadna detekcia tohto druhu."
       },

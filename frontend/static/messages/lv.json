@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Cilvēku pārskatītie",
         "reviewsCount": "{count, plural, zero {# pārskatījumu} one {# pārskatījums} other {# pārskatījumi}}",
         "reviewsCorrect": "{count} pareizi",
-        "reviewsFalse": "{count} kļūdaini pozitīvi",
+        "reviewsFalse": "{count, plural, zero {# kļūdaini pozitīvu} one {# kļūdaini pozitīvs} other {# kļūdaini pozitīvi}}",
         "oftenRejected": "Šeit bieži noraidīta: {percent}% pārskatījumu bija kļūdaini pozitīvi",
         "reviewsNone": "Neviena šīs sugas noteikšana vēl nav pārskatīta."
       },

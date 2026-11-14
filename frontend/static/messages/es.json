@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Revisadas por personas",
         "reviewsCount": "{count, plural, one {# revisión} other {# revisiones}}",
         "reviewsCorrect": "{count} correctas",
-        "reviewsFalse": "{count} falsos positivos",
+        "reviewsFalse": "{count, plural, one {# falso positivo} other {# falsos positivos}}",
         "oftenRejected": "Rechazada con frecuencia aquí: el {percent}% de las revisiones fueron falsos positivos",
         "reviewsNone": "Aún no se ha revisado ninguna detección de esta especie."
       },

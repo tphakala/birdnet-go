@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Reviewed by people",
         "reviewsCount": "{count, plural, one {# review} other {# reviews}}",
         "reviewsCorrect": "{count} correct",
-        "reviewsFalse": "{count} false positive",
+        "reviewsFalse": "{count, plural, one {# false positive} other {# false positives}}",
         "oftenRejected": "Often rejected here: {percent}% of reviews were false positives",
         "reviewsNone": "No detection of this species has been reviewed yet."
       },

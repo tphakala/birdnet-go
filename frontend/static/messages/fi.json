@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Ihmisten tarkistamat",
         "reviewsCount": "{count, plural, one {# tarkistus} other {# tarkistusta}}",
         "reviewsCorrect": "{count} oikein",
-        "reviewsFalse": "{count} virheellistä",
+        "reviewsFalse": "{count, plural, one {# virheellinen} other {# virheellistä}}",
         "oftenRejected": "Hylätty täällä usein: {percent} % tarkistuksista oli virheellisiä",
         "reviewsNone": "Tämän lajin havaintoja ei ole vielä tarkistettu."
       },

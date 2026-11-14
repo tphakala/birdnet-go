@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Gjennomgått av brukere",
         "reviewsCount": "{count, plural, one {# gjennomgang} other {# gjennomganger}}",
         "reviewsCorrect": "{count} korrekte",
-        "reviewsFalse": "{count} falske positive",
+        "reviewsFalse": "{count, plural, one {# falsk positiv} other {# falske positive}}",
         "oftenRejected": "Ofte avvist her: {percent}% av gjennomgangene var falske positive",
         "reviewsNone": "Ingen registrering av denne arten er gjennomgått ennå."
       },

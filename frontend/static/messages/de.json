@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Von Menschen überprüft",
         "reviewsCount": "{count, plural, one {# Überprüfung} other {# Überprüfungen}}",
         "reviewsCorrect": "{count} korrekt",
-        "reviewsFalse": "{count} falsch positiv",
+        "reviewsFalse": "{count, plural, one {# falsch positiv} other {# falsch positiv}}",
         "oftenRejected": "Hier oft abgelehnt: {percent} % der Überprüfungen waren falsch positiv",
         "reviewsNone": "Es wurde noch keine Erkennung dieser Art überprüft."
       },

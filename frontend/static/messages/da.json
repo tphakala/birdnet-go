@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Gennemgået af mennesker",
         "reviewsCount": "{count, plural, one {# gennemgang} other {# gennemgange}}",
         "reviewsCorrect": "{count} korrekte",
-        "reviewsFalse": "{count} falsk positive",
+        "reviewsFalse": "{count, plural, one {# falsk positiv} other {# falsk positive}}",
         "oftenRejected": "Ofte afvist her: {percent}% af gennemgangene var falsk positive",
         "reviewsNone": "Ingen registrering af denne art er blevet gennemgået endnu."
       },

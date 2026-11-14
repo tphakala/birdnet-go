@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/svelte';
+import { parsePlural } from '$lib/i18n/pluralParser';
+import english from '../../../../../../../static/messages/en.json';
 import SpeciesStatsCard from './SpeciesStatsCard.svelte';
 import type { DetectionDetailData } from './detailTypes';
 
@@ -82,5 +84,16 @@ describe('SpeciesStatsCard daily counts', () => {
     });
 
     expect(container.querySelectorAll('.dd-daily-bar')).toHaveLength(30);
+  });
+});
+
+describe('SpeciesStatsCard review count wording', () => {
+  // The English message as the app ships it, resolved by the app's own plural parser.
+  const falsePositives = (count: number) =>
+    parsePlural(english.detections.detail.stats.reviewsFalse, { count }, 'en');
+
+  it('names one false positive in the singular and more in the plural', () => {
+    expect(falsePositives(1)).toBe('1 false positive');
+    expect(falsePositives(2)).toBe('2 false positives');
   });
 });

@@ -1031,7 +1031,7 @@
         "reviewsTitle": "Revisionato da utenti",
         "reviewsCount": "{count, plural, one {# revisione} other {# revisioni}}",
         "reviewsCorrect": "{count} corretti",
-        "reviewsFalse": "{count} falsi positivi",
+        "reviewsFalse": "{count, plural, one {# falso positivo} other {# falsi positivi}}",
         "oftenRejected": "Spesso scartata qui: il {percent}% delle revisioni era falso positivo",
         "reviewsNone": "Nessun rilevamento di questa specie è stato ancora revisionato."
       },
