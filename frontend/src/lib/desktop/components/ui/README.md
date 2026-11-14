@@ -627,7 +627,7 @@ interface Props extends HTMLAttributes<HTMLElement> {
 - Never wrap live data in it: it is the status region of the skeleton only
 
 **Building a skeleton:** a skeleton mirrors the loaded layout (same grid, card
-chrome and minimum heights) and has exactly one `SkeletonStatus`. Put the label in
+chrome and minimum heights) and has exactly one visible loading label: a `SkeletonStatus`, or a status region the view already shows. Put the label in
 a slot where a line of loaded text appears, such as a card header's right side, a
 tile footer or an empty-state title, so the skeleton adds no height. Use it two
 ways:

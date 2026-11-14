@@ -280,7 +280,7 @@ and `--text-primary` does the same for every fixed scheme in both themes;
   technology, stop the pulse under `motion-reduce` and let bars shrink
   (`min-w-0 max-w-full`). The skeleton mirrors the loaded layout (same grid,
   card chrome and minimum heights) so nothing jumps when the data arrives, and
-  has exactly one visible `SkeletonStatus`, placed where a line of loaded text
+  has exactly one visible loading label (a `SkeletonStatus`, or a status region the view already shows), placed where a line of loaded text
   appears so it adds no height. Show it only on the first load: a refresh or a
   poll never brings it back, and a failed load replaces it with an error. Use
   `src/lib/desktop/features/system/components/InferenceSkeleton.svelte` as the

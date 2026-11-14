@@ -2,7 +2,8 @@
   Skeleton - one placeholder bar of a loading skeleton.
 
   Decorative only: the bar is always hidden from assistive technology, so pair a
-  skeleton with exactly one visible SkeletonStatus label. Bars shrink with their
+  skeleton with exactly one visible loading label: a SkeletonStatus, or a status
+  region the view already shows. Bars shrink with their
   container and stop pulsing under prefers-reduced-motion.
 
   Size and shape come from `className` (for example `h-4 w-28`, `rounded-full`).
@@ -15,7 +16,11 @@
   import { cn } from '$lib/utils/cn';
 
   interface Props extends HTMLAttributes<HTMLElement> {
-    /** Size and shape of the bar, merged after the base classes. */
+    /**
+     * Size (h-*, w-*) and corner shape (rounded-*) of the bar. cn() does not merge, so a
+     * class that conflicts with a base class wins only when Tailwind emits it later in the
+     * stylesheet; rounded-* always does, and for other properties it depends on the value.
+     */
     className?: string;
     /** Merged like className, for callers that use the Svelte attribute name. */
     class?: string;

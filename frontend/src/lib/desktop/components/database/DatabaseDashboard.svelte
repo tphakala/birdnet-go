@@ -424,8 +424,10 @@
   }
 
   // --- Initial load ---
-  // The page shows one skeleton until every first request of the view it lands on has
-  // answered, so no card shows a placeholder value (Disconnected, No backups) or pops in late
+  // The page shows one skeleton until the first requests its cards read have answered (the
+  // status; then the overview and legacy status, or the stats and backups of the migration
+  // view), so no card shows a placeholder value (Disconnected, No backups) or pops in late.
+  // A failed overview ends it at once: its error replaces the cards that need the legacy status.
   let legacySettled = $derived(legacyStatus.data !== null || legacyStatus.error !== null);
   let firstLoadPending = $derived(
     migrationStatus.loading ||
@@ -433,8 +435,9 @@
         ? overviewLoading || (!overviewError && !legacySettled)
         : legacyStats.loading || v2Stats.loading || backupJobsLoading)
   );
-  // Latched: once the page has loaded, refreshes, polls and a later view change never
-  // bring the skeleton back
+  // Latched: once the page has loaded, refreshes and polls never bring the page skeleton
+  // back. A later switch to v2-only whose overview has not answered yet shows the dashboard
+  // skeleton inside that view instead (see the template)
   let initialLoadDone = $state(false);
   $effect(() => {
     // Read nothing once latched, so polls stop re-running this effect
