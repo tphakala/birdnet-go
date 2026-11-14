@@ -35,6 +35,8 @@
   import { TrendingUp, TrendingDown, Minus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
+  import { t } from '$lib/i18n';
 
   type TrendDirection = 'up' | 'down' | 'neutral';
   type CardVariant =
@@ -129,9 +131,14 @@
     <div class="flex items-start justify-between">
       <div class="flex-1">
         {#if loading}
+          <!-- The label stands where the loaded label line is, in the card's own text colour, so
+               the loading card is as tall as the loaded one (28 + 8 + 20 = the 36 + 20 loaded) -->
           <div class="space-y-2">
-            <Skeleton className="h-8 w-24" />
-            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-7 w-24" />
+            <SkeletonStatus
+              label={t('common.loading')}
+              className="block text-sm font-medium opacity-90 text-current!"
+            />
             {#if subLabel}
               <Skeleton className="h-3 w-28" />
             {/if}
