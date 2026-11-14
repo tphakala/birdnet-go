@@ -131,7 +131,9 @@ This folder contains **shared components** used across the application. Feature-
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
 - `SelectionToolbar.svelte` - Sticky toolbar for multiselect list views (selection count, select-all banner, action slot)
+- `Skeleton.svelte` - One decorative placeholder bar of a loading skeleton
 - `SkeletonDailySummary.svelte` - Loading skeleton for daily summary cards
+- `SkeletonStatus.svelte` - The one visible `role="status"` loading label of a skeleton
 - `StatusPill.svelte` - Status pill indicator
 - `TestSuccessNote.svelte` - Test success notification component
 - `ThemeToggle.svelte` - Theme switching toggle

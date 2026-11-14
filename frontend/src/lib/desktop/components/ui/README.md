@@ -32,6 +32,8 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 - [ProgressBar](#progressbar) - Progress visualization with thresholds
 - [Meter](#meter) - Static measurement bar (disk, CPU, table size) on the data visualization tokens
 - [LoadingSpinner](#loadingspinner) - Loading state indicator
+- [Skeleton](#skeleton) - Placeholder bar of a loading skeleton
+- [SkeletonStatus](#skeletonstatus) - Visible loading label of a skeleton
 - [EmptyState](#emptystate) - Empty content placeholder
 - [ErrorAlert](#erroralert) - Error and notification messages
 - [NotificationToast](#notificationtoast) - Toast notifications
@@ -560,6 +562,84 @@ already in the DOM. A spinner mounted inside `{#if}` inserts the region and its
 text together, so it is often not announced. For a state change that must be
 heard, keep an always-rendered sr-only `role="status"` region, change its text,
 and pass `aria-hidden="true"` to the spinner.
+
+---
+
+### Skeleton
+
+**File**: `Skeleton.svelte`
+
+One placeholder bar of a loading skeleton. Size and shape come from `className`.
+
+```typescript
+interface Props extends HTMLAttributes<HTMLElement> {
+  className?: string;
+}
+```
+
+**Usage:**
+
+```svelte
+<Skeleton className="h-4 w-28" />
+<Skeleton className="h-5 w-16 rounded-full" />
+<!-- Inside a line of text, for example in place of a numeral -->
+<span class="text-2xl font-mono"><Skeleton className="inline-block h-7 w-8 align-middle" /></span>
+```
+
+**Features:**
+
+- Root is a `<span>` with `display: block`, so it is valid inside `<p>`, `<span>` and `<td>`
+- Always `aria-hidden="true"` (a caller cannot override it) and marked `data-skeleton`
+- Shrinks with its container (`min-w-0 max-w-full`)
+- Pulses, and stops under `prefers-reduced-motion`
+- `cn()` does not merge conflicting classes; overrides such as `rounded-full`
+  and `inline-block` win because Tailwind emits them after `rounded` and `block`
+
+---
+
+### SkeletonStatus
+
+**File**: `SkeletonStatus.svelte`
+
+The one visible loading label of a skeleton: a `role="status"` element that holds
+only the label text.
+
+```typescript
+interface Props extends HTMLAttributes<HTMLElement> {
+  label: string;
+  className?: string;
+}
+```
+
+**Usage:**
+
+```svelte
+<div class="flex items-center justify-between">
+  <h3 class="text-sm font-semibold">{t('system.storage.title')}</h3>
+  <SkeletonStatus label={t('common.loading')} className="text-xs" />
+</div>
+```
+
+**Features:**
+
+- Visible text in the muted colour; sets no font size, so pass one or inherit it
+- Never wrap live data in it: it is the status region of the skeleton only
+
+**Building a skeleton:** a skeleton mirrors the loaded layout (same grid, card
+chrome and minimum heights) and has exactly one `SkeletonStatus`. Put the label in
+a slot where a line of loaded text appears, such as a card header's right side, a
+tile footer or an empty-state title, so the skeleton adds no height. Use it two
+ways:
+
+- A dedicated `*Skeleton.svelte` component for a view whose layout cannot render
+  without data (`features/system/components/InferenceSkeleton.svelte`,
+  `DatabaseDashboardSkeleton.svelte`)
+- A `loading` prop on a card that already renders its chrome before the data
+  arrives: titles, icons and labels stay, and only the values become bars
+  (`features/system/components/StorageCard.svelte`)
+
+Show the skeleton only before the first answer. A refresh or a poll keeps the
+data on screen, and a failed first load replaces the skeleton with an error.
 
 ---
 
