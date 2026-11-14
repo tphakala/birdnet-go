@@ -144,6 +144,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/detections/:id/predictions` | `GetDetectionPredictions` | ❌   | Alternate species the detecting model scored (enhanced database only)                                                      |
 | DELETE | `/detections/:id`             | `DeleteDetection`         | ✅   | Delete detection record                                                                                                    |
 | POST   | `/detections/:id/review`      | `ReviewDetection`         | ✅   | Review/verify detection                                                                                                    |
+| PUT    | `/detections/:id/species`     | `ChangeDetectionSpecies`  | ✅   | Set the species as a reviewer's correction (enhanced database only)                                                        |
 | POST   | `/detections/:id/lock`        | `LockDetection`           | ✅   | Lock detection from changes                                                                                                |
 | POST   | `/detections/ignore`          | `IgnoreSpecies`           | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
 | GET    | `/detections/ignored`         | `GetExcludedSpecies`      | ✅   | Get list of excluded species                                                                                               |
@@ -368,12 +369,35 @@ written best-effort).
 - The SSE `pending` event has its own `modelContributions` with a different element shape (`modelID`,
   `hitCount`, `maxConfidence`, present only when more than one model contributed).
 
+**Species change.** `PUT /detections/:id/species` with `{"scientificName": "..."}` sets the species of a
+detection as a reviewer's correction, on the enhanced (v2) database only. The detection takes the detecting
+model's label for that species (by name or taxonomic alias); confidence, clip and times are unchanged, and the
+detection is marked reviewed as `correct`. The first change records the model's own pick, and later changes
+keep it. A request for the species the detection already has changes nothing and answers 200, except that a locked detection answers 409 first. The success
+body is `{"status":"success"}`.
+
+- `originalSpecies`: list, recent and single detection responses carry `originalSpecies` (`scientificName`,
+  `commonName`, `speciesCode`) once a reviewer has changed the species, also after it was changed back. Its
+  confidence is the detection's `confidence`. It is omitted when the species was never changed and on the
+  legacy database. `POST /search` does not carry it.
+- Status codes: `409` when the enhanced database is not in use and for a locked detection (checked before the species is looked up), `400` for an id
+  that is not a positive integer that fits in 32 bits, a body that cannot be read, a missing name, a name
+  without a species part and an unknown species, `404` when the detection does not exist, and `500` for a database error.
+- Limitations: the new-species flags (`isNewSpecies`, `daysSinceFirstSeen` and the yearly and seasonal ones)
+  of the changed detection and of both species can stay as they were until the species tracker next
+  re-syncs from the database. Nothing already published is retracted or sent again: MQTT, BirdWeather, SSE
+  and notifications keep the species they were sent with. The clip file name and the tags embedded in the
+  clip keep the old species. No audit event is recorded, and no history is kept: only the model's own pick
+  and the current species. Only a species that already has a label row, for any model, is accepted; any
+  other name answers 400.
+
 **Detection predictions.** On the enhanced (v2) database, `GET /detections/:id/predictions` returns the
 alternate species the detecting model scored for one detection. `modelPredictions` has one element per
 model, today at most one, with `modelName`, `modelVersion`, `modelVariant`, `modelType` and `predictions`.
 `predictions` is never empty, and `modelPredictions` is `[]` when nothing remains after filtering. Each
 prediction has `scientificName` (the current, canonical name), `commonName`, `speciesCode` and
-`confidence`, ordered by confidence descending, then by scientific name.
+`confidence`, and `original` (on at most one entry, and absent when the species was never changed or was
+changed back; see below), ordered by confidence descending, then by scientific name.
 
 - Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
   below every non-dog alternate that remains, and is kept when none remains. This is a heuristic: the classifier adds one past its top results so that
@@ -381,6 +405,10 @@ prediction has `scientificName` (the current, canonical name), `commonName`, `sp
   The comparison is against the stored alternates, which are only those at or above
   `birdnet.alternateminconfidence`, so a genuine dog result is hidden when it scores below every stored non-dog alternate,
   and with fewer stored rows this happens more often.
+- Original pick: after a species change the model's own pick is listed with `original: true` and the
+  detection's confidence, unless it is the current species. It is exempt from the human sound and dog
+  filters, does not take part in the dog comparison, and a stored alternate of the same species is merged
+  into it.
 - Scope: the species the detecting model ranked in its top 10 for the analysis window that produced
   the detection, without the detected species and, when a location is set and the model takes part in
   range filtering, without species outside the location's range (for detections saved after the range

@@ -833,3 +833,151 @@ func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
 	_, err = repo.GetAdditionalResults(ctx, "not-an-id")
 	require.Error(t, err, "a non-numeric id must be rejected")
 }
+
+// TestDetectionRepository_ReadsCarryOriginalSpecies verifies that every read path
+// that builds a detection.Result from the v2 store fills OriginalSpecies for a
+// detection whose species a reviewer changed, keeps it after the species is changed
+// back, and leaves it zero for an untouched detection in the same result set.
+func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
+	t.Parallel()
+
+	const (
+		originalSci    = "Turdus merula"
+		originalCommon = "Eurasian Blackbird"
+		originalCode   = "eurbla"
+		currentSci     = "Parus major"
+		currentCommon  = "Great Tit"
+		ghostSci       = "Corvus corax"
+		date           = "2026-06-01"
+		hour           = "12"
+	)
+	cfg, cfgCleanup := buildTestConfig(t, []string{
+		originalSci + "_" + originalCommon,
+		currentSci + "_" + currentCommon,
+	})
+	cfg.SpeciesCodeMap = map[string]string{originalSci: originalCode}
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
+	ds.timezone = time.UTC
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+
+	at := func(minute int) time.Time { return time.Date(2026, 6, 1, 12, minute, 0, 0, time.UTC) }
+	changed := seedDetection(t, ds, originalSci, at(0))
+	untouched := seedDetection(t, ds, currentSci, at(10))
+	require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci))
+
+	want := detection.Species{ScientificName: originalSci, CommonName: originalCommon, Code: originalCode}
+	find := func(results []*detection.Result, id uint) *detection.Result {
+		for _, r := range results {
+			if r.ID == id {
+				return r
+			}
+		}
+		return nil
+	}
+	idString := func(id uint) string { return strconv.FormatUint(uint64(id), 10) }
+
+	checkLists := func(t *testing.T, wantOriginal detection.Species, skipSpeciesList bool) {
+		t.Helper()
+		for _, rc := range listReadCalls(date, hour) {
+			if skipSpeciesList && rc.name == "GetBySpecies" {
+				// The listed species is the one the detection no longer has.
+				continue
+			}
+			results, err := rc.call(ctx, repo)
+			require.NoError(t, err, rc.name)
+			got := find(results, changed.ID)
+			require.NotNil(t, got, "%s did not return the changed detection", rc.name)
+			assert.Equal(t, wantOriginal, got.OriginalSpecies, rc.name)
+			other := find(results, untouched.ID)
+			require.NotNil(t, other, "%s did not return the untouched detection", rc.name)
+			assert.Zero(t, other.OriginalSpecies, rc.name)
+		}
+	}
+
+	t.Run("after a change", func(t *testing.T) {
+		got, err := repo.Get(ctx, idString(changed.ID))
+		require.NoError(t, err)
+		assert.Equal(t, currentSci, got.Species.ScientificName)
+		assert.Equal(t, want, got.OriginalSpecies)
+		other, err := repo.Get(ctx, idString(untouched.ID))
+		require.NoError(t, err)
+		assert.Zero(t, other.OriginalSpecies)
+
+		checkLists(t, want, false)
+	})
+
+	t.Run("after a change back", func(t *testing.T) {
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, originalSci))
+
+		got, err := repo.Get(ctx, idString(changed.ID))
+		require.NoError(t, err)
+		assert.Equal(t, originalSci, got.Species.ScientificName)
+		assert.Equal(t, want, got.OriginalSpecies)
+
+		checkLists(t, want, true)
+	})
+
+	t.Run("original label row deleted", func(t *testing.T) {
+		ghost := seedDetection(t, ds, ghostSci, at(20))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, ghost.ID, currentSci))
+		ghostLabel, err := ds.label.GetOrCreate(ctx, ghostSci, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+		require.NoError(t, err)
+		require.NoError(t, ds.label.Delete(ctx, ghostLabel.ID))
+
+		got, err := repo.Get(ctx, idString(ghost.ID))
+		require.NoError(t, err)
+		assert.Equal(t, currentSci, got.Species.ScientificName)
+		assert.Zero(t, got.OriginalSpecies)
+
+		// The list reads batch the labels: a missing original row is no error there either.
+		for _, rc := range listReadCalls(date, hour) {
+			results, err := rc.call(ctx, repo)
+			require.NoError(t, err, rc.name)
+			listed := find(results, ghost.ID)
+			require.NotNil(t, listed, "%s did not return the detection with the deleted original label", rc.name)
+			assert.Equal(t, currentSci, listed.Species.ScientificName, rc.name)
+			assert.Zero(t, listed.OriginalSpecies, rc.name)
+		}
+	})
+}
+
+// TestDetectionRepository_OriginalSpeciesCommonNameFallback pins what the read
+// mapping puts in OriginalSpecies.CommonName: the resolved common name for a species
+// the name maps know, and the scientific name itself for a legacy alias they lack,
+// which the predictions merge treats as unresolved.
+func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		aliasSci     = "Streptopelia senegalensis" // legacy alias, not in the name maps
+		canonicalSci = "Spilopelia senegalensis"
+		canonicalCom = "Laughing Dove"
+		currentSci   = "Parus major"
+	)
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{canonicalSci + "_" + canonicalCom, currentSci + "_Great Tit"})
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+	seedDetection(t, ds, currentSci, time.Date(2026, 6, 1, 12, 20, 0, 0, time.UTC))
+
+	tests := []struct {
+		name string
+		sci  string
+		want detection.Species
+	}{
+		{"alias falls back to its scientific name", aliasSci, detection.Species{ScientificName: aliasSci, CommonName: aliasSci}},
+		{"canonical species resolves", canonicalSci, detection.Species{ScientificName: canonicalSci, CommonName: canonicalCom}},
+	}
+	for i, tt := range tests {
+		changed := seedDetection(t, ds, tt.sci, time.Date(2026, 6, 1, 12, i, 0, 0, time.UTC))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci), tt.name)
+
+		got, err := repo.Get(ctx, strconv.FormatUint(uint64(changed.ID), 10))
+		require.NoError(t, err, tt.name)
+		assert.Equal(t, tt.want, got.OriginalSpecies, tt.name)
+	}
+}

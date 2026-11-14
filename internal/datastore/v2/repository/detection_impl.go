@@ -154,7 +154,8 @@ func (r *detectionRepository) Get(ctx context.Context, id uint) (*entities.Detec
 	return &det, nil
 }
 
-// GetWithRelations retrieves a detection with preloaded Label, Model, and Source.
+// GetWithRelations retrieves a detection with preloaded Label, Model, and Source, and
+// the original Label when a reviewer changed the species.
 // Note: Due to v2_ prefix concerns, we manually join rather than using Preload.
 func (r *detectionRepository) GetWithRelations(ctx context.Context, id uint) (*entities.Detection, error) {
 	var det entities.Detection
@@ -174,6 +175,19 @@ func (r *detectionRepository) GetWithRelations(ctx context.Context, id uint) (*e
 		}
 	} else {
 		det.Label = &label
+	}
+
+	// The model's original pick, only for a detection whose species was changed.
+	// A missing row is not an error.
+	if det.OriginalLabelID != nil {
+		var original entities.Label
+		if err := r.db.WithContext(ctx).Table(r.labelsTable()).First(&original, *det.OriginalLabelID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("failed to load original label: %w", err)
+			}
+		} else {
+			det.OriginalLabel = &original
+		}
 	}
 
 	var model entities.AIModel
@@ -470,7 +484,8 @@ func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*enti
 	return dets, nil
 }
 
-// loadRelationsForDetections loads Label, Model, Source for multiple detections.
+// loadRelationsForDetections loads Label (and the original Label of a detection whose
+// species was changed), Model, Source for multiple detections.
 // Returns error if any relation lookup fails.
 func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
@@ -483,6 +498,9 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 	sourceIDs := make(map[uint]bool)
 	for _, d := range dets {
 		labelIDs[d.LabelID] = true
+		if d.OriginalLabelID != nil {
+			labelIDs[*d.OriginalLabelID] = true
+		}
 		modelIDs[d.ModelID] = true
 		if d.SourceID != nil {
 			sourceIDs[*d.SourceID] = true
@@ -547,6 +565,9 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 	// Assign relations
 	for _, d := range dets {
 		d.Label = labels[d.LabelID]
+		if d.OriginalLabelID != nil {
+			d.OriginalLabel = labels[*d.OriginalLabelID]
+		}
 		d.Model = models[d.ModelID]
 		if d.SourceID != nil {
 			d.Source = sources[*d.SourceID]

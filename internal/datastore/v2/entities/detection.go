@@ -57,4 +57,8 @@ type Detection struct {
 	Review   *DetectionReview    `gorm:"-"`
 	Lock     *DetectionLock      `gorm:"-"`
 	Comments []*DetectionComment `gorm:"-"`
+	// OriginalLabel is the label behind OriginalLabelID, loaded with the other
+	// relations. It carries no foreignKey tag: a relationship would make AutoMigrate
+	// rebuild the table on SQLite.
+	OriginalLabel *Label `gorm:"-"`
 }

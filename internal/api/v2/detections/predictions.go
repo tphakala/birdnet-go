@@ -10,13 +10,11 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	detectionPkg "github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/labels/vocalization"
-	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
@@ -55,32 +53,30 @@ type ModelPredictionSetResponse struct {
 }
 
 // PredictionResponse is one alternate species with the confidence the model gave it.
+// Original marks the model's own pick of a detection whose species a reviewer
+// changed; its confidence is the detection's.
 type PredictionResponse struct {
 	ScientificName string  `json:"scientificName"`
 	CommonName     string  `json:"commonName"`
 	SpeciesCode    string  `json:"speciesCode"`
 	Confidence     float64 `json:"confidence"`
+	Original       bool    `json:"original,omitempty"`
 }
 
 // GetDetectionPredictions handles GET /api/v2/detections/:id/predictions. It returns
 // the alternate species the detecting model scored for one detection, without the
 // detected species, human sound classes and a dog class that only the filter
-// preserved. It answers 409 unless the enhanced (v2) database is in use, and 400
-// for an id that is not a positive integer that fits in 32 bits.
+// preserved. When a reviewer changed the species, the model's own pick is listed
+// too, marked original, whatever those rules say. It answers 409 unless the enhanced
+// (v2) database is in use, and 400 for an id that is not a positive integer that fits
+// in 32 bits.
 func (c *Handler) GetDetectionPredictions(ctx echo.Context) error {
 	if c.V2Manager == nil || !datastoreV2.IsEnhancedDatabase() {
-		// Answered without an error log line: the route is public and a legacy
-		// install would otherwise fill the health error buffer with normal use.
-		resp := c.NewErrorResponse(nil, predictionsV2RequiredMessage, http.StatusConflict)
-		c.LogDebugIfEnabled(predictionsV2RequiredLog,
-			logger.String("correlation_id", resp.CorrelationID),
-			logger.String("path", apicore.RoutePattern(ctx)),
-		)
-		return ctx.JSON(http.StatusConflict, resp)
+		return c.respondEnhancedDatabaseRequired(ctx, predictionsV2RequiredMessage, predictionsV2RequiredLog)
 	}
 
-	n, err := strconv.ParseUint(ctx.Param("id"), 10, detectionIDBits)
-	if err != nil || n == 0 {
+	n, err := parseDetectionID(ctx)
+	if err != nil {
 		return c.HandleError(ctx, err, invalidDetectionIDMessage, http.StatusBadRequest)
 	}
 	// Read the validated number, so the id that was checked is the id that is read.
@@ -110,7 +106,7 @@ func (c *Handler) GetDetectionPredictions(ctx echo.Context) error {
 		DetectionID:      uint(n),
 		ModelPredictions: make([]ModelPredictionSetResponse, 0, 1),
 	}
-	if preds := buildPredictions(r.Species.ScientificName, rows); len(preds) > 0 {
+	if preds := buildPredictions(r, rows); len(preds) > 0 {
 		modelType := r.Model.ModelType
 		if modelType == "" {
 			modelType = defaultModelType
@@ -155,24 +151,45 @@ func comparePredictionCandidates(a, b *predictionCandidate) int {
 // below every non-dog row (the classifier appends one past its top results to keep
 // it visible, so a low dog score is usually that artifact; a genuine low-scoring dog
 // result is dropped with it), and sorts by confidence descending then species key.
+//
+// When a reviewer changed the species, r.OriginalSpecies is the model's own pick and
+// it is listed as an extra entry marked original, with the detection's confidence
+// (see originalPickCandidate for when there is none). The entry is exempt from the
+// human and dog filters and does not take part in the dog comparison, so it never
+// changes how the other rows are handled. Stored rows of its species only fill its
+// missing code and its unresolved common name (empty, or the scientific name the
+// datastore falls back to) when the row's own common name is resolved. A stand-in
+// common name that no row replaces follows the entry's canonical scientific name.
+//
 // The result is the same for any input order.
-func buildPredictions(primarySci string, rows []detectionPkg.AdditionalResult) []PredictionResponse {
-	primaryKey := speciesindex.CanonicalKey(primarySci)
+func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResult) []PredictionResponse {
+	primaryKey := speciesindex.CanonicalKey(r.Species.ScientificName)
+	original := originalPickCandidate(r, primaryKey)
 
 	candidates := make([]*predictionCandidate, 0, len(rows))
+	var originalRows []*predictionCandidate
 	for _, row := range rows {
 		name := strings.TrimSpace(row.Species.ScientificName)
-		if name == "" || math.IsNaN(row.Confidence) || math.IsInf(row.Confidence, 0) {
+		if name == "" || !isFiniteConfidence(row.Confidence) {
 			continue
 		}
 		key := speciesindex.CanonicalKey(name)
-		if key == primaryKey || vocalization.IsHumanSound(name) {
+		if key == primaryKey {
 			continue
 		}
-		candidates = append(candidates, &predictionCandidate{
+		cand := &predictionCandidate{
 			name: name, key: key, commonName: row.Species.CommonName, code: row.Species.Code,
 			confidence: row.Confidence, dog: vocalization.IsDog(name),
-		})
+		}
+		// Checked before the human rule: the original is listed whatever its class.
+		if original != nil && key == original.key {
+			originalRows = append(originalRows, cand)
+			continue
+		}
+		if vocalization.IsHumanSound(name) {
+			continue
+		}
+		candidates = append(candidates, cand)
 	}
 	slices.SortFunc(candidates, comparePredictionCandidates)
 
@@ -206,6 +223,12 @@ func buildPredictions(primarySci string, rows []detectionPkg.AdditionalResult) [
 		})
 	}
 
+	if original != nil {
+		original.fillFrom(originalRows)
+		entries = append(entries, original)
+		slices.SortFunc(entries, comparePredictionCandidates)
+	}
+
 	out := make([]PredictionResponse, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, PredictionResponse{
@@ -213,7 +236,75 @@ func buildPredictions(primarySci string, rows []detectionPkg.AdditionalResult) [
 			CommonName:     e.commonName,
 			SpeciesCode:    e.code,
 			Confidence:     e.confidence,
+			Original:       e == original,
 		})
 	}
 	return out
+}
+
+// originalPickCandidate returns the entry for the model's own pick of a detection
+// whose species a reviewer changed, or nil when there is none to show: the species
+// was never changed, the original has no species part in its name, it is the current
+// species (primaryKey), or the detection's confidence is not finite.
+func originalPickCandidate(r *detectionPkg.Result, primaryKey string) *predictionCandidate {
+	name := strings.TrimSpace(r.OriginalSpecies.ScientificName)
+	key := speciesindex.CanonicalKey(name)
+	if name == "" || key == "" || key == primaryKey || !isFiniteConfidence(r.Confidence) {
+		return nil
+	}
+	return &predictionCandidate{
+		name: name, key: key, commonName: r.OriginalSpecies.CommonName, code: r.OriginalSpecies.Code,
+		confidence: r.Confidence,
+	}
+}
+
+// commonNameUnresolved reports whether a common name is missing or is only the
+// scientific name the datastore falls back to for a species it cannot name. That
+// stand-in is the stored scientific name verbatim, so the comparison is exact after
+// trimming: a localized name that differs from the scientific name only in case is
+// a real name. A localized name that is byte-identical to the scientific name cannot
+// be told from a stand-in.
+func commonNameUnresolved(commonName, scientificName string) bool {
+	commonName = strings.TrimSpace(commonName)
+	return commonName == "" || commonName == strings.TrimSpace(scientificName)
+}
+
+// isFiniteConfidence reports whether a confidence is a usable number: neither NaN
+// nor infinite, which would also make the JSON encoding fail.
+func isFiniteConfidence(confidence float64) bool {
+	return !math.IsNaN(confidence) && !math.IsInf(confidence, 0)
+}
+
+// parseDetectionID reads the :id parameter of a detection route. It accepts only a
+// positive integer that fits in detectionIDBits bits; any other value is an error.
+func parseDetectionID(ctx echo.Context) (uint64, error) {
+	n, err := strconv.ParseUint(ctx.Param("id"), 10, detectionIDBits)
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, errors.NewStd("detection id must be positive")
+	}
+	return n, nil
+}
+
+// fillFrom completes the original entry from stored rows of its species, ranked so
+// the result does not depend on input order: the first resolved common name and the
+// first non-empty code win, and common names are trimmed. A stand-in common name
+// that no row replaces follows the entry's canonical scientific name, under which it
+// is shown.
+func (c *predictionCandidate) fillFrom(rows []*predictionCandidate) {
+	c.commonName = strings.TrimSpace(c.commonName)
+	slices.SortFunc(rows, comparePredictionCandidates)
+	for _, row := range rows {
+		if commonNameUnresolved(c.commonName, c.name) && !commonNameUnresolved(row.commonName, row.name) {
+			c.commonName = strings.TrimSpace(row.commonName)
+		}
+		if c.code == "" {
+			c.code = row.code
+		}
+	}
+	if c.commonName != "" && c.commonName == c.name {
+		c.commonName = openfauna.CanonicalName(c.name)
+	}
 }
