@@ -37,6 +37,9 @@ function names(links: HTMLElement[]): string[] {
 }
 
 describe('DetailNavBar step links', () => {
+  // The shared mock's own behaviour, put back after each test so later suites get it.
+  const sharedT = vi.mocked(t).getMockImplementation();
+
   beforeEach(() => {
     // Keep the placeholders in the name, so links that differ only by a parameter differ here.
     vi.mocked(t).mockImplementation((key: string, params?: Record<string, unknown>) =>
@@ -46,6 +49,7 @@ describe('DetailNavBar step links', () => {
 
   afterEach(() => {
     cleanup();
+    if (sharedT) vi.mocked(t).mockImplementation(sharedT);
     vi.mocked(getLocale).mockReturnValue('en');
   });
 
