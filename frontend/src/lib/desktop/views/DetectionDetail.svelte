@@ -126,6 +126,9 @@
   // - lists: neighbours, predictions and daily counts, which also change with the species;
   // - species and attribution: tied to the species, kept while stepping within one species.
   let detectionController: AbortController | null = null;
+  // A save was made on the page whose effect on the review counts is not known yet: the
+  // next detection to arrive recounts them (a refresh only when its verdict changed).
+  let recountPending = false;
   let relatedController: AbortController | null = null;
   let listsController: AbortController | null = null;
   let speciesController: AbortController | null = null;
@@ -307,12 +310,14 @@
         loadDaily(data, listsController.signal);
       }
 
+      // A new verdict changes the species' review counts; a note or lock does not. A
+      // step cannot tell what the save on the detection it left changed, so it recounts.
       if (speciesChanged) {
         loadSpeciesData(data);
-      } else if (refresh && verdictChanged && speciesController) {
-        // A new verdict changes the species' review counts; a note or lock does not.
+      } else if (recountPending && (!refresh || verdictChanged) && speciesController) {
         void loadReviewCounts(data.scientificName, speciesController.signal);
       }
+      recountPending = false;
     } catch (error) {
       if (isAbort(error, signal)) return;
       logger.error('Error fetching detection:', error);
@@ -329,10 +334,23 @@
     }
   }
 
-  /** Reloads the current detection after a change made on this page. */
-  function refreshDetection() {
-    if (resolvedDetectionId) {
+  /**
+   * Reloads the detection a change was saved on, in place. A save on a detection
+   * the page is leaving or has left does not reload the one now shown: a refresh
+   * would cancel a step still loading, and the step brings its detection with all
+   * its data. Such a save may still have changed the species' review counts, so
+   * they are counted again, now or when the step's detection arrives.
+   */
+  function refreshDetection(savedId: number) {
+    recountPending = true;
+    if (!resolvedDetectionId || !detection) return;
+    if (savedId === detection.id && !isLoadingDetection) {
       void fetchDetection(resolvedDetectionId, true);
+      return;
+    }
+    if (!isLoadingDetection && speciesController) {
+      recountPending = false;
+      void loadReviewCounts(detection.scientificName, speciesController.signal);
     }
   }
 

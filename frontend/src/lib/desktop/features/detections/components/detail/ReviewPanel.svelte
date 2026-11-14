@@ -38,8 +38,8 @@
     grow?: boolean;
     /** Opens the species dialog. */
     onWrongSpecies: () => void;
-    /** Called after a change was saved, so the page can reload the detection. */
-    onChanged: () => void;
+    /** Called with the detection's id after a change to it was saved, so the page can reload it. */
+    onChanged: (_detectionId: number) => void;
   }
 
   let {
@@ -96,16 +96,18 @@
 
   async function setVerdict(verdict: Verdict) {
     if (verdictBlocked || saving !== null || detection.verified === verdict) return;
+    // The detection the change is saved on, kept for when the save answers.
+    const id = detection.id;
     saving = verdict;
     errorMessage = '';
     try {
-      await api.post(`/api/v2/detections/${detection.id}/review`, { verified: verdict });
+      await api.post(`/api/v2/detections/${id}/review`, { verified: verdict });
       toastActions.success(
         verdict === 'correct'
           ? t('detections.detail.review.savedCorrect')
           : t('detections.detail.review.savedFalsePositive')
       );
-      onChanged();
+      onChanged(id);
     } catch (error) {
       logger.error('Failed to save verdict', error, { action: 'review' });
       fail(t('common.review.errors.verificationFailed'));
@@ -117,12 +119,13 @@
   // A refused change leaves the switch as it was: ToggleField shows the value it is given.
   async function setLocked(locked: boolean) {
     if (locked === keepValue || !canReview || saving !== null) return;
+    const id = detection.id;
     saving = 'lock';
     errorMessage = '';
     lockTarget = locked;
     try {
-      await api.post(`/api/v2/detections/${detection.id}/lock`, { locked });
-      onChanged();
+      await api.post(`/api/v2/detections/${id}/lock`, { locked });
+      onChanged(id);
     } catch (error) {
       logger.error('Failed to change lock', error, { action: 'lock' });
       lockTarget = null;

@@ -422,6 +422,173 @@ describe('DetectionDetail stepping and refreshing', () => {
   });
 });
 
+describe('DetectionDetail saves that finish around a step', () => {
+  // Regression: a save on one detection that finished after the user had stepped to the
+  // next one refreshed the new detection in place of its own load, which cancelled that
+  // load, so the new detection never got its sun times.
+  it('lets the step load the new detection when a save on the old one finishes during it', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    let answerNext: ((_response: Response) => void) | undefined;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/60/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      ['/api/v2/detections/60', makeDetection({ id: 60, date: '2024-02-01' })],
+      [
+        '/api/v2/detections/61',
+        () =>
+          new Promise<Response>(resolve => {
+            answerNext = resolve;
+          }),
+      ],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '60' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/weather/sun/2024-02-01')).toBe(1);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '61' });
+    await settle();
+
+    answerReview?.(jsonResponse({}));
+    await settle();
+    answerNext?.(jsonResponse(makeDetection({ id: 61, date: '2024-02-02' })));
+
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/weather/sun/2024-02-02')).toBe(1);
+    });
+  });
+
+  // A save that answers after the user stepped to a detection of the same species still
+  // changes that species' review counts, so the step recounts them.
+  it('recounts the reviews when a save on the old detection finishes during a step', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    let answerNext: ((_response: Response) => void) | undefined;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/62/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      ['/api/v2/detections/62', makeDetection({ id: 62 })],
+      [
+        '/api/v2/detections/63',
+        (call: Call) =>
+          call.url.endsWith('/api/v2/detections/63')
+            ? new Promise<Response>(resolve => {
+                answerNext = resolve;
+              })
+            : Promise.resolve(jsonResponse({})),
+      ],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '62' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '63' });
+    await settle();
+    answerReview?.(jsonResponse({}));
+    await settle();
+    answerNext?.(jsonResponse(makeDetection({ id: 63 })));
+
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(4);
+    });
+  });
+
+  it('recounts the reviews, without reloading the new detection, when a save finishes after the step', async () => {
+    let answerReview: ((_response: Response) => void) | undefined;
+    const calls = stubApi([
+      [
+        '/api/v2/detections/64/review',
+        () =>
+          new Promise<Response>(resolve => {
+            answerReview = resolve;
+          }),
+      ],
+      ['/api/v2/detections/64', makeDetection({ id: 64 })],
+      ['/api/v2/detections/65', makeDetection({ id: 65 })],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '64' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await rerender({ detectionId: '65' });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+      ).not.toBeNull();
+    });
+    await settle();
+
+    answerReview?.(jsonResponse({}));
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(4);
+    });
+    expect(calls.filter(call => call.url.endsWith('/api/v2/detections/65')).length).toBe(1);
+  });
+
+  // Regression: a step that cancelled the refresh after a verdict also lost the recount of
+  // the species' reviews, which a step within one species does not make again.
+  it('recounts the reviews when a step cancels the refresh after a verdict', async () => {
+    let answerRefresh: ((_response: Response) => void) | undefined;
+    let loads = 0;
+    const calls = stubApi([
+      ['/api/v2/detections/70/review', {}],
+      [
+        '/api/v2/detections/70',
+        (call: Call) => {
+          if (!call.url.endsWith('/api/v2/detections/70')) return Promise.resolve(jsonResponse({}));
+          loads += 1;
+          if (loads === 1) return Promise.resolve(jsonResponse(makeDetection({ id: 70 })));
+          return new Promise<Response>(resolve => {
+            answerRefresh = resolve;
+          });
+        },
+      ],
+      ['/api/v2/detections/71', makeDetection({ id: 71 })],
+      ['/api/v2/search', { total: 0 }],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '70' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(2);
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await waitFor(() => {
+      expect(loads).toBe(2);
+    });
+
+    await rerender({ detectionId: '71' });
+    await waitFor(() => {
+      expect(count(calls, '/api/v2/search')).toBe(4);
+    });
+    answerRefresh?.(jsonResponse(makeDetection({ id: 70, verified: 'correct' })));
+  });
+});
+
 describe('DetectionDetail recording', () => {
   it('downloads the saved recording from the ID-based endpoint', async () => {
     stubApi([
