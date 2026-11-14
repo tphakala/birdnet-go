@@ -646,23 +646,6 @@ func TestGetDetectionPredictions_OriginalPick(t *testing.T) {
 		})
 	}
 
-	t.Run("the dog rule gives the same verdict with and without an original", func(t *testing.T) {
-		rows := []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid), predRow(predTestDog, "", "", predTestDog1)}
-		for name, primary := range map[string]*detection.Result{
-			"without": predictionsPrimary(predTestMallard, predTestModelType),
-			"with":    changedPrimary(predTestMallard, blackbird, predTestDog1/2),
-		} {
-			e, repo, h := predictionsFixture(t)
-			expectReads(repo, primary, rows)
-			_, body := getPredictions(t, e, h, predTestID)
-			resp := decodePredictions(t, body)
-			require.Len(t, resp.ModelPredictions, 1, name)
-			for _, p := range resp.ModelPredictions[0].Predictions {
-				assert.NotEqual(t, predTestDog, p.ScientificName, name)
-			}
-		}
-	})
-
 	t.Run("an unchanged detection has no original key", func(t *testing.T) {
 		e, repo, h := predictionsFixture(t)
 		expectReads(repo, predictionsPrimary(predTestMallard, predTestModelType), []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)})

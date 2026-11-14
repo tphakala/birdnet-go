@@ -304,7 +304,7 @@ func (c *predictionCandidate) fillFrom(rows []*predictionCandidate) {
 			c.code = row.code
 		}
 	}
-	if c.commonName != "" && commonNameUnresolved(c.commonName, c.name) {
+	if c.commonName != "" && c.commonName == c.name {
 		c.commonName = openfauna.CanonicalName(c.name)
 	}
 }
