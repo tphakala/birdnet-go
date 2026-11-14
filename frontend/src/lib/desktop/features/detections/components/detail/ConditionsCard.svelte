@@ -25,6 +25,7 @@
     Wind,
   } from '@lucide/svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import WeatherSvgIcon from '$lib/desktop/components/ui/WeatherSvgIcon.svelte';
   import { t } from '$lib/i18n';
   import {
@@ -329,6 +330,13 @@
 {/snippet}
 
 <DetailCard title={t('detections.detail.conditions.title')} fill={true}>
+  {#snippet header()}
+    <!-- The one visible label while the card's own data loads. -->
+    {#if weatherPending || (activityLoading && hourlyActivity === null)}
+      <SkeletonStatus label={t('common.loading')} className="ml-auto text-xs" />
+    {/if}
+  {/snippet}
+
   <div class="dd-conditions">
     <!-- Sky strip: the one part that grows with the card. -->
     <div class="dd-sky-block">
