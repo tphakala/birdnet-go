@@ -83,6 +83,38 @@ describe('ReviewPanel species change during a save', () => {
     expect(wrongSpeciesButton()).toHaveAttribute('aria-disabled', 'true');
     expect(onWrongSpecies).not.toHaveBeenCalled();
   });
+
+  // Regression: the other controls ignored clicks during a save without showing it.
+  it('shows every review control as blocked, pointing at the status, while a save is out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {}))
+    );
+    render(ReviewPanel, {
+      props: {
+        detection: { ...detection, verified: 'false_positive' },
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+    const correct = screen.getByRole('button', { name: /detections\.detail\.review\.correct/ });
+
+    await fireEvent.click(correct);
+
+    const status = screen.getByText('detections.detail.review.saving');
+    for (const control of [
+      correct,
+      screen.getByRole('button', { name: /detections\.detail\.review\.falsePositive/ }),
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' }),
+      screen.getByRole('switch'),
+    ]) {
+      expect(control).toHaveAttribute('aria-disabled', 'true');
+      expect(control.getAttribute('aria-describedby')?.split(' ')).toContain(status.id);
+    }
+  });
 });
 
 describe('ReviewPanel ignore species', () => {

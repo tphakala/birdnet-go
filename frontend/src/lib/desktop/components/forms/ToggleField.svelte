@@ -23,6 +23,8 @@
     value: boolean;
     /** Blocks changes but keeps the switch focusable (aria-disabled), announced with its description. */
     disabled?: boolean;
+    /** Id of an element outside the field that also describes the switch, read after its own description. */
+    describedBy?: string;
     error?: string;
     onUpdate: (_value: boolean) => void;
     required?: boolean;
@@ -37,6 +39,7 @@
     variant = 'default',
     value = $bindable(),
     disabled = false,
+    describedBy: outsideDescriptionId,
     error,
     onUpdate,
     required = false,
@@ -177,9 +180,14 @@
     )
   );
 
-  // The description first, then the error: neither is part of the accessible name
+  // The description first, then the error, then an outside description: none is part of the
+  // accessible name
   let describedBy = $derived(
-    [description ? descriptionId : undefined, error ? `${fieldId}-error` : undefined]
+    [
+      description ? descriptionId : undefined,
+      error ? `${fieldId}-error` : undefined,
+      outsideDescriptionId,
+    ]
       .filter(Boolean)
       .join(' ') || undefined
   );

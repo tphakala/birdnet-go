@@ -69,9 +69,12 @@
   let lockTarget = $state<boolean | null>(null);
 
   let verdictBlocked = $derived(!canReview || detection.locked);
+  // A save still out blocks every control, which then points at the status line saying so.
+  let busy = $derived(saving !== null);
+  let verdictUnavailable = $derived(verdictBlocked || busy);
   let speciesBlocked = $derived(speciesBlockedReason !== '');
   // A species change waits for a save still out: the status line then says it is saving.
-  let wrongSpeciesBlocked = $derived(speciesBlocked || saving !== null);
+  let wrongSpeciesBlocked = $derived(speciesBlocked || busy);
   let canIgnore = $derived(
     canReview && detection.verified === 'false_positive' && !detection.locked
   );
@@ -216,8 +219,8 @@
       variant={detection.verified === 'correct' || saving === 'correct' ? 'success' : 'default'}
       size="md"
       aria-pressed={detection.verified === 'correct'}
-      aria-disabled={verdictBlocked ? 'true' : undefined}
-      aria-describedby={verdictBlocked ? statusId : undefined}
+      aria-disabled={verdictUnavailable ? 'true' : undefined}
+      aria-describedby={verdictUnavailable ? statusId : undefined}
       onclick={() => setVerdict('correct')}
     >
       <Check class="size-4" />
@@ -229,8 +232,8 @@
         : 'default'}
       size="md"
       aria-pressed={detection.verified === 'false_positive'}
-      aria-disabled={verdictBlocked ? 'true' : undefined}
-      aria-describedby={verdictBlocked ? statusId : undefined}
+      aria-disabled={verdictUnavailable ? 'true' : undefined}
+      aria-describedby={verdictUnavailable ? statusId : undefined}
       onclick={() => setVerdict('false_positive')}
     >
       <X class="size-4" />
@@ -257,6 +260,8 @@
           description={t('detections.detail.review.keepHelp')}
           icon={Lock}
           value={keepValue}
+          disabled={busy}
+          describedBy={busy ? statusId : undefined}
           onUpdate={setLocked}
         />
       </div>
@@ -267,7 +272,8 @@
         <Button
           variant="default"
           size="sm"
-          aria-disabled={ignored ? 'true' : undefined}
+          aria-disabled={ignored || busy ? 'true' : undefined}
+          aria-describedby={busy ? statusId : undefined}
           title={t('common.review.form.ignoreSpeciesHelp')}
           onclick={ignoreSpecies}
         >
