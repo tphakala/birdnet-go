@@ -136,7 +136,7 @@
     grid-template-columns: subgrid;
     grid-column: 1 / -1;
     align-items: center;
-    row-gap: 0.25rem;
+    gap: 0.25rem 0.875rem;
     padding: 0.5rem 0;
     font-size: 0.875rem;
     border-top: 1px solid var(--border-100);
@@ -255,11 +255,9 @@
 
   /* Stacked rows: in a narrow window (one page column), and in any card too narrow for
      the four columns. Their minimum is 12 + 4 + 7 + 7rem plus three 0.875rem gaps,
-     32.625rem (the hit count column grows with a longer text, up to about 6rem in the
-     longest languages, which every two-column page still has room for): the half-width
-     column of a window with the sidebar open, from 1101 to about 1275 px wide, is
-     narrower. The two rules hold the same declarations; container and media queries
-     cannot share one block. */
+     32.625rem; the hit count column grows with a longer text, up to about 6rem in the
+     longest languages, which every two-column page still has room for. The two rules
+     hold the same declarations; container and media queries cannot share one block. */
   @media (max-width: 900px) {
     .dd-models {
       grid-template-columns: minmax(0, 1fr);
