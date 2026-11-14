@@ -618,7 +618,7 @@
           </span>
         {:else if running}
           <span id={RUN_STATUS_ID} role="status" class="flex items-center gap-1.5">
-            <Loader2 class="size-3.5 animate-spin" />
+            <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
             {t('health.running')}
           </span>
         {/if}
@@ -631,7 +631,7 @@
           title={t('health.refresh')}
           class="inline-flex items-center justify-center size-8 rounded-md transition-colors not-aria-disabled:hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
         >
-          <RefreshCw class="size-4 {running ? 'animate-spin' : ''}" />
+          <RefreshCw class="size-4 {running ? 'animate-spin motion-reduce:animate-none' : ''}" />
         </button>
       </div>
     </div>
