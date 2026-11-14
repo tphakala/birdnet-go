@@ -34,7 +34,6 @@
     "internalServerError": "Iekšējā servera kļūda",
     "actions": {
       "download": "Lejupielādēt",
-      "review": "Pārskatīt",
       "play": "Atskaņot",
       "view": "Skatīt"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Jā",
       "no": "Nē",
       "unknown": "Nezināms"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Slēpt komentāru",
         "commentPlaceholder": "Pievienojiet komentāru par šo noteikšanu...",
         "commentCount": "({chars} rakstzīmes)",
-        "chars": "rakstzīmes",
-        "commentsLabel": "Komentāri",
-        "currentStatusTitle": "Pašreizējais statuss",
-        "detectionStatusTitle": "Noteikšanas statuss",
-        "lockLabel": "Bloķēšanas statuss",
-        "reviewLabel": "Pārskatīšanas statuss",
         "saveReview": "Saglabāt pārskatīšanu"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Novērojums",
       "aria": {
-        "downloadAudioClip": "Lejupielādēt audio fragmentu {name} noteikšanai",
-        "audioRecordingFor": "Audio ieraksts un spektrogramma {name}",
         "scientificName": "Zinātniskais nosaukums",
         "classificationBadges": "Sugas klasifikācijas nozīmītes",
         "confidence": "Atklāšanas ticamība {confidence}%",
-        "metadata": "Atklāšanas metadati",
-        "weatherConditions": "Laikapstākļi atklāšanas brīdī",
-        "comments": "Atklāšanas komentāri",
-        "commentText": "Komentāra teksts",
-        "commentTimestamp": "Komentāra laika zīmogs",
-        "mainRegion": "Atklāšanas informācija",
-        "tabsHeading": "Atklāšanas informācijas cilnes",
-        "tabList": "Atklāšanas detaļu cilnes",
         "speciesHeadingSuffix": "atklāšanas informācija"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Ieraksts un spektrogramma",
       "clipHint": "Noklikšķiniet un velciet uz spektrogrammas, lai atlasītu diapazonu klipu eksportam"
     },
-    "tabs": {
-      "overview": "Pārskats",
-      "taxonomy": "Taksonomija",
-      "history": "Vēsture",
-      "notes": "Piezīmes"
-    },
     "environmental": {
       "title": "Vides apstākļi"
     },
@@ -1206,18 +1181,9 @@
       "status": "Statuss",
       "locked": "Bloķēts"
     },
-    "history": {
-      "title": "Atklāšanu vēsture",
-      "comingSoon": "Vēstures izsekošana drīzumā..."
-    },
-    "notes": {
-      "title": "Piezīmes un komentāri",
-      "noComments": "Šai atklāšanai nav komentāru vai piezīmju."
-    },
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}",
       "loadingResults": "Ielādē {count} rezultātus...",
       "thumbnailLoading": "Ielādē {species} sīktēlu...",
       "thumbnailLoaded": "Sīktēls {species} ielādēts",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Sugas retums",
       "score": "Vērtējums",
-      "basedOnLocation": "Pamatojoties uz atrašanās vietu: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Ļoti izplatīta",
         "common": "Izplatīta",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomiskā klasifikācija",
-      "subspecies": "Pasugas",
       "noData": "Taksonomijas dati nav pieejami.",
       "labels": {
         "kingdom": "Valsts",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Sugu izsekošana",
       "newSpecies": "Jauna suga",
       "newThisYear": "Pirmā šogad",
-      "newThisSeason": "Pirmā šosezon",
-      "daysSinceFirst": "Dienas kopš pirmās novērošanas"
+      "newThisSeason": "Pirmā šosezon"
     }
   },
   "spectrogram": {

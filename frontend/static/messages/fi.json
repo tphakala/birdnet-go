@@ -34,7 +34,6 @@
     "internalServerError": "Sisäinen palvelinvirhe",
     "actions": {
       "download": "Lataa",
-      "review": "Tarkastele",
       "play": "Toista",
       "view": "Näytä"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Kyllä",
       "no": "Ei",
       "unknown": "Tuntematon"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Piilota kommentti",
         "commentPlaceholder": "Lisää kommentti tästä havainnosta...",
         "commentCount": "({chars} merkkiä)",
-        "chars": "merkkiä",
-        "commentsLabel": "Kommentit",
-        "currentStatusTitle": "Nykyinen tila",
-        "detectionStatusTitle": "Havainnon tila",
-        "lockLabel": "Lukitustila",
-        "reviewLabel": "Tarkistustila",
         "saveReview": "Tallenna tarkistus"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Havainto",
       "aria": {
-        "downloadAudioClip": "Lataa äänileike {name} havainnolle",
-        "audioRecordingFor": "Äänitallenne ja spektrogrammi lajille {name}",
         "scientificName": "Tieteellinen nimi",
         "classificationBadges": "Lajin luokitusmerkit",
         "confidence": "Havainnon luottamus {confidence}%",
-        "metadata": "Havainnon metatiedot",
-        "weatherConditions": "Sääolosuhteet havaintohetkellä",
-        "comments": "Havainnon kommentit",
-        "commentText": "Kommentin teksti",
-        "commentTimestamp": "Kommentin aikaleima",
-        "mainRegion": "Havainnon tiedot",
-        "tabsHeading": "Havaintotietojen välilehdet",
-        "tabList": "Havainnon tietojen välilehdet",
         "speciesHeadingSuffix": "havainnon tiedot"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Tallenne ja spektrogrammi",
       "clipHint": "Valitse leike napsauttamalla ja vetämällä spektrogrammia"
     },
-    "tabs": {
-      "overview": "Yleiskatsaus",
-      "taxonomy": "Taksonomia",
-      "history": "Historia",
-      "notes": "Huomiot"
-    },
     "environmental": {
       "title": "Ympäristöolosuhteet"
     },
@@ -1206,18 +1181,9 @@
       "status": "Tila",
       "locked": "Lukittu"
     },
-    "history": {
-      "title": "Havainnon historia",
-      "comingSoon": "Historian seuranta tulossa pian..."
-    },
-    "notes": {
-      "title": "Huomiot ja kommentit",
-      "noComments": "Ei kommentteja tai huomioita tälle havainnolle."
-    },
     "aria": {
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
-      "error": "Virhe havainnon latauksessa: {error}",
       "loadingResults": "Ladataan {count} tulosta...",
       "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
       "thumbnailLoaded": "Pikkukuva {species} ladattu",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Lajin harvinaisuus",
       "score": "Pisteet",
-      "basedOnLocation": "Sijainnin perusteella: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Hyvin yleinen",
         "common": "Yleinen",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",
-      "subspecies": "Alalajit",
       "noData": "Taksonomiatietoja ei ole saatavilla.",
       "labels": {
         "kingdom": "Kunta",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Lajiseuranta",
       "newSpecies": "Uusi laji",
       "newThisYear": "Ensimmäinen tänä vuonna",
-      "newThisSeason": "Ensimmäinen tällä kaudella",
-      "daysSinceFirst": "Päiviä ensihavainnosta"
+      "newThisSeason": "Ensimmäinen tällä kaudella"
     }
   },
   "spectrogram": {

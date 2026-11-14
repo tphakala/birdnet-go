@@ -34,7 +34,6 @@
     "internalServerError": "Internt serverfel",
     "actions": {
       "download": "Ladda ner",
-      "review": "Granska",
       "play": "Spela upp",
       "view": "Visa"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nej",
       "unknown": "Okänd"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Dölj kommentar",
         "commentPlaceholder": "Lägg till en kommentar om denna detektion...",
         "commentCount": "({chars} tecken)",
-        "chars": "tecken",
-        "commentsLabel": "Kommentarer",
-        "currentStatusTitle": "Nuvarande status",
-        "detectionStatusTitle": "Detektionsstatus",
-        "lockLabel": "Låsstatus",
-        "reviewLabel": "Granskningsstatus",
         "saveReview": "Spara granskning"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Observation",
       "aria": {
-        "downloadAudioClip": "Ladda ner ljudklipp för {name}-detektion",
-        "audioRecordingFor": "Ljudinspelning och spektrogram för {name}",
         "scientificName": "Vetenskapligt namn",
         "classificationBadges": "Märken för artklassificering",
         "confidence": "Detekteringskonfidens {confidence}%",
-        "metadata": "Detekteringsmetadata",
-        "weatherConditions": "Väderförhållanden vid detekteringstillfället",
-        "comments": "Kommentarer till detekteringen",
-        "commentText": "Kommentarstext",
-        "commentTimestamp": "Tidsstämpel för kommentar",
-        "mainRegion": "Detekteringsinformation",
-        "tabsHeading": "Flikar med detekteringsinformation",
-        "tabList": "Flikar med detekteringsdetaljer",
         "speciesHeadingSuffix": "detekteringsinformation"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Inspelning och spektrogram",
       "clipHint": "Klicka och dra på spektrogrammet för att välja ett intervall för klippexport"
     },
-    "tabs": {
-      "overview": "Översikt",
-      "taxonomy": "Taxonomi",
-      "history": "Historik",
-      "notes": "Anteckningar"
-    },
     "environmental": {
       "title": "Miljöförhållanden"
     },
@@ -1206,18 +1181,9 @@
       "status": "Status",
       "locked": "Låst"
     },
-    "history": {
-      "title": "Detekteringshistorik",
-      "comingSoon": "Historikspårning kommer snart..."
-    },
-    "notes": {
-      "title": "Anteckningar och kommentarer",
-      "noComments": "Inga kommentarer eller anteckningar för denna detektering."
-    },
     "aria": {
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
-      "error": "Fel vid laddning av detektering: {error}",
       "loadingResults": "Laddar {count} resultat...",
       "thumbnailLoading": "Laddar {species} miniatyrbild...",
       "thumbnailLoaded": "Miniatyrbild av {species} laddad",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Arternas sällsynthet",
       "score": "Poäng",
-      "basedOnLocation": "Baserat på plats: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Mycket vanlig",
         "common": "Vanlig",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomisk klassificering",
-      "subspecies": "Underart",
       "noData": "Inga taxonomidata tillgängliga.",
       "labels": {
         "kingdom": "Rike",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Artspårning",
       "newSpecies": "Ny art",
       "newThisYear": "Första i år",
-      "newThisSeason": "Första denna säsong",
-      "daysSinceFirst": "Dagar sedan först sedd"
+      "newThisSeason": "Första denna säsong"
     }
   },
   "spectrogram": {

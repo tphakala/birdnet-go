@@ -43,7 +43,6 @@ export type TranslationKey =
   | 'common.pageNotFound'
   | 'common.internalServerError'
   | 'common.actions.download'
-  | 'common.actions.review'
   | 'common.actions.play'
   | 'common.actions.view'
   | 'common.buttons.save'
@@ -142,7 +141,6 @@ export type TranslationKey =
   | 'common.aria.opensInNewTab'
   | 'common.labels.confidence'
   | 'common.labels.github'
-  | 'common.values.yes'
   | 'common.values.no'
   | 'common.values.unknown'
   | 'common.modal.confirmAction'
@@ -168,12 +166,6 @@ export type TranslationKey =
   | 'common.review.form.hideComment'
   | 'common.review.form.commentPlaceholder'
   | 'common.review.form.commentCount' // params: chars
-  | 'common.review.form.chars'
-  | 'common.review.form.commentsLabel'
-  | 'common.review.form.currentStatusTitle'
-  | 'common.review.form.detectionStatusTitle'
-  | 'common.review.form.lockLabel'
-  | 'common.review.form.reviewLabel'
   | 'common.review.form.saveReview'
   | 'common.review.errors.saveFailed'
   | 'common.review.errors.noAudio'
@@ -731,20 +723,9 @@ export type TranslationKey =
   | 'detections.detail.species.searchHintAll' // params: count
   | 'detections.detail.species.noMatchesInRange'
   | 'detections.detail.species.modelPick'
-  | 'detections.detail.observation'
-  | 'detections.detail.aria.downloadAudioClip' // params: name
-  | 'detections.detail.aria.audioRecordingFor' // params: name
   | 'detections.detail.aria.scientificName'
   | 'detections.detail.aria.classificationBadges'
   | 'detections.detail.aria.confidence' // params: confidence
-  | 'detections.detail.aria.metadata'
-  | 'detections.detail.aria.weatherConditions'
-  | 'detections.detail.aria.comments'
-  | 'detections.detail.aria.commentText'
-  | 'detections.detail.aria.commentTimestamp'
-  | 'detections.detail.aria.mainRegion'
-  | 'detections.detail.aria.tabsHeading'
-  | 'detections.detail.aria.tabList'
   | 'detections.detail.aria.speciesHeadingSuffix'
   | 'detections.detail.nav.label'
   | 'detections.detail.nav.back'
@@ -960,23 +941,14 @@ export type TranslationKey =
   | 'detections.row.imageFailedToLoad'
   | 'detections.media.title'
   | 'detections.media.clipHint'
-  | 'detections.tabs.overview'
-  | 'detections.tabs.taxonomy'
-  | 'detections.tabs.history'
-  | 'detections.tabs.notes'
   | 'detections.environmental.title'
   | 'detections.metadata.title'
   | 'detections.metadata.source'
   | 'detections.metadata.duration'
   | 'detections.metadata.status'
   | 'detections.metadata.locked'
-  | 'detections.history.title'
-  | 'detections.history.comingSoon'
-  | 'detections.notes.title'
-  | 'detections.notes.noComments'
   | 'detections.aria.loading'
   | 'detections.aria.loaded' // params: species
-  | 'detections.aria.error' // params: error
   | 'detections.aria.loadingResults' // params: count
   | 'detections.aria.thumbnailLoading' // params: species
   | 'detections.aria.thumbnailLoaded' // params: species
@@ -988,9 +960,7 @@ export type TranslationKey =
   | 'detections.errors.loadFailed' // params: status
   | 'detections.errors.noIdProvided'
   | 'detections.errors.fetchFailed'
-  | 'species.rarity.title'
   | 'species.rarity.score'
-  | 'species.rarity.basedOnLocation' // params: latitude, longitude
   | 'species.rarity.statuses.very_common'
   | 'species.rarity.statuses.common'
   | 'species.rarity.statuses.uncommon'
@@ -998,7 +968,6 @@ export type TranslationKey =
   | 'species.rarity.statuses.very_rare'
   | 'species.rarity.statuses.unknown'
   | 'species.taxonomy.hierarchy'
-  | 'species.taxonomy.subspecies'
   | 'species.taxonomy.noData'
   | 'species.taxonomy.labels.kingdom'
   | 'species.taxonomy.labels.phylum'
@@ -1016,11 +985,9 @@ export type TranslationKey =
   | 'species.synonyms.errors.unknownSpecies'
   | 'species.synonyms.errors.duplicateKey'
   | 'species.synonyms.errors.emptyUpdatedName'
-  | 'species.tracking.title'
   | 'species.tracking.newSpecies'
   | 'species.tracking.newThisYear'
   | 'species.tracking.newThisSeason'
-  | 'species.tracking.daysSinceFirst'
   | 'spectrogram.controls.frequencyRange'
   | 'spectrogram.controls.colorMap'
   | 'spectrogram.controls.gain'
@@ -4749,8 +4716,6 @@ export type TranslationParams = {
   'detections.detail.species.notKnownHere': { species: string | number };
   'detections.detail.species.searchHintRange': { count: string | number };
   'detections.detail.species.searchHintAll': { count: string | number };
-  'detections.detail.aria.downloadAudioClip': { name: string | number };
-  'detections.detail.aria.audioRecordingFor': { name: string | number };
   'detections.detail.aria.confidence': { confidence: string | number };
   'detections.detail.nav.speciesGroup': { species: string | number };
   'detections.detail.nav.olderSpecies': { species: string | number };
@@ -4816,12 +4781,10 @@ export type TranslationParams = {
   'detections.selection.tooManyDetections': { count: string | number };
   'detections.row.viewDetails': { species: string | number };
   'detections.aria.loaded': { species: string | number };
-  'detections.aria.error': { error: string | number };
   'detections.aria.loadingResults': { count: string | number };
   'detections.aria.thumbnailLoading': { species: string | number };
   'detections.aria.thumbnailLoaded': { species: string | number };
   'detections.errors.loadFailed': { status: string | number };
-  'species.rarity.basedOnLocation': { latitude: string | number; longitude: string | number };
   'spectrogram.gain.level': { value: string | number };
   'system.systemInfo.temperatureValue': { temp: string | number };
   'system.errors.systemInfo': { error: string | number };

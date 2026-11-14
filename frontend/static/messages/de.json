@@ -34,7 +34,6 @@
     "internalServerError": "Interner Serverfehler",
     "actions": {
       "download": "Herunterladen",
-      "review": "Überprüfen",
       "play": "Abspielen",
       "view": "Ansehen"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nein",
       "unknown": "Unbekannt"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Kommentar ausblenden",
         "commentPlaceholder": "Fügen Sie einen Kommentar zu dieser Erkennung hinzu...",
         "commentCount": "({chars} Zeichen)",
-        "chars": "Zeichen",
-        "commentsLabel": "Kommentare",
-        "currentStatusTitle": "Aktueller Status",
-        "detectionStatusTitle": "Erkennungsstatus",
-        "lockLabel": "Sperrstatus",
-        "reviewLabel": "Überprüfungsstatus",
         "saveReview": "Überprüfung speichern"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Beobachtung",
       "aria": {
-        "downloadAudioClip": "Audioclip für {name}-Erkennung herunterladen",
-        "audioRecordingFor": "Audioaufnahme und Spektrogramm für {name}",
         "scientificName": "Wissenschaftlicher Name",
         "classificationBadges": "Badges zur Artklassifizierung",
         "confidence": "Erkennungskonfidenz {confidence}%",
-        "metadata": "Erkennungsmetadaten",
-        "weatherConditions": "Wetterbedingungen zum Zeitpunkt der Erkennung",
-        "comments": "Kommentare zur Erkennung",
-        "commentText": "Kommentartext",
-        "commentTimestamp": "Zeitstempel des Kommentars",
-        "mainRegion": "Erkennungsdetails",
-        "tabsHeading": "Registerkarten mit Erkennungsinformationen",
-        "tabList": "Registerkarten der Erkennungsdetails",
         "speciesHeadingSuffix": "Erkennungsdetails"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Aufnahme & Spektrogramm",
       "clipHint": "Klicken und ziehen Sie auf dem Spektrogramm, um einen Bereich für den Clip-Export auszuwählen"
     },
-    "tabs": {
-      "overview": "Übersicht",
-      "taxonomy": "Taxonomie",
-      "history": "Verlauf",
-      "notes": "Notizen"
-    },
     "environmental": {
       "title": "Umgebungsbedingungen"
     },
@@ -1206,18 +1181,9 @@
       "status": "Status",
       "locked": "Gesperrt"
     },
-    "history": {
-      "title": "Erkennungsverlauf",
-      "comingSoon": "Verlaufsverfolgung in Kürze verfügbar..."
-    },
-    "notes": {
-      "title": "Notizen & Kommentare",
-      "noComments": "Keine Kommentare oder Notizen für diese Erkennung."
-    },
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
-      "error": "Fehler beim Laden der Erkennung: {error}",
       "loadingResults": "Lade {count} Ergebnisse...",
       "thumbnailLoading": "Lade Vorschaubild von {species}...",
       "thumbnailLoaded": "Vorschaubild von {species} geladen",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Seltenheit der Art",
       "score": "Bewertung",
-      "basedOnLocation": "Basierend auf Standort: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Sehr häufig",
         "common": "Häufig",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomische Klassifizierung",
-      "subspecies": "Unterarten",
       "noData": "Keine Taxonomiedaten verfügbar.",
       "labels": {
         "kingdom": "Reich",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Artenbeobachtung",
       "newSpecies": "Neue Art",
       "newThisYear": "Erste Beobachtung dieses Jahr",
-      "newThisSeason": "Erste Beobachtung diese Saison",
-      "daysSinceFirst": "Tage seit erster Beobachtung"
+      "newThisSeason": "Erste Beobachtung diese Saison"
     }
   },
   "spectrogram": {

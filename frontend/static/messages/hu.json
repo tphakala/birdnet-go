@@ -34,7 +34,6 @@
     "internalServerError": "Belső szerverhiba",
     "actions": {
       "download": "Letöltés",
-      "review": "Áttekintés",
       "play": "Lejátszás",
       "view": "Megtekintés"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Igen",
       "no": "Nem",
       "unknown": "Ismeretlen"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Megjegyzés elrejtése",
         "commentPlaceholder": "Adjon hozzá egy megjegyzést ehhez az észleléshez...",
         "commentCount": "({chars} karakter)",
-        "chars": "karakter",
-        "commentsLabel": "Megjegyzések",
-        "currentStatusTitle": "Jelenlegi állapot",
-        "detectionStatusTitle": "Észlelés állapota",
-        "lockLabel": "Zárolás állapota",
-        "reviewLabel": "Áttekintés állapota",
         "saveReview": "Áttekintés mentése"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Megfigyelés",
       "aria": {
-        "downloadAudioClip": "Hangklip letöltése: {name} észleléshez",
-        "audioRecordingFor": "Hangfelvétel és spektrogram: {name}",
         "scientificName": "Tudományos név",
         "classificationBadges": "Faj besorolási jelvények",
         "confidence": "Észlelés megbízhatósága {confidence}%",
-        "metadata": "Észlelés metaadatok",
-        "weatherConditions": "Időjárási viszonyok az észlelés idején",
-        "comments": "Észlelés megjegyzései",
-        "commentText": "Megjegyzés szövege",
-        "commentTimestamp": "Megjegyzés időbélyege",
-        "mainRegion": "Észlelés részletei",
-        "tabsHeading": "Észlelési információk lapjai",
-        "tabList": "Észlelés részleteinek lapjai",
         "speciesHeadingSuffix": "észlelés részletei"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Felvétel és spektrogram",
       "clipHint": "Kattintson és húzza a spektrogramon egy tartomány kijelöléséhez a kivágás exportálásához"
     },
-    "tabs": {
-      "overview": "Áttekintés",
-      "taxonomy": "Taxonómia",
-      "history": "Előzmények",
-      "notes": "Megjegyzések"
-    },
     "environmental": {
       "title": "Környezeti feltételek"
     },
@@ -1206,18 +1181,9 @@
       "status": "Állapot",
       "locked": "Zárolva"
     },
-    "history": {
-      "title": "Észlelés előzmények",
-      "comingSoon": "Az előzmények követése hamarosan..."
-    },
-    "notes": {
-      "title": "Megjegyzések és kommentek",
-      "noComments": "Nincs komment vagy megjegyzés ehhez az észleléshez."
-    },
     "aria": {
       "loading": "Észlelés részleteinek betöltése...",
       "loaded": "Észlelés részletei betöltve: {species}",
-      "error": "Hiba az észlelés betöltésekor: {error}",
       "loadingResults": "{count} eredmény betöltése...",
       "thumbnailLoading": "{species} bélyegkép betöltése...",
       "thumbnailLoaded": "{species} bélyegkép betöltve",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Faj ritkasága",
       "score": "Pontszám",
-      "basedOnLocation": "Helyszín alapján: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Nagyon gyakori",
         "common": "Gyakori",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonómiai besorolás",
-      "subspecies": "Alfajok",
       "noData": "Nem érhető el taxonómia adat.",
       "labels": {
         "kingdom": "Ország",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Faj követés",
       "newSpecies": "Új faj",
       "newThisYear": "Első az idén",
-      "newThisSeason": "Első ebben az évszakban",
-      "daysSinceFirst": "Napok az első észlelés óta"
+      "newThisSeason": "Első ebben az évszakban"
     }
   },
   "spectrogram": {

@@ -34,7 +34,6 @@
     "internalServerError": "Interní chyba serveru",
     "actions": {
       "download": "Stáhnout",
-      "review": "Zkontrolovat",
       "play": "Přehrát",
       "view": "Zobrazit"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ano",
       "no": "Ne",
       "unknown": "Neznámé"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Skrýt komentář",
         "commentPlaceholder": "Přidejte komentář k této detekci…",
         "commentCount": "({chars} znaků)",
-        "chars": "znaků",
-        "commentsLabel": "Komentáře",
-        "currentStatusTitle": "Aktuální stav",
-        "detectionStatusTitle": "Stav detekce",
-        "lockLabel": "Stav uzamčení",
-        "reviewLabel": "Stav kontroly",
         "saveReview": "Uložit kontrolu"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Pozorování",
       "aria": {
-        "downloadAudioClip": "Stáhnout zvukový záznam pro detekci {name}",
-        "audioRecordingFor": "Zvukový záznam a spektrogram pro {name}",
         "scientificName": "Vědecký název",
         "classificationBadges": "Odznaky klasifikace druhu",
         "confidence": "Spolehlivost detekce {confidence}%",
-        "metadata": "Metadata detekce",
-        "weatherConditions": "Povětrnostní podmínky v době detekce",
-        "comments": "Komentáře k detekci",
-        "commentText": "Text komentáře",
-        "commentTimestamp": "Časové razítko komentáře",
-        "mainRegion": "Podrobnosti detekce",
-        "tabsHeading": "Karty s informacemi o detekci",
-        "tabList": "Karty podrobností detekce",
         "speciesHeadingSuffix": "podrobnosti detekce"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Nahrávka a spektrogram",
       "clipHint": "Klikněte a táhněte na spektrogramu pro výběr rozsahu k exportu klipu"
     },
-    "tabs": {
-      "overview": "Přehled",
-      "taxonomy": "Taxonomie",
-      "history": "Historie",
-      "notes": "Poznámky"
-    },
     "environmental": {
       "title": "Podmínky prostředí"
     },
@@ -1206,18 +1181,9 @@
       "status": "Stav",
       "locked": "Uzamčeno"
     },
-    "history": {
-      "title": "Historie detekcí",
-      "comingSoon": "Sledování historie bude brzy k dispozici…"
-    },
-    "notes": {
-      "title": "Poznámky a komentáře",
-      "noComments": "K této detekci nejsou žádné komentáře ani poznámky."
-    },
     "aria": {
       "loading": "Načítání podrobností detekce…",
       "loaded": "Podrobnosti detekce načteny pro {species}",
-      "error": "Chyba při načítání detekce: {error}",
       "loadingResults": "Načítání {count} výsledků...",
       "thumbnailLoading": "Načítání náhledu {species}...",
       "thumbnailLoaded": "Náhled {species} načten",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Vzácnost druhu",
       "score": "Skóre",
-      "basedOnLocation": "Na základě polohy: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Velmi běžný",
         "common": "Běžný",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomická klasifikace",
-      "subspecies": "Poddruh",
       "noData": "Taxonomická data nejsou k dispozici.",
       "labels": {
         "kingdom": "Říše",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Sledování druhů",
       "newSpecies": "Nový druh",
       "newThisYear": "Poprvé letos",
-      "newThisSeason": "Poprvé v této sezóně",
-      "daysSinceFirst": "Dní od prvního pozorování"
+      "newThisSeason": "Poprvé v této sezóně"
     }
   },
   "spectrogram": {

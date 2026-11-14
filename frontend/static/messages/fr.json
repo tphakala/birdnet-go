@@ -34,7 +34,6 @@
     "internalServerError": "Erreur interne du serveur",
     "actions": {
       "download": "Télécharger",
-      "review": "Réviser",
       "play": "Lire",
       "view": "Voir"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Oui",
       "no": "Non",
       "unknown": "Inconnu"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Masquer le commentaire",
         "commentPlaceholder": "Ajoutez un commentaire à propos de cette détection...",
         "commentCount": "({chars} caractères)",
-        "chars": "caractères",
-        "commentsLabel": "Commentaires",
-        "currentStatusTitle": "Statut actuel",
-        "detectionStatusTitle": "Statut de détection",
-        "lockLabel": "Statut de verrouillage",
-        "reviewLabel": "Statut d'examen",
         "saveReview": "Enregistrer l'examen"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Observation",
       "aria": {
-        "downloadAudioClip": "Télécharger le clip audio pour la détection {name}",
-        "audioRecordingFor": "Enregistrement audio et spectrogramme pour {name}",
         "scientificName": "Nom scientifique",
         "classificationBadges": "Badges de classification de l'espèce",
         "confidence": "Confiance de détection {confidence}%",
-        "metadata": "Métadonnées de détection",
-        "weatherConditions": "Conditions météo au moment de la détection",
-        "comments": "Commentaires de la détection",
-        "commentText": "Texte du commentaire",
-        "commentTimestamp": "Horodatage du commentaire",
-        "mainRegion": "Détails de détection",
-        "tabsHeading": "Onglets d'informations de détection",
-        "tabList": "Onglets des détails de détection",
         "speciesHeadingSuffix": "détails de détection"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Enregistrement et spectrogramme",
       "clipHint": "Cliquez et faites glisser sur le spectrogramme pour sélectionner une plage à exporter"
     },
-    "tabs": {
-      "overview": "Vue d'ensemble",
-      "taxonomy": "Taxonomie",
-      "history": "Historique",
-      "notes": "Notes"
-    },
     "environmental": {
       "title": "Conditions environnementales"
     },
@@ -1206,18 +1181,9 @@
       "status": "Statut",
       "locked": "Verrouillé"
     },
-    "history": {
-      "title": "Historique de détection",
-      "comingSoon": "Suivi de l'historique à venir..."
-    },
-    "notes": {
-      "title": "Notes et commentaires",
-      "noComments": "Aucun commentaire ou note pour cette détection."
-    },
     "aria": {
       "loading": "Chargement des détails de détection...",
       "loaded": "Détails de détection chargés pour {species}",
-      "error": "Erreur lors du chargement de la détection : {error}",
       "loadingResults": "Chargement de {count} résultats...",
       "thumbnailLoading": "Chargement de la miniature de {species}...",
       "thumbnailLoaded": "Miniature de {species} chargée",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Rareté de l'espèce",
       "score": "Score",
-      "basedOnLocation": "Basé sur l'emplacement : {latitude}, {longitude}",
       "statuses": {
         "very_common": "Très commun",
         "common": "Commun",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Classification taxonomique",
-      "subspecies": "Sous-espèces",
       "noData": "Aucune donnée taxonomique disponible.",
       "labels": {
         "kingdom": "Règne",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Suivi des espèces",
       "newSpecies": "Nouvelle espèce",
       "newThisYear": "Première fois cette année",
-      "newThisSeason": "Première fois cette saison",
-      "daysSinceFirst": "Jours depuis la première détection"
+      "newThisSeason": "Première fois cette saison"
     }
   },
   "spectrogram": {

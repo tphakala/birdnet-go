@@ -34,7 +34,6 @@
     "internalServerError": "Error interno del servidor",
     "actions": {
       "download": "Descargar",
-      "review": "Revisar",
       "play": "Reproducir",
       "view": "Ver"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Sí",
       "no": "No",
       "unknown": "Desconocido"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Ocultar comentario",
         "commentPlaceholder": "Añade un comentario sobre esta detección...",
         "commentCount": "({chars} caracteres)",
-        "chars": "caracteres",
-        "commentsLabel": "Comentarios",
-        "currentStatusTitle": "Estado actual",
-        "detectionStatusTitle": "Estado de detección",
-        "lockLabel": "Estado de bloqueo",
-        "reviewLabel": "Estado de revisión",
         "saveReview": "Guardar revisión"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Observación",
       "aria": {
-        "downloadAudioClip": "Descargar clip de audio para la detección {name}",
-        "audioRecordingFor": "Grabación de audio y espectrograma para {name}",
         "scientificName": "Nombre científico",
         "classificationBadges": "Insignias de clasificación de especie",
         "confidence": "Confianza de la detección {confidence}%",
-        "metadata": "Metadatos de detección",
-        "weatherConditions": "Condiciones meteorológicas en el momento de la detección",
-        "comments": "Comentarios de la detección",
-        "commentText": "Texto del comentario",
-        "commentTimestamp": "Marca de tiempo del comentario",
-        "mainRegion": "Detalles de detección",
-        "tabsHeading": "Pestañas de información de la detección",
-        "tabList": "Pestañas de detalles de la detección",
         "speciesHeadingSuffix": "detalles de detección"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Grabación y espectrograma",
       "clipHint": "Haz clic y arrastra en el espectrograma para seleccionar un rango para exportar"
     },
-    "tabs": {
-      "overview": "Resumen",
-      "taxonomy": "Taxonomía",
-      "history": "Historial",
-      "notes": "Notas"
-    },
     "environmental": {
       "title": "Condiciones ambientales"
     },
@@ -1206,18 +1181,9 @@
       "status": "Estado",
       "locked": "Bloqueado"
     },
-    "history": {
-      "title": "Historial de detección",
-      "comingSoon": "El seguimiento del historial estará disponible próximamente..."
-    },
-    "notes": {
-      "title": "Notas y comentarios",
-      "noComments": "No hay comentarios ni notas para esta detección."
-    },
     "aria": {
       "loading": "Cargando detalles de detección...",
       "loaded": "Detalles de detección cargados para {species}",
-      "error": "Error al cargar la detección: {error}",
       "loadingResults": "Cargando {count} resultados...",
       "thumbnailLoading": "Cargando miniatura de {species}...",
       "thumbnailLoaded": "Miniatura de {species} cargada",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Rareza de la especie",
       "score": "Puntuación",
-      "basedOnLocation": "Basado en la ubicación: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Muy común",
         "common": "Común",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Clasificación taxonómica",
-      "subspecies": "Subespecies",
       "noData": "No hay datos de taxonomía disponibles.",
       "labels": {
         "kingdom": "Reino",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Seguimiento de especies",
       "newSpecies": "Nueva especie",
       "newThisYear": "Primera vez este año",
-      "newThisSeason": "Primera vez esta temporada",
-      "daysSinceFirst": "Días desde la primera detección"
+      "newThisSeason": "Primera vez esta temporada"
     }
   },
   "spectrogram": {

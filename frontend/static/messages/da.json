@@ -34,7 +34,6 @@
     "internalServerError": "Intern serverfejl",
     "actions": {
       "download": "Download",
-      "review": "Gennemgå",
       "play": "Afspil",
       "view": "Vis"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nej",
       "unknown": "Ukendt"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Skjul kommentar",
         "commentPlaceholder": "Tilføj en kommentar om denne detektion...",
         "commentCount": "({chars} tegn)",
-        "chars": "tegn",
-        "commentsLabel": "Kommentarer",
-        "currentStatusTitle": "Aktuel status",
-        "detectionStatusTitle": "Detektionsstatus",
-        "lockLabel": "Låsestatus",
-        "reviewLabel": "Gennemgangsstatus",
         "saveReview": "Gem gennemgang"
       },
       "errors": {
@@ -914,21 +906,10 @@
         "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
         "modelPick": "model's pick"
       },
-      "observation": "Observation",
       "aria": {
-        "downloadAudioClip": "Download lydklip for {name} detektion",
-        "audioRecordingFor": "Lydoptagelse og spektrogram for {name}",
         "scientificName": "Videnskabeligt navn",
         "classificationBadges": "Mærker for artsklassifikation",
         "confidence": "Registreringssikkerhed {confidence}%",
-        "metadata": "Registreringsmetadata",
-        "weatherConditions": "Vejrforhold på registreringstidspunktet",
-        "comments": "Kommentarer til registreringen",
-        "commentText": "Kommentartekst",
-        "commentTimestamp": "Tidsstempel for kommentar",
-        "mainRegion": "Registreringsdetaljer",
-        "tabsHeading": "Faner med registreringsoplysninger",
-        "tabList": "Faner for registreringsdetaljer",
         "speciesHeadingSuffix": "registreringsdetaljer"
       },
       "nav": {
@@ -1190,12 +1171,6 @@
       "title": "Optagelse og spektrogram",
       "clipHint": "Klik og træk på spektrogrammet for at vælge et interval til klipeksport"
     },
-    "tabs": {
-      "overview": "Oversigt",
-      "taxonomy": "Taksonomi",
-      "history": "Historik",
-      "notes": "Noter"
-    },
     "environmental": {
       "title": "Miljøforhold"
     },
@@ -1206,18 +1181,9 @@
       "status": "Status",
       "locked": "Låst"
     },
-    "history": {
-      "title": "Registreringshistorik",
-      "comingSoon": "Historiksporing kommer snart..."
-    },
-    "notes": {
-      "title": "Noter og kommentarer",
-      "noComments": "Ingen kommentarer eller noter for denne registrering."
-    },
     "aria": {
       "loading": "Indlæser registreringsdetaljer...",
       "loaded": "Registreringsdetaljer indlæst for {species}",
-      "error": "Fejl ved indlæsning af registrering: {error}",
       "loadingResults": "Indlæser {count} resultater...",
       "thumbnailLoading": "Indlæser {species} miniaturebillede...",
       "thumbnailLoaded": "Miniaturebillede af {species} indlæst",
@@ -1235,9 +1201,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Artens sjældenhed",
       "score": "Score",
-      "basedOnLocation": "Baseret på lokation: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Meget almindelig",
         "common": "Almindelig",
@@ -1249,7 +1213,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomisk klassifikation",
-      "subspecies": "Underart",
       "noData": "Ingen taksonomiske data tilgængelige.",
       "labels": {
         "kingdom": "Rige",
@@ -1275,11 +1238,9 @@
       }
     },
     "tracking": {
-      "title": "Artssporing",
       "newSpecies": "Ny art",
       "newThisYear": "Første i år",
-      "newThisSeason": "Første denne sæson",
-      "daysSinceFirst": "Dage siden første observation"
+      "newThisSeason": "Første denne sæson"
     }
   },
   "spectrogram": {
