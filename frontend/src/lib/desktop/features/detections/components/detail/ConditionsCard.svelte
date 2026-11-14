@@ -87,6 +87,15 @@
   // The Navigation2 icon's arrow points up (north) when not rotated.
   const AXIS_HOURS = [0, 6, 12, 18, 24];
   const MISSING = '-';
+  // The precipitation types the weather providers report (internal/weather), each named
+  // in the UI language; another value is left out rather than shown in English.
+  const PRECIPITATION_TYPES = new Set(['rain', 'snow', 'sleet']);
+
+  function precipitationTypeName(type: string | undefined): string | undefined {
+    return type && PRECIPITATION_TYPES.has(type)
+      ? t(`detections.detail.conditions.precipitationTypes.${type}`)
+      : undefined;
+  }
   // Share of the strip height where the horizon line sits, measured from the top.
   const HORIZON_PERCENT = 62;
   // How far the sun marker travels above and below the horizon, in percent of strip height.
@@ -279,7 +288,7 @@
       label: t('detections.detail.conditions.precipitation'),
       value: precipitation !== undefined ? formatDecimal(precipitation) : MISSING,
       unit: precipitation !== undefined ? ' mm' : undefined,
-      suffix: precipitation ? hourly?.precipitation_type : undefined,
+      suffix: precipitation ? precipitationTypeName(hourly?.precipitation_type) : undefined,
     },
     {
       key: 'clouds',

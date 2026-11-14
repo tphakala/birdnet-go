@@ -958,6 +958,11 @@
         "windFrom": "Szélirány: {direction}",
         "cloudCover": "Felhőborítottság",
         "precipitation": "Csapadék",
+        "precipitationTypes": {
+          "rain": "eső",
+          "snow": "hó",
+          "sleet": "havas eső"
+        },
         "observedAt": "Időjárási megfigyelés: {time}",
         "notObserved": "Ehhez az időponthoz nincs időjárási megfigyelés"
       },

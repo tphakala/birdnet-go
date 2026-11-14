@@ -958,6 +958,11 @@
         "windFrom": "Tuuli {direction}",
         "cloudCover": "Pilvisyys",
         "precipitation": "Sademäärä",
+        "precipitationTypes": {
+          "rain": "vettä",
+          "snow": "lunta",
+          "sleet": "räntää"
+        },
         "observedAt": "Säähavainto klo {time}",
         "notObserved": "Ei säähavaintoa tälle ajankohdalle"
       },

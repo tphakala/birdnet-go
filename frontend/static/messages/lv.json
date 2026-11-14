@@ -958,6 +958,11 @@
         "windFrom": "Vējš no {direction}",
         "cloudCover": "Mākoņainība",
         "precipitation": "Nokrišņi",
+        "precipitationTypes": {
+          "rain": "lietus",
+          "snow": "sniegs",
+          "sleet": "slapjš sniegs"
+        },
         "observedAt": "Laikapstākļu novērojums no {time}",
         "notObserved": "Šim laikam nav laikapstākļu novērojuma"
       },

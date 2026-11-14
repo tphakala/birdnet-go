@@ -958,6 +958,11 @@
         "windFrom": "Vietor od {direction}",
         "cloudCover": "Oblačnosť",
         "precipitation": "Zrážky",
+        "precipitationTypes": {
+          "rain": "dážď",
+          "snow": "sneh",
+          "sleet": "dážď so snehom"
+        },
         "observedAt": "Pozorovanie počasia z {time}",
         "notObserved": "Pre tento čas chýba pozorovanie počasia"
       },

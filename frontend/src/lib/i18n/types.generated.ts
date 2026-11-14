@@ -768,6 +768,9 @@ export type TranslationKey =
   | 'detections.detail.conditions.windFrom' // params: direction
   | 'detections.detail.conditions.cloudCover'
   | 'detections.detail.conditions.precipitation'
+  | 'detections.detail.conditions.precipitationTypes.rain'
+  | 'detections.detail.conditions.precipitationTypes.snow'
+  | 'detections.detail.conditions.precipitationTypes.sleet'
   | 'detections.detail.conditions.observedAt' // params: time
   | 'detections.detail.conditions.notObserved'
   | 'detections.detail.compass.n'

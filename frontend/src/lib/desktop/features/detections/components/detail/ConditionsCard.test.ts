@@ -41,6 +41,25 @@ describe('ConditionsCard weather tiles', () => {
     expect(tileValue('detections.detail.conditions.windFrom')).toBe('0.0 m/s');
   });
 
+  // Regression: the type came straight from the API and read "snow" in every language.
+  it('names the precipitation type in the UI language', () => {
+    renderCard({
+      hourly: { time: '03:00', temperature: -2, precipitation: 0.3, precipitation_type: 'snow' },
+    });
+
+    expect(document.querySelector('.dd-tile-suffix')?.textContent).toBe(
+      'detections.detail.conditions.precipitationTypes.snow'
+    );
+  });
+
+  it('leaves out a precipitation type it has no name for', () => {
+    renderCard({
+      hourly: { time: '03:00', temperature: 2, precipitation: 0.3, precipitation_type: 'hail' },
+    });
+
+    expect(tileValue('detections.detail.conditions.precipitation')).toBe('0.3 mm');
+  });
+
   it('shows the cloud cover the API sent', () => {
     renderCard({ hourly: { time: '03:00', temperature: 2, clouds: 40 } });
     expect(tileValue('detections.detail.conditions.cloudCover')).toBe('40%');

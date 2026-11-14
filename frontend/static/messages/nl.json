@@ -958,6 +958,11 @@
         "windFrom": "Wind uit {direction}",
         "cloudCover": "Bewolking",
         "precipitation": "Neerslag",
+        "precipitationTypes": {
+          "rain": "regen",
+          "snow": "sneeuw",
+          "sleet": "natte sneeuw"
+        },
         "observedAt": "Weerobservatie van {time}",
         "notObserved": "Geen weerobservatie voor dit tijdstip"
       },

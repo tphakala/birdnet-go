@@ -958,6 +958,11 @@
         "windFrom": "Vind fra {direction}",
         "cloudCover": "Skydække",
         "precipitation": "Nedbør",
+        "precipitationTypes": {
+          "rain": "regn",
+          "snow": "sne",
+          "sleet": "slud"
+        },
         "observedAt": "Vejrobservation fra kl. {time}",
         "notObserved": "Ingen vejrobservation for dette tidspunkt"
       },

@@ -958,6 +958,11 @@
         "windFrom": "Vento de {direction}",
         "cloudCover": "Nuvens",
         "precipitation": "Precipitação",
+        "precipitationTypes": {
+          "rain": "chuva",
+          "snow": "neve",
+          "sleet": "chuva com neve"
+        },
         "observedAt": "Observação meteorológica das {time}",
         "notObserved": "Sem observação meteorológica para esta hora"
       },

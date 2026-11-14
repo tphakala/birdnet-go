@@ -958,6 +958,11 @@
         "windFrom": "Wind from {direction}",
         "cloudCover": "Cloud Cover",
         "precipitation": "Precipitation",
+        "precipitationTypes": {
+          "rain": "rain",
+          "snow": "snow",
+          "sleet": "sleet"
+        },
         "observedAt": "Weather observation from {time}",
         "notObserved": "No weather observation for this time"
       },
