@@ -157,7 +157,9 @@ func comparePredictionCandidates(a, b *predictionCandidate) int {
 // human and dog filters and does not take part in the dog comparison, so it never
 // changes how the other rows are handled. Stored rows of its species only fill its
 // missing code and its unresolved common name (empty, or the scientific name the
-// datastore falls back to). The result is the same for any input order.
+// datastore falls back to) when the row's own common name is resolved. A stand-in
+// common name that no row replaces follows the entry's canonical scientific name.
+// The result is the same for any input order.
 func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResult) []PredictionResponse {
 	primaryKey := speciesindex.CanonicalKey(r.Species.ScientificName)
 	original := originalPickCandidate(r, primaryKey)
@@ -223,12 +225,17 @@ func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResu
 		// Ranked order again, so the filled values do not depend on input order.
 		slices.SortFunc(originalRows, comparePredictionCandidates)
 		for _, row := range originalRows {
-			if row.commonName != "" && commonNameUnresolved(original.commonName, original.name) {
+			if commonNameUnresolved(original.commonName, original.name) && !commonNameUnresolved(row.commonName, row.name) {
 				original.commonName = row.commonName
 			}
 			if original.code == "" {
 				original.code = row.code
 			}
+		}
+		// The entry is shown under the canonical spelling of its name, so a stand-in
+		// common name that is still the stored scientific name follows it.
+		if original.commonName != "" && commonNameUnresolved(original.commonName, original.name) {
+			original.commonName = openfauna.CanonicalName(original.name)
 		}
 		entries = append(entries, original)
 		slices.SortFunc(entries, comparePredictionCandidates)

@@ -85,6 +85,19 @@ func TestChangeDetectionSpecies(t *testing.T) {
 	assert.Equal(t, 0, h.DetectionCache.Len(), "the change invalidated the cache")
 }
 
+// TestChangeDetectionSpecies_LargestID verifies that the largest id a 32-bit build
+// holds, also with leading zeros, reaches the repository as that number.
+func TestChangeDetectionSpecies_LargestID(t *testing.T) {
+	const largest = 1<<32 - 1
+	for _, id := range []string{predTestMaxID, "0" + predTestMaxID} {
+		changer := &fakeSpeciesChanger{}
+		e, _, h := speciesChangeFixture(t, changer)
+		code, _ := putSpecies(t.Context(), t, e, h, id, speciesChangeTestBody)
+		assert.Equal(t, http.StatusOK, code, id)
+		assert.Equal(t, []speciesChangeCall{{id: largest, scientificName: predTestMallard}}, changer.calls, id)
+	}
+}
+
 // TestChangeDetectionSpecies_StatusMapping verifies one status and message per
 // repository sentinel, also when the sentinel is wrapped.
 func TestChangeDetectionSpecies_StatusMapping(t *testing.T) {

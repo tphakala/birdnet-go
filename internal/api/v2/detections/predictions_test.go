@@ -502,6 +502,31 @@ func TestGetDetectionPredictions_OriginalPick(t *testing.T) {
 			}},
 		},
 		{
+			// The higher ranked row carries the stand-in too, so it must not block the
+			// lower ranked row that has the real name.
+			name: "a stored row that only repeats its scientific name does not block a real common name", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, predTestPrimaryNew, "", predTestMid),
+				predRow("spilopelia senegalensis", predTestDoveCommon, "", predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon,
+				Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			// No stored row: the entry's name is rewritten to the canonical spelling, so
+			// the stand-in common name follows it.
+			name: "an alias original without a stored row gets the canonical name as its stand-in common name", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{
+				{ScientificName: predTestPrimaryNew, CommonName: predTestPrimaryNew, Confidence: predTestOrigConf, Original: true},
+				{ScientificName: predTestRaven, Confidence: predTestMid},
+			},
+		},
+		{
 			name: "a resolved common name is not overwritten by a stored row", current: predTestMallard,
 			original: detection.Species{ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon}, conf: predTestOrigConf,
 			rows: []detection.AdditionalResult{

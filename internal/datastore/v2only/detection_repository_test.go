@@ -935,25 +935,39 @@ func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
 }
 
 // TestDetectionRepository_OriginalSpeciesCommonNameFallback pins what the read
-// mapping puts in OriginalSpecies.CommonName for a species the name maps cannot
-// resolve: the scientific name itself, which the predictions merge treats as
-// unresolved.
+// mapping puts in OriginalSpecies.CommonName: the resolved common name for a species
+// the name maps know, and the scientific name itself for a legacy alias they lack,
+// which the predictions merge treats as unresolved.
 func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
 	t.Parallel()
 
 	const (
-		aliasSci   = "Streptopelia senegalensis" // legacy alias, not in the name maps
-		currentSci = "Parus major"
+		aliasSci     = "Streptopelia senegalensis" // legacy alias, not in the name maps
+		canonicalSci = "Spilopelia senegalensis"
+		canonicalCom = "Laughing Dove"
+		currentSci   = "Parus major"
 	)
-	ds, cleanup := setupTestDatastore(t)
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{canonicalSci + "_" + canonicalCom, currentSci + "_Great Tit"})
 	defer cleanup()
 	ds.timezone = time.UTC
 	ctx := t.Context()
-	changed := seedDetection(t, ds, aliasSci, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
-	seedDetection(t, ds, currentSci, time.Date(2026, 6, 1, 12, 10, 0, 0, time.UTC))
-	require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci))
+	repo := NewDetectionRepository(ds)
+	seedDetection(t, ds, currentSci, time.Date(2026, 6, 1, 12, 20, 0, 0, time.UTC))
 
-	got, err := NewDetectionRepository(ds).Get(ctx, strconv.FormatUint(uint64(changed.ID), 10))
-	require.NoError(t, err)
-	assert.Equal(t, detection.Species{ScientificName: aliasSci, CommonName: aliasSci}, got.OriginalSpecies)
+	tests := []struct {
+		name string
+		sci  string
+		want detection.Species
+	}{
+		{"alias falls back to its scientific name", aliasSci, detection.Species{ScientificName: aliasSci, CommonName: aliasSci}},
+		{"canonical species resolves", canonicalSci, detection.Species{ScientificName: canonicalSci, CommonName: canonicalCom}},
+	}
+	for i, tt := range tests {
+		changed := seedDetection(t, ds, tt.sci, time.Date(2026, 6, 1, 12, i, 0, 0, time.UTC))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci), tt.name)
+
+		got, err := repo.Get(ctx, strconv.FormatUint(uint64(changed.ID), 10))
+		require.NoError(t, err, tt.name)
+		assert.Equal(t, tt.want, got.OriginalSpecies, tt.name)
+	}
 }
