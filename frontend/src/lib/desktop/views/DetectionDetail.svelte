@@ -145,6 +145,12 @@
   // The species dialog: the model's other predictions, and the place to change the species.
   let speciesDialogOpen = $state(false);
 
+  // The dialog belongs to the detection it was opened on; another detection closes it.
+  $effect(() => {
+    void resolvedDetectionId;
+    speciesDialogOpen = false;
+  });
+
   // The detecting model's predictions; it is the one model that stores them.
   let predictionSet = $derived(predictions?.modelPredictions?.at(0) ?? null);
   let alternates = $derived(predictionSet?.predictions ?? []);
@@ -732,16 +738,20 @@
       </div>
     </div>
 
-    <SpeciesChangeDialog
-      isOpen={speciesDialogOpen}
-      {detection}
-      speciesName={displayName}
-      {alternates}
-      {predictionModel}
-      blockedReason={speciesBlockedReason}
-      onClose={() => (speciesDialogOpen = false)}
-      onChanged={refreshDetection}
-    />
+    <!-- One dialog per detection, like the review panels: a save still out belongs to
+         the detection it was made on. -->
+    {#key detection.id}
+      <SpeciesChangeDialog
+        isOpen={speciesDialogOpen}
+        {detection}
+        speciesName={displayName}
+        {alternates}
+        {predictionModel}
+        blockedReason={speciesBlockedReason}
+        onClose={() => (speciesDialogOpen = false)}
+        onChanged={refreshDetection}
+      />
+    {/key}
   {:else if isLoadingDetection}
     <!-- First load: the loaded page's grid and card chrome, with bars for content. The
          one visible loading label sits where the breadcrumb will be. -->

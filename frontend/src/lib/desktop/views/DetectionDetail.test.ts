@@ -675,6 +675,33 @@ describe('DetectionDetail daily counts', () => {
   });
 });
 
+describe('DetectionDetail species dialog', () => {
+  // Regression: the dialog stayed open across a change of detection with the earlier pick,
+  // and Confirm then changed the species of a detection it was not opened for.
+  it('closes when another detection is shown', async () => {
+    stubApi([
+      ['/api/v2/detections/98', makeDetection({ id: 98 })],
+      ['/api/v2/detections/99', makeDetection({ id: 99 })],
+    ]);
+    // The Modal stays in the document and shows its open state with the visible class.
+    const dialog = () =>
+      screen.getByRole('dialog', { name: 'detections.detail.species.dialogTitle', hidden: true });
+
+    const { rerender } = detailTest.render({ detectionId: '98' });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /detections\.detail\.review\.wrongSpecies/ })
+    );
+    await waitFor(() => {
+      expect(dialog()).toHaveClass('visible');
+    });
+
+    await rerender({ detectionId: '99' });
+    await waitFor(() => {
+      expect(dialog()).not.toHaveClass('visible');
+    });
+  });
+});
+
 describe('DetectionDetail review counts', () => {
   // Regression: the counts asked for after a verdict shared the species request's signal
   // with the first counts, so a slow first answer arriving last put the old counts back.
