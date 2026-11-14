@@ -45,7 +45,12 @@ describe('loadSpeciesSummary', () => {
     await loadSpeciesSummary('Turdus merula');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    vi.advanceTimersByTime(300_001);
+    // Still kept just inside the five minutes, asked again just past them.
+    vi.advanceTimersByTime(299_999);
+    await loadSpeciesSummary('Turdus merula');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(2);
     await loadSpeciesSummary('Turdus merula');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

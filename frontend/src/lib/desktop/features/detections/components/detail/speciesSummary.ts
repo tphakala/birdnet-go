@@ -7,6 +7,7 @@
  * otherwise repeat the request on each step).
  */
 import { buildAppUrl } from '$lib/utils/urlHelpers';
+import { isSpeciesSummary } from './detailGuards';
 import type { SpeciesSummary } from './detailTypes';
 
 const CACHE_TTL_MS = 300_000;
@@ -20,7 +21,7 @@ async function fetchRows(): Promise<SpeciesSummary[]> {
     throw new Error(`species summary request failed: ${response.status}`);
   }
   const data: unknown = await response.json();
-  return Array.isArray(data) ? (data as SpeciesSummary[]) : [];
+  return Array.isArray(data) ? data.filter(isSpeciesSummary) : [];
 }
 
 /** The summary row of a species, or null when the species has none. Rejects when the request fails. */
