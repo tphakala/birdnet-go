@@ -81,6 +81,14 @@ describe('SystemHealth first run', () => {
     const statuses = screen.getAllByRole('status');
     expect(statuses).toHaveLength(1);
     expect(statuses[0]).toHaveTextContent('health.running');
+    // The tile footers hold bars, not a running label of their own
+    expect(screen.getAllByText('health.running')).toHaveLength(1);
+    // The run status spinner and the Refresh icon spin, and stop under reduced motion
+    const spinners = container.querySelectorAll('.animate-spin');
+    expect(spinners).toHaveLength(2);
+    for (const spinner of spinners) {
+      expect(spinner).toHaveClass('motion-reduce:animate-none');
+    }
     const numeral = screen
       .getByText('health.summary.healthy')
       .closest('.flex-wrap')
