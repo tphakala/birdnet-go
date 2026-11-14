@@ -30,9 +30,22 @@
      * While the neighbours are not known, the step links are blocked under their own names.
      */
     available: boolean;
+    /**
+     * True while the next detection loads: the trail still names the previous one and is
+     * dimmed like the rest of the page. The step links stay as they are, so focus stays.
+     */
+    stale?: boolean;
   }
 
-  let { speciesName, date, time, neighbors, failed = false, available }: Props = $props();
+  let {
+    speciesName,
+    date,
+    time,
+    neighbors,
+    failed = false,
+    available,
+    stale = false,
+  }: Props = $props();
 
   // The name of a blocked step link. Every state keeps the link's own name so the four
   // links stay distinguishable: while the neighbours are being looked up or when the lookup
@@ -79,7 +92,7 @@
 {/snippet}
 
 <nav class="dd-nav" aria-label={t('detections.detail.nav.label')}>
-  <ol class="dd-nav-trail">
+  <ol class="dd-nav-trail" class:dd-nav-trail-stale={stale}>
     <li class="dd-nav-item">
       <a class="dd-nav-back focus-ring" href={listUrl} onclick={handleAppLinkClick}>
         <ArrowLeft class="size-4" />
@@ -152,6 +165,16 @@
     gap: 0.5rem;
     min-width: 0;
     font-size: 0.875rem;
+  }
+
+  .dd-nav-trail-stale {
+    opacity: 0.6;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dd-nav-trail {
+      transition: opacity 150ms ease;
+    }
   }
 
   .dd-nav-item {

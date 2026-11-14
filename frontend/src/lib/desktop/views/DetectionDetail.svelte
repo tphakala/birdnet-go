@@ -460,8 +460,10 @@
       `/api/v2/weather/detection/${id}`,
       signal,
       isDetectionWeather,
-      // eslint-disable-next-line security/detect-object-injection -- id passed isValidDetectionId
-      value => (weatherAnswers[id] = value),
+      value => {
+        // eslint-disable-next-line security/detect-object-injection -- id passed isValidDetectionId
+        weatherAnswers[id] = value;
+      },
       'weather'
     );
   }
@@ -473,8 +475,10 @@
       `/api/v2/weather/sun/${date}`,
       signal,
       isSunTimes,
-      // eslint-disable-next-line security/detect-object-injection -- date comes from the detection's date field
-      value => (sunAnswers[date] = value),
+      value => {
+        // eslint-disable-next-line security/detect-object-injection -- date comes from the detection's date field
+        sunAnswers[date] = value;
+      },
       'sun'
     );
   }
@@ -698,6 +702,7 @@
       {neighbors}
       failed={neighborsFailed}
       available={steppingAvailable}
+      stale={isLoadingDetection}
     />
 
     <!-- While the next detection loads, the previous one stays on screen, dimmed and
@@ -744,9 +749,16 @@
       />
     </div>
 
-    <!-- The clip, or the kept spectrogram image after retention removed its audio -->
+    <!-- The clip, or the kept spectrogram image after retention removed its audio.
+         Dimmed and inert with the grids while the next detection loads. -->
     {#if detection.clipName || detection.spectrogramOnly}
-      <RecordingCard {detection} speciesName={displayName} />
+      <div
+        class:dd-switching={isLoadingDetection}
+        inert={isLoadingDetection}
+        aria-busy={isLoadingDetection}
+      >
+        <RecordingCard {detection} speciesName={displayName} />
+      </div>
     {/if}
 
     <div
@@ -800,14 +812,21 @@
           <div class="flex gap-5">
             <!-- The photo is 13.5rem wide, 10.5rem in a window of 900 px or less (IdentityCard). -->
             <Skeleton className="aspect-[4/3] w-54 shrink-0 max-[900px]:w-42" />
-            <div class="flex min-w-0 flex-1 flex-col justify-between">
-              <div>
-                {@render line('h-9', 'h-7 w-56')}
-                {@render line('h-6', 'h-4 w-40')}
-                {@render line('mt-1 h-4.5', 'h-3 w-64')}
+            <div class="flex min-w-0 flex-1 flex-col justify-between gap-2">
+              <div class="flex justify-between gap-4">
+                <div class="min-w-0">
+                  {@render line('h-9', 'h-7 w-56')}
+                  {@render line('h-6', 'h-4 w-40')}
+                  {@render line('mt-1 h-4.5', 'h-3 w-64')}
+                </div>
+                <!-- The confidence ring and its label, which set the height of this row. -->
+                <div class="flex shrink-0 flex-col items-center gap-1">
+                  <Skeleton className="size-18 rounded-full" />
+                  {@render line('h-3.75', 'h-2.5 w-14')}
+                </div>
               </div>
               {@render line('h-6.5', 'h-5 w-48 rounded-full')}
-              {@render line('h-8', 'h-8 w-36')}
+              {@render line('h-7.5', 'h-7.5 w-36')}
             </div>
           </div>
           <div class="mt-3 border-t border-[var(--border-100)] pt-2.5">
@@ -910,6 +929,14 @@
   @container dd-page (width < 64rem) {
     .dd-grid {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* The navigation bar's two lines at this width: the trail (a line of 0.875rem text in
+       a link with 0.25rem padding), a 0.5rem gap, then the step links. */
+    .dd-skeleton-nav {
+      align-items: flex-start;
+      height: calc(0.875rem * 1.5 + 0.5rem + 0.5rem + 2rem + 2px);
+      padding-top: 0.25rem;
     }
   }
 </style>

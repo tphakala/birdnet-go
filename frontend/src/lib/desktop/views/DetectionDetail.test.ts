@@ -983,7 +983,7 @@ describe('DetectionDetail loading paths', () => {
 
   it('makes the previous detection inert, and leaves the step links usable, while the next loads', async () => {
     stubApi([
-      ['/api/v2/detections/113', makeDetection({ id: 113 })],
+      ['/api/v2/detections/113', makeDetection({ id: 113, clipName: 'clip-113.wav' })],
       [
         '/api/v2/detections/114',
         (call: Call) =>
@@ -1001,6 +1001,13 @@ describe('DetectionDetail loading paths', () => {
     const grids = [...container.querySelectorAll<HTMLElement>('.dd-grid')];
     expect(grids.length).toBe(2);
     expect(grids.every(grid => grid.inert)).toBe(true);
+    // The previous detection's recording, with its player and download, is inert too.
+    const download = screen.getByText('media.audio.download', { exact: false });
+    let recordingInert = false;
+    for (let node: HTMLElement | null = download; node; node = node.parentElement) {
+      if (node.inert) recordingInert = true;
+    }
+    expect(recordingInert).toBe(true);
     // Svelte sets inert as a property, which jsdom does not reflect as an attribute, so
     // the nav's ancestors are checked one by one.
     const inertAncestors: HTMLElement[] = [];
