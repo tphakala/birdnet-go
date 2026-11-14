@@ -1,74 +1,68 @@
-import { describe, expect, it } from 'vitest';
-import { indexSpecies, searchSpecies } from './speciesCatalog';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const catalog = [
-  { scientificName: 'Tachyphonus surinamus', commonName: 'amazonianharjatangara' },
-  { scientificName: 'Parus major', commonName: 'talitiainen' },
-  { scientificName: 'Anas crecca', commonName: 'tavi' },
-  { scientificName: 'Pinicola enucleator', commonName: 'taviokuurna' },
-  { scientificName: 'Scolopax rusticola', commonName: 'lehtokurppa' },
-  { scientificName: 'Turdus pilaris', commonName: 'räkättirastas' },
-  // Two made-up entries, one per word-start rank: a common name whose second word
-  // starts with "ta", and a scientific name whose second word does.
-  { scientificName: 'Exemplum primum', commonName: 'pohjan tavi' },
-  { scientificName: 'Exemplum tardum', commonName: 'esimerkkilaji' },
-].map(indexSpecies);
+// Each test imports a fresh module, so the per-page cache starts empty.
+async function freshCatalog() {
+  vi.resetModules();
+  return import('./speciesCatalog');
+}
 
-const names = (query: string, limit = 10) =>
-  searchSpecies(catalog, query, limit).map(item => item.commonName);
+function respond(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-describe('searchSpecies', () => {
-  it('orders matches by rank, then by common name', () => {
-    expect(names('ta')).toEqual([
-      // common name starts with the query
-      'talitiainen',
-      'tavi',
-      'taviokuurna',
-      // scientific name starts with it: "Tachyphonus" is not what a person typing "ta" is after
-      'amazonianharjatangara',
-      // a later word of the common name starts with it
-      'pohjan tavi',
-      // a later word of the scientific name starts with it ("tardum")
-      'esimerkkilaji',
-      // the query appears somewhere inside the name ("rastas")
-      'räkättirastas',
+describe('loadSpeciesCatalog', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps each species once and names a species without a common name by its scientific name', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          respond(200, {
+            species: [
+              { scientificName: 'Parus major', commonName: 'Great Tit' },
+              { scientificName: ' Parus major ', commonName: 'Duplicate' },
+              { scientificName: 'Anas crecca', commonName: '  ' },
+              { scientificName: '', commonName: 'No scientific name' },
+            ],
+          })
+        )
+      )
+    );
+    const { loadSpeciesCatalog } = await freshCatalog();
+
+    await expect(loadSpeciesCatalog('range')).resolves.toEqual([
+      { scientificName: 'Parus major', commonName: 'Great Tit' },
+      { scientificName: 'Anas crecca', commonName: 'Anas crecca' },
     ]);
   });
 
-  it('keeps the best matches when the limit cuts the list', () => {
-    expect(names('ta', 2)).toEqual(['talitiainen', 'tavi']);
+  it('requests a list once and shares it', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(respond(200, { species: [] })));
+    vi.stubGlobal('fetch', fetchMock);
+    const { loadSpeciesCatalog } = await freshCatalog();
+
+    await Promise.all([loadSpeciesCatalog('all'), loadSpeciesCatalog('all')]);
+    await loadSpeciesCatalog('all');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('finds a species by the start of its scientific name', () => {
-    expect(names('scolo')).toEqual(['lehtokurppa']);
-  });
+  it('forgets a failed load, so the next opening asks again', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(respond(500, {}))
+      .mockResolvedValueOnce(respond(200, { species: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { loadSpeciesCatalog } = await freshCatalog();
 
-  it('finds a species by a later word of its scientific name', () => {
-    expect(names('rusti')).toEqual(['lehtokurppa']);
-  });
-
-  it('finds a species by text inside its common name', () => {
-    expect(names('kurppa')).toEqual(['lehtokurppa']);
-  });
-
-  it('ignores case and surrounding spaces', () => {
-    expect(names('  TAVI ')).toEqual(['tavi', 'taviokuurna', 'pohjan tavi']);
-  });
-
-  it('matches a name typed with decomposed accents', () => {
-    // "ä" typed as "a" followed by a combining diaeresis, as a composing keyboard sends it.
-    expect(names('räkä')).toEqual(['räkättirastas']);
-  });
-
-  it('returns nothing for an empty query or one that matches nothing', () => {
-    expect(names('')).toEqual([]);
-    expect(names('   ')).toEqual([]);
-    expect(names('zzqqxx')).toEqual([]);
-  });
-
-  it('returns only the two names of each species', () => {
-    expect(searchSpecies(catalog, 'tavi', 1)).toEqual([
-      { scientificName: 'Anas crecca', commonName: 'tavi' },
-    ]);
+    await expect(loadSpeciesCatalog('range')).rejects.toThrow();
+    await expect(loadSpeciesCatalog('range')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
