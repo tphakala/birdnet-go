@@ -56,8 +56,28 @@
     onRetry,
   }: Props = $props();
 
-  /** Rows in the skeleton: a typical host shows eight to nine. */
-  const SKELETON_ROW_WIDTHS = ['w-40', 'w-32', 'w-24', 'w-48', 'w-20', 'w-36', 'w-24', 'w-40'];
+  /**
+   * Rows in the skeleton. The loaded card always shows the OS, uptime and CPU cores rows;
+   * the environment, hostname, time zone and CPU details rows appear on nearly every host
+   * (seven rows). The system model row (single-board computers and laptops) and the
+   * temperature row (hosts with a sensor) are the conditional ones: a Raspberry Pi, the
+   * common BirdNET-Go host, shows both and so nine rows. Size for that case; a host
+   * without them gets a card up to two rows (about 60 px) shorter when the data arrives.
+   * The first row holds the loading label, so the bar rows are one fewer than the rows.
+   * The system model row is the one loaded row that wraps instead of truncating, and it
+   * does so in the narrow lg column (a Pi 5 model name needs about 206 px), so its
+   * placeholder is two bars that wrap like the words of the name do.
+   */
+  const SKELETON_BAR_ROWS = [
+    ['w-32'],
+    ['w-24'],
+    ['w-28', 'w-[5.75rem]'],
+    ['w-20'],
+    ['w-36'],
+    ['w-24'],
+    ['w-40'],
+    ['w-28'],
+  ];
 
   let card = $state<HTMLDivElement>();
   // A Retry that succeeds removes the alert; focus then lands on the card
@@ -81,20 +101,25 @@
     <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
       {t('system.systemInfo.title')}
     </h3>
-    {#if loading && !error}
-      <SkeletonStatus label={t('common.loading')} className="text-xs" />
-    {/if}
   </div>
   {#if error}
     <ErrorAlert message={error} {onRetry} focusFallback={focusCard} />
   {:else if loading}
     <div class="space-y-2.5">
-      {#each SKELETON_ROW_WIDTHS as width, i (i)}
+      <!-- The label sits on the first row, where a line of loaded text appears: in the header
+           it would push the title onto two lines in the narrow lg column -->
+      <div class="flex items-center gap-3">
+        <Skeleton className="h-3.5 w-3.5 shrink-0" />
+        <SkeletonStatus label={t('common.loading')} className="text-sm" />
+      </div>
+      {#each SKELETON_BAR_ROWS as widths, i (i)}
         <div class="flex items-center gap-3">
           <Skeleton className="h-3.5 w-3.5 shrink-0" />
-          <span class="text-sm"
-            ><Skeleton className="inline-block align-middle h-3.5 {width}" /></span
-          >
+          <span class="min-w-0 text-sm">
+            {#each widths as width, j (j)}
+              <Skeleton className="inline-block align-middle h-3.5 {width}" />
+            {/each}
+          </span>
         </div>
       {/each}
     </div>

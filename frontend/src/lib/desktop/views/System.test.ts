@@ -312,6 +312,21 @@ describe('System view', () => {
     }
   );
 
+  it('shows a dash, never a zero, in the metric tiles whose source failed', async () => {
+    failWith(INFO_URL, 500);
+    failWith(RESOURCES_URL, 500);
+    await mountAt(OVERVIEW_PATH);
+
+    const cpuTile = within(cardTitled(t('system.metrics.cpu')));
+    expect(cpuTile.queryByText(`0 ${t('system.metrics.cores')}`)).not.toBeInTheDocument();
+    expect(cpuTile.getByText('-')).toBeInTheDocument();
+
+    const memoryTile = within(cardTitled(t('system.metrics.memory')));
+    expect(memoryTile.queryByText(/^0 B/)).not.toBeInTheDocument();
+    expect(memoryTile.queryByText(/avail/i)).not.toBeInTheDocument();
+    expect(memoryTile.getAllByText('-')).toHaveLength(2);
+  });
+
   it('keeps the loaded data on screen through a slow or failed refresh', async () => {
     await mountAt(OVERVIEW_PATH);
     expect(screen.getByText('Linux')).toBeInTheDocument();

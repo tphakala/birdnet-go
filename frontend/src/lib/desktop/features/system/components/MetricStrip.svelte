@@ -9,12 +9,14 @@
 
   interface Props {
     cpuPercent: number;
-    cpuCores: number;
+    /** Null when the system info could not load; the tile then shows a dash. */
+    cpuCores: number | null;
     cpuHistory: number[];
     memoryPercent: number;
-    memoryUsed: number;
-    memoryTotal: number;
-    memoryAvailable: number;
+    /** Null when the resources could not load; the tile then shows dashes, never zeros. */
+    memoryUsed: number | null;
+    memoryTotal: number | null;
+    memoryAvailable: number | null;
     memoryHistory: number[];
     temperatureAvailable: boolean;
     temperatureValue: number;
@@ -53,6 +55,12 @@
   const sparklineColorCpu = '#3b82f6';
   const sparklineColorMemory = '#8b5cf6';
   const sparklineColorTemperature = '#f97316';
+
+  // The inference footer lists one entry per model and wraps once a few models are listed
+  // (three on a typical tile). It always reserves two lines, loading and loaded, so the tile
+  // row keeps its height whether one model or several are listed. `lh` is one line of the
+  // footer's own line height; 0.125rem is its row gap.
+  const INFERENCE_FOOTER_CLASS = 'min-h-[calc(2lh+0.125rem)]';
 
   let hasTempHistory = $derived(temperatureHistory.length > 0);
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
@@ -110,11 +118,11 @@
   <span class="text-lg"><Skeleton className="inline-block align-middle h-5 w-16" /></span>
 {/snippet}
 
-{#snippet loadingBody()}
+{#snippet loadingBody(footerClass: string = '')}
   <div class="flex-1 min-h-[28px]">
     <Skeleton className="h-full w-full aspect-5/1" />
   </div>
-  <div class="flex mt-2 text-[10px]">
+  <div class="flex mt-2 text-[10px] {footerClass}">
     <SkeletonStatus label={t('common.loading')} />
   </div>
 {/snippet}
@@ -145,7 +153,7 @@
           <Sparkline data={cpuHistory} color={sparklineColorCpu} />
         </div>
         <div class="flex justify-between mt-2 text-[10px] text-muted">
-          <span>{cpuCores} {t('system.metrics.cores')}</span>
+          <span>{cpuCores === null ? '-' : `${cpuCores} ${t('system.metrics.cores')}`}</span>
           <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
         </div>
       {/if}
@@ -177,8 +185,16 @@
           <Sparkline data={memoryHistory} color={sparklineColorMemory} />
         </div>
         <div class="flex justify-between mt-2 text-[10px] text-muted">
-          <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
-          <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
+          <span
+            >{memoryUsed === null || memoryTotal === null
+              ? '-'
+              : `${formatBytesCompact(memoryUsed)} / ${formatBytesCompact(memoryTotal)}`}</span
+          >
+          <span
+            >{memoryAvailable === null
+              ? '-'
+              : `${formatBytesCompact(memoryAvailable)} ${t('system.metrics.available')}`}</span
+          >
         </div>
       {/if}
     </div>
@@ -265,12 +281,14 @@
         </div>
       </div>
       {#if inferenceLoading}
-        {@render loadingBody()}
+        {@render loadingBody(INFERENCE_FOOTER_CLASS)}
       {:else if hasInferenceData}
         <div class="flex-1 min-h-[28px]">
           <Sparkline datasets={inferenceDatasets} />
         </div>
-        <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted">
+        <div
+          class="flex flex-wrap content-start gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted {INFERENCE_FOOTER_CLASS}"
+        >
           {#each modelsWithData as m (m.id)}
             <span class="flex items-center gap-1">
               <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>

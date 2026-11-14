@@ -583,12 +583,12 @@
     <!-- Top Metric Strip -->
     <MetricStrip
       {cpuPercent}
-      cpuCores={systemInfo.num_cpu ?? 0}
+      cpuCores={infoSection.status === 'failed' ? null : (systemInfo.num_cpu ?? 0)}
       {cpuHistory}
       {memoryPercent}
-      memoryUsed={memoryUsage.used ?? 0}
-      memoryTotal={memoryUsage.total ?? 0}
-      memoryAvailable={memoryUsage.available ?? 0}
+      memoryUsed={resourcesSection.status === 'failed' ? null : (memoryUsage.used ?? 0)}
+      memoryTotal={resourcesSection.status === 'failed' ? null : (memoryUsage.total ?? 0)}
+      memoryAvailable={resourcesSection.status === 'failed' ? null : (memoryUsage.available ?? 0)}
       {memoryHistory}
       temperatureAvailable={systemTemperature.is_available}
       temperatureValue={temperatureDisplay}
