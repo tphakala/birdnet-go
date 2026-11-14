@@ -1,5 +1,6 @@
 <script lang="ts">
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import type { StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import {
     Download,
@@ -89,6 +90,10 @@
 
   // Id of the "Running diagnostics" text that explains why Refresh and the window selector wait.
   const RUN_STATUS_ID = generateId('health-run-status');
+  /** Rows of each category card in the results skeleton, shaped like a typical report. */
+  const RESULTS_SKELETON_ROWS = [5, 4, 4];
+  /** Width of each row's check name bar, varied so the rows do not read as a table. */
+  const CHECK_NAME_WIDTHS = ['w-28', 'w-36', 'w-24', 'w-32', 'w-28'];
 
   function toggleExpand(checkName: string) {
     const next = new Set(expandedChecks);
@@ -406,6 +411,50 @@
   </svg>
 {/snippet}
 
+<!-- A tile count; until the first report arrives a bar stands in, inside the numeral span -->
+{#snippet tileCount(count: number | undefined)}
+  {#if count !== undefined}
+    {count}
+  {:else if running && !report}
+    <Skeleton className="inline-block align-middle h-7 w-8" />
+  {:else}
+    -
+  {/if}
+{/snippet}
+
+<!-- First-run placeholder of the category cards; the run status beside Refresh is its label -->
+{#snippet resultsSkeleton()}
+  <div class="space-y-4" data-testid="health-results-skeleton">
+    {#each RESULTS_SKELETON_ROWS as rows, card (card)}
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+      >
+        <div class="text-xs mb-3"><Skeleton className="inline-block align-middle h-3 w-28" /></div>
+        <div class="space-y-2">
+          {#each CHECK_NAME_WIDTHS.slice(0, rows) as width, row (row)}
+            <div
+              class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--color-base-200)]/50"
+            >
+              <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm">
+                  <Skeleton className="inline-block align-middle h-3.5 {width}" />
+                </div>
+                <div class="text-xs">
+                  <Skeleton className="inline-block align-middle h-3 w-48" />
+                </div>
+              </div>
+              <span class="text-xs shrink-0"
+                ><Skeleton className="inline-block align-middle h-3 w-10" /></span
+              >
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
 <div class="col-span-12 space-y-4">
   <!-- Status Metric Strip (matches System Overview pattern) -->
   <div class="@container">
@@ -422,7 +471,7 @@
             <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
           </div>
           <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--text-success)]">
-            {report?.count_by_status?.healthy ?? (running ? '…' : '-')}
+            {@render tileCount(report?.count_by_status?.healthy)}
           </span>
         </div>
         <div class="mt-auto text-xs text-muted">
@@ -433,7 +482,7 @@
               ? t('health.metricFooter.allPassing')
               : t('health.metricFooter.healthyOfTotal', { healthy: h, total })}
           {:else if running}
-            {t('health.running')}
+            <Skeleton className="inline-block align-middle h-3 w-20" />
           {:else}
             -
           {/if}
@@ -457,7 +506,7 @@
               ? 'text-[var(--text-warning)]'
               : 'text-muted'}"
           >
-            {report?.count_by_status?.warning ?? (running ? '…' : '-')}
+            {@render tileCount(report?.count_by_status?.warning)}
           </span>
         </div>
         <div class="mt-auto text-xs text-muted">
@@ -466,7 +515,7 @@
               ? t('health.metricFooter.needsAttention')
               : t('health.metricFooter.none')}
           {:else if running}
-            {t('health.running')}
+            <Skeleton className="inline-block align-middle h-3 w-20" />
           {:else}
             -
           {/if}
@@ -490,7 +539,7 @@
               ? 'text-[var(--text-error)]'
               : 'text-muted'}"
           >
-            {report?.count_by_status?.critical ?? (running ? '…' : '-')}
+            {@render tileCount(report?.count_by_status?.critical)}
           </span>
         </div>
         <div class="mt-auto text-xs text-muted">
@@ -499,7 +548,7 @@
               ? t('health.metricFooter.failing')
               : t('health.metricFooter.allClear')}
           {:else if running}
-            {t('health.running')}
+            <Skeleton className="inline-block align-middle h-3 w-20" />
           {:else}
             -
           {/if}
@@ -523,7 +572,7 @@
               ? ''
               : 'text-[var(--color-base-content)]/70'}"
           >
-            {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
+            {@render tileCount(report?.count_by_status?.skipped)}
           </span>
         </div>
         <div class="mt-auto text-xs text-muted">
@@ -532,7 +581,7 @@
               ? t('health.metricFooter.noData')
               : t('health.metricFooter.none')}
           {:else if running}
-            {t('health.running')}
+            <Skeleton className="inline-block align-middle h-3 w-20" />
           {:else}
             -
           {/if}
@@ -568,7 +617,7 @@
             <span class="text-muted">· {report.duration_ms.toFixed(0)}ms</span>
           </span>
         {:else if running}
-          <span id={RUN_STATUS_ID} class="flex items-center gap-1.5">
+          <span id={RUN_STATUS_ID} role="status" class="flex items-center gap-1.5">
             <Loader2 class="size-3.5 animate-spin" />
             {t('health.running')}
           </span>
@@ -883,5 +932,7 @@
         </div>
       </div>
     {/each}
+  {:else if running}
+    {@render resultsSkeleton()}
   {/if}
 </div>

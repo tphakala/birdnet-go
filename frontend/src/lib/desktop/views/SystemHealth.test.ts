@@ -5,6 +5,7 @@ import { runAxeTest } from '$lib/utils/axe-utils';
 import SystemHealth from './SystemHealth.svelte';
 
 const TOTAL_CHECKS = 5;
+const RESULTS_SKELETON_ID = 'health-results-skeleton';
 
 const mocks = vi.hoisted(() => ({ post: vi.fn() }));
 
@@ -49,6 +50,60 @@ describe('SystemHealth Healthy tile footer', () => {
 
     await screen.findByText('health.metricFooter.allPassing');
     expect(t).not.toHaveBeenCalledWith('health.metricFooter.healthyOfTotal', expect.anything());
+  });
+});
+
+describe('SystemHealth first run', () => {
+  afterEach(() => {
+    cleanup();
+    mocks.post.mockReset();
+  });
+
+  /** Holds the mount run until the returned functions settle it. */
+  function renderWithPendingFirstRun() {
+    let finish: (value: ReturnType<typeof report>) => void = () => {};
+    let fail: (reason: Error) => void = () => {};
+    mocks.post.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        finish = resolve;
+        fail = reject;
+      })
+    );
+    const view = render(SystemHealth);
+    return { ...view, finish, fail };
+  }
+
+  it('shows a skeleton of the results and the tile counts until the first report arrives', async () => {
+    const { container, finish } = renderWithPendingFirstRun();
+
+    await screen.findByTestId(RESULTS_SKELETON_ID);
+    // One label for the whole page, in the run status beside Refresh
+    const statuses = screen.getAllByRole('status');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toHaveTextContent('health.running');
+    const numeral = screen
+      .getByText('health.summary.healthy')
+      .closest('.flex-wrap')
+      ?.querySelector('.font-mono');
+    expect(numeral?.querySelector('[data-skeleton]')).not.toBeNull();
+    expect(container).not.toHaveTextContent('…');
+
+    finish(report(TOTAL_CHECKS));
+
+    await screen.findByText('health.metricFooter.allPassing');
+    expect(screen.queryByTestId(RESULTS_SKELETON_ID)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-skeleton]')).toBeNull();
+  });
+
+  it('replaces the skeleton with the error when the first run fails', async () => {
+    const { container, fail } = renderWithPendingFirstRun();
+    await screen.findByTestId(RESULTS_SKELETON_ID);
+
+    fail(new Error('network down'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('health.errors.fetchFailed');
+    expect(screen.queryByTestId(RESULTS_SKELETON_ID)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-skeleton]')).toBeNull();
   });
 });
 
@@ -191,6 +246,9 @@ describe('SystemHealth keyboard and run state', () => {
       expect(radio).toHaveAttribute('aria-describedby', describedBy);
     }
     expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-describedby');
+    // A rerun keeps the last report on screen: no skeleton comes back
+    expect(screen.queryByTestId(RESULTS_SKELETON_ID)).not.toBeInTheDocument();
+    expect(document.querySelector('[data-skeleton]')).toBeNull();
 
     finish(report(TOTAL_CHECKS));
     await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));
