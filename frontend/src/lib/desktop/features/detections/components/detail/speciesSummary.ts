@@ -12,16 +12,16 @@ import type { SpeciesSummary } from './detailTypes';
 
 const CACHE_TTL_MS = 300_000;
 
-let cached: { at: number; rows: SpeciesSummary[] } | null = null;
-let inFlight: Promise<SpeciesSummary[]> | null = null;
+let cached: { at: number; rows: unknown[] } | null = null;
+let inFlight: Promise<unknown[]> | null = null;
 
-async function fetchRows(): Promise<SpeciesSummary[]> {
+async function fetchRows(): Promise<unknown[]> {
   const response = await fetch(buildAppUrl('/api/v2/analytics/species/summary'));
   if (!response.ok) {
     throw new Error(`species summary request failed: ${response.status}`);
   }
   const data: unknown = await response.json();
-  return Array.isArray(data) ? data.filter(isSpeciesSummary) : [];
+  return Array.isArray(data) ? data : [];
 }
 
 /** The summary row of a species, or null when the species has none. Rejects when the request fails. */
@@ -32,5 +32,9 @@ export async function loadSpeciesSummary(scientificName: string): Promise<Specie
     });
     cached = { at: Date.now(), rows: await inFlight };
   }
-  return cached.rows.find(row => row.scientific_name === scientificName) ?? null;
+  // Only the row asked for is checked: the list holds every species of the station.
+  const row = cached.rows.find(
+    candidate => isSpeciesSummary(candidate) && candidate.scientific_name === scientificName
+  );
+  return isSpeciesSummary(row) ? row : null;
 }

@@ -118,10 +118,7 @@
           ? t('common.review.status.verifiedCorrect')
           : t('common.review.status.falsePositive');
       const { firstReviewedAt, lastReviewedAt } = detection;
-      const savedAgain = Boolean(
-        firstReviewedAt && lastReviewedAt && firstReviewedAt !== lastReviewedAt
-      );
-      if (savedAgain && firstReviewedAt) {
+      if (firstReviewedAt && lastReviewedAt && firstReviewedAt !== lastReviewedAt) {
         list.push({
           key: 'review-first',
           // The first verdict is not kept, so this entry names no verdict.

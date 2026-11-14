@@ -211,7 +211,9 @@
         scientificName: chosen.scientificName,
       });
       toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
-      onChanged({ detectionId: id, scientificName: previousSpecies, reviewCounts: true });
+      // A dialog still open is on the saved detection, whose reload counts the new species;
+      // one already gone left the page free to show another detection of the old species.
+      onChanged({ detectionId: id, scientificName: previousSpecies, reviewCounts: destroyed });
       if (!destroyed) onClose();
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });

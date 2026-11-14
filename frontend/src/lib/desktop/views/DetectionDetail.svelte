@@ -132,14 +132,14 @@
   });
   type LoadingKey = keyof typeof loading;
 
-  // Whether the server can step between detections. It cannot on the legacy
-  // database format, where the navigation groups are left out.
-  let steppingAvailable = $state(true);
   // True when the neighbours request failed for the detection shown.
   let neighborsFailed = $state(false);
   // Whether the server runs the current database format; null until a route that
   // depends on it has answered. Kept across detections: it does not change.
   let enhancedDatabase = $state<boolean | null>(null);
+  // The server can step between detections, except on the legacy database format,
+  // where the navigation groups are left out.
+  let steppingAvailable = $derived(enhancedDatabase !== false);
 
   // AbortControllers, one per lifetime:
   // - detection: the detection itself;
@@ -521,7 +521,6 @@
       // links in place, blocked, so the one in focus stays.
       if (response.status === HTTP_CONFLICT) {
         enhancedDatabase = false;
-        steppingAvailable = false;
         return;
       }
       if (!response.ok) {
@@ -536,7 +535,6 @@
         return;
       }
       neighbors = body;
-      steppingAvailable = true;
       enhancedDatabase = true;
     } catch (error) {
       if (isAbort(error, signal)) return;
@@ -574,16 +572,6 @@
     loading.reviews = false;
   }
 
-  /** The body of GET /api/v2/species: an object that may hold a rarity block. */
-  function isSpeciesAnswer(value: unknown): value is { rarity?: unknown } {
-    return isPlainObject(value);
-  }
-
-  /** The body of GET /api/v2/species/taxonomy: an object that may hold a taxonomy block. */
-  function isTaxonomyAnswer(value: unknown): value is { taxonomy?: unknown } {
-    return isPlainObject(value);
-  }
-
   /**
    * Loads the data tied to the detection's species. Called only when the species
    * changes, so stepping through detections of one species keeps what is loaded.
@@ -605,14 +593,14 @@
     load(
       `/api/v2/species?scientific_name=${species}`,
       signal,
-      isSpeciesAnswer,
+      isPlainObject,
       value => (rarity = isSpeciesRarity(value?.rarity) ? value.rarity : null),
       'rarity'
     );
     load(
       `/api/v2/species/taxonomy?scientific_name=${species}`,
       signal,
-      isTaxonomyAnswer,
+      isPlainObject,
       value => (taxonomy = isTaxonomy(value?.taxonomy) ? value.taxonomy : null)
     );
     load(
