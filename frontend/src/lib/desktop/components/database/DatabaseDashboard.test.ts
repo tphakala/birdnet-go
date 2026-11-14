@@ -1517,60 +1517,95 @@ describe('DatabaseDashboard initial load', () => {
   /** Lets pending promise callbacks and the renders they cause run. */
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
-  it('keeps one skeleton until the status, overview and legacy status of the v2-only view answered', async () => {
+  it.each([
+    { last: 'overview', first: 'legacy status' },
+    { last: 'legacy status', first: 'overview' },
+  ])(
+    'keeps one skeleton until the status, overview and legacy status of the v2-only view answered, with the $last last',
+    async ({ last }) => {
+      const status = deferred<unknown>();
+      const overviewRequest = deferred<unknown>();
+      const legacy = deferred<unknown>();
+      serve({
+        [STATUS_URL]: status.promise,
+        [OVERVIEW_URL]: overviewRequest.promise,
+        [LEGACY_STATUS_URL]: legacy.promise,
+      });
+      const answerOverview = () => overviewRequest.resolve(overview);
+      const answerLegacy = () => legacy.resolve(cleanableLegacy);
+      const [answerFirst, answerLast] =
+        last === 'overview' ? [answerLegacy, answerOverview] : [answerOverview, answerLegacy];
+
+      renderTyped(DatabaseDashboard);
+
+      const skeleton = screen.getByTestId(SKELETON_TEST_ID);
+      expect(within(skeleton).getByRole('status')).toHaveTextContent(
+        t('system.database.dashboard.loading')
+      );
+
+      status.resolve(v2OnlyStatus);
+      // The legacy status is only requested once the status says the install is v2-only
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
+
+      answerFirst();
+      await settle();
+      // One request is still pending, so the page keeps the same skeleton
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
+
+      answerLast();
+      await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+      // The cleanup card arrives with the rest of the page, not after it
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: t('system.database.legacy.cleanup.title') })
+      ).toBeInTheDocument();
+    }
+  );
+
+  it('keeps the skeleton until the migration status answers, even after the other requests', async () => {
     const status = deferred<unknown>();
-    const overviewRequest = deferred<unknown>();
-    const legacy = deferred<unknown>();
-    serve({
-      [STATUS_URL]: status.promise,
-      [OVERVIEW_URL]: overviewRequest.promise,
-      [LEGACY_STATUS_URL]: legacy.promise,
-    });
+    serve({ [STATUS_URL]: status.promise });
 
     renderTyped(DatabaseDashboard);
-
-    const skeleton = screen.getByTestId(SKELETON_TEST_ID);
-    expect(within(skeleton).getByRole('status')).toHaveTextContent(
-      t('system.database.dashboard.loading')
-    );
-
-    status.resolve(v2OnlyStatus);
-    // The legacy status is only requested once the status says the install is v2-only
-    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
-    expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
-
-    overviewRequest.resolve(overview);
+    // Every other first request answers while the status is still pending
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(BACKUP_JOBS_URL));
     await settle();
-    expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
-
-    legacy.resolve(cleanableLegacy);
-    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
-    // The cleanup card arrives with the rest of the page, not after it
-    expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: t('system.database.legacy.cleanup.title') })
-    ).toBeInTheDocument();
-  });
-
-  it('shows no disconnected database or missing backups while the migration view loads', async () => {
-    const legacyStatsRequest = deferred<unknown>();
-    serve({ [STATUS_URL]: idleStatus, [LEGACY_STATS_URL]: legacyStatsRequest.promise });
-
-    renderTyped(DatabaseDashboard);
-
-    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(STATUS_URL));
     await settle();
     expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument();
-    expect(screen.queryByText(t('system.database.stats.disconnected'))).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(t('system.database.backup.history.noBackups'))
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(t('system.database.stats.connected'))).not.toBeInTheDocument();
 
-    legacyStatsRequest.resolve(databaseStats);
-
-    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
-    expect(screen.getAllByText(t('system.database.stats.connected')).length).toBeGreaterThan(0);
+    status.resolve(v2OnlyStatus);
+    await screen.findByRole('heading', { name: tablesTitle() });
+    expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
   });
+
+  it.each([
+    { request: 'legacy stats', url: LEGACY_STATS_URL, value: databaseStats },
+    { request: 'v2 stats', url: V2_STATS_URL, value: databaseStats },
+    { request: 'backup jobs', url: BACKUP_JOBS_URL, value: { jobs: [] } },
+  ])(
+    'shows no disconnected database or missing backups while the migration view waits for the $request',
+    async ({ url, value }) => {
+      const pending = deferred<unknown>();
+      serve({ [STATUS_URL]: idleStatus, [url]: pending.promise });
+
+      renderTyped(DatabaseDashboard);
+
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(STATUS_URL));
+      await settle();
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument();
+      expect(screen.queryByText(t('system.database.stats.disconnected'))).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(t('system.database.backup.history.noBackups'))
+      ).not.toBeInTheDocument();
+
+      pending.resolve(value);
+
+      await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+      expect(screen.getAllByText(t('system.database.stats.connected')).length).toBeGreaterThan(0);
+    }
+  );
 
   it('does not bring the skeleton back when the overview refreshes', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
