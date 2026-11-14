@@ -86,6 +86,7 @@ function dispatchPlainEvent(type: string) {
 
 import ImportActivityCard from './ImportActivityCard.svelte';
 import { api } from '$lib/utils/api';
+import { t } from '$lib/i18n';
 import { STREAM_STALL_THRESHOLD } from '../utils';
 import type { ImportProgress, ImportStatusResponse } from '../types';
 
@@ -264,6 +265,45 @@ describe('ImportActivityCard', () => {
       expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
     });
     expect(MockReconnectingEventSource).not.toHaveBeenCalled();
+  });
+
+  it('shows the re-attached count only when clips were attached to stored detections', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      running: false,
+      job_id: 'job-1',
+      status: 'done',
+      progress: {
+        ...runningProgress,
+        processed: 100,
+        inserted: 0,
+        skipped: 100,
+        reattached: 7,
+        phase: 'done',
+      },
+    } satisfies ImportStatusResponse);
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.reattachedNote')).toBeInTheDocument();
+    });
+    expect(t).toHaveBeenCalledWith('system.importExport.done.reattachedNote', { count: 7 });
+    // A run that only re-attached clips still gets the detections link.
+    expect(
+      screen.getByRole('link', { name: /system.importExport.done.viewDetectionsLink/ })
+    ).toHaveAttribute('href', expect.stringMatching(/^\/ui\/detections(?:[?#]|$)/));
+  });
+
+  it('does not show the re-attached line when nothing was re-attached', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      running: false,
+      job_id: 'job-1',
+      status: 'done',
+      progress: { ...runningProgress, processed: 100, inserted: 90, reattached: 0, phase: 'done' },
+    } satisfies ImportStatusResponse);
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.done.reattachedNote')).not.toBeInTheDocument();
   });
 
   it('shows the cancelled summary when status reports a cancelled run', async () => {

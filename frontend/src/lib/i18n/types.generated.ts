@@ -1066,6 +1066,7 @@ export type TranslationKey =
   | 'system.importExport.done.interruptedDescription'
   | 'system.importExport.done.viewDetectionsLink'
   | 'system.importExport.done.partialInserted' // params: count
+  | 'system.importExport.done.reattachedNote' // params: count
   | 'system.importExport.done.importAnother'
   | 'system.importExport.errors.loadFailed'
   | 'system.importExport.errors.mediaLoadFailed'
@@ -4659,6 +4660,7 @@ export type TranslationParams = {
   'system.importExport.source.containerUnreadableHint': { uid: string | number };
   'system.importExport.progress.progressLabel': { percent: string | number };
   'system.importExport.done.partialInserted': { count: string | number };
+  'system.importExport.done.reattachedNote': { count: string | number };
   'system.database.legacy.cleanup.success': { size: string | number };
   'system.database.legacy.cleanup.confirmMessage': { size: string | number };
   'system.database.dashboard.metrics.lastHour': { count: string | number };

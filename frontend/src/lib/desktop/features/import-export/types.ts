@@ -19,6 +19,11 @@ export interface ImportProgress {
   processed: number;
   inserted: number;
   skipped: number;
+  /**
+   * Stored clip-less detections that got their audio clip attached in a
+   * db-audio run. Their source rows are also counted in `skipped`.
+   */
+  reattached?: number;
   errors: number;
   phase: ImportPhase | 'done';
 }

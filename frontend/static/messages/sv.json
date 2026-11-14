@@ -1384,6 +1384,7 @@
         "interruptedDescription": "Anslutningen till servern bröts medan importen pågick, så det slutliga resultatet är okänt. Kontrollera dina detekteringar och starta importen igen om det behövs.",
         "viewDetectionsLink": "Visa importerade detekteringar",
         "partialInserted": "{count} detekteringar importerades före avbrottet.",
+        "reattachedNote": "{count, plural, one {# redan sparad detektion fick sitt ljudklipp.} other {# redan sparade detektioner fick sina ljudklipp.}}",
         "importAnother": "Importera igen"
       },
       "errors": {

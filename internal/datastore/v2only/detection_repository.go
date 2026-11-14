@@ -53,6 +53,15 @@ func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Re
 	return r.ds.detectionToResult(ctx, det), nil
 }
 
+// SetClipName sets the clip name of an existing detection whose clip name is
+// still empty, forwarding to the v2 detection repository, and reports whether
+// the row changed. It exists so the imports engine can re-attach audio clips to
+// detections a db-only import already stored: the engine receives this adapter
+// as its datastore.DetectionRepository and type-asserts exactly this method.
+func (r *detectionRepository) SetClipName(ctx context.Context, id uint, clipName string) (bool, error) {
+	return r.ds.detection.SetClipName(ctx, id, clipName)
+}
+
 // GetAdditionalResults returns the stored alternate predictions of a detection. The
 // species names and codes resolve like those of the detection's own species, and the
 // confidence is the full float64 (the bridge would give the scientific name as common

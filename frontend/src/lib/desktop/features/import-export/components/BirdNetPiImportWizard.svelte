@@ -1017,6 +1017,13 @@
                   size="lg"
                 />
               </div>
+              {#if (importProgress.reattached ?? 0) > 0}
+                <p class="text-sm text-[var(--color-base-content)]/70 text-left">
+                  {t('system.importExport.done.reattachedNote', {
+                    count: importProgress.reattached ?? 0,
+                  })}
+                </p>
+              {/if}
               <div class="mt-2">
                 <a
                   href={buildDetectionsFilterUrl()}
@@ -1044,6 +1051,13 @@
                 })}
               </p>
             {/if}
+            {#if (importProgress?.reattached ?? 0) > 0}
+              <p class="text-sm text-[var(--color-base-content)]/70">
+                {t('system.importExport.done.reattachedNote', {
+                  count: importProgress?.reattached ?? 0,
+                })}
+              </p>
+            {/if}
           {:else if importError}
             <XCircle class="size-12 mx-auto text-[var(--color-error)]" aria-hidden="true" />
             <div>
@@ -1052,6 +1066,13 @@
               </h4>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-1">{importError}</p>
             </div>
+            {#if (importProgress?.reattached ?? 0) > 0}
+              <p class="text-sm text-[var(--color-base-content)]/70">
+                {t('system.importExport.done.reattachedNote', {
+                  count: importProgress?.reattached ?? 0,
+                })}
+              </p>
+            {/if}
           {:else if importInterrupted}
             <Unplug class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
             <div>

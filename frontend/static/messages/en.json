@@ -1384,6 +1384,7 @@
         "interruptedDescription": "The connection to the server was lost while the import was running, so its final result is unknown. Check your detections and start the import again if needed.",
         "viewDetectionsLink": "View imported detections",
         "partialInserted": "{count} detections were imported before cancellation.",
+        "reattachedNote": "{count, plural, one {# detection that was already stored got its audio clip.} other {# detections that were already stored got their audio clips.}}",
         "importAnother": "Import another"
       },
       "errors": {

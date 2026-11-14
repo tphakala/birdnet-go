@@ -1384,6 +1384,7 @@
         "interruptedDescription": "La connexion au serveur a été perdue pendant l'import, son résultat final est donc inconnu. Vérifiez vos détections et relancez l'import si nécessaire.",
         "viewDetectionsLink": "Voir les détections importées",
         "partialInserted": "{count} détections ont été importées avant l'annulation.",
+        "reattachedNote": "{count, plural, one {# détection déjà enregistrée a reçu son extrait audio.} other {# détections déjà enregistrées ont reçu leurs extraits audio.}}",
         "importAnother": "Importer à nouveau"
       },
       "errors": {

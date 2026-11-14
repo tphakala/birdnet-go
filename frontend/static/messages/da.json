@@ -1384,6 +1384,7 @@
         "interruptedDescription": "Forbindelsen til serveren gik tabt, mens importen kørte, så det endelige resultat er ukendt. Tjek dine registreringer, og start importen igen om nødvendigt.",
         "viewDetectionsLink": "Se importerede registreringer",
         "partialInserted": "{count} registreringer blev importeret før annulleringen.",
+        "reattachedNote": "{count, plural, one {# allerede gemt detektion fik sit lydklip.} other {# allerede gemte detektioner fik deres lydklip.}}",
         "importAnother": "Importér igen"
       },
       "errors": {
