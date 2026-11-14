@@ -951,9 +951,9 @@
         "sunrise": "Sunrise",
         "sunset": "Sunset",
         "activityLegend": "{species} activity by hour, all time",
-        "feelsLike": "feels like {value}",
+        "feelsLike": "Ressenti",
         "moonLit": "{percent}% lit",
-        "windFrom": "from {direction}",
+        "windFrom": "Vent de {direction}",
         "precipitation": "Precipitation",
         "observedAt": "Weather observation from {time}",
         "notObserved": "No weather observation for this time"
