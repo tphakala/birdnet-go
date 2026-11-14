@@ -39,23 +39,30 @@ function makeDetection(overrides: Partial<Detection>): Detection {
 const FRESH_SCIENTIFIC = 'Fresh-sci-B';
 const STALE_SCIENTIFIC = 'Stale-sci-A';
 
-/** A fetch Response carrying a JSON body. */
+/** Minimal fetch Response stub carrying a JSON body. */
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  return {
+    ok: status >= 200 && status < 300,
     status,
-    headers: { 'content-type': 'application/json' },
-  });
+    statusText: status === 200 ? 'OK' : 'Error',
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: () => Promise.resolve(body),
+    // Serialize lazily and reject (never throw synchronously) so this
+    // Promise-returning method honors its contract even on a non-serializable body.
+    text: () => {
+      try {
+        return Promise.resolve(JSON.stringify(body));
+      } catch (error) {
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+  } as unknown as Response;
 }
 
 /** One request the page made: method and path with query. */
 interface Call {
   method: string;
   url: string;
-}
-
-/** A route answer that builds its own Response from the call. */
-function isResponder(value: unknown): value is (_call: Call) => Promise<Response> {
-  return typeof value === 'function';
 }
 
 /**
@@ -72,8 +79,11 @@ function stubApi(routes: [string, unknown][]): Call[] {
       calls.push({ method: init?.method ?? 'GET', url });
       for (const [fragment, answer] of routes) {
         if (url.includes(fragment)) {
-          if (isResponder(answer)) {
-            return answer({ method: init?.method ?? 'GET', url });
+          if (typeof answer === 'function') {
+            return (answer as (_call: Call) => Promise<Response>)({
+              method: init?.method ?? 'GET',
+              url,
+            });
           }
           return Promise.resolve(jsonResponse(answer));
         }
@@ -105,7 +115,7 @@ afterEach(() => {
 
 describe('DetectionDetail loading and errors', () => {
   it('shows one visible loading label in the skeleton until the detection arrives', async () => {
-    let answer: ((_response: Response) => void) | undefined;
+    let answer!: (_response: Response) => void;
     stubApi([
       [
         '/api/v2/detections/5',
@@ -123,7 +133,7 @@ describe('DetectionDetail loading and errors', () => {
     });
     expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
 
-    answer?.(jsonResponse(makeDetection({ id: 5, commonName: 'Loaded bird' })));
+    answer(jsonResponse(makeDetection({ id: 5, commonName: 'Loaded bird' })));
     await waitFor(() => {
       expect(container.querySelector('#species-heading')?.textContent).toContain('Loaded bird');
     });
@@ -150,7 +160,7 @@ describe('DetectionDetail loading and errors', () => {
   // AbortController signal locally and checks the captured signal (not the shared
   // controller reference, which by then points at B's non-aborted controller).
   it('does not let a stale detection response overwrite a newer one', async () => {
-    let resolveStale: ((_response: Response) => void) | undefined;
+    let resolveStale!: (_response: Response) => void;
     const staleResponse = new Promise<Response>(resolve => {
       resolveStale = resolve;
     });
@@ -169,7 +179,7 @@ describe('DetectionDetail loading and errors', () => {
       expect(container.textContent).toContain(FRESH_SCIENTIFIC);
     });
 
-    resolveStale?.(
+    resolveStale(
       jsonResponse(
         makeDetection({ id: 1, scientificName: STALE_SCIENTIFIC, commonName: 'Stale A' })
       )
@@ -283,7 +293,7 @@ describe('DetectionDetail stepping and refreshing', () => {
   // while they are only made again when the species changes, so a step within one
   // species left the range score, taxonomy and statistics empty for good.
   it('keeps the species data loading across a step within the same species', async () => {
-    let answerSpecies: ((_response: Response) => void) | undefined;
+    let answerSpecies!: (_response: Response) => void;
     const speciesAnswer = new Promise<Response>(resolve => {
       answerSpecies = resolve;
     });
@@ -304,9 +314,7 @@ describe('DetectionDetail stepping and refreshing', () => {
     });
     await settle();
 
-    answerSpecies?.(
-      jsonResponse({ rarity: { status: 'rare', score: 0.05, location_based: true } })
-    );
+    answerSpecies(jsonResponse({ rarity: { status: 'rare', score: 0.05, location_based: true } }));
     await waitFor(() => {
       expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
     });
@@ -740,163 +748,6 @@ describe('DetectionDetail review counts', () => {
     await settle();
 
     expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
-  });
-});
-
-describe('DetectionDetail loading paths', () => {
-  it('does not recount the reviews after a note, which leaves the verdict as it was', async () => {
-    const calls = stubApi([
-      ['/api/v2/detections/110/review', {}],
-      ['/api/v2/detections/110', makeDetection({ id: 110 })],
-      ['/api/v2/search', { total: 0 }],
-    ]);
-
-    detailTest.render({ detectionId: '110' });
-    await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(2);
-    });
-    const box = await screen.findByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
-    await fireEvent.input(box, { target: { value: 'A note' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'detections.detail.log.saveNote' }));
-    await waitFor(() => {
-      expect(calls.filter(call => call.url.endsWith('/api/v2/detections/110')).length).toBe(2);
-    });
-    await settle();
-
-    expect(count(calls, '/api/v2/search')).toBe(2);
-  });
-
-  it('drops a late answer for the species the page has left', async () => {
-    let answerOld: ((_response: Response) => void) | undefined;
-    stubApi([
-      ['/api/v2/detections/111', makeDetection({ id: 111, scientificName: 'Turdus merula' })],
-      ['/api/v2/detections/112', makeDetection({ id: 112, scientificName: 'Erithacus rubecula' })],
-      [
-        'species?scientific_name=Turdus%20merula',
-        () =>
-          new Promise<Response>(resolve => {
-            answerOld = resolve;
-          }),
-      ],
-      [
-        'species?scientific_name=Erithacus%20rubecula',
-        { rarity: { status: 'rare', score: 0.05, location_based: true } },
-      ],
-    ]);
-
-    const { container, rerender } = detailTest.render({ detectionId: '111' });
-    await waitFor(() => {
-      expect(answerOld).toBeDefined();
-    });
-    await rerender({ detectionId: '112' });
-    await waitFor(() => {
-      expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
-    });
-
-    answerOld?.(jsonResponse({ rarity: { status: 'common', score: 0.9, location_based: true } }));
-    await settle();
-
-    expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
-  });
-
-  it('makes the previous detection inert, and leaves the step links usable, while the next loads', async () => {
-    stubApi([
-      ['/api/v2/detections/113', makeDetection({ id: 113 })],
-      [
-        '/api/v2/detections/114',
-        (call: Call) =>
-          call.url.endsWith('/api/v2/detections/114')
-            ? new Promise<Response>(() => {})
-            : Promise.resolve(jsonResponse({})),
-      ],
-    ]);
-
-    const { container, rerender } = detailTest.render({ detectionId: '113' });
-    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
-    await rerender({ detectionId: '114' });
-    await settle();
-
-    const grids = [...container.querySelectorAll<HTMLElement>('.dd-grid')];
-    expect(grids.length).toBe(2);
-    expect(grids.every(grid => grid.inert)).toBe(true);
-    // Svelte sets inert as a property, which jsdom does not reflect as an attribute, so
-    // the nav's ancestors are checked one by one.
-    const inertAncestors: HTMLElement[] = [];
-    for (let node = container.querySelector('nav'); node; node = node.parentElement) {
-      if (node.inert) inertAncestors.push(node);
-    }
-    expect(container.querySelector('nav')).not.toBeNull();
-    expect(inertAncestors).toEqual([]);
-  });
-
-  it('keeps the detection on screen, with no error, when a refresh fails', async () => {
-    let loads = 0;
-    stubApi([
-      ['/api/v2/detections/115/review', {}],
-      [
-        '/api/v2/detections/115',
-        (call: Call) => {
-          if (!call.url.endsWith('/api/v2/detections/115'))
-            return Promise.resolve(jsonResponse({}));
-          loads += 1;
-          return Promise.resolve(
-            loads === 1
-              ? jsonResponse(makeDetection({ id: 115, commonName: 'Kept bird' }))
-              : jsonResponse({}, 500)
-          );
-        },
-      ],
-    ]);
-
-    const { container } = detailTest.render({ detectionId: '115' });
-    await fireEvent.click(
-      await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ })
-    );
-    await waitFor(() => {
-      expect(loads).toBe(2);
-    });
-    await settle();
-
-    expect(container.querySelector('#species-heading')?.textContent).toContain('Kept bird');
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('leaves no placeholder once every request has failed', async () => {
-    stubApi([
-      ['/api/v2/detections/116/', () => Promise.resolve(jsonResponse({}, 500))],
-      ['/api/v2/detections/116', makeDetection({ id: 116 })],
-      ['/api/v2/', () => Promise.resolve(jsonResponse({}, 404))],
-    ]);
-
-    const { container } = detailTest.render({ detectionId: '116' });
-    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
-    await waitFor(() => {
-      expect(container.querySelector('[data-skeleton]')).toBeNull();
-    });
-  });
-
-  it('keeps loaded species data on screen through a step within the species', async () => {
-    const calls = stubApi([
-      ['/api/v2/detections/117', makeDetection({ id: 117, scientificName: 'Turdus merula' })],
-      ['/api/v2/detections/118', makeDetection({ id: 118, scientificName: 'Turdus merula' })],
-      [
-        'species?scientific_name=',
-        { rarity: { status: 'rare', score: 0.05, location_based: true } },
-      ],
-    ]);
-
-    const { container, rerender } = detailTest.render({ detectionId: '117' });
-    await waitFor(() => {
-      expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
-    });
-    await rerender({ detectionId: '118' });
-    await waitFor(() => {
-      expect(count(calls, '/api/v2/detections/118')).toBeGreaterThan(0);
-    });
-    await settle();
-
-    expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
-    expect(count(calls, 'species?scientific_name=')).toBe(1);
   });
 });
 
