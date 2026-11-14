@@ -9,7 +9,8 @@
   Layout rule: no control in this panel moves when the state changes, and no
   space is held empty for text that may never come. The one line of status text
   (why a control is blocked, saving, an error) is the card's subtitle, which is
-  always there. The offer to ignore a species has a fixed slot at the end of the
+  always there; an error is also sent as a toast, which shows it in full and
+  announces it. The offer to ignore a species has a fixed slot at the end of the
   Keep row, shown only while it applies.
 -->
 <script lang="ts">
@@ -18,9 +19,10 @@
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import { t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
-  import { fetchWithCSRF } from '$lib/utils/api';
+  import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
+  import DetailCard from './DetailCard.svelte';
   import type { DetectionDetailData } from './detailTypes';
 
   type Verdict = 'correct' | 'false_positive';
@@ -30,11 +32,10 @@
     speciesName: string;
     /** False for visitors without review permission: the panel is then read-only. */
     canReview: boolean;
-    /**
-     * Whether the server can change a detection's species (it needs the current
-     * database format). Null while that is not known yet.
-     */
-    speciesChangeSupported: boolean | null;
+    /** Why the species cannot be changed now; empty when it can. */
+    speciesBlockedReason: string;
+    /** Takes the remaining height of the column the panel sits in. */
+    grow?: boolean;
     /** Opens the species dialog. */
     onWrongSpecies: () => void;
     /** Called after a change was saved, so the page can reload the detection. */
@@ -45,36 +46,34 @@
     detection,
     speciesName,
     canReview,
-    speciesChangeSupported,
+    speciesBlockedReason,
+    grow = false,
     onWrongSpecies,
     onChanged,
   }: Props = $props();
 
   const logger = loggers.ui;
-  const headingId = generateId('review-heading');
   const statusId = generateId('review-status');
 
   let saving = $state<Verdict | 'lock' | 'ignore' | null>(null);
   let errorMessage = $state('');
   let ignored = $state(false);
-  // Bumped to redraw the switch from the saved state after a change that did not go through
-  // (the native checkbox has already flipped by the time the request is refused).
-  let keepSwitchEpoch = $state(0);
+  // The Keep state asked for, shown while it is saved and until the reloaded detection has it.
+  let lockTarget = $state<boolean | null>(null);
 
   let verdictBlocked = $derived(!canReview || detection.locked);
-  let speciesBlocked = $derived(verdictBlocked || speciesChangeSupported === false);
+  let speciesBlocked = $derived(speciesBlockedReason !== '');
   let canIgnore = $derived(
     canReview && detection.verified === 'false_positive' && !detection.locked
   );
+  let keepValue = $derived(lockTarget ?? detection.locked);
 
-  // The one line of status text, the most pressing reason first.
+  // The one line of status text, the most pressing reason first. The blocked reasons
+  // come in the order the page puts them in speciesBlockedReason.
   let statusText = $derived.by(() => {
     if (errorMessage) return errorMessage;
     if (saving) return t('detections.detail.review.saving');
-    if (!canReview) return t('detections.detail.review.loginRequired');
-    if (detection.locked) return t('detections.detail.review.lockedHelp');
-    if (speciesChangeSupported === false) return t('detections.detail.review.legacyHelp');
-    return t('detections.detail.review.autosave');
+    return speciesBlockedReason || t('detections.detail.review.autosave');
   });
 
   // A different detection starts with a clean panel.
@@ -82,14 +81,17 @@
     void detection.id;
     errorMessage = '';
     ignored = false;
+    lockTarget = null;
   });
 
-  async function post(path: string, body: unknown): Promise<void> {
-    await fetchWithCSRF(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+  // The reloaded detection has the Keep state that was asked for.
+  $effect(() => {
+    if (lockTarget !== null && detection.locked === lockTarget) lockTarget = null;
+  });
+
+  function fail(message: string) {
+    errorMessage = message;
+    toastActions.error(message);
   }
 
   async function setVerdict(verdict: Verdict) {
@@ -97,7 +99,7 @@
     saving = verdict;
     errorMessage = '';
     try {
-      await post(`/api/v2/detections/${detection.id}/review`, { verified: verdict });
+      await api.post(`/api/v2/detections/${detection.id}/review`, { verified: verdict });
       toastActions.success(
         verdict === 'correct'
           ? t('detections.detail.review.savedCorrect')
@@ -106,27 +108,25 @@
       onChanged();
     } catch (error) {
       logger.error('Failed to save verdict', error, { action: 'review' });
-      errorMessage = t('common.review.errors.verificationFailed');
+      fail(t('common.review.errors.verificationFailed'));
     } finally {
       saving = null;
     }
   }
 
+  // A refused change leaves the switch as it was: ToggleField shows the value it is given.
   async function setLocked(locked: boolean) {
-    if (locked === detection.locked) return;
-    if (!canReview || saving !== null) {
-      keepSwitchEpoch += 1;
-      return;
-    }
+    if (locked === keepValue || !canReview || saving !== null) return;
     saving = 'lock';
     errorMessage = '';
+    lockTarget = locked;
     try {
-      await post(`/api/v2/detections/${detection.id}/lock`, { locked });
+      await api.post(`/api/v2/detections/${detection.id}/lock`, { locked });
       onChanged();
     } catch (error) {
       logger.error('Failed to change lock', error, { action: 'lock' });
-      errorMessage = t('common.review.errors.lockStatusFailed');
-      keepSwitchEpoch += 1;
+      lockTarget = null;
+      fail(t('common.review.errors.lockStatusFailed'));
     } finally {
       saving = null;
     }
@@ -137,7 +137,7 @@
     saving = 'ignore';
     errorMessage = '';
     try {
-      await post(`/api/v2/detections/${detection.id}/review`, {
+      await api.post(`/api/v2/detections/${detection.id}/review`, {
         verified: 'false_positive',
         ignore_species: detection.commonName,
       });
@@ -145,7 +145,7 @@
       toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });
-      errorMessage = t('common.review.errors.saveFailed');
+      fail(t('common.review.errors.saveFailed'));
     } finally {
       saving = null;
     }
@@ -156,19 +156,19 @@
   }
 </script>
 
-<section class="dd-review" aria-labelledby={headingId}>
-  <header class="dd-review-header">
-    <h2 id={headingId} class="dd-review-title">{t('detections.detail.review.title')}</h2>
+<DetailCard title={t('detections.detail.review.title')} padding="snug" {grow}>
+  {#snippet header()}
+    <!-- Not a live region: blocked reasons are read through aria-describedby on the
+         buttons, and results and errors are announced by their toasts. -->
     <p
       id={statusId}
       class="dd-review-status"
       class:dd-review-status-error={Boolean(errorMessage)}
-      role={errorMessage ? 'alert' : 'status'}
       title={statusText}
     >
       {statusText}
     </p>
-  </header>
+  {/snippet}
 
   <p class="dd-review-question">
     {t('detections.detail.review.question', { species: speciesName })}
@@ -215,24 +215,21 @@
   {#if canReview}
     <div class="dd-review-keep">
       <div class="dd-review-keep-toggle">
-        {#key keepSwitchEpoch}
-          <ToggleField
-            label={t('detections.detail.review.keep')}
-            description={t('detections.detail.review.keepHelp')}
-            icon={Lock}
-            value={detection.locked}
-            onUpdate={setLocked}
-          />
-        {/key}
+        <ToggleField
+          label={t('detections.detail.review.keep')}
+          description={t('detections.detail.review.keepHelp')}
+          icon={Lock}
+          value={keepValue}
+          onUpdate={setLocked}
+        />
       </div>
       <!-- A fixed slot: the button takes its place whether or not it is shown, so
-           the switch beside it does not move when a verdict changes. -->
+           the switch beside it does not move when a verdict changes. Hidden, it is
+           also out of the tab order and the accessibility tree. -->
       <div class="dd-review-ignore" class:dd-review-ignore-hidden={!canIgnore}>
         <Button
           variant="default"
           size="sm"
-          tabindex={canIgnore ? undefined : -1}
-          aria-hidden={canIgnore ? undefined : 'true'}
           aria-disabled={ignored ? 'true' : undefined}
           title={t('common.review.form.ignoreSpeciesHelp')}
           onclick={ignoreSpecies}
@@ -244,36 +241,10 @@
       </div>
     </div>
   {/if}
-</section>
+</DetailCard>
 
 <style>
-  .dd-review {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    padding: 0.875rem 1.25rem 1rem;
-    background-color: var(--color-base-100);
-    border: 1px solid var(--border-100);
-    border-radius: var(--radius-box);
-  }
-
-  .dd-review-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.625rem;
-    min-width: 0;
-  }
-
-  .dd-review-title {
-    flex: 0 0 auto;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
-  }
-
-  /* One line, always present; a longer message is cut and kept in the title. */
+  /* One line, always present; a longer message is cut here and shown in full in its toast. */
   .dd-review-status {
     flex: 1 1 0;
     min-width: 0;
@@ -281,7 +252,7 @@
     font-size: 0.75rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-review-status-error {
@@ -289,7 +260,6 @@
   }
 
   .dd-review-question {
-    margin-top: 0.625rem;
     font-size: 1rem;
     font-weight: 600;
   }

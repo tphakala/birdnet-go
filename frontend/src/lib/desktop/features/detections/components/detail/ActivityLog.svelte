@@ -9,10 +9,13 @@
 <script lang="ts">
   import { ArrowLeftRight, AudioLines, Check, Lock, MessageSquare, Radar, X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-  import { fetchWithCSRF } from '$lib/utils/api';
+  import { toastActions } from '$lib/stores/toast';
+  import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { generateId } from '$lib/utils/uuid';
   import DetailCard from './DetailCard.svelte';
+  import { toPercent } from './detailFormat';
   import { wallClockDateTime, wallClockTime } from './detailTime';
   import type { DetectionDetailData } from './detailTypes';
 
@@ -33,24 +36,21 @@
     detection: DetectionDetailData;
     speciesName: string;
     canReview: boolean;
-    /** The model's own species when a reviewer changed it; empty otherwise. */
-    originalSpeciesName?: string;
-    /** The model's confidence in its own species, 0 to 1. */
-    originalConfidence?: number;
     onChanged: () => void;
   }
 
-  let {
-    detection,
-    speciesName,
-    canReview,
-    originalSpeciesName = '',
-    originalConfidence,
-    onChanged,
-  }: Props = $props();
+  let { detection, speciesName, canReview, onChanged }: Props = $props();
 
   const logger = loggers.ui;
-  const PERCENT = 100;
+  const ENTRY_ICONS: Record<EntryKind, typeof Radar> = {
+    detected: Radar,
+    clip: AudioLines,
+    correct: Check,
+    false_positive: X,
+    species: ArrowLeftRight,
+    locked: Lock,
+    note: MessageSquare,
+  };
   const noteId = generateId('detail-note');
   const noteHelpId = generateId('detail-note-help');
 
@@ -58,7 +58,12 @@
   let saving = $state(false);
   let errorMessage = $state<string | null>(null);
 
-  let notesBlocked = $derived(detection.locked);
+  // The model's own species, when a reviewer changed it to another; empty otherwise.
+  let originalSpeciesName = $derived.by(() => {
+    const original = detection.originalSpecies;
+    if (!original || original.scientificName === detection.scientificName) return '';
+    return localizeSpeciesName(original.scientificName, original.commonName);
+  });
 
   let entries = $derived.by(() => {
     const list: Entry[] = [];
@@ -73,7 +78,8 @@
       at: detectedAt,
       title: t('detections.detail.log.detected', {
         species: originalSpeciesName || speciesName,
-        confidence: Math.round((originalConfidence ?? detection.confidence ?? 0) * PERCENT),
+        // A species change keeps the confidence: it is the model's own.
+        confidence: toPercent(detection.confidence),
       }),
       detail: begin && end ? t('detections.detail.log.captureWindow', { begin, end }) : undefined,
     });
@@ -95,15 +101,13 @@
         detection.verified === 'correct'
           ? t('common.review.status.verifiedCorrect')
           : t('common.review.status.falsePositive');
-      const changed =
-        detection.reviewedAt &&
-        detection.reviewUpdatedAt &&
-        detection.reviewedAt !== detection.reviewUpdatedAt;
-      if (changed && detection.reviewedAt) {
+      const { reviewedAt, reviewUpdatedAt } = detection;
+      const changed = Boolean(reviewedAt && reviewUpdatedAt && reviewedAt !== reviewUpdatedAt);
+      if (changed && reviewedAt) {
         list.push({
           key: 'review-first',
           kind: detection.verified,
-          at: detection.reviewedAt,
+          at: reviewedAt,
           title: t('detections.detail.log.firstReviewed'),
         });
       }
@@ -163,16 +167,13 @@
 
   async function addNote() {
     const text = note.trim();
-    if (!text || saving || notesBlocked) return;
+    if (!text || saving || detection.locked) return;
     saving = true;
     errorMessage = null;
     try {
-      await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment: text }),
-      });
+      await api.post(`/api/v2/detections/${detection.id}/review`, { comment: text });
       note = '';
+      toastActions.success(t('detections.detail.log.noteAdded'));
       onChanged();
     } catch (error) {
       logger.error('Failed to add note', error, { action: 'note' });
@@ -186,23 +187,10 @@
 <DetailCard title={t('detections.detail.log.title')} subtitle={t('detections.detail.log.subtitle')}>
   <ol class="dd-log">
     {#each entries as entry (entry.key)}
+      {@const Icon = ENTRY_ICONS[entry.kind]}
       <li class="dd-log-entry">
         <span class="dd-log-icon dd-log-icon-{entry.kind}" aria-hidden="true">
-          {#if entry.kind === 'detected'}
-            <Radar class="size-3.5" />
-          {:else if entry.kind === 'clip'}
-            <AudioLines class="size-3.5" />
-          {:else if entry.kind === 'correct'}
-            <Check class="size-3.5" />
-          {:else if entry.kind === 'false_positive'}
-            <X class="size-3.5" />
-          {:else if entry.kind === 'species'}
-            <ArrowLeftRight class="size-3.5" />
-          {:else if entry.kind === 'locked'}
-            <Lock class="size-3.5" />
-          {:else}
-            <MessageSquare class="size-3.5" />
-          {/if}
+          <Icon class="size-3.5" />
         </span>
         <div class="dd-log-content">
           <p class="dd-log-time">
@@ -231,13 +219,13 @@
       <label class="dd-note-label" for={noteId}>{t('detections.detail.log.addNote')}</label>
       <textarea
         id={noteId}
-        class="dd-note-input"
+        class="dd-note-input focus-ring"
         rows="2"
         bind:value={note}
         placeholder={t('common.review.form.commentPlaceholder')}
-        readonly={notesBlocked}
-        aria-describedby={notesBlocked ? noteHelpId : undefined}></textarea>
-      {#if notesBlocked}
+        readonly={detection.locked}
+        aria-describedby={detection.locked ? noteHelpId : undefined}></textarea>
+      {#if detection.locked}
         <p id={noteHelpId} class="dd-note-help">{t('detections.detail.log.lockedHelp')}</p>
       {/if}
       {#if errorMessage}
@@ -246,8 +234,8 @@
       <div class="dd-note-actions">
         <button
           type="submit"
-          class="dd-note-submit"
-          aria-disabled={!note.trim() || saving || notesBlocked ? 'true' : undefined}
+          class="dd-note-submit focus-ring"
+          aria-disabled={!note.trim() || saving || detection.locked ? 'true' : undefined}
         >
           {saving ? t('detections.detail.review.saving') : t('detections.detail.log.saveNote')}
         </button>
@@ -292,7 +280,7 @@
     border: 1px solid var(--border-200);
     border-radius: 50%;
     background-color: var(--color-base-100);
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-log-icon-correct {
@@ -314,7 +302,7 @@
   .dd-log-time {
     font-size: 0.6875rem;
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-log-title {
@@ -325,7 +313,7 @@
     overflow: hidden;
     font-size: 0.75rem;
     text-overflow: ellipsis;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-log-body {
@@ -363,15 +351,10 @@
     background-color: var(--color-base-100);
   }
 
-  .dd-note-input:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
-  }
-
   .dd-note-help {
     margin-top: 0.375rem;
     font-size: 0.75rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-note-error {
@@ -400,13 +383,9 @@
     background-color: var(--color-primary-hover);
   }
 
+  /* Dimmed by colour, not opacity, so the focus ring keeps its contrast (as ui/Button). */
   .dd-note-submit[aria-disabled='true'] {
     cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  .dd-note-submit:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    background-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
   }
 </style>

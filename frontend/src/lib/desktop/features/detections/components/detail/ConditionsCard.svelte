@@ -24,25 +24,29 @@
     Thermometer,
     Wind,
   } from '@lucide/svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import WeatherSvgIcon from '$lib/desktop/components/ui/WeatherSvgIcon.svelte';
   import { t } from '$lib/i18n';
   import {
-    convertTemperature,
     convertWindSpeed,
-    getTemperatureSymbol,
+    formatTemperatureCompact,
     getWindSpeedUnit,
     type TemperatureUnit,
   } from '$lib/utils/formatters';
   import {
     getBasmiliusIconName,
     getMoonPhaseI18nKey,
+    getMoonPhaseIconName,
     translateWeatherCondition,
   } from '$lib/utils/weather';
   import DetailCard from './DetailCard.svelte';
+  import { barHeight, formatDecimal, PERCENT } from './detailFormat';
   import {
     MINUTES_PER_DAY,
     compassPoint,
     dayPercent,
+    detectionMinute,
+    sunEventTimes,
     wallClockMinutes,
     wallClockTime,
   } from './detailTime';
@@ -59,6 +63,10 @@
     sun?: SunTimes | null;
     /** The species' detections per hour of day, for the activity bars. */
     hourlyActivity?: HourlyBucket[] | null;
+    /** True while the weather or the sun times are still being requested. */
+    weatherLoading?: boolean;
+    /** True while the hourly activity is still being requested. */
+    activityLoading?: boolean;
     speciesName: string;
   }
 
@@ -67,11 +75,12 @@
     weather = null,
     sun = null,
     hourlyActivity = null,
+    weatherLoading = false,
+    activityLoading = false,
     speciesName,
   }: Props = $props();
 
   const HOURS_PER_DAY = 24;
-  const PERCENT = 100;
   const HALF_TURN_DEGREES = 180;
   const AXIS_HOURS = [0, 6, 12, 18, 24];
   const MINUTES_PER_HOUR = 60;
@@ -83,30 +92,35 @@
   const NIGHT_ARC_DEPTH_PERCENT = 24;
   // Past this point of the day axis the time label sits left of the marker so it stays inside.
   const LABEL_FLIP_PERCENT = 80;
-  // Smallest bar height, in percent, for an hour that has any detections.
-  const MIN_BAR_PERCENT = 8;
   // Height of the busiest hour's bar, in percent of the ground band.
   const ACTIVITY_MAX_PERCENT = 82;
 
   let units = $derived<TemperatureUnit>(detection.weather?.units ?? 'metric');
   let hourly = $derived(weather?.hourly);
+  // Nothing to show yet, but the answer is still on its way: placeholders instead of dashes.
+  let weatherPending = $derived(weatherLoading && weather === null);
 
-  // Sun events as minutes of the station's day. The sun endpoint is preferred;
-  // the weather provider's sunrise and sunset are the fallback.
-  let sunriseTime = $derived(sun?.sunrise ?? weather?.daily?.sunrise);
-  let sunsetTime = $derived(sun?.sunset ?? weather?.daily?.sunset);
-  let sunrise = $derived(wallClockMinutes(sunriseTime));
-  let sunset = $derived(wallClockMinutes(sunsetTime));
-  let dawn = $derived(wallClockMinutes(sun?.civil_dawn) ?? sunrise);
-  let dusk = $derived(wallClockMinutes(sun?.civil_dusk) ?? sunset);
-  let moment = $derived(wallClockMinutes(detection.timestamp ?? `T${detection.time}`));
-  let hasSun = $derived(sunrise !== null && sunset !== null && sunrise < sunset);
+  let sunTimes = $derived(sunEventTimes(sun, weather));
+  let moment = $derived(detectionMinute(detection));
+
+  // Sun events as minutes of the station's day; null without a usable sunrise and sunset.
+  // Without civil twilight times the twilight ramps start at sunrise and sunset.
+  let sunSpan = $derived.by(() => {
+    const sunrise = wallClockMinutes(sunTimes.sunrise);
+    const sunset = wallClockMinutes(sunTimes.sunset);
+    if (sunrise === null || sunset === null || sunrise >= sunset) return null;
+    return {
+      sunrise,
+      sunset,
+      dawn: wallClockMinutes(sun?.civil_dawn) ?? sunrise,
+      dusk: wallClockMinutes(sun?.civil_dusk) ?? sunset,
+    };
+  });
 
   // Background gradient: night, twilight ramp, day, twilight ramp, night.
   let skyGradient = $derived.by(() => {
-    if (!hasSun || sunrise === null || sunset === null || dawn === null || dusk === null) {
-      return 'linear-gradient(to right, var(--sky-night), var(--sky-night))';
-    }
+    if (!sunSpan) return 'linear-gradient(to right, var(--sky-night), var(--sky-night))';
+    const { sunrise, sunset, dawn, dusk } = sunSpan;
     const stops = [
       `var(--sky-night) 0%`,
       `var(--sky-night) ${dayPercent(dawn)}%`,
@@ -120,29 +134,31 @@
     return `linear-gradient(to right, ${stops.join(', ')})`;
   });
 
+  let sunIsUp = $derived(
+    sunSpan !== null && moment !== null && moment >= sunSpan.sunrise && moment <= sunSpan.sunset
+  );
+
+  /** Height of half an ellipse at `elapsed` minutes into an arc `length` minutes long, 0 to 1. */
+  function arcHeight(elapsed: number, length: number): number {
+    const half = length / 2;
+    const offset = (elapsed - half) / half;
+    return Math.sqrt(Math.max(0, 1 - offset * offset));
+  }
+
   // Height of the sun marker relative to the horizon. The day arc is half an
   // ellipse from sunrise to sunset; the night arc is its shallower mirror from
   // sunset round midnight to the next sunrise.
-  let sunIsUp = $derived(
-    hasSun && moment !== null && sunrise !== null && sunset !== null
-      ? moment >= sunrise && moment <= sunset
-      : false
-  );
-
   let markerTop = $derived.by(() => {
-    if (!hasSun || moment === null || sunrise === null || sunset === null) {
-      return HORIZON_PERCENT;
-    }
+    if (!sunSpan || moment === null) return HORIZON_PERCENT;
+    const { sunrise, sunset } = sunSpan;
     if (sunIsUp) {
-      const half = (sunset - sunrise) / 2;
-      const offset = (moment - (sunrise + half)) / half;
-      return HORIZON_PERCENT - DAY_ARC_HEIGHT_PERCENT * Math.sqrt(Math.max(0, 1 - offset * offset));
+      return (
+        HORIZON_PERCENT - DAY_ARC_HEIGHT_PERCENT * arcHeight(moment - sunrise, sunset - sunrise)
+      );
     }
-    const nightLength = MINUTES_PER_DAY - (sunset - sunrise);
-    const half = nightLength / 2;
     const sinceSunset = moment >= sunset ? moment - sunset : moment + MINUTES_PER_DAY - sunset;
-    const offset = (sinceSunset - half) / half;
-    return HORIZON_PERCENT + NIGHT_ARC_DEPTH_PERCENT * Math.sqrt(Math.max(0, 1 - offset * offset));
+    const nightLength = MINUTES_PER_DAY - (sunset - sunrise);
+    return HORIZON_PERCENT + NIGHT_ARC_DEPTH_PERCENT * arcHeight(sinceSunset, nightLength);
   });
 
   // Activity bars, scaled to the busiest hour.
@@ -175,12 +191,12 @@
       : 'not-available'
   );
 
-  function degrees(value: number): string {
-    return `${Math.round(convertTemperature(value, units))}${getTemperatureSymbol(units)}`;
+  function speed(value: number): string {
+    return formatDecimal(convertWindSpeed(value, units));
   }
 
-  function speed(value: number): string {
-    return convertWindSpeed(value, units).toFixed(1);
+  function hourLabel(hour: number): string {
+    return `${String(hour).padStart(2, '0')}:00`;
   }
 
   // Wind as "2.5 (5.3) m/s": speed, then the gust in brackets, as the rest of the app writes it.
@@ -190,11 +206,67 @@
     return `${speed(windSpeed)}${gust} ${getWindSpeedUnit(units)}`;
   });
 
-  let windLabel = $derived(
-    hourly?.wind_deg !== undefined
-      ? t('detections.detail.conditions.windFrom', { direction: compassPoint(hourly.wind_deg) })
-      : t('detections.weather.labels.wind')
-  );
+  // The six tiles, always: a value that was not recorded shows a dash. The wind tile's
+  // arrow points the way the wind blows, when the direction is known.
+  let tiles = $derived([
+    {
+      key: 'wind',
+      icon: hourly?.wind_deg !== undefined ? Navigation : Wind,
+      rotate: hourly?.wind_deg !== undefined ? hourly.wind_deg + HALF_TURN_DEGREES : undefined,
+      label:
+        hourly?.wind_deg !== undefined
+          ? t('detections.detail.conditions.windFrom', {
+              direction: compassPoint(hourly.wind_deg),
+            })
+          : t('detections.weather.labels.wind'),
+      value: windValue,
+      suffix: '',
+    },
+    {
+      key: 'precipitation',
+      icon: CloudRain,
+      rotate: undefined,
+      label: t('detections.detail.conditions.precipitation'),
+      value:
+        hourly?.precipitation !== undefined ? `${formatDecimal(hourly.precipitation)} mm` : MISSING,
+      suffix: hourly?.precipitation && hourly.precipitation_type ? hourly.precipitation_type : '',
+    },
+    {
+      key: 'clouds',
+      icon: Cloud,
+      rotate: undefined,
+      label: t('detections.weather.labels.cloudCover'),
+      value: hourly?.clouds !== undefined ? `${hourly.clouds}%` : MISSING,
+      suffix: '',
+    },
+    {
+      key: 'humidity',
+      icon: Droplets,
+      rotate: undefined,
+      label: t('detections.weather.labels.humidity'),
+      value: humidity !== undefined ? `${humidity}%` : MISSING,
+      suffix: '',
+    },
+    {
+      key: 'pressure',
+      icon: Gauge,
+      rotate: undefined,
+      label: t('detections.weather.labels.pressure'),
+      value: hourly?.pressure ? `${hourly.pressure} hPa` : MISSING,
+      suffix: '',
+    },
+    {
+      key: 'feelsLike',
+      icon: Thermometer,
+      rotate: undefined,
+      label: t('detections.detail.conditions.feelsLike'),
+      value:
+        hourly?.feels_like !== undefined
+          ? formatTemperatureCompact(hourly.feels_like, units)
+          : MISSING,
+      suffix: '',
+    },
+  ]);
 
   let moonName = $derived(
     detection.weather?.moonPhaseName
@@ -202,22 +274,20 @@
       : ''
   );
   let moonIcon = $derived(
-    detection.weather?.moonPhaseName
-      ? `moon-${detection.weather.moonPhaseName
-          .toLowerCase()
-          .replace(/\s+moon$/, '')
-          .replace(/\s+/g, '-')}`
-      : ''
+    detection.weather?.moonPhaseName ? getMoonPhaseIconName(detection.weather.moonPhaseName) : ''
   );
 </script>
 
-{#snippet tile(label: string, value: string, suffix: string)}
-  <div class="dd-tile-text">
-    <dt class="dd-tile-label">{label}</dt>
-    <dd class="dd-tile-value">
-      {value}{#if suffix}<span class="dd-tile-suffix">{suffix}</span>{/if}
-    </dd>
-  </div>
+{#snippet sunEvent(Icon: typeof Sunrise, label: string, time: string | undefined)}
+  <span class="dd-sky-legend-item">
+    <Icon class="size-3.5" />
+    {label}
+    {#if !wallClockTime(time) && weatherPending}
+      <Skeleton inline className="h-3 w-9" />
+    {:else}
+      <strong>{wallClockTime(time) || MISSING}</strong>
+    {/if}
+  </span>
 {/snippet}
 
 <DetailCard title={t('detections.detail.conditions.title')} fill={true}>
@@ -230,39 +300,55 @@
         role="group"
         aria-label={t('detections.detail.conditions.skyLabel', {
           time: detection.time,
-          sunrise: wallClockTime(sunriseTime) || '?',
-          sunset: wallClockTime(sunsetTime) || '?',
+          sunrise: wallClockTime(sunTimes.sunrise) || '?',
+          sunset: wallClockTime(sunTimes.sunset) || '?',
         })}
       >
-        {#if hasSun && sunrise !== null && sunset !== null}
+        {#if sunSpan}
           <!-- Sun path above the horizon between sunrise and sunset -->
           <div
             class="dd-sky-arc"
-            style:left="{dayPercent(sunrise)}%"
-            style:width="{dayPercent(sunset) - dayPercent(sunrise)}%"
+            style:left="{dayPercent(sunSpan.sunrise)}%"
+            style:width="{dayPercent(sunSpan.sunset) - dayPercent(sunSpan.sunrise)}%"
             style:top="{HORIZON_PERCENT - DAY_ARC_HEIGHT_PERCENT}%"
             style:height="{DAY_ARC_HEIGHT_PERCENT * 2}%"
           ></div>
         {/if}
         <div class="dd-sky-horizon" style:top="{HORIZON_PERCENT}%"></div>
         {#if activity}
-          <div
-            class="dd-activity"
-            style:height="{PERCENT - HORIZON_PERCENT}%"
-            role="img"
-            aria-label={t('detections.detail.conditions.activityLabel', { species: speciesName })}
-          >
+          <!-- The bars are drawn for the eye; the table below carries their values. -->
+          <div class="dd-activity" style:height="{PERCENT - HORIZON_PERCENT}%" aria-hidden="true">
             {#each activity as bar (bar.hour)}
               <span
                 class="dd-activity-bar"
                 class:dd-activity-bar-now={bar.hour === detectionHour}
-                style:height="{Math.max(
-                  bar.share * ACTIVITY_MAX_PERCENT,
-                  bar.count > 0 ? MIN_BAR_PERCENT : 0
-                )}%"
-                title="{String(bar.hour).padStart(2, '0')}:00  {bar.count}"
+                style:height="{barHeight(bar.share, bar.count, ACTIVITY_MAX_PERCENT)}%"
+                title="{hourLabel(bar.hour)}  {bar.count}"
               ></span>
             {/each}
+          </div>
+          <table class="sr-only">
+            <caption>
+              {t('detections.detail.conditions.activityLabel', { species: speciesName })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('detections.detail.identity.time')}</th>
+                <th scope="col">{t('analytics.charts.detections')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each activity as bar (bar.hour)}
+                <tr>
+                  <th scope="row">{hourLabel(bar.hour)}</th>
+                  <td>{bar.count}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else if activityLoading && hourlyActivity === null}
+          <div class="dd-activity-pending" style:height="{PERCENT - HORIZON_PERCENT}%">
+            <Skeleton className="h-full w-full rounded-none" />
           </div>
         {/if}
         {#if moment !== null}
@@ -290,16 +376,8 @@
 
       <!-- Two lines, both always present. -->
       <p class="dd-sky-legend">
-        <span class="dd-sky-legend-item">
-          <Sunrise class="size-3.5" />
-          {t('detections.detail.conditions.sunrise')}
-          <strong>{wallClockTime(sunriseTime) || MISSING}</strong>
-        </span>
-        <span class="dd-sky-legend-item">
-          <Sunset class="size-3.5" />
-          {t('detections.detail.conditions.sunset')}
-          <strong>{wallClockTime(sunsetTime) || MISSING}</strong>
-        </span>
+        {@render sunEvent(Sunrise, t('detections.detail.conditions.sunrise'), sunTimes.sunrise)}
+        {@render sunEvent(Sunset, t('detections.detail.conditions.sunset'), sunTimes.sunset)}
       </p>
       <p class="dd-sky-legend dd-sky-legend-activity">
         <span class="dd-sky-legend-swatch" aria-hidden="true"></span>
@@ -313,14 +391,21 @@
     <div class="dd-weather-now">
       <WeatherSvgIcon icon={conditionIcon} size={48} title={description ?? ''} />
       <div class="dd-weather-now-text">
-        <span class="dd-weather-temp"
-          >{temperature !== undefined ? degrees(temperature) : MISSING}</span
-        >
-        <span class="dd-weather-desc">
-          {description
-            ? translateWeatherCondition(description)
-            : t('detections.weather.noDataAvailable')}
-        </span>
+        {#if !hasWeather && weatherPending}
+          <span class="dd-weather-temp"><Skeleton inline className="h-6 w-14" /></span>
+          <span class="dd-weather-desc"><Skeleton inline className="h-3 w-32" /></span>
+        {:else}
+          <span class="dd-weather-temp"
+            >{temperature !== undefined
+              ? formatTemperatureCompact(temperature, units)
+              : MISSING}</span
+          >
+          <span class="dd-weather-desc">
+            {description
+              ? translateWeatherCondition(description)
+              : t('detections.weather.noDataAvailable')}
+          </span>
+        {/if}
       </div>
       {#if moonName}
         <div class="dd-weather-moon">
@@ -339,67 +424,38 @@
       {/if}
     </div>
 
-    <!-- Six tiles, always: a value that was not recorded shows a dash. -->
     <dl class="dd-tiles">
-      <div class="dd-tile">
-        {#if hourly?.wind_deg !== undefined}
-          <span
-            class="dd-tile-icon"
-            style:transform="rotate({hourly.wind_deg + HALF_TURN_DEGREES}deg)"
-          >
-            <Navigation class="size-3.5" />
-          </span>
-        {:else}
-          <span class="dd-tile-icon"><Wind class="size-3.5" /></span>
-        {/if}
-        {@render tile(windLabel, windValue, '')}
-      </div>
-      <div class="dd-tile">
-        <span class="dd-tile-icon"><CloudRain class="size-3.5" /></span>
-        {@render tile(
-          t('detections.detail.conditions.precipitation'),
-          hourly?.precipitation !== undefined ? `${hourly.precipitation.toFixed(1)} mm` : MISSING,
-          hourly?.precipitation && hourly.precipitation_type ? hourly.precipitation_type : ''
-        )}
-      </div>
-      <div class="dd-tile">
-        <span class="dd-tile-icon"><Cloud class="size-3.5" /></span>
-        {@render tile(
-          t('detections.weather.labels.cloudCover'),
-          hourly?.clouds !== undefined ? `${hourly.clouds}%` : MISSING,
-          ''
-        )}
-      </div>
-      <div class="dd-tile">
-        <span class="dd-tile-icon"><Droplets class="size-3.5" /></span>
-        {@render tile(
-          t('detections.weather.labels.humidity'),
-          humidity !== undefined ? `${humidity}%` : MISSING,
-          ''
-        )}
-      </div>
-      <div class="dd-tile">
-        <span class="dd-tile-icon"><Gauge class="size-3.5" /></span>
-        {@render tile(
-          t('detections.weather.labels.pressure'),
-          hourly?.pressure ? `${hourly.pressure} hPa` : MISSING,
-          ''
-        )}
-      </div>
-      <div class="dd-tile">
-        <span class="dd-tile-icon"><Thermometer class="size-3.5" /></span>
-        {@render tile(
-          t('detections.detail.conditions.feelsLike'),
-          hourly?.feels_like !== undefined ? degrees(hourly.feels_like) : MISSING,
-          ''
-        )}
-      </div>
+      {#each tiles as tile (tile.key)}
+        <div class="dd-tile">
+          <dt class="dd-tile-label">
+            <span
+              class="dd-tile-icon"
+              style:transform={tile.rotate === undefined ? undefined : `rotate(${tile.rotate}deg)`}
+              aria-hidden="true"
+            >
+              <tile.icon class="size-3.5" />
+            </span>
+            {tile.label}
+          </dt>
+          <dd class="dd-tile-value">
+            {#if tile.value === MISSING && weatherPending}
+              <Skeleton inline className="h-3 w-12" />
+            {:else}
+              {tile.value}{#if tile.suffix}<span class="dd-tile-suffix">{tile.suffix}</span>{/if}
+            {/if}
+          </dd>
+        </div>
+      {/each}
     </dl>
 
     <p class="dd-weather-note">
-      {hourly?.time
-        ? t('detections.detail.conditions.observedAt', { time: hourly.time.slice(0, 5) })
-        : t('detections.detail.conditions.notObserved')}
+      {#if !hourly?.time && weatherPending}
+        <Skeleton inline className="h-2.5 w-40" />
+      {:else}
+        {hourly?.time
+          ? t('detections.detail.conditions.observedAt', { time: hourly.time.slice(0, 5) })
+          : t('detections.detail.conditions.notObserved')}
+      {/if}
     </p>
   </div>
 </DetailCard>
@@ -526,6 +582,18 @@
     background-color: rgb(255 255 255 / 0.92);
   }
 
+  /* While the hourly counts load: a faint pulsing band where the bars will stand. */
+  .dd-activity-pending {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-end;
+    padding-top: 1.5rem;
+    opacity: 0.3;
+  }
+
   .dd-sky-axis {
     position: relative;
     flex: 0 0 auto;
@@ -533,7 +601,7 @@
     margin-top: 0.125rem;
     font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-sky-axis span {
@@ -560,7 +628,7 @@
     margin-top: 0.125rem;
     font-size: 0.75rem;
     white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-sky-legend-activity {
@@ -644,7 +712,7 @@
 
   .dd-weather-moon-lit {
     font-size: 0.6875rem;
-    color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-tiles {
@@ -662,28 +730,25 @@
     }
   }
 
+  /* The icon sits in the tile's left padding, inside the term, so each tile holds only
+     its term and its value. */
   .dd-tile {
+    position: relative;
     display: flex;
-    align-items: flex-start;
-    gap: 0.375rem;
+    flex-direction: column;
     min-width: 0;
     height: 2.875rem;
-    padding: 0.375rem 0.5rem;
+    padding: 0.375rem 0.5rem 0.375rem 1.75rem;
     border-radius: 0.5rem;
     background-color: var(--color-base-200);
   }
 
   .dd-tile-icon {
+    position: absolute;
+    top: 0.4375rem;
+    left: 0.5rem;
     display: inline-flex;
-    flex: 0 0 auto;
-    margin-top: 0.0625rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
-  }
-
-  .dd-tile-text {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
+    color: var(--text-subtle);
   }
 
   .dd-tile-label {
@@ -692,7 +757,7 @@
     line-height: 1rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-tile-value {
@@ -709,7 +774,16 @@
     margin-left: 0.25rem;
     font-size: 0.6875rem;
     font-weight: 400;
-    color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+    color: var(--text-subtle);
+  }
+
+  /* Windows contrast themes drop background colours and gradients. The sky's colours
+     carry the day and night, and the activity bars and the marker inside it are the data,
+     so the whole strip keeps its own paint. */
+  @media (forced-colors: active) {
+    .dd-sky {
+      forced-color-adjust: none;
+    }
   }
 
   .dd-weather-note {
@@ -721,6 +795,6 @@
     line-height: 1rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 </style>

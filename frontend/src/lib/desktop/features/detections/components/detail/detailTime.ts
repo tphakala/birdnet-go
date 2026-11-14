@@ -5,6 +5,10 @@
  * shows station time, so these helpers read the clock fields straight from the
  * string instead of converting through the browser's time zone.
  */
+import { getLocale } from '$lib/i18n';
+import { addDays } from '$lib/utils/date';
+import { PERCENT } from './detailFormat';
+import type { DetectionDetailData, DetectionWeather, SunTimes } from './detailTypes';
 
 export const MINUTES_PER_DAY = 1440;
 const MINUTES_PER_HOUR = 60;
@@ -64,21 +68,25 @@ export function wallClockDateTime(timestamp: string | undefined | null): string 
   return [date, time].filter(Boolean).join(' ');
 }
 
+const LONG_DATE: Intl.DateTimeFormatOptions = {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+};
+const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+
 /**
- * A calendar date formatted for display ("Sat 14 Nov 2026" in English).
- * The date is built from its fields, so the browser's zone cannot shift the day.
+ * A calendar date in the UI language ("Sat, Nov 14, 2026" in English); with
+ * `short`, the day and month only. The date is built from its fields, so the
+ * browser's zone cannot shift the day.
  */
-export function formatCalendarDate(date: string | undefined | null, locale?: string): string {
+export function formatCalendarDate(date: string | undefined | null, short = false): string {
   if (!date) return '';
   const match = DATE_PATTERN.exec(date);
   if (!match) return date;
   const value = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return value.toLocaleDateString(locale, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  return value.toLocaleDateString(getLocale(), short ? SHORT_DATE : LONG_DATE);
 }
 
 /** Seconds between two RFC3339 timestamps, or null when either is unparsable. */
@@ -95,10 +103,33 @@ export function secondsBetween(
 
 /** Position of a minute of the day on a 0 to 100 percent day axis. */
 export function dayPercent(minutes: number): number {
-  return (Math.min(Math.max(minutes, 0), MINUTES_PER_DAY) / MINUTES_PER_DAY) * 100;
+  return (Math.min(Math.max(minutes, 0), MINUTES_PER_DAY) / MINUTES_PER_DAY) * PERCENT;
 }
 
-export type SunEvent = 'sunrise' | 'sunset';
+/** First day of a window of `days` calendar days that ends on `date` ("YYYY-MM-DD"). */
+export function dailyWindowStart(date: string, days: number): string {
+  return addDays(date, -(days - 1));
+}
+
+/** Minute of the station's day at which a detection was made, or null when unknown. */
+export function detectionMinute(
+  detection: Pick<DetectionDetailData, 'timestamp' | 'time'>
+): number | null {
+  return wallClockMinutes(detection.timestamp ?? `T${detection.time}`);
+}
+
+/** Sunrise and sunset of a detection's day: the sun endpoint first, the weather provider's as a fallback. */
+export function sunEventTimes(
+  sun: SunTimes | null | undefined,
+  weather: DetectionWeather | null | undefined
+): { sunrise?: string; sunset?: string } {
+  return {
+    sunrise: sun?.sunrise ?? weather?.daily?.sunrise,
+    sunset: sun?.sunset ?? weather?.daily?.sunset,
+  };
+}
+
+type SunEvent = 'sunrise' | 'sunset';
 
 /** How far a moment is from the nearest sunrise or sunset. */
 export interface SunOffset {

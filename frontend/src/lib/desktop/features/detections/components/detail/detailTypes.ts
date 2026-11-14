@@ -80,7 +80,6 @@ export interface SunTimes {
 export interface AlternatePrediction {
   scientificName: string;
   commonName?: string;
-  speciesCode?: string;
   confidence: number;
   /** True for the model's own pick, kept on record after a reviewer changed the species. */
   original?: boolean;

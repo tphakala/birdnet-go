@@ -1,7 +1,8 @@
 <!--
   DetailNavBar - breadcrumb and older/newer navigation of the detection detail page.
-  Two pairs of buttons step through all detections and through detections of the
-  same species, by detection ID.
+  Two pairs of links step through all detections and through detections of the
+  same species, by detection ID. A step with nowhere to go stays in place as a
+  blocked link (the same element, so keyboard focus survives the next step).
 
   The step buttons keep their place on screen: both groups have a fixed width and
   stay on the first line, so a long species name is cut short instead of pushing
@@ -11,6 +12,8 @@
 <script lang="ts">
   import { ArrowLeft, ChevronLeft, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import type { DetectionNeighbors } from './detailTypes';
 
   interface Props {
@@ -21,57 +24,63 @@
     neighbors: DetectionNeighbors | null;
     /** False when the server cannot step between detections; the groups are then left out. */
     available: boolean;
-    onNavigate: (_id: number) => void;
-    onBack: () => void;
   }
 
-  let { speciesName, date, time, neighbors, available, onNavigate, onBack }: Props = $props();
+  let { speciesName, date, time, neighbors, available }: Props = $props();
 
-  function go(id: number | null) {
-    if (id !== null) onNavigate(id);
+  const listUrl = buildAppUrl('/ui/detections');
+
+  function blockClick(event: MouseEvent) {
+    event.preventDefault();
   }
 </script>
 
-{#snippet stepButton(id: number | null, label: string, emptyLabel: string, older: boolean)}
-  <button
-    type="button"
-    class="dd-nav-step"
+{#snippet stepLink(id: number | null, label: string, emptyLabel: string, older: boolean)}
+  <a
+    class="dd-nav-step focus-ring"
+    href={id === null ? undefined : buildAppUrl(`/ui/detections/${id}`)}
+    role={id === null ? 'link' : undefined}
+    tabindex={id === null ? 0 : undefined}
+    aria-disabled={id === null ? 'true' : undefined}
     aria-label={id === null ? emptyLabel : label}
     title={id === null ? emptyLabel : label}
-    aria-disabled={id === null ? 'true' : undefined}
-    onclick={() => go(id)}
+    onclick={id === null ? blockClick : handleAppLinkClick}
   >
     {#if older}
       <ChevronLeft class="size-4" />
     {:else}
       <ChevronRight class="size-4" />
     {/if}
-  </button>
+  </a>
 {/snippet}
 
 <nav class="dd-nav" aria-label={t('detections.detail.nav.label')}>
-  <div class="dd-nav-trail">
-    <button type="button" class="dd-nav-back" onclick={onBack}>
-      <ArrowLeft class="size-4" />
-      <span>{t('detections.detail.nav.back')}</span>
-    </button>
-    <span class="dd-nav-sep" aria-hidden="true">/</span>
-    <span class="dd-nav-crumb dd-nav-crumb-species">{speciesName}</span>
-    <span class="dd-nav-sep" aria-hidden="true">/</span>
-    <span class="dd-nav-crumb dd-nav-crumb-time">{date} {time}</span>
-  </div>
+  <ol class="dd-nav-trail">
+    <li class="dd-nav-item">
+      <a class="dd-nav-back focus-ring" href={listUrl} onclick={handleAppLinkClick}>
+        <ArrowLeft class="size-4" />
+        <span>{t('detections.detail.nav.back')}</span>
+      </a>
+    </li>
+    <li class="dd-nav-item dd-nav-item-species">
+      <span class="dd-nav-crumb dd-nav-crumb-species">{speciesName}</span>
+    </li>
+    <li class="dd-nav-item" aria-current="page">
+      <span class="dd-nav-crumb dd-nav-crumb-time">{date} {time}</span>
+    </li>
+  </ol>
 
   {#if available}
     <div class="dd-nav-groups" aria-busy={neighbors === null}>
       <div class="dd-nav-group" role="group" aria-label={t('detections.detail.nav.allGroup')}>
-        {@render stepButton(
+        {@render stepLink(
           neighbors?.previous ?? null,
           t('detections.detail.nav.older'),
           t('detections.detail.nav.noOlder'),
           true
         )}
         <span class="dd-nav-group-label">{t('detections.detail.nav.allGroup')}</span>
-        {@render stepButton(
+        {@render stepLink(
           neighbors?.next ?? null,
           t('detections.detail.nav.newer'),
           t('detections.detail.nav.noNewer'),
@@ -83,7 +92,7 @@
         role="group"
         aria-label={t('detections.detail.nav.speciesGroup', { species: speciesName })}
       >
-        {@render stepButton(
+        {@render stepLink(
           neighbors?.previousSameSpecies ?? null,
           t('detections.detail.nav.olderSpecies', { species: speciesName }),
           t('detections.detail.nav.noOlderSpecies', { species: speciesName }),
@@ -92,7 +101,7 @@
         <span class="dd-nav-group-label dd-nav-group-species" title={speciesName}
           >{speciesName}</span
         >
-        {@render stepButton(
+        {@render stepLink(
           neighbors?.nextSameSpecies ?? null,
           t('detections.detail.nav.newerSpecies', { species: speciesName }),
           t('detections.detail.nav.noNewerSpecies', { species: speciesName }),
@@ -121,6 +130,24 @@
     font-size: 0.875rem;
   }
 
+  .dd-nav-item {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .dd-nav-item-species {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /* The separator is drawn, not written, and has empty alternative text. */
+  .dd-nav-item + .dd-nav-item::before {
+    content: '/' / '';
+    color: var(--text-subtle);
+  }
+
   .dd-nav-back {
     display: inline-flex;
     flex: 0 0 auto;
@@ -129,8 +156,7 @@
     padding: 0.25rem 0.5rem;
     margin-left: -0.5rem;
     border-radius: var(--radius-field);
-    color: color-mix(in srgb, var(--color-base-content) 75%, transparent);
-    cursor: pointer;
+    color: var(--text-subtle);
   }
 
   .dd-nav-back:hover {
@@ -138,19 +164,20 @@
     color: var(--color-base-content);
   }
 
-  .dd-nav-sep {
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
-  }
-
   .dd-nav-crumb {
     min-width: 0;
+    white-space: nowrap;
+    color: var(--text-subtle);
+  }
+
+  /* Only the species crumb gives way to a long name; the current page is never cut. */
+  .dd-nav-crumb-species {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 75%, transparent);
   }
 
   .dd-nav-crumb-time {
+    flex: 0 0 auto;
     font-variant-numeric: tabular-nums;
     color: var(--color-base-content);
     font-weight: 500;
@@ -179,7 +206,7 @@
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-nav-group-species {
@@ -194,15 +221,15 @@
     height: 2rem;
     border-radius: var(--radius-field);
     color: var(--color-base-content);
-    cursor: pointer;
   }
 
   .dd-nav-step:hover {
     background-color: var(--color-base-200);
   }
 
+  /* Dimmed by colour, not opacity, so the focus ring keeps its contrast. */
   .dd-nav-step[aria-disabled='true'] {
-    opacity: 0.35;
+    color: color-mix(in srgb, var(--color-base-content) 35%, transparent);
     cursor: not-allowed;
   }
 
@@ -210,14 +237,9 @@
     background-color: transparent;
   }
 
-  .dd-nav-back:focus-visible,
-  .dd-nav-step:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
-  }
-
   /* In a narrow window the trail and the step groups each take their own line, at
-     every detection, so the trail has room and nothing depends on its length. */
+     every detection, so the trail has room and nothing depends on its length.
+     The page grid switches to one column at the same width (DetectionDetail.svelte). */
   @media (max-width: 1100px) {
     .dd-nav {
       flex-direction: column;

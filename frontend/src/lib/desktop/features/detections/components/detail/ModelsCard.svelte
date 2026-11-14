@@ -9,6 +9,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import DetailCard from './DetailCard.svelte';
+  import { formatModelLabel, formatPercent, PERCENT, toPercent } from './detailFormat';
   import { wallClockTime } from './detailTime';
   import type { ModelContribution } from './detailTypes';
 
@@ -18,8 +19,6 @@
 
   let { contributions = null }: Props = $props();
 
-  const PERCENT = 100;
-  const DEFAULT_VARIANT = 'default';
   // Narrowest confidence span drawn, in percent, so a single hit stays visible.
   const MIN_SPAN_PERCENT = 1.5;
 
@@ -31,19 +30,10 @@
 
   let hitModels = $derived(rows.filter(row => row.hitCount > 0).length);
 
-  function modelLabel(name: string, version: string, variant?: string): string {
-    const base = [name, version].filter(Boolean).join(' ');
-    return variant && variant !== DEFAULT_VARIANT ? `${base} (${variant})` : base;
-  }
-
-  function percent(value: number | undefined): string {
-    return value === undefined ? '' : `${Math.round(value * PERCENT)}%`;
-  }
-
   function confidenceText(row: ModelContribution): string {
     if (row.minConfidence === undefined || row.maxConfidence === undefined) return '';
-    const low = Math.round(row.minConfidence * PERCENT);
-    const high = Math.round(row.maxConfidence * PERCENT);
+    const low = toPercent(row.minConfidence);
+    const high = toPercent(row.maxConfidence);
     return low === high ? `${high}%` : `${low}-${high}%`;
   }
 
@@ -71,7 +61,7 @@
           <div class="dd-model-name">
             <span class="dd-model-dot" class:dd-model-dot-hit={hit} aria-hidden="true"></span>
             <span class="dd-model-title">
-              {modelLabel(row.modelName, row.modelVersion, row.modelVariant)}
+              {formatModelLabel(row.modelName, row.modelVersion, row.modelVariant)}
             </span>
             {#if row.modelType}
               <span class="dd-model-type">{row.modelType}</span>
@@ -103,7 +93,7 @@
               {#if row.hitCount > 1 && row.meanConfidence !== undefined}
                 <span
                   >{t('detections.detail.models.mean', {
-                    value: percent(row.meanConfidence),
+                    value: formatPercent(row.meanConfidence),
                   })}</span
                 >
               {/if}
@@ -121,12 +111,13 @@
 <style>
   .dd-models-empty {
     font-size: 0.875rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-models {
     display: flex;
     flex-direction: column;
+    container: dd-models / inline-size;
   }
 
   .dd-model {
@@ -179,7 +170,7 @@
     letter-spacing: 0.04em;
     line-height: 1.125rem;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
     border: 1px solid var(--border-200);
     border-radius: var(--radius-full);
   }
@@ -235,21 +226,25 @@
     align-items: flex-end;
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
     white-space: nowrap;
   }
 
   .dd-model-miss .dd-model-title {
     font-weight: 500;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-model-nohit {
     grid-column: 2 / -1;
     font-size: 0.8125rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
+  /* Stacked rows: in a narrow window (one page column), and in any card too narrow for
+     the four columns, which need about 32.6rem (the half-width column of a window with the
+     sidebar open, from about 1100 to 1280 px). The two rules hold the same declarations;
+     container and media queries cannot share one block. */
   @media (max-width: 900px) {
     .dd-model {
       grid-template-columns: minmax(0, 1fr) auto;
@@ -263,6 +258,41 @@
     .dd-model-times {
       flex-direction: row;
       gap: 0.5rem;
+    }
+  }
+
+  @container dd-models (max-width: 33rem) {
+    .dd-model {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .dd-model-range,
+    .dd-model-nohit {
+      grid-column: 1 / -1;
+    }
+
+    .dd-model-times {
+      flex-direction: row;
+      gap: 0.5rem;
+    }
+  }
+
+  /* Windows contrast themes drop background colours: the confidence span, its mean and
+     the hit dot keep a system colour. */
+  @media (forced-colors: active) {
+    .dd-range-track {
+      border: 1px solid CanvasText;
+    }
+
+    .dd-range-span,
+    .dd-model-dot-hit {
+      forced-color-adjust: none;
+      background-color: CanvasText;
+    }
+
+    .dd-range-mean {
+      forced-color-adjust: none;
+      background-color: Highlight;
     }
   }
 </style>

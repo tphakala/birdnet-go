@@ -5,10 +5,11 @@
   The other predictions come first, since the right species is often among them.
   A search covers the rest: by default over the species the range filter expects
   at the station, and over every species the models know once the reviewer turns
-  that on. Nothing is saved until the reviewer confirms.
+  that on. Both lists are one radio group: picking a species in one clears the
+  other. Nothing is saved until the reviewer confirms.
 
-  A visitor who cannot change the species still gets the list of predictions;
-  the search and the confirm button are then left out.
+  A visitor who cannot change the species still gets the list of predictions, as
+  plain rows; the search and the confirm button are then left out.
 
   The dialog keeps one size while it is used: the results area has a fixed
   height, and the footer buttons keep their labels and place.
@@ -21,19 +22,15 @@
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
-  import { ApiError, fetchWithCSRF } from '$lib/utils/api';
+  import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { normalizeForLookup } from '$lib/utils/speciesNames';
+  import { rankPredictions, toLocalizedPredictions } from '$lib/utils/speciesPredictions';
   import { generateId } from '$lib/utils/uuid';
   import { formatScore } from './detailFormat';
   import type { AlternatePrediction, DetectionDetailData } from './detailTypes';
-  import {
-    loadSpeciesCatalog,
-    searchSpecies,
-    type CatalogScope,
-    type CatalogSpecies,
-    type IndexedSpecies,
-  } from './speciesCatalog';
+  import { loadSpeciesCatalog, type CatalogScope, type CatalogSpecies } from './speciesCatalog';
 
   interface Props {
     isOpen: boolean;
@@ -43,9 +40,7 @@
     alternates: AlternatePrediction[];
     /** The model that made the predictions, for the list heading. */
     predictionModel: string;
-    /** Whether the viewer may change the species now. */
-    canChange: boolean;
-    /** Why the species cannot be changed; shown when canChange is false. */
+    /** Why the species cannot be changed now; empty when the viewer may change it. */
     blockedReason: string;
     onClose: () => void;
     /** Called after the species was changed, so the page can reload the detection. */
@@ -58,7 +53,6 @@
     speciesName,
     alternates,
     predictionModel,
-    canChange,
     blockedReason,
     onClose,
     onChanged,
@@ -67,8 +61,11 @@
   const logger = loggers.ui;
   const MAX_RESULTS = 6;
   const MIN_QUERY_LENGTH = 2;
+  // Wait this long after the last keystroke before announcing the number of matches.
+  const ANNOUNCE_DELAY_MS = 300;
   const confirmHelpId = generateId('species-confirm-help');
   const searchId = generateId('species-search');
+  const choiceName = generateId('species-choice');
   // The server's answer for a species it has no label row for yet.
   const HTTP_BAD_REQUEST = 400;
 
@@ -79,11 +76,14 @@
   // False searches the range filter's species, true every species the models know.
   let allSpecies = $state(false);
   let catalogState = $state<CatalogState>('loading');
-  let catalog = $state.raw<IndexedSpecies[]>([]);
+  let catalog = $state.raw<CatalogSpecies[]>([]);
   let saving = $state(false);
   let errorMessage = $state('');
+  let announcement = $state('');
 
+  let canChange = $derived(blockedReason === '');
   let scope = $derived<CatalogScope>(allSpecies ? 'all' : 'range');
+  let searching = $derived(query.trim().length >= MIN_QUERY_LENGTH);
 
   // Each opening starts clean, on the range filter's list.
   $effect(() => {
@@ -118,26 +118,57 @@
     };
   });
 
-  let results = $derived(
-    query.trim().length >= MIN_QUERY_LENGTH
-      ? // The detection's own species is left out, since it cannot be changed to
-        // itself. One extra result is asked for so that leaving it out does not
-        // shorten the page.
-        searchSpecies(catalog, query, MAX_RESULTS + 1)
-          .filter(item => item.scientificName !== detection.scientificName)
-          .slice(0, MAX_RESULTS)
-      : []
-  );
+  // The catalog with each species named in the UI language, the same way as the
+  // predictions above it; the value is the scientific name.
+  let options = $derived.by(() => {
+    const commonNames = new Map(catalog.map(item => [item.scientificName, item.commonName]));
+    return toLocalizedPredictions(
+      catalog.map(item => item.scientificName),
+      scientificName => localizeSpeciesName(scientificName, commonNames.get(scientificName))
+    );
+  });
+
+  // The detection's own species is left out, since it cannot be changed to itself.
+  // A name the reviewer sees that starts with the query ranks first (rankPredictions'
+  // "local" tier): typing "ta" lists "tavi" before a species whose Latin name starts
+  // with Ta, and both before names that only contain "ta".
+  let results = $derived.by<CatalogSpecies[]>(() => {
+    if (!searching) return [];
+    const needle = normalizeForLookup(query.trim());
+    return rankPredictions(options, query, {
+      limit: MAX_RESULTS,
+      isLocal: option => (option.normalizedLabel ?? '').startsWith(needle),
+      exclude: option => option.value === detection.scientificName,
+    }).map(option => ({ scientificName: option.value, commonName: option.label }));
+  });
+
+  // What the results area says, announced once typing pauses instead of on every
+  // keystroke; only the count or the reason there are none, never the whole list.
+  let resultsSummary = $derived.by(() => {
+    if (catalogState !== 'ready' || !searching) return '';
+    if (results.length === 0) {
+      return allSpecies
+        ? t('detections.detail.species.noMatches')
+        : t('detections.detail.species.noMatchesInRange');
+    }
+    return results.length === 1
+      ? t('search.resultsCountOne')
+      : t('search.resultsCountOther', { count: results.length });
+  });
+
+  $effect(() => {
+    const text = resultsSummary;
+    const timer = globalThis.setTimeout(() => {
+      announcement = text;
+    }, ANNOUNCE_DELAY_MS);
+    return () => globalThis.clearTimeout(timer);
+  });
 
   function alternateSpecies(item: AlternatePrediction): CatalogSpecies {
     return {
       scientificName: item.scientificName,
-      commonName: localizeSpeciesName(item.scientificName, item.commonName ?? item.scientificName),
+      commonName: localizeSpeciesName(item.scientificName, item.commonName),
     };
-  }
-
-  function pick(item: CatalogSpecies) {
-    if (canChange) selected = item;
   }
 
   async function confirm() {
@@ -145,10 +176,8 @@
     saving = true;
     errorMessage = '';
     try {
-      await fetchWithCSRF(`/api/v2/detections/${detection.id}/species`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scientificName: selected.scientificName }),
+      await api.put(`/api/v2/detections/${detection.id}/species`, {
+        scientificName: selected.scientificName,
       });
       toastActions.success(
         t('detections.detail.species.changed', { species: selected.commonName })
@@ -167,35 +196,43 @@
   }
 </script>
 
-{#snippet option(item: CatalogSpecies, detail: string, original: boolean)}
+<!-- One row: a radio choice for a reviewer, a plain list item otherwise. -->
+{#snippet names(item: CatalogSpecies, detail: string, original: boolean)}
+  <span class="dd-species-names">
+    <span class="dd-species-common">{item.commonName}</span>
+    <span class="dd-species-scientific">{item.scientificName}</span>
+    {#if original}
+      <span class="dd-species-original">{t('detections.detail.species.modelPick')}</span>
+    {/if}
+  </span>
+  {#if detail}
+    <span class="dd-species-detail">{detail}</span>
+  {/if}
+{/snippet}
+
+{#snippet choice(item: CatalogSpecies, detail: string, original: boolean)}
   {@const active = selected?.scientificName === item.scientificName}
-  <li>
-    <button
-      type="button"
-      class="dd-species-option"
-      class:dd-species-option-active={active}
-      class:dd-species-option-static={!canChange}
-      aria-pressed={canChange ? active : undefined}
-      aria-disabled={canChange ? undefined : 'true'}
-      onclick={() => pick(item)}
-    >
-      {#if canChange}
-        <span class="dd-species-check" aria-hidden="true">
-          {#if active}<Check class="size-3.5" />{/if}
-        </span>
-      {/if}
-      <span class="dd-species-names">
-        <span class="dd-species-common">{item.commonName}</span>
-        <span class="dd-species-scientific">{item.scientificName}</span>
-        {#if original}
-          <span class="dd-species-original">{t('detections.detail.species.modelPick')}</span>
-        {/if}
-      </span>
-      {#if detail}
-        <span class="dd-species-detail">{detail}</span>
-      {/if}
-    </button>
-  </li>
+  <label class="dd-species-option" class:dd-species-option-active={active}>
+    <input
+      type="radio"
+      class="sr-only"
+      name={choiceName}
+      value={item.scientificName}
+      checked={active}
+      onchange={() => (selected = item)}
+    />
+    <span class="dd-species-check" aria-hidden="true">
+      {#if active}<Check class="size-3.5" />{/if}
+    </span>
+    {@render names(item, detail, original)}
+  </label>
+{/snippet}
+
+{#snippet predictionsHeading()}
+  {t('detections.detail.species.fromPredictions')}
+  {#if predictionModel}
+    <span class="dd-species-heading-detail">{predictionModel}</span>
+  {/if}
 {/snippet}
 
 <Modal
@@ -209,97 +246,111 @@
   {onClose}
 >
   {#snippet children()}
-    <p class="dd-species-current">
-      {t('detections.detail.species.current')}
-      <strong>{speciesName}</strong>
-      <span class="dd-species-scientific">{detection.scientificName}</span>
-    </p>
+    <div class="dd-species">
+      <p class="dd-species-current">
+        {t('detections.detail.species.current')}
+        <strong>{speciesName}</strong>
+        <span class="dd-species-scientific">{detection.scientificName}</span>
+      </p>
 
-    <h3 class="dd-species-heading">
-      {t('detections.detail.species.fromPredictions')}
-      {#if predictionModel}
-        <span class="dd-species-heading-detail">{predictionModel}</span>
-      {/if}
-    </h3>
-    {#if alternates.length > 0}
-      <ul class="dd-species-list dd-species-alternates">
-        {#each alternates as item (item.scientificName)}
-          {@render option(
-            alternateSpecies(item),
-            formatScore(item.confidence),
-            item.original === true
-          )}
-        {/each}
-      </ul>
-    {:else}
-      <p class="dd-species-note">{t('detections.detail.species.noPredictions')}</p>
-    {/if}
-
-    {#if canChange}
-      <div class="dd-species-search">
-        <div class="dd-species-search-head">
-          <label class="dd-species-heading dd-species-search-label" for={searchId}>
-            {t('detections.detail.species.search')}
-          </label>
-          <ToggleField
-            variant="inline"
-            label={t('detections.detail.species.allSpecies')}
-            value={allSpecies}
-            onUpdate={value => (allSpecies = value)}
-          />
-        </div>
-        <TextInput
-          id={searchId}
-          bind:value={query}
-          type="search"
-          size="md"
-          placeholder={allSpecies
-            ? t('detections.detail.species.searchAllPlaceholder')
-            : t('detections.detail.species.searchRangePlaceholder')}
-          autocomplete="off"
-        />
-      </div>
-      <div class="dd-species-results" aria-live="polite">
-        {#if catalogState === 'loading'}
-          <p class="dd-species-note">{t('detections.detail.species.loadingList')}</p>
-        {:else if catalogState === 'failed'}
-          <p class="dd-species-note dd-species-error">
-            {t('detections.detail.species.listFailed')}
-          </p>
-        {:else if query.trim().length < MIN_QUERY_LENGTH}
-          <p class="dd-species-note">
-            {allSpecies
-              ? t('detections.detail.species.searchHintAll', { count: catalog.length })
-              : t('detections.detail.species.searchHintRange', { count: catalog.length })}
-          </p>
-        {:else if results.length === 0}
-          <p class="dd-species-note">
-            {allSpecies
-              ? t('detections.detail.species.noMatches')
-              : t('detections.detail.species.noMatchesInRange')}
-          </p>
-        {:else}
-          <ul class="dd-species-list">
-            {#each results as item (item.scientificName)}
-              {@render option(item, '', false)}
+      {#if !canChange}
+        <h4 class="dd-species-heading">{@render predictionsHeading()}</h4>
+        {#if alternates.length > 0}
+          <ul class="dd-species-list dd-species-alternates">
+            {#each alternates as item (item.scientificName)}
+              <li class="dd-species-option dd-species-option-static">
+                {@render names(
+                  alternateSpecies(item),
+                  formatScore(item.confidence),
+                  item.original === true
+                )}
+              </li>
             {/each}
           </ul>
+        {:else}
+          <p class="dd-species-note">{t('detections.detail.species.noPredictions')}</p>
         {/if}
-      </div>
+        <p class="dd-species-effect">{blockedReason}</p>
+      {:else}
+        <fieldset class="dd-species-group">
+          <legend class="dd-species-heading">{@render predictionsHeading()}</legend>
+          {#if alternates.length > 0}
+            <div class="dd-species-list dd-species-alternates">
+              {#each alternates as item (item.scientificName)}
+                {@render choice(
+                  alternateSpecies(item),
+                  formatScore(item.confidence),
+                  item.original === true
+                )}
+              {/each}
+            </div>
+          {:else}
+            <p class="dd-species-note">{t('detections.detail.species.noPredictions')}</p>
+          {/if}
+        </fieldset>
 
-      <p class="dd-species-effect">{t('detections.detail.species.effect')}</p>
-      {#if errorMessage}
-        <p class="dd-species-error" role="alert">{errorMessage}</p>
+        <search class="dd-species-search">
+          <div class="dd-species-search-head">
+            <label class="dd-species-heading dd-species-search-label" for={searchId}>
+              {t('detections.detail.species.search')}
+            </label>
+            <ToggleField
+              variant="inline"
+              label={t('detections.detail.species.allSpecies')}
+              value={allSpecies}
+              onUpdate={value => (allSpecies = value)}
+            />
+          </div>
+          <TextInput
+            id={searchId}
+            bind:value={query}
+            type="search"
+            size="md"
+            placeholder={allSpecies
+              ? t('detections.detail.species.searchAllPlaceholder')
+              : t('detections.detail.species.searchRangePlaceholder')}
+            autocomplete="off"
+          />
+          <p class="sr-only" role="status">{announcement}</p>
+        </search>
+        <fieldset class="dd-species-group dd-species-results" style:--rows={MAX_RESULTS}>
+          <legend class="sr-only">{t('detections.detail.species.search')}</legend>
+          {#if catalogState === 'loading'}
+            <p class="dd-species-note">{t('detections.detail.species.loadingList')}</p>
+          {:else if catalogState === 'failed'}
+            <p class="dd-species-note dd-species-error">
+              {t('detections.detail.species.listFailed')}
+            </p>
+          {:else if !searching}
+            <p class="dd-species-note">
+              {allSpecies
+                ? t('detections.detail.species.searchHintAll', { count: catalog.length })
+                : t('detections.detail.species.searchHintRange', { count: catalog.length })}
+            </p>
+          {:else if results.length === 0}
+            <p class="dd-species-note">{resultsSummary}</p>
+          {:else}
+            <div class="dd-species-list">
+              {#each results as item (item.scientificName)}
+                {@render choice(item, '', false)}
+              {/each}
+            </div>
+          {/if}
+        </fieldset>
+
+        <p class="dd-species-effect">{t('detections.detail.species.effect')}</p>
+        {#if errorMessage}
+          <p class="dd-species-error" role="alert">{errorMessage}</p>
+        {/if}
       {/if}
-    {:else}
-      <p class="dd-species-effect">{blockedReason}</p>
-    {/if}
+    </div>
   {/snippet}
 
   {#snippet footer()}
     {#if canChange}
       <!-- The hint and the picked species share this slot, and the button labels
-           do not change, so picking a species moves neither button. -->
+           do not change, so picking a species moves neither button. The species is
+           also shown in full in its row above, so cutting it here hides nothing. -->
       <p
         id={confirmHelpId}
         class="dd-species-choice"
@@ -327,6 +378,12 @@
 </Modal>
 
 <style>
+  /* One species row is a single line of names in a bordered box. */
+  .dd-species {
+    --row-height: 2.375rem;
+    --row-gap: 0.25rem;
+  }
+
   .dd-species-current {
     font-size: 0.875rem;
   }
@@ -335,19 +392,28 @@
     margin: 0 0.25rem;
   }
 
+  /* The legend is the group's heading; a fieldset ignores a legend's margins, so the
+     space above it is the fieldset's and the space below is padding. */
+  .dd-species-group {
+    min-width: 0;
+    margin: 1rem 0 0;
+    padding: 0;
+    border: 0;
+  }
+
   .dd-species-heading {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    margin: 1rem 0 0.375rem;
+    display: block;
+    padding: 0 0 0.375rem;
+    margin: 1rem 0 0;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-species-heading-detail {
+    margin-left: 0.5rem;
     font-weight: 400;
     letter-spacing: 0;
     text-transform: none;
@@ -366,13 +432,14 @@
   }
 
   .dd-species-search-label {
+    padding: 0;
     margin: 0;
   }
 
   .dd-species-list {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: var(--row-gap);
   }
 
   /* A long list of predictions scrolls inside its own box instead of pushing the
@@ -384,6 +451,7 @@
 
   .dd-species-option {
     display: flex;
+    min-height: var(--row-height);
     align-items: center;
     gap: 0.625rem;
     width: 100%;
@@ -407,14 +475,15 @@
     background-color: transparent;
   }
 
+  /* The radio itself is hidden; its row shows the focus ring. */
+  .dd-species-option:has(input:focus-visible) {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
   .dd-species-option-active {
     border-color: var(--color-primary);
     background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  }
-
-  .dd-species-option:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
   }
 
   .dd-species-check {
@@ -451,7 +520,7 @@
   .dd-species-scientific {
     font-size: 0.8125rem;
     font-style: italic;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-species-original {
@@ -465,26 +534,27 @@
     flex: 0 0 auto;
     font-size: 0.8125rem;
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
-  /* Fixed height for a full page of results, so the dialog keeps its size and
-     its controls keep their place while typing. */
+  /* Fixed height for a full page of results (--rows, the most results shown), so the
+     dialog keeps its size and its controls keep their place while typing. Each row is
+     --row-height high; rows are --row-gap apart. */
   .dd-species-results {
-    height: 16.5rem;
+    height: calc(var(--rows) * var(--row-height) + (var(--rows) - 1) * var(--row-gap));
     margin-top: 0.5rem;
     overflow-y: auto;
   }
 
   .dd-species-note {
     font-size: 0.8125rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-species-effect {
     margin-top: 0.75rem;
     font-size: 0.8125rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-species-error {
@@ -502,7 +572,7 @@
     font-size: 0.8125rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-species-choice-picked {

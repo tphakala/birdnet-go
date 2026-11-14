@@ -5,11 +5,15 @@
 -->
 <script lang="ts">
   import { ArrowRight, TriangleAlert } from '@lucide/svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import { t } from '$lib/i18n';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { addDays } from '$lib/utils/date';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import DetailCard from './DetailCard.svelte';
-  import { formatCalendarDate, wallClockDate } from './detailTime';
+  import { barHeight, formatCount, formatPercent, PERCENT, toPercent } from './detailFormat';
+  import { dailyWindowStart, formatCalendarDate, wallClockDate } from './detailTime';
   import type {
     DailyCounts,
     DetectionDetailData,
@@ -23,16 +27,14 @@
     speciesName: string;
     rarity?: SpeciesRarity | null;
     summary?: SpeciesSummary | null;
-    /** True while the all-time summary is still loading. */
-    summaryLoading?: boolean;
     /** Daily counts for the days leading up to the detection. */
     daily?: DailyCounts | null;
-    /** First day of the daily counts window (YYYY-MM-DD). */
-    dailyStart: string;
-    /** Number of days in the daily counts window. */
+    /** Number of days in the daily counts window, ending on the detection's day. */
     dailyDays: number;
     /** How reviewers judged this species' detections; null until known. */
     reviews?: SpeciesReviewCounts | null;
+    /** Which parts are still being requested; each shows placeholders until it answers. */
+    loading?: { rarity: boolean; summary: boolean; daily: boolean; reviews: boolean };
   }
 
   let {
@@ -40,21 +42,26 @@
     speciesName,
     rarity = null,
     summary = null,
-    summaryLoading = false,
     daily = null,
-    dailyStart,
     dailyDays,
     reviews = null,
+    loading = { rarity: false, summary: false, daily: false, reviews: false },
   }: Props = $props();
 
-  const PERCENT = 100;
-  const MS_PER_DAY = 86_400_000;
-  // Smallest bar height, in percent, for a day that has any detections.
-  const MIN_BAR_PERCENT = 8;
   // A species is called out as often rejected once at least this many of its
   // detections were reviewed and this share of them were false positives.
   const MIN_REVIEWS_FOR_WARNING = 3;
   const FALSE_POSITIVE_WARNING_SHARE = 0.5;
+  const MISSING = '-';
+
+  // Placeholders stand in for a part only while it has nothing to show yet.
+  let pending = $derived({
+    rarity: loading.rarity && rarity === null,
+    summary: loading.summary && summary === null,
+    daily: loading.daily && daily === null,
+    reviews: loading.reviews && reviews === null,
+  });
+  let anyPending = $derived(Object.values(pending).some(Boolean));
 
   let reviewed = $derived(reviews ? reviews.correct + reviews.falsePositive : 0);
   let falsePositiveShare = $derived(reviews && reviewed > 0 ? reviews.falsePositive / reviewed : 0);
@@ -62,23 +69,20 @@
     reviewed >= MIN_REVIEWS_FOR_WARNING && falsePositiveShare >= FALSE_POSITIVE_WARNING_SHARE
   );
 
-  function dayKey(date: Date): string {
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${date.getFullYear()}-${month}-${day}`;
-  }
-
   // One bar per calendar day of the window, including days without detections.
   let dailyBars = $derived.by(() => {
-    const [year, month, day] = dailyStart.split('-').map(Number);
-    if (!year || !month || !day) return [];
     const counts = new Map((daily?.data ?? []).map(entry => [entry.date, entry.count]));
-    const start = new Date(year, month - 1, day).getTime();
-    const bars = Array.from({ length: dailyDays }, (_, index) => {
-      // Midday keeps the date stable across daylight saving changes.
-      const date = dayKey(new Date(start + index * MS_PER_DAY + MS_PER_DAY / 2));
-      return { date, count: counts.get(date) ?? 0 };
-    });
+    let bars: { date: string; label: string; count: number }[];
+    try {
+      const start = dailyWindowStart(detection.date, dailyDays);
+      bars = Array.from({ length: dailyDays }, (_, index) => {
+        const date = addDays(start, index);
+        return { date, label: formatCalendarDate(date, true), count: counts.get(date) ?? 0 };
+      });
+    } catch {
+      // A malformed detection date leaves the chart out.
+      return [];
+    }
     const peak = Math.max(1, ...bars.map(bar => bar.count));
     return bars.map(bar => ({ ...bar, share: bar.count / peak }));
   });
@@ -87,39 +91,63 @@
 
   let speciesUrl = $derived(buildSpeciesDetectionUrl(detection.scientificName, detection.date));
 
-  function percent(value: number | undefined): string {
-    return value === undefined ? '-' : `${Math.round(value * PERCENT)}%`;
-  }
-
   function heard(timestamp: string | undefined): string {
-    return timestamp ? formatCalendarDate(wallClockDate(timestamp)) : '-';
+    return timestamp ? formatCalendarDate(wallClockDate(timestamp)) : MISSING;
   }
 </script>
 
+<!-- A value still on its way: a bar in place of the text, the same line height. -->
+{#snippet value(waiting: boolean, text: string, width = 'w-16')}
+  {#if waiting}
+    <Skeleton inline className="h-4 {width}" />
+  {:else}
+    {text}
+  {/if}
+{/snippet}
+
 <DetailCard title={t('detections.detail.stats.title')} subtitle={speciesName}>
-  {#if rarity}
+  {#snippet header()}
+    {#if anyPending}
+      <SkeletonStatus label={t('common.loading')} className="ml-auto text-xs" />
+    {/if}
+  {/snippet}
+
+  {#if rarity || pending.rarity}
     <div class="dd-rarity">
       <div class="dd-rarity-head">
         <span class="dd-rarity-label">{t('detections.detail.stats.rangeScore')}</span>
-        <span class="dd-rarity-status">
-          {t(`species.rarity.statuses.${rarity.status}`)}
-          <strong>{Math.round(rarity.score * PERCENT)}%</strong>
-        </span>
+        {#if rarity}
+          <span class="dd-rarity-status">
+            {t(`species.rarity.statuses.${rarity.status}`)}
+            <strong>{formatPercent(rarity.score)}</strong>
+          </span>
+        {:else}
+          <Skeleton inline className="h-3 w-24" />
+        {/if}
       </div>
       <div
         class="dd-rarity-track"
-        role="meter"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        aria-valuenow={Math.round(rarity.score * PERCENT)}
-        aria-label={t('detections.detail.stats.rangeScore')}
+        role={rarity ? 'meter' : undefined}
+        aria-valuemin={rarity ? 0 : undefined}
+        aria-valuemax={rarity ? 100 : undefined}
+        aria-valuenow={rarity ? toPercent(rarity.score) : undefined}
+        aria-valuetext={rarity
+          ? `${t(`species.rarity.statuses.${rarity.status}`)}, ${formatPercent(rarity.score)}`
+          : undefined}
+        aria-label={rarity ? t('detections.detail.stats.rangeScore') : undefined}
       >
-        <span class="dd-rarity-fill" style:width="{rarity.score * PERCENT}%"></span>
+        {#if rarity}
+          <span class="dd-rarity-fill" style:width="{rarity.score * PERCENT}%"></span>
+        {/if}
       </div>
       <p class="dd-rarity-note">
-        {rarity.date
-          ? t('detections.detail.stats.rangeScoreNote', { date: rarity.date })
-          : t('detections.detail.stats.rangeScoreNoteToday')}
+        {#if rarity}
+          {rarity.date
+            ? t('detections.detail.stats.rangeScoreNote', { date: rarity.date })
+            : t('detections.detail.stats.rangeScoreNoteToday')}
+        {:else}
+          <Skeleton inline className="h-2.5 w-48" />
+        {/if}
       </p>
     </div>
   {/if}
@@ -127,47 +155,50 @@
   <dl class="dd-stats">
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.total')}</dt>
-      <dd>
-        {#if summary}
-          {summary.count.toLocaleString()}
-        {:else if summaryLoading}
-          <span class="dd-stat-loading">{t('common.loading')}</span>
-        {:else}
-          -
-        {/if}
-      </dd>
+      <dd>{@render value(pending.summary, summary ? formatCount(summary.count) : MISSING)}</dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.windowTotal', { days: dailyDays })}</dt>
-      <dd>{windowTotal.toLocaleString()}</dd>
+      <dd>{@render value(pending.daily, formatCount(windowTotal))}</dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.firstHeard')}</dt>
-      <dd class="dd-stat-text">{heard(summary?.first_heard)}</dd>
+      <dd class="dd-stat-text">
+        {@render value(pending.summary, heard(summary?.first_heard), 'w-28')}
+      </dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.lastHeard')}</dt>
-      <dd class="dd-stat-text">{heard(summary?.last_heard)}</dd>
+      <dd class="dd-stat-text">
+        {@render value(pending.summary, heard(summary?.last_heard), 'w-28')}
+      </dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.avgConfidence')}</dt>
-      <dd>{percent(summary?.avg_confidence)}</dd>
+      <dd>{@render value(pending.summary, formatPercent(summary?.avg_confidence, MISSING))}</dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.maxConfidence')}</dt>
-      <dd>{percent(summary?.max_confidence)}</dd>
+      <dd>{@render value(pending.summary, formatPercent(summary?.max_confidence, MISSING))}</dd>
     </div>
   </dl>
 
-  {#if reviews}
+  {#if reviews || pending.reviews}
     <div class="dd-reviews">
       <div class="dd-reviews-head">
         <span>{t('detections.detail.stats.reviewsTitle')}</span>
-        <span class="dd-reviews-count">
-          {t('detections.detail.stats.reviewsCount', { count: reviewed })}
-        </span>
+        {#if reviews}
+          <span class="dd-reviews-count">
+            {t('detections.detail.stats.reviewsCount', { count: reviewed })}
+          </span>
+        {:else}
+          <Skeleton inline className="h-3 w-20" />
+        {/if}
       </div>
-      {#if reviewed > 0}
+      {#if !reviews}
+        <div class="dd-reviews-bar"></div>
+        <p class="dd-reviews-legend"><Skeleton inline className="h-3 w-40" /></p>
+      {:else if reviewed > 0}
         <div class="dd-reviews-bar" aria-hidden="true">
           <span class="dd-reviews-correct" style:width="{(1 - falsePositiveShare) * PERCENT}%"
           ></span>
@@ -185,7 +216,7 @@
           <p class="dd-reviews-warning">
             <TriangleAlert class="size-3.5" />
             {t('detections.detail.stats.oftenRejected', {
-              percent: Math.round(falsePositiveShare * PERCENT),
+              percent: toPercent(falsePositiveShare),
             })}
           </p>
         {/if}
@@ -200,31 +231,48 @@
       <div class="dd-daily-head">
         <span>{t('detections.detail.stats.dailyTitle', { days: dailyDays })}</span>
       </div>
-      <div
-        class="dd-daily-bars"
-        role="img"
-        aria-label={t('detections.detail.stats.dailyLabel', {
-          days: dailyDays,
-          count: windowTotal,
-        })}
-      >
-        {#each dailyBars as bar (bar.date)}
-          <span
-            class="dd-daily-bar"
-            class:dd-daily-bar-now={bar.date === detection.date}
-            style:height="{Math.max(bar.share * PERCENT, bar.count > 0 ? MIN_BAR_PERCENT : 0)}%"
-            title="{bar.date}  {bar.count}"
-          ></span>
-        {/each}
-      </div>
+      {#if pending.daily}
+        <div class="dd-daily-bars"><Skeleton className="h-full w-full rounded-none" /></div>
+      {:else}
+        <!-- The bars are drawn for the eye; the table below carries their values. -->
+        <div class="dd-daily-bars" aria-hidden="true">
+          {#each dailyBars as bar (bar.date)}
+            <span
+              class="dd-daily-bar"
+              class:dd-daily-bar-now={bar.date === detection.date}
+              style:height="{barHeight(bar.share, bar.count)}%"
+              title="{bar.label}  {bar.count}"
+            ></span>
+          {/each}
+        </div>
+        <table class="sr-only">
+          <caption>
+            {t('detections.detail.stats.dailyLabel', { days: dailyDays, count: windowTotal })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t('detections.detail.identity.date')}</th>
+              <th scope="col">{t('analytics.charts.detections')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each dailyBars as bar (bar.date)}
+              <tr>
+                <th scope="row">{bar.label}</th>
+                <td>{bar.count}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
       <div class="dd-daily-axis" aria-hidden="true">
-        <span>{dailyBars.at(0)?.date ?? ''}</span>
-        <span>{dailyBars.at(-1)?.date ?? ''}</span>
+        <span>{dailyBars.at(0)?.label ?? ''}</span>
+        <span>{dailyBars.at(-1)?.label ?? ''}</span>
       </div>
     </div>
   {/if}
 
-  <a class="dd-stats-link" href={speciesUrl} onclick={handleAppLinkClick}>
+  <a class="dd-stats-link focus-ring" href={speciesUrl} onclick={handleAppLinkClick}>
     {t('detections.detail.stats.allThisDay', { species: speciesName })}
     <ArrowRight class="size-3.5" />
   </a>
@@ -240,7 +288,7 @@
   }
 
   .dd-rarity-label {
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-rarity-status strong {
@@ -266,7 +314,7 @@
   .dd-rarity-note {
     margin-top: 0.3125rem;
     font-size: 0.6875rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-stats {
@@ -286,7 +334,7 @@
 
   .dd-stat dt {
     font-size: 0.6875rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-stat dd {
@@ -301,12 +349,6 @@
     line-height: 1.6;
   }
 
-  .dd-stat-loading {
-    font-size: 0.8125rem;
-    font-weight: 400;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
-  }
-
   .dd-reviews {
     margin-top: 1rem;
     padding-top: 0.875rem;
@@ -319,7 +361,7 @@
     justify-content: space-between;
     gap: 0.75rem;
     font-size: 0.75rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-reviews-count {
@@ -386,7 +428,7 @@
   .dd-reviews-none {
     margin-top: 0.375rem;
     font-size: 0.8125rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-daily {
@@ -397,7 +439,7 @@
 
   .dd-daily-head {
     font-size: 0.75rem;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-daily-bars {
@@ -426,7 +468,7 @@
     margin-top: 0.1875rem;
     font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    color: var(--text-subtle);
   }
 
   .dd-stats-link {
@@ -441,5 +483,27 @@
 
   .dd-stats-link:hover {
     text-decoration: underline;
+  }
+
+  /* Windows contrast themes drop background colours: the fills and bars keep a system
+     colour, so the score, the review split and the chart stay visible. */
+  @media (forced-colors: active) {
+    .dd-rarity-track,
+    .dd-reviews-bar {
+      border: 1px solid CanvasText;
+    }
+
+    .dd-rarity-fill,
+    .dd-reviews-correct,
+    .dd-daily-bar {
+      forced-color-adjust: none;
+      background-color: CanvasText;
+    }
+
+    .dd-reviews-false,
+    .dd-daily-bar-now {
+      forced-color-adjust: none;
+      background-color: Highlight;
+    }
   }
 </style>
