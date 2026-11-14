@@ -14,6 +14,7 @@
   import { t } from '$lib/i18n';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { formatCalendarDate } from './detailTime';
   import type { DetectionNeighbors } from './detailTypes';
 
   interface Props {
@@ -33,11 +34,13 @@
 
   let { speciesName, date, time, neighbors, failed = false, available }: Props = $props();
 
-  // The name of a blocked step link: why it cannot step, or its own name while the
-  // neighbours are still being looked up.
+  // The name of a blocked step link. Every state keeps the link's own name so the four
+  // links stay distinguishable: while the neighbours are being looked up or when the lookup
+  // failed it adds that reason, and once they are known it states why there is nowhere to go.
   function blockedLabel(label: string, emptyLabel: string): string {
-    if (failed) return t('dataDisplay.table.error');
-    return neighbors === null ? label : emptyLabel;
+    if (failed) return t('detections.detail.nav.stepFailed', { label });
+    if (neighbors === null) return t('detections.detail.nav.stepLoading', { label });
+    return emptyLabel;
   }
 
   const listUrl = buildAppUrl('/ui/detections');
@@ -87,7 +90,7 @@
       <span class="dd-nav-crumb dd-nav-crumb-species">{speciesName}</span>
     </li>
     <li class="dd-nav-item" aria-current="page">
-      <span class="dd-nav-crumb dd-nav-crumb-time">{date} {time}</span>
+      <span class="dd-nav-crumb dd-nav-crumb-time">{formatCalendarDate(date)} {time}</span>
     </li>
   </ol>
 
