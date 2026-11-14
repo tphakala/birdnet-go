@@ -9,7 +9,7 @@ import { deferred } from '../../../test/async-helpers';
 import System from './System.svelte';
 
 const SLOW_REFRESH_MS = 30_000;
-/** The polling fallback's interval, used when the metrics history endpoint is missing. */
+/** The polling fallback's interval; the view polls when the metrics history request fails. */
 const POLLING_INTERVAL_MS = 5_000;
 const OVERVIEW_PATH = '/ui/system';
 const DATABASE_PATH = '/ui/system/database';
@@ -392,7 +392,7 @@ describe('System view', () => {
   });
 
   it('clears a failed resources section once the polling fallback answers', async () => {
-    // No history endpoint, so the view polls the resources endpoint instead
+    // The history request fails, so the view polls the resources endpoint instead
     failWith(RESOURCES_URL, 500);
     failWith(HISTORY_REQUEST, 500);
     await mountAt(OVERVIEW_PATH);
