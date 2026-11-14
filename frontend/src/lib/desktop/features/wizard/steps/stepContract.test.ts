@@ -92,12 +92,12 @@ const stepCases: StepCase[] = [
     component: IntegrationStep,
     edit: async () => {
       await fireEvent.click(
-        screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+        screen.getByRole('switch', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
       );
     },
     invalidEdit: async () => {
       await fireEvent.click(
-        screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+        screen.getByRole('switch', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
       );
       await fireEvent.input(
         await screen.findByRole('textbox', {

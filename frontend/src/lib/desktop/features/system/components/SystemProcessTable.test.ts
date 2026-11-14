@@ -196,7 +196,7 @@ describe('SystemProcessTable', () => {
     await view.rerender(tableProps({ processes: [], error: null }));
 
     await waitFor(() =>
-      expect(screen.getByRole('checkbox', { name: t('system.processInfo.showAll') })).toHaveFocus()
+      expect(screen.getByRole('switch', { name: t('system.processInfo.showAll') })).toHaveFocus()
     );
   });
 
