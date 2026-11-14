@@ -81,8 +81,14 @@ describe('SystemHealth first run', () => {
     const statuses = screen.getAllByRole('status');
     expect(statuses).toHaveLength(1);
     expect(statuses[0]).toHaveTextContent('health.running');
-    // The tile footers hold bars, not a running label of their own
-    expect(screen.getAllByText('health.running')).toHaveLength(1);
+    // The tile footers hold bars, not a running label of their own: one visible label
+    // beside Refresh, plus the screen reader text of the status region
+    const visibleLabels = screen
+      .getAllByText('health.running')
+      .filter(label => !label.classList.contains('sr-only'));
+    expect(visibleLabels).toHaveLength(1);
+    // The status region speaks for it, so the visible label is not read twice
+    expect(visibleLabels[0]).toHaveAttribute('aria-hidden', 'true');
     // The run status spinner and the Refresh icon spin, and stop under reduced motion
     const spinners = container.querySelectorAll('.animate-spin');
     expect(spinners).toHaveLength(2);
@@ -239,12 +245,16 @@ describe('SystemHealth keyboard and run state', () => {
   it('keeps the radios and Refresh focusable and explains the wait while a run is active', async () => {
     const { finish } = await renderWithPendingRun();
     const refresh = screen.getByRole('button', { name: 'health.refresh' });
+    // The status region is already mounted and empty, so the run it reports is announced
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(/^$/);
     refresh.focus();
     await fireEvent.click(refresh);
 
     await waitFor(() => expect(refresh).toHaveAttribute('aria-disabled', 'true'));
     const describedBy = refresh.getAttribute('aria-describedby') ?? '';
     const running = document.getElementById(describedBy);
+    expect(running).toBe(status);
     expect(running).toHaveTextContent('health.running');
     expect(refresh).not.toBeDisabled();
     expect(document.activeElement).toBe(refresh);

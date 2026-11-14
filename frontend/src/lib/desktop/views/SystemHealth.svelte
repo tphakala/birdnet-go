@@ -595,6 +595,11 @@
         {t('health.diagnostics')}
       </h3>
       <div class="flex items-center gap-3 text-xs text-muted shrink-0">
+        <!-- Always mounted, so a run started by Refresh is announced: a status region
+             inserted together with its text often is not -->
+        <span id={RUN_STATUS_ID} role="status" class="sr-only"
+          >{running ? t('health.running') : ''}</span
+        >
         {#if error}
           <span
             role="alert"
@@ -615,7 +620,8 @@
             <span class="text-muted">· {report.duration_ms.toFixed(0)}ms</span>
           </span>
         {:else if running}
-          <span id={RUN_STATUS_ID} role="status" class="flex items-center gap-1.5">
+          <!-- The visible label; the status region above carries the announcement -->
+          <span aria-hidden="true" class="flex items-center gap-1.5">
             <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
             {t('health.running')}
           </span>
