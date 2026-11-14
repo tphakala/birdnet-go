@@ -35,10 +35,14 @@ const (
 // delete committed meanwhile. A detection deleted or locked after those reads is
 // told apart after the transaction, as Update does, so the retry helper, which
 // reads the word "locked" in an error as a busy database, never sees
-// ErrDetectionLocked.
+// ErrDetectionLocked. A request for the species the current label already stands
+// for, compared by canonical key, returns before any label is resolved or made.
 func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scientificName string) error {
 	scientificName = strings.TrimSpace(scientificName)
-	if scientificName == "" {
+	// A name without a species part (empty, "_" or "_Blackbird") has an empty key,
+	// which would match a label whose key is empty too.
+	species := speciesindex.CanonicalKey(scientificName)
+	if scientificName == "" || species == "" {
 		return ErrLabelNotFound
 	}
 
@@ -52,6 +56,18 @@ func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scient
 	}
 	if locked {
 		return ErrDetectionLocked
+	}
+	// The species the detection already stands for, under whichever spelling or
+	// label ID, is no change. This runs before label resolution so that no label
+	// is created for it. A current label that is gone cannot be compared.
+	current, err := NewLabelRepository(r.db, r.metrics, r.useV2Prefix, r.isMySQL).GetByID(ctx, det.LabelID)
+	switch {
+	case err == nil:
+		if speciesindex.CanonicalKey(current.ScientificName) == species {
+			return nil
+		}
+	case !errors.Is(err, ErrLabelNotFound):
+		return fmt.Errorf("load current label: %w", err)
 	}
 	label, err := r.speciesLabel(ctx, scientificName, det.ModelID)
 	if err != nil {

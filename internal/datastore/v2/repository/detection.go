@@ -336,10 +336,12 @@ type DetectionRepository interface {
 	// models have a label of that name, one is created for the detection's model
 	// with their label type and taxonomic class; that label is made before the
 	// guarded update and stays, as a valid label of the model, if the detection is
-	// locked or deleted in between. The same species is a no-op that writes
-	// nothing. Returns ErrDetectionNotFound if id does not exist,
+	// locked or deleted in between. A request for the species the detection's
+	// current label already stands for is a no-op that writes nothing, whatever
+	// the spelling requested and whichever of the model's labels of the species
+	// the detection holds. Returns ErrDetectionNotFound if id does not exist,
 	// ErrDetectionLocked if it is locked, and ErrLabelNotFound if the name is
-	// empty or no model has a label for the species.
+	// empty or has no species part, or no model has a label for the species.
 	ChangeSpecies(ctx context.Context, id uint, scientificName string) error
 
 	// Exists checks if a detection with the given ID exists.

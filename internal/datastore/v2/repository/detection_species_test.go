@@ -433,3 +433,89 @@ func TestDetectionRepository_ChangeSpecies_ReviewFailureRollsBackLabel(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, entities.VerificationFalsePositive, review.Verified)
 }
+
+// TestDetectionRepository_ChangeSpecies_SameSpeciesIsNoOp pins that a request for
+// the species the detection's current label already stands for writes nothing,
+// whichever spelling is requested and whichever of the model's labels of the
+// species the detection holds. The model holds two spellings: the old one has the
+// lower label ID.
+func TestDetectionRepository_ChangeSpecies_SameSpeciesIsNoOp(t *testing.T) {
+	tests := []struct {
+		name string
+		// onNewer is whether the detection holds the newer spelling.
+		onNewer bool
+		request string
+	}{
+		{"newer spelling, lower-case old spelling", true, strings.ToLower(speciesTestDoveOld)},
+		{"newer spelling, old spelling exactly", true, speciesTestDoveOld},
+		{"newer spelling, lower-case new spelling", true, strings.ToLower(speciesTestDoveNew)},
+		{"older spelling, new spelling exactly", false, speciesTestDoveNew},
+		{"older spelling, lower-case new spelling", false, strings.ToLower(speciesTestDoveNew)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, repo := speciesTestDB(t)
+			ctx := t.Context()
+			older := createTestLabel(t, db, speciesTestDoveOld, speciesTestBirdnet)
+			newer := createTestLabel(t, db, speciesTestDoveNew, speciesTestBirdnet)
+			held := older
+			if tt.onNewer {
+				held = newer
+			}
+			det := speciesTestDetection(t, db, held)
+			labelsBefore := speciesTestLabelCount(t, db)
+
+			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, tt.request))
+
+			got, err := repo.Get(ctx, det.ID)
+			require.NoError(t, err)
+			assert.Equal(t, *det, *got, "the detection is left as it is, with its original NULL")
+			_, err = repo.GetReview(ctx, det.ID)
+			require.ErrorIs(t, err, ErrReviewNotFound, "no review is created")
+			assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created")
+		})
+	}
+
+	t.Run("another species still changes the detection and records the original", func(t *testing.T) {
+		db, repo := speciesTestDB(t)
+		ctx := t.Context()
+		createTestLabel(t, db, speciesTestDoveOld, speciesTestBirdnet)
+		newer := createTestLabel(t, db, speciesTestDoveNew, speciesTestBirdnet)
+		teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+		det := speciesTestDetection(t, db, newer)
+
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestTeal))
+
+		got, err := repo.Get(ctx, det.ID)
+		require.NoError(t, err)
+		assert.Equal(t, teal.ID, got.LabelID)
+		require.NotNil(t, got.OriginalLabelID)
+		assert.Equal(t, newer.ID, *got.OriginalLabelID)
+	})
+}
+
+// TestDetectionRepository_ChangeSpecies_EmptyKey pins that a name with no species
+// part is refused and writes nothing, also when a label of the model has an empty
+// key too.
+func TestDetectionRepository_ChangeSpecies_EmptyKey(t *testing.T) {
+	for _, name := range []string{"_Blackbird", "_", " _Blackbird_Code "} {
+		t.Run(name, func(t *testing.T) {
+			db, repo := speciesTestDB(t)
+			ctx := t.Context()
+			teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+			// A label whose own key is empty must not match the empty request.
+			createTestLabel(t, db, "_Odd", speciesTestBirdnet)
+			det := speciesTestDetection(t, db, teal)
+			labelsBefore := speciesTestLabelCount(t, db)
+
+			require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, name), ErrLabelNotFound)
+
+			got, err := repo.Get(ctx, det.ID)
+			require.NoError(t, err)
+			assert.Equal(t, *det, *got)
+			_, err = repo.GetReview(ctx, det.ID)
+			require.ErrorIs(t, err, ErrReviewNotFound)
+			assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db))
+		})
+	}
+}
