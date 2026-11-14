@@ -149,7 +149,7 @@ describe('SpeciesChangeDialog saving', () => {
         expect(onChanged).toHaveBeenCalledWith({
           detectionId: 7,
           scientificName: 'Turdus merula',
-          reviewCounts: true,
+          speciesStats: true,
         });
       });
       expect(onClose).not.toHaveBeenCalled();
@@ -186,11 +186,9 @@ describe('SpeciesChangeDialog saving', () => {
 
 describe('SpeciesChangeDialog choosing', () => {
   const puts: string[] = [];
-  let summaryRequests = 0;
 
   beforeEach(() => {
     puts.length = 0;
-    summaryRequests = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -201,10 +199,6 @@ describe('SpeciesChangeDialog choosing', () => {
         }
         if (url.includes('/range/species/list')) {
           return Promise.resolve(json({ species: rangeSpecies }));
-        }
-        if (url.includes('/analytics/species/summary')) {
-          summaryRequests += 1;
-          return Promise.resolve(json([]));
         }
         return Promise.resolve(json({}));
       })
@@ -240,26 +234,6 @@ describe('SpeciesChangeDialog choosing', () => {
     await waitFor(() => {
       expect(puts).toEqual([JSON.stringify({ scientificName: 'Turdus pilaris' })]);
     });
-  });
-
-  // Moving a detection to another species changes two species' all-time totals, so the rows
-  // the page kept before the change are out of date.
-  it('makes the page ask for the all-time species totals again after a change', async () => {
-    const { loadSpeciesSummary, forgetSpeciesSummary } = await import('./speciesSummary');
-    forgetSpeciesSummary();
-    await loadSpeciesSummary('Turdus merula');
-    await loadSpeciesSummary('Turdus merula');
-    expect(summaryRequests).toBe(1);
-
-    const { onChanged } = renderDialog();
-    await fireEvent.click(radio('Song Thrush'));
-    await fireEvent.click(
-      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
-    );
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-
-    await loadSpeciesSummary('Turdus merula');
-    expect(summaryRequests).toBe(2);
   });
 
   it('does not list a predicted species again among the search results', async () => {

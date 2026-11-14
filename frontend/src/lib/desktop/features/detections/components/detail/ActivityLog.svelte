@@ -205,7 +205,7 @@
       await api.post(`/api/v2/detections/${id}/review`, { comment: text });
       note = '';
       toastActions.success(t('detections.detail.log.noteAdded'));
-      onChanged({ detectionId: id, scientificName, reviewCounts: false });
+      onChanged({ detectionId: id, scientificName, speciesStats: false });
     } catch (error) {
       logger.error('Failed to add note', error, { action: 'note' });
       const message = t('common.review.errors.commentFailed');

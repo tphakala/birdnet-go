@@ -42,9 +42,9 @@
     isHourlyBuckets,
     isSpeciesRarity,
     isSunTimes,
+    isSpeciesStats,
     isTaxonomy,
     parseImageAttribution,
-    searchTotal,
   } from '$lib/desktop/features/detections/components/detail/detailGuards';
   import {
     dailyWindowStart,
@@ -62,15 +62,12 @@
     HourlyBucket,
     SavedChange,
     SpeciesRarity,
-    SpeciesReviewCounts,
-    SpeciesSummary,
+    SpeciesStats,
     SunTimes,
     TaxonomyHierarchy,
   } from '$lib/desktop/features/detections/components/detail/detailTypes';
-  import { loadSpeciesSummary } from '$lib/desktop/features/detections/components/detail/speciesSummary';
   import { t } from '$lib/i18n';
   import type { ImageAttribution } from '$lib/types/detection.types';
-  import { api } from '$lib/utils/api';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { isPlainObject } from '$lib/utils/security';
   import { getLocalDateString } from '$lib/utils/date';
@@ -115,9 +112,8 @@
   let predictions = $state<DetectionPredictions | null>(null);
   let hourlyActivity = $state<HourlyBucket[] | null>(null);
   let dailyCounts = $state<DailyCounts | null>(null);
-  let speciesSummary = $state<SpeciesSummary | null>(null);
-  let reviewCounts = $state<SpeciesReviewCounts | null>(null);
-  // The species whose data (and review counts) the page holds; empty before the first load.
+  let speciesStats = $state<SpeciesStats | null>(null);
+  // The species whose data the page holds; empty before the first load.
   let speciesDataFor = '';
 
   // Which requests are out, so a card can tell "still loading" from "not recorded".
@@ -126,9 +122,8 @@
     sun: false,
     hourly: false,
     rarity: false,
-    summary: false,
+    stats: false,
     daily: false,
-    reviews: false,
   });
   type LoadingKey = keyof typeof loading;
 
@@ -145,13 +140,13 @@
   // - detection: the detection itself;
   // - related: weather and sun times, tied to the detection and its date;
   // - lists: neighbours, predictions and daily counts, which also change with the species;
-  // - species and attribution: tied to the species, kept while stepping within one species.
+  // - species and attribution: tied to the species, kept while stepping within one species;
+  // - stats: the species statistics, also asked for again after a save changed them.
   let detectionController: AbortController | null = null;
-  // Number of the latest review count request.
-  let reviewCountsRequest = 0;
   let relatedController: AbortController | null = null;
   let listsController: AbortController | null = null;
   let speciesController: AbortController | null = null;
+  let statsController: AbortController | null = null;
   let attributionController: AbortController | null = null;
 
   let displayName = $derived(
@@ -267,6 +262,7 @@
   $effect(() => {
     return () => {
       speciesController?.abort();
+      statsController?.abort();
       attributionController?.abort();
       cancelAttributionRetry();
     };
@@ -377,8 +373,8 @@
   }
 
   /**
-   * A change was saved on a detection. Its species' review counts are counted again when
-   * the page holds that species' data, whichever detection is shown now. The detection
+   * A change was saved on a detection. Its species' statistics are loaded again when the
+   * page holds that species' data, whichever detection is shown now. The detection
    * itself is reloaded only when it is the one the page is on:
    * - shown and settled: reloaded in place, keeping what is on screen if that fails;
    * - being stepped to: the step's request may have been sent before the save went
@@ -386,8 +382,8 @@
    * - already left: nothing to reload, a step brings its own detection.
    */
   function onSaved(change: SavedChange) {
-    if (change.reviewCounts && change.scientificName === speciesDataFor && speciesController) {
-      void loadReviewCounts(change.scientificName, speciesController.signal);
+    if (change.speciesStats && change.scientificName === speciesDataFor) {
+      loadStats(change.scientificName);
     }
     if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) return;
     void fetchDetection(resolvedDetectionId, !isLoadingDetection);
@@ -410,8 +406,8 @@
    * GET a JSON document; null when the request fails, the server has no answer or the
    * answer is not the shape `isShape` accepts.
    * Plain fetch on purpose: the shared API client reports every unexpected answer
-   * to error tracking, and these routes answer 404 (no weather for the time) and
-   * 400 (no species row for a sound class) in normal use.
+   * to error tracking, and these routes answer 404 (no weather for the time, a species
+   * the lookup does not know) and 409 (statistics on the legacy database) in normal use.
    */
   async function loadJson<T>(
     path: string,
@@ -550,33 +546,22 @@
     }
   }
 
-  /** Counts the species' detections reviewers marked correct and false positive. */
-  async function loadReviewCounts(scientificName: string, signal: AbortSignal) {
-    const count = async (verifiedStatus: string): Promise<number> => {
-      const result = await api.post<unknown>(
-        '/api/v2/search',
-        { speciesScientific: [scientificName], verifiedStatus, page: 1 },
-        { signal }
-      );
-      return searchTotal(result);
-    };
-    // Counts asked for later (after a verdict) win over earlier ones still out.
-    reviewCountsRequest += 1;
-    const request = reviewCountsRequest;
-    const latest = () => !signal.aborted && request === reviewCountsRequest;
-    loading.reviews = true;
-    try {
-      const [correct, falsePositive] = await Promise.all([
-        count('correct'),
-        count('false_positive'),
-      ]);
-      if (!latest()) return;
-      reviewCounts = { correct, falsePositive };
-    } catch (error) {
-      if (!latest() || isAbort(error, signal)) return;
-      logger.error('Error loading species review counts:', error);
-    }
-    loading.reviews = false;
+  /**
+   * The species' all-time statistics. A newer request (after a verdict, or for another
+   * species) cancels the one still out, so the latest answer is the one shown; the
+   * statistics on screen stay until it arrives.
+   */
+  function loadStats(scientificName: string) {
+    statsController = renew(statsController);
+    load(
+      `/api/v2/species/stats?scientific_name=${encodeURIComponent(scientificName)}`,
+      statsController.signal,
+      isSpeciesStats,
+      value => {
+        speciesStats = value;
+      },
+      'stats'
+    );
   }
 
   /**
@@ -592,8 +577,7 @@
     taxonomy = null;
     imageAttribution = null;
     hourlyActivity = null;
-    speciesSummary = null;
-    reviewCounts = null;
+    speciesStats = null;
 
     const species = encodeURIComponent(det.scientificName);
 
@@ -618,19 +602,7 @@
       'hourly'
     );
 
-    loading.summary = true;
-    loadSpeciesSummary(det.scientificName)
-      .then(value => {
-        if (!signal.aborted) speciesSummary = value;
-      })
-      .catch((error: unknown) => {
-        if (!signal.aborted) logger.error('Error loading species summary:', error);
-      })
-      .finally(() => {
-        if (!signal.aborted) loading.summary = false;
-      });
-
-    void loadReviewCounts(det.scientificName, signal);
+    loadStats(det.scientificName);
     void fetchImageAttribution(det.scientificName);
   }
 
@@ -794,10 +766,9 @@
           {detection}
           speciesName={displayName}
           {rarity}
-          summary={speciesSummary}
+          stats={speciesStats}
           daily={dailyCounts}
           dailyDays={DAILY_WINDOW_DAYS}
-          reviews={reviewCounts}
           {loading}
         />
       </div>

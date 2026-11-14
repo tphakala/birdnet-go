@@ -101,6 +101,22 @@ async function settle() {
   await new Promise(resolve => setTimeout(resolve, 0));
 }
 
+/** The species statistics route. */
+const STATS = '/api/v2/species/stats';
+
+/** A species statistics answer with the given review counts. */
+function statsOf(correct: number, falsePositive: number, total = 10) {
+  return {
+    scientificName: 'Default scientific',
+    count: total,
+    firstHeard: '2024-01-01T10:00:00Z',
+    lastHeard: '2024-01-01T10:00:00Z',
+    avgConfidence: 0.8,
+    maxConfidence: 0.9,
+    reviews: { correct, falsePositive },
+  };
+}
+
 const count = (calls: Call[], fragment: string) =>
   calls.filter(call => call.url.includes(fragment)).length;
 
@@ -346,7 +362,7 @@ describe('DetectionDetail stepping and refreshing', () => {
     expect(count(calls, '/api/v2/weather/sun/')).toBe(0);
   });
 
-  it('after a verdict, re-counts reviews but leaves weather, sun and lists alone', async () => {
+  it('after a verdict, reloads the species statistics but leaves weather, sun and lists alone', async () => {
     let verified: Detection['verified'] = 'unverified';
     const calls = stubApi([
       ['/api/v2/detections/40/review', {}],
@@ -355,12 +371,12 @@ describe('DetectionDetail stepping and refreshing', () => {
         '/api/v2/detections/40',
         () => Promise.resolve(jsonResponse(makeDetection({ id: 40, verified }))),
       ],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     detailTest.render({ detectionId: '40' });
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(2);
+      expect(count(calls, STATS)).toBe(1);
     });
     await settle();
     const before = {
@@ -376,7 +392,7 @@ describe('DetectionDetail stepping and refreshing', () => {
     );
 
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(4);
+      expect(count(calls, STATS)).toBe(2);
     });
     await settle();
     expect(calls.some(call => call.method === 'POST' && call.url.includes('/40/review'))).toBe(
@@ -398,7 +414,7 @@ describe('DetectionDetail stepping and refreshing', () => {
         '/api/v2/detections/50',
         () => Promise.resolve(jsonResponse(makeDetection({ id: 50, scientificName }))),
       ],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     detailTest.render({ detectionId: '50' });
@@ -455,7 +471,7 @@ describe('DetectionDetail saves that finish around a step', () => {
             answerNext = resolve;
           }),
       ],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     const { rerender } = detailTest.render({ detectionId: '60' });
@@ -478,8 +494,8 @@ describe('DetectionDetail saves that finish around a step', () => {
   });
 
   // A save that answers after the user stepped to a detection of the same species still
-  // changes that species' review counts, so the step recounts them.
-  it('recounts the reviews when a save on the old detection finishes during a step', async () => {
+  // changes that species' statistics, so the step reloads them.
+  it('reloads the species statistics when a save on the old detection finishes during a step', async () => {
     let answerReview: ((_response: Response) => void) | undefined;
     let answerNext: ((_response: Response) => void) | undefined;
     const calls = stubApi([
@@ -500,12 +516,12 @@ describe('DetectionDetail saves that finish around a step', () => {
               })
             : Promise.resolve(jsonResponse({})),
       ],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     const { rerender } = detailTest.render({ detectionId: '62' });
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(2);
+      expect(count(calls, STATS)).toBe(1);
     });
     await fireEvent.click(
       screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
@@ -517,11 +533,11 @@ describe('DetectionDetail saves that finish around a step', () => {
     answerNext?.(jsonResponse(makeDetection({ id: 63 })));
 
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(4);
+      expect(count(calls, STATS)).toBe(2);
     });
   });
 
-  it('recounts the reviews, without reloading the new detection, when a save finishes after the step', async () => {
+  it('reloads the species statistics, without reloading the new detection, when a save finishes after the step', async () => {
     let answerReview: ((_response: Response) => void) | undefined;
     const calls = stubApi([
       [
@@ -533,12 +549,12 @@ describe('DetectionDetail saves that finish around a step', () => {
       ],
       ['/api/v2/detections/64', makeDetection({ id: 64 })],
       ['/api/v2/detections/65', makeDetection({ id: 65 })],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     const { rerender } = detailTest.render({ detectionId: '64' });
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(2);
+      expect(count(calls, STATS)).toBe(1);
     });
     await fireEvent.click(
       screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
@@ -553,14 +569,14 @@ describe('DetectionDetail saves that finish around a step', () => {
 
     answerReview?.(jsonResponse({}));
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(4);
+      expect(count(calls, STATS)).toBe(2);
     });
     expect(calls.filter(call => call.url.endsWith('/api/v2/detections/65')).length).toBe(1);
   });
 
-  // Regression: a step that cancelled the refresh after a verdict also lost the recount of
-  // the species' reviews, which a step within one species does not make again.
-  it('recounts the reviews when a step cancels the refresh after a verdict', async () => {
+  // Regression: a step that cancelled the refresh after a verdict also lost the reload of
+  // the species' statistics, which a step within one species does not make again.
+  it('reloads the species statistics when a step cancels the refresh after a verdict', async () => {
     let answerRefresh: ((_response: Response) => void) | undefined;
     let loads = 0;
     const calls = stubApi([
@@ -577,12 +593,12 @@ describe('DetectionDetail saves that finish around a step', () => {
         },
       ],
       ['/api/v2/detections/71', makeDetection({ id: 71 })],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     const { rerender } = detailTest.render({ detectionId: '70' });
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(2);
+      expect(count(calls, STATS)).toBe(1);
     });
     await fireEvent.click(
       screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
@@ -593,7 +609,7 @@ describe('DetectionDetail saves that finish around a step', () => {
 
     await rerender({ detectionId: '71' });
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(4);
+      expect(count(calls, STATS)).toBe(2);
     });
     answerRefresh?.(jsonResponse(makeDetection({ id: 70, verified: 'correct' })));
   });
@@ -714,39 +730,105 @@ describe('DetectionDetail species dialog', () => {
   });
 });
 
-describe('DetectionDetail review counts', () => {
-  // Regression: the counts asked for after a verdict shared the species request's signal
-  // with the first counts, so a slow first answer arriving last put the old counts back.
-  it('keeps the counts asked for after a verdict when the first counts answer later', async () => {
-    const firstAnswers: ((_response: Response) => void)[] = [];
-    let searches = 0;
-    let verified: Detection['verified'] = 'unverified';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.includes('/api/v2/search')) {
-          searches += 1;
-          if (searches <= 2) {
-            return new Promise<Response>(resolve => {
-              firstAnswers.push(resolve);
-            });
-          }
-          const correct = String(init?.body).includes('"correct"');
-          return Promise.resolve(jsonResponse({ total: correct ? 5 : 0 }));
-        }
-        if (url.endsWith('/api/v2/detections/80')) {
-          return Promise.resolve(jsonResponse(makeDetection({ id: 80, verified })));
-        }
-        return Promise.resolve(jsonResponse({}));
-      })
-    );
+describe('DetectionDetail species statistics', () => {
+  /** The text of the value under a statistics label. */
+  const statValue = (label: string) =>
+    screen.getByText(label).nextElementSibling?.textContent.trim() ?? '';
+
+  it('fills the statistics card from the species statistics answer', async () => {
+    stubApi([
+      ['/api/v2/detections/79', makeDetection({ id: 79, scientificName: 'Turdus merula' })],
+      [STATS, statsOf(3, 1, 1234)],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '79' });
+    await waitFor(() => {
+      expect(statValue('detections.detail.stats.total')).toMatch(/1.?234/);
+    });
+    expect(statValue('detections.detail.stats.maxConfidence')).toBe('90%');
+    // Three correct and one false positive: the bar splits 75 to 25.
+    expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('75%');
+  });
+
+  it('asks for the statistics of the detection’s own species', async () => {
+    const calls = stubApi([
+      ['/api/v2/detections/78', makeDetection({ id: 78, scientificName: 'Turdus merula' })],
+    ]);
+
+    detailTest.render({ detectionId: '78' });
+    await waitFor(() => {
+      expect(count(calls, `${STATS}?scientific_name=Turdus%20merula`)).toBe(1);
+    });
+    // The all-species summary and the review searches are no longer needed.
+    expect(count(calls, '/analytics/species/summary')).toBe(0);
+    expect(count(calls, '/api/v2/search')).toBe(0);
+  });
+
+  // The legacy database has no statistics route: the card says "not recorded" quietly.
+  it('shows dashes, without an error, when the legacy database answers 409', async () => {
+    const { loggers } = await import('$lib/utils/logger');
+    stubApi([
+      ['/api/v2/detections/77', makeDetection({ id: 77 })],
+      [STATS, () => Promise.resolve(jsonResponse({ error: 'legacy' }, 409))],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '77' });
+    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
+    await waitFor(() => {
+      expect(container.querySelector('.dd-stats [data-skeleton]')).toBeNull();
+    });
+    expect(statValue('detections.detail.stats.total')).toBe('-');
+    expect(statValue('detections.detail.stats.firstHeard')).toBe('-');
+    expect(container.querySelector('.dd-reviews')).toBeNull();
+    // Other routes of this stub answer {} and are logged as malformed; the statistics are not.
+    expect(JSON.stringify(vi.mocked(loggers.ui.error).mock.calls)).not.toContain(STATS);
+  });
+
+  it('shows a dash for times and confidences of a species with no detections', async () => {
+    stubApi([
+      ['/api/v2/detections/76', makeDetection({ id: 76 })],
+      [
+        STATS,
+        {
+          scientificName: 'Default scientific',
+          count: 0,
+          firstHeard: null,
+          lastHeard: null,
+          avgConfidence: null,
+          maxConfidence: null,
+          reviews: { correct: 0, falsePositive: 2 },
+        },
+      ],
+    ]);
+
+    detailTest.render({ detectionId: '76' });
+    await waitFor(() => {
+      expect(statValue('detections.detail.stats.total')).toBe('0');
+    });
+    expect(statValue('detections.detail.stats.lastHeard')).toBe('-');
+    expect(statValue('detections.detail.stats.avgConfidence')).toBe('-');
+  });
+
+  // Regression: the statistics asked for after a verdict must win over the first ones,
+  // even when the first answer arrives last.
+  it('keeps the statistics asked for after a verdict when the first ones answer later', async () => {
+    const answers: ((_response: Response) => void)[] = [];
+    stubApi([
+      ['/api/v2/detections/80/review', {}],
+      ['/api/v2/detections/80', makeDetection({ id: 80 })],
+      [
+        STATS,
+        () =>
+          answers.length === 0
+            ? new Promise<Response>(resolve => {
+                answers.push(resolve);
+              })
+            : Promise.resolve(jsonResponse(statsOf(5, 0))),
+      ],
+    ]);
 
     const { container } = detailTest.render({ detectionId: '80' });
-    await waitFor(() => {
-      expect(searches).toBe(2);
-    });
-    verified = 'correct';
+    await waitFor(() => expect(answers).toHaveLength(1));
     await fireEvent.click(
       screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
     );
@@ -754,67 +836,106 @@ describe('DetectionDetail review counts', () => {
       expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
     });
 
-    // The first counts (no reviews correct, one false positive) answer last.
-    firstAnswers[0]?.(jsonResponse({ total: 0 }));
-    firstAnswers[1]?.(jsonResponse({ total: 1 }));
+    // The first statistics (no review correct, one false positive) answer last.
+    answers[0]?.(jsonResponse(statsOf(0, 1)));
     await settle();
 
     expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
   });
 
-  // The placeholder belongs to the latest request: an older answer must not clear it while the
-  // counts asked for after the verdict are still out.
-  it('keeps the placeholder until the latest counts answer, not the first', async () => {
-    const answers: ((_response: Response) => void)[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.includes('/api/v2/search')) {
-          return new Promise<Response>(resolve => {
-            answers.push(resolve);
-          });
-        }
-        if (url.endsWith('/api/v2/detections/81')) {
-          return Promise.resolve(jsonResponse(makeDetection({ id: 81, verified: 'correct' })));
-        }
-        return Promise.resolve(jsonResponse({}));
-      })
-    );
+  // A species change through the dialog moves the detection to another species: the card
+  // shows the new species' statistics, not the old totals.
+  it('shows the new species’ statistics after a species change', async () => {
+    let scientificName = 'Turdus merula';
+    const calls = stubApi([
+      ['/api/v2/detections/82/review', {}],
+      [
+        '/api/v2/detections/82',
+        (call: Call) =>
+          Promise.resolve(
+            jsonResponse(call.url.endsWith('/82') ? makeDetection({ id: 82, scientificName }) : {})
+          ),
+      ],
+      [`${STATS}?scientific_name=Turdus%20merula`, statsOf(0, 0, 40)],
+      [`${STATS}?scientific_name=Turdus%20philomelos`, statsOf(0, 0, 7)],
+    ]);
 
-    const { container } = detailTest.render({ detectionId: '81' });
-    await waitFor(() => expect(answers).toHaveLength(2));
-    await fireEvent.click(
-      screen.getByRole('button', { name: /detections\.detail\.review\.false/ })
-    );
-    await waitFor(() => expect(answers).toHaveLength(4));
-
-    // The first counts answer; the counts asked for after the verdict are still out.
-    answers[0]?.(jsonResponse({ total: 0 }));
-    answers[1]?.(jsonResponse({ total: 1 }));
-    await settle();
-    expect(container.querySelector('.dd-reviews-legend [data-skeleton]')).not.toBeNull();
-    expect(container.querySelector('.dd-reviews-none')).toBeNull();
-
-    answers[2]?.(jsonResponse({ total: 5 }));
-    answers[3]?.(jsonResponse({ total: 0 }));
+    detailTest.render({ detectionId: '82' });
     await waitFor(() => {
-      expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
+      expect(statValue('detections.detail.stats.total')).toBe('40');
     });
+    // Any save that reloads the detection will do; the reloaded detection names another species.
+    scientificName = 'Turdus philomelos';
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+
+    await waitFor(() => {
+      expect(statValue('detections.detail.stats.total')).toBe('7');
+    });
+    expect(count(calls, `${STATS}?scientific_name=Turdus%20philomelos`)).toBe(1);
+  });
+
+  it('reads a statistics answer of the wrong shape as no answer', async () => {
+    stubApi([
+      ['/api/v2/detections/83', makeDetection({ id: 83 })],
+      [STATS, { scientificName: 'Default scientific', count: '12', reviews: null }],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '83' });
+    await screen.findByRole('button', { name: /detections\.detail\.review\.correct/ });
+    await waitFor(() => {
+      expect(container.querySelector('.dd-stats [data-skeleton]')).toBeNull();
+    });
+    expect(statValue('detections.detail.stats.total')).toBe('-');
+  });
+});
+
+describe('DetectionDetail sound classes', () => {
+  // The species lookups answer a sound class with its names only and an unresolved taxonomy.
+  it('shows a sound class without a rarity chip, taxonomy or error', async () => {
+    const { loggers } = await import('$lib/utils/logger');
+    stubApi([
+      [
+        '/api/v2/detections/90',
+        makeDetection({ id: 90, scientificName: 'Dog', commonName: 'Dog' }),
+      ],
+      ['/api/v2/species?scientific_name=Dog', { scientific_name: 'Dog', common_name: 'Dog' }],
+      [
+        '/api/v2/species/taxonomy?scientific_name=Dog',
+        { scientific_name: 'Dog', metadata: { source: 'unresolved', note: 'sound class' } },
+      ],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '90' });
+    await waitFor(() => {
+      expect(container.querySelector('#species-heading')?.textContent).toContain('Dog');
+    });
+    await waitFor(() => {
+      expect(container.querySelector('.dd-identity-chips [data-skeleton]')).toBeNull();
+    });
+    await settle();
+
+    expect(container.querySelector('.dd-chip-rarity')).toBeNull();
+    expect(container.querySelector('[role="meter"]')).toBeNull();
+    expect(container.querySelector('.dd-identity-taxonomy')?.textContent.trim()).toBe('');
+    const logged = JSON.stringify(vi.mocked(loggers.ui.error).mock.calls);
+    expect(logged).not.toContain('/api/v2/species?');
+    expect(logged).not.toContain('/api/v2/species/taxonomy?');
   });
 });
 
 describe('DetectionDetail loading paths', () => {
-  it('does not recount the reviews after a note, which leaves the verdict as it was', async () => {
+  it('does not reload the species statistics after a note, which leaves the verdict as it was', async () => {
     const calls = stubApi([
       ['/api/v2/detections/110/review', {}],
       ['/api/v2/detections/110', makeDetection({ id: 110 })],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     detailTest.render({ detectionId: '110' });
     await waitFor(() => {
-      expect(count(calls, '/api/v2/search')).toBe(2);
+      expect(count(calls, STATS)).toBe(1);
     });
     const box = await screen.findByLabelText<HTMLTextAreaElement>('detections.detail.log.addNote');
     await fireEvent.input(box, { target: { value: 'A note' } });
@@ -824,7 +945,7 @@ describe('DetectionDetail loading paths', () => {
     });
     await settle();
 
-    expect(count(calls, '/api/v2/search')).toBe(2);
+    expect(count(calls, STATS)).toBe(1);
   });
 
   it('drops a late answer for the species the page has left', async () => {
@@ -960,6 +1081,7 @@ describe('DetectionDetail loading paths', () => {
 
     expect(container.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('5');
     expect(count(calls, 'species?scientific_name=')).toBe(1);
+    expect(count(calls, STATS)).toBe(1);
   });
 });
 
@@ -992,7 +1114,7 @@ describe('DetectionDetail stepping back to a detection with a save out', () => {
         },
       ],
       ['/api/v2/detections/61', makeDetection({ id: 61, date: '2024-03-03' })],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     const { rerender } = detailTest.render({ detectionId: '60' });
@@ -1067,7 +1189,7 @@ describe('DetectionDetail zero-padded detection ids', () => {
           return Promise.resolve(jsonResponse(makeDetection({ id: 7 })));
         },
       ],
-      ['/api/v2/search', { total: 0 }],
+      ['/api/v2/species/stats', statsOf(0, 0)],
     ]);
 
     const { container } = detailTest.render({ detectionId: '007' });

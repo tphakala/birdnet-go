@@ -38,10 +38,10 @@ export interface DetectionDetailData extends Detection {
 export interface SavedChange {
   /** The detection the save was made on, which may no longer be the one shown. */
   detectionId: number;
-  /** The species whose review counts the save may have changed. */
+  /** The species whose statistics the save may have changed. */
   scientificName: string;
-  /** True when the save may have changed that species' correct and false positive counts. */
-  reviewCounts: boolean;
+  /** True when the save may have changed that species' statistics (a verdict or a species change). */
+  speciesStats: boolean;
 }
 
 /** GET /api/v2/detections/:id/neighbors */
@@ -111,15 +111,17 @@ export interface DetectionPredictions {
   }[];
 }
 
-/** One row of GET /api/v2/analytics/species/summary */
-export interface SpeciesSummary {
-  scientific_name: string;
-  common_name?: string;
+/** GET /api/v2/species/stats: the all-time statistics of one species. */
+export interface SpeciesStats {
+  scientificName: string;
+  /** Detections of the species, leaving out those reviewed as false positive. */
   count: number;
-  first_heard?: string;
-  last_heard?: string;
-  avg_confidence?: number;
-  max_confidence?: number;
+  /** The times and confidences are null when the count is 0. */
+  firstHeard: string | null;
+  lastHeard: string | null;
+  avgConfidence: number | null;
+  maxConfidence: number | null;
+  reviews: SpeciesReviewCounts;
 }
 
 /** One bucket of GET /api/v2/analytics/time/distribution/hourly */

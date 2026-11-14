@@ -7,11 +7,10 @@ import {
   isDetectionWeather,
   isHourlyBuckets,
   isSpeciesRarity,
-  isSpeciesSummary,
+  isSpeciesStats,
   isSunTimes,
   isTaxonomy,
   parseImageAttribution,
-  searchTotal,
 } from './detailGuards';
 
 const detection = {
@@ -79,10 +78,26 @@ describe('shape guards', () => {
     ],
     ['taxonomy', isTaxonomy, { family: 'Turdidae' }, { family: 3 }],
     [
-      'summary row',
-      isSpeciesSummary,
-      { scientific_name: 'A b', count: 3 },
-      { scientific_name: 'A b' },
+      'species statistics',
+      isSpeciesStats,
+      {
+        scientificName: 'A b',
+        count: 3,
+        firstHeard: '2026-01-01T00:00:00Z',
+        lastHeard: null,
+        avgConfidence: 0.5,
+        maxConfidence: null,
+        reviews: { correct: 1, falsePositive: 0 },
+      },
+      {
+        scientificName: 'A b',
+        count: 3,
+        firstHeard: null,
+        lastHeard: null,
+        avgConfidence: null,
+        maxConfidence: null,
+        reviews: { correct: 1 },
+      },
     ],
   ];
 
@@ -105,9 +120,17 @@ describe('shape guards', () => {
     expect(parseImageAttribution(null)).toBeNull();
   });
 
-  it('reads the search total, or 0 when the answer has none', () => {
-    expect(searchTotal({ total: 4 })).toBe(4);
-    expect(searchTotal({ total: '4' })).toBe(0);
-    expect(searchTotal(null)).toBe(0);
+  // Times and confidences are null for a species without detections, never absent.
+  it('refuses species statistics that leave a nullable field out', () => {
+    expect(
+      isSpeciesStats({
+        scientificName: 'A b',
+        count: 0,
+        firstHeard: null,
+        lastHeard: null,
+        avgConfidence: null,
+        reviews: { correct: 0, falsePositive: 0 },
+      })
+    ).toBe(false);
   });
 });

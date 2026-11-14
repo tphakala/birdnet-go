@@ -178,7 +178,7 @@ describe('ReviewPanel ignore species reload', () => {
       expect(onChanged).toHaveBeenCalledWith({
         detectionId: 7,
         scientificName: 'Scolopax rusticola',
-        reviewCounts: false,
+        speciesStats: false,
       });
     });
   });

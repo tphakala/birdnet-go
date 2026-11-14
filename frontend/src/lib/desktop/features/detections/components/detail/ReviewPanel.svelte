@@ -110,7 +110,7 @@
           ? t('detections.detail.review.savedCorrect')
           : t('detections.detail.review.savedFalsePositive')
       );
-      onChanged({ detectionId: id, scientificName, reviewCounts: true });
+      onChanged({ detectionId: id, scientificName, speciesStats: true });
     } catch (error) {
       logger.error('Failed to save verdict', error, { action: 'review' });
       fail(t('common.review.errors.verificationFailed'));
@@ -129,7 +129,7 @@
     lockTarget = locked;
     try {
       await api.post(`/api/v2/detections/${id}/lock`, { locked });
-      onChanged({ detectionId: id, scientificName, reviewCounts: false });
+      onChanged({ detectionId: id, scientificName, speciesStats: false });
     } catch (error) {
       logger.error('Failed to change lock', error, { action: 'lock' });
       lockTarget = null;
@@ -152,7 +152,7 @@
       });
       ignoredSpecies = species;
       // Saving the review again moves its last-saved time, which the activity log shows.
-      onChanged({ detectionId: id, scientificName: species, reviewCounts: false });
+      onChanged({ detectionId: id, scientificName: species, speciesStats: false });
       toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });

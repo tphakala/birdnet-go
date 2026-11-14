@@ -23,7 +23,15 @@ function renderWithReviews(correct: number, falsePositive: number) {
       detection,
       speciesName: 'Eurasian Woodcock',
       dailyDays: 30,
-      reviews: { correct, falsePositive },
+      stats: {
+        scientificName: detection.scientificName,
+        count: correct,
+        firstHeard: null,
+        lastHeard: null,
+        avgConfidence: null,
+        maxConfidence: null,
+        reviews: { correct, falsePositive },
+      },
     },
   });
 }

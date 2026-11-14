@@ -17,7 +17,7 @@ import type {
   DetectionWeather,
   HourlyBucket,
   SpeciesRarity,
-  SpeciesSummary,
+  SpeciesStats,
   SunTimes,
   TaxonomyHierarchy,
 } from './detailTypes';
@@ -221,24 +221,29 @@ export function isDetectionPredictions(value: unknown): value is DetectionPredic
   );
 }
 
-/** One row of GET /api/v2/analytics/species/summary. */
-export function isSpeciesSummary(value: unknown): value is SpeciesSummary {
+/** A string or null: a field the server always sends, null when it has no value. */
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+/** A number or null, as `isNullableString`. */
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || isCount(value);
+}
+
+/** GET /api/v2/species/stats. Every key is always sent; the times and confidences may be null. */
+export function isSpeciesStats(value: unknown): value is SpeciesStats {
   return (
     isPlainObject(value) &&
-    fieldsMatch(
-      value,
-      [
-        ['scientific_name', 'string'],
-        ['count', 'number'],
-      ],
-      [
-        ['common_name', 'string'],
-        ['first_heard', 'string'],
-        ['last_heard', 'string'],
-        ['avg_confidence', 'number'],
-        ['max_confidence', 'number'],
-      ]
-    )
+    typeof value.scientificName === 'string' &&
+    isCount(value.count) &&
+    isNullableString(value.firstHeard) &&
+    isNullableString(value.lastHeard) &&
+    isNullableNumber(value.avgConfidence) &&
+    isNullableNumber(value.maxConfidence) &&
+    isPlainObject(value.reviews) &&
+    isCount(value.reviews.correct) &&
+    isCount(value.reviews.falsePositive)
   );
 }
 
@@ -323,9 +328,4 @@ export function parseImageAttribution(value: unknown): ImageAttribution | null {
     licenseURL: text('licenseURL'),
     sourceProvider: text('sourceProvider'),
   };
-}
-
-/** The `total` of POST /api/v2/search, or 0 when the answer has none. */
-export function searchTotal(value: unknown): number {
-  return isPlainObject(value) && isCount(value.total) ? value.total : 0;
 }

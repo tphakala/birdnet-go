@@ -18,33 +18,30 @@
     DailyCounts,
     DetectionDetailData,
     SpeciesRarity,
-    SpeciesReviewCounts,
-    SpeciesSummary,
+    SpeciesStats,
   } from './detailTypes';
 
   interface Props {
     detection: DetectionDetailData;
     speciesName: string;
     rarity?: SpeciesRarity | null;
-    summary?: SpeciesSummary | null;
+    /** All-time totals, times, confidences and review counts; null until known. */
+    stats?: SpeciesStats | null;
     /** Daily counts for the days leading up to the detection. */
     daily?: DailyCounts | null;
     /** Number of days in the daily counts window, ending on the detection's day. */
     dailyDays: number;
-    /** How reviewers judged this species' detections; null until known. */
-    reviews?: SpeciesReviewCounts | null;
     /** Which parts are still being requested; each shows placeholders until it answers. */
-    loading?: Partial<Record<'rarity' | 'summary' | 'daily' | 'reviews', boolean>>;
+    loading?: Partial<Record<'rarity' | 'stats' | 'daily', boolean>>;
   }
 
   let {
     detection,
     speciesName,
     rarity = null,
-    summary = null,
+    stats = null,
     daily = null,
     dailyDays,
-    reviews = null,
     loading = {},
   }: Props = $props();
 
@@ -57,12 +54,13 @@
   // Placeholders stand in for a part only while it has nothing to show yet.
   let pending = $derived({
     rarity: Boolean(loading.rarity) && rarity === null,
-    summary: Boolean(loading.summary) && summary === null,
+    stats: Boolean(loading.stats) && stats === null,
     daily: Boolean(loading.daily) && daily === null,
-    reviews: Boolean(loading.reviews) && reviews === null,
   });
   let anyPending = $derived(Object.values(pending).some(Boolean));
 
+  // How reviewers judged this species' detections.
+  let reviews = $derived(stats?.reviews ?? null);
   let reviewed = $derived(reviews ? reviews.correct + reviews.falsePositive : 0);
   let falsePositiveShare = $derived(reviews && reviewed > 0 ? reviews.falsePositive / reviewed : 0);
   let oftenRejected = $derived(
@@ -109,7 +107,7 @@
 
   let speciesUrl = $derived(buildSpeciesDetectionUrl(detection.scientificName, detection.date));
 
-  function heard(timestamp: string | undefined): string {
+  function heard(timestamp: string | null | undefined): string {
     return timestamp ? formatCalendarDate(timestamp) : MISSING;
   }
 </script>
@@ -163,7 +161,7 @@
   <dl class="dd-stats">
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.total')}</dt>
-      <dd>{@render value(pending.summary, summary ? formatCount(summary.count) : MISSING)}</dd>
+      <dd>{@render value(pending.stats, stats ? formatCount(stats.count) : MISSING)}</dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.windowTotal', { days: dailyDays })}</dt>
@@ -174,26 +172,26 @@
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.firstHeard')}</dt>
       <dd class="dd-stat-text">
-        {@render value(pending.summary, heard(summary?.first_heard), 'w-28')}
+        {@render value(pending.stats, heard(stats?.firstHeard), 'w-28')}
       </dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.lastHeard')}</dt>
       <dd class="dd-stat-text">
-        {@render value(pending.summary, heard(summary?.last_heard), 'w-28')}
+        {@render value(pending.stats, heard(stats?.lastHeard), 'w-28')}
       </dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.avgConfidence')}</dt>
-      <dd>{@render value(pending.summary, formatPercent(summary?.avg_confidence, MISSING))}</dd>
+      <dd>{@render value(pending.stats, formatPercent(stats?.avgConfidence, MISSING))}</dd>
     </div>
     <div class="dd-stat">
       <dt>{t('detections.detail.stats.maxConfidence')}</dt>
-      <dd>{@render value(pending.summary, formatPercent(summary?.max_confidence, MISSING))}</dd>
+      <dd>{@render value(pending.stats, formatPercent(stats?.maxConfidence, MISSING))}</dd>
     </div>
   </dl>
 
-  {#if reviews || pending.reviews}
+  {#if reviews || pending.stats}
     <div class="dd-reviews">
       <div class="dd-reviews-head">
         <span>{t('detections.detail.stats.reviewsTitle')}</span>
