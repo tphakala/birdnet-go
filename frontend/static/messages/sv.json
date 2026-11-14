@@ -135,7 +135,7 @@
       "selectDate": "Välj datum",
       "previousMonth": "Föregående månad",
       "nextMonth": "Nästa månad",
-      "selectToday": "Välj idag",
+      "selectToday": "Välj i dag",
       "dateSelected": "Datum valt: {date}",
       "calendarNavigation": "Använd piltangenterna för att navigera i kalendern, Enter för att välja, Escape för att stänga",
       "visitEbirdLink": "Öppna eBird.org i en ny flik",
@@ -419,7 +419,7 @@
         "updatingIntervals": "Uppdaterar detektionsintervall...",
         "reconfiguringMqtt": "Uppdaterar MQTT-anslutning...",
         "reconfiguringBirdweather": "Uppdaterar BirdWeather-integration...",
-        "reconfiguringEbird": "Updating eBird integration...",
+        "reconfiguringEbird": "Updaterar eBird-integration...",
         "reconfiguringStreams": "Uppdaterar ljudströmmar...",
         "reconfiguringTelemetry": "Uppdaterar telemetriinställningar...",
         "reconfiguringPushNotifications": "Omkonfigurerar push-aviseringsleverantörer...",
@@ -430,7 +430,7 @@
         "oauthRestartRequired": "Autentiseringsleverantörsinställningar ändrade. Omstart krävs.",
         "databaseRestartRequired": "Databasinställningar har ändrats. Omstart krävs.",
         "loggingRestartRequired": "Logginställningar har ändrats. Omstart krävs.",
-        "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
+        "reconfiguringSoundLevel": "Uppdaterar ljudnivåövervakning...",
         "reconfiguringAudioSources": "Konfigurerar om ljudkällor...",
         "rebuildingExtendedCapture": "Bygger om filter för utökad inspelning...",
         "extendedCaptureRestartRequired": "Inställningar för utökad inspelning ändrade. Omstart krävs.",
@@ -681,7 +681,7 @@
     "rejected": "Avvisad",
     "newSpeciesHighlights": {
       "title": "Nya & återvändande arter",
-      "subtitle": "Förstagångsobservationer och nyligen återvända",
+      "subtitle": "Förstagångsobservationer och nyligen återanlända",
       "trackingDisabled": "Aktivera \"Aktivera artspårning\" för att använda den här funktionen.",
       "categoryLifetime": "Ny art",
       "categoryYear": "Ny i år",
@@ -714,7 +714,7 @@
       "navigation": {
         "previousDay": "Föregående dag",
         "nextDay": "Nästa dag",
-        "today": "Idag"
+        "today": "I dag"
       },
       "tooltips": {
         "viewHourly": "Visa alla detekteringar för {hour}:00",
@@ -764,7 +764,7 @@
         "showSpecies": "Visa art {species}",
         "ignoreSpecies": "Ignorera art {species}",
         "showSpeciesConfirm": "Är du säker på att du vill visa framtida detekteringar av {species}?",
-        "ignoreSpeciesConfirm": "Är du säker på att du vill ignorera framtida detekteringar av {species}? Detta påverkar bara nya detekteringar - befintliga detekteringar finns kvar i databasen.",
+        "ignoreSpeciesConfirm": "Är du säker på att du vill ignorera framtida detekteringar av {species}? Detta påverkar bara nya detekteringar, befintliga detekteringar finns kvar i databasen.",
         "unlockDetection": "Lås upp detektering",
         "lockDetection": "Lås detektering",
         "unlockDetectionConfirm": "Är du säker på att du vill låsa upp denna detektering av {species}? Den kommer då att kunna tas bort vid vanlig rensning.",
@@ -1199,7 +1199,7 @@
       "labels": {
         "free": "Ledigt",
         "available": "Tillgängligt",
-        "buffCache": "Buff/Cache"
+        "buffCache": "Buffert/Cache"
       }
     },
     "progress": {
@@ -1235,7 +1235,7 @@
       "database": "Databas",
       "inference": "AI-modeller",
       "terminal": "Terminal",
-      "importExport": "Importera / Exportera"
+      "importExport": "Importera/Exportera"
     },
     "importExport": {
       "available": "Tillgänglig",
@@ -1290,7 +1290,7 @@
         "mountDescription": "Din BirdNET-Pi-databas bör finnas på den externa mediemonteringen.",
         "mountRoot": "Monteringsrot",
         "nativeTitle": "Extern mediemontering krävs",
-        "nativeDescription": "BirdNET-Pi-import kräver en extern mediemontering, som endast är tillgänglig när BirdNET-Go körs i en container. Nativa (icke-containeriserade) installationer kan inte använda den här importfunktionen.",
+        "nativeDescription": "BirdNET-Pi-import kräver en extern mediemontering, som endast är tillgänglig när BirdNET-Go körs i en container. Nativa (icke-containerbaserade) installationer kan inte använda den här importfunktionen.",
         "nativeHowTo": "För att importera från BirdNET-Pi, kör BirdNET-Go i en container där BirdNET-Pi-datakatalogen är monterad som den externa medievolymen.",
         "missingTitle": "Extern mediemontering hittades inte",
         "missingDescription": "BirdNET-Go körs i en container, men den externa mediemonteringen är inte åtkomlig. Följ stegen nedan för att ställa in den.",
@@ -1626,7 +1626,7 @@
           "validationFailed": "Validering misslyckades",
           "rate": "Hastighet",
           "recPerSec": "{rate} post/s",
-          "dayAvg": "~{count} / dag snitt",
+          "dayAvg": "~{count} /dag snitt",
           "dayHistory": "30 dagars historik"
         },
         "phase": {
@@ -1790,7 +1790,7 @@
       "sectionHardware": "Hårdvara",
       "sectionBackends": "Inferens-backends",
       "sectionModels": "Modeller",
-      "noModels": "No models are currently loaded",
+      "noModels": "Inga modeller är för närvarande inlästa",
       "architecture": "Arkitektur",
       "cpu": "CPU",
       "environment": "Miljö",
@@ -2054,7 +2054,7 @@
       "lowestMaxConfidence": "Lägst maximal konfidens"
     },
     "charts": {
-      "top10Species": "Topp 10 arter",
+      "top10Species": "Topp-10-arter",
       "detectionsByTimeOfDay": "Detektioner efter tid på dygnet",
       "detectionTrends": "Detektionstrender",
       "newSpeciesDetected": "Nya arter detekterade",
@@ -2100,7 +2100,7 @@
       "card": {
         "detections": "Detektioner:",
         "confidence": "Konfidens:",
-        "first": "Först:"
+        "first": "Första:"
       }
     },
     "advanced": {
@@ -2131,7 +2131,7 @@
           "noData": "Ingen data för tid på dygnet tillgänglig",
           "noDataHint": "Välj arter och ett datumintervall för att visa mönster",
           "axisTime": "Tid på dygnet",
-          "axisCount": "Genomsn. detektioner / dag"
+          "axisCount": "Genomsn. detektioner/dag"
         },
         "dailyTrend": {
           "title": "Artdetektionstrender",
@@ -2152,7 +2152,7 @@
         },
         "accumulation": {
           "title": "Artackumuleringskurva",
-          "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
+          "description": "Kumulativt antal unika arter som påträffats under den valda tidsperioden. Kurvan stiger i takt med att nya arter dyker upp och planar ut mot en asymptot när de vanliga arterna väl har registrerats. Att kurvan fortfarande stiger mot slutet tyder på att det sannolikt finns fler arter som väntar på att upptäckas.",
           "noData": "Inga data för artackumulering tillgängliga",
           "noDataHint": "Välj ett större datumintervall för att se artlistan byggas upp över tid",
           "ariaLabel": "Artackumuleringskurva: kumulativa distinkta arter detekterade under perioden",
@@ -2164,24 +2164,24 @@
           "summary": "Kumulativ artackumulering över {days} dagar, som nådde {species} distinkta arter i slutet av perioden."
         },
         "yearOverYear": {
-          "title": "År-över-år-spårare",
+          "title": "År-för-år-spårare",
           "description": "Kumulativa detektioner hittills i år jämfört med samma kalenderdatum förra året. Det skuggade bandet är den löpande klyftan mellan de två; om i årets linje ligger över förra årets innebär det att du ligger före förra årets takt.",
           "noData": "Ingen år-över-år-data tillgänglig",
           "noDataHint": "Detektioner från i år och förra året byggs upp här i takt med att året fortskrider",
-          "ariaLabel": "År-över-år-spårare: kumulativa detektioner i år jämfört med samma period förra året",
+          "ariaLabel": "År-för-år-spårare: kumulativa detektioner i år jämfört med samma period förra året",
           "axisDate": "Datum",
           "axisCount": "Kumulativa detektioner",
           "legendThis": "{year} (i år)",
           "legendLast": "{year} (förra året)",
           "tooltipDelta": "Skillnad",
-          "summary": "År över år: fram till {monthDay} har {currentYear} {thisYear} kumulativa detektioner jämfört med {lastYear} för {previousYear} (en skillnad på {delta})."
+          "summary": "År för år: fram till {monthDay} har {currentYear} {thisYear} kumulativa detektioner jämfört med {lastYear} för {previousYear} (en skillnad på {delta})."
         },
         "phenology": {
-          "title": "Ankomst- och avfärdsfenologi",
+          "title": "Ankomst- och flyttningsfenologi",
           "description": "Första och sista detektion av varje art inom den valda perioden, ritad som staplar för de mest detekterade arterna. Läs uppifrån och ner i ankomstordning för att se vem som dyker upp först och vem som stannar kvar längst över säsongen.",
           "noData": "Ingen fenologidata tillgänglig",
-          "noDataHint": "Välj ett bredare datumintervall för att se när arter anländer och avreser",
-          "ariaLabel": "Ankomst- och avfärdsfenologi: uppehållsstaplar som visar varje arts spann mellan första och sista detektion",
+          "noDataHint": "Välj ett bredare datumintervall för att se när arter anländer och flyttar",
+          "ariaLabel": "Ankomst- och flyttningsfenologi: uppehållsstaplar som visar varje arts spann mellan första och sista detektion",
           "axisDate": "Datum",
           "summary": "Ankomst och avfärd för {species} arter över den valda perioden.",
           "tooltipFirst": "Först detekterad",
@@ -2191,24 +2191,24 @@
           "residencyDays": "{days} dagar"
         },
         "heatmap": {
-          "title": "Säsongsmässig aktivitetsvärmekarta",
-          "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
+          "title": "Säsongsmässig aktivitetstäthetskarta",
+          "description": "Registreringstäthet per datum och tid på dygnet som visar flyttningsvågor och hur gryningssången förändras över tid",
           "noData": "Ingen aktivitetsdata tillgänglig",
-          "noDataHint": "Select a date range to view seasonal activity patterns",
+          "noDataHint": "Välj ett datumintervall för att se säsongsbaserade aktivitetsmönster",
           "axisDate": "Datum",
           "axisTime": "Tid på dygnet",
           "tooltipTime": "Tid",
           "tooltipCount": "Detektioner",
           "legendLess": "Mindre",
           "legendMore": "Mer ({max})",
-          "ariaLabel": "Säsongsmässig aktivitetsvärmekarta: detektionstäthet efter datum och tid på dygnet",
+          "ariaLabel": "Säsongsmässig aktivitetstäthetskarta: detektionstäthet efter datum och tid på dygnet",
           "summary": "{total} detektioner över {days} dagar. Livligast runt {time} den {date}."
         },
         "ridgeline": {
           "title": "När arterna sjunger",
-          "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
+          "description": "Aktivitet under dygnet för de arter som registrerats flest gånger, med uppdelning mellan fåglar som sjunger i gryningen, fåglar som är aktiva hela dagen och nattaktiva fåglar",
           "noData": "Ingen aktivitetsdata tillgänglig för arter",
-          "noDataHint": "Select a wider date range to compare species activity patterns",
+          "noDataHint": "Välj ett bredare datumintervall för att jämföra arters aktivitetsmönster",
           "ariaLabel": "Aktivitetsdiagram: aktivitetsfördelning per timme och art",
           "axisTime": "Tid på dygnet",
           "note": "Visar de {count} mest upptäckta arterna",
@@ -2218,10 +2218,10 @@
         },
         "succession": {
           "title": "Akustisk succession",
-          "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
+          "description": "Hur de dominerande arterna i ljudlandskapet avlöser varandra under dygnet, åskådliggjort som staplade band av observationer per timme från tiden före gryningen och fram till natten.",
           "noData": "Ingen data för akustisk succession tillgänglig",
-          "noDataHint": "Select a wider date range to see how species hand off through the day",
-          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
+          "noDataHint": "Välj ett bredare datumintervall för att se hur arter avlöser varandra under dagen",
+          "ariaLabel": "Strömgraf för akustisk succession: staplade registreringar per dygnstimme för de vanligaste arterna",
           "axisTime": "Tid på dygnet",
           "note": "Kombinerad timaktivitet för de {count} främsta arterna efter detektionsvolym",
           "tooltipDetections": "Detektioner",
@@ -2232,7 +2232,7 @@
           "title": "Gryningskörens början",
           "description": "När gryningskören startar varje dag i förhållande till borgerlig gryning, vilket isolerar säsongsskiftet från klocktiden",
           "noData": "Ingen data för gryningskören tillgänglig",
-          "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
+          "noDataHint": "Välj ett bredare datumintervall för att spåra hur gryningskören skiftar över årstiderna",
           "ariaLabel": "Spårare för gryningskörens början: daglig körstart i förhållande till borgerlig gryning",
           "axisDate": "Datum",
           "axisOnset": "Minuter från borgerlig gryning",
@@ -3087,7 +3087,7 @@
                 "placeholder": "admin"
               },
               "password": {
-                "label": "Lösenord / Åtkomsttoken",
+                "label": "Lösenord/Åtkomsttoken",
                 "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
               }
             },
@@ -3836,7 +3836,7 @@
         "normalizationHelp": "Justera automatiskt ljudnivåer till EBU R128 sändningsstandard för konsekvent uppspelningsvolym i alla klipp.",
         "normalizationDisabled": "Ljudnormalisering är inaktiverad",
         "targetLUFSLabel": "Målhöghet (LUFS)",
-        "targetLUFSHelp": "Integrerad höghetsm mål i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128 sändningsstandard. Intervall: -40 till -10 LUFS.",
+        "targetLUFSHelp": "Målvärde för integrerad ljudstyrka i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128-standarden för sändningar. Område: -40 till -10 LUFS.",
         "truePeakLabel": "Sann toppnivå (dBTP)",
         "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
         "normalizationNote": "EBU R128-standard",
@@ -4150,7 +4150,7 @@
         "confirmEnable": "Är du säker på att du vill aktivera webbläsarterminalen? Detta ger skalåtkomst till värdsystemet. Gör bara detta på betrodda nätverk."
       },
       "tls": {
-        "title": "TLS / HTTPS",
+        "title": "TLS/HTTPS",
         "description": "Konfigurera TLS/HTTPS-kryptering för säkra anslutningar",
         "modeLabel": "TLS-läge",
         "modeNone": "Ingen (HTTP)",
@@ -4457,11 +4457,11 @@
           "tooltip": "Använd knapparna nedan eller skriv direkt (kommaseparerade)",
           "availableTitle": "Tillgängliga parametrar",
           "buttons": {
-            "commonName": "CommonName",
-            "scientificName": "ScientificName",
-            "confidence": "Confidence",
-            "time": "Time",
-            "source": "Source",
+            "commonName": "Artnamn",
+            "scientificName": "Vetenskapligt namn",
+            "confidence": "Konfidens",
+            "time": "Tid",
+            "source": "Källa",
             "clearParameters": "Rensa parametrar"
           }
         },
@@ -4573,7 +4573,7 @@
           "september": "September",
           "october": "Oktober",
           "november": "November",
-          "december": "december"
+          "december": "December"
         },
         "units": {
           "days": "dagar",
@@ -4718,7 +4718,7 @@
         "metric": "Mätvärde",
         "conditionsSection": "Villkor",
         "property": "Egenskap",
-        "operator": "Operator",
+        "operator": "Operatör",
         "value": "Värde",
         "valuePlaceholder": "Ange värde",
         "duration": "Varaktighet (s)",
@@ -5022,8 +5022,8 @@
         "selected": "Valt: {startDate} - {endDate}"
       },
       "presets": {
-        "today": "Idag",
-        "yesterday": "Igår",
+        "today": "I dag",
+        "yesterday": "I går",
         "last7Days": "Senaste 7 dagarna",
         "last30Days": "Senaste 30 dagarna",
         "thisMonth": "Denna månad",
@@ -5507,7 +5507,7 @@
       "audioSource": {
         "title": "Ljudkälla",
         "sourceTypeLabel": "Källtyp",
-        "soundcard": "Mikrofon / Ljudkort",
+        "soundcard": "Mikrofon/Ljudkort",
         "rtspStream": "RTSP-ström",
         "deviceLabel": "Ljudenhet",
         "deviceLoading": "Laddar ljudenheter...",
@@ -5635,18 +5635,18 @@
         "helpText": "Språk som används för arternas vardagliga namn i gränssnittet."
       },
       "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+        "label": "Åsidosätt konfidensgränsen",
+        "helpText": "När den är aktiverad använder modellen sin egen konfidensgräns nedan. När den är inaktiverad följer den BirdNETs huvudsakliga konfidensgräns.."
       },
       "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+        "helpText": "Minsta konfidenspoäng (0,01 – 0,99) som krävs för att en detektering från denna modell ska registreras.",
+        "followsBirdnet": "Aktivera åsidosättningen ovan för att ange ett eget värde. Denna modell följer för närvarande det huvudsakliga tröskelvärdet för konfidens i BirdNET."
       },
       "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
+        "label": "Perch v2 konfidenströskel"
       },
       "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
+        "label": "BirdNET v3.0 konfidenströskel"
       }
     },
     "rangeFilter": {
@@ -5690,19 +5690,19 @@
         "title": "Modellregion",
         "modeAuto": "Automatisk",
         "modeAutoHint": "Välj den bästa regionala varianten utifrån stationsplatsen",
-        "modeManual": "Manual region select",
-        "modeManualHint": "Choose a region yourself, or the worldwide model",
-        "worldwideTitle": "Worldwide",
-        "worldwideSubtitle": "Every region, all species",
-        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
-        "selectedBadge": "Selected",
-        "orSpecificRegion": "Or a specific region",
-        "search": "Search regions or countries",
-        "searchNoResults": "No regions match \"{query}\"",
-        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "modeManual": "Manuellt val av region",
+        "modeManualHint": "Välj en region själv eller den globala modellen",
+        "worldwideTitle": "Hela världen",
+        "worldwideSubtitle": "Varje region, alla arter",
+        "worldwideResourceNote": "Största modellen, använder mest RAM och CPU",
+        "selectedBadge": "Vald",
+        "orSpecificRegion": "Eller en specifik region",
+        "search": "Sök regioner eller länder",
+        "searchNoResults": "Inga regioner matchar \"{query}\"",
+        "manualPrompt": "Välj en region nedan eller modellen för hela världen.",
         "countriesOverflow": "+{count}",
-        "coreCoverage": "Core coverage:",
-        "partialCoverage": "Partial coverage:",
+        "coreCoverage": "Grundläggande täckning:",
+        "partialCoverage": "Delvis täckning:",
         "pinAction": "Fäst {region}",
         "switchToAuto": "Växla till automatisk",
         "loading": "Laddar regioner...",
@@ -5738,11 +5738,11 @@
         "filterAria": "Filtrera regionsanpassade byggen",
         "filterNoMatch": "Inga regioner matchar \"{query}\"",
         "latency": "~{ms} ms",
-        "precisionInfo": "About precision and variants",
-        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+        "precisionInfo": "Om precision och varianter",
+        "precisionHelp": "Precision (FP32, FP16, INT8) innebär en avvägning mellan noggrannhet å ena sidan och storlek samt hastighet å den andra: FP32 ger högst noggrannhet, medan INT8 är minst och snabbast. ”Rekommenderad” är det alternativ som passar bäst för den hårdvara som har identifierats; ”Standard” motsvarar modellens ursprungliga utformning."
       },
       "actionInProgress": "Vänta tills den pågående installationen, ominstallationen eller borttagningen av modellen är klar",
-      "removeSuccess": "Removed {name}",
+      "removeSuccess": "Borttagen {name}",
       "reasons": {
         "backendRecommended": "Körs på {backend}, den rekommenderade backend-motorn för din hårdvara",
         "backendSupported": "Körs på {backend}",
@@ -5819,7 +5819,7 @@
         "goToDownloadSource": "Gå till Nedladdningskälla",
         "dismiss": "Avfärda",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "För att försöka igen, använd knappen Ta bort på modellens kort."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -5856,7 +5856,7 @@
         "badgeTitle": "Ett snabbare bygge är tillgängligt för din hårdvara",
         "swap": "Optimera",
         "dialogTitle": "Optimera dina modeller",
-        "installedBuild": "Installed build",
+        "installedBuild": "Installerad version",
         "fromTo": "{from} till {to}",
         "apply": "Tillämpa",
         "applyAll": "Tillämpa alla",
@@ -5879,12 +5879,12 @@
       "birdOnlyNote": "Dynamiskt tröskelvärde gäller endast fågelklassificerare."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2-detektering",
+      "description": "Ange ett särskilt konfidenströskelvärde för detekteringar i Google Perch v2, oberoende av tröskelvärdet för BirdNET.."
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0-detektering",
+      "description": "Ange ett särskilt konfidenströskelvärde för detekteringar i BirdNET v3.0 oberoende av det huvudsakliga tröskelvärdet för BirdNET."
     }
   },
   "restart": {
@@ -5899,7 +5899,7 @@
     "bannerAction": "Starta om nu",
     "restartFailed": "Det gick inte att starta om",
     "reasons": {
-      "webserver": "Webbserver / nätverksinställningar",
+      "webserver": "Webbserver/nätverksinställningar",
       "oauth": "Inställningar för autentiseringsleverantör",
       "database": "Databasinställningar",
       "logging": "Logginställningar",
@@ -5981,7 +5981,7 @@
       "healthy": "Hälsosam",
       "warnings": "Varningar",
       "critical": "Kritisk",
-      "skipped": "Hoppade över",
+      "skipped": "Överhoppade",
       "total": "Totalt antal kontroller"
     },
     "metricFooter": {
