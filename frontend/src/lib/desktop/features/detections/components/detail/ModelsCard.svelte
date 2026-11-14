@@ -242,9 +242,10 @@
   }
 
   /* Stacked rows: in a narrow window (one page column), and in any card too narrow for
-     the four columns, which need about 32.6rem (the half-width column of a window with the
-     sidebar open, from about 1100 to 1280 px). The two rules hold the same declarations;
-     container and media queries cannot share one block. */
+     the four columns. Their minimum is 12 + 4 + 7 + 7rem plus three 0.875rem gaps,
+     32.625rem: the half-width column of a window with the sidebar open, from 1101 to
+     about 1275 px wide, is narrower. The two rules hold the same declarations; container
+     and media queries cannot share one block. */
   @media (max-width: 900px) {
     .dd-model {
       grid-template-columns: minmax(0, 1fr) auto;
@@ -261,7 +262,7 @@
     }
   }
 
-  @container dd-models (max-width: 33rem) {
+  @container dd-models (width < 32.625rem) {
     .dd-model {
       grid-template-columns: minmax(0, 1fr) auto;
     }

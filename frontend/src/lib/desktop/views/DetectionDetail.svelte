@@ -712,7 +712,8 @@
       <div class="dd-column">
         <DetailCard padding="even">
           <div class="flex gap-5">
-            <Skeleton className="aspect-[4/3] w-54 shrink-0" />
+            <!-- The photo is 13.5rem wide, 10.5rem in a window of 900 px or less (IdentityCard). -->
+            <Skeleton className="aspect-[4/3] w-54 shrink-0 max-[900px]:w-42" />
             <div class="flex min-w-0 flex-1 flex-col justify-between">
               <div>
                 {@render line('h-9', 'h-7 w-56')}

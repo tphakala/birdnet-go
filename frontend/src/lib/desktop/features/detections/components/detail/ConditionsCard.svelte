@@ -327,25 +327,28 @@
               ></span>
             {/each}
           </div>
-          <table class="sr-only">
-            <caption>
-              {t('detections.detail.conditions.activityLabel', { species: speciesName })}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t('detections.detail.identity.time')}</th>
-                <th scope="col">{t('analytics.charts.detections')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each activity as bar (bar.hour)}
+          <!-- A table is as tall as its rows whatever its height, so the wrapper hides it. -->
+          <div class="sr-only">
+            <table>
+              <caption>
+                {t('detections.detail.conditions.activityLabel', { species: speciesName })}
+              </caption>
+              <thead>
                 <tr>
-                  <th scope="row">{hourLabel(bar.hour)}</th>
-                  <td>{bar.count}</td>
+                  <th scope="col">{t('detections.detail.identity.time')}</th>
+                  <th scope="col">{t('analytics.charts.detections')}</th>
                 </tr>
-              {/each}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {#each activity as bar (bar.hour)}
+                  <tr>
+                    <th scope="row">{hourLabel(bar.hour)}</th>
+                    <td>{bar.count}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
         {:else if activityLoading && hourlyActivity === null}
           <div class="dd-activity-pending" style:height="{PERCENT - HORIZON_PERCENT}%">
             <Skeleton className="h-full w-full rounded-none" />

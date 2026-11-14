@@ -245,25 +245,28 @@
             ></span>
           {/each}
         </div>
-        <table class="sr-only">
-          <caption>
-            {t('detections.detail.stats.dailyLabel', { days: dailyDays, count: windowTotal })}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t('detections.detail.identity.date')}</th>
-              <th scope="col">{t('analytics.charts.detections')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each dailyBars as bar (bar.date)}
+        <!-- A table is as tall as its rows whatever its height, so the wrapper hides it. -->
+        <div class="sr-only">
+          <table>
+            <caption>
+              {t('detections.detail.stats.dailyLabel', { days: dailyDays, count: windowTotal })}
+            </caption>
+            <thead>
               <tr>
-                <th scope="row">{bar.label}</th>
-                <td>{bar.count}</td>
+                <th scope="col">{t('detections.detail.identity.date')}</th>
+                <th scope="col">{t('analytics.charts.detections')}</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {#each dailyBars as bar (bar.date)}
+                <tr>
+                  <th scope="row">{bar.label}</th>
+                  <td>{bar.count}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
       <div class="dd-daily-axis" aria-hidden="true">
         <span>{dailyBars.at(0)?.label ?? ''}</span>
