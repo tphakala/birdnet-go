@@ -206,6 +206,47 @@ describe('ReviewPanel ignore species reload', () => {
       });
     });
   });
+
+  // Regression: Ignore was free again before the page's reload landed, and a failed reload
+  // went unreported.
+  it('stays busy until the page reload settles, and says so when it failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+      )
+    );
+    let settleReload: ((_reloaded: boolean) => void) | undefined;
+    const onChanged = vi.fn(
+      () =>
+        new Promise<boolean>(resolve => {
+          settleReload = resolve;
+        })
+    );
+    render(ReviewPanel, {
+      props: {
+        detection: { ...detection, verified: 'false_positive' },
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged,
+      },
+    });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(screen.getByText('detections.detail.review.saving')).toBeInTheDocument();
+
+    settleReload?.(false);
+    await waitFor(() => {
+      expect(screen.getByText('detections.detail.review.reloadFailed')).toBeInTheDocument();
+    });
+  });
 });
 
 describe('ReviewPanel Keep switch', () => {

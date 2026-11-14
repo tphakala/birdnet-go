@@ -166,13 +166,23 @@
         verified: 'false_positive',
         ignore_species: detection.commonName,
       });
-      ignoredSpecies = species;
-      // Saving the review again moves its last-saved time, which the activity log shows.
-      onChanged({ detectionId: id, scientificName: species, speciesStats: false });
-      toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });
+      saving = null;
       fail(t('common.review.errors.saveFailed'));
+      return;
+    }
+    ignoredSpecies = species;
+    toastActions.success(t('detections.detail.review.ignoredSpecies', { species: speciesName }));
+    // Saving the review again moves its last-saved time, which the activity log shows. The
+    // panel stays busy until the page's reload settles.
+    try {
+      const reloaded = await onChanged({
+        detectionId: id,
+        scientificName: species,
+        speciesStats: false,
+      });
+      if (reloaded === false) fail(t('detections.detail.review.reloadFailed'));
     } finally {
       saving = null;
     }
