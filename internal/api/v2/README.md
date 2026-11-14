@@ -142,6 +142,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/detections/recent`          | `GetRecentDetections`     | ❌   | Recent detections; `limit` defaults to 10 and is capped at 1000                                                            |
 | GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`   | ❌   | Detection time context                                                                                                     |
 | GET    | `/detections/:id/predictions` | `GetDetectionPredictions` | ❌   | Alternate species the detecting model scored (enhanced database only)                                                      |
+| GET    | `/detections/:id/neighbors`   | `GetDetectionNeighbors`   | ❌   | Previous and next detection ids, overall and of the same species (enhanced database only)                                  |
 | DELETE | `/detections/:id`             | `DeleteDetection`         | ✅   | Delete detection record                                                                                                    |
 | POST   | `/detections/:id/review`      | `ReviewDetection`         | ✅   | Review/verify detection                                                                                                    |
 | PUT    | `/detections/:id/species`     | `ChangeDetectionSpecies`  | ✅   | Set the species as a reviewer's correction (enhanced database only)                                                        |
@@ -436,6 +437,31 @@ changed back; see below), ordered by confidence descending, then by scientific n
   as Male or Child.
 - Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive
   integer that fits in 32 bits, `404` when the detection does not exist, and `500` for a database error.
+
+**Detection neighbors.** `GET /api/v2/detections/:id/neighbors` returns the ids of the detections next to one
+detection, for stepping through detections:
+
+```json
+{
+  "detectionId": 509253,
+  "previous": 509252,
+  "next": 509254,
+  "previousSameSpecies": 509100,
+  "nextSameSpecies": null
+}
+```
+
+Every key is always present, and a neighbor that does not exist is `null`.
+
+- Order: `previous` is the greatest id below `:id` and `next` the smallest id above it, so gaps left by deleted
+  detections are skipped. The order is record id order, which is the order detections were stored. After an
+  import it can differ from time order.
+- Same species: `previousSameSpecies` and `nextSameSpecies` walk the detections of the species of `:id`, matched by
+  scientific name across the labels of every model, including labels stored in the legacy
+  `ScientificName_CommonName` form. Two spellings of one species, such as a former and a current name, are two
+  separate chains. Refetch the neighbors after the species of the detection is changed.
+- Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive integer
+  that fits in 32 bits, `404` when the detection does not exist, and `500` for a database error.
 
 ### Notifications (`notifications/notifications.go`)
 

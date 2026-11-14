@@ -92,6 +92,10 @@ type Handler struct {
 	// speciesChanger changes the species of a detection. It is nil unless the
 	// enhanced v2 database is active; see RegisterDetectionRoutes.
 	speciesChanger speciesChanger
+
+	// neighbors finds the detections next to a detection. It is nil unless the
+	// enhanced v2 database is active; see RegisterDetectionRoutes.
+	neighbors neighborReader
 }
 
 // New constructs the detections domain handler around the shared core and the
@@ -160,15 +164,17 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 		return
 	}
 
-	// Model contributions and species changes are keyed by v2 detection IDs. In
+	// Model contributions, species changes and neighbors are keyed by v2 detection IDs. In
 	// migration mode a manager exists but the notes carry legacy IDs, so the
 	// repository is built only when the enhanced database is active (c.DS and this
-	// manager then share one database). The species change lives on the v2
-	// repository only, not on c.Repo, which the legacy store also implements.
+	// manager then share one database). The species change and the neighbor lookup
+	// live on the v2 repository only, not on c.Repo, which the legacy store also
+	// implements.
 	if c.V2Manager != nil && datastoreV2.IsEnhancedDatabase() {
 		v2Repo := repository.NewDetectionRepository(c.V2Manager.DB(), nil, c.V2Manager.TablePrefix() != "", c.V2Manager.IsMySQL())
 		c.contributions = v2Repo
 		c.speciesChanger = v2Repo
+		c.neighbors = v2Repo
 	}
 
 	// DetectionCache is initialized by the constructor (NewWithOptions); do not
@@ -184,6 +190,7 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 	g.GET("/detections/recent", c.GetRecentDetections)
 	g.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
 	g.GET("/detections/:id/predictions", c.GetDetectionPredictions)
+	g.GET("/detections/:id/neighbors", c.GetDetectionNeighbors)
 
 	// Protected detection management endpoints
 	detectionGroup := g.Group("/detections", c.AuthMiddleware)
