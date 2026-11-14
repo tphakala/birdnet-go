@@ -122,7 +122,17 @@ export function isDetectionDetail(value: unknown): value is DetectionDetailData 
             ]
           )
       ));
-  return commentsValid && contributionsValid;
+  // The model's own pick, present once a reviewer changed the species.
+  const { originalSpecies } = value;
+  const originalValid =
+    originalSpecies === undefined ||
+    (isPlainObject(originalSpecies) &&
+      fieldsMatch(originalSpecies, [
+        ['scientificName', 'string'],
+        ['commonName', 'string'],
+        ['speciesCode', 'string'],
+      ]));
+  return commentsValid && contributionsValid && originalValid;
 }
 
 const HOURLY_OPTIONAL: Fields = [

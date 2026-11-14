@@ -36,6 +36,15 @@ describe('shape guards', () => {
       { ...detection, comments: [{ id: 1, entry: 'x', createdAt: '2026-11-14T08:00:00Z' }] },
       { ...detection, comments: [{ id: 1 }] },
     ],
+    [
+      'detection original species',
+      isDetectionDetail,
+      {
+        ...detection,
+        originalSpecies: { scientificName: 'A b', commonName: 'Ab', speciesCode: 'ab' },
+      },
+      { ...detection, originalSpecies: {} },
+    ],
     ['weather', isDetectionWeather, { hourly: { time: 't', temperature: 3 } }, { hourly: 'warm' }],
     ['sun', isSunTimes, { date: '2026-11-14', sunrise: 'x' }, { sunrise: 'x' }],
     [
