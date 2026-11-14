@@ -553,7 +553,8 @@
   /**
    * The species' all-time statistics. A newer request (after a verdict, or for another
    * species) cancels the one still out, so the latest answer is the one shown; the
-   * statistics on screen stay until it arrives.
+   * statistics on screen stay until it arrives, and stay when it fails. A change of
+   * species clears them before asking (loadSpeciesData).
    */
   function loadStats(scientificName: string) {
     statsController = renew(statsController);
@@ -562,7 +563,7 @@
       statsController.signal,
       isSpeciesStats,
       value => {
-        speciesStats = value;
+        speciesStats = value ?? speciesStats;
       },
       'stats'
     );

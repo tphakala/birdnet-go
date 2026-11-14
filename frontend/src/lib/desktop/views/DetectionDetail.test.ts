@@ -843,6 +843,39 @@ describe('DetectionDetail species statistics', () => {
     expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
   });
 
+  // Regression: a reload that failed replaced the statistics on screen with dashes.
+  it('keeps the statistics on screen when their reload after a verdict fails', async () => {
+    let statsCalls = 0;
+    const calls = stubApi([
+      ['/api/v2/detections/84/review', {}],
+      ['/api/v2/detections/84', makeDetection({ id: 84 })],
+      [
+        STATS,
+        () => {
+          statsCalls += 1;
+          return Promise.resolve(
+            statsCalls === 1 ? jsonResponse(statsOf(3, 1, 55)) : jsonResponse({}, 500)
+          );
+        },
+      ],
+    ]);
+
+    const { container } = detailTest.render({ detectionId: '84' });
+    await waitFor(() => {
+      expect(statValue('detections.detail.stats.total')).toBe('55');
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
+    );
+    await waitFor(() => {
+      expect(count(calls, STATS)).toBe(2);
+    });
+    await settle();
+
+    expect(statValue('detections.detail.stats.total')).toBe('55');
+    expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('75%');
+  });
+
   // A species change through the dialog moves the detection to another species: the card
   // shows the new species' statistics, not the old totals.
   it('shows the new species’ statistics after a species change', async () => {
