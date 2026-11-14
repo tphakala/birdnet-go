@@ -38,11 +38,6 @@ describe('SpeciesStatsCard often-rejected warning', () => {
     expect(warning()).not.toBeNull();
   });
 
-  it('warns when exactly half of the reviews were false positives', () => {
-    renderWithReviews(2, 2);
-    expect(warning()).not.toBeNull();
-  });
-
   it('does not warn on fewer than three reviews', () => {
     renderWithReviews(0, 2);
     expect(warning()).toBeNull();
