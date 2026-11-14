@@ -167,12 +167,14 @@
     font-size: 0.875rem;
   }
 
-  .dd-nav-trail-stale {
+  /* While the next detection loads, the crumbs that name the previous one are dimmed. The
+     back link stays as it is: it still works, and its focus ring keeps its contrast. */
+  .dd-nav-trail-stale .dd-nav-crumb {
     opacity: 0.6;
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .dd-nav-trail {
+    .dd-nav-crumb {
       transition: opacity 150ms ease;
     }
   }
