@@ -992,6 +992,14 @@ func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
 // the moment the test wrote it.
 const reviewLockTimeTolerance = time.Minute
 
+// assertNoReviewLockTimes checks that res carries none of the review and lock times.
+func assertNoReviewLockTimes(t *testing.T, res *detection.Result, what string) {
+	t.Helper()
+	assert.True(t, res.FirstReviewedAt.IsZero(), what)
+	assert.True(t, res.LastReviewedAt.IsZero(), what)
+	assert.True(t, res.LockedAt.IsZero(), what)
+}
+
 // assertGetReviewAndLockTimes drives one detection through review, lock, unlock and
 // relock with the methods the handlers call and checks the times Get returns after
 // each step. It is shared by the SQLite test and the MySQL/MariaDB integration test,
@@ -1029,9 +1037,7 @@ func assertGetReviewAndLockTimes(t *testing.T, ds *Datastore) *entities.Detectio
 
 	// A fresh detection has no review and no lock.
 	res := get()
-	assert.True(t, res.FirstReviewedAt.IsZero())
-	assert.True(t, res.LastReviewedAt.IsZero())
-	assert.True(t, res.LockedAt.IsZero())
+	assertNoReviewLockTimes(t, res, "fresh detection")
 
 	// Reviewed once and locked: every time is now, and a review saved once has equal times.
 	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: det.ID, Verified: "correct"}))
@@ -1090,14 +1096,10 @@ func TestDetectionRepository_GetReadsReviewAndLockTimes(t *testing.T) {
 			}
 		}
 		require.NotNil(t, found, "%s must contain the detection", call.name)
-		assert.True(t, found.FirstReviewedAt.IsZero(), call.name)
-		assert.True(t, found.LastReviewedAt.IsZero(), call.name)
-		assert.True(t, found.LockedAt.IsZero(), call.name)
+		assertNoReviewLockTimes(t, found, call.name)
 	}
 
 	bridged, err := datastore.NewDetectionRepository(ds, ds.timezone).Get(ctx, strconv.FormatUint(uint64(det.ID), 10))
 	require.NoError(t, err)
-	assert.True(t, bridged.FirstReviewedAt.IsZero())
-	assert.True(t, bridged.LastReviewedAt.IsZero())
-	assert.True(t, bridged.LockedAt.IsZero())
+	assertNoReviewLockTimes(t, bridged, "bridge Get")
 }

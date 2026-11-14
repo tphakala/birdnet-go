@@ -274,11 +274,8 @@ func TestGetDetection_ReviewAndLockTimes(t *testing.T) {
 		return r
 	}
 	timeKeys := []string{"firstReviewedAt", "lastReviewedAt", "lockedAt"}
-
-	t.Run("reviewed and locked", func(t *testing.T) {
-		e, mockDS, repo, h := detectionsRepoHandler(t)
-		repo.EXPECT().Get(mock.Anything, "1").Return(result(true), nil)
-		mockDS.EXPECT().GetHourlyWeather(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+	getDetection1 := func(t *testing.T, e *echo.Echo, h *Handler) *httptest.ResponseRecorder {
+		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/1", http.NoBody)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
@@ -287,6 +284,14 @@ func TestGetDetection_ReviewAndLockTimes(t *testing.T) {
 		c.SetParamValues("1")
 		require.NoError(t, h.GetDetection(c))
 		require.Equal(t, http.StatusOK, rec.Code)
+		return rec
+	}
+
+	t.Run("reviewed and locked", func(t *testing.T) {
+		e, mockDS, repo, h := detectionsRepoHandler(t)
+		repo.EXPECT().Get(mock.Anything, "1").Return(result(true), nil)
+		mockDS.EXPECT().GetHourlyWeather(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+		rec := getDetection1(t, e, h)
 		var resp DetectionResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 		assert.Equal(t, "2026-06-01T08:00:01+02:00", resp.FirstReviewedAt)
@@ -298,14 +303,7 @@ func TestGetDetection_ReviewAndLockTimes(t *testing.T) {
 		e, mockDS, repo, h := detectionsRepoHandler(t)
 		repo.EXPECT().Get(mock.Anything, "1").Return(result(false), nil)
 		mockDS.EXPECT().GetHourlyWeather(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/1", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/detections/:id")
-		c.SetParamNames("id")
-		c.SetParamValues("1")
-		require.NoError(t, h.GetDetection(c))
-		require.Equal(t, http.StatusOK, rec.Code)
+		rec := getDetection1(t, e, h)
 		var body map[string]any
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 		for _, key := range timeKeys {
