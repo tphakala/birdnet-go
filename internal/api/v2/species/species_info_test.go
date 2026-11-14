@@ -453,7 +453,7 @@ func TestSoundClassLookups(t *testing.T) {
 
 	// The stub name stands in for the production resolver, which localizes class names.
 	backend := &stubBackend{
-		names: map[string]string{"Siren": "Sireeni"},
+		names: map[string]string{"Siren": "Sireeni", "Church_bell": "Kirkonkello"},
 		// The legacy context is the one under which a class reads very_rare today, so
 		// the absent-rarity assertion bites.
 		rc: rarityContexts(labels)[rarityLegacy],
@@ -469,7 +469,7 @@ func TestSoundClassLookups(t *testing.T) {
 		// Single token in the snapshot (as Siren_Siren) and an entry in the taxonomy database.
 		{name: "BirdNET single token", query: "Siren", wantCommon: "Sireeni"},
 		// Perch underscore label, absent from the snapshot.
-		{name: "Perch underscore label", query: "Church_bell", wantCommon: "Church bell"},
+		{name: "Perch underscore label", query: "Church_bell", wantCommon: "Kirkonkello"},
 		{name: "BirdNET two words", query: "Human vocal", wantCommon: "Human vocal"},
 		// First token of the multi-word class power_tool, stored by older builds.
 		{name: "legacy first token", query: "Power", wantCommon: "Power"},

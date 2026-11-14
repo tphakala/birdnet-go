@@ -500,8 +500,12 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
 	// reports CommonName == ScientificName for them. Treat that (and an empty common
 	// name) as "needs localizing" and resolve through the orchestrator's
-	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
-	if commonName == "" || strings.EqualFold(commonName, matchedSci) {
+	// OpenFauna-authoritative resolver, passing the configured locale explicitly. A
+	// Perch class label ("Church_bell") reads as its spaced form ("Church bell"), which
+	// differs from the label only by underscores, so it needs localizing too.
+	unlocalizedClass := soundevent.IsName(matchedSci) &&
+		strings.EqualFold(commonName, strings.ReplaceAll(matchedSci, "_", " "))
+	if commonName == "" || strings.EqualFold(commonName, matchedSci) || unlocalizedClass {
 		if resolved := c.resolveEitherName(backend, matchedSci, scientificName); resolved != "" {
 			commonName = resolved
 		}
@@ -846,12 +850,13 @@ const (
 // answers offline, so eBird is pure enrichment (subspecies, locale common names),
 // never a hard dependency for a basic lookup (#4105). Resolution order:
 //
-//  1. A missing embedded database (c.TaxonomyDB == nil) is a fatal build/deploy
+//  1. A sound class name ("Dog", "Church_bell") is answered with the unresolved
+//     response before any lookup, because a class is not a taxon. It needs no
+//     database, so it is answered even when the database is missing.
+//  2. A missing embedded database (c.TaxonomyDB == nil) is a fatal build/deploy
 //     fault, since the data is compiled in via go:embed and always loads in a
 //     healthy binary. Surface it as a system error immediately, before eBird, so a
 //     broken binary fails fast instead of being masked by whatever eBird returns.
-//  2. A sound class name ("Dog", "Church_bell") is answered with the unresolved
-//     response before any lookup, because a class is not a taxon.
 //  3. Local lookup. A hit returns the full hierarchy (optionally enriched by eBird).
 //  4. On a local miss, eBird is consulted only when configured, and only as
 //     enrichment: a species eBird genuinely does not carry (every non-avian label,
@@ -862,16 +867,6 @@ const (
 //     erroring, so a user without eBird still gets a graceful, machine-detectable
 //     answer instead of a misleading failure.
 func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
-	// A nil embedded database is a system fault, not a per-species miss: fail fast
-	// regardless of eBird configuration (see step 1 above).
-	if c.TaxonomyDB == nil {
-		return nil, errors.Newf("taxonomy database not loaded").
-			Category(errors.CategorySystem).
-			Context("scientific_name", scientificName).
-			Component("api-species").
-			Build()
-	}
-
 	// Load the eBird client once for the whole request and thread it through the
 	// helpers below. The client can be swapped concurrently by a settings
 	// hot-reload (ReconfigureEBird); re-reading it in each helper would risk a
@@ -882,6 +877,16 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 	// database has entries named like classes ("Siren", "Car") with an organism's ranks.
 	if soundevent.IsName(scientificName) {
 		return deriveMinimalTaxonomy(scientificName, client != nil), nil
+	}
+
+	// A nil embedded database is a system fault, not a per-species miss: fail fast
+	// regardless of eBird configuration (see step 2 above).
+	if c.TaxonomyDB == nil {
+		return nil, errors.Newf("taxonomy database not loaded").
+			Category(errors.CategorySystem).
+			Context("scientific_name", scientificName).
+			Component("api-species").
+			Build()
 	}
 
 	// Try local taxonomy database first
