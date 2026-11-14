@@ -115,7 +115,7 @@
 <!-- Loading tile parts: a bar on the value line, a bar in the sparkline area (5:1, the
      sparkline's view box), and the loading label on the footer line -->
 {#snippet loadingValue()}
-  <span class="text-lg"><Skeleton className="inline-block align-middle h-5 w-16" /></span>
+  <span class="text-lg"><Skeleton inline className="h-5 w-16" /></span>
 {/snippet}
 
 {#snippet loadingBody(footerClass: string = '')}

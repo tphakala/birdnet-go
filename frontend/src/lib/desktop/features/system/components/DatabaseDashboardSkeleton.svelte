@@ -19,8 +19,6 @@
     'bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm';
   const TILE_CLASS = `${CARD_CLASS} flex flex-col`;
   const TILE_HEADER_CLASS = 'flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3';
-  /** A bar that sits on a line of text, so the line keeps the text's height. */
-  const INLINE_BAR = 'inline-block align-middle';
   const SPARKLINE_TILE_COUNT = 3;
   const DATABASE_TILE_ROWS = 3;
   /** Label widths of the Database details rows, varied so they do not read as a table. */
@@ -33,18 +31,18 @@
 {#snippet tileTitle()}
   <div class="flex items-center gap-2">
     <Skeleton className="h-7 w-7 rounded-lg" />
-    <span class="text-xs"><Skeleton className="{INLINE_BAR} h-3 w-20" /></span>
+    <span class="text-xs"><Skeleton inline className="h-3 w-20" /></span>
   </div>
 {/snippet}
 
 {#snippet cardTitle(width: string)}
-  <div class="text-xs mb-3"><Skeleton className="{INLINE_BAR} h-3 {width}" /></div>
+  <div class="text-xs mb-3"><Skeleton inline className="h-3 {width}" /></div>
 {/snippet}
 
 {#snippet textRow(labelWidth: string, valueWidth: string)}
   <div class="flex justify-between gap-3 text-sm">
-    <span><Skeleton className="{INLINE_BAR} h-3.5 {labelWidth}" /></span>
-    <span><Skeleton className="{INLINE_BAR} h-3.5 {valueWidth}" /></span>
+    <span><Skeleton inline className="h-3.5 {labelWidth}" /></span>
+    <span><Skeleton inline className="h-3.5 {valueWidth}" /></span>
   </div>
 {/snippet}
 
@@ -56,15 +54,15 @@
         <div class={TILE_CLASS}>
           <div class={TILE_HEADER_CLASS}>
             {@render tileTitle()}
-            <span class="text-lg"><Skeleton className="{INLINE_BAR} h-5 w-16" /></span>
+            <span class="text-lg"><Skeleton inline className="h-5 w-16" /></span>
           </div>
           <!-- The sparkline keeps its 5:1 view box, which sets the tile height on narrow grids -->
           <div class="flex-1 min-h-[28px]">
             <Skeleton className="h-full w-full aspect-5/1" />
           </div>
           <div class="flex justify-between mt-2 text-[10px]">
-            <span><Skeleton className="{INLINE_BAR} h-2 w-14" /></span>
-            <span><Skeleton className="{INLINE_BAR} h-2 w-14" /></span>
+            <span><Skeleton inline className="h-2 w-14" /></span>
+            <span><Skeleton inline className="h-2 w-14" /></span>
           </div>
         </div>
       {/each}
@@ -121,31 +119,31 @@
       <Skeleton className="h-full w-full" />
     </div>
     <div class="flex justify-between text-[10px]">
-      <span><Skeleton className="{INLINE_BAR} h-2 w-12" /></span>
-      <span><Skeleton className="{INLINE_BAR} h-2 w-14" /></span>
-      <span><Skeleton className="{INLINE_BAR} h-2 w-14" /></span>
+      <span><Skeleton inline className="h-2 w-12" /></span>
+      <span><Skeleton inline className="h-2 w-14" /></span>
+      <span><Skeleton inline className="h-2 w-14" /></span>
     </div>
   </div>
 
   <!-- Table breakdown: header, column headings and rows -->
   <div class={CARD_CLASS}>
     <div class="flex items-center justify-between mb-3 text-xs">
-      <span><Skeleton className="{INLINE_BAR} h-3 w-24" /></span>
-      <span><Skeleton className="{INLINE_BAR} h-3 w-20" /></span>
+      <span><Skeleton inline className="h-3 w-24" /></span>
+      <span><Skeleton inline className="h-3 w-20" /></span>
     </div>
     <div class="grid grid-cols-4 gap-x-3 border-b border-[var(--border-100)] py-2 px-3 text-xs">
       {#each { length: TABLE_COLUMN_COUNT } as _, i (i)}
-        <span><Skeleton className="{INLINE_BAR} h-3 w-12" /></span>
+        <span><Skeleton inline className="h-3 w-12" /></span>
       {/each}
     </div>
     {#each { length: TABLE_ROW_COUNT } as _, i (i)}
       <div
         class="grid grid-cols-4 gap-x-3 border-b border-[var(--border-100)] last:border-b-0 py-2 px-3 text-sm"
       >
-        <span><Skeleton className="{INLINE_BAR} h-3 w-40" /></span>
-        <span><Skeleton className="{INLINE_BAR} h-3 w-16" /></span>
-        <span><Skeleton className="{INLINE_BAR} h-3 w-12" /></span>
-        <span><Skeleton className="{INLINE_BAR} h-1.5 w-16 rounded-full" /></span>
+        <span><Skeleton inline className="h-3 w-40" /></span>
+        <span><Skeleton inline className="h-3 w-16" /></span>
+        <span><Skeleton inline className="h-3 w-12" /></span>
+        <span><Skeleton inline className="h-1.5 w-16 rounded-full" /></span>
       </div>
     {/each}
   </div>

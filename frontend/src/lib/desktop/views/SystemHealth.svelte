@@ -416,7 +416,7 @@
   {#if count !== undefined}
     {count}
   {:else if running && !report}
-    <Skeleton className="inline-block align-middle h-7 w-8" />
+    <Skeleton inline className="h-7 w-8" />
   {:else}
     -
   {/if}
@@ -429,7 +429,7 @@
       <div
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
       >
-        <div class="text-xs mb-3"><Skeleton className="inline-block align-middle h-3 w-28" /></div>
+        <div class="text-xs mb-3"><Skeleton inline className="h-3 w-28" /></div>
         <div class="space-y-2">
           {#each CHECK_NAME_WIDTHS.slice(0, rows) as width, row (row)}
             <div
@@ -438,15 +438,13 @@
               <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
               <div class="flex-1 min-w-0">
                 <div class="text-sm">
-                  <Skeleton className="inline-block align-middle h-3.5 {width}" />
+                  <Skeleton inline className="h-3.5 {width}" />
                 </div>
                 <div class="text-xs">
-                  <Skeleton className="inline-block align-middle h-3 w-48" />
+                  <Skeleton inline className="h-3 w-48" />
                 </div>
               </div>
-              <span class="text-xs shrink-0"
-                ><Skeleton className="inline-block align-middle h-3 w-10" /></span
-              >
+              <span class="text-xs shrink-0"><Skeleton inline className="h-3 w-10" /></span>
             </div>
           {/each}
         </div>
@@ -482,7 +480,7 @@
               ? t('health.metricFooter.allPassing')
               : t('health.metricFooter.healthyOfTotal', { healthy: h, total })}
           {:else if running}
-            <Skeleton className="inline-block align-middle h-3 w-20" />
+            <Skeleton inline className="h-3 w-20" />
           {:else}
             -
           {/if}
@@ -515,7 +513,7 @@
               ? t('health.metricFooter.needsAttention')
               : t('health.metricFooter.none')}
           {:else if running}
-            <Skeleton className="inline-block align-middle h-3 w-20" />
+            <Skeleton inline className="h-3 w-20" />
           {:else}
             -
           {/if}
@@ -548,7 +546,7 @@
               ? t('health.metricFooter.failing')
               : t('health.metricFooter.allClear')}
           {:else if running}
-            <Skeleton className="inline-block align-middle h-3 w-20" />
+            <Skeleton inline className="h-3 w-20" />
           {:else}
             -
           {/if}
@@ -581,7 +579,7 @@
               ? t('health.metricFooter.noData')
               : t('health.metricFooter.none')}
           {:else if running}
-            <Skeleton className="inline-block align-middle h-3 w-20" />
+            <Skeleton inline className="h-3 w-20" />
           {:else}
             -
           {/if}

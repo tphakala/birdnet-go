@@ -73,14 +73,14 @@
   <div class="flex items-center justify-between mb-1.5 text-sm">
     <div class="flex items-center gap-2">
       <Skeleton className="h-3.5 w-3.5" />
-      <span><Skeleton className="inline-block align-middle h-3.5 w-20" /></span>
+      <span><Skeleton inline className="h-3.5 w-20" /></span>
     </div>
-    <span><Skeleton className="inline-block align-middle h-3.5 w-28" /></span>
+    <span><Skeleton inline className="h-3.5 w-28" /></span>
   </div>
   <Skeleton className="h-2 w-full rounded-full" />
   <div class="flex justify-between text-[10px] {footerClass}">
     {#each { length: footerColumns } as _, i (i)}
-      <span><Skeleton className="inline-block align-middle h-2 w-14" /></span>
+      <span><Skeleton inline className="h-2 w-14" /></span>
     {/each}
   </div>
 {/snippet}

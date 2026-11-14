@@ -574,6 +574,7 @@ One placeholder bar of a loading skeleton. Size and shape come from `className`.
 ```typescript
 interface Props extends HTMLAttributes<HTMLElement> {
   className?: string;
+  inline?: boolean; // sit on a line of text, vertically centred
 }
 ```
 
@@ -583,7 +584,7 @@ interface Props extends HTMLAttributes<HTMLElement> {
 <Skeleton className="h-4 w-28" />
 <Skeleton className="h-5 w-16 rounded-full" />
 <!-- Inside a line of text, for example in place of a numeral -->
-<span class="text-2xl font-mono"><Skeleton className="inline-block h-7 w-8 align-middle" /></span>
+<span class="text-2xl font-mono"><Skeleton inline className="h-7 w-8" /></span>
 ```
 
 **Features:**
@@ -592,8 +593,8 @@ interface Props extends HTMLAttributes<HTMLElement> {
 - Always `aria-hidden="true"` (a caller cannot override it) and marked `data-skeleton`
 - Shrinks with its container (`min-w-0 max-w-full`)
 - Pulses, and stops under `prefers-reduced-motion`
-- `cn()` does not merge conflicting classes; overrides such as `rounded-full`
-  and `inline-block` win because Tailwind emits them after `rounded` and `block`
+- `cn()` does not merge conflicting classes; a shape override such as
+  `rounded-full` wins because Tailwind emits it after `rounded`
 
 ---
 

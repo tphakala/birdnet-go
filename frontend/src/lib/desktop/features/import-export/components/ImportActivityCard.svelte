@@ -227,8 +227,8 @@
       <Skeleton className="size-8 rounded-lg" />
       <SkeletonStatus label={t('system.importExport.loading')} className="text-sm font-medium" />
       <div class="flex flex-col items-center text-xs">
-        <span><Skeleton className="inline-block align-middle h-3 w-44" /></span>
-        <span><Skeleton className="inline-block align-middle h-3 w-32" /></span>
+        <span><Skeleton inline className="h-3 w-44" /></span>
+        <span><Skeleton inline className="h-3 w-32" /></span>
       </div>
     </div>
   {:else if view === 'loadError'}

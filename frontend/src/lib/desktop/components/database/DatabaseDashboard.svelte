@@ -437,6 +437,8 @@
   // bring the skeleton back
   let initialLoadDone = $state(false);
   $effect(() => {
+    // Read nothing once latched, so polls stop re-running this effect
+    if (initialLoadDone) return;
     if (!firstLoadPending) initialLoadDone = true;
   });
   let showSkeleton = $derived(!initialLoadDone && firstLoadPending);

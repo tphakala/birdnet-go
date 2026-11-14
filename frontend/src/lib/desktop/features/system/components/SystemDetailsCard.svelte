@@ -97,11 +97,9 @@
   tabindex="-1"
   class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
 >
-  <div class="flex items-center justify-between gap-2 mb-3">
-    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
-      {t('system.systemInfo.title')}
-    </h3>
-  </div>
+  <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
+    {t('system.systemInfo.title')}
+  </h3>
   {#if error}
     <ErrorAlert message={error} {onRetry} focusFallback={focusCard} />
   {:else if loading}
@@ -117,7 +115,7 @@
           <Skeleton className="h-3.5 w-3.5 shrink-0" />
           <span class="min-w-0 text-sm">
             {#each widths as width, j (j)}
-              <Skeleton className="inline-block align-middle h-3.5 {width}" />
+              <Skeleton inline className="h-3.5 {width}" />
             {/each}
           </span>
         </div>

@@ -26,5 +26,15 @@ describe('Skeleton', () => {
       'rounded-full'
     );
     expect(bar).toHaveAttribute('data-testid', 'bar');
+    expect(bar).toHaveClass('block');
+    expect(bar).not.toHaveClass('inline-block');
+  });
+
+  it('sits on a line of text when inline', () => {
+    const { container } = renderTyped(Skeleton, { props: { inline: true, className: 'h-3 w-8' } });
+
+    const bar = container.querySelector('[data-skeleton]');
+    expect(bar).toHaveClass('inline-block', 'align-middle', 'h-3', 'w-8');
+    expect(bar).not.toHaveClass('block');
   });
 });
