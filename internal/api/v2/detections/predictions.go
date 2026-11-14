@@ -156,7 +156,8 @@ func comparePredictionCandidates(a, b *predictionCandidate) int {
 // (see originalPickCandidate for when there is none). The entry is exempt from the
 // human and dog filters and does not take part in the dog comparison, so it never
 // changes how the other rows are handled. Stored rows of its species only fill its
-// missing common name and code. The result is the same for any input order.
+// missing code and its unresolved common name (empty, or the scientific name the
+// datastore falls back to). The result is the same for any input order.
 func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResult) []PredictionResponse {
 	primaryKey := speciesindex.CanonicalKey(r.Species.ScientificName)
 	original := originalPickCandidate(r, primaryKey)
@@ -222,7 +223,7 @@ func buildPredictions(r *detectionPkg.Result, rows []detectionPkg.AdditionalResu
 		// Ranked order again, so the filled values do not depend on input order.
 		slices.SortFunc(originalRows, comparePredictionCandidates)
 		for _, row := range originalRows {
-			if original.commonName == "" {
+			if row.commonName != "" && commonNameUnresolved(original.commonName, original.name) {
 				original.commonName = row.commonName
 			}
 			if original.code == "" {
@@ -260,4 +261,11 @@ func originalPickCandidate(r *detectionPkg.Result, primaryKey string) *predictio
 		name: name, key: key, commonName: r.OriginalSpecies.CommonName, code: r.OriginalSpecies.Code,
 		confidence: r.Confidence,
 	}
+}
+
+// commonNameUnresolved reports whether a common name is missing or is only the
+// scientific name the datastore falls back to for a species it cannot name.
+func commonNameUnresolved(commonName, scientificName string) bool {
+	commonName = strings.TrimSpace(commonName)
+	return commonName == "" || strings.EqualFold(commonName, strings.TrimSpace(scientificName))
 }

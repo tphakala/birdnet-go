@@ -933,3 +933,27 @@ func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
 		assert.Zero(t, got.OriginalSpecies)
 	})
 }
+
+// TestDetectionRepository_OriginalSpeciesCommonNameFallback pins what the read
+// mapping puts in OriginalSpecies.CommonName for a species the name maps cannot
+// resolve: the scientific name itself, which the predictions merge treats as
+// unresolved.
+func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		aliasSci   = "Streptopelia senegalensis" // legacy alias, not in the name maps
+		currentSci = "Parus major"
+	)
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+	changed := seedDetection(t, ds, aliasSci, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	seedDetection(t, ds, currentSci, time.Date(2026, 6, 1, 12, 10, 0, 0, time.UTC))
+	require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci))
+
+	got, err := NewDetectionRepository(ds).Get(ctx, strconv.FormatUint(uint64(changed.ID), 10))
+	require.NoError(t, err)
+	assert.Equal(t, detection.Species{ScientificName: aliasSci, CommonName: aliasSci}, got.OriginalSpecies)
+}

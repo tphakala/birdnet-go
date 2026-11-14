@@ -428,6 +428,7 @@ const (
 	predTestOrigCode   = "eurbla"
 	predTestHumanClass = "Human vocal"
 	predTestCough      = "Cough"
+	predTestDoveCommon = "Laughing Dove"
 )
 
 // changedPrimary is a detection whose species was changed from original to current.
@@ -486,6 +487,30 @@ func TestGetDetectionPredictions_OriginalPick(t *testing.T) {
 				predRow("spilopelia SENEGALENSIS", "", "", predTestLow2),
 			},
 			want: []PredictionResponse{{ScientificName: predTestPrimaryNew, SpeciesCode: predTestDoveCode, Confidence: predTestOrigConf, Original: true}},
+		},
+		{
+			// The datastore falls back to the scientific name as the common name of a
+			// name it cannot resolve, such as a legacy alias.
+			name: "an unresolved common name is taken from the stored row of the canonical spelling", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, predTestDoveCommon, predTestDoveCode, predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon, SpeciesCode: predTestDoveCode,
+				Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a resolved common name is not overwritten by a stored row", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, "Another Name", predTestDoveCode, predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon, SpeciesCode: predTestDoveCode,
+				Confidence: predTestOrigConf, Original: true,
+			}},
 		},
 		{
 			name: "a human sound class is listed and its stored rows are not dropped", current: predTestMallard,
