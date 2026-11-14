@@ -25,7 +25,7 @@ const (
 	speciesChangeFailedMessage     = "Failed to change the species of the detection"
 	speciesChangeV2RequiredLog     = "detection species change requested without the enhanced database"
 	speciesChangeRequestEndedLog   = "detection species change request ended before the change finished"
-	speciesChangedLog              = "Detection species changed"
+	speciesChangeRequestedLog      = "Detection species change requested"
 )
 
 // speciesChanger changes the species of a detection. The enhanced (v2) detection
@@ -82,9 +82,9 @@ func (c *Handler) ChangeDetectionSpecies(ctx echo.Context) error {
 		}
 	}
 
-	// The change is the only trace of a reviewer's correction until an audit trail
-	// exists, so it is logged.
-	c.LogInfoIfEnabled(speciesChangedLog,
+	// Every accepted request is logged until an audit trail exists, including one for
+	// the species the detection already has, which writes nothing.
+	c.LogInfoIfEnabled(speciesChangeRequestedLog,
 		logger.Uint64("detection_id", n),
 		logger.String("scientific_name", name),
 	)
