@@ -246,3 +246,43 @@ describe('ConditionsCard condition icon', () => {
     expect(icon?.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 });
+
+describe('ConditionsCard sky without sun times', () => {
+  afterEach(() => cleanup());
+
+  // Regression: without sunrise and sunset the strip was painted as night all day and the
+  // marker of a daytime detection was drawn as a night marker.
+  it('claims neither day nor night when no sun times are known', () => {
+    render(ConditionsCard, {
+      props: { detection, weather: null, sun: null, speciesName: 'Woodcock' },
+    });
+
+    const sky = document.querySelector<HTMLElement>('.dd-sky');
+    expect(sky?.style.background).not.toContain('--sky-night');
+    expect(sky?.style.background).not.toContain('--sky-day');
+    const dot = document.querySelector('.dd-sky-now-dot');
+    expect(dot).toHaveClass('dd-sky-now-dot-unknown');
+    expect(dot).not.toHaveClass('dd-sky-now-dot-day');
+    expect(document.querySelector('.dd-sky-arc')).toBeNull();
+  });
+
+  it('paints day and night once the sun times are known', () => {
+    render(ConditionsCard, {
+      props: {
+        detection,
+        weather: null,
+        sun: {
+          date: '2026-11-14',
+          sunrise: '2026-11-14T08:26:00+02:00',
+          sunset: '2026-11-14T15:35:00+02:00',
+        },
+        speciesName: 'Woodcock',
+      },
+    });
+
+    expect(document.querySelector<HTMLElement>('.dd-sky')?.style.background).toContain(
+      '--sky-night'
+    );
+    expect(document.querySelector('.dd-sky-now-dot')).not.toHaveClass('dd-sky-now-dot-unknown');
+  });
+});

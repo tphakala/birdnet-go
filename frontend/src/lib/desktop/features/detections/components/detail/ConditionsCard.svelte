@@ -136,9 +136,10 @@
     };
   });
 
-  // Background gradient: night, twilight ramp, day, twilight ramp, night.
+  // Background gradient: night, twilight ramp, day, twilight ramp, night. Without sun
+  // times the strip is one neutral colour: it claims neither day nor night.
   let skyGradient = $derived.by(() => {
-    if (!sunSpan) return 'linear-gradient(to right, var(--sky-night), var(--sky-night))';
+    if (!sunSpan) return 'linear-gradient(to right, var(--sky-unknown), var(--sky-unknown))';
     const { sunrise, sunset, dawn, dusk } = sunSpan;
     const stops = [
       `var(--sky-night) 0%`,
@@ -421,7 +422,11 @@
         {#if moment !== null}
           <div class="dd-sky-now" style:left="{dayPercent(moment)}%">
             <span class="dd-sky-now-line"></span>
-            <span class="dd-sky-now-dot" class:dd-sky-now-dot-day={sunIsUp} style:top="{markerTop}%"
+            <span
+              class="dd-sky-now-dot"
+              class:dd-sky-now-dot-day={sunIsUp}
+              class:dd-sky-now-dot-unknown={!sunSpan}
+              style:top="{markerTop}%"
             ></span>
             <span
               class="dd-sky-now-label"
@@ -546,6 +551,7 @@
     --sky-night: #131a3a;
     --sky-twilight: #c56a55;
     --sky-day: #6fb1e8;
+    --sky-unknown: #4a5263;
 
     display: flex;
     flex: 1 1 auto;
@@ -611,6 +617,12 @@
   .dd-sky-now-dot-day {
     background-color: #ffd54a;
     box-shadow: 0 0 0 5px rgb(255 213 74 / 0.3);
+  }
+
+  /* Without sun times the marker sits on the horizon as a ring: neither sun nor moon. */
+  .dd-sky-now-dot-unknown {
+    background-color: transparent;
+    box-shadow: none;
   }
 
   .dd-sky-now-label {
