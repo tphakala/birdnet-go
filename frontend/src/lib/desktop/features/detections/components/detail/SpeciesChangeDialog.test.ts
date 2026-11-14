@@ -24,6 +24,13 @@ const alternates: AlternatePrediction[] = [
   { scientificName: 'Turdus iliacus', commonName: 'Redwing', confidence: 0.2 },
 ];
 
+// The range list is loaded once per page (module cache), so every test serves the same one.
+const rangeSpecies = [
+  { scientificName: 'Turdus merula', commonName: 'Blackbird' },
+  { scientificName: 'Turdus pilaris', commonName: 'Fieldfare' },
+  { scientificName: 'Turdus viscivorus', commonName: 'Mistle Thrush' },
+];
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -67,9 +74,7 @@ describe('SpeciesChangeDialog saving', () => {
           });
         }
         if (url.includes('/range/species/list')) {
-          return Promise.resolve(
-            json({ species: [{ scientificName: 'Parus major', commonName: 'Great Tit' }] })
-          );
+          return Promise.resolve(json({ species: rangeSpecies }));
         }
         return Promise.resolve(json({}));
       })
@@ -134,5 +139,91 @@ describe('SpeciesChangeDialog saving', () => {
       expect(onChanged).toHaveBeenCalledWith(7);
     });
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('SpeciesChangeDialog choosing', () => {
+  const puts: string[] = [];
+
+  beforeEach(() => {
+    puts.length = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === 'PUT') {
+          puts.push(String(init.body));
+          return Promise.resolve(json({}));
+        }
+        if (url.includes('/range/species/list')) {
+          return Promise.resolve(json({ species: rangeSpecies }));
+        }
+        return Promise.resolve(json({}));
+      })
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  async function search(query: string) {
+    await fireEvent.input(screen.getByRole('searchbox'), { target: { value: query } });
+  }
+
+  it('keeps one species picked across the predictions and the search results', async () => {
+    renderDialog();
+    await fireEvent.click(radio('Song Thrush'));
+    await search('Fieldfare');
+    await fireEvent.click(await screen.findByRole('radio', { name: /Fieldfare/ }));
+
+    expect(screen.getAllByRole('radio', { checked: true })).toHaveLength(1);
+    expect(radio('Fieldfare')).toBeChecked();
+    // What is saved is the last pick, from whichever list it came.
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+    );
+    await waitFor(() => {
+      expect(puts).toEqual([JSON.stringify({ scientificName: 'Turdus pilaris' })]);
+    });
+  });
+
+  it('never offers the detection\u2019s own species in the results', async () => {
+    renderDialog();
+    await search('Turdus');
+
+    await screen.findByRole('radio', { name: /Fieldfare/ });
+    expect(screen.queryByRole('radio', { name: /Blackbird/ })).toBeNull();
+  });
+
+  it('searches only from two characters on', async () => {
+    renderDialog();
+    await screen.findByText('detections.detail.species.searchHintRange');
+    await search('F');
+
+    expect(screen.getByText('detections.detail.species.searchHintRange')).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /Fieldfare/ })).toBeNull();
+
+    await search('Fi');
+    expect(await screen.findByRole('radio', { name: /Fieldfare/ })).toBeInTheDocument();
+  });
+
+  it('saves nothing until a species is picked', async () => {
+    renderDialog();
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+    );
+
+    expect(puts).toEqual([]);
+  });
+
+  it('shows a viewer who cannot change the species plain rows and the reason', () => {
+    renderDialog('detections.detail.review.loginRequired');
+
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.getByText(/Song Thrush/)).toBeInTheDocument();
+    expect(screen.getByText('detections.detail.review.loginRequired')).toBeInTheDocument();
   });
 });
