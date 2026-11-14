@@ -36,6 +36,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
@@ -395,7 +396,34 @@ func resolveSpeciesLabel(snap *speciesindex.Snapshot, targetSci string) (matched
 	return "", ""
 }
 
-// GetSpeciesInfo retrieves extended information about a bird species
+const (
+	// minLookupNameLength is the shortest name the species and taxonomy lookups accept.
+	minLookupNameLength = 3
+	// lookupNameWordSeparator marks a binomial: the two parts of a scientific name.
+	lookupNameWordSeparator = " "
+	// invalidLookupNameMessage is the client message for a name that fails validateLookupName.
+	invalidLookupNameMessage = "Invalid scientific name format"
+)
+
+// validateLookupName returns the validation error for a name the species and
+// taxonomy lookups reject, or nil. A name must be at least minLookupNameLength
+// bytes and either contain a space (a binomial) or be a sound-event class name,
+// which may be a single token ("Dog") or an underscore-joined label ("Church_bell").
+func validateLookupName(name, component string) error {
+	if len(name) >= minLookupNameLength &&
+		(strings.Contains(name, lookupNameWordSeparator) || soundevent.IsName(name)) {
+		return nil
+	}
+	return errors.Newf("invalid scientific name format").
+		Category(errors.CategoryValidation).
+		Context("scientific_name", name).
+		Component(component).
+		Build()
+}
+
+// GetSpeciesInfo retrieves extended information about a bird species. A sound class
+// name ("Dog", "Human vocal") is answered with its names only: a class is neither a
+// geographic species nor a taxon, so it carries no rarity and no taxonomy.
 func (c *Handler) GetSpeciesInfo(ctx echo.Context) error {
 	// Get scientific name from query parameter
 	scientificName := ctx.QueryParam("scientific_name")
@@ -408,12 +436,8 @@ func (c *Handler) GetSpeciesInfo(ctx echo.Context) error {
 
 	// Validate the scientific name format (basic validation)
 	scientificName = strings.TrimSpace(scientificName)
-	if len(scientificName) < 3 || !strings.Contains(scientificName, " ") {
-		return c.HandleError(ctx, errors.Newf("invalid scientific name format").
-			Category(errors.CategoryValidation).
-			Context("scientific_name", scientificName).
-			Component("api-species").
-			Build(), "Invalid scientific name format", http.StatusBadRequest)
+	if err := validateLookupName(scientificName, "api-species"); err != nil {
+		return c.HandleError(ctx, err, invalidLookupNameMessage, http.StatusBadRequest)
 	}
 
 	// Get species info
@@ -450,7 +474,13 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	snap := c.speciesSnapshot()
 	matchedLabel, commonName := resolveSpeciesLabel(snap, scientificName)
 
-	// If species not found in any loaded model's labels, return error
+	// A sound class no loaded model lists (a Perch class with Perch unloaded, a first
+	// token stored by an older build) is still answered, by its own name.
+	if matchedLabel == "" && soundevent.IsName(scientificName) {
+		matchedLabel, commonName = scientificName, detection.ParseSpeciesString(scientificName).CommonName
+	}
+
+	// If neither a loaded model's labels nor the sound classes know the name, return error
 	if matchedLabel == "" {
 		return nil, errors.Newf("species '%s' not found in loaded model labels", scientificName).
 			Category(errors.CategoryNotFound).
@@ -470,8 +500,12 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
 	// reports CommonName == ScientificName for them. Treat that (and an empty common
 	// name) as "needs localizing" and resolve through the orchestrator's
-	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
-	if commonName == "" || strings.EqualFold(commonName, matchedSci) {
+	// OpenFauna-authoritative resolver, passing the configured locale explicitly. A
+	// Perch class label ("Church_bell") reads as its spaced form ("Church bell"), which
+	// differs from the label only by underscores, so it needs localizing too.
+	unlocalizedClass := soundevent.IsName(matchedSci) &&
+		strings.EqualFold(commonName, strings.ReplaceAll(matchedSci, "_", " "))
+	if commonName == "" || strings.EqualFold(commonName, matchedSci) || unlocalizedClass {
 		if resolved := c.resolveEitherName(backend, matchedSci, scientificName); resolved != "" {
 			commonName = resolved
 		}
@@ -484,6 +518,13 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 		ScientificName: scientificName,
 		CommonName:     commonName,
 		Metadata:       make(map[string]any),
+	}
+
+	// A sound class is neither a geographic species nor a taxon, and the embedded
+	// taxonomy has entries named like classes ("Siren", "Car"), so a lookup would
+	// report an organism's ranks. Deciding on matchedSci also covers a raw label.
+	if soundevent.IsName(matchedSci) {
+		return info, nil
 	}
 
 	// Get rarity information
@@ -757,7 +798,8 @@ type SubspeciesInfo struct {
 	Region         string `json:"region,omitempty"`
 }
 
-// GetSpeciesTaxonomy retrieves detailed taxonomy information for a species
+// GetSpeciesTaxonomy retrieves detailed taxonomy information for a species. A sound
+// class name answers 200 with the unresolved marker and no taxonomy.
 func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 	// Get parameters from query
 	scientificName := ctx.QueryParam("scientific_name")
@@ -770,12 +812,8 @@ func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 
 	// Validate the scientific name format (basic validation)
 	scientificName = strings.TrimSpace(scientificName)
-	if len(scientificName) < 3 || !strings.Contains(scientificName, " ") {
-		return c.HandleError(ctx, errors.Newf("invalid scientific name format").
-			Category(errors.CategoryValidation).
-			Context("scientific_name", scientificName).
-			Component("api-species").
-			Build(), "Invalid scientific name format", http.StatusBadRequest)
+	if err := validateLookupName(scientificName, "api-species"); err != nil {
+		return c.HandleError(ctx, err, invalidLookupNameMessage, http.StatusBadRequest)
 	}
 
 	// Get optional parameters
@@ -804,6 +842,9 @@ const (
 	// eBird consulted but also unable to resolve the species: eBird is already
 	// enabled, so do not tell the user to configure it.
 	taxonomyUnresolvedNoteEBirdOn = "species not found in the embedded taxonomy or eBird"
+	// A sound class ("Dog", "Church_bell") is not a taxon, so no data source can
+	// give it a taxonomy; the note must not recommend one.
+	taxonomySoundClassNote = "sound class, not a species; it has no taxonomy"
 )
 
 // getDetailedTaxonomy retrieves detailed taxonomy information for a species.
@@ -812,22 +853,38 @@ const (
 // answers offline, so eBird is pure enrichment (subspecies, locale common names),
 // never a hard dependency for a basic lookup (#4105). Resolution order:
 //
-//  1. A missing embedded database (c.TaxonomyDB == nil) is a fatal build/deploy
+//  1. A sound class name ("Dog", "Church_bell") is answered with the unresolved
+//     response and a sound class note (soundClassTaxonomy) before any lookup,
+//     because a class is not a taxon. It needs no
+//     database, so it is answered even when the database is missing.
+//  2. A missing embedded database (c.TaxonomyDB == nil) is a fatal build/deploy
 //     fault, since the data is compiled in via go:embed and always loads in a
 //     healthy binary. Surface it as a system error immediately, before eBird, so a
 //     broken binary fails fast instead of being masked by whatever eBird returns.
-//  2. Local lookup. A hit returns the full hierarchy (optionally enriched by eBird).
-//  3. On a local miss, eBird is consulted only when configured, and only as
+//  3. Local lookup. A hit returns the full hierarchy (optionally enriched by eBird).
+//  4. On a local miss, eBird is consulted only when configured, and only as
 //     enrichment: a species eBird genuinely does not carry (every non-avian label,
 //     such as frogs, bats and insects, falls here because eBird is a bird database)
 //     must not fail the request, so an eBird not-found degrades to the derived
 //     response below. A real eBird transport/API error still propagates.
-//  4. Otherwise return an explicit "unresolved" marker (HTTP 200) rather than
+//  5. Otherwise return an explicit "unresolved" marker (HTTP 200) rather than
 //     erroring, so a user without eBird still gets a graceful, machine-detectable
 //     answer instead of a misleading failure.
 func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
+	// Load the eBird client once for the whole request and thread it through the
+	// helpers below. The client can be swapped concurrently by a settings
+	// hot-reload (ReconfigureEBird); re-reading it in each helper would risk a
+	// nil-after-check TOCTOU across method boundaries.
+	client := c.ebirdClient()
+
+	// A sound class is not a taxon: answer it before any lookup, since the embedded
+	// database has entries named like classes ("Siren", "Car") with an organism's ranks.
+	if soundevent.IsName(scientificName) {
+		return soundClassTaxonomy(scientificName), nil
+	}
+
 	// A nil embedded database is a system fault, not a per-species miss: fail fast
-	// regardless of eBird configuration (see step 1 above).
+	// regardless of eBird configuration (see step 2 above).
 	if c.TaxonomyDB == nil {
 		return nil, errors.Newf("taxonomy database not loaded").
 			Category(errors.CategorySystem).
@@ -835,12 +892,6 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 			Component("api-species").
 			Build()
 	}
-
-	// Load the eBird client once for the whole request and thread it through the
-	// helpers below. The client can be swapped concurrently by a settings
-	// hot-reload (ReconfigureEBird); re-reading it in each helper would risk a
-	// nil-after-check TOCTOU across method boundaries.
-	client := c.ebirdClient()
 
 	// Try local taxonomy database first
 	if info := c.tryLocalTaxonomy(ctx, client, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
@@ -881,10 +932,11 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 // deriveMinimalTaxonomy builds the fallback response for a species the embedded
 // database does not cover and eBird did not resolve. It intentionally returns NO
 // taxonomy hierarchy. GetSpeciesTaxonomy accepts any string that merely looks like
-// a binomial (a length check plus a space), and BirdNET-Go's label set includes
-// non-organism noise classes such as "Human vocal" and "Power tools", so deriving
-// a genus from the first token or asserting Kingdom "Animalia" would fabricate a
-// wrong taxonomy for those. Instead it echoes the requested name and marks the
+// a binomial (a length check plus a space) and any sound class name, and
+// BirdNET-Go's label set includes non-organism classes such as "Human vocal" and
+// "Power tools" (answered by soundClassTaxonomy before any lookup), so deriving a genus from the
+// first token or asserting Kingdom "Animalia" would fabricate a wrong taxonomy for
+// those. Instead it echoes the requested name and marks the
 // result "unresolved" in metadata: an HTTP 200 that degrades gracefully (#4105) and
 // is machine-detectable, rather than a misleading error. A consumer that renders a
 // fixed rank list then omits the absent taxonomy block instead of showing empty
@@ -900,6 +952,19 @@ func deriveMinimalTaxonomy(scientificName string, eBirdConfigured bool) *Taxonom
 		Metadata: map[string]any{
 			"source": taxonomySourceUnresolved,
 			"note":   note,
+		},
+	}
+}
+
+// soundClassTaxonomy builds the response for a sound class name: unresolved like
+// deriveMinimalTaxonomy, but with a note that says why, because neither the
+// embedded database nor eBird can give a sound class a taxonomy.
+func soundClassTaxonomy(name string) *TaxonomyInfo {
+	return &TaxonomyInfo{
+		ScientificName: name,
+		Metadata: map[string]any{
+			"source": taxonomySourceUnresolved,
+			"note":   taxonomySoundClassNote,
 		},
 	}
 }
