@@ -951,7 +951,7 @@
         "sunrise": "Sunrise",
         "sunset": "Sunset",
         "activityLegend": "{species} activity by hour, all time",
-        "feelsLike": "Gevoelstemperatuur",
+        "feelsLike": "Voelt als",
         "moonLit": "{percent}% lit",
         "windFrom": "Wind uit {direction}",
         "precipitation": "Precipitation",
