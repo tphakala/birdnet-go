@@ -160,6 +160,43 @@ describe('DetectionDetail loading and errors', () => {
     expect(container.querySelector('[data-skeleton]')).toBeNull();
   });
 
+  // Regression: an invalid id set the error but left the skeleton up for good.
+  it('says the id is not valid instead of loading forever', async () => {
+    const calls = stubApi([]);
+
+    detailTest.render({ detectionId: 'not a valid id!' });
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'detections.errors.noIdProvided'
+    );
+    expect(screen.queryByText('detections.aria.loading')).toBeNull();
+    expect(count(calls, '/api/v2/detections/')).toBe(0);
+  });
+
+  it('says no id was given when the address names no detection', async () => {
+    detailTest.render({});
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'detections.errors.noIdProvided'
+    );
+    expect(screen.queryByText('detections.aria.loading')).toBeNull();
+  });
+
+  it('drops the shown detection when the id changes to an invalid one', async () => {
+    stubApi([['/api/v2/detections/7', makeDetection({ id: 7, commonName: 'Old bird' })]]);
+
+    const { container, rerender } = detailTest.render({ detectionId: '7' });
+    await waitFor(() => {
+      expect(container.querySelector('#species-heading')?.textContent).toContain('Old bird');
+    });
+    await rerender({ detectionId: 'bad id!' });
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'detections.errors.noIdProvided'
+    );
+    expect(container.querySelector('#species-heading')).toBeNull();
+  });
+
   it('announces a load error once, through a single alert', async () => {
     stubApi([['/api/v2/detections/6', () => Promise.resolve(jsonResponse({}, 404))]]);
 

@@ -223,24 +223,23 @@
     return /^\d+$/.test(id) ? String(Number(id)) : id;
   }
 
-  // Resolve detection ID from the URL if not provided via prop
+  // The detection's id: the prop, or else the address. A missing or invalid id leaves
+  // nothing to load, so the page drops what it shows and says why instead of loading.
   $effect(() => {
-    if (!detectionIdProp) {
+    let candidate = detectionIdProp;
+    if (!candidate) {
       const pathParts = window.location.pathname.split('/');
       const detectionIndex = pathParts.indexOf('detections');
-      if (detectionIndex !== -1 && pathParts[detectionIndex + 1]) {
-        const candidateId = pathParts[detectionIndex + 1];
-        if (isValidDetectionId(candidateId)) {
-          resolvedDetectionId = canonicalDetectionId(candidateId);
-        } else {
-          detectionError = t('detections.errors.noIdProvided');
-        }
-      }
-    } else if (isValidDetectionId(detectionIdProp)) {
-      resolvedDetectionId = canonicalDetectionId(detectionIdProp);
-    } else {
-      detectionError = t('detections.errors.noIdProvided');
+      candidate = detectionIndex === -1 ? undefined : pathParts.at(detectionIndex + 1);
     }
+    if (candidate && isValidDetectionId(candidate)) {
+      resolvedDetectionId = canonicalDetectionId(candidate);
+      return;
+    }
+    resolvedDetectionId = undefined;
+    detection = null;
+    isLoadingDetection = false;
+    detectionError = t('detections.errors.noIdProvided');
   });
 
   // Load the detection whenever the ID changes. Stepping to another detection
