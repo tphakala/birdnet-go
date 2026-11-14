@@ -129,8 +129,6 @@
   // A save was made on the page whose effect on the review counts is not known yet: the
   // next detection to arrive recounts them (a refresh only when its verdict changed).
   let recountPending = false;
-  // Number of the latest review count request.
-  let reviewCountsRequest = 0;
   let relatedController: AbortController | null = null;
   let listsController: AbortController | null = null;
   let speciesController: AbortController | null = null;
@@ -481,20 +479,16 @@
       );
       return result.total ?? 0;
     };
-    // Counts asked for later (after a verdict) win over earlier ones still out.
-    reviewCountsRequest += 1;
-    const request = reviewCountsRequest;
-    const latest = () => !signal.aborted && request === reviewCountsRequest;
     loading.reviews = true;
     try {
       const [correct, falsePositive] = await Promise.all([
         count('correct'),
         count('false_positive'),
       ]);
-      if (!latest()) return;
+      if (signal.aborted) return;
       reviewCounts = { correct, falsePositive };
     } catch (error) {
-      if (!latest() || isAbort(error, signal)) return;
+      if (isAbort(error, signal)) return;
       logger.error('Error loading species review counts:', error);
     }
     loading.reviews = false;

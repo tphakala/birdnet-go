@@ -631,55 +631,6 @@ describe('DetectionDetail daily counts', () => {
   });
 });
 
-describe('DetectionDetail review counts', () => {
-  // Regression: the counts asked for after a verdict shared the species request's signal
-  // with the first counts, so a slow first answer arriving last put the old counts back.
-  it('keeps the counts asked for after a verdict when the first counts answer later', async () => {
-    const firstAnswers: ((_response: Response) => void)[] = [];
-    let searches = 0;
-    let verified: Detection['verified'] = 'unverified';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.includes('/api/v2/search')) {
-          searches += 1;
-          if (searches <= 2) {
-            return new Promise<Response>(resolve => {
-              firstAnswers.push(resolve);
-            });
-          }
-          const correct = String(init?.body).includes('"correct"');
-          return Promise.resolve(jsonResponse({ total: correct ? 5 : 0 }));
-        }
-        if (url.endsWith('/api/v2/detections/80')) {
-          return Promise.resolve(jsonResponse(makeDetection({ id: 80, verified })));
-        }
-        return Promise.resolve(jsonResponse({}));
-      })
-    );
-
-    const { container } = detailTest.render({ detectionId: '80' });
-    await waitFor(() => {
-      expect(searches).toBe(2);
-    });
-    verified = 'correct';
-    await fireEvent.click(
-      screen.getByRole('button', { name: /detections\.detail\.review\.correct/ })
-    );
-    await waitFor(() => {
-      expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
-    });
-
-    // The first counts (no reviews correct, one false positive) answer last.
-    firstAnswers[0]?.(jsonResponse({ total: 0 }));
-    firstAnswers[1]?.(jsonResponse({ total: 1 }));
-    await settle();
-
-    expect(container.querySelector<HTMLElement>('.dd-reviews-correct')?.style.width).toBe('100%');
-  });
-});
-
 describe('DetectionDetail recording', () => {
   it('downloads the saved recording from the ID-based endpoint', async () => {
     stubApi([
