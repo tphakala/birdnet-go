@@ -3,8 +3,10 @@
  * filter expects at the station's location, and every species the station's
  * models know.
  *
- * Each list is requested once, on first use, and kept for the life of the page.
- * Matching and ranking a query is left to the shared species prediction helpers.
+ * Each list is requested once and shared until the lists are forgotten: the picker
+ * forgets them each time it opens, since the settings (location, range filter) change
+ * the range filter's list without a page reload. Matching and ranking a query is left
+ * to the shared species prediction helpers.
  */
 import { isPlainObject } from '$lib/utils/security';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -48,6 +50,11 @@ async function fetchCatalog(endpoint: string): Promise<CatalogSpecies[]> {
   return species;
 }
 
+/** Drops the kept lists, so the next load reads the current ones. */
+export function forgetSpeciesCatalogs(): void {
+  catalogs.clear();
+}
+
 /**
  * Starts loading a species list if it is not loaded yet. Rejects when the
  * request fails.
@@ -57,8 +64,9 @@ export function loadSpeciesCatalog(scope: CatalogScope): Promise<CatalogSpecies[
   if (loading) return loading;
   // eslint-disable-next-line security/detect-object-injection -- scope is a typed union
   const request = fetchCatalog(CATALOG_ENDPOINTS[scope]).catch((error: unknown) => {
-    // A failed load is not kept, so opening the picker again retries.
-    catalogs.delete(scope);
+    // A failed load is not kept, so asking again retries. A newer request for the scope
+    // (after the lists were forgotten) stays.
+    if (catalogs.get(scope) === request) catalogs.delete(scope);
     throw error;
   });
   catalogs.set(scope, request);

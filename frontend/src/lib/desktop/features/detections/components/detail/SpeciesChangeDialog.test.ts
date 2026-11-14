@@ -24,7 +24,7 @@ const alternates: AlternatePrediction[] = [
   { scientificName: 'Turdus iliacus', commonName: 'Redwing', confidence: 0.2 },
 ];
 
-// The range list is loaded once per page (module cache), so every test serves the same one.
+// The range filter's species, served to every test.
 const rangeSpecies = [
   { scientificName: 'Turdus merula', commonName: 'Blackbird' },
   { scientificName: 'Turdus philomelos', commonName: 'Song Thrush' },
@@ -310,6 +310,30 @@ describe('SpeciesChangeDialog choosing', () => {
       if (original) Object.defineProperty(prototype, 'scrollIntoView', original);
       else Reflect.deleteProperty(prototype, 'scrollIntoView');
     }
+  });
+
+  // The range filter's list changes with the settings, which apply without a page reload.
+  it('reads the range filter list again at each opening', async () => {
+    const props = {
+      isOpen: true,
+      detection,
+      speciesName: 'Blackbird',
+      alternates,
+      predictionModel: 'BirdNET 2.4',
+      blockedReason: '',
+      onClose: vi.fn(),
+      onChanged: vi.fn(),
+    };
+    const rangeRequests = () =>
+      vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('/range/species/list'))
+        .length;
+    const { rerender } = render(SpeciesChangeDialog, { props });
+    await waitFor(() => expect(rangeRequests()).toBe(1));
+
+    await rerender({ ...props, isOpen: false });
+    await rerender({ ...props, isOpen: true });
+
+    await waitFor(() => expect(rangeRequests()).toBe(2));
   });
 
   it('does not list a predicted species again among the search results', async () => {

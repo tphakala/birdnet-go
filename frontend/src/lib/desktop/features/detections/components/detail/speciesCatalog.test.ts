@@ -88,6 +88,19 @@ describe('loadSpeciesCatalog', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  // Settings change the range filter's list (location, threshold) without a page reload.
+  it('asks again after the lists are forgotten', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(respond(200, { species: [] })));
+    vi.stubGlobal('fetch', fetchMock);
+    const { loadSpeciesCatalog, forgetSpeciesCatalogs } = await freshCatalog();
+
+    await loadSpeciesCatalog('range');
+    forgetSpeciesCatalogs();
+    await loadSpeciesCatalog('range');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('forgets a failed load, so the next opening asks again', async () => {
     const fetchMock = vi
       .fn()

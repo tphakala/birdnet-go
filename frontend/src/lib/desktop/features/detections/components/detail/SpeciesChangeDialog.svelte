@@ -31,7 +31,12 @@
   import { generateId } from '$lib/utils/uuid';
   import { formatScore } from './detailFormat';
   import type { AlternatePrediction, DetectionDetailData, SavedChange } from './detailTypes';
-  import { loadSpeciesCatalog, type CatalogScope, type CatalogSpecies } from './speciesCatalog';
+  import {
+    forgetSpeciesCatalogs,
+    loadSpeciesCatalog,
+    type CatalogScope,
+    type CatalogSpecies,
+  } from './speciesCatalog';
 
   interface Props {
     isOpen: boolean;
@@ -97,9 +102,10 @@
   let scope = $derived<CatalogScope>(allSpecies ? 'all' : 'range');
   let searching = $derived(query.trim().length >= MIN_QUERY_LENGTH);
 
-  // Each opening starts clean, on the range filter's list.
-  $effect(() => {
+  // Each opening starts clean, on the range filter's list as the settings now define it.
+  $effect.pre(() => {
     if (!isOpen) return;
+    forgetSpeciesCatalogs();
     query = '';
     selected = null;
     errorMessage = '';
