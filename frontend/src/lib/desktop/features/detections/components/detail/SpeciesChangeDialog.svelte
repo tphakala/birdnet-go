@@ -30,6 +30,7 @@
   import { rankPredictions, toLocalizedPredictions } from '$lib/utils/speciesPredictions';
   import { generateId } from '$lib/utils/uuid';
   import { formatScore } from './detailFormat';
+  import { forgetSpeciesSummary } from './speciesSummary';
   import type { AlternatePrediction, DetectionDetailData, SavedChange } from './detailTypes';
   import { loadSpeciesCatalog, type CatalogScope, type CatalogSpecies } from './speciesCatalog';
 
@@ -213,6 +214,8 @@
       await api.put(`/api/v2/detections/${id}/species`, {
         scientificName: chosen.scientificName,
       });
+      // The kept all-time totals count this detection under its old species.
+      forgetSpeciesSummary();
       toastActions.success(t('detections.detail.species.changed', { species: chosen.commonName }));
       // A dialog still open is on the saved detection, whose reload counts the new species;
       // one already gone left the page free to show another detection of the old species.
