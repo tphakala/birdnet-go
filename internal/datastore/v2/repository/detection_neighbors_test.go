@@ -16,6 +16,8 @@ const (
 	neighborsSpeciesA        = "Parus major"
 	neighborsSpeciesB        = "Cyanistes caeruleus"
 	neighborsLegacyLabelA    = neighborsSpeciesA + "_Great Tit"
+	neighborsNamelessLabelA  = "_Odd"
+	neighborsNamelessLabelB  = "_Other"
 	neighborsMissingLabelID  = uint(9999)
 	neighborsNeverUsedID     = uint(1000000)
 	neighborsCaptureCallback = "test:capture_neighbor_statements"
@@ -199,6 +201,19 @@ func TestDetectionRepository_GetNeighborIDs_Edges(t *testing.T) {
 		n, err := f.repo.GetNeighborIDs(t.Context(), orphan)
 		require.NoError(t, err)
 		assert.Equal(t, DetectionNeighbors{Previous: before, Next: after}, *n)
+	})
+
+	t.Run("a label without a scientific name has overall neighbors only", func(t *testing.T) {
+		f := newNeighborsFixture(t)
+		odd := createTestLabel(t, f.db, neighborsNamelessLabelA, 1)
+		other := createTestLabel(t, f.db, neighborsNamelessLabelB, 1)
+		before := f.add(odd, neighborsNamelessLabelA)
+		anchor := f.add(odd, neighborsNamelessLabelA)
+		after := f.add(other, neighborsNamelessLabelB)
+		n, err := f.repo.GetNeighborIDs(t.Context(), anchor)
+		require.NoError(t, err)
+		assert.Equal(t, DetectionNeighbors{Previous: before, Next: after}, *n,
+			"a name with no species part must not match every label that starts with an underscore")
 	})
 
 	t.Run("a deleted and a never used id are not found", func(t *testing.T) {

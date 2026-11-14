@@ -19,12 +19,21 @@ const (
 	neighborsOtherName       = "Cyanistes caeruleus"
 	neighborsCaptureName     = "test:capture_neighbor_statements"
 	neighborsExplainSubquery = "SUBQUERY"
-	neighborsExtraColumn     = "Extra"
-	neighborsSelectTypeCol   = "select_type"
 	neighborsOptimizedAway   = "Select tables optimized away"
 	neighborsNoMinMaxRow     = "No matching min/max row"
 	neighborsMinStatements   = 3
+
+	neighborsSubqueriesPerStatement = 2
 )
+
+// neighborsExplainRow is the part of an EXPLAIN row the plan assertions read.
+// MySQL and MariaDB name these columns alike; Key and Extra are NULL for a
+// subquery answered without a table.
+type neighborsExplainRow struct {
+	SelectType string  `gorm:"column:select_type"`
+	Key        *string `gorm:"column:key"`
+	Extra      *string `gorm:"column:Extra"`
+}
 
 // TestMySQL_GetNeighborIDs runs the neighbor lookup through the production
 // MySQL DSN under both table layouts. It pins that the v2_ table names are used,
@@ -85,19 +94,31 @@ func TestMySQL_GetNeighborIDs(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, repository.DetectionNeighbors{Next: second, NextSameSpecies: second}, *got, "the lowest row has no previous neighbors")
 
+			got, err = repo.GetNeighborIDs(ctx, fifth)
+			require.NoError(t, err)
+			assert.Equal(t, repository.DetectionNeighbors{Previous: fourth, PreviousSameSpecies: fourth}, *got, "the highest row has no next neighbors")
+
 			require.GreaterOrEqual(t, len(statements), neighborsMinStatements, "the overall pair and one pair per label")
+			subqueries := 0
 			for _, statement := range statements {
-				var plan []map[string]any
+				var plan []neighborsExplainRow
 				require.NoError(t, db.Raw("EXPLAIN "+statement).Scan(&plan).Error, statement)
+				require.NotEmpty(t, plan, statement)
 				for _, row := range plan {
-					if !strings.EqualFold(fmt.Sprint(row[neighborsSelectTypeCol]), neighborsExplainSubquery) {
+					if !strings.EqualFold(row.SelectType, neighborsExplainSubquery) {
 						continue
 					}
-					extra := fmt.Sprint(row[neighborsExtraColumn])
+					subqueries++
+					extra := ""
+					if row.Extra != nil {
+						extra = *row.Extra
+					}
 					assert.True(t, extra == neighborsOptimizedAway || extra == neighborsNoMinMaxRow,
-						"subquery is not answered from one index seek: %v (%s)", row, statement)
+						"subquery is not answered from one index seek: %+v (%s)", row, statement)
+					assert.Nil(t, row.Key, "an aggregate answered from one seek reads no table: %s", statement)
 				}
 			}
+			assert.Equal(t, neighborsSubqueriesPerStatement*len(statements), subqueries, "every statement has a MIN and a MAX subquery in its plan")
 		})
 	}
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -132,6 +133,10 @@ func TestGetDetectionNeighbors_StatusMapping(t *testing.T) {
 // repository.
 func TestGetDetectionNeighbors_WiredToV2Repository(t *testing.T) {
 	f := newContribFixture(t)
+	var first entities.Detection
+	require.NoError(t, f.mgr.DB().First(&first, f.detectionID).Error)
+	second := entities.Detection{LabelID: first.LabelID, ModelID: first.ModelID, Confidence: first.Confidence, DetectedAt: first.DetectedAt}
+	require.NoError(t, f.mgr.DB().Create(&second).Error)
 	e, _, h := setupTestEnvironment(t)
 	h.V2Manager = f.mgr
 	h.AuthMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
@@ -148,6 +153,6 @@ func TestGetDetectionNeighbors_WiredToV2Repository(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t,
-		fmt.Sprintf(`{"detectionId":%s,"previous":null,"next":null,"previousSameSpecies":null,"nextSameSpecies":null}`, id),
+		fmt.Sprintf(`{"detectionId":%s,"previous":null,"next":%d,"previousSameSpecies":null,"nextSameSpecies":%d}`, id, second.ID, second.ID),
 		rec.Body.String())
 }

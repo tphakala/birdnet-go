@@ -46,7 +46,14 @@ func (r *detectionRepository) GetNeighborIDs(ctx context.Context, id uint) (*Det
 		return nil, fmt.Errorf("load detection label: %w", err)
 	}
 
-	match, args := LabelMatchForScientificName(detection.ExtractScientificName(label.ScientificName))
+	// A name with no species part (empty, blank or "_Common") has no species to
+	// step through, and its match would take every label that is empty or starts
+	// with an underscore.
+	species := detection.ExtractScientificName(label.ScientificName)
+	if species == "" {
+		return neighbors, nil
+	}
+	match, args := LabelMatchForScientificName(species)
 	var speciesLabels []entities.Label
 	if err := r.db.WithContext(ctx).Table(r.labelsTable()).Select(columnLabelIdentity).Where(match, args...).Find(&speciesLabels).Error; err != nil {
 		return nil, fmt.Errorf("load labels of the species: %w", err)
