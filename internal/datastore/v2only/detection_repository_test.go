@@ -931,6 +931,16 @@ func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, currentSci, got.Species.ScientificName)
 		assert.Zero(t, got.OriginalSpecies)
+
+		// The list reads batch the labels: a missing original row is no error there either.
+		for _, rc := range listReadCalls(date, hour) {
+			results, err := rc.call(ctx, repo)
+			require.NoError(t, err, rc.name)
+			listed := find(results, ghost.ID)
+			require.NotNil(t, listed, "%s did not return the detection with the deleted original label", rc.name)
+			assert.Equal(t, currentSci, listed.Species.ScientificName, rc.name)
+			assert.Zero(t, listed.OriginalSpecies, rc.name)
+		}
 	})
 }
 

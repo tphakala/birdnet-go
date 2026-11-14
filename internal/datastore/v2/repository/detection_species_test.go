@@ -140,6 +140,12 @@ func TestDetectionRepository_ChangeSpecies_ReadsLoadOriginalLabel(t *testing.T) 
 	got, err = repo.GetWithRelations(ctx, changed.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got.OriginalLabel)
+	recent, err = repo.GetRecent(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, recent, 2)
+	for _, d := range recent {
+		assert.Nil(t, d.OriginalLabel)
+	}
 }
 
 // TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows pins that the
