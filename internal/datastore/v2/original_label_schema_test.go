@@ -24,8 +24,9 @@ func TestInitialize_AddsOriginalLabelColumn(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, colsWith, "original_label_id")
 
-	// The column is a plain nullable column: an index or a foreign key on it
-	// would make the migration heavier and, on SQLite, a table rebuild.
+	// The column is a plain nullable column: an index on it would make the
+	// migration heavier, and a foreign key would make AutoMigrate rebuild the
+	// table on SQLite.
 	var indexed int64
 	require.NoError(t, db.Raw(
 		"SELECT COUNT(*) FROM pragma_index_list('detections') il "+
