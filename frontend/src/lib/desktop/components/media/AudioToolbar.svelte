@@ -3,6 +3,10 @@
 
   Provides: unified playback controls, selection range, gain/denoise/normalize processing,
   and export functionality. Inspired by iZotope RX toolbar layout.
+
+  The bar wraps on its own content: a transport row (play, skip, loop, time, seek) and a
+  processing row (selection, gain, denoise, normalize, export) share one line when there
+  is room and stack otherwise, and each row wraps again inside a narrow host.
 -->
 <script lang="ts">
   import {
@@ -17,7 +21,9 @@
     Loader2,
     ChevronDown,
   } from '@lucide/svelte';
+  import type { Action } from 'svelte/action';
   import { dropdown } from '$lib/utils/transitions';
+  import { computeAnchorPosition, type HorizontalAlign } from '$lib/utils/anchorPosition';
   import { t } from '$lib/i18n';
   import { playButtonLabelKey } from '$lib/utils/audio';
   import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
@@ -184,45 +190,155 @@
 
   // Unified playing state
   let isCurrentlyPlaying = $derived(isPlayingSelection || isPlaying);
+
+  // Gap between a menu and its dropdown wrapper, set as the menu's block margin
+  const MENU_GAP_PX = 4;
+  // Distance a menu keeps from the viewport edges
+  const MENU_VIEWPORT_MARGIN_PX = 8;
+  // Overflow values that make an element clip its content
+  const CLIPPING_OVERFLOW: ReadonlySet<string> = new Set(['hidden', 'clip', 'auto', 'scroll']);
+
+  /**
+   * Keeps a menu visible. The menu stays absolutely positioned inside its
+   * `position: relative` dropdown wrapper, after its trigger, so Tab order and the
+   * outside click check are unchanged. Horizontally it is aligned to the trigger's
+   * start or end edge and clamped into the viewport and every scroll box that clips
+   * the wrapper. It opens above the wrapper
+   * unless the room above is too short for it and the room below is larger; the room
+   * on each side is measured inside the viewport and every scroll box that clips the
+   * wrapper, and the menu's height is capped to the room on the chosen side. The
+   * position is recomputed when the window is resized or anything outside the menu
+   * scrolls.
+   */
+  const anchorMenu: Action<HTMLElement, HorizontalAlign> = (menu, align = 'start') => {
+    function place(event?: Event): void {
+      // Scrolling inside the menu does not move it
+      if (event?.target instanceof Node && menu.contains(event.target)) return;
+      const wrapper = menu.parentElement;
+      const trigger = wrapper?.querySelector(':scope > button');
+      if (!wrapper || !(trigger instanceof HTMLElement)) return;
+
+      // Measure the natural height, not the one capped by the previous pass; clearing
+      // the cap resets the menu's own scroll position, so keep it
+      const scrollTop = menu.scrollTop;
+      menu.style.maxHeight = '';
+      const height = menu.offsetHeight;
+
+      // Measure the room with the menu out of layout, so its previous position cannot
+      // stick out of a scroll box and give that box a scrollbar meanwhile. It is shown
+      // again before the next rendering update, so focus inside it is kept.
+      menu.style.display = 'none';
+      const wrapperRect = wrapper.getBoundingClientRect();
+
+      // The visible band: the viewport, cut by every ancestor that clips its overflow
+      // (on Search, the results table scrolls sideways and so clips vertically too).
+      // Overflow above a fixed ancestor does not clip it, so the walk stops there. A
+      // box with no size lays nothing out (display: contents), so it bounds nothing.
+      let clipTop = 0;
+      let clipBottom = window.innerHeight;
+      let clipLeft = 0;
+      let clipRight = window.innerWidth;
+      for (let el = wrapper.parentElement; el; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (CLIPPING_OVERFLOW.has(style.overflowX) || CLIPPING_OVERFLOW.has(style.overflowY)) {
+          // Content is clipped at the scrollport: inside the borders and any scrollbar
+          const rect = el.getBoundingClientRect();
+          if (el.clientHeight > 0) {
+            const top = rect.top + el.clientTop;
+            clipTop = Math.max(clipTop, top);
+            clipBottom = Math.min(clipBottom, top + el.clientHeight);
+          }
+          if (el.clientWidth > 0) {
+            const left = rect.left + el.clientLeft;
+            clipLeft = Math.max(clipLeft, left);
+            clipRight = Math.min(clipRight, left + el.clientWidth);
+          }
+        }
+        if (style.position === 'fixed') break;
+      }
+      menu.style.display = '';
+
+      // Unlike computeAnchorPosition, which prefers below, the menu opens above as it
+      // always has. The room is measured from the wrapper: the menu hangs off its
+      // edges, and an export error message can sit between the trigger and the bottom.
+      const roomAbove = wrapperRect.top - clipTop - MENU_VIEWPORT_MARGIN_PX;
+      const roomBelow = clipBottom - wrapperRect.bottom - MENU_VIEWPORT_MARGIN_PX;
+      const below = roomAbove < height + MENU_GAP_PX && roomBelow > roomAbove;
+      menu.style.top = below ? '100%' : 'auto';
+      menu.style.bottom = below ? 'auto' : '100%';
+      menu.style.maxHeight = `${Math.max(0, (below ? roomBelow : roomAbove) - MENU_GAP_PX)}px`;
+
+      // Clamped by the width measured after the cap (a capped menu gains a scrollbar on
+      // systems with classic scrollbars, which widens a max-content menu) into the
+      // viewport and the visible band; where the band is narrower than the menu, its
+      // start edge stays visible
+      const width = menu.offsetWidth;
+      let { left } = computeAnchorPosition({
+        triggerRect: trigger.getBoundingClientRect(),
+        floatingHeight: height,
+        floatingWidth: width,
+        align,
+        viewportMargin: MENU_VIEWPORT_MARGIN_PX,
+      });
+      left = Math.min(left, clipRight - MENU_VIEWPORT_MARGIN_PX - width);
+      left = Math.max(left, clipLeft + MENU_VIEWPORT_MARGIN_PX);
+      menu.style.left = `${left - wrapper.getBoundingClientRect().left}px`;
+      menu.scrollTop = scrollTop;
+    }
+
+    menu.style.marginBlock = `${MENU_GAP_PX}px`;
+    place();
+    window.addEventListener('resize', place);
+    // Captured, so a scroll of any container that moves the trigger is seen too
+    window.addEventListener('scroll', place, true);
+    return {
+      destroy() {
+        window.removeEventListener('resize', place);
+        window.removeEventListener('scroll', place, true);
+      },
+    };
+  };
 </script>
 
 <svelte:document onclick={handleClickOutside} />
 
 <div class="audio-toolbar">
-  <!-- Playback controls: play, rewind, loop, time, progress -->
-  <div class="toolbar-group playback-controls">
-    <button
-      class="toolbar-btn play-btn"
-      onclick={handlePlay}
-      disabled={isLoading}
-      aria-label={t(playButtonLabelKey(isLoading, isCurrentlyPlaying))}
-    >
-      {#if isLoading}
-        <Loader2 size={14} class="animate-spin" />
-      {:else if isCurrentlyPlaying}
-        <Pause size={14} />
-      {:else}
-        <Play size={14} />
-      {/if}
-    </button>
-    <button
-      class="toolbar-btn"
-      disabled={!hasSelection}
-      onclick={onSkipToSelection}
-      aria-label={t('components.audioPlayer.processing.skipToStart')}
-    >
-      <SkipBack size={14} />
-    </button>
-    <button
-      type="button"
-      class="toolbar-btn"
-      class:active={loop}
-      aria-pressed={loop}
-      onclick={onLoopToggle}
-      aria-label={t('media.audio.loop')}
-    >
-      <Repeat size={14} />
-    </button>
+  <!-- Transport row: play, rewind, loop, time, seek -->
+  <div class="toolbar-row playback-controls">
+    <div class="toolbar-group">
+      <button
+        class="toolbar-btn play-btn"
+        onclick={handlePlay}
+        disabled={isLoading}
+        aria-label={t(playButtonLabelKey(isLoading, isCurrentlyPlaying))}
+      >
+        {#if isLoading}
+          <Loader2 size={14} class="animate-spin" />
+        {:else if isCurrentlyPlaying}
+          <Pause size={14} />
+        {:else}
+          <Play size={14} />
+        {/if}
+      </button>
+      <button
+        class="toolbar-btn"
+        disabled={!hasSelection}
+        onclick={onSkipToSelection}
+        aria-label={t('components.audioPlayer.processing.skipToStart')}
+      >
+        <SkipBack size={14} />
+      </button>
+      <button
+        type="button"
+        class="toolbar-btn"
+        class:active={loop}
+        aria-pressed={loop}
+        onclick={onLoopToggle}
+        aria-label={t('media.audio.loop')}
+      >
+        <Repeat size={14} />
+      </button>
+    </div>
     <span class="playback-time">{formatTime(currentTime)} / {formatTime(seekMax)}</span>
     <div
       bind:this={progressBarEl}
@@ -238,28 +354,29 @@
       onclick={handleSeekClick}
       onkeydown={handleSeekKeydown}
     >
-      <div class="progress-fill" style:width="{progress}%"></div>
+      <div class="progress-track">
+        <div class="progress-fill" style:width="{progress}%"></div>
+      </div>
     </div>
   </div>
 
-  <!-- Selection range display -->
-  <div class="toolbar-group selection-controls">
-    <span class="time-range" class:dimmed={!hasSelection}>
-      {formatSelectionTime(selectionStart)} - {formatSelectionTime(selectionEnd)}
-    </span>
-    <button
-      class="toolbar-btn"
-      class:invisible={!hasSelection}
-      onclick={onClearSelection}
-      disabled={!hasSelection}
-      aria-label={t('components.audioPlayer.processing.clearSelection')}
-    >
-      <X size={14} />
-    </button>
-  </div>
+  <!-- Processing row: selection range, gain, denoise, normalize, export -->
+  <div class="toolbar-row processing-controls">
+    <div class="toolbar-group selection-controls">
+      <span class="time-range" class:dimmed={!hasSelection}>
+        {formatSelectionTime(selectionStart)} - {formatSelectionTime(selectionEnd)}
+      </span>
+      <button
+        class="toolbar-btn"
+        class:invisible={!hasSelection}
+        onclick={onClearSelection}
+        disabled={!hasSelection}
+        aria-label={t('components.audioPlayer.processing.clearSelection')}
+      >
+        <X size={14} />
+      </button>
+    </div>
 
-  <!-- Processing controls -->
-  <div class="toolbar-group processing-controls">
     <label class="toolbar-control" title={t('components.audioPlayer.processing.gain')}>
       <Volume2 size={14} />
       <input
@@ -287,12 +404,22 @@
         <AudioWaveform size={14} />
         <!-- The name is "Denoise Light": the control, then the visible state it shows -->
         <span class="sr-only">{t('components.audioPlayer.processing.denoise')}</span>
-        <span>{denoiseLabel}</span>
+        <!-- Hidden sizers reserve the longest label's width, so the button and the
+             rows around it keep their size when the preset changes. Their text sits in
+             an attribute, not the DOM, so the button's name and text stay the same. -->
+        <span class="denoise-label">
+          <span class="denoise-label-current">{denoiseLabel}</span>
+          {#each DENOISE_OPTIONS as opt (opt.id)}
+            <span class="denoise-label-sizer" aria-hidden="true" data-label={t(opt.labelKey)}
+            ></span>
+          {/each}
+        </span>
         <ChevronDown size={10} />
       </button>
       {#if showDenoiseMenu}
         <div
           class="denoise-menu"
+          use:anchorMenu={'start'}
           in:dropdown={{ y: -4, duration: 120 }}
           out:dropdown={{ y: -4, duration: 80 }}
         >
@@ -328,10 +455,7 @@
         N
       {/if}
     </button>
-  </div>
 
-  <!-- Export controls -->
-  <div class="toolbar-group export-controls">
     <div class="export-dropdown">
       <button
         class="toolbar-btn export-btn"
@@ -357,6 +481,7 @@
       {#if showExportMenu}
         <div
           class="export-menu"
+          use:anchorMenu={'end'}
           in:dropdown={{ y: -4, duration: 120 }}
           out:dropdown={{ y: -4, duration: 80 }}
         >
@@ -376,50 +501,80 @@
 
 <style>
   .audio-toolbar {
+    /* Hit-area floor for every control. Mouse and trackpad users get 32 px, which keeps
+       the bar compact on desktop; a coarse pointer (touch) gets 44 px below, the
+       comfortable size for a finger. Both are px rather than rem: WCAG target size is
+       in CSS px, and a rem floor would double each icon button at 200 percent text. */
+    --audio-toolbar-target: 32px;
+
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.5rem;
+    gap: 0.375rem 0.75rem;
+    padding: 0.375rem;
     background: var(--color-base-200);
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-field);
     font-size: 0.75rem;
   }
 
+  /* Touch: 44 px targets, with the roomier spacing that goes with them */
+  @media (pointer: coarse) {
+    .audio-toolbar {
+      --audio-toolbar-target: 44px;
+
+      gap: 0.5rem 0.75rem;
+      padding: 0.5rem;
+    }
+  }
+
+  .toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+    min-width: 0;
+  }
+
+  /* Grows to fill its line; 24rem is the width it asks for before the processing
+     row may sit beside it. */
+  .playback-controls {
+    flex: 1 1 24rem;
+  }
+
   .toolbar-group {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 0.25rem;
-    flex-shrink: 0;
     white-space: nowrap;
-  }
-
-  .playback-controls {
-    flex: 0 0 auto;
-    gap: 0.375rem;
-  }
-
-  .play-btn {
-    padding: 0.25rem;
   }
 
   .playback-time {
-    font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     opacity: 0.7;
-    width: 5rem;
+    min-width: 5rem;
   }
 
+  /* The slider box is the hit area (the toolbar target: 32 px, 44 px for touch); the
+     visible track is a full-width child, so a click maps onto the track exactly (no
+     padding or border here). */
   .progress-bar {
-    width: 80px;
+    display: flex;
+    flex: 1 1 6rem;
+    align-items: center;
+    min-width: 6rem;
+    height: var(--audio-toolbar-target);
+    cursor: pointer;
+  }
+
+  .progress-track {
+    flex: 1 1 auto;
     height: 5px;
     background: var(--color-base-300);
     border-radius: 3px;
-    cursor: pointer;
     overflow: hidden;
-    flex-shrink: 1;
-    min-width: 40px;
   }
 
   .progress-fill {
@@ -429,26 +584,9 @@
     transition: width 0.1s linear;
   }
 
-  .selection-controls {
-    flex: 0 0 auto;
-  }
-
+  /* Hidden, but keeps its box, so the bar does not move when a selection appears */
   .invisible {
     visibility: hidden;
-    width: 0;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-  }
-
-  .processing-controls {
-    flex: 1 1 auto;
-    justify-content: center;
-  }
-
-  .export-controls {
-    flex: 0 0 auto;
-    margin-left: auto;
   }
 
   .toolbar-btn {
@@ -456,14 +594,17 @@
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    padding: 0.25rem 0.375rem;
+    min-width: var(--audio-toolbar-target);
+    min-height: var(--audio-toolbar-target);
+    padding: 0.25rem 0.5rem;
     background: none;
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-selector);
     color: var(--color-base-content);
     cursor: pointer;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 500;
+    white-space: nowrap;
     transition: all 0.15s ease;
   }
 
@@ -496,52 +637,97 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
+    min-width: 0;
     color: var(--color-base-content);
     opacity: 0.7;
+    white-space: nowrap;
   }
 
+  /* Shrinkable, so the gain group still fits a very narrow bar. The width is not
+     redundant with the flex basis: without it the row's max-content size uses the
+     browser's default range width, about 130 px. */
   .gain-slider {
-    width: 80px;
+    flex: 1 1 5rem;
+    width: 5rem;
+    min-width: 3rem;
+    height: var(--audio-toolbar-target);
+    margin: 0;
     accent-color: var(--color-primary);
   }
 
   .control-value {
-    font-size: 0.6875rem;
     font-variant-numeric: tabular-nums;
     min-width: 3rem;
   }
 
-  .denoise-dropdown {
+  .denoise-dropdown,
+  .export-dropdown {
     position: relative;
+    min-width: 0;
   }
 
-  .denoise-menu {
+  /* Stacks the current label over hidden copies of every label, like a native select */
+  .denoise-label {
+    display: inline-grid;
+    justify-items: start;
+  }
+
+  .denoise-label-current,
+  .denoise-label-sizer {
+    grid-area: 1 / 1;
+  }
+
+  .denoise-label-sizer {
+    visibility: hidden;
+  }
+
+  .denoise-label-sizer::after {
+    content: attr(data-label);
+  }
+
+  /* anchorMenu places the menus inline: left, the side and max-height */
+  .denoise-menu,
+  .export-menu {
     position: absolute;
-    bottom: 100%;
-    left: 0;
-    margin-bottom: 0.25rem;
+    width: max-content;
+    max-width: calc(100vw - 1rem);
+    overflow-y: auto;
     background: var(--color-base-100);
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-field);
     box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+    white-space: nowrap;
     z-index: 10;
+  }
+
+  .denoise-menu {
     min-width: 80px;
   }
 
-  .denoise-option {
+  .export-menu {
+    min-width: 100px;
+  }
+
+  .denoise-option,
+  .export-option {
     display: block;
     width: 100%;
-    padding: 0.375rem 0.625rem;
+    min-height: var(--audio-toolbar-target);
     text-align: left;
     background: none;
     border: none;
     color: var(--color-base-content);
     cursor: pointer;
-    font-size: 0.75rem;
   }
 
-  .denoise-option:hover {
+  .denoise-option:hover,
+  .export-option:hover {
     background: var(--color-base-200);
+  }
+
+  .denoise-option {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
   }
 
   .denoise-option.selected {
@@ -550,9 +736,8 @@
   }
 
   .time-range {
-    font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
-    width: 6rem;
+    min-width: 6.5rem;
     text-align: center;
   }
 
@@ -560,45 +745,16 @@
     opacity: 0.35;
   }
 
-  .export-dropdown {
-    position: relative;
-  }
-
-  .export-menu {
-    position: absolute;
-    bottom: 100%;
-    right: 0;
-    margin-bottom: 0.25rem;
-    background: var(--color-base-100);
-    border: 1px solid var(--color-base-300);
-    border-radius: var(--radius-field);
-    box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-    z-index: 10;
-    min-width: 100px;
-  }
-
   .export-option {
-    display: block;
-    width: 100%;
     padding: 0.5rem 0.75rem;
-    text-align: left;
-    background: none;
-    border: none;
-    color: var(--color-base-content);
-    cursor: pointer;
     font-size: 0.8125rem;
   }
 
-  .export-option:hover {
-    background: var(--color-base-200);
-  }
-
   .export-error {
-    font-size: 0.6875rem;
+    display: block;
+    font-size: 0.75rem;
     color: var(--text-error);
     max-width: 12rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
 </style>
