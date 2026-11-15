@@ -548,30 +548,6 @@ func getSessionPath() (string, bool) {
 	return sessionPath, true
 }
 
-// computeBaseURL returns the base URL for constructing OAuth redirect URIs.
-// It prioritizes BaseURL, then falls back to Host (which may include scheme).
-// Returns empty string if neither is configured.
-func computeBaseURL(settings *conf.Settings) string {
-	// BaseURL takes precedence if configured
-	if settings.Security.BaseURL != "" {
-		// Ensure no trailing slash
-		return strings.TrimSuffix(settings.Security.BaseURL, "/")
-	}
-
-	// Fall back to Host (may already include scheme like "https://example.com")
-	if settings.Security.Host != "" {
-		host := strings.TrimSuffix(settings.Security.Host, "/")
-		// If host already has a scheme, use it as-is
-		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-			return host
-		}
-		// Otherwise, assume HTTPS for security
-		return "https://" + host
-	}
-
-	return ""
-}
-
 // oidcRegistration holds the inputs of one OIDC provider registration, copied out
 // of the settings snapshot so the discovery goroutine never reads shared settings.
 type oidcRegistration struct {
@@ -592,7 +568,7 @@ func buildGothProviders(settings *conf.Settings) (providers []goth.Provider, oid
 	providers = make([]goth.Provider, 0, InitialProviderCapacity)
 
 	// Compute base URL for redirect URIs if not explicitly configured
-	baseURL := computeBaseURL(settings)
+	baseURL := settings.Security.OAuthOrigin()
 
 	// Iterate over the OAuthProviders array
 	for i := range settings.Security.OAuthProviders {

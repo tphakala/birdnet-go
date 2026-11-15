@@ -142,44 +142,42 @@ func oauthRedirectProblem(p *OAuthProviderConfig, originProblem string) string {
 // oauthOriginProblem describes why security.host and security.baseUrl cannot
 // produce a redirect origin, or returns "" when they can.
 //
-// Presence is not enough: computeBaseURL returns baseUrl verbatim, so a value that
-// is not an absolute http(s) URL yields a callback the identity provider will
-// reject, which is the same lock-out as having no origin at all. baseUrl also wins
-// outright when set, so a valid host cannot rescue a malformed one.
+// It is empty exactly when OAuthOrigin is usable, which is what keeps this check
+// from drifting away from the code that builds the callback. Presence is not
+// enough: a baseUrl that is not an absolute http(s) URL yields a callback the
+// identity provider will reject, which is the same lock-out as having no origin at
+// all, and baseUrl wins outright when set, so a valid host cannot rescue it.
 //
-// This mirrors computeBaseURL in internal/security/oauth.go, including its rule
-// that a host without a scheme is assumed to be https. The logic is duplicated
-// rather than shared because security imports conf, so the dependency cannot run the
-// other way.
-//
-// A malformed baseUrl is only reported through this path, when a credentialed
-// provider actually depends on it. Rejecting one that nothing consumes would be the
-// kind of inert-config failure this pass exists to remove.
+// A malformed baseUrl is only fatal through this path, when a credentialed provider
+// actually depends on it. One that nothing consumes is warned about on load
+// (normalizeBaseURL) and rejected on save (ValidateSecurityBaseURL).
 func oauthOriginProblem(settings *Security) string {
-	var origin string
-	switch {
-	case settings.BaseURL != "":
-		origin = strings.TrimSuffix(settings.BaseURL, "/")
-	case settings.Host != "":
-		host := strings.TrimSuffix(settings.Host, "/")
-		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-			origin = host
-		} else {
-			origin = "https://" + host
-		}
-	default:
+	field, origin := settings.oauthOriginCandidate()
+	if origin == "" {
 		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
 	}
-
-	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
-		field := "security.host"
-		if settings.BaseURL != "" {
-			field = "security.baseUrl"
-		}
-		return fmt.Sprintf("%s does not form an absolute http(s) URL (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, origin)
+	if settings.OAuthOrigin() != "" {
+		return ""
 	}
-	return ""
+	return fmt.Sprintf("%s does not form an absolute http(s) URL without credentials (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, privacy.RedactURLUserinfo(origin))
+}
+
+// ValidateSecurityBaseURL rejects a security.baseUrl that is set but is not an
+// absolute http(s) URL with a host and no credentials. Only the PUT and PATCH settings handlers run
+// it, so a save cannot introduce or keep such a value; it is not part of
+// ValidateSettings because config load must keep booting with one (normalizeBaseURL
+// warns instead). The error names the field and omits the value, which may carry
+// credentials.
+func ValidateSecurityBaseURL(sec *Security) error {
+	if !sec.hasUnusableBaseURL() {
+		return nil
+	}
+	return errors.Newf("security.baseUrl must be an absolute http or https URL with a host and without credentials, such as https://birds.example.com").
+		Component("conf").
+		Category(errors.CategoryValidation).
+		Context("operation", "validate_security_base_url").
+		Context("validation_type", "security-base-url").
+		Build()
 }
 
 // validateOAuthRedirects rejects an enabled OAuth provider that has credentials but

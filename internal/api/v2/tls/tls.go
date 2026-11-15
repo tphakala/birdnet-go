@@ -300,7 +300,7 @@ func (c *Handler) GenerateSelfSignedCertificate(ctx echo.Context) error {
 
 	// Collect SANs from settings
 	snap := c.getSettingsOrFallback()
-	host := snap.Security.Host
+	host := snap.Security.GetHostnameForCertificates()
 	baseURL := snap.Security.BaseURL
 
 	sans := tlspkg.CollectSANs(host, baseURL)

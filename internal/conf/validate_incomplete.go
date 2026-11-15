@@ -53,6 +53,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Component names used for the warnings recorded below. They become the prefix of
@@ -96,9 +97,11 @@ func (s *Settings) recordValidationWarning(component, format string, args ...any
 
 // normalizeIncompleteFeatures disables or defaults settings that are enabled but
 // not configured enough to have any effect, recording a warning for each. See the
-// file comment for the policy and its one security exception.
+// file comment for the policy and its one security exception. A security.baseUrl
+// that cannot be used is the one thing it warns about and keeps (normalizeBaseURL).
 func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeOAuthProviders()
+	s.normalizeBaseURL()
 	s.normalizeQuietHours()
 	s.normalizeEqualizers()
 	s.normalizeAudioExport()
@@ -114,6 +117,22 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeAlternateMinConfidence()
 	s.normalizeModelConsensus()
 	s.normalizeUltrasonicFilter()
+}
+
+// normalizeBaseURL warns about a security.baseUrl that is set but not a usable
+// absolute http(s) URL with a host and no credentials. The value is kept: the settings page then shows it for
+// correction, and GetHostnameForCertificates still reads the AutoTLS hostname from
+// it, so clearing it could turn a scheme typo into a startup failure. Every origin
+// producer already treats it as unusable (see OAuthOrigin and GetBaseURL), and the
+// one fatal case, a credentialed OAuth provider that depends on it, stays with
+// validateOAuthRedirects.
+func (s *Settings) normalizeBaseURL() {
+	if !s.Security.hasUnusableBaseURL() {
+		return
+	}
+	s.recordValidationWarning(warnComponentSecurity,
+		"security.baseUrl %q is not an absolute http(s) URL with a host and without credentials, so links and OAuth callbacks cannot be built from it; it is ignored until corrected",
+		privacy.RedactURLUserinfo(s.Security.BaseURL))
 }
 
 // normalizeUltrasonicFilter resets invalid or unwritten ultrasonic STFT settings

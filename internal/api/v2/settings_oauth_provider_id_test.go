@@ -304,3 +304,56 @@ func TestUpdateSectionSettingsRejectsStoredUnknownOAuthProviderID(t *testing.T) 
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+// TestUpdateSettingsRejectsUnusableBaseURL verifies the full settings PUT and the
+// security section PATCH reject a non-empty baseUrl that is not an absolute
+// http(s) URL, name the field, and publish nothing; a valid one is accepted.
+func TestUpdateSettingsRejectsUnusableBaseURL(t *testing.T) {
+	const badBaseURL = "birds.example.com"
+
+	t.Run("PUT", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+
+		s := conf.CloneSettings(controller.Settings.Load())
+		s.Security.BaseURL = badBaseURL
+		rec := sendFullSettings(t, e, controller, s)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "security.baseUrl")
+		assert.Empty(t, controller.Settings.Load().Security.BaseURL)
+
+		s.Security.BaseURL = testOAuthBaseURL
+		putFullSettings(t, e, controller, s)
+		assert.Equal(t, testOAuthBaseURL, controller.Settings.Load().Security.BaseURL)
+	})
+
+	t.Run("PATCH", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+
+		rec := sendSectionPatch(t, e, controller, "security", map[string]any{"baseUrl": badBaseURL})
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "security.baseUrl")
+		assert.Empty(t, controller.Settings.Load().Security.BaseURL)
+
+		rec = sendSectionPatch(t, e, controller, "security", map[string]any{"baseUrl": testOAuthBaseURL})
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, testOAuthBaseURL, controller.Settings.Load().Security.BaseURL)
+	})
+}
+
+// TestUpdateSectionSettingsRejectsStoredUnusableBaseURL verifies a PATCH of a
+// section other than security is rejected while the stored security.baseUrl is
+// unusable, as the handler documents.
+func TestUpdateSectionSettingsRejectsStoredUnusableBaseURL(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	const storedBaseURL = "birds.example.com"
+	controller.Settings.Load().Security.BaseURL = storedBaseURL
+
+	rec := sendSectionPatch(t, e, controller, "audio", map[string]any{
+		"export": map[string]any{"enabled": false},
+	})
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "security.baseUrl")
+}

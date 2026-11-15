@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test constants for Security helper methods.
@@ -177,6 +178,51 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 			want: testHostExample,
 		},
 		{
+			name:     "Host with a scheme, port and path - should return the bare hostname",
+			security: Security{Host: testURLHTTPS + "/birdnet", BaseURL: testURLDifferent},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with an uppercase scheme and padding - should return the bare hostname",
+			security: Security{Host: " HTTPS://" + testHostExample + " "},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with a scheme and an IPv6 literal - should return it without brackets",
+			security: Security{Host: "http://[" + testHostIPv6 + "]:8080"},
+			want:     testHostIPv6,
+		},
+		{
+			name:     "Host with another scheme - should fall back to BaseURL",
+			security: Security{Host: "ftp://" + testHostIgnored, BaseURL: testURLHTTPSNoPort},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with another scheme and no BaseURL - should be empty",
+			security: Security{Host: "ftp://" + testHostIgnored},
+			want:     "",
+		},
+		{
+			name:     "Host with credentials - should fall back to BaseURL",
+			security: Security{Host: "user:pw@" + testHostIgnored, BaseURL: testURLHTTPSNoPort},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with credentials and no BaseURL - should be empty",
+			security: Security{Host: "user:pw@" + testHostIgnored},
+			want:     "",
+		},
+		{
+			name:     "Host with a scheme but no hostname - should fall back to BaseURL",
+			security: Security{Host: "http://:8080", BaseURL: testURLHTTPSNoPort},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with a scheme but no hostname and no BaseURL - should be empty",
+			security: Security{Host: "http://:8080"},
+			want:     "",
+		},
+		{
 			name: "Host empty, BaseURL set without port - should extract hostname",
 			security: Security{
 				Host:    "",
@@ -253,6 +299,51 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 		security Security
 		want     string
 	}{
+		{
+			name:     "Host with a scheme, port and path - should return host:port",
+			security: Security{Host: testURLHTTPS + "/birdnet"},
+			want:     testHostExample + ":" + testPort5500,
+		},
+		{
+			name:     "Host with an uppercase scheme and padding - should return the host",
+			security: Security{Host: " HTTP://" + testHostExample + " "},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with a scheme and a port but no hostname - should be empty",
+			security: Security{Host: "http://:8080"},
+			want:     "",
+		},
+		{
+			name:     "Host with a scheme that does not parse - should be empty",
+			security: Security{Host: "http://bad host"},
+			want:     "",
+		},
+		{
+			name:     "Host with credentials - should be empty",
+			security: Security{Host: "user:pw@" + testHostExample},
+			want:     "",
+		},
+		{
+			name:     "BaseURL unusable and Host with credentials - should be empty",
+			security: Security{BaseURL: testHostIgnored, Host: "user@" + testHostExample},
+			want:     "",
+		},
+		{
+			name:     "Host with another scheme - should be empty",
+			security: Security{Host: "ftp://" + testHostExample},
+			want:     "",
+		},
+		{
+			name:     "BaseURL with a port but no hostname - should use the Host",
+			security: Security{BaseURL: "https://:8443", Host: testHostExample},
+			want:     testHostExample,
+		},
+		{
+			name:     "BaseURL with credentials - should use the Host",
+			security: Security{BaseURL: "https://user:pw@" + testHostIgnored, Host: testHostExample},
+			want:     testHostExample,
+		},
 		{
 			name: "BaseURL set with port - should return host:port",
 			security: Security{
@@ -512,4 +603,111 @@ func TestSecurity_IsHTTPSBaseURL(t *testing.T) {
 		var nilSec *Security
 		assert.False(t, nilSec.IsHTTPSBaseURL(), "nil *Security must not panic and returns false")
 	})
+}
+
+// TestSecurity_OriginDerivation pins what OAuthOrigin and GetBaseURL return for
+// the same settings, and that oauthOriginProblem is empty exactly when OAuthOrigin
+// is usable, so the validator cannot drift from the code that builds the callback.
+//
+// The scheme-less host rows pin a known difference on purpose: OAuth assumes https
+// for a bare security.host, while notification links follow the TLS mode and port.
+// Callback URLs registered at identity providers depend on the first, so changing
+// either answer must show up here as a deliberate edit.
+func TestSecurity_OriginDerivation(t *testing.T) {
+	t.Parallel()
+
+	const port = testPortCustom
+	tests := []struct {
+		name        string
+		security    Security
+		wantOrigin  string
+		wantBaseURL string
+		wantProblem string
+	}{
+		{name: "valid baseUrl", security: Security{BaseURL: testURLHTTPS}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
+		{name: "trailing slash and padding are trimmed", security: Security{BaseURL: " " + testURLTrailingSlash + "\t"}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort},
+		{name: "baseUrl wins over host", security: Security{BaseURL: testURLHTTPS, Host: testHostIgnored}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
+		{name: "scheme-less baseUrl is no origin and host does not rescue it", security: Security{BaseURL: testHostExample, Host: testHostIgnored}, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "host with a trailing slash is trimmed like the OAuth origin", security: Security{Host: testHostExample + "/", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
+		{name: "host with an https scheme is used as given, TLS off", security: Security{Host: testURLHTTPSNoPort + "/", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort},
+		{name: "host with an http scheme gets no second scheme and no port, TLS on", security: Security{Host: " " + testURLHTTPNoPort + " ", TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPNoPort, wantBaseURL: testURLHTTPNoPort},
+		{name: "host scheme is recognised in any case", security: Security{Host: "HTTPS://" + testHostExample, TLSMode: TLSModeNone}, wantOrigin: "HTTPS://" + testHostExample, wantBaseURL: "HTTPS://" + testHostExample},
+		{name: "host with a scheme but no hostname is no origin and no link", security: Security{Host: "http://:8080"}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "credentialed baseUrl is no origin and no link", security: Security{BaseURL: "https://user:pw@" + testHostExample, Host: testHostIgnored}, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "credentialed schemed host is no origin and no link", security: Security{Host: "https://user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "credentialed host with an uppercase scheme is no origin and no link", security: Security{Host: "HTTPS://user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "host with another scheme is no origin and no link", security: Security{Host: "ftp://" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "bare host with credentials is no origin and no link", security: Security{Host: "user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "bare host with an at sign in its path is no origin and no link", security: Security{Host: testHostExample + "/x@y"}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
+		{name: "baseUrl of only a slash is set and unusable, host does not rescue it", security: Security{BaseURL: "/", Host: testHostExample, TLSMode: TLSModeNone}, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},
+		{name: "nothing set", security: Security{}, wantBaseURL: "", wantProblem: "no redirect URL"},
+		{name: "bare host, TLS off: OAuth assumes https, links follow the TLS mode", security: Security{Host: testHostExample, TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
+		{name: "bare host, TLS on: both https", security: Security{Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
+		{name: "padded bare host", security: Security{Host: "  " + testHostExample + " ", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.wantOrigin, tt.security.OAuthOrigin())
+			assert.Equal(t, tt.wantBaseURL, tt.security.GetBaseURL(port))
+
+			problem := oauthOriginProblem(&tt.security)
+			if tt.wantProblem == "" {
+				assert.Empty(t, problem)
+			} else {
+				assert.Contains(t, problem, tt.wantProblem)
+			}
+			assert.Equal(t, problem == "", tt.security.OAuthOrigin() != "",
+				"oauthOriginProblem must be empty exactly when OAuthOrigin is usable")
+		})
+	}
+}
+
+// TestSecurity_OAuthOrigin_Host covers a security.host that cannot form a URL,
+// which the table above cannot express through GetBaseURL: it is no origin.
+func TestSecurity_OAuthOrigin_Host(t *testing.T) {
+	t.Parallel()
+
+	unusable := Security{Host: "bad host"}
+	assert.Empty(t, unusable.OAuthOrigin())
+	assert.Contains(t, oauthOriginProblem(&unusable), "security.host")
+}
+
+// TestValidateSecurityBaseURL pins the save-time rule: a set baseUrl must be a
+// usable URL, an unset or whitespace-only one is fine, and the error names the
+// field without echoing credentials.
+func TestValidateSecurityBaseURL(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateSecurityBaseURL(&Security{}))
+	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: "  "}))
+	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: " " + testURLHTTPS + " "}))
+	require.Error(t, ValidateSecurityBaseURL(&Security{BaseURL: "/"}), "a lone slash is set, not unset")
+
+	for _, value := range []string{"ftp://user:hunter2@" + testHostExample, "https://user:hunter2@" + testHostExample} {
+		err := ValidateSecurityBaseURL(&Security{BaseURL: value})
+		require.Error(t, err, value)
+		assert.Contains(t, err.Error(), "security.baseUrl")
+		assert.NotContains(t, err.Error(), "hunter2")
+	}
+}
+
+// TestValidateBaseURL_ErrorOmitsValue verifies a parse failure does not repeat the
+// value, which may carry credentials.
+func TestValidateBaseURL_ErrorOmitsValue(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateBaseURL("http://user:hunter2@" + testHostExample + ":notaport")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid URL format")
+	assert.NotContains(t, err.Error(), "hunter2")
+	assert.NotContains(t, err.Error(), "notaport", "no parser detail is quoted")
+
+	// A scheme-less value parses with its user name as the scheme.
+	err = ValidateBaseURL("hunter2:pw@" + testHostExample)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "hunter2")
 }

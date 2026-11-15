@@ -205,7 +205,8 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 // snapshot (rollbackSettings).
 //
 // The save is rejected with 400 while any security.oauthProviders entry has a
-// blank or unknown provider ID, including one that was already stored.
+// blank or unknown provider ID, or while security.baseUrl is set but not an
+// absolute http(s) URL with a host and no credentials, including a value that was already stored.
 //
 // A request that sends If-Match is applied only if it matches the current
 // settings ETag (settingsETag); otherwise it answers 412 with the current ETag
@@ -309,6 +310,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// failure: commitSettings publishes nothing when this returns an error.
 		if err := conf.ValidateOAuthProviderIDs(&updated.Security); err != nil {
 			// The text names the field, so the settings page can show what to fix.
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
+		if err := conf.ValidateSecurityBaseURL(&updated.Security); err != nil {
 			return newRejection(err, err.Error(), http.StatusBadRequest)
 		}
 		if err := conf.ValidateSettings(updated); err != nil {
@@ -425,8 +429,9 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 // and any other reader that goes through conf.GetSettings().
 //
 // Like UpdateSettings, it rejects the save with 400 while the merged settings
-// hold a security.oauthProviders entry with a blank or unknown provider ID,
-// whichever section was patched.
+// hold a security.oauthProviders entry with a blank or unknown provider ID, or a
+// security.baseUrl that is set but not an absolute http(s) URL with a host and no credentials, whichever section
+// was patched.
 //
 // If-Match and the ETag response header work as on UpdateSettings: the ETag is
 // the one for the whole settings, not for the section.
@@ -520,6 +525,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
 		if err := conf.ValidateOAuthProviderIDs(&updated.Security); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
+		if err := conf.ValidateSecurityBaseURL(&updated.Security); err != nil {
 			return newRejection(err, err.Error(), http.StatusBadRequest)
 		}
 		if err := conf.ValidateSettings(updated); err != nil {
