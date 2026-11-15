@@ -228,6 +228,14 @@ describe('Species (analytics page) — sortable column headers', () => {
     expect(screen.getByRole('status')).toHaveTextContent(ascendingMessage);
   });
 
+  it('names the table by its visible heading', async () => {
+    await renderListView();
+
+    expect(
+      screen.getByRole('table', { name: t('analytics.species.speciesList') })
+    ).toBeInTheDocument();
+  });
+
   it('persists the chosen sort order to localStorage', async () => {
     const { container } = await renderListView();
 

@@ -213,14 +213,17 @@ describe('SortableDataTable', () => {
   });
 
   it('leaves focus alone when the table did not hold it', async () => {
+    // Focus is on the body, where the fallback would act, but never entered the table
     const outside = document.createElement('button');
     document.body.append(outside);
     const view = renderTable({ title: 'Things' });
     outside.focus();
+    outside.blur();
+    expect(document.body).toHaveFocus();
 
     await view.rerender({ loading: true });
     await Promise.resolve();
-    expect(outside).toHaveFocus();
+    expect(document.body).toHaveFocus();
     outside.remove();
   });
 

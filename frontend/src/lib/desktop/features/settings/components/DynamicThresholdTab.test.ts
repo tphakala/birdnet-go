@@ -70,4 +70,15 @@ describe('DynamicThresholdTab sorting', () => {
       t('dataDisplay.table.sortedAscending', { column: thresholdLabel })
     );
   });
+
+  it('names the table by its visible title', async () => {
+    mockApi();
+    renderTyped(DynamicThresholdTab, { props: {} });
+
+    expect(
+      await screen.findByRole('table', {
+        name: t('settings.species.dynamicThreshold.header.species'),
+      })
+    ).toBeInTheDocument();
+  });
 });
