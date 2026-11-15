@@ -762,14 +762,20 @@
     }
   }
 
+  // Identity of the latest range-filter status request; an older response that resolves
+  // after a newer request is dropped so it cannot overwrite the newer status.
+  let rangeFilterStatusRequest = 0;
+
   // Fetch range-filter health from the status endpoint. Failures are non-fatal: the
   // banner simply does not render if the status cannot be read.
   async function loadRangeFilterStatus() {
+    const requestId = ++rangeFilterStatusRequest;
     try {
-      rangeFilterHealth = await api.get<RangeFilterStatusSummary>('/api/v2/range/status');
+      const status = await api.get<RangeFilterStatusSummary>('/api/v2/range/status');
+      if (requestId === rangeFilterStatusRequest) rangeFilterHealth = status;
     } catch (error) {
       logger.error('Failed to load range filter status:', error);
-      rangeFilterHealth = null;
+      if (requestId === rangeFilterStatusRequest) rangeFilterHealth = null;
     }
   }
 
