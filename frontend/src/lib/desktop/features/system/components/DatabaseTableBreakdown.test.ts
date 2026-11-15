@@ -83,6 +83,14 @@ describe('DatabaseTableBreakdown sorting', () => {
     expect(screen.getByRole('status').textContent).toBe('');
   });
 
+  it('does not announce a sort while there are no tables', async () => {
+    render(DatabaseTableBreakdown, { props: { tables: [] } });
+
+    await fireEvent.click(screen.getByTestId('sort-name'));
+
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
   it('names the table by its visible title', () => {
     renderTyped(DatabaseTableBreakdown, { props: { tables } });
 

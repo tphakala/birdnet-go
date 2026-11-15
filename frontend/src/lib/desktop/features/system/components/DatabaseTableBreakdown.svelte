@@ -55,7 +55,8 @@
       sortDirection = col === 'name' || col === 'engine' ? 'asc' : 'desc';
     }
     const column = columns.find(c => c.key === col);
-    if (column) sortStatus = sortAnnouncement(column.label, sortDirection);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && tables.length > 0) sortStatus = sortAnnouncement(column.label, sortDirection);
   }
 
   type ColumnDef = { key: string; label: string };
