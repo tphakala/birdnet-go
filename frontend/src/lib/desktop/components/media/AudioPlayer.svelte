@@ -2296,6 +2296,14 @@
       document.removeEventListener('mouseup', handleSelectionMouseUp);
       document.removeEventListener('keydown', handleSelectionKeydown);
       document.removeEventListener('selectstart', handleSelectStart);
+      // A gesture cut off here never sees its mouseup or touchend, so end it now;
+      // otherwise it would resume when extraction is switched on again.
+      if (isDragSelecting) normalizeSelection();
+      isDragSelecting = false;
+      draggingHandle = null;
+      isScrubbing = false;
+      mouseDownInPlayer = false;
+      if (playerContainer) playerContainer.style.touchAction = '';
     };
   });
 

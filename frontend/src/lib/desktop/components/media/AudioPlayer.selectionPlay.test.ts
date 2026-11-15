@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
+import type { ComponentProps } from 'svelte';
 import {
   installFakeMediaElement,
   fakeAudioNodeChain,
@@ -44,7 +45,7 @@ describe('AudioPlayer selection play', () => {
   const originalRect = Element.prototype.getBoundingClientRect;
   const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
 
-  function mount(props: Record<string, unknown> = {}) {
+  function mount(props: Partial<ComponentProps<typeof AudioPlayer>> = {}) {
     return render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
@@ -362,6 +363,21 @@ describe('AudioPlayer selection play', () => {
 
     await rerender({ enableClipExtraction: false });
 
+    const selectStart = new Event('selectstart', { cancelable: true });
+    document.dispatchEvent(selectStart);
+    expect(selectStart.defaultPrevented).toBe(false);
+  });
+
+  it('does not resume an interrupted drag when extraction is switched on again', async () => {
+    const { container, rerender } = mount();
+    ctl.completeLoad();
+    await settle();
+    await startDrag(container);
+
+    await rerender({ enableClipExtraction: false });
+    await rerender({ enableClipExtraction: true });
+
+    // Without a new press nothing is being dragged, so text selection is allowed
     const selectStart = new Event('selectstart', { cancelable: true });
     document.dispatchEvent(selectStart);
     expect(selectStart.defaultPrevented).toBe(false);
