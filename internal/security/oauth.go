@@ -181,6 +181,7 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 					continue
 				}
 
+				warnOnOIDCIssuerMismatch(providerConfig.IssuerURL, oidcProvider.OpenIDConfig.Issuer, discoveryURL)
 				goth.UseProviders(newPKCEOIDCProvider(oidcProvider))
 				// Register first, clear second: a reader that sees the provider
 				// missing may still read the old failure, never the reverse.
@@ -772,6 +773,7 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes, err)
 		return nil
 	}
+	warnOnOIDCIssuerMismatch(providerConfig.IssuerURL, oidcProvider.OpenIDConfig.Issuer, discoveryURL)
 	clearOIDCDiscoveryFailure()
 	return newPKCEOIDCProvider(oidcProvider)
 }

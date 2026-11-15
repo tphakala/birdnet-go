@@ -309,10 +309,22 @@ func TestOIDCDiscoveryURL(t *testing.T) {
 	tests := []struct{ name, issuer, want string }{
 		{name: "without trailing slash", issuer: "https://idp.example/realms/home", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
 		{name: "with trailing slash", issuer: "https://idp.example/application/o/app/", want: "https://idp.example/application/o/app/.well-known/openid-configuration"},
+		{name: "pasted discovery URL", issuer: "https://idp.example/realms/home/.well-known/openid-configuration", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "pasted discovery URL with trailing slash", issuer: "https://idp.example/realms/home/.well-known/openid-configuration/", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "pasted discovery URL of a root issuer", issuer: "https://idp.example/.well-known/openid-configuration", want: "https://idp.example/.well-known/openid-configuration"},
+		{name: "well-known in the middle of the path", issuer: "https://idp.example/.well-known/realms/home", want: "https://idp.example/.well-known/realms/home/.well-known/openid-configuration"},
+		{name: "pasted discovery URL with several trailing slashes", issuer: "https://idp.example/realms/home/.well-known/openid-configuration//", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "pasted discovery URL with a query", issuer: "https://login.example/tenant/v2.0/.well-known/openid-configuration?appid=abc", want: "https://login.example/tenant/v2.0/.well-known/openid-configuration?appid=abc"},
+		{name: "issuer with a query", issuer: "https://login.example/tenant/v2.0/?appid=abc", want: "https://login.example/tenant/v2.0/.well-known/openid-configuration?appid=abc"},
+		{name: "fragment is dropped", issuer: "https://idp.example/realms/home#section", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "empty fragment is dropped", issuer: "https://idp.example/realms/home#", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "empty query is dropped", issuer: "https://idp.example/realms/home?", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, oidcDiscoveryURL(tt.issuer))
+			got := oidcDiscoveryURL(tt.issuer)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, got, oidcDiscoveryURL(got), "the builder must not change its own output")
 		})
 	}
 }

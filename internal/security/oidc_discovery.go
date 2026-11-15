@@ -2,6 +2,7 @@ package security
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -26,10 +27,60 @@ const oidcMainLogModule = "security.oidc"
 // oidcDiscoveryPath is appended to the issuer URL to get the discovery document.
 const oidcDiscoveryPath = "/.well-known/openid-configuration"
 
-// oidcDiscoveryURL builds the OIDC discovery document URL per RFC 8414: the
-// document is at {issuer}/.well-known/openid-configuration.
+// oidcIssuerBase returns the issuer URL without trailing slashes. It accepts
+// the issuer itself or the full discovery document URL and strips a trailing
+// oidcDiscoveryPath, so a pasted discovery URL reaches the same document as the
+// issuer it belongs to. The value must not carry a query; see
+// splitOIDCIssuerQuery.
+func oidcIssuerBase(issuerURL string) string {
+	base := strings.TrimRight(issuerURL, "/")
+	base = strings.TrimSuffix(base, oidcDiscoveryPath)
+	return strings.TrimRight(base, "/")
+}
+
+// splitOIDCIssuerQuery returns the configured issuer URL without its query and
+// fragment, plus the raw query. Some identity providers show the discovery URL
+// with a query (for example ?appid=<client id>), and a user may paste that form.
+// A value that does not parse, or has no query or fragment, is returned as is
+// with an empty query.
+func splitOIDCIssuerQuery(issuerURL string) (withoutQuery, rawQuery string) {
+	u, err := url.Parse(issuerURL)
+	if err != nil || !strings.ContainsAny(issuerURL, "?#") {
+		return issuerURL, ""
+	}
+	rawQuery = u.RawQuery
+	u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = "", false, "", ""
+	return u.String(), rawQuery
+}
+
+// oidcDiscoveryURL builds the OIDC discovery document URL: the document is at
+// {issuer}/.well-known/openid-configuration (OpenID Connect Discovery 1.0,
+// section 4). The configured value may already be the discovery URL; see
+// oidcIssuerBase. A query on the configured value is kept on the discovery URL
+// and a fragment is dropped.
 func oidcDiscoveryURL(issuerURL string) string {
-	return strings.TrimSuffix(issuerURL, "/") + oidcDiscoveryPath
+	withoutQuery, rawQuery := splitOIDCIssuerQuery(issuerURL)
+	discoveryURL := oidcIssuerBase(withoutQuery) + oidcDiscoveryPath
+	if rawQuery != "" {
+		discoveryURL += "?" + rawQuery
+	}
+	return discoveryURL
+}
+
+// warnOnOIDCIssuerMismatch logs a warning when the issuer reported by the
+// discovery document differs from the configured issuer URL, ignoring trailing
+// slashes, a pasted discovery path and a query. Registration continues either
+// way: goth checks ID tokens against the discovered issuer, and a provider
+// reached through an internal host name keeps working.
+func warnOnOIDCIssuerMismatch(configuredIssuer, discoveredIssuer, discoveryURL string) {
+	withoutQuery, _ := splitOIDCIssuerQuery(configuredIssuer)
+	if oidcIssuerBase(withoutQuery) == strings.TrimRight(discoveredIssuer, "/") {
+		return
+	}
+	logOIDCEvent(logger.LogLevelWarn, "OIDC discovery document reports a different issuer than the configured issuer URL, sign-in continues and ID tokens are checked against the discovered issuer",
+		logger.CredentialURL("issuer_url", configuredIssuer),
+		logger.CredentialURL("discovered_issuer", discoveredIssuer),
+		logger.CredentialURL("discovery_url", discoveryURL))
 }
 
 // redactedError carries an error text with credentials removed and still
