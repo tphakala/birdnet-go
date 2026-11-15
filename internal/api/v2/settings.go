@@ -1808,6 +1808,21 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 	s.Notification.Push.Providers = providersCopy
 }
 
+// findStoredOAuthProvider returns the stored entry an incoming entry with a
+// redacted secret stands for. An entry with the same provider ID and client ID is
+// the same entry, even when its enabled state changed in this save. Failing that,
+// the entry with the same ID and enabled state is used (see conf.FindOAuthProvider),
+// so a disabled entry sharing the ID of an enabled one does not donate its secret
+// when the client ID was edited too.
+func findStoredOAuthProvider(stored []conf.OAuthProviderConfig, incoming *conf.OAuthProviderConfig) *conf.OAuthProviderConfig {
+	for i := range stored {
+		if stored[i].Provider == incoming.Provider && stored[i].ClientID == incoming.ClientID {
+			return &stored[i]
+		}
+	}
+	return conf.FindOAuthProvider(stored, incoming.Provider, incoming.Enabled)
+}
+
 // restoreRedactedSecrets replaces redacted placeholder values in the incoming
 // settings with the current (real) values so that an update round-trip
 // (GET → modify → PUT) does not overwrite real secrets with the placeholder.
@@ -1839,11 +1854,8 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
 			continue
 		}
-		// Match the stored entry with the same ID and enabled state, so a disabled
-		// leftover sharing the ID of an enabled entry never donates its secret.
-		incomingEntry := &incoming.Security.OAuthProviders[i]
-		if stored := conf.FindOAuthProvider(current.Security.OAuthProviders, incomingEntry.Provider, incomingEntry.Enabled); stored != nil {
-			incomingEntry.ClientSecret = stored.ClientSecret
+		if stored := findStoredOAuthProvider(current.Security.OAuthProviders, &incoming.Security.OAuthProviders[i]); stored != nil {
+			incoming.Security.OAuthProviders[i].ClientSecret = stored.ClientSecret
 		}
 	}
 
@@ -3116,8 +3128,9 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 // Provider registration (the goth providers built from client id/secret and the
 // callback URL derived from the base URL) binds once at startup via
 // security.InitializeGoth and does not hot-reload, so a change needs a restart to
-// take effect. Entries are matched by provider ID and enabled state so reordering
-// the list alone is not treated as a change. UserID is intentionally excluded:
+// take effect. Entries are matched by provider ID and enabled state, so reordering
+// the list alone is not treated as a change, except for several entries that share
+// both. UserID is intentionally excluded:
 // the per-provider allowlist is read live by the auth check (via currentSettings),
 // so allowlist edits already hot-reload without a restart.
 func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {

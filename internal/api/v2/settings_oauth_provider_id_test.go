@@ -169,3 +169,49 @@ func TestUpdateSettingsRestoresSecretOfMatchingOAuthEntry(t *testing.T) {
 	assert.Equal(t, leftoverSecret, got[0].ClientSecret)
 	assert.Equal(t, testOAuthSecret, got[1].ClientSecret)
 }
+
+// TestUpdateSettingsRestoresSecretWhenEnabledFlagsSwap verifies each redacted
+// secret goes back to the entry with the same client ID even when the enabled
+// flags of two same-ID entries change in one save.
+func TestUpdateSettingsRestoresSecretWhenEnabledFlagsSwap(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	const leftoverSecret = "leftover-secret"
+	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: leftoverSecret, UserID: testOAuthUserAllowed},
+		{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
+	}
+
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Security.OAuthProviders[0].Enabled = true
+	s.Security.OAuthProviders[0].ClientSecret = redactedValue
+	s.Security.OAuthProviders[1].Enabled = false
+	s.Security.OAuthProviders[1].ClientSecret = redactedValue
+	putFullSettings(t, e, controller, s)
+
+	got := controller.Settings.Load().Security.OAuthProviders
+	require.Len(t, got, 2)
+	assert.Equal(t, leftoverSecret, got[0].ClientSecret)
+	assert.Equal(t, testOAuthSecret, got[1].ClientSecret)
+}
+
+// TestUpdateSettingsRestoresSecretWhenClientIDChanges verifies a redacted secret is
+// still restored from the stored entry with the same provider ID when only the
+// client ID was edited.
+func TestUpdateSettingsRestoresSecretWhenClientIDChanges(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "google", Enabled: true, ClientID: "old", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
+	}
+
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Security.OAuthProviders[0].ClientID = "new"
+	s.Security.OAuthProviders[0].ClientSecret = redactedValue
+	putFullSettings(t, e, controller, s)
+
+	got := controller.Settings.Load().Security.OAuthProviders
+	require.Len(t, got, 1)
+	assert.Equal(t, "new", got[0].ClientID)
+	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
+}
