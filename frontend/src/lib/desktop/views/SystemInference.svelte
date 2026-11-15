@@ -252,7 +252,7 @@
     if (!keys) return;
 
     metricsSSE = new ReconnectingEventSource(
-      `/api/v2/system/metrics/stream?metrics=${encodeURIComponent(keys)}`,
+      buildAppUrl(`/api/v2/system/metrics/stream?metrics=${encodeURIComponent(keys)}`),
       { max_retry_time: 30000 }
     );
 

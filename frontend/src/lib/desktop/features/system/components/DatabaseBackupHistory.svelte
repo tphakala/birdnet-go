@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
@@ -260,7 +261,7 @@
                 <div class="flex justify-end">
                   {#if backup.status === 'completed' && backup.download_url}
                     <a
-                      href={backup.download_url}
+                      href={buildAppUrl(backup.download_url)}
                       class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-info)]"
                       download
                     >

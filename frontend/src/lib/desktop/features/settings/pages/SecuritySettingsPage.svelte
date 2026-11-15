@@ -1039,7 +1039,7 @@
             loading={certLoading}
             error={certError}
             {certInfo}
-            downloadUrl="/api/v2/tls/certificate/download"
+            downloadUrl={buildAppUrl('/api/v2/tls/certificate/download')}
             onRegenerate={settings.tlsMode === 'selfsigned' ? handleGenerateCert : undefined}
             onDelete={handleDeleteCert}
             regenerateLoading={generateLoading}

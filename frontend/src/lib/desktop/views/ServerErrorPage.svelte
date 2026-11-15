@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { t } from '$lib/i18n';
   import { appState } from '$lib/stores/appState.svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -56,7 +57,7 @@
     <!-- Link Buttons -->
     <div class="mt-8 space-x-4">
       <a
-        href="/"
+        href={buildAppUrl('/ui/dashboard')}
         class="btn btn-primary normal-case text-base font-semibold transition duration-300"
       >
         {t('common.goToDashboard')}
