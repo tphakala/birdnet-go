@@ -381,7 +381,7 @@ describe('AudioToolbar layout', () => {
   });
 
   // The real sizes are checked in audio-toolbar-wrap.browser.test.ts with touch emulated
-  it('gives mouse users 32 px controls and touch users 44 px', () => {
+  it('sets the hit-area target to 32 px, and 44 px under a coarse pointer', () => {
     expect(toolbarCss).toMatch(/\.audio-toolbar\s*\{[^}]*--audio-toolbar-target:\s*32px/);
     expect(toolbarCss).toMatch(
       /@media\s*\(pointer:\s*coarse\)\s*\{\s*\.audio-toolbar\s*\{[^}]*--audio-toolbar-target:\s*44px/
@@ -532,6 +532,46 @@ describe('AudioToolbar menus', () => {
       expect(openedMenu('export').style.maxHeight).toBe(expectedMaxHeight);
     }
   );
+
+  it('ignores clipping boxes outside a fixed ancestor', async () => {
+    const user = userEvent.setup();
+    const { container } = renderToolbar();
+    const toolbar = container.querySelector('.audio-toolbar');
+    // The container clips from 0 to 200 px, but it sits outside the fixed toolbar
+    const computedStyle = window.getComputedStyle;
+    vi.stubGlobal('getComputedStyle', (el: Element) =>
+      Object.assign(
+        computedStyle(el),
+        el === container ? { overflowY: 'auto' } : {},
+        el === toolbar ? { position: 'fixed' } : {}
+      )
+    );
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1024, 200));
+    vi.spyOn(container, 'clientHeight', 'get').mockReturnValue(200);
+    placeTrigger('export', 400, 500, 100);
+    stubMenuSize();
+
+    await user.click(trigger('export'));
+
+    // The viewport alone: 92 px above, 616 px below; the clip box would give above and 88px
+    expect(menuSide('export')).toBe('below');
+    expect(openedMenu('export').style.maxHeight).toBe('612px');
+  });
+
+  it('keeps the menu scroll position when it is placed again', async () => {
+    const user = userEvent.setup();
+    renderToolbar();
+    placeTrigger('export', 400, 500, 400);
+    stubMenuSize();
+    await user.click(trigger('export'));
+    // Placing clears the height cap, which resets the scroll position in a browser
+    vi.spyOn(openedMenu('export'), 'scrollTop', 'get').mockReturnValue(20);
+    const written = vi.spyOn(openedMenu('export'), 'scrollTop', 'set');
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(written).toHaveBeenCalledWith(20);
+  });
 
   it('measures the room below from the wrapper, under an export error', async () => {
     const user = userEvent.setup();

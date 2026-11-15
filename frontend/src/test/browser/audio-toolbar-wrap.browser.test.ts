@@ -34,6 +34,8 @@ const ZOOMED_HOST_WIDTH_PX = 900;
 // Hit-area floor for a fine pointer (mouse, trackpad) and a coarse one (touch)
 const FINE_TARGET_PX = 32;
 const COARSE_TARGET_PX = 44;
+// A scroll offset inside a capped menu, short of its end so no clamp can match it
+const SCROLLED_PX = 20;
 const MIN_FONT_PX = 12;
 // How far the Export button is pushed past the right edge of the viewport
 const PAST_EDGE_PX = 20;
@@ -88,13 +90,20 @@ function hitAreas(): Record<string, Element> {
   };
 }
 
-async function openExportMenu(): Promise<HTMLElement> {
-  el('.export-btn').click();
-  await expect.poll(() => document.querySelector('.export-menu')).not.toBeNull();
-  const menu = el('.export-menu');
+async function openMenu(kind: 'export' | 'denoise'): Promise<HTMLElement> {
+  el(`.${kind}-dropdown > .toolbar-btn`).click();
+  await expect.poll(() => document.querySelector(`.${kind}-menu`)).not.toBeNull();
+  const menu = el(`.${kind}-menu`);
   // The enter transition scales the menu; measure once it has settled
   await expect.poll(() => menu.getAnimations().length).toBe(0);
   return menu;
+}
+
+/** Names of the options in the open menu that are shorter than the hit-area floor. */
+function shortOptions(menu: HTMLElement, target: number): string[] {
+  return Array.from(menu.querySelectorAll('button'))
+    .filter(option => option.getBoundingClientRect().height < target)
+    .map(option => option.textContent.trim());
 }
 
 async function closeExportMenu(): Promise<void> {
@@ -164,6 +173,11 @@ describe('AudioToolbar wrapping in a real browser', () => {
       // An icon button is exactly the floor, so the mouse size stays compact
       const play = el('.play-btn').getBoundingClientRect();
       expect([play.width, play.height]).toEqual([target, target]);
+
+      // Menu options are the next tap after their trigger, so they get the same floor
+      expect(shortOptions(await openMenu('export'), target)).toEqual([]);
+      await closeExportMenu();
+      expect(shortOptions(await openMenu('denoise'), target)).toEqual([]);
     } finally {
       await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
     }
@@ -183,11 +197,10 @@ describe('AudioToolbar wrapping in a real browser', () => {
       '.denoise-label-current',
       '.export-btn',
     ]);
-    await openExportMenu();
+    await openMenu('export');
     const inExportMenu = tooSmall(['.export-option']);
     await closeExportMenu();
-    el('.denoise-dropdown > .toolbar-btn').click();
-    await expect.poll(() => document.querySelector('.denoise-menu')).not.toBeNull();
+    await openMenu('denoise');
     const inDenoiseMenu = tooSmall(['.denoise-option']);
 
     expect([...inBar, ...inExportMenu, ...inDenoiseMenu]).toEqual([]);
@@ -227,13 +240,13 @@ describe('AudioToolbar wrapping in a real browser', () => {
 
   it('keeps the Export menu inside the viewport when its button is at the right edge', async () => {
     await renderToolbar();
-    const awayFromEdge = (await openExportMenu()).getBoundingClientRect().width;
+    const awayFromEdge = (await openMenu('export')).getBoundingClientRect().width;
     await closeExportMenu();
 
     const exportRight = el('.export-btn').getBoundingClientRect().right;
     host.style.marginLeft = `${window.innerWidth - exportRight + PAST_EDGE_PX}px`;
     expect(el('.export-btn').getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
-    const menu = (await openExportMenu()).getBoundingClientRect();
+    const menu = (await openMenu('export')).getBoundingClientRect();
 
     expect(menu.left).toBeGreaterThanOrEqual(0);
     expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
@@ -247,13 +260,37 @@ describe('AudioToolbar wrapping in a real browser', () => {
     const button = el('.export-btn').getBoundingClientRect();
     host.style.marginTop = `${window.innerHeight / 2 - (button.top + button.height / 2)}px`;
 
-    const menu = await openExportMenu();
+    const menu = await openMenu('export');
     const rect = menu.getBoundingClientRect();
 
     expect(rect.top).toBeGreaterThanOrEqual(0);
     expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight);
     // Capped, so the options that do not fit scroll inside the menu
     expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+  });
+
+  it('keeps a scrolled menu at its scroll position when the window resizes', async () => {
+    await page.viewport(PAGE_WIDTH_PX, SHORT_PAGE_HEIGHT_PX);
+    await renderToolbar();
+    const button = el('.export-btn').getBoundingClientRect();
+    host.style.marginTop = `${window.innerHeight / 2 - (button.top + button.height / 2)}px`;
+    const menu = await openMenu('export');
+    expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+    menu.scrollTop = SCROLLED_PX;
+    expect(menu.scrollTop).toBe(SCROLLED_PX);
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(menu.scrollTop).toBe(SCROLLED_PX);
+  });
+
+  it('fills the seek box with the visible track, so a click seeks under the pointer', async () => {
+    await renderToolbar();
+
+    const box = el('.progress-bar').getBoundingClientRect();
+    const track = el('.progress-track').getBoundingClientRect();
+
+    expect([track.left, track.right]).toEqual([box.left, box.right]);
   });
 
   it("keeps the Denoise button's width when the preset changes", async () => {
