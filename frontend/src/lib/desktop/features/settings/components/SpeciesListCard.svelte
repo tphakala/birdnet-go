@@ -181,17 +181,18 @@
     return result;
   });
 
+  // Clear the sort message when no species are shown (an empty list, a search with no
+  // matches), so rows returning later do not announce a sort the user did not just make
+  $effect(() => {
+    if (filteredSpecies.length === 0) sortStatus = '';
+  });
+
   function isSortColumn(value: string): value is SortColumn {
     return value === 'commonName' || value === 'scientificName';
   }
 
   // Announced once per sort, from the handler, so first render says nothing
   let sortStatus = $state('');
-
-  // The table goes away with the last species; do not announce the old sort when the list refills
-  $effect(() => {
-    if (species.length === 0) sortStatus = '';
-  });
 
   // Header labels, shared by the header cells and the sort announcement
   const sortHeaderLabels: Record<SortColumn, () => string> = {

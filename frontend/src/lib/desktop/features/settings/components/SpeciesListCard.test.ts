@@ -548,4 +548,20 @@ describe('SpeciesListCard sorting', () => {
     await view.rerender({ species: [] });
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
   });
+
+  it('drops the sort announcement when a search matches no species', async () => {
+    const MANY = 9;
+    renderCard({ species: Array.from({ length: MANY }, (_, i) => `Bird ${i}`) });
+    await fireEvent.click(
+      screen.getByRole('button', { name: t('settings.species.activeSpecies.columns.commonName') })
+    );
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await fireEvent.input(
+      screen.getByPlaceholderText(t('settings.species.activeSpecies.search.placeholder')),
+      { target: { value: 'zzzz' } }
+    );
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+  });
 });
