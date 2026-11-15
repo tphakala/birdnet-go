@@ -402,9 +402,14 @@ describe('AudioToolbar menus', () => {
     document.querySelectorAll('[data-testid="after-toolbar"]').forEach(el => el.remove());
   });
 
-  function renderToolbar() {
+  function renderToolbar(overrides: Partial<ComponentProps<typeof AudioToolbar>> = {}) {
     return toolbarTest.render({
-      props: audioToolbarProps({ selectionStart: 1, selectionEnd: 3, hasSelection: true }),
+      props: audioToolbarProps({
+        selectionStart: 1,
+        selectionEnd: 3,
+        hasSelection: true,
+        ...overrides,
+      }),
     });
   }
 
@@ -426,12 +431,16 @@ describe('AudioToolbar menus', () => {
     return el;
   }
 
-  // Places the trigger and its wrapper at the given viewport box and gives every
-  // element the measured menu size, since jsdom lays nothing out.
-  function placeTrigger(menu: Menu, left: number, right: number, top: number) {
-    const rect = new DOMRect(left, top, right - left, TRIGGER_HEIGHT_PX);
-    vi.spyOn(trigger(menu), 'getBoundingClientRect').mockReturnValue(rect);
-    vi.spyOn(wrapper(menu), 'getBoundingClientRect').mockReturnValue(rect);
+  // Places the trigger at the given viewport box, since jsdom lays nothing out. The
+  // wrapper has the same box, or extends below it by wrapperExtra px (an export error).
+  function placeTrigger(menu: Menu, left: number, right: number, top: number, wrapperExtra = 0) {
+    const width = right - left;
+    vi.spyOn(trigger(menu), 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(left, top, width, TRIGGER_HEIGHT_PX)
+    );
+    vi.spyOn(wrapper(menu), 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(left, top, width, TRIGGER_HEIGHT_PX + wrapperExtra)
+    );
   }
 
   function stubMenuSize() {
@@ -520,6 +529,20 @@ describe('AudioToolbar menus', () => {
     }
   );
 
+  it('measures the room below from the wrapper, under an export error', async () => {
+    const user = userEvent.setup();
+    renderToolbar({ extractionError: 'Export failed' });
+    // The error text makes the wrapper 40 px taller than the trigger
+    placeTrigger('export', 400, 500, 100, 40);
+    stubMenuSize();
+
+    await user.click(trigger('export'));
+
+    // 768 - 184 - 8 px margin leaves 576 px below the wrapper; minus the 4 px gap
+    expect(menuSide('export')).toBe('below');
+    expect(openedMenu('export').style.maxHeight).toBe('572px');
+  });
+
   it('caps the menu height to the room below it in a short viewport', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('innerHeight', 480);
@@ -546,12 +569,13 @@ describe('AudioToolbar menus', () => {
     await user.click(trigger('export'));
     expect(menuLeft('export')).toBe(350);
 
+    // Moved into the clamp zone: a stale placement would put the left edge at 930
     vi.restoreAllMocks();
-    placeTrigger('export', 600, 700, 400);
+    placeTrigger('export', 980, 1100, 400);
     stubMenuSize();
     dispatch();
 
-    expect(menuLeft('export')).toBe(550);
+    expect(menuLeft('export')).toBe(866);
   });
 
   it('leaves an open menu in place while its own options scroll', async () => {

@@ -27,6 +27,8 @@ const PAGE_WIDTH_PX = 1400;
 const PAGE_HEIGHT_PX = 900;
 const SHORT_PAGE_HEIGHT_PX = 400;
 const HOST_WIDTH_PX = 660;
+// Wide enough for the long message keys the labels show here once doubled
+const ZOOMED_HOST_WIDTH_PX = 900;
 const TARGET_PX = 44;
 const MIN_FONT_PX = 12;
 // How far the Export button is pushed past the right edge of the viewport
@@ -146,16 +148,44 @@ describe('AudioToolbar wrapping in a real browser', () => {
 
   it('uses text of at least 12 px', async () => {
     await renderToolbar();
+    const tooSmall = (selectors: string[]) =>
+      selectors.filter(
+        selector => parseFloat(getComputedStyle(el(selector)).fontSize) < MIN_FONT_PX
+      );
 
-    const tooSmall = [
+    const inBar = tooSmall([
       '.playback-time',
       '.time-range',
       '.control-value',
       '.denoise-label-current',
       '.export-btn',
-    ].filter(selector => parseFloat(getComputedStyle(el(selector)).fontSize) < MIN_FONT_PX);
+    ]);
+    await openExportMenu();
+    const inExportMenu = tooSmall(['.export-option']);
+    await closeExportMenu();
+    el('.denoise-dropdown > .toolbar-btn').click();
+    await expect.poll(() => document.querySelector('.denoise-menu')).not.toBeNull();
+    const inDenoiseMenu = tooSmall(['.denoise-option']);
 
-    expect(tooSmall).toEqual([]);
+    expect([...inBar, ...inExportMenu, ...inDenoiseMenu]).toEqual([]);
+  });
+
+  it('keeps every control inside the bar at 200 percent text', async () => {
+    host.style.width = `${ZOOMED_HOST_WIDTH_PX}px`;
+    document.documentElement.style.fontSize = '200%';
+    try {
+      await renderToolbar();
+
+      const contentRight = barContentRight();
+      const pastBar = Object.entries(hitAreas())
+        .filter(([, control]) => control.getBoundingClientRect().right > contentRight + 0.5)
+        .map(([name]) => name);
+
+      expect(pastBar).toEqual([]);
+      expect(bar().scrollWidth).toBeLessThanOrEqual(bar().clientWidth);
+    } finally {
+      document.documentElement.style.removeProperty('font-size');
+    }
   });
 
   it('stretches the seek bar to the end of its row', async () => {
