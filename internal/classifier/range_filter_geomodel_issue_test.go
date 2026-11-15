@@ -116,3 +116,31 @@ func TestReload_FailureMarksStateUntilNextPublishedState(t *testing.T) {
 	require.NoError(t, o.rangeFilter.reload(ok, o.rangeFilterView))
 	assert.False(t, o.RangeFilterStatus().ReloadFailed, "a successful reload clears the flag")
 }
+
+// TestReload_FailureWithoutBackendMarksState checks that a failed reload on a service with
+// no loaded backend publishes a state that reports the failure, with no backend active.
+func TestReload_FailureWithoutBackendMarksState(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = nil
+	settings.BirdNET.RangeFilter.Model = conf.RangeFilterModelV3
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	settings.BirdNET.RangeFilter.LabelsPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird"}
+	o := &Orchestrator{
+		Settings:  settings,
+		modelsDir: t.TempDir(),
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	require.Error(t, o.rangeFilter.reload(settings, o.rangeFilterView))
+	status := o.RangeFilterStatus()
+	assert.False(t, status.Active)
+	assert.True(t, status.ReloadFailed)
+}
