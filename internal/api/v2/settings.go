@@ -1788,29 +1788,62 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 	s.Notification.Push.Providers = providersCopy
 }
 
-// findStoredOAuthProvider returns the stored entry an incoming entry with a
-// redacted secret stands for. Entries are matched by provider ID with client ID
-// and enabled state both equal, then by client ID alone (the same entry whose
-// enabled state changed in this save), then by enabled state alone (see
-// conf.FindOAuthProvider). Each step keeps a disabled leftover sharing the ID of an
-// enabled entry from donating its secret.
-func findStoredOAuthProvider(stored []conf.OAuthProviderConfig, incoming *conf.OAuthProviderConfig) *conf.OAuthProviderConfig {
-	var sameClientID *conf.OAuthProviderConfig
-	for i := range stored {
-		if stored[i].Provider != incoming.Provider || stored[i].ClientID != incoming.ClientID {
-			continue
-		}
-		if stored[i].Enabled == incoming.Enabled {
-			return &stored[i]
-		}
-		if sameClientID == nil {
-			sameClientID = &stored[i]
+// restoreOAuthProviderSecrets replaces the redacted secret of each incoming OAuth
+// provider entry with the stored secret of the entry it stands for. Each stored
+// entry donates its secret at most once per save. Entries are matched in three
+// steps, each over all incoming entries in order: provider ID, client ID and
+// enabled state equal; then provider ID and client ID equal (the same entry whose
+// enabled state changed); then, only when exactly one stored entry has the
+// provider ID and it is unclaimed, the provider ID alone (a client ID edit). An
+// entry left unmatched keeps the sentinel, which validateNoRedactedSentinels
+// rejects, instead of receiving a secret that may belong to another entry.
+func restoreOAuthProviderSecrets(stored, incoming []conf.OAuthProviderConfig) {
+	claimed := make([]bool, len(stored))
+
+	// claim gives in the secret of the first unclaimed stored entry with its
+	// provider ID that match accepts, and marks that entry as used.
+	claim := func(in *conf.OAuthProviderConfig, match func(st *conf.OAuthProviderConfig) bool) {
+		for j := range stored {
+			if claimed[j] || stored[j].Provider != in.Provider || !match(&stored[j]) {
+				continue
+			}
+			claimed[j] = true
+			in.ClientSecret = stored[j].ClientSecret
+			return
 		}
 	}
-	if sameClientID != nil {
-		return sameClientID
+
+	for step := range 3 {
+		for i := range incoming {
+			in := &incoming[i]
+			if in.ClientSecret != redactedValue {
+				continue
+			}
+			switch step {
+			case 0:
+				claim(in, func(st *conf.OAuthProviderConfig) bool {
+					return st.ClientID == in.ClientID && st.Enabled == in.Enabled
+				})
+			case 1:
+				claim(in, func(st *conf.OAuthProviderConfig) bool { return st.ClientID == in.ClientID })
+			default:
+				if countOAuthProviderID(stored, in.Provider) == 1 {
+					claim(in, func(*conf.OAuthProviderConfig) bool { return true })
+				}
+			}
+		}
 	}
-	return conf.FindOAuthProvider(stored, incoming.Provider, incoming.Enabled)
+}
+
+// countOAuthProviderID returns how many entries have the given provider ID.
+func countOAuthProviderID(providers []conf.OAuthProviderConfig, providerID string) int {
+	n := 0
+	for i := range providers {
+		if providers[i].Provider == providerID {
+			n++
+		}
+	}
+	return n
 }
 
 // restoreRedactedSecrets replaces redacted placeholder values in the incoming
@@ -1839,15 +1872,9 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Diagnostics
 	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
 
-	// Array-based OAuth providers: match by Provider name to handle reordering
-	for i := range incoming.Security.OAuthProviders {
-		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
-			continue
-		}
-		if stored := findStoredOAuthProvider(current.Security.OAuthProviders, &incoming.Security.OAuthProviders[i]); stored != nil {
-			incoming.Security.OAuthProviders[i].ClientSecret = stored.ClientSecret
-		}
-	}
+	// Array-based OAuth providers: matched by provider ID, client ID and enabled
+	// state, so reordering does not mix up secrets.
+	restoreOAuthProviderSecrets(current.Security.OAuthProviders, incoming.Security.OAuthProviders)
 
 	// MQTT
 	restore(&current.Realtime.MQTT.Password, &incoming.Realtime.MQTT.Password)

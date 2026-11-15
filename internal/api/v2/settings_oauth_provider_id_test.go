@@ -146,6 +146,19 @@ func TestUpdateSectionSettingsKeepsOAuthSecretWhenProviderIDCaseChanges(t *testi
 	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
 }
 
+// sendFullSettings drives UpdateSettings (PUT) with a full snapshot and returns the
+// response without asserting its status, for saves that are expected to be rejected.
+func sendFullSettings(t *testing.T, e *echo.Echo, c *Controller, s *conf.Settings) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(s)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, c.UpdateSettings(e.NewContext(req, rec)))
+	return rec
+}
+
 // TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates verifies the full
 // settings PUT rejects two enabled entries whose IDs differ only in case, which
 // canonicalisation turns into the same provider.
@@ -158,12 +171,7 @@ func TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates(t *testing.T) {
 		{Provider: "google", Enabled: true, ClientID: "id1", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
 		{Provider: "Google", Enabled: true, ClientID: "id2", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
 	}
-	body, err := json.Marshal(s)
-	require.NoError(t, err)
-	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	require.NoError(t, controller.UpdateSettings(e.NewContext(req, rec)))
+	rec := sendFullSettings(t, e, controller, s)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -248,4 +256,47 @@ func TestUpdateSettingsRestoresSecretWhenClientIDChanges(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "new", got[0].ClientID)
 	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
+}
+
+// TestUpdateSettingsLeavesUnclaimedOAuthSentinelRejected verifies a redacted secret
+// is never copied from a stored entry that another incoming entry already claimed,
+// or picked among several stored entries by provider ID alone. The save is rejected
+// instead, because the sentinel stays.
+func TestUpdateSettingsLeavesUnclaimedOAuthSentinelRejected(t *testing.T) {
+	leftover := conf.OAuthProviderConfig{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: "leftover-secret", UserID: testOAuthUserAllowed}
+	live := conf.OAuthProviderConfig{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed}
+	redacted := func(clientID string, enabled bool) conf.OAuthProviderConfig {
+		return conf.OAuthProviderConfig{Provider: "google", Enabled: enabled, ClientID: clientID, ClientSecret: redactedValue, UserID: testOAuthUserAllowed}
+	}
+
+	tests := []struct {
+		name     string
+		stored   []conf.OAuthProviderConfig
+		incoming []conf.OAuthProviderConfig
+	}{
+		{
+			name:     "added entry does not copy the secret of a stored same-ID entry",
+			stored:   []conf.OAuthProviderConfig{live},
+			incoming: []conf.OAuthProviderConfig{redacted("live", true), redacted("added", false)},
+		},
+		{
+			name:     "client ID edit with an enabled flip next to a leftover is not guessed",
+			stored:   []conf.OAuthProviderConfig{leftover, live},
+			incoming: []conf.OAuthProviderConfig{redacted("leftover", false), redacted("edited", false)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, _, controller := setupTestEnvironment(t)
+			controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+			controller.Settings.Load().Security.OAuthProviders = tt.stored
+
+			s := conf.CloneSettings(controller.Settings.Load())
+			s.Security.OAuthProviders = tt.incoming
+			rec := sendFullSettings(t, e, controller, s)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
 }
