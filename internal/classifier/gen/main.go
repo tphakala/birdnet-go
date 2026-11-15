@@ -24,7 +24,7 @@
 //
 // Determinism matters: the output is committed and guarded by a CI drift gate,
 // so the generator must produce byte-identical output for a given input. Entries
-// are sorted by (region slug, variant token), backend map keys are emitted
+// are sorted by (region slug, live before superseded, variant token), backend map keys are emitted
 // sorted, the field order is fixed, and the whole file is run through
 // go/format.Source before writing.
 //
