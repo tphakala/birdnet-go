@@ -290,6 +290,16 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 			want:     testHostExample,
 		},
 		{
+			name:     "Host with a scheme and a port but no hostname - should be empty",
+			security: Security{Host: "http://:8080"},
+			want:     "",
+		},
+		{
+			name:     "Host with a scheme that does not parse - should be empty",
+			security: Security{Host: "http://bad host"},
+			want:     "",
+		},
+		{
 			name: "BaseURL set with port - should return host:port",
 			security: Security{
 				BaseURL: testURLHTTPS,

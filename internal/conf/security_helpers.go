@@ -197,7 +197,8 @@ func hostnameOf(raw string) string {
 // This is useful for cases where the full host:port is needed (e.g., HTTP Host header).
 // Priority order:
 //  1. Host:port extracted from BaseURL (if valid)
-//  2. Host field as fallback (host:port when it carries an http(s) scheme)
+//  2. Host field as fallback (host:port when it carries an http(s) scheme, empty
+//     when that has no hostname)
 //  3. Empty string if neither is available
 func (s *Security) GetExternalHost() string {
 	// Priority 1: Extract from BaseURL if valid
@@ -213,7 +214,7 @@ func (s *Security) GetExternalHost() string {
 	if !hostHasScheme(host) {
 		return host
 	}
-	if parsed, err := url.Parse(host); err == nil {
+	if parsed, err := url.Parse(host); err == nil && parsed.Hostname() != "" {
 		return parsed.Host
 	}
 	return ""
