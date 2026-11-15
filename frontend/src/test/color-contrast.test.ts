@@ -1385,14 +1385,6 @@ describe('Primary and accent content in every color scheme', () => {
       return isScannable && !isFixture;
     }
 
-    /** The text without the comments that may quote a class list as an example. */
-    function withoutComments(text: string): string {
-      return text
-        .replace(/<!--[\s\S]*?-->/g, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/(^|\s)\/\/[^\n]*/g, '$1');
-    }
-
     /** Component markup, the style modules that hold class strings, and the app shell. */
     const focusScanSources = [
       ...sources.filter(({ file }) => isFocusScanned(file)),
@@ -1404,8 +1396,7 @@ describe('Primary and accent content in every color scheme', () => {
     ];
 
     /** The faded focus indicators in a source text that no full-strength focus border accompanies. */
-    function fadedFocusIndicators(source: string): string[] {
-      const text = withoutComments(source);
+    function fadedFocusIndicators(text: string): string[] {
       return [...text.matchAll(FADED_FOCUS_INDICATOR)]
         .filter(match => {
           const isFadedBorder = /(?:^|:)border-/.test(match[1]);
@@ -1422,20 +1413,21 @@ describe('Primary and accent content in every color scheme', () => {
       expect(offenders).toEqual([]);
     });
 
-    it('the faded focus scan skips comments and test fixtures', () => {
-      const faded = 'focus:ring-[var(--color-primary)]/20';
-      expect(fadedFocusIndicators(`// class="${faded}"\n<div></div>`)).toEqual([]);
-      expect(fadedFocusIndicators(`/* class="${faded}" */`)).toEqual([]);
-      expect(fadedFocusIndicators(`<!-- <input class="${faded}" /> -->`)).toEqual([]);
-      // A URL in a string is not a line comment
-      expect(fadedFocusIndicators(`const u = 'https://x.test'; const c = "${faded}";`)).toEqual([
-        faded,
-      ]);
+    it('the faded focus scan skips test fixtures and specs', () => {
       expect(isFocusScanned('desktop/components/ui/Modal.toggle.test.svelte')).toBe(false);
       expect(isFocusScanned('desktop/components/ui/Modal.test.ts')).toBe(false);
       expect(isFocusScanned('tests/e2e/color-scheme.spec.ts')).toBe(false);
       expect(isFocusScanned('desktop/components/forms/PlaceSearch.styles.ts')).toBe(true);
       expect(isFocusScanned('desktop/components/ui/Modal.svelte')).toBe(true);
+    });
+
+    it('the faded focus scan reads a class list that has no closing quote to its end', () => {
+      // The full-strength border after the ring is still part of the same list
+      expect(
+        fadedFocusIndicators(
+          'focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]'
+        )
+      ).toEqual([]);
     });
 
     it('the alert rule editor draws no faded focus glow, with or without a focus border', () => {
