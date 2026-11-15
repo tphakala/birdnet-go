@@ -236,6 +236,18 @@ describe('Species (analytics page) — sortable column headers', () => {
     ).toBeInTheDocument();
   });
 
+  it('drops the sort announcement when a search matches no species', async () => {
+    const { container } = await renderListView();
+    await fireEvent.click(container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX]);
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await fireEvent.input(screen.getByPlaceholderText(t('analytics.filters.searchPlaceholder')), {
+      target: { value: 'zzzz' },
+    });
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+  });
+
   it('persists the chosen sort order to localStorage', async () => {
     const { container } = await renderListView();
 

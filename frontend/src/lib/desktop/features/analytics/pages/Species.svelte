@@ -391,6 +391,12 @@
     return filtered.map(row => row.species);
   });
 
+  // Clear the sort message when no species are shown (no data, a search with no matches), so
+  // rows returning later do not announce a sort the user did not just make
+  $effect(() => {
+    if (filteredSpecies.length === 0) sortStatus = '';
+  });
+
   function getFilteredCount(): number {
     return filteredSpecies.length;
   }
