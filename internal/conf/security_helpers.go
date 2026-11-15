@@ -134,7 +134,7 @@ func (s *Security) GetBaseURL(port string) string {
 		return baseURL
 	}
 
-	// Priority 2: Construct from Host + port + TLSMode
+	// Priority 2: Host as given when it has a scheme, otherwise built from Host + port + TLSMode
 	host := s.trimmedHost()
 	if host == "" {
 		return ""
