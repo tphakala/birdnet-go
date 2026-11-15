@@ -110,6 +110,7 @@ import { api } from '$lib/utils/api';
 
 const DIALOG_TITLE = 'settings.main.sections.rangeFilter.modal.title';
 const REASON_LOADING_SPECIES = 'settings.main.sections.rangeFilter.modal.loadingSpecies';
+const REASON_COUNT_UNAVAILABLE = 'settings.main.errors.rangeFilterCountFailed';
 const REASON_NO_SPECIES = 'settings.main.sections.rangeFilter.modal.noSpeciesFound';
 const REASON_SETTINGS_LOADING = 'settings.loading';
 const REASON_NO_LOCATION = 'settings.species.activeSpecies.locationNotConfigured.title';
@@ -298,6 +299,20 @@ describe('AnalysisSettingsPage range filter dialog', () => {
 
       await waitFor(() => expect(reasonOf(viewSpecies)).toBe(REASON_NO_SPECIES));
       expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('says the count is unavailable, not loading, once its failed requests are dismissed', async () => {
+      vi.mocked(api.get).mockRejectedValueOnce(new Error('count failed'));
+      vi.mocked(api.post).mockRejectedValueOnce(new Error('test failed'));
+      render(AnalysisSettingsPage);
+      const viewSpecies = await screen.findByRole('button', { name: VIEW_SPECIES });
+      // The failed requests raise the page error; dismissing it starts no new request
+      const dismiss = await screen.findByRole('button', { name: 'common.aria.dismissAlert' });
+      await fireEvent.click(dismiss);
+
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+      expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
+      expect(reasonOf(viewSpecies)).toBe(REASON_COUNT_UNAVAILABLE);
     });
 
     it('has no reason once the button works', async () => {

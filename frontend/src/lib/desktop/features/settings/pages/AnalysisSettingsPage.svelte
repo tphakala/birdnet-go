@@ -912,6 +912,8 @@
 
   let rangeFilterState = $state<{
     speciesCount: number | null;
+    // True once a count request has finished, so a missing count then means it failed
+    countSettled: boolean;
     loading: boolean;
     testing: boolean;
     downloading: boolean;
@@ -920,6 +922,7 @@
     species: RangeFilterSpecies[];
   }>({
     speciesCount: null,
+    countSettled: false,
     loading: false,
     testing: false,
     downloading: false,
@@ -1041,6 +1044,7 @@
       logger.error('Failed to load range filter count:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterCountFailed');
     }
+    rangeFilterState.countSettled = true;
   }
 
   async function testCurrentRangeFilter() {
@@ -1067,6 +1071,7 @@
       );
 
       rangeFilterState.speciesCount = data.count;
+      rangeFilterState.countSettled = true;
 
       if (rangeFilterState.showModal) {
         rangeFilterState.species = data.species || [];
@@ -1076,6 +1081,7 @@
       logger.error('Failed to test range filter:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       rangeFilterState.speciesCount = null;
+      rangeFilterState.countSettled = true;
     } finally {
       clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
@@ -1096,7 +1102,10 @@
     if (rangeFilterState.testing)
       return t('settings.main.sections.rangeFilter.speciesCount.loading');
     if (rangeFilterState.speciesCount === null) {
-      return rangeFilterState.error ?? t('settings.main.sections.rangeFilter.speciesCount.loading');
+      // Loading only while the first count is pending; after that a missing count is a failure
+      return rangeFilterState.countSettled
+        ? t('settings.main.errors.rangeFilterCountFailed')
+        : t('settings.main.sections.rangeFilter.speciesCount.loading');
     }
     if (rangeFilterState.speciesCount === 0) {
       return t('settings.main.sections.rangeFilter.modal.noSpeciesFound');
