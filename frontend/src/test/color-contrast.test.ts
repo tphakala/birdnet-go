@@ -1361,25 +1361,39 @@ describe('Primary and accent content in every color scheme', () => {
       expect(offenders).toEqual([]);
     });
 
-    it('no focus ring, outline or border is drawn at reduced opacity unless a full-strength focus border accompanies it', () => {
-      // A ring or border faded to a percentage of the primary, warning or error colour can fall
-      // below 3:1 against the page. Inputs may add a faint glow when the field also gets a
-      // full-strength focus border; everything else uses .focus-ring.
-      const FADED_FOCUS_INDICATOR =
-        /(?:^|\s)(?:focus|focus-visible):(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+/g;
-      const FULL_STRENGTH_FOCUS_BORDER =
-        /(?:^|\s)(?:focus|focus-visible):border-\[var\(--[\w-]+\)\](?![/\w])/;
+    // A ring or border faded to a percentage of a theme colour can fall below 3:1 against the
+    // page. Inputs may add a faint glow when the field also gets a full-strength focus border;
+    // everything else uses .focus-ring. A utility may open a class value, so a quote also bounds it.
+    const FADED_FOCUS_INDICATOR =
+      /(?:^|[\s"'`])(?:focus|focus-visible):(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+/g;
+    const FULL_STRENGTH_FOCUS_BORDER =
+      /(?:^|[\s"'`])focus(?:-visible)?:border-\[var\(--[\w-]+\)\](?![/\w])/;
+
+    /** The faded focus indicators in a source text that no full-strength focus border accompanies. */
+    function fadedFocusIndicators(text: string): string[] {
+      return [...text.matchAll(FADED_FOCUS_INDICATOR)]
+        .filter(match => {
+          const isFadedBorder = match[0].includes(':border-');
+          const classes = quotedAround(text, match.index + match[0].length - 1);
+          return isFadedBorder || !FULL_STRENGTH_FOCUS_BORDER.test(classes);
+        })
+        .map(match => match[0].slice(1));
+    }
+
+    it('no focus ring, outline or border is drawn at reduced opacity of a theme color unless a full-strength focus border accompanies it', () => {
       const offenders = sources.flatMap(({ file, text }) =>
-        [...text.matchAll(FADED_FOCUS_INDICATOR)]
-          .filter(match => {
-            const isFadedBorder = match[0].includes(':border-');
-            return (
-              isFadedBorder || !FULL_STRENGTH_FOCUS_BORDER.test(quotedAround(text, match.index))
-            );
-          })
-          .map(match => `${file}: ${match[0].trim()}`)
+        fadedFocusIndicators(text).map(indicator => `${file}: ${indicator}`)
       );
       expect(offenders).toEqual([]);
+    });
+
+    it('the faded focus scan sees an indicator that opens or follows a class value and honours a focus border', () => {
+      const faded = 'focus:ring-[var(--color-primary)]/20';
+      expect(fadedFocusIndicators(`<input class="${faded} px-2" />`)).toEqual([faded]);
+      expect(fadedFocusIndicators(`<input class="px-2 ${faded}" />`)).toEqual([faded]);
+      expect(
+        fadedFocusIndicators(`<input class="focus:border-[var(--color-primary)] ${faded}" />`)
+      ).toEqual([]);
     });
 
     it('scheme picker swatches match each scheme primary in the light and dark themes', () => {
