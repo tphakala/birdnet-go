@@ -136,6 +136,23 @@ describe('createFocusReturn', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it('leaves focus alone when a focused control is followed by a press on plain content outside', async () => {
+      setup();
+      const page = document.createElement('p');
+      document.body.appendChild(page);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      inner.focus();
+      page.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      // The press on non-focusable content drops focus to the body without a related target
+      inner.blur();
+      await removeContainer(action);
+      page.remove();
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('runs the fallback after a press on a button the browser did not focus', async () => {
       setup();
       const { track } = createFocusReturn(() => [outside]);

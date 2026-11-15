@@ -43,11 +43,10 @@ export interface FocusReturn {
  * until focus moves to another element. A press on plain content inside the container,
  * including content inside a tabindex element, does not count by itself: it leaves focus
  * on the page body, or focuses the tabindex element, which its own focusin then records.
- * Focus that was inside and then left for nothing (a click on plain page content) still
- * counts, so removal then runs the fallback. A later press on the page outside the
- * container, while focus is not inside it, clears the mark, whether it came from a press
- * or from focus that has since left. A fallback that returns an empty list leaves focus
- * where it is.
+ * A press elsewhere on the page clears the hold, wherever focus is. Focus that left the
+ * container without a press (a window or tab blur, a programmatic move to the page body)
+ * still counts, so removal then runs the fallback. A fallback that returns an empty list
+ * leaves focus where it is.
  */
 export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
   // Each tracked element keeps its own state, so an outgoing element whose destroy runs after
@@ -118,12 +117,14 @@ function trackContainer(root: HTMLElement, fallback: FocusFallback | undefined):
     }
   }
 
-  // A press on the page outside the container while focus is not inside it: a control pressed
-  // earlier that the browser did not focus (Safari) is no longer where the user is. Capture, so
-  // a handler that stops propagation cannot hide the press.
+  // A press elsewhere on the page ends the hold, wherever focus is: a control pressed earlier
+  // that the browser did not focus (Safari) is no longer where the user is, and a press on
+  // non-focusable content drops focus from a control inside with no related target, which
+  // focusout cannot tell from a window blur. Capture, so a handler that stops propagation
+  // cannot hide the press.
   function handleOutsidePress(event: PointerEvent) {
     if (!(event.target instanceof Node) || root.contains(event.target)) return;
-    if (!root.contains(document.activeElement)) holdsFocus = false;
+    holdsFocus = false;
   }
 
   document.addEventListener('pointerdown', handleOutsidePress, true);
