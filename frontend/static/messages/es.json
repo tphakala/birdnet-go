@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "El filtro de rango no coincidió con ninguna especie",
             "description": "El filtro de rango del geomodelo no coincidió con ninguna de las especies del modelo activo, por lo que se filtraría toda detección. Comprueba que el archivo de etiquetas del filtro de rango coincide con el modelo activo."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel no está instalado",
+            "description": "Estos modelos necesitan BirdNET Geomodel para filtrar las detecciones por ubicación: {models}. Instale BirdNET Geomodel v3.0 desde la pestaña Modelos de los ajustes de Análisis."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel no se está usando",
+            "description": "BirdNET Geomodel está instalado, pero el filtro de rango está configurado para usar otro modelo, por lo que estos modelos no se filtran por ubicación: {models}. Elimine birdnet.rangefilter.model y birdnet.rangefilter.modelpath del archivo de configuración o del entorno para usarlo."
+          },
+          "geomodelLoadFailed": {
+            "title": "No se pudo cargar BirdNET Geomodel",
+            "description": "No se pudo cargar BirdNET Geomodel, por lo que estos modelos no se filtran por ubicación: {models}. Revise el registro de la aplicación e instale o reinstale BirdNET Geomodel v3.0 desde la pestaña Modelos de los ajustes de Análisis."
+          },
+          "reloadFailed": {
+            "title": "Falló la recarga del filtro de rango",
+            "description": "La última recarga del filtro de rango falló, por lo que se sigue usando el filtro de rango cargado anteriormente. Revise el registro de la aplicación y reinicie BirdNET-Go para reintentarlo."
+          },
+          "openModels": "Abrir Modelos"
         },
         "columns": {
           "commonName": "Nombre común",

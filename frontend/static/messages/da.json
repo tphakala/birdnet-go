@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Områdefilteret matchede ingen arter",
             "description": "Områdefilteret med geomodel matchede ingen af den aktive models arter, så alle detektioner ville blive filtreret fra. Kontrollér, at områdefilterets labelfil passer til den aktive model."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel er ikke installeret",
+            "description": "Disse modeller har brug for BirdNET Geomodel for at filtrere registreringer efter placering: {models}. Installer BirdNET Geomodel v3.0 fra fanen Modeller i Analyse-indstillingerne."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel er ikke i brug",
+            "description": "BirdNET Geomodel er installeret, men områdefilteret er indstillet til at bruge en anden model, så disse modeller filtreres ikke efter placering: {models}. Fjern birdnet.rangefilter.model og birdnet.rangefilter.modelpath fra konfigurationsfilen eller miljøet for at bruge den."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel kunne ikke indlæses",
+            "description": "BirdNET Geomodel kunne ikke indlæses, så disse modeller filtreres ikke efter placering: {models}. Tjek programmets log, og installer eller geninstaller BirdNET Geomodel v3.0 fra fanen Modeller i Analyse-indstillingerne."
+          },
+          "reloadFailed": {
+            "title": "Genindlæsning af områdefilteret mislykkedes",
+            "description": "Den seneste genindlæsning af områdefilteret mislykkedes, så det tidligere indlæste områdefilter bruges stadig. Tjek programmets log, og genstart BirdNET-Go for at prøve igen."
+          },
+          "openModels": "Åbn Modeller"
         },
         "columns": {
           "commonName": "Almindeligt navn",

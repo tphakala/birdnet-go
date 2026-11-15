@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Le filtre de portée n'a correspondu à aucune espèce",
             "description": "Le filtre de portée du géomodèle ne correspond à aucune des espèces du modèle actif, toutes les détections seraient donc filtrées. Vérifiez que le fichier d'étiquettes du filtre de portée correspond au modèle actif."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel n'est pas installé",
+            "description": "Ces modèles ont besoin de BirdNET Geomodel pour filtrer les détections selon l'emplacement : {models}. Installez BirdNET Geomodel v3.0 depuis l'onglet Modèles des paramètres d'Analyse."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel n'est pas utilisé",
+            "description": "BirdNET Geomodel est installé, mais le filtre de portée est configuré pour utiliser un autre modèle, donc ces modèles ne sont pas filtrés selon l'emplacement : {models}. Supprimez birdnet.rangefilter.model et birdnet.rangefilter.modelpath du fichier de configuration ou de l'environnement pour l'utiliser."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel n'a pas pu être chargé",
+            "description": "BirdNET Geomodel n'a pas pu être chargé, donc ces modèles ne sont pas filtrés selon l'emplacement : {models}. Consultez le journal de l'application, puis installez ou réinstallez BirdNET Geomodel v3.0 depuis l'onglet Modèles des paramètres d'Analyse."
+          },
+          "reloadFailed": {
+            "title": "Échec du rechargement du filtre de portée",
+            "description": "Le dernier rechargement du filtre de portée a échoué, le filtre de portée chargé précédemment reste donc en service. Consultez le journal de l'application et redémarrez BirdNET-Go pour réessayer."
+          },
+          "openModels": "Ouvrir Modèles"
         },
         "columns": {
           "commonName": "Nom commun",

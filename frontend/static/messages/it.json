@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Il filtro intervallo non ha trovato corrispondenze con nessuna specie",
             "description": "Il filtro intervallo del geomodello non corrisponde a nessuna delle specie del modello attivo, quindi ogni rilevamento verrebbe filtrato. Verifica che il file delle etichette del filtro intervallo corrisponda al modello attivo."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel non è installato",
+            "description": "Questi modelli hanno bisogno di BirdNET Geomodel per filtrare i rilevamenti in base alla posizione: {models}. Installa BirdNET Geomodel v3.0 dalla scheda Modelli nelle impostazioni di Analisi."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel non è in uso",
+            "description": "BirdNET Geomodel è installato, ma il filtro intervallo è configurato per usare un altro modello, quindi questi modelli non vengono filtrati in base alla posizione: {models}. Per usarlo, rimuovi birdnet.rangefilter.model e birdnet.rangefilter.modelpath dal file di configurazione o dall'ambiente."
+          },
+          "geomodelLoadFailed": {
+            "title": "Impossibile caricare BirdNET Geomodel",
+            "description": "Impossibile caricare BirdNET Geomodel, quindi questi modelli non vengono filtrati in base alla posizione: {models}. Controlla il log dell'applicazione e installa o reinstalla BirdNET Geomodel v3.0 dalla scheda Modelli nelle impostazioni di Analisi."
+          },
+          "reloadFailed": {
+            "title": "Ricaricamento del filtro intervallo non riuscito",
+            "description": "L'ultimo ricaricamento del filtro intervallo non è riuscito, quindi è ancora in uso il filtro intervallo caricato in precedenza. Controlla il log dell'applicazione e riavvia BirdNET-Go per riprovare."
+          },
+          "openModels": "Apri Modelli"
         },
         "columns": {
           "commonName": "Nome comune",

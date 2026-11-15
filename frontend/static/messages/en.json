@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Range filter matched no species",
             "description": "The geomodel range filter did not match any of the active model's species, so every detection would be filtered out. Check that the range filter labels file matches the active model."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel is not installed",
+            "description": "These models need the BirdNET Geomodel to filter detections by location: {models}. Install BirdNET Geomodel v3.0 from the Models tab in Analysis settings."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel is not in use",
+            "description": "The BirdNET Geomodel is installed, but the range filter is configured to use another model, so these models are not filtered by location: {models}. Remove birdnet.rangefilter.model and birdnet.rangefilter.modelpath from the configuration file or environment to use it."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel could not be loaded",
+            "description": "The BirdNET Geomodel could not be loaded, so these models are not filtered by location: {models}. Check the application log, and install or reinstall BirdNET Geomodel v3.0 from the Models tab in Analysis settings."
+          },
+          "reloadFailed": {
+            "title": "Range filter reload failed",
+            "description": "The last range filter reload failed, so the previously loaded range filter is still in use. Check the application log and restart BirdNET-Go to retry."
+          },
+          "openModels": "Open Models"
         },
         "columns": {
           "commonName": "Common Name",

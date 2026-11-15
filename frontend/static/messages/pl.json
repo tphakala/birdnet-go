@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Filtr zasięgu nie dopasował żadnego gatunku",
             "description": "Filtr zasięgu geomodelu nie dopasował żadnego z gatunków aktywnego modelu, więc każde wykrycie zostałoby odfiltrowane. Sprawdź, czy plik etykiet filtra zasięgu odpowiada aktywnemu modelowi."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel nie jest zainstalowany",
+            "description": "Te modele potrzebują BirdNET Geomodel, aby filtrować wykrycia według lokalizacji: {models}. Zainstaluj BirdNET Geomodel v3.0 na karcie Modele w ustawieniach Analizy."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel nie jest używany",
+            "description": "BirdNET Geomodel jest zainstalowany, ale filtr zasięgu jest skonfigurowany na inny model, więc te modele nie są filtrowane według lokalizacji: {models}. Aby go użyć, usuń birdnet.rangefilter.model i birdnet.rangefilter.modelpath z pliku konfiguracji lub środowiska."
+          },
+          "geomodelLoadFailed": {
+            "title": "Nie udało się wczytać BirdNET Geomodel",
+            "description": "Nie udało się wczytać BirdNET Geomodel, więc te modele nie są filtrowane według lokalizacji: {models}. Sprawdź dziennik aplikacji oraz zainstaluj lub zainstaluj ponownie BirdNET Geomodel v3.0 na karcie Modele w ustawieniach Analizy."
+          },
+          "reloadFailed": {
+            "title": "Ponowne wczytanie filtru zasięgu nie powiodło się",
+            "description": "Ostatnie ponowne wczytanie filtru zasięgu nie powiodło się, więc nadal używany jest wcześniej wczytany filtr zasięgu. Sprawdź dziennik aplikacji i uruchom ponownie BirdNET-Go, aby spróbować jeszcze raz."
+          },
+          "openModels": "Otwórz Modele"
         },
         "columns": {
           "commonName": "Nazwa",

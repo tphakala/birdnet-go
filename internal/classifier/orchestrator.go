@@ -1418,7 +1418,8 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 }
 
 // RangeFilterStatus returns introspection data about the range filter,
-// including per-classifier geomodel coverage for all active non-bat models.
+// including per-classifier geomodel coverage for all active non-bat models and a
+// diagnosis of why a loaded Perch or BirdNET v3.0 model is not served by the geomodel.
 func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	settings := o.CurrentSettings()
 	rf := settings.BirdNET.RangeFilter
@@ -1432,6 +1433,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		mappedSpecies int
 		kind          = rfKindNone
 		state         *rangeFilterState
+		reloadFailed  bool
 	)
 	if rfs := o.rangeFilter; rfs != nil {
 		// Take ONE state snapshot for the whole response so active, fellBack, kind, the
@@ -1440,6 +1442,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		state = rfs.loadState()
 		active = state.backend != nil
 		fellBack = state.fellBack
+		reloadFailed = state.reloadFailed
 		if kind = state.kind; kind == "" {
 			kind = rfKindNone // normalize the zero value, mirroring backendKind()
 		}
@@ -1501,6 +1504,13 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	// consumes. Bat/BSG are not range-filter participants, so rangeFilterView never
 	// includes them; a Perch-only or v3.0-only install is reported without a v2.4 gate.
 	classifiers := buildClassifierViews(view, geoLabels)
+	// A geomodel backend kept by a failed reload was built before any participant that
+	// loaded since, so it does not serve those. A reload still in flight is not flagged,
+	// so the diagnosis does not flicker during a normal model load.
+	geomodelServing := kind == rfKindGeomodelV3 &&
+		(!reloadFailed || !geomodelParticipantMissing(view.participants, state))
+	// The stat runs only when a geomodel-needing participant is not served by the geomodel.
+	stockPresent := view.wantsGeomodel && !geomodelServing && geomodelFilesPresent(view.modelsDir)
 	resp := RangeFilterStatusResponse{
 		Geomodel:            geomodel,
 		Classifiers:         make([]ClassifierCoverage, 0, len(classifiers)),
@@ -1513,6 +1523,8 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		MappedSpecies:       mappedSpecies,
 		Backend:             string(kind),
 		ParticipantsLoaded:  len(view.participants) > 0,
+		GeomodelIssue:       geomodelIssueFor(&rf, view.wantsGeomodel, geomodelServing, stockPresent),
+		ReloadFailed:        reloadFailed,
 	}
 	for _, cm := range classifiers {
 		name := cm.id
@@ -1535,6 +1547,18 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	})
 
 	return resp
+}
+
+// geomodelParticipantMissing reports whether a loaded participant that needs the geomodel
+// is absent from the participant set the backend state was built over.
+func geomodelParticipantMissing(participants []participantLabels, state *rangeFilterState) bool {
+	for i := range participants {
+		id := participants[i].id
+		if rangeFilterCompatFor(id) == rangeFilterCompatGeomodel && (state == nil || !state.hasParticipant(id)) {
+			return true
+		}
+	}
+	return false
 }
 
 // RangeFilterActive reports whether a range-filter backend is loaded (filtering is being

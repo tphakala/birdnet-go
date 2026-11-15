@@ -212,6 +212,9 @@ type rangeFilterState struct {
 	// lets the coverage and backfill rules key on what the backend was built over rather
 	// than re-reading the live view (which can have drifted since the build).
 	anchoredOnV24 bool
+	// reloadFailed is true only on a state published by a failed reload (a fresh no-backend
+	// state, or a copy of the retained state). Every other publication leaves it false.
+	reloadFailed bool
 }
 
 // rangeFilterService owns the range-filter backend and occurrence cache.
@@ -355,10 +358,15 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 				participants:  view.participants,
 				anchoredOnV24: view.v24Labels != nil,
 				generation:    cur.generation + 1,
+				reloadFailed:  true,
 			})
 			rfs.mu.Unlock()
 			rfs.clearSpeciesCache()
 		} else {
+			// Keep the retained backend and generation; only mark the failure.
+			marked := *cur
+			marked.reloadFailed = true
+			rfs.state.Store(&marked)
 			rfs.mu.Unlock()
 		}
 		return errors.New(err).

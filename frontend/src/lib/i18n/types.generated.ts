@@ -3324,6 +3324,15 @@ export type TranslationKey =
   | 'settings.species.activeSpecies.rangeFilterHealth.fellBack.description'
   | 'settings.species.activeSpecies.rangeFilterHealth.mappedZero.title'
   | 'settings.species.activeSpecies.rangeFilterHealth.mappedZero.description'
+  | 'settings.species.activeSpecies.rangeFilterHealth.geomodelNotInstalled.title'
+  | 'settings.species.activeSpecies.rangeFilterHealth.geomodelNotInstalled.description' // params: models
+  | 'settings.species.activeSpecies.rangeFilterHealth.geomodelNotSelected.title'
+  | 'settings.species.activeSpecies.rangeFilterHealth.geomodelNotSelected.description' // params: models
+  | 'settings.species.activeSpecies.rangeFilterHealth.geomodelLoadFailed.title'
+  | 'settings.species.activeSpecies.rangeFilterHealth.geomodelLoadFailed.description' // params: models
+  | 'settings.species.activeSpecies.rangeFilterHealth.reloadFailed.title'
+  | 'settings.species.activeSpecies.rangeFilterHealth.reloadFailed.description'
+  | 'settings.species.activeSpecies.rangeFilterHealth.openModels'
   | 'settings.species.activeSpecies.columns.commonName'
   | 'settings.species.activeSpecies.columns.scientificName'
   | 'settings.species.activeSpecies.columns.score'
@@ -5062,6 +5071,15 @@ export type TranslationParams = {
   'settings.species.duplicateConfigError': { species: string | number };
   'settings.species.activeSpecies.stats.minutesAgo': { count: string | number };
   'settings.species.activeSpecies.stats.hoursAgo': { count: string | number };
+  'settings.species.activeSpecies.rangeFilterHealth.geomodelNotInstalled.description': {
+    models: string | number;
+  };
+  'settings.species.activeSpecies.rangeFilterHealth.geomodelNotSelected.description': {
+    models: string | number;
+  };
+  'settings.species.activeSpecies.rangeFilterHealth.geomodelLoadFailed.description': {
+    models: string | number;
+  };
   'settings.species.customConfiguration.badges.threshold': { value: string | number };
   'settings.species.customConfiguration.badges.interval': { value: string | number };
   'settings.species.customConfiguration.editing': { species: string | number };

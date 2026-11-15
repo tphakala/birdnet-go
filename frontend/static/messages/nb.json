@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Utvalgsfilter matchet ingen arter",
             "description": "Geomodell-utvalgsfilteret matchet ingen av den aktive modellens arter, så enhver registrering ville bli filtrert ut. Sjekk at utvalgsfilteretikettfilen matcher den aktive modellen."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel er ikke installert",
+            "description": "Disse modellene trenger BirdNET Geomodel for å filtrere registreringer etter posisjon: {models}. Installer BirdNET Geomodel v3.0 fra fanen Modeller i Analyse-innstillingene."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel er ikke i bruk",
+            "description": "BirdNET Geomodel er installert, men utvalgsfilteret er satt til å bruke en annen modell, så disse modellene filtreres ikke etter posisjon: {models}. Fjern birdnet.rangefilter.model og birdnet.rangefilter.modelpath fra konfigurasjonsfilen eller miljøet for å bruke den."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel kunne ikke lastes",
+            "description": "BirdNET Geomodel kunne ikke lastes, så disse modellene filtreres ikke etter posisjon: {models}. Sjekk applikasjonsloggen, og installer eller installer BirdNET Geomodel v3.0 på nytt fra fanen Modeller i Analyse-innstillingene."
+          },
+          "reloadFailed": {
+            "title": "Ny innlasting av utvalgsfilteret mislyktes",
+            "description": "Den siste nye innlastingen av utvalgsfilteret mislyktes, så det tidligere innlastede utvalgsfilteret er fortsatt i bruk. Sjekk applikasjonsloggen og start BirdNET-Go på nytt for å prøve igjen."
+          },
+          "openModels": "Åpne Modeller"
         },
         "columns": {
           "commonName": "Norsk navn",
