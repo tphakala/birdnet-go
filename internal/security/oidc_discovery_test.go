@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -645,6 +646,30 @@ func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
 	err := ProviderRegistrationError(ProviderOIDC)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, errProviderNotRegistered, "the cut first attempt must leave a recorded cause")
+}
+
+// TestOIDCDiscovery_WindowOverBeforeFirstAttempt pins that the first attempt
+// always runs: a retry window that is already over leaves a recorded cause
+// instead of an empty slot. The wait between attempts races the timer against
+// the window, so the round repeats to make a wrong pick near certain.
+func TestOIDCDiscovery_WindowOverBeforeFirstAttempt(t *testing.T) {
+	idp := newGatedIDP(t, false)
+	for i := range 12 {
+		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
+			logs := useSplitLogFiles(t)
+			ctx, gen := beginDiscoveryForTest(t)
+			done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
+				initialBackoff: time.Millisecond,
+				maxBackoff:     time.Millisecond,
+				maxDuration:    time.Nanosecond,
+			})
+
+			waitDone(t, done)
+			assert.Contains(t, logs.main(), "OIDC discovery retries exhausted")
+			require.NotErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+				"the first attempt must run and leave a recorded cause")
+		})
+	}
 }
 
 // TestDiscoverOIDC_UsesBoundedClient pins that discovery goes through

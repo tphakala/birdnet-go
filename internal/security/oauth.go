@@ -862,8 +862,15 @@ func startOIDCDiscovery(ctx context.Context, gen uint64, reg *oidcRegistration, 
 			default:
 			}
 
+			// The first attempt always runs: with a window that is already over
+			// the select would otherwise pick at random between the window and
+			// the zero timer, and could skip discovery without a recorded cause.
+			windowOver := windowCtx.Done()
+			if attempt == 1 {
+				windowOver = nil
+			}
 			select {
-			case <-windowCtx.Done():
+			case <-windowOver:
 				if ctx.Err() == nil {
 					endOIDCRetryWindow(gen, reg, lastErr, policy)
 					return
