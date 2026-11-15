@@ -8,7 +8,7 @@ import AudioToolbar from './AudioToolbar.svelte';
 import toolbarSource from './AudioToolbar.svelte?raw';
 import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
 import { SEEK_PAGE_STEP_SECONDS, SEEK_STEP_SECONDS } from '$lib/utils/seek';
-import { DENOISE_BUTTON_NAME } from '../../../../test/audioPlayerQueries';
+import { DENOISE_BUTTON_NAME, EXPORT_BUTTON_NAME } from '../../../../test/audioPlayerQueries';
 import { AUDIO_TOOLBAR_CLIP_SECONDS, audioToolbarProps } from '../../../../test/audioToolbarProps';
 
 // The component's source without comments, for the tests that pin a CSS declaration
@@ -46,9 +46,7 @@ describe('AudioToolbar export menu', () => {
     const user = userEvent.setup();
     renderToolbar();
 
-    await user.click(
-      screen.getByRole('button', { name: 'components.audioPlayer.processing.export' })
-    );
+    await user.click(screen.getByRole('button', { name: EXPORT_BUTTON_NAME }));
 
     const menu = document.querySelector('.export-menu');
     expect(menu).not.toBeNull();
@@ -71,9 +69,7 @@ describe('AudioToolbar export menu', () => {
     const onExport = vi.fn();
     renderToolbar(onExport);
 
-    await user.click(
-      screen.getByRole('button', { name: 'components.audioPlayer.processing.export' })
-    );
+    await user.click(screen.getByRole('button', { name: EXPORT_BUTTON_NAME }));
     await user.click(screen.getByRole('button', { name: 'Opus' }));
 
     expect(onExport).toHaveBeenCalledWith('opus');
@@ -397,7 +393,6 @@ type Menu = 'export' | 'denoise';
 
 describe('AudioToolbar menus', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
-  const EXPORT_NAME = 'components.audioPlayer.processing.export';
   // Measured menu size the layout stubs report
   const MENU_WIDTH_PX = 150;
   const MENU_HEIGHT_PX = 266;
@@ -423,7 +418,7 @@ describe('AudioToolbar menus', () => {
 
   function trigger(menu: Menu): HTMLElement {
     return screen.getByRole('button', {
-      name: menu === 'export' ? EXPORT_NAME : DENOISE_BUTTON_NAME,
+      name: menu === 'export' ? EXPORT_BUTTON_NAME : DENOISE_BUTTON_NAME,
     });
   }
 

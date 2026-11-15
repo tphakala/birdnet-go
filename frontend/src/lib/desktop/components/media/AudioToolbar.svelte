@@ -191,7 +191,7 @@
   // Unified playing state
   let isCurrentlyPlaying = $derived(isPlayingSelection || isPlaying);
 
-  // Gap between a menu and its dropdown wrapper; equal to the menus' margin-block below
+  // Gap between a menu and its dropdown wrapper, set as the menu's block margin
   const MENU_GAP_PX = 4;
   // Distance a menu keeps from the viewport edges
   const MENU_VIEWPORT_MARGIN_PX = 8;
@@ -260,6 +260,7 @@
       menu.scrollTop = scrollTop;
     }
 
+    menu.style.marginBlock = `${MENU_GAP_PX}px`;
     place();
     window.addEventListener('resize', place);
     // Captured, so a scroll of any container that moves the trigger is seen too
@@ -665,7 +666,6 @@
     width: max-content;
     max-width: calc(100vw - 1rem);
     overflow-y: auto;
-    margin-block: 4px; /* px, not rem, so it always equals MENU_GAP_PX in the script */
     background: var(--color-base-100);
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-field);
@@ -694,13 +694,14 @@
     cursor: pointer;
   }
 
+  .denoise-option:hover,
+  .export-option:hover {
+    background: var(--color-base-200);
+  }
+
   .denoise-option {
     padding: 0.375rem 0.625rem;
     font-size: 0.75rem;
-  }
-
-  .denoise-option:hover {
-    background: var(--color-base-200);
   }
 
   .denoise-option.selected {
@@ -721,10 +722,6 @@
   .export-option {
     padding: 0.5rem 0.75rem;
     font-size: 0.8125rem;
-  }
-
-  .export-option:hover {
-    background: var(--color-base-200);
   }
 
   .export-error {
