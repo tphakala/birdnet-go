@@ -1052,7 +1052,8 @@ func (s *Server) registerOAuthRoutes() {
 // enabled provider is not registered. The cause stays in the security log.
 const oauthProviderUnavailableMessage = "Sign-in with this provider is not available right now. The administrator can find the reason in the BirdNET-Go log."
 
-// handleOAuthBegin initiates the OAuth flow with the requested provider.
+// handleOAuthBegin initiates the OAuth flow with the requested provider, once
+// it is enabled and registered.
 // GET /auth/:provider
 func (s *Server) handleOAuthBegin(c echo.Context) error {
 	pathProvider := c.Param("provider")
@@ -1072,24 +1073,8 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
 	}
 
-	// Reject providers that are not currently enabled and fully configured before
-	// sending the user on the provider round-trip, so a disabled or half-configured
-	// provider fails fast with a clear security.log entry here instead of an opaque
-	// error after the redirect (issue #3381). The visitor only sees a generic message.
-	if settings := s.currentSettings(); settings == nil || !settings.IsOAuthProviderEnabled(configProvider) {
-		log.Warn("OAuth login rejected: provider is disabled or not fully configured")
-		return c.String(http.StatusBadRequest, "OAuth provider not available")
-	}
-
-	// Reject an enabled provider that goth does not know (OIDC discovery failed
-	// or has not finished) instead of letting gothic answer
-	// with its raw error. The cause is for the security log only; the visitor
-	// gets one fixed sentence.
-	// The registry matches goth names exactly, so look the provider up by its
-	// canonical name.
-	if err := security.ProviderRegistrationError(provider); err != nil {
-		log.Warn("OAuth login rejected: provider is not registered", logger.Error(err))
-		return c.String(http.StatusServiceUnavailable, oauthProviderUnavailableMessage)
+	if handled, err := s.rejectUnusableOAuthProvider(c, log, "OAuth login", configProvider, provider); handled {
+		return err
 	}
 
 	// Add provider to request context for gothic
@@ -1110,7 +1095,35 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	return nil
 }
 
-// handleOAuthCallback handles the OAuth callback from the provider.
+// rejectUnusableOAuthProvider answers the request and reports true when the
+// provider cannot be used right now. Begin and callback share it so the two
+// cannot drift. stage names the step in the log lines.
+func (s *Server) rejectUnusableOAuthProvider(c echo.Context, log logger.Logger, stage, configProvider, provider string) (handled bool, err error) {
+	// Reject a provider that is not currently enabled and fully configured, so a
+	// disabled or half-configured provider fails fast with a clear security.log
+	// entry here instead of an opaque error from gothic (issue #3381). The visitor
+	// only sees a generic message.
+	if settings := s.currentSettings(); settings == nil || !settings.IsOAuthProviderEnabled(configProvider) {
+		log.Warn(stage + " rejected: provider is disabled or not fully configured")
+		return true, c.String(http.StatusBadRequest, "OAuth provider not available")
+	}
+
+	// Reject an enabled provider that goth does not know (OIDC discovery failed
+	// or has not finished) instead of letting gothic answer
+	// with its raw error. The cause is for the security log only; the visitor
+	// gets one fixed sentence.
+	// The registry matches goth names exactly, so look the provider up by its
+	// canonical name.
+	if regErr := security.ProviderRegistrationError(provider); regErr != nil {
+		log.Warn(stage+" rejected: provider is not registered", logger.Error(regErr))
+		return true, c.String(http.StatusServiceUnavailable, oauthProviderUnavailableMessage)
+	}
+	return false, nil
+}
+
+// handleOAuthCallback handles the OAuth callback from the provider. Like the
+// begin step it rejects a provider that is disabled or not registered, and it
+// completes authentication only with the provider named in the path.
 // GET /auth/:provider/callback
 func (s *Server) handleOAuthCallback(c echo.Context) error {
 	pathProvider := c.Param("provider")
@@ -1123,10 +1136,14 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 
 	// Resolve the path name once so gothic and the session get the canonical
 	// goth name whatever casing the request used.
-	_, provider, ok := s.canonicalOAuthProvider(pathProvider)
+	configProvider, provider, ok := s.canonicalOAuthProvider(pathProvider)
 	if !ok {
 		log.Warn("OAuth login callback rejected: unsupported or unrecognized provider requested")
 		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
+	}
+
+	if handled, err := s.rejectUnusableOAuthProvider(c, log, "OAuth login callback", configProvider, provider); handled {
+		return err
 	}
 
 	// Add provider to request context for gothic
