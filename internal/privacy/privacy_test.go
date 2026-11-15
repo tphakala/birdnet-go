@@ -2156,6 +2156,11 @@ func TestScrubCredentialURL_UnparseableFallback(t *testing.T) {
 		assert.Equal(t, "[REDACTED]@host", ScrubCredentialURL("user@host"))
 	})
 
+	t.Run("password with a numeric prefix and a slash parses as a port", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "https://[REDACTED]@host/x", ScrubCredentialURL("https://alice:123/secret@host/x"))
+	})
+
 	t.Run("parseable pathless URL with at sign in the query is unchanged", func(t *testing.T) {
 		t.Parallel()
 		const in = "https://idp.example?login_hint=a@b.example"

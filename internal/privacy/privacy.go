@@ -844,8 +844,9 @@ func ScrubToken(token string) string {
 // ScrubCredentialURL sanitizes URLs that may contain embedded credentials.
 // Handles common notification service URL formats (telegram://, discord://, slack://, etc.)
 // and generic URLs with userinfo (user:pass@host). A value url.Parse rejects, and
-// an opaque, scheme-less or host-less value that it accepts without a User, is
-// redacted with RedactURLUserinfo instead.
+// an opaque, scheme-less or host-less value that it accepts without a User, or
+// a URL without a User that has an "@" in its path, is redacted with
+// RedactURLUserinfo instead.
 func ScrubCredentialURL(rawURL string) string {
 	if rawURL == "" {
 		return ""
@@ -862,6 +863,13 @@ func ScrubCredentialURL(rawURL string) string {
 	// structure cannot locate its userinfo.
 	if parsedURL.Host == "" && (strings.Contains(parsedURL.Opaque, "@") ||
 		(!strings.HasPrefix(parsedURL.Path, "/") && strings.Contains(parsedURL.Path, "@"))) {
+		return RedactURLUserinfo(rawURL)
+	}
+
+	// A password with a numeric prefix and a "/" ("https://user:123/pw@host")
+	// parses as host "user:123" with the rest of the password in the path, so an
+	// "@" in the path of a URL without a User is treated as userinfo.
+	if parsedURL.User == nil && parsedURL.Host != "" && strings.Contains(parsedURL.Path, "@") {
 		return RedactURLUserinfo(rawURL)
 	}
 
