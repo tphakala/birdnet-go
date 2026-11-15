@@ -2229,6 +2229,11 @@ func TestScrubURLUserinfoInText(t *testing.T) {
 		},
 		{"no URL", "connection refused", "connection refused"},
 		{
+			"scheme-relative URL in a quoted segment",
+			`Get "//alice:pw@idp.example/x": unsupported protocol scheme ""`,
+			`Get "//[REDACTED]@idp.example/x": unsupported protocol scheme ""`,
+		},
+		{
 			"opaque URL in a quoted segment",
 			`Get "https:user:pw@host/x": refused`,
 			`Get "[REDACTED]@host/x": refused`,

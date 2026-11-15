@@ -931,7 +931,9 @@ func isSchemeName(s string) bool {
 // A double-quoted segment that contains an "@" and is not a structurally valid
 // URL with a host (it fails url.Parse, or parses as an opaque or scheme-less
 // value) is redacted with RedactURLUserinfo, which covers the quoted URLs of a
-// failed request, including ones with a raw "/" in the password. A URL with a
+// failed request, including ones with a raw "/" in the password. A quoted URL
+// that parses with a host and carries userinfo (including a scheme-relative
+// "//user:pw@host") is redacted the same way. A URL with a
 // scheme, quoted or not, then loses its userinfo up to the first "/", "?", "#",
 // white space or double quote, so an "@" in a query or in later text is not
 // treated as userinfo. Text without such a URL, and text already processed by
@@ -940,7 +942,7 @@ func isSchemeName(s string) bool {
 func ScrubURLUserinfoInText(text string) string {
 	text = quotedUserinfoPattern.ReplaceAllStringFunc(text, func(quoted string) string {
 		inner := quoted[1 : len(quoted)-1]
-		if u, err := url.Parse(inner); err == nil && u.Host != "" && u.Opaque == "" {
+		if u, err := url.Parse(inner); err == nil && u.Host != "" && u.Opaque == "" && u.User == nil {
 			return quoted
 		}
 		return `"` + RedactURLUserinfo(inner) + `"`
