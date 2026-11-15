@@ -33,8 +33,8 @@ const (
 // because the alternative is a server that will not boot and therefore serves no
 // UI in which to fix the provider. The exception is a provider that can still
 // force authentication on while being unable to complete a sign-in; see
-// validateOAuthRedirects and validateOIDCProviders. Two enabled entries with the
-// same provider ID are rejected by validateOAuthProviderDuplicates.
+// validateOAuthRedirects and validateOIDCProviders. Two entries with the same
+// provider ID are rejected by validateOAuthProviderDuplicates.
 func validateSecuritySettings(settings *Security) error {
 	// TLS mode validation
 	if err := validateTLSMode(settings); err != nil {
@@ -277,27 +277,22 @@ func validateTLSMode(settings *Security) error {
 	return nil
 }
 
-// validateOAuthProviderDuplicates rejects two enabled entries with the same
-// provider ID, for every provider kind. Two of those make it ambiguous which one
-// a sign-in would use, because goth registers providers by name and the second
-// silently replaces the first while the settings lookups read the first. A
-// disabled second entry never reaches goth (GetEnabledOAuthProviders and
-// initializeProviders both skip it), so refusing to start over a leftover is the
-// failure the incomplete-feature normalisation exists to remove. IDs are
-// canonical (see NormalizeOAuthProviderIDs) by the time this runs.
+// validateOAuthProviderDuplicates rejects two entries with the same provider ID,
+// enabled or not, for every provider kind: lookups, the secret restore and the
+// restart detector all identify an entry by its provider ID. IDs are canonical
+// (see NormalizeOAuthProviderIDs) by the time this runs. Config load never reaches
+// it with a duplicate, because ReconcileOAuthProviderDuplicates collapses them
+// first; the settings API does, and answers with this error.
 func validateOAuthProviderDuplicates(settings *Security) error {
-	firstEnabled := make(map[string]int, len(settings.OAuthProviders))
+	first := make(map[string]int, len(settings.OAuthProviders))
 	for i := range settings.OAuthProviders {
 		provider := &settings.OAuthProviders[i]
-		if !provider.Enabled {
-			continue
-		}
-		first, seen := firstEnabled[provider.Provider]
+		firstIndex, seen := first[provider.Provider]
 		if !seen {
-			firstEnabled[provider.Provider] = i
+			first[provider.Provider] = i
 			continue
 		}
-		return errors.Newf("security.oauthProviders[%d]: duplicate enabled entry for provider %q, already configured at security.oauthProviders[%d]", i, provider.Provider, first).
+		return errors.Newf("security.oauthProviders[%d]: duplicate entry for provider %q, already configured at security.oauthProviders[%d]", i, provider.Provider, firstIndex).
 			Component("conf").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_oauth_provider_duplicates").

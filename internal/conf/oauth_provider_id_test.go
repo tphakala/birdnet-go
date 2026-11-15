@@ -1,11 +1,14 @@
 package conf
 
 import (
+	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // oauthProviderIDConfig configures an enabled OIDC provider written with an
@@ -67,10 +70,9 @@ func TestNormalizeOAuthProviderIDs(t *testing.T) {
 	}
 }
 
-// TestValidateSecuritySettings_OAuthProviderDuplicates pins that two enabled
-// entries with the same provider ID are rejected for every provider kind, with
-// the offending index in the message, while a leftover disabled entry and a
-// single entry of each kind still pass.
+// TestValidateSecuritySettings_OAuthProviderDuplicates pins that two entries with
+// the same provider ID are rejected for every provider kind, enabled or not, with
+// the offending index in the message, while a single entry of each kind passes.
 func TestValidateSecuritySettings_OAuthProviderDuplicates(t *testing.T) {
 	t.Parallel()
 
@@ -89,7 +91,8 @@ func TestValidateSecuritySettings_OAuthProviderDuplicates(t *testing.T) {
 		{name: "exact duplicate google", providers: []OAuthProviderConfig{entry("google", true), entry("google", true)}, wantErr: "security.oauthProviders[1]: duplicate"},
 		{name: "exact duplicate oidc", providers: []OAuthProviderConfig{entry("oidc", true), entry("oidc", true)}, wantErr: "security.oauthProviders[1]: duplicate"},
 		{name: "enabled entry after a different kind", providers: []OAuthProviderConfig{entry("github", true), entry("google", true), entry("google", true)}, wantErr: "security.oauthProviders[2]: duplicate"},
-		{name: "one enabled one disabled", providers: []OAuthProviderConfig{entry("google", true), entry("google", false)}},
+		{name: "one enabled one disabled", providers: []OAuthProviderConfig{entry("google", true), entry("google", false)}, wantErr: "security.oauthProviders[1]: duplicate"},
+		{name: "two disabled", providers: []OAuthProviderConfig{entry("github", false), entry("github", false)}, wantErr: "security.oauthProviders[1]: duplicate"},
 		{name: "single entry of each kind", providers: []OAuthProviderConfig{
 			entry("google", true), entry("github", true), entry("microsoft", true),
 			entry("line", true), entry("kakao", true), entry("oidc", true),
@@ -113,62 +116,90 @@ func TestValidateSecuritySettings_OAuthProviderDuplicates(t *testing.T) {
 	}
 }
 
-// TestLoad_RejectsCaseVariantOAuthProviderDuplicates pins that entries differing
-// only in the case of the ID are duplicates once Load canonicalises them.
-func TestLoad_RejectsCaseVariantOAuthProviderDuplicates(t *testing.T) {
+// loadWithOAuthProviders loads a config with the given oauthProviders YAML entries
+// and returns the providers that survive loading.
+func loadWithOAuthProviders(t *testing.T, entries string) []OAuthProviderConfig {
+	t.Helper()
 	prepareConfigFromYAML(t, `
 security:
   sessionsecret: "0123456789abcdef0123456789abcdef"
   baseurl: "https://birds.example.com"
   oauthProviders:
-    - provider: google
-      enabled: true
-      clientId: id1
-      clientSecret: secret1
-      userId: user@example.com
-    - provider: Google
-      enabled: true
-      clientId: id2
-      clientSecret: secret2
-      userId: user@example.com
-`)
-
-	_, err := Load()
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate")
+`+entries)
+	settings, err := Load()
+	require.NoError(t, err, "a duplicate provider ID must never stop the server from starting")
+	return settings.Security.OAuthProviders
 }
 
-// TestGetOAuthProvider_PrefersEnabledEntry pins that a disabled leftover with the
-// same ID never hides the enabled entry, whichever comes first, because goth
-// registers the enabled one.
-func TestGetOAuthProvider_PrefersEnabledEntry(t *testing.T) {
-	t.Parallel()
-
-	disabled := OAuthProviderConfig{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: "old"}
-	enabled := OAuthProviderConfig{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: "new"}
+// TestLoad_ReconcilesSameIDOAuthProviders pins that entries sharing a canonical
+// provider ID collapse to one at load: the first enabled entry, else the first.
+func TestLoad_ReconcilesSameIDOAuthProviders(t *testing.T) {
+	entry := func(provider, clientID string, enabled bool, extra string) string {
+		return fmt.Sprintf(`    - provider: %s
+      enabled: %t
+      clientId: %s
+      clientSecret: secret
+      userId: user@example.com
+%s`, provider, enabled, clientID, extra)
+	}
+	const issuer = "      issuerUrl: https://idp.example.com\n"
 
 	tests := []struct {
-		name      string
-		providers []OAuthProviderConfig
-		wantID    string
-		wantOn    bool
+		name         string
+		entries      string
+		wantProvider string
+		wantClientID string
+		wantEnabled  bool
 	}{
-		{name: "disabled first", providers: []OAuthProviderConfig{disabled, enabled}, wantID: "live", wantOn: true},
-		{name: "enabled first", providers: []OAuthProviderConfig{enabled, disabled}, wantID: "live", wantOn: true},
-		{name: "only disabled", providers: []OAuthProviderConfig{disabled}, wantID: "leftover", wantOn: false},
+		{name: "two enabled, case variant", entries: entry("google", "first", true, "") + entry("Google", "second", true, ""), wantProvider: "google", wantClientID: "first", wantEnabled: true},
+		{name: "two enabled oidc", entries: entry("oidc", "first", true, issuer) + entry("OIDC", "second", true, issuer), wantProvider: "oidc", wantClientID: "first", wantEnabled: true},
+		{name: "disabled first, enabled second", entries: entry("google", "leftover", false, "") + entry("google", "live", true, ""), wantProvider: "google", wantClientID: "live", wantEnabled: true},
+		{name: "two disabled", entries: entry("github", "first", false, "") + entry("GitHub", "second", false, ""), wantProvider: "github", wantClientID: "first", wantEnabled: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			s := &Settings{Security: Security{OAuthProviders: tt.providers}}
+			got := loadWithOAuthProviders(t, tt.entries)
 
-			got := s.GetOAuthProvider("google")
-
-			require.NotNil(t, got)
-			assert.Equal(t, tt.wantID, got.ClientID)
-			assert.Equal(t, tt.wantOn, s.IsOAuthProviderEnabled("google"))
+			require.Len(t, got, 1)
+			assert.Equal(t, tt.wantProvider, got[0].Provider)
+			assert.Equal(t, tt.wantClientID, got[0].ClientID)
+			assert.Equal(t, tt.wantEnabled, got[0].Enabled)
 		})
 	}
+}
+
+// TestReconcileOAuthProviderDuplicates_LogsDroppedEntries pins the dropped entry's
+// index, provider ID and enabled state in the warning, and that no secret is logged.
+func TestReconcileOAuthProviderDuplicates_LogsDroppedEntries(t *testing.T) {
+	logs := logtest.CaptureBufferAt(t, slog.LevelWarn)
+	s := &Settings{Security: Security{OAuthProviders: []OAuthProviderConfig{
+		{Provider: "google", Enabled: false, ClientID: "a", ClientSecret: "dropped-secret"},
+		{Provider: "github", Enabled: true, ClientID: "g", ClientSecret: "kept-secret"},
+		{Provider: "google", Enabled: true, ClientID: "b", ClientSecret: "kept-secret"},
+	}}}
+
+	s.ReconcileOAuthProviderDuplicates()
+
+	require.Len(t, s.Security.OAuthProviders, 2)
+	assert.Equal(t, []string{"github", "google"}, []string{s.Security.OAuthProviders[0].Provider, s.Security.OAuthProviders[1].Provider})
+	out := logs.String()
+	assert.Contains(t, out, "index=0")
+	assert.Contains(t, out, "provider=google")
+	assert.NotContains(t, out, "secret")
+}
+
+// TestGetOAuthProvider pins the lookup by canonical provider ID.
+func TestGetOAuthProvider(t *testing.T) {
+	t.Parallel()
+
+	s := &Settings{Security: Security{OAuthProviders: []OAuthProviderConfig{
+		{Provider: "github", ClientID: "h"},
+		{Provider: "google", ClientID: "g"},
+	}}}
+
+	got := s.GetOAuthProvider("google")
+	require.NotNil(t, got)
+	assert.Equal(t, "g", got.ClientID)
+	assert.Nil(t, s.GetOAuthProvider("kakao"))
 }

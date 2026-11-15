@@ -166,25 +166,13 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			changed: true,
 		},
 		{
-			name: "same-ID enabled and disabled pair unchanged, no restart",
+			name: "providers reordered, no restart",
 			old: []conf.OAuthProviderConfig{
 				provider("google", "cid", "user@example.com", true),
-				provider("google", "leftover", "user@example.com", false),
+				provider("github", "gid", "user@example.com", true),
 			},
 			current: []conf.OAuthProviderConfig{
-				provider("google", "cid", "user@example.com", true),
-				provider("google", "leftover", "user@example.com", false),
-			},
-			changed: false,
-		},
-		{
-			name: "same-ID enabled and disabled pair reordered, no restart",
-			old: []conf.OAuthProviderConfig{
-				provider("google", "cid", "user@example.com", true),
-				provider("google", "leftover", "user@example.com", false),
-			},
-			current: []conf.OAuthProviderConfig{
-				provider("google", "leftover", "user@example.com", false),
+				provider("github", "gid", "user@example.com", true),
 				provider("google", "cid", "user@example.com", true),
 			},
 			changed: false,

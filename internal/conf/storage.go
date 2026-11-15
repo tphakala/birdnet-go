@@ -119,9 +119,11 @@ func Load() (*Settings, error) {
 	}
 
 	// Canonicalize provider IDs so every exact comparison below and in the
-	// validators sees lower-case IDs. Not persisted: the file keeps what the
-	// user wrote until the next save.
+	// validators sees lower-case IDs, then collapse entries that share an ID so
+	// neither the incomplete-feature pass nor validation sees a duplicate. Not
+	// persisted: the file keeps what the user wrote until the next save.
 	settings.NormalizeOAuthProviderIDs()
+	settings.ReconcileOAuthProviderDuplicates()
 
 	// Migrate legacy RTSP URLs to new streams format
 	if settings.MigrateRTSPConfig() {

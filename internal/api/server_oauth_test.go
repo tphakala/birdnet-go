@@ -3,7 +3,9 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/gorilla/sessions"
@@ -382,9 +384,12 @@ func TestHandleOAuthBegin_RegisteredProviderMixedCase(t *testing.T) {
 }
 
 // callbackOAuth runs handleOAuthCallback for the given provider path parameter.
-func callbackOAuth(t *testing.T, s *Server, provider string) *httptest.ResponseRecorder {
+func callbackOAuth(t *testing.T, s *Server, provider string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/auth/"+provider+"/callback", http.NoBody)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
 	c.SetParamNames("provider")
@@ -417,28 +422,36 @@ func stubCompleteUserAuth(t *testing.T, user *goth.User) *[]string {
 // Not parallel: it swaps the settings, gothic.Store and gothic.CompleteUserAuth.
 func TestHandleOAuthCallback_MixedCaseProvider(t *testing.T) {
 	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	// Production keeps sessions in a filesystem store: the cookie carries a session
+	// ID, so the writes of one callback accumulate in the session the begin step
+	// created. Prime such a session and send its cookie with the callback.
 	prevStore := gothic.Store
-	gothic.Store = sessions.NewCookieStore([]byte("test-session-secret-long-enough-32"))
+	gothic.Store = sessions.NewFilesystemStore(t.TempDir(), []byte("test-session-secret-long-enough-32"))
 	t.Cleanup(func() { gothic.Store = prevStore })
+	primeRec := httptest.NewRecorder()
+	require.NoError(t, gothic.StoreInSession("state", "x", httptest.NewRequest(http.MethodGet, "/", http.NoBody), primeRec))
 	seen := stubCompleteUserAuth(t, &goth.User{UserID: "ms-1", Email: "user@example.com"})
 
-	rec := callbackOAuth(t, s, "MicrosoftOnline")
+	rec := callbackOAuth(t, s, "MicrosoftOnline", primeRec.Result().Cookies()...)
 
 	assert.Equal(t, []string{security.ProviderMicrosoft}, *seen)
 	assert.Equal(t, http.StatusFound, rec.Code)
 	assert.Contains(t, rec.Header().Get("Location"), "/ui/dashboard")
 
-	// Every session write sets its own cookie, so look for the one that carries
-	// the active provider key and check its value.
-	var stored []string
-	for _, cookie := range rec.Result().Cookies() {
-		readBack := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	// Apply every Set-Cookie of the response the way a browser would (an HTTPS
+	// URL keeps Secure cookies; a later cookie replaces an earlier one of the same
+	// name) and read the effective session back from the resulting request.
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	callbackURL := &url.URL{Scheme: "https", Host: "birds.example.com", Path: "/"}
+	jar.SetCookies(callbackURL, rec.Result().Cookies())
+	readBack := httptest.NewRequest(http.MethodGet, callbackURL.String(), http.NoBody)
+	for _, cookie := range jar.Cookies(callbackURL) {
 		readBack.AddCookie(cookie)
-		if value, err := gothic.GetFromSession(security.SessionKeyAuthProvider, readBack); err == nil {
-			stored = append(stored, value)
-		}
 	}
-	assert.Equal(t, []string{security.ProviderMicrosoft}, stored)
+	stored, err := gothic.GetFromSession(security.SessionKeyAuthProvider, readBack)
+	require.NoError(t, err)
+	assert.Equal(t, security.ProviderMicrosoft, stored)
 }
 
 // TestHandleOAuthCallback_UnknownProvider pins that an unknown provider in the

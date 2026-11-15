@@ -1294,8 +1294,8 @@ func validateOAuthProvidersArray(updateMap map[string]any) error {
 		return fmt.Errorf("oauthProviders must be an array")
 	}
 
-	// Two enabled entries with the same provider ID are rejected by
-	// conf.ValidateSettings, which runs on the merged settings after this check.
+	// Two entries with the same provider ID are rejected by conf.ValidateSettings,
+	// which runs on the merged settings after this check.
 	for i, item := range providersArray {
 		providerMap, ok := item.(map[string]any)
 		if !ok {
@@ -1788,64 +1788,6 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 	s.Notification.Push.Providers = providersCopy
 }
 
-// restoreOAuthProviderSecrets replaces the redacted secret of each incoming OAuth
-// provider entry with the stored secret of the entry it stands for. Each stored
-// entry donates its secret at most once per save. Entries are matched in three
-// steps, each over all incoming entries in order: provider ID, client ID and
-// enabled state equal; then provider ID and client ID equal (the same entry whose
-// enabled state changed); then, only when exactly one stored entry has the
-// provider ID and it is unclaimed, the provider ID alone (a client ID edit). An
-// entry left unmatched keeps the sentinel, which validateNoRedactedSentinels
-// rejects, instead of receiving a secret that may belong to another entry.
-func restoreOAuthProviderSecrets(stored, incoming []conf.OAuthProviderConfig) {
-	claimed := make([]bool, len(stored))
-
-	// claim gives in the secret of the first unclaimed stored entry with its
-	// provider ID that match accepts, and marks that entry as used.
-	claim := func(in *conf.OAuthProviderConfig, match func(st *conf.OAuthProviderConfig) bool) {
-		for j := range stored {
-			if claimed[j] || stored[j].Provider != in.Provider || !match(&stored[j]) {
-				continue
-			}
-			claimed[j] = true
-			in.ClientSecret = stored[j].ClientSecret
-			return
-		}
-	}
-
-	for step := range 3 {
-		for i := range incoming {
-			in := &incoming[i]
-			if in.ClientSecret != redactedValue {
-				continue
-			}
-			switch step {
-			case 0:
-				claim(in, func(st *conf.OAuthProviderConfig) bool {
-					return st.ClientID == in.ClientID && st.Enabled == in.Enabled
-				})
-			case 1:
-				claim(in, func(st *conf.OAuthProviderConfig) bool { return st.ClientID == in.ClientID })
-			default:
-				if countOAuthProviderID(stored, in.Provider) == 1 {
-					claim(in, func(*conf.OAuthProviderConfig) bool { return true })
-				}
-			}
-		}
-	}
-}
-
-// countOAuthProviderID returns how many entries have the given provider ID.
-func countOAuthProviderID(providers []conf.OAuthProviderConfig, providerID string) int {
-	n := 0
-	for i := range providers {
-		if providers[i].Provider == providerID {
-			n++
-		}
-	}
-	return n
-}
-
 // restoreRedactedSecrets replaces redacted placeholder values in the incoming
 // settings with the current (real) values so that an update round-trip
 // (GET → modify → PUT) does not overwrite real secrets with the placeholder.
@@ -1872,9 +1814,18 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Diagnostics
 	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
 
-	// Array-based OAuth providers: matched by provider ID, client ID and enabled
-	// state, so reordering does not mix up secrets.
-	restoreOAuthProviderSecrets(current.Security.OAuthProviders, incoming.Security.OAuthProviders)
+	// Array-based OAuth providers: match by provider ID, which is unique, to handle
+	// reordering. An incoming ID with no stored entry keeps its sentinel and the
+	// save is rejected below.
+	for i := range incoming.Security.OAuthProviders {
+		in := &incoming.Security.OAuthProviders[i]
+		if in.ClientSecret != redactedValue {
+			continue
+		}
+		if stored := current.GetOAuthProvider(in.Provider); stored != nil {
+			in.ClientSecret = stored.ClientSecret
+		}
+	}
 
 	// MQTT
 	restore(&current.Realtime.MQTT.Password, &incoming.Realtime.MQTT.Password)
@@ -3145,9 +3096,8 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 // Provider registration (the goth providers built from client id/secret and the
 // callback URL derived from the base URL) binds once at startup via
 // security.InitializeGoth and does not hot-reload, so a change needs a restart to
-// take effect. Entries are matched by provider ID and enabled state, so reordering
-// the list alone is not treated as a change, except for several entries that share
-// both. UserID is intentionally excluded:
+// take effect. Entries are matched by provider ID, which is unique, so reordering
+// the list alone is not treated as a change. UserID is intentionally excluded:
 // the per-provider allowlist is read live by the auth check (via currentSettings),
 // so allowlist edits already hot-reload without a restart.
 func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
@@ -3158,9 +3108,7 @@ func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
 	}
 	for i := range oldProviders {
 		oldProvider := &oldProviders[i]
-		// Compare with the entry of the same ID and enabled state, so a same-ID
-		// pair of enabled and disabled entries is compared entry by entry.
-		newProvider := conf.FindOAuthProvider(newProviders, oldProvider.Provider, oldProvider.Enabled)
+		newProvider := currentSettings.GetOAuthProvider(oldProvider.Provider)
 		if newProvider == nil {
 			return true
 		}

@@ -81,28 +81,32 @@ func TestValidateOAuthProvidersArrayRejectsBlankProviderAfterTrim(t *testing.T) 
 	assert.Contains(t, err.Error(), "must be a non-empty string")
 }
 
-// TestUpdateSectionSettingsOAuthProviderDuplicates verifies PATCH applies the same
-// duplicate rule as load and PUT: two enabled entries with the same canonical ID
-// are rejected, an enabled entry with a disabled leftover is not.
-func TestUpdateSectionSettingsOAuthProviderDuplicates(t *testing.T) {
-	e, _, controller := setupTestEnvironment(t)
-	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+// TestUpdateSectionSettingsRejectsSameIDOAuthProviders verifies PATCH rejects two
+// entries with the same canonical ID, enabled or not, like PUT does.
+func TestUpdateSectionSettingsRejectsSameIDOAuthProviders(t *testing.T) {
+	tests := []struct {
+		name           string
+		secondDisabled bool
+	}{
+		{name: "both enabled"},
+		{name: "second disabled", secondDisabled: true},
+	}
 
-	rejected := sendSectionPatch(t, e, controller, "security", map[string]any{
-		"oauthProviders": []any{oauthProviderPayload("google", nil), oauthProviderPayload("Google", nil)},
-	})
-	assert.Equal(t, http.StatusBadRequest, rejected.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, _, controller := setupTestEnvironment(t)
+			controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
 
-	patchSection(t, e, controller, "security", map[string]any{
-		"oauthProviders": []any{
-			oauthProviderPayload("google", map[string]any{"enabled": false}),
-			oauthProviderPayload("Google", nil),
-		},
-	})
-	got := controller.Settings.Load().Security.OAuthProviders
-	require.Len(t, got, 2)
-	assert.False(t, got[0].Enabled)
-	assert.True(t, got[1].Enabled)
+			rec := sendSectionPatch(t, e, controller, "security", map[string]any{
+				"oauthProviders": []any{
+					oauthProviderPayload("google", nil),
+					oauthProviderPayload("Google", map[string]any{"enabled": !tt.secondDisabled}),
+				},
+			})
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
 }
 
 // TestUpdateSettingsKeepsOAuthSecretWhenProviderIDCaseChanges verifies the ID is
@@ -176,67 +180,6 @@ func TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestUpdateSettingsRestoresSecretOfMatchingOAuthEntry verifies the redacted secret
-// is restored from the stored entry with the same ID and enabled state, so a
-// disabled leftover listed first does not donate its secret to the enabled entry,
-// including when both entries share a client ID.
-func TestUpdateSettingsRestoresSecretOfMatchingOAuthEntry(t *testing.T) {
-	tests := []struct {
-		name                         string
-		leftoverClientID, liveClient string
-	}{
-		{name: "different client IDs", leftoverClientID: "leftover", liveClient: "live"},
-		{name: "same client ID", leftoverClientID: "same", liveClient: "same"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e, _, controller := setupTestEnvironment(t)
-			const leftoverSecret = "leftover-secret"
-			controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
-			controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
-				{Provider: "google", Enabled: false, ClientID: tt.leftoverClientID, ClientSecret: leftoverSecret, UserID: testOAuthUserAllowed},
-				{Provider: "google", Enabled: true, ClientID: tt.liveClient, ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
-			}
-
-			s := conf.CloneSettings(controller.Settings.Load())
-			s.Security.OAuthProviders[0].ClientSecret = redactedValue
-			s.Security.OAuthProviders[1].ClientSecret = redactedValue
-			putFullSettings(t, e, controller, s)
-
-			got := controller.Settings.Load().Security.OAuthProviders
-			require.Len(t, got, 2)
-			assert.Equal(t, leftoverSecret, got[0].ClientSecret)
-			assert.Equal(t, testOAuthSecret, got[1].ClientSecret)
-		})
-	}
-}
-
-// TestUpdateSettingsRestoresSecretWhenEnabledFlagsSwap verifies each redacted
-// secret goes back to the entry with the same client ID even when the enabled
-// flags of two same-ID entries change in one save.
-func TestUpdateSettingsRestoresSecretWhenEnabledFlagsSwap(t *testing.T) {
-	e, _, controller := setupTestEnvironment(t)
-	const leftoverSecret = "leftover-secret"
-	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
-	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
-		{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: leftoverSecret, UserID: testOAuthUserAllowed},
-		{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
-	}
-
-	s := conf.CloneSettings(controller.Settings.Load())
-	s.Security.OAuthProviders[0].Enabled = true
-	s.Security.OAuthProviders[0].ClientSecret = redactedValue
-	s.Security.OAuthProviders[1].Enabled = false
-	s.Security.OAuthProviders[1].ClientSecret = redactedValue
-	putFullSettings(t, e, controller, s)
-
-	got := controller.Settings.Load().Security.OAuthProviders
-	require.Len(t, got, 2)
-	assert.Equal(t, leftoverSecret, got[0].ClientSecret)
-	assert.Equal(t, testOAuthSecret, got[1].ClientSecret)
-}
-
 // TestUpdateSettingsRestoresSecretWhenClientIDChanges verifies a redacted secret is
 // still restored from the stored entry with the same provider ID when only the
 // client ID was edited.
@@ -258,45 +201,33 @@ func TestUpdateSettingsRestoresSecretWhenClientIDChanges(t *testing.T) {
 	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
 }
 
-// TestUpdateSettingsLeavesUnclaimedOAuthSentinelRejected verifies a redacted secret
-// is never copied from a stored entry that another incoming entry already claimed,
-// or picked among several stored entries by provider ID alone. The save is rejected
-// instead, because the sentinel stays.
-func TestUpdateSettingsLeavesUnclaimedOAuthSentinelRejected(t *testing.T) {
-	leftover := conf.OAuthProviderConfig{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: "leftover-secret", UserID: testOAuthUserAllowed}
-	live := conf.OAuthProviderConfig{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed}
-	redacted := func(clientID string, enabled bool) conf.OAuthProviderConfig {
-		return conf.OAuthProviderConfig{Provider: "google", Enabled: enabled, ClientID: clientID, ClientSecret: redactedValue, UserID: testOAuthUserAllowed}
+// TestUpdateSettingsRestoresOAuthSecretByProviderID verifies a redacted secret is
+// restored by provider ID when the list is reordered, and that an entry whose ID has
+// no stored counterpart keeps the placeholder, so the save is rejected.
+func TestUpdateSettingsRestoresOAuthSecretByProviderID(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "google", Enabled: true, ClientID: "g", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
+		{Provider: "github", Enabled: true, ClientID: "h", ClientSecret: "github-secret", UserID: testOAuthUserAllowed},
 	}
 
-	tests := []struct {
-		name     string
-		stored   []conf.OAuthProviderConfig
-		incoming []conf.OAuthProviderConfig
-	}{
-		{
-			name:     "added entry does not copy the secret of a stored same-ID entry",
-			stored:   []conf.OAuthProviderConfig{live},
-			incoming: []conf.OAuthProviderConfig{redacted("live", true), redacted("added", false)},
-		},
-		{
-			name:     "client ID edit with an enabled flip next to a leftover is not guessed",
-			stored:   []conf.OAuthProviderConfig{leftover, live},
-			incoming: []conf.OAuthProviderConfig{redacted("leftover", false), redacted("edited", false)},
-		},
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "github", Enabled: true, ClientID: "h", ClientSecret: redactedValue, UserID: testOAuthUserAllowed},
+		{Provider: "google", Enabled: true, ClientID: "g", ClientSecret: redactedValue, UserID: testOAuthUserAllowed},
 	}
+	putFullSettings(t, e, controller, s)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e, _, controller := setupTestEnvironment(t)
-			controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
-			controller.Settings.Load().Security.OAuthProviders = tt.stored
+	got := controller.Settings.Load().Security.OAuthProviders
+	require.Len(t, got, 2)
+	assert.Equal(t, "github-secret", got[0].ClientSecret)
+	assert.Equal(t, testOAuthSecret, got[1].ClientSecret)
 
-			s := conf.CloneSettings(controller.Settings.Load())
-			s.Security.OAuthProviders = tt.incoming
-			rec := sendFullSettings(t, e, controller, s)
-
-			assert.Equal(t, http.StatusBadRequest, rec.Code)
-		})
-	}
+	s = conf.CloneSettings(controller.Settings.Load())
+	s.Security.OAuthProviders = append(s.Security.OAuthProviders, conf.OAuthProviderConfig{
+		Provider: "microsoft", Enabled: false, ClientID: "m", ClientSecret: redactedValue, UserID: testOAuthUserAllowed,
+	})
+	rec := sendFullSettings(t, e, controller, s)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }

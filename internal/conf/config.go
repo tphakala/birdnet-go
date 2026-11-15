@@ -2209,33 +2209,47 @@ func (s *Settings) NormalizeOAuthProviderIDs() {
 	}
 }
 
-// FindOAuthProvider returns the first entry with the given provider ID and enabled
-// state, or the first entry with that ID when none has that state, or nil. A
-// disabled leftover with the same ID as an enabled entry is tolerated by
-// validation, and only the enabled one is registered with goth, so lookups that
-// stand for the registered provider pass enabled=true and never land on the
-// leftover whatever the order.
-func FindOAuthProvider(providers []OAuthProviderConfig, providerID string, enabled bool) *OAuthProviderConfig {
-	var fallback *OAuthProviderConfig
+// ReconcileOAuthProviderDuplicates collapses entries that share a canonical
+// provider ID into one: the first enabled entry, or the first entry when none is
+// enabled. The others are dropped and one warning per dropped entry names its
+// index, provider ID and enabled state (never a secret). It expects IDs already
+// canonical (see NormalizeOAuthProviderIDs), and runs on config load so that a
+// hand-edited file with duplicates still starts. The settings API rejects such
+// duplicates instead (see validateOAuthProviderDuplicates).
+func (s *Settings) ReconcileOAuthProviderDuplicates() {
+	providers := s.Security.OAuthProviders
+	keep := make(map[string]int, len(providers))
 	for i := range providers {
-		if providers[i].Provider != providerID {
-			continue
-		}
-		if providers[i].Enabled == enabled {
-			return &providers[i]
-		}
-		if fallback == nil {
-			fallback = &providers[i]
+		kept, seen := keep[providers[i].Provider]
+		if !seen || (providers[i].Enabled && !providers[kept].Enabled) {
+			keep[providers[i].Provider] = i
 		}
 	}
-	return fallback
+
+	reconciled := make([]OAuthProviderConfig, 0, len(keep))
+	for i := range providers {
+		if keep[providers[i].Provider] == i {
+			reconciled = append(reconciled, providers[i])
+			continue
+		}
+		GetLogger().Warn("Dropped duplicate OAuth provider entry; keeping the first enabled entry for this provider ID",
+			logger.Int("index", i),
+			logger.String("provider", providers[i].Provider),
+			logger.Bool("enabled", providers[i].Enabled))
+	}
+	s.Security.OAuthProviders = reconciled
 }
 
 // GetOAuthProvider returns the OAuth provider configuration for the given provider
-// ID, preferring an enabled entry over a disabled one with the same ID. Returns nil
-// if the provider is not configured.
+// ID, or nil if the provider is not configured. Provider IDs are unique after load
+// and save.
 func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
-	return FindOAuthProvider(s.Security.OAuthProviders, providerID, true)
+	for i := range s.Security.OAuthProviders {
+		if s.Security.OAuthProviders[i].Provider == providerID {
+			return &s.Security.OAuthProviders[i]
+		}
+	}
+	return nil
 }
 
 // IsOAuthProviderEnabled returns true if the specified OAuth provider is enabled.
