@@ -139,6 +139,24 @@ describe('AudioPlayer selection play', () => {
     expect(chain.gain.gain.value).toBeCloseTo(dbToGain(LATER_GAIN_DB));
   });
 
+  it('reuses the graph built by the full play when a selection is played afterwards', async () => {
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await press();
+    expect(mockedAttach).toHaveBeenCalledTimes(1);
+    ctl.element.pause();
+    await dragSelection(container);
+
+    await press();
+
+    expect(ctl.paused).toBe(false);
+    expect(mockedAttach).toHaveBeenCalledTimes(1);
+    // Only a selection play seeks to the selection start.
+    const selectionStartSec = (SELECTION_START_PX / WIDE_CONTAINER_PX) * ctl.element.duration;
+    expect(ctl.element.currentTime).toBeCloseTo(selectionStartSec);
+  });
+
   it('disables the audio settings when the graph cannot attach on a selection play', async () => {
     mockedAttach.mockImplementation(() => null);
     const { container } = mount();
