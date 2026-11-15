@@ -218,6 +218,9 @@
     isLoading = true;
     // Apply Filters (and mount/reset) commit the pending dropdown selection.
     appliedSortOrder = filters.sortOrder;
+    // The commit can restore a different sort (Reset); drop the old sort message so the next
+    // identical sort is a new text for the live region
+    sortStatus = '';
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
     // Commit the search term immediately too, cancelling any pending debounce so
     // a just-typed term is not re-applied a moment later.

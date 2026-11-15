@@ -207,6 +207,27 @@ describe('Species (analytics page) — sortable column headers', () => {
     );
   });
 
+  it('clears the sort announcement when resetting the filters restores the default sort', async () => {
+    const { container } = await renderListView();
+    const countButton = () =>
+      container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX];
+    const countLabel = countButton().textContent.trim();
+    const ascendingMessage = t('dataDisplay.table.sortedAscending', { column: countLabel });
+
+    await fireEvent.click(countButton());
+    expect(screen.getByRole('status')).toHaveTextContent(ascendingMessage);
+
+    await fireEvent.click(screen.getByRole('button', { name: t('analytics.filters.reset') }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+    await waitFor(() => {
+      if (!container.querySelector('table tbody tr')) throw new Error('table not yet rendered');
+    });
+
+    // The same ascending sort again must reach the live region as a new text
+    await fireEvent.click(countButton());
+    expect(screen.getByRole('status')).toHaveTextContent(ascendingMessage);
+  });
+
   it('persists the chosen sort order to localStorage', async () => {
     const { container } = await renderListView();
 
