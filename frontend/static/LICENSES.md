@@ -228,7 +228,7 @@ Source: MIT
 
 ### github.com/markbates/goth
 
-License: https://github.com/tphakala/goth/blob/08c3db6a364a/LICENSE.txt
+License: https://github.com/tphakala/goth/blob/6aa0c19a04c2/LICENSE.txt
 Source: MIT
 
 ### github.com/mattn/go-colorable
