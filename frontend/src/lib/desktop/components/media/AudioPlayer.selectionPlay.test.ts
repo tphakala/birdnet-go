@@ -246,6 +246,22 @@ describe('AudioPlayer selection play', () => {
     expect(ctl.play).not.toHaveBeenCalled();
   });
 
+  it('still plays when a load retry reloads the same clip while the context starts', async () => {
+    const start = holdContextStart();
+    mount();
+    ctl.completeLoad();
+    await settle();
+    await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+
+    ctl.failLoad();
+    await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+    ctl.completeLoad();
+    start();
+    await settle();
+
+    expect(ctl.play).toHaveBeenCalled();
+  });
+
   it('plays once, with the graph, from the selection start when pressed twice while the context starts', async () => {
     const start = holdContextStart();
     const { container } = mount();

@@ -962,6 +962,7 @@
   // bats is turned off (currentSource).
   function swapProcessedSource(url: string) {
     if (!audioElement || audibleBats.active) return;
+    cancelPendingPlay();
     const pos = audioElement.currentTime;
     replaceSource(url);
     audioElement.currentTime = pos;
@@ -1014,6 +1015,8 @@
     }
 
     isProcessing = true;
+    // A play press still waiting for the audio context must not start the old clip.
+    cancelPendingPlay();
     // Pause playback while backend applies filters
     if (isPlaying && audioElement) {
       audioElement.pause();
@@ -1370,7 +1373,6 @@
   // Point the element at a new source. The assignment pauses the element without
   // a 'pause' event, so the playing flag is cleared first.
   function replaceSource(url: string) {
-    cancelPendingPlay();
     if (!audioElement) return;
     markPlaybackStopped();
     audioElement.src = url;
@@ -1594,6 +1596,7 @@
     audibleBatsPendingFraction = frac;
     audibleBatsPendingAutoplay = isPlaying || playRequestedAfterRetry;
     resetRetryState();
+    cancelPendingPlay();
     replaceSource(newSrc);
     audioElement.load();
   }
