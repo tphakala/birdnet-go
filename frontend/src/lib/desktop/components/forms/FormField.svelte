@@ -1,11 +1,9 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { generateId } from '$lib/utils/uuid';
   import type { Validator, ValidationResult } from '$lib/utils/validators';
   import type { Snippet } from 'svelte';
   import { t } from '$lib/i18n';
-
-  // Module-level counter for consistent SSR-safe IDs
-  let fieldCounter = 0;
 
   type FieldType =
     | 'text'
@@ -112,8 +110,8 @@
   let touched = $state(false);
   let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(null);
 
-  // Generate counter suffix once on component creation (not reactive)
-  const fieldIdSuffix = ++fieldCounter;
+  // Unique per instance, so fields whose names are equal still get distinct ids.
+  const fieldIdSuffix = generateId();
 
   // Derived IDs - react to prop changes while maintaining stable suffix
   const fieldId = $derived(id || `field-${name || 'field'}-${fieldIdSuffix}`);
