@@ -166,6 +166,18 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			changed: true,
 		},
 		{
+			name: "providers reordered, no restart",
+			old: []conf.OAuthProviderConfig{
+				provider("google", "cid", "user@example.com", true),
+				provider("github", "gid", "user@example.com", true),
+			},
+			current: []conf.OAuthProviderConfig{
+				provider("github", "gid", "user@example.com", true),
+				provider("google", "cid", "user@example.com", true),
+			},
+			changed: false,
+		},
+		{
 			name:    "enabled toggle requires restart",
 			old:     []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", false)},
 			current: []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", true)},

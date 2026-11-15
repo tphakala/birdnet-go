@@ -248,6 +248,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			return newRejection(err, "Failed to apply settings update", http.StatusBadRequest)
 		}
 
+		// Canonicalize provider IDs before the secret restore matches them by ID.
+		updated.NormalizeOAuthProviderIDs()
+
 		// Restore redacted secret placeholders to their live values so the merge does
 		// not persist the placeholder over a real secret. current is the source of
 		// truth for pre-update secrets (same argument order and ordering as PATCH).
@@ -442,6 +445,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := updateSettingsSection(updated, section, requestBody); err != nil {
 			return newRejection(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 		}
+
+		// Canonicalize provider IDs before the secret restore matches them by ID.
+		updated.NormalizeOAuthProviderIDs()
 
 		// Restore redacted secret fields to their current values so the merge
 		// does not overwrite real secrets with the placeholder. current is the
@@ -1266,6 +1272,7 @@ var validOAuthProviders = map[string]bool{
 	"microsoft": true,
 	"line":      true,
 	"kakao":     true,
+	"oidc":      true,
 }
 
 // getValidOAuthProviderNames returns sorted list of valid provider names for error messages
@@ -1287,56 +1294,38 @@ func validateOAuthProvidersArray(updateMap map[string]any) error {
 		return fmt.Errorf("oauthProviders must be an array")
 	}
 
-	// Track configured providers to detect duplicates
-	configuredProviders := make(map[string]bool)
-
+	// Two entries with the same provider ID are rejected by conf.ValidateSettings,
+	// which runs on the merged settings after this check.
 	for i, item := range providersArray {
-		providerName, err := validateOAuthProviderEntry(item, i, configuredProviders)
-		if err != nil {
+		providerMap, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("oauthProviders[%d] must be an object", i)
+		}
+		if err := validateOAuthProviderName(providerMap, i); err != nil {
 			return err
 		}
-		configuredProviders[providerName] = true
+		if err := validateOAuthProviderEnabled(providerMap, i); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// validateOAuthProviderEntry validates a single OAuth provider entry in the array.
-// Returns the provider name if valid, or an error if validation fails.
-func validateOAuthProviderEntry(item any, index int, configuredProviders map[string]bool) (string, error) {
-	providerMap, ok := item.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("oauthProviders[%d] must be an object", index)
-	}
-
-	providerName, err := validateOAuthProviderName(providerMap, index, configuredProviders)
-	if err != nil {
-		return "", err
-	}
-
-	if err := validateOAuthProviderEnabled(providerMap, index); err != nil {
-		return "", err
-	}
-
-	return providerName, nil
-}
-
-// validateOAuthProviderName validates the provider name field and checks for duplicates.
-func validateOAuthProviderName(providerMap map[string]any, index int, configuredProviders map[string]bool) (string, error) {
+// validateOAuthProviderName validates the provider name field. The ID is trimmed
+// and lower-cased first, the same way it is stored.
+func validateOAuthProviderName(providerMap map[string]any, index int) error {
 	providerName, ok := providerMap["provider"].(string)
-	if !ok || providerName == "" {
-		return "", fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
+	canonical := conf.NormalizeOAuthProviderID(providerName)
+	if !ok || canonical == "" {
+		return fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
 	}
 
-	if !validOAuthProviders[providerName] {
-		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
+	if !validOAuthProviders[canonical] {
+		return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
 	}
 
-	if configuredProviders[providerName] {
-		return "", fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
-	}
-
-	return providerName, nil
+	return nil
 }
 
 // validateOAuthProviderEnabled validates the enabled field and required credentials.
@@ -1825,16 +1814,16 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Diagnostics
 	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
 
-	// Array-based OAuth providers: match by Provider name to handle reordering
+	// Array-based OAuth providers: match by provider ID, which is unique, to handle
+	// reordering. An incoming ID with no stored entry keeps its sentinel and the
+	// save is rejected below.
 	for i := range incoming.Security.OAuthProviders {
-		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
+		in := &incoming.Security.OAuthProviders[i]
+		if in.ClientSecret != redactedValue {
 			continue
 		}
-		for j := range current.Security.OAuthProviders {
-			if current.Security.OAuthProviders[j].Provider == incoming.Security.OAuthProviders[i].Provider {
-				incoming.Security.OAuthProviders[i].ClientSecret = current.Security.OAuthProviders[j].ClientSecret
-				break
-			}
+		if stored := current.GetOAuthProvider(in.Provider); stored != nil {
+			in.ClientSecret = stored.ClientSecret
 		}
 	}
 
@@ -3107,27 +3096,20 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 // Provider registration (the goth providers built from client id/secret and the
 // callback URL derived from the base URL) binds once at startup via
 // security.InitializeGoth and does not hot-reload, so a change needs a restart to
-// take effect. Comparison is keyed by provider ID so reordering the list alone is
-// not treated as a change. UserID is intentionally excluded: the per-provider
-// allowlist is read live by the auth check (via currentSettings), so allowlist
-// edits already hot-reload without a restart.
+// take effect. Entries are matched by provider ID, which is unique, so reordering
+// the list alone is not treated as a change. UserID is intentionally excluded:
+// the per-provider allowlist is read live by the auth check (via currentSettings),
+// so allowlist edits already hot-reload without a restart.
 func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldProviders := oldSettings.Security.OAuthProviders
 	newProviders := currentSettings.Security.OAuthProviders
 	if len(oldProviders) != len(newProviders) {
 		return true
 	}
-	// Keyed by provider ID; duplicate IDs (a malformed config) collapse last-wins,
-	// which is acceptable and fail-safe: a missed change only delays a not-yet-active
-	// provider from registering until the next restart, never grants access.
-	newByID := make(map[string]*conf.OAuthProviderConfig, len(newProviders))
-	for i := range newProviders {
-		newByID[newProviders[i].Provider] = &newProviders[i]
-	}
 	for i := range oldProviders {
 		oldProvider := &oldProviders[i]
-		newProvider, ok := newByID[oldProvider.Provider]
-		if !ok {
+		newProvider := currentSettings.GetOAuthProvider(oldProvider.Provider)
+		if newProvider == nil {
 			return true
 		}
 		if oldProvider.Enabled != newProvider.Enabled ||

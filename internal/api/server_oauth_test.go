@@ -3,7 +3,9 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/gorilla/sessions"
@@ -19,33 +21,34 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
-func TestIsValidOAuthProvider(t *testing.T) {
+func TestCanonicalOAuthProvider(t *testing.T) {
 	t.Parallel()
 
 	s := &Server{}
 
 	tests := []struct {
-		name     string
-		provider string
-		want     bool
+		name         string
+		pathName     string
+		wantConfig   string
+		wantGoth     string
+		wantResolved bool
 	}{
-		{name: "google", provider: security.ProviderGoogle, want: true},
-		{name: "github", provider: security.ProviderGitHub, want: true},
-		{name: "microsoftonline", provider: security.ProviderMicrosoft, want: true},
-		{name: "line", provider: security.ProviderLine, want: true},
-		{name: "kakao", provider: security.ProviderKakao, want: true},
-		{name: "openid-connect", provider: security.ProviderOIDC, want: true},
-		{name: "case insensitive", provider: "Google", want: true},
-		{name: "unknown provider", provider: "facebook", want: false},
-		{name: "empty string", provider: "", want: false},
-		{name: "config name not goth name", provider: "microsoft", want: false},
+		{name: "google", pathName: security.ProviderGoogle, wantConfig: security.ConfigGoogle, wantGoth: security.ProviderGoogle, wantResolved: true},
+		{name: "microsoftonline", pathName: security.ProviderMicrosoft, wantConfig: security.ConfigMicrosoft, wantGoth: security.ProviderMicrosoft, wantResolved: true},
+		{name: "openid-connect", pathName: security.ProviderOIDC, wantConfig: security.ConfigOIDC, wantGoth: security.ProviderOIDC, wantResolved: true},
+		{name: "mixed case microsoft", pathName: "MicrosoftOnline", wantConfig: security.ConfigMicrosoft, wantGoth: security.ProviderMicrosoft, wantResolved: true},
+		{name: "unknown provider", pathName: "facebook"},
+		{name: "empty string", pathName: ""},
+		{name: "config name not goth name", pathName: "microsoft"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := s.isValidOAuthProvider(tt.provider)
-			assert.Equal(t, tt.want, got)
+			configProvider, gothProvider, ok := s.canonicalOAuthProvider(tt.pathName)
+			assert.Equal(t, tt.wantResolved, ok)
+			assert.Equal(t, tt.wantConfig, configProvider)
+			assert.Equal(t, tt.wantGoth, gothProvider)
 		})
 	}
 }
@@ -376,5 +379,90 @@ func TestHandleOAuthBegin_RegisteredProviderMixedCase(t *testing.T) {
 
 	rec := beginOAuth(t, s, "MicrosoftOnline")
 
-	assert.NotEqual(t, http.StatusServiceUnavailable, rec.Code, "a registered provider must not be answered as unavailable")
+	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "login.microsoftonline.com")
+}
+
+// callbackOAuth runs handleOAuthCallback for the given provider path parameter.
+func callbackOAuth(t *testing.T, s *Server, provider string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/auth/"+provider+"/callback", http.NoBody)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	c.SetParamNames("provider")
+	c.SetParamValues(provider)
+	require.NoError(t, s.handleOAuthCallback(c))
+	return rec
+}
+
+// stubCompleteUserAuth replaces gothic.CompleteUserAuth for the test. It records
+// the provider name gothic would resolve for each request.
+func stubCompleteUserAuth(t *testing.T, user *goth.User) *[]string {
+	t.Helper()
+	var seen []string
+	prev := gothic.CompleteUserAuth
+	gothic.CompleteUserAuth = func(_ http.ResponseWriter, req *http.Request) (goth.User, error) {
+		name, err := gothic.GetProviderName(req)
+		if err != nil {
+			return goth.User{}, err
+		}
+		seen = append(seen, name)
+		return *user, nil
+	}
+	t.Cleanup(func() { gothic.CompleteUserAuth = prev })
+	return &seen
+}
+
+// TestHandleOAuthCallback_MixedCaseProvider pins that a callback path whose casing
+// differs from the goth name reaches gothic and the session under the canonical
+// goth name, which the session readers compare exactly.
+// Not parallel: it swaps the settings, gothic.Store and gothic.CompleteUserAuth.
+func TestHandleOAuthCallback_MixedCaseProvider(t *testing.T) {
+	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	// Production keeps sessions in a filesystem store: the cookie carries a session
+	// ID, so the writes of one callback accumulate in the session the begin step
+	// created. Prime such a session and send its cookie with the callback.
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewFilesystemStore(t.TempDir(), []byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+	primeRec := httptest.NewRecorder()
+	require.NoError(t, gothic.StoreInSession("state", "x", httptest.NewRequest(http.MethodGet, "/", http.NoBody), primeRec))
+	seen := stubCompleteUserAuth(t, &goth.User{UserID: "ms-1", Email: "user@example.com"})
+
+	rec := callbackOAuth(t, s, "MicrosoftOnline", primeRec.Result().Cookies()...)
+
+	assert.Equal(t, []string{security.ProviderMicrosoft}, *seen)
+	assert.Equal(t, http.StatusFound, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "/ui/dashboard")
+
+	// Apply every Set-Cookie of the response the way a browser would (an HTTPS
+	// URL keeps Secure cookies; a later cookie replaces an earlier one of the same
+	// name) and read the effective session back from the resulting request.
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	callbackURL := &url.URL{Scheme: "https", Host: "birds.example.com", Path: "/"}
+	jar.SetCookies(callbackURL, rec.Result().Cookies())
+	readBack := httptest.NewRequest(http.MethodGet, callbackURL.String(), http.NoBody)
+	for _, cookie := range jar.Cookies(callbackURL) {
+		readBack.AddCookie(cookie)
+	}
+	stored, err := gothic.GetFromSession(security.SessionKeyAuthProvider, readBack)
+	require.NoError(t, err)
+	assert.Equal(t, security.ProviderMicrosoft, stored)
+}
+
+// TestHandleOAuthCallback_UnknownProvider pins that an unknown provider in the
+// callback path is rejected before gothic runs.
+// Not parallel: it swaps gothic.CompleteUserAuth.
+func TestHandleOAuthCallback_UnknownProvider(t *testing.T) {
+	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	seen := stubCompleteUserAuth(t, &goth.User{})
+
+	rec := callbackOAuth(t, s, "facebook")
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Empty(t, *seen, "gothic must not be called for an unknown provider")
 }

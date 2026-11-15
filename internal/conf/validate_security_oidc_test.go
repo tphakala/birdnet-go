@@ -93,14 +93,15 @@ func TestValidateSecuritySettings_OIDC(t *testing.T) {
 			errMsg:  "duplicate",
 		},
 		{
-			name: "one enabled and one disabled OIDC provider - should pass",
+			name: "one enabled and one disabled OIDC provider - should fail",
 			modify: func(s *Security) {
 				s.OAuthProviders = []OAuthProviderConfig{
 					{Provider: "oidc", Enabled: true, ClientID: "id1", ClientSecret: "secret1", IssuerURL: "https://idp1.example.com"},
 					{Provider: "oidc", Enabled: false, ClientID: "id2", ClientSecret: "secret2", IssuerURL: "https://idp2.example.com"},
 				}
 			},
-			wantErr: false,
+			wantErr: true,
+			errMsg:  "duplicate",
 		},
 		{
 			name: "OIDC with HTTP issuerUrl - should pass with warning",

@@ -33,7 +33,8 @@ const (
 // because the alternative is a server that will not boot and therefore serves no
 // UI in which to fix the provider. The exception is a provider that can still
 // force authentication on while being unable to complete a sign-in; see
-// validateOAuthRedirects and validateOIDCProviders.
+// validateOAuthRedirects and validateOIDCProviders. Two entries with the same
+// provider ID are rejected by validateOAuthProviderDuplicates.
 func validateSecuritySettings(settings *Security) error {
 	// TLS mode validation
 	if err := validateTLSMode(settings); err != nil {
@@ -103,6 +104,13 @@ func validateSecuritySettings(settings *Security) error {
 	// parent key exists in the config file but sessionduration is absent.
 	if settings.SessionDuration <= 0 {
 		settings.SessionDuration = DefaultSessionDuration // 7 days, matches viper default
+	}
+
+	// Reject two entries with the same provider ID, enabled or not, for every
+	// kind. Runs first so a duplicate is always reported with its index, ahead
+	// of any per-entry rule the duplicate also breaks.
+	if err := validateOAuthProviderDuplicates(settings); err != nil {
+		return err
 	}
 
 	// Reject providers that would force authentication on without being able to
@@ -271,14 +279,36 @@ func validateTLSMode(settings *Security) error {
 	return nil
 }
 
+// validateOAuthProviderDuplicates rejects two entries with the same provider ID,
+// enabled or not, for every provider kind: lookups, the secret restore and the
+// restart detector all identify an entry by its provider ID. IDs are canonical
+// (see NormalizeOAuthProviderIDs) by the time this runs. Config load never reaches
+// it with a duplicate, because ReconcileOAuthProviderDuplicates collapses them
+// first; the settings API does, and answers with this error.
+func validateOAuthProviderDuplicates(settings *Security) error {
+	first := make(map[string]int, len(settings.OAuthProviders))
+	for i := range settings.OAuthProviders {
+		provider := &settings.OAuthProviders[i]
+		firstIndex, seen := first[provider.Provider]
+		if !seen {
+			first[provider.Provider] = i
+			continue
+		}
+		return errors.Newf("security.oauthProviders[%d]: duplicate entry for provider %q, already configured at security.oauthProviders[%d]", i, provider.Provider, firstIndex).
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_oauth_provider_duplicates").
+			Context("validation_type", "security-oauth-duplicate").
+			Context("provider", provider.Provider).
+			Build()
+	}
+	return nil
+}
+
 // validateOIDCProviders validates OIDC-specific provider configuration.
 //
-// Only a duplicate among ENABLED entries is fatal on that count: two of those make
-// it ambiguous which one a sign-in would use, because goth registers providers by
-// name and the second silently replaces the first. A disabled second entry never
-// reaches goth (GetEnabledOAuthProviders and initializeProviders both skip it), so
-// refusing to start over a leftover is the failure this whole change exists to
-// remove.
+// Duplicate entries are rejected for every provider kind by
+// validateOAuthProviderDuplicates, which runs first.
 //
 // An unusable issuer URL stays fatal. That is worth spelling out because the rest
 // of this change moves in the other direction. Enabling OIDC is the setting that
@@ -299,18 +329,10 @@ func validateTLSMode(settings *Security) error {
 // deliberately configured, where booting into a locked door is worse than saying
 // which field is wrong.
 func validateOIDCProviders(settings *Security) error {
-	oidcCount := 0
 	for i := range settings.OAuthProviders {
 		provider := &settings.OAuthProviders[i]
 		if provider.Provider != providerOIDC || !provider.Enabled {
 			continue
-		}
-		oidcCount++
-		if oidcCount > 1 {
-			return errors.Newf("only one enabled OIDC provider (provider: %q) is allowed in security.oauthProviders, found duplicate entry", providerOIDC).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "security-oidc-duplicate").
-				Build()
 		}
 		if provider.IssuerURL == "" {
 			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is %q and enabled", providerOIDC).

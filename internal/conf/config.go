@@ -2194,8 +2194,78 @@ type AlertSettings struct {
 	HistoryRetentionDays int `json:"historyRetentionDays" yaml:"history_retention_days" mapstructure:"history_retention_days"` // Days to retain alert history (0 = unlimited)
 }
 
-// GetOAuthProvider returns the OAuth provider configuration for the given provider ID.
-// Returns nil if the provider is not configured.
+// NormalizeOAuthProviderID returns the canonical form of an OAuth provider ID:
+// trimmed and lower case. Provider IDs are compared exactly throughout the
+// settings code, so every ingestion point stores them in this form.
+func NormalizeOAuthProviderID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// NormalizeOAuthProviderIDs rewrites every Security.OAuthProviders[i].Provider
+// to its canonical form. It is idempotent and never drops or disables an entry.
+func (s *Settings) NormalizeOAuthProviderIDs() {
+	for i := range s.Security.OAuthProviders {
+		s.Security.OAuthProviders[i].Provider = NormalizeOAuthProviderID(s.Security.OAuthProviders[i].Provider)
+	}
+}
+
+// ReconcileOAuthProviderDuplicates collapses entries that share a canonical
+// provider ID into one: the first enabled entry that has credentials, else the
+// first entry that has credentials, else the first enabled entry, else the first
+// entry. Preferring credentials keeps a working or disabled-but-complete entry from
+// losing to an unfinished one that incomplete-feature normalisation would disable
+// afterwards. The others are dropped and one warning per dropped
+// entry names its index, provider ID and enabled state (never a secret). It
+// expects IDs already canonical (see NormalizeOAuthProviderIDs), and runs on
+// config load so that a hand-edited file with duplicates still starts. The settings
+// API rejects such duplicates instead (see validateOAuthProviderDuplicates).
+func (s *Settings) ReconcileOAuthProviderDuplicates() {
+	providers := s.Security.OAuthProviders
+	// Preference of an entry when several share a provider ID, highest first.
+	const (
+		rankOther = iota
+		rankEnabled
+		rankComplete
+		rankEnabledComplete
+	)
+	rank := func(p *OAuthProviderConfig) int {
+		complete := p.ClientID != "" && p.ClientSecret != ""
+		switch {
+		case p.Enabled && complete:
+			return rankEnabledComplete
+		case complete:
+			return rankComplete
+		case p.Enabled:
+			return rankEnabled
+		default:
+			return rankOther
+		}
+	}
+	keep := make(map[string]int, len(providers))
+	for i := range providers {
+		kept, seen := keep[providers[i].Provider]
+		if !seen || rank(&providers[i]) > rank(&providers[kept]) {
+			keep[providers[i].Provider] = i
+		}
+	}
+
+	reconciled := make([]OAuthProviderConfig, 0, len(keep))
+	for i := range providers {
+		if keep[providers[i].Provider] == i {
+			reconciled = append(reconciled, providers[i])
+			continue
+		}
+		GetLogger().Warn("Dropped duplicate OAuth provider entry; keeping the best entry for this provider ID",
+			logger.Int("index", i),
+			logger.String("provider", providers[i].Provider),
+			logger.Bool("enabled", providers[i].Enabled))
+	}
+	s.Security.OAuthProviders = reconciled
+}
+
+// GetOAuthProvider returns the OAuth provider configuration for the given provider
+// ID, or nil if the provider is not configured. Provider IDs are unique after load
+// and save.
 func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
 	for i := range s.Security.OAuthProviders {
 		if s.Security.OAuthProviders[i].Provider == providerID {

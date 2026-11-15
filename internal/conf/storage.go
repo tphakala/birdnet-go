@@ -239,6 +239,13 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Canonicalize provider IDs and collapse entries that share one, so neither the
+	// incomplete-feature pass nor validation sees a duplicate. This runs after the
+	// last persistMigration on purpose: the file keeps what the user wrote, dropped
+	// entries and their credentials included, until the next save.
+	settings.NormalizeOAuthProviderIDs()
+	settings.ReconcileOAuthProviderDuplicates()
+
 	// Resolve features that are switched on but were never configured, before the
 	// validators get to see them. A config file can age into that state across
 	// upgrades, and rejecting the file leaves no UI in which to correct it, so
