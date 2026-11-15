@@ -102,6 +102,25 @@ describe('createFocusReturn', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it.each([
+      { tabindex: '-1', name: 'a tabindex=-1 wrapper' },
+      { tabindex: '0', name: 'a tabindex=0 wrapper' },
+    ])('leaves focus alone after a press on plain text inside $name', async ({ tabindex }) => {
+      setup();
+      const wrapper = document.createElement('div');
+      wrapper.tabIndex = Number(tabindex);
+      const text = document.createElement('p');
+      wrapper.appendChild(text);
+      container.appendChild(wrapper);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      text.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('runs the fallback after a press on a button the browser did not focus', async () => {
       setup();
       const { track } = createFocusReturn(() => [outside]);
