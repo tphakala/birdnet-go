@@ -1081,8 +1081,8 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "OAuth provider not available")
 	}
 
-	// Reject an enabled provider that goth does not know (OIDC discovery failed,
-	// or the provider was enabled after startup) instead of letting gothic answer
+	// Reject an enabled provider that goth does not know (OIDC discovery failed
+	// or has not finished) instead of letting gothic answer
 	// with its raw error. The cause is for the security log only; the visitor
 	// gets one fixed sentence.
 	// The registry matches goth names exactly, so look the provider up by its

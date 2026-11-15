@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	gothGoogle "github.com/markbates/goth/providers/google"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -22,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
@@ -1386,21 +1388,26 @@ func mockOIDCDiscovery(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.well-known/openid-configuration" {
-			w.Header().Set("Content-Type", "application/json")
-			baseURL := "http://" + r.Host
-			_, _ = w.Write([]byte(`{
-				"issuer": "` + baseURL + `",
-				"authorization_endpoint": "` + baseURL + `/authorize",
-				"token_endpoint": "` + baseURL + `/token",
-				"userinfo_endpoint": "` + baseURL + `/userinfo",
-				"jwks_uri": "` + baseURL + `/jwks"
-			}`))
+			writeOIDCDiscovery(w, r)
 			return
 		}
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(server.Close)
 	return server
+}
+
+// writeOIDCDiscovery writes a minimal OIDC discovery document for the request host.
+func writeOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	baseURL := "http://" + r.Host
+	_, _ = w.Write([]byte(`{
+		"issuer": "` + baseURL + `",
+		"authorization_endpoint": "` + baseURL + `/authorize",
+		"token_endpoint": "` + baseURL + `/token",
+		"userinfo_endpoint": "` + baseURL + `/userinfo",
+		"jwks_uri": "` + baseURL + `/jwks"
+	}`))
 }
 
 func TestInitializeProviders_OIDC_Success(t *testing.T) {
@@ -1430,7 +1437,7 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 		},
 	}
 
-	initializeProviders(settings)
+	<-registerProviders(t, settings)
 
 	providers := goth.GetProviders()
 	provider, ok := providers[ProviderOIDC]
@@ -1442,28 +1449,46 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 		"a successful registration must clear the recorded discovery failure")
 }
 
-// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry,
-// then waits for their goroutines to exit so that a test's cleanups (closing its
-// logger, clearing goth providers) cannot race with a retry still running.
-// Test-only helper for resetting OIDC retry state between tests. Production reaps
-// these on shutdown via cancelAllOIDCRetriesLocked (shutdownOIDCRetries); there is
-// no settings-reload path that rebuilds providers at runtime, so this wrapper lives
-// with the tests rather than in the production binary.
-func cancelAllOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	cancelAllOIDCRetriesLocked()
-	oidcRetryCancelMu.Unlock()
-	oidcRetryGoroutines.Wait()
+// shutdownOIDCRetries shuts down discovery for the current server instance, as
+// its shutdown watcher does when the server context ends.
+func shutdownOIDCRetries() {
+	oidcMu.Lock()
+	epoch := oidcEnableEpoch
+	oidcMu.Unlock()
+	shutdownOIDCRetriesFor(epoch)
+}
+
+// registerProviders runs a registration pass for settings and returns the done
+// channel of its OIDC discovery goroutine (nil when none started). Its cleanup
+// supersedes the pass with an empty one, waits for the goroutine and resets the
+// process-global registry and failure slot, so no goroutine outlives its test.
+func registerProviders(t *testing.T, settings *conf.Settings) <-chan struct{} {
+	t.Helper()
+	// A prior test's server shutdown may have disabled discovery.
+	enableOIDCRetries()
+	done := initializeProviders(settings)
+	t.Cleanup(func() { resetProviders(t, done) })
+	return done
+}
+
+// resetProviders supersedes the current registration with an empty one and waits
+// for the given discovery goroutine to exit.
+func resetProviders(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	initializeProviders(&conf.Settings{})
+	if done != nil {
+		testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout, "OIDC discovery goroutine did not exit after it was superseded")
+	}
+	// Every discovery goroutine, not only the one handed in, must be gone before
+	// the logger and the registry are reset.
+	oidcDiscoveryGoroutines.Wait()
+	goth.ClearProviders()
+	clearOIDCDiscoveryFailure()
 }
 
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
-	t.Cleanup(clearOIDCDiscoveryFailure)
-	// A prior test's server shutdown may have disabled retries; re-enable so the
-	// discovery-failure path actually starts a background retry.
-	enableOIDCRetries()
-	t.Cleanup(cancelAllOIDCRetries)
 
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -1483,9 +1508,11 @@ func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 		},
 	}
 
-	// Should not panic; just log error and skip
-	initializeProviders(settings)
+	// Discovery runs in the background; the retry window outlasts the test, so
+	// the channel is not awaited here.
+	registerProviders(t, settings)
 
+	requireOIDCFailureRecorded(t)
 	_, err := goth.GetProvider(ProviderOIDC)
 	require.Error(t, err, "OIDC provider should not be registered when discovery fails")
 }
@@ -1513,7 +1540,7 @@ func TestInitializeProviders_OIDC_DefaultScopes(t *testing.T) {
 		},
 	}
 
-	initializeProviders(settings)
+	<-registerProviders(t, settings)
 
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]
@@ -1544,7 +1571,7 @@ func TestInitializeProviders_OIDC_CustomScopesWithoutOpenID(t *testing.T) {
 		},
 	}
 
-	initializeProviders(settings)
+	<-registerProviders(t, settings)
 
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]
@@ -1579,85 +1606,62 @@ func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
 	assert.False(t, ok, "Disabled OIDC provider should not be registered")
 }
 
-func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
+// testOIDCPolicy is a retry policy fast enough for tests.
+var testOIDCPolicy = oidcRetryPolicy{
+	initialBackoff: 20 * time.Millisecond,
+	maxBackoff:     50 * time.Millisecond,
+	maxDuration:    30 * time.Second,
+}
+
+// beginDiscoveryForTest starts a registration generation with no providers and
+// returns the context and generation of its discovery goroutine, so a test can
+// drive startOIDCDiscovery directly. Its cleanup supersedes the generation.
+func beginDiscoveryForTest(t *testing.T) (ctx context.Context, gen uint64) {
+	t.Helper()
+	enableOIDCRetries()
+	ctx, gen, start := beginProviderRegistration(nil, testOIDCRegistration("http://begin.test"))
+	require.True(t, start, "discovery should be allowed to start")
+	t.Cleanup(func() { resetProviders(t, nil) })
+	return ctx, gen
+}
+
+func testOIDCRegistration(issuerURL string) *oidcRegistration {
+	return &oidcRegistration{
+		issuerURL:    issuerURL,
+		discoveryURL: oidcDiscoveryURL(issuerURL),
+		clientID:     "test-client",
+		clientSecret: "test-secret",
+		redirectURI:  "http://localhost/auth/openid-connect/callback",
+		scopes:       []string{"openid", "profile", "email"},
+	}
+}
+
+func TestStartOIDCDiscovery_SucceedsOnRetry(t *testing.T) {
 	logs := useSplitLogFiles(t)
-	goth.ClearProviders()
-	t.Cleanup(goth.ClearProviders)
-	t.Cleanup(clearOIDCDiscoveryFailure)
 
-	// Start a server that fails the first discovery request, then succeeds.
-	// Use a sync.Once to ensure exactly the first /.well-known request fails.
-	// The doneCh channel is closed after goth.UseProviders is called by the retry goroutine,
-	// providing a proper synchronization point for reading the goth providers map.
-	var failOnce sync.Once
-	var firstRequestFailed atomic.Bool
-
-	// Patch: wrap the success path to signal completion after UseProviders runs.
-	// We detect success by counting successful discovery responses from the server.
-	var successCount atomic.Int32
-
+	// A server that fails the first discovery request, then succeeds.
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			shouldFail := false
-			failOnce.Do(func() {
-				shouldFail = true
-				firstRequestFailed.Store(true)
-			})
-			if shouldFail {
-				http.Error(w, "not ready", http.StatusServiceUnavailable)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			baseURL := "http://" + r.Host
-			_, _ = w.Write([]byte(`{
-				"issuer": "` + baseURL + `",
-				"authorization_endpoint": "` + baseURL + `/authorize",
-				"token_endpoint": "` + baseURL + `/token",
-				"userinfo_endpoint": "` + baseURL + `/userinfo",
-				"jwks_uri": "` + baseURL + `/jwks"
-			}`))
-			successCount.Add(1)
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
 			return
 		}
-		http.NotFound(w, r)
+		if requests.Add(1) == 1 {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		writeOIDCDiscovery(w, r)
 	}))
 	t.Cleanup(server.Close)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
+	ctx, gen := beginDiscoveryForTest(t)
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(server.URL), testOIDCPolicy)
 
-	config := conf.OAuthProviderConfig{
-		Provider:     "oidc",
-		Enabled:      true,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		IssuerURL:    server.URL,
-		UserID:       "user@example.com",
-	}
-
-	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"}, errors.NewStd("initial discovery failure"))
-
-	// Wait for the server to have served a successful discovery response.
-	// We verify via the server-side counter rather than reading goth's providers map
-	// with goth.GetProviders, which returns the global map without taking the lock
-	// that UseProviders holds and would trigger the race detector (GetProvider does
-	// lock). The successful response proves openidConnect.New() succeeded
-	// and goth.UseProviders() was called.
-	require.Eventually(t, func() bool {
-		return successCount.Load() > 0
-	}, 25*time.Second, 500*time.Millisecond, "OIDC discovery retry should eventually succeed")
-
-	assert.True(t, firstRequestFailed.Load(), "first discovery request should have failed to verify retry behavior")
-
-	// The first attempt failed and recorded a failure; the success must clear it.
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("OIDC retry goroutine did not exit after registering the provider")
-	}
-	goth.ClearProviders()
-	require.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
-		"a successful retry must clear the recorded discovery failure")
+	testutil.WaitForChannel(t, done, testutil.LongTestTimeout, "OIDC discovery goroutine did not exit after registering the provider")
+	assert.GreaterOrEqual(t, requests.Load(), int32(2), "the first discovery request failed, so a retry must have run")
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err, "the retry must register the provider")
+	assert.Nil(t, lastOIDCDiscoveryErr.Load(), "a successful retry must clear the recorded discovery failure")
 	// The late registration must reach the console and main log, not only the security log.
 	assert.Contains(t, logs.main(), "OIDC provider registered after background retry")
 	assert.Contains(t, logs.main(), "security.oidc")
@@ -1665,136 +1669,123 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 	assert.Contains(t, logs.security(), "OIDC provider registered after background retry")
 }
 
-func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
-	goth.ClearProviders()
-	t.Cleanup(goth.ClearProviders)
+func TestStartOIDCDiscovery_CanceledByContext(t *testing.T) {
+	// The first attempt is held in flight while the context is cancelled, then
+	// answered with a failure that must not be recorded.
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseRequest := func() { releaseOnce.Do(func() { close(release) }) }
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entered <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(releaseRequest)
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, gen := beginDiscoveryForTest(t)
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(server.URL), testOIDCPolicy)
 
-	config := conf.OAuthProviderConfig{
-		Provider:     "oidc",
-		Enabled:      true,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		IssuerURL:    "http://unreachable.invalid:1",
-		UserID:       "user@example.com",
-	}
-
-	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"}, errors.NewStd("initial discovery failure"))
-
-	// Cancel immediately; goroutine is waiting in time.After(5s) and will
-	// see ctx.Done() on the next select iteration without ever attempting discovery
+	testutil.WaitForChannel(t, entered, testutil.DefaultTestTimeout, "the first discovery attempt did not start")
 	cancel()
+	releaseRequest()
 
-	// Wait deterministically for the goroutine to exit
-	select {
-	case <-done:
-		// Goroutine exited; safe to read goth's map without races
-	case <-time.After(5 * time.Second):
-		t.Fatal("OIDC retry goroutine did not exit after context cancellation")
+	testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout, "OIDC discovery goroutine did not exit after context cancellation")
+
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.Error(t, err, "OIDC provider should not be registered after cancel")
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a cancelled attempt is not a discovery failure")
+}
+
+// TestOIDCDiscovery_ShutdownSupersedesInFlightAttempt pins the outcome of a
+// shutdown while an attempt is in flight: whether the attempt succeeds or fails
+// after shutdown, nothing is registered and no failure is recorded. The goroutine
+// stops at the cancelled context before it commits; the generation check inside
+// the commit is pinned separately by TestFinishOIDCDiscovery_StaleGenerationWritesNothing.
+func TestOIDCDiscovery_ShutdownSupersedesInFlightAttempt(t *testing.T) {
+	tests := []struct {
+		name         string
+		lateSucceeds bool
+	}{
+		{name: "late success", lateSucceeds: true},
+		{name: "late failure", lateSucceeds: false},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { enableOIDCRetries() })
+			idp := newGatedIDP(t, tt.lateSucceeds)
+			done := idp.registerProviders(t, oidcSettings(idp.URL))
+			idp.waitEntered(t)
 
-	providers := goth.GetProviders()
-	_, ok := providers[ProviderOIDC]
-	assert.False(t, ok, "OIDC provider should not be registered after cancel")
-}
+			shutdownOIDCRetries()
+			idp.release()
+			waitDone(t, done)
 
-func TestCancelOIDCRetry(t *testing.T) {
-	// The retry map and disabled flag are package-global shared state; start
-	// enabled (a prior test's server shutdown may have disabled retries) and
-	// clean up afterwards.
-	enableOIDCRetries()
-	t.Cleanup(cancelAllOIDCRetries)
-
-	// cancelAllOIDCRetries must be safe to call when no retry is running.
-	cancelAllOIDCRetries()
-
-	// Set a cancel function for an issuer and verify cancelAllOIDCRetries calls it.
-	const issuer = "https://issuer.example/single"
-	ctx, cancel := context.WithCancel(t.Context())
-	require.True(t, setOIDCRetryCancel(issuer, cancel), "retry should register while enabled")
-
-	cancelAllOIDCRetries()
-
-	select {
-	case <-ctx.Done():
-		// Expected
-	default:
-		t.Error("expected context to be canceled")
+			_, err := goth.GetProvider(ProviderOIDC)
+			require.Error(t, err, "an attempt that finishes after shutdown must not register the provider")
+			require.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+				"an attempt that finishes after shutdown must not record a failure")
+		})
 	}
 }
 
-// TestOIDCRetryCancel_PerIssuer is the regression test for the per-issuer OIDC
-// retry fix: with a single
-// package-global cancel func, initializing a second OIDC provider cancelled the
-// first provider's retry. Per-issuer keying must keep each provider's retry
-// independent, and cancelAllOIDCRetries must cancel every outstanding retry.
-func TestOIDCRetryCancel_PerIssuer(t *testing.T) {
-	// Start from a clean slate; earlier tests may have left entries behind or
-	// disabled retries via a server shutdown.
-	enableOIDCRetries()
-	t.Cleanup(cancelAllOIDCRetries)
-	cancelAllOIDCRetries()
+// TestOIDCDiscovery_ShutdownForgetsActiveRegistration pins that shutdown forgets
+// the OIDC registration of the current generation: after a new server instance
+// re-enables discovery, a pass with the same OIDC settings starts discovery
+// instead of treating the shut down attempt as still running.
+func TestOIDCDiscovery_ShutdownForgetsActiveRegistration(t *testing.T) {
+	t.Cleanup(func() { enableOIDCRetries() })
+	idp := newGatedIDP(t, true)
+	settings := oidcSettings(idp.URL)
+	done := idp.registerProviders(t, settings)
+	idp.waitEntered(t)
 
-	const issuerA = "https://issuer-a.example"
-	const issuerB = "https://issuer-b.example"
-
-	ctxA, cancelA := context.WithCancel(t.Context())
-	ctxB, cancelB := context.WithCancel(t.Context())
-
-	// Register the first provider's retry, then the second's. Under the old
-	// single-global design, registering B cancelled A. It must not now.
-	require.True(t, setOIDCRetryCancel(issuerA, cancelA), "issuer A retry should register")
-	require.True(t, setOIDCRetryCancel(issuerB, cancelB), "issuer B retry should register")
-
-	require.NoError(t, ctxA.Err(), "issuer A retry must survive issuer B registration")
-	require.NoError(t, ctxB.Err(), "issuer B retry must be active")
-
-	// Re-registering the same issuer cancels and replaces only that issuer's
-	// prior retry, leaving the other issuer untouched.
-	ctxB2, cancelB2 := context.WithCancel(t.Context())
-	require.True(t, setOIDCRetryCancel(issuerB, cancelB2), "issuer B retry should re-register")
-	require.Error(t, ctxB.Err(), "prior issuer B retry must be cancelled when replaced")
-	require.NoError(t, ctxB2.Err(), "replacement issuer B retry must be active")
-	require.NoError(t, ctxA.Err(), "issuer A must remain active when issuer B is replaced")
-
-	// cancelAllOIDCRetries cancels every remaining retry.
-	cancelAllOIDCRetries()
-	require.Error(t, ctxA.Err(), "cancelAllOIDCRetries must cancel issuer A")
-	assert.Error(t, ctxB2.Err(), "cancelAllOIDCRetries must cancel the replacement retry")
-}
-
-// TestOIDCRetry_DisabledAfterShutdown verifies that once shutdown has begun no
-// new OIDC discovery retry can start, closing the race where a late provider
-// (re)initialization would spawn a goroutine that outlives the server.
-func TestOIDCRetry_DisabledAfterShutdown(t *testing.T) {
-	// Restore enabled state for any later tests sharing this package-global.
-	t.Cleanup(enableOIDCRetries)
-	t.Cleanup(cancelAllOIDCRetries)
-	enableOIDCRetries()
-
-	const issuer = "https://issuer.example/shutdown"
-
-	// While enabled, a retry registers and stays active.
-	ctx1, cancel1 := context.WithCancel(t.Context())
-	require.True(t, setOIDCRetryCancel(issuer, cancel1), "retry should register while enabled")
-	require.NoError(t, ctx1.Err(), "registered retry must stay active")
-
-	// Shutdown cancels in-flight retries and blocks new ones.
 	shutdownOIDCRetries()
-	require.Error(t, ctx1.Err(), "shutdown must cancel the in-flight retry")
+	idp.release()
+	waitDone(t, done)
 
-	// A registration after shutdown is refused and its context is cancelled,
-	// so initializeOIDCProvider will not start the goroutine.
-	ctx2, cancel2 := context.WithCancel(t.Context())
-	require.False(t, setOIDCRetryCancel(issuer, cancel2), "retry must be refused after shutdown")
-	require.Error(t, ctx2.Err(), "refused retry's context must be cancelled")
-
-	// A fresh server instance re-enables retries.
 	enableOIDCRetries()
-	_, cancel3 := context.WithCancel(t.Context())
-	t.Cleanup(cancel3)
-	require.True(t, setOIDCRetryCancel(issuer, cancel3), "retry should register again after re-enable")
+	restarted := initializeProviders(settings)
+	require.NotNil(t, restarted, "the same OIDC settings after a restart must start discovery")
+	waitDone(t, restarted)
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err, "the restarted discovery must register the provider")
+}
+
+// TestOIDCDiscovery_DisabledAfterShutdown verifies that once shutdown has begun
+// no new OIDC discovery can start, closing the race where a late provider
+// (re)registration would spawn a goroutine that outlives the server.
+func TestOIDCDiscovery_DisabledAfterShutdown(t *testing.T) {
+	t.Cleanup(func() { enableOIDCRetries() })
+	idp := mockOIDCDiscovery(t)
+	settings := &conf.Settings{Security: conf.Security{
+		Host: "localhost",
+		OAuthProviders: []conf.OAuthProviderConfig{{
+			Provider: ConfigOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: idp.URL,
+		}},
+	}}
+
+	// While enabled, a pass starts discovery.
+	done := registerProviders(t, settings)
+	require.NotNil(t, done, "a pass must start discovery while enabled")
+	<-done
+
+	// Shutdown blocks new discovery.
+	shutdownOIDCRetries()
+	assert.Nil(t, initializeProviders(settings), "a pass after shutdown must not start discovery")
+
+	// A fresh server instance re-enables discovery.
+	enableOIDCRetries()
+	done = initializeProviders(settings)
+	require.NotNil(t, done, "a pass after re-enable must start discovery")
+	<-done
 }
 
 // TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader verifies the automatic
@@ -2333,4 +2324,110 @@ func TestListedProxyNoticeSkipsUnlistedPeers(t *testing.T) {
 	_, noted := server.throttledMessages[listedProxyUnverifiedLogKey]
 	server.mutex.RUnlock()
 	assert.False(t, noted, "an unlisted peer must not be reported as a trusted proxy")
+}
+
+// providerSettings builds settings with the given OAuth providers and base URL.
+func providerSettings(baseURL string, providers ...conf.OAuthProviderConfig) *conf.Settings {
+	return &conf.Settings{Security: conf.Security{BaseURL: baseURL, OAuthProviders: providers}}
+}
+
+func TestReloadOAuthProviders_RegistryFollowsSettings(t *testing.T) {
+	google := func(secret string, enabled bool) conf.OAuthProviderConfig {
+		return conf.OAuthProviderConfig{Provider: ConfigGoogle, Enabled: enabled, ClientID: "g-id", ClientSecret: secret}
+	}
+	githubCfg := conf.OAuthProviderConfig{Provider: ConfigGitHub, Enabled: true, ClientID: "h-id", ClientSecret: "h-secret"}
+
+	type want struct {
+		google, github bool
+		googleSecret   string
+		googleCallback string
+	}
+	steps := []struct {
+		name     string
+		settings *conf.Settings
+		want     want
+	}{
+		{name: "enable Google after an empty start", settings: providerSettings("https://a.example", google("s1", true)),
+			want: want{google: true, googleSecret: "s1", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "change the client secret", settings: providerSettings("https://a.example", google("s2", true)),
+			want: want{google: true, googleSecret: "s2", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "add GitHub", settings: providerSettings("https://a.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "disable Google", settings: providerSettings("https://a.example", google("s2", false), githubCfg),
+			want: want{github: true}},
+		{name: "re-enable Google", settings: providerSettings("https://a.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "remove Google, GitHub stays", settings: providerSettings("https://a.example", githubCfg),
+			want: want{github: true}},
+		{name: "change the base URL", settings: providerSettings("https://b.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://b.example/auth/google/callback"}},
+		{name: "the same settings twice", settings: providerSettings("https://b.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://b.example/auth/google/callback"}},
+	}
+
+	enableOIDCRetries()
+	t.Cleanup(func() { resetProviders(t, nil) })
+	for _, step := range steps {
+		ReloadOAuthProviders(step.settings)
+
+		gp, err := goth.GetProvider(ProviderGoogle)
+		if !step.want.google {
+			require.Error(t, err, "%s: Google must not stay registered", step.name)
+		} else {
+			require.NoError(t, err, step.name)
+			g, ok := gp.(*gothGoogle.Provider)
+			require.True(t, ok, step.name)
+			assert.Equal(t, step.want.googleSecret, g.Secret, step.name)
+			assert.Equal(t, step.want.googleCallback, g.CallbackURL, step.name)
+		}
+		_, err = goth.GetProvider(ProviderGitHub)
+		if step.want.github {
+			require.NoError(t, err, step.name)
+		} else {
+			require.Error(t, err, "%s: GitHub must not be registered", step.name)
+		}
+	}
+}
+
+func TestReloadOAuthProviders_NilSettings(t *testing.T) {
+	assert.NotPanics(t, func() { ReloadOAuthProviders(nil) })
+}
+
+func TestReloadOAuthProviders_OIDCIssuerChange(t *testing.T) {
+	issuerA := mockOIDCDiscovery(t)
+	issuerC := mockOIDCDiscovery(t)
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(failing.Close)
+
+	oidc := func(issuer string) *conf.Settings {
+		return providerSettings("https://bng.example", conf.OAuthProviderConfig{
+			Provider: ConfigOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: issuer,
+		})
+	}
+	authEndpoint := func(t *testing.T) string {
+		t.Helper()
+		p, err := goth.GetProvider(ProviderOIDC)
+		require.NoError(t, err)
+		return p.(*pkceOIDCProvider).OpenIDConfig.AuthEndpoint
+	}
+
+	// Identity provider A registers.
+	waitDone(t, registerProviders(t, oidc(issuerA.URL)))
+	require.Equal(t, issuerA.URL+"/authorize", authEndpoint(t))
+
+	// Issuer B answers 503: A's registration is gone at once and the failure names B.
+	done := registerProviders(t, oidc(failing.URL))
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.Error(t, err, "the registration of the old issuer must be gone right after the pass")
+	require.Error(t, ProviderRegistrationError(ProviderOIDC))
+	requireOIDCFailureRecorded(t)
+	assert.Contains(t, ProviderRegistrationError(ProviderOIDC).Error(), failing.URL+"/.well-known/openid-configuration")
+
+	// A working issuer C replaces B, and the recorded failure of B is reset.
+	waitDone(t, registerProviders(t, oidc(issuerC.URL)))
+	waitDone(t, done)
+	assert.Equal(t, issuerC.URL+"/authorize", authEndpoint(t))
+	require.NoError(t, ProviderRegistrationError(ProviderOIDC))
 }

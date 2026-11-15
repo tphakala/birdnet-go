@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gopkg.in/yaml.v3"
@@ -2355,7 +2356,6 @@ const (
 	reasonWebserverRestart = "restart.reasons.webserver"
 	reasonDatabaseRestart  = "restart.reasons.database"
 	reasonLoggingRestart   = "restart.reasons.logging"
-	reasonOAuthRestart     = "restart.reasons.oauth"
 )
 
 // settingsChangeChecks defines the settings change detectors that dispatch an
@@ -2417,7 +2417,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},
-	{"OAuth providers", "", oauthProvidersChanged, "Authentication provider settings changed. Restart required to apply.", notification.MsgSettingsOauthRestart, ToastTypeWarning, toastDurationExtended},
+	{"OAuth providers", "", oauthProvidersChanged, "Updating authentication providers...", notification.MsgSettingsReconfiguringOauthProviders, ToastTypeInfo, toastDurationMedium},
 	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, ToastTypeWarning, toastDurationExtended},
 	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, ToastTypeWarning, toastDurationExtended},
 	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", ToastTypeInfo, toastDurationShort},
@@ -2433,16 +2433,30 @@ var settingsChangeChecks = []settingsChangeCheck{
 // above; settings_restart_test.go cross-validates these keys against the table
 // names and against the hot-reload registry's `restart` category.
 var restartRequiringChecks = map[string]string{
-	"Web server":      reasonWebserverRestart,
-	"OAuth providers": reasonOAuthRestart,
-	"Database":        reasonDatabaseRestart,
-	"Logging":         reasonLoggingRestart,
+	"Web server": reasonWebserverRestart,
+	"Database":   reasonDatabaseRestart,
+	"Logging":    reasonLoggingRestart,
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
 func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Settings) error {
 	var reconfigActions []string
 	var restartReasons []string
+
+	// Re-register the OAuth providers first, before the table below and the
+	// fallible audio step, so the registration built from the old settings stops
+	// serving logins as early as possible after the new snapshot is published.
+	// It can run this early because security.ReloadOAuthProviders cannot fail and
+	// does no network I/O: it builds the providers in memory and starts OIDC
+	// discovery in the background. A control channel action would leave the old
+	// registration serving until ControlMonitor reached it, which can take as long
+	// as an MQTT reconfigure. When a later step fails, finishSettingsWrite undoes
+	// the pass (restoreOAuthProviders) together with the settings rollback.
+	// Limited to the controller that owns the global snapshot: goth's registry is
+	// process-global, so a standalone test controller must not rewrite it.
+	if c.isGlobalOwner && oauthProvidersChanged(oldSettings, currentSettings) {
+		security.ReloadOAuthProviders(currentSettings)
+	}
 
 	// Process all settings change checks using table-driven approach
 	for _, check := range settingsChangeChecks {
@@ -3075,8 +3089,9 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	// Check security/TLS settings that affect the server. BaseURL is included
 	// because it feeds the HTTP->HTTPS redirect authority (api.Config.RedirectAuthority)
 	// and the session-cookie Secure decision (SessionCookiesSecure), both captured
-	// once at server start; it also seeds OAuth callback URLs at startup. Its only
-	// live consumer is notification link generation, so prompting restart matches the
+	// once at server start; it also feeds the default OAuth callback URLs, which
+	// oauthProvidersChanged re-registers without a restart. Its only other live
+	// consumer is notification link generation, so prompting restart matches the
 	// existing Host handling (Host is also read live by notifications yet restart-gated).
 	oldSec := oldSettings.Security
 	newSec := currentSettings.Security
@@ -3092,15 +3107,21 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	return false
 }
 
-// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed.
-// Provider registration (the goth providers built from client id/secret and the
-// callback URL derived from the base URL) binds once at startup via
-// security.InitializeGoth and does not hot-reload, so a change needs a restart to
-// take effect. Entries are matched by provider ID, which is unique, so reordering
-// the list alone is not treated as a change. UserID is intentionally excluded:
-// the per-provider allowlist is read live by the auth check (via currentSettings),
-// so allowlist edits already hot-reload without a restart.
+// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed,
+// which makes handleSettingsChanges re-register the providers
+// (security.ReloadOAuthProviders). Registration depends on each provider's client
+// id/secret, redirect URI, issuer and scopes, and on the callback URL derived from
+// Host or BaseURL, so a change of either of those counts when at least one provider
+// is enabled. Entries are matched by provider ID, which is unique, so reordering
+// the list alone is not treated as a change. UserID is intentionally excluded: the
+// per-provider allowlist is read live by the auth check (via currentSettings), so
+// allowlist edits need no re-registration.
 func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
+	if (oldSettings.Security.Host != currentSettings.Security.Host ||
+		oldSettings.Security.BaseURL != currentSettings.Security.BaseURL) &&
+		slices.ContainsFunc(currentSettings.Security.OAuthProviders, func(p conf.OAuthProviderConfig) bool { return p.Enabled }) {
+		return true
+	}
 	oldProviders := oldSettings.Security.OAuthProviders
 	newProviders := currentSettings.Security.OAuthProviders
 	if len(oldProviders) != len(newProviders) {

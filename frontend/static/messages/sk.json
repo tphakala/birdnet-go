@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Prepočítavanie dynamických prahov pre novú základnú hodnotu",
         "reconfiguringDynamicThresholds": "Prekonfigurovanie dynamických prahov...",
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
-        "oauthRestartRequired": "Nastavenia poskytovateľa autentifikácie zmenené. Vyžaduje sa reštart.",
+        "reconfiguringOauthProviders": "Aktualizujú sa poskytovatelia overovania...",
         "databaseRestartRequired": "Nastavenia databázy boli zmenené. Vyžaduje sa reštart.",
         "loggingRestartRequired": "Nastavenia protokolovania boli zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Nepodarilo sa spustiť reštart",
     "reasons": {
       "webserver": "Webový server / siete",
-      "oauth": "Nastavenia poskytovateľa overovania",
       "database": "Nastavenia databázy",
       "logging": "Nastavenia protokolovania",
       "tlsCertificate": "Certifikát TLS"

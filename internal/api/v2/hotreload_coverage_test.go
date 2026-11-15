@@ -284,6 +284,8 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"WebServer.EnableTerminal": {categories: []hotReloadCategory{hotReloadNotify}},
 
 	// --- Security ---
+	// OAuth provider registration is applied directly by handleSettingsChanges
+	// (security.ReloadOAuthProviders), not through a control channel action.
 	"Security": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Sentry ---

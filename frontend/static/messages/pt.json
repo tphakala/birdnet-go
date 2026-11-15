@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Recalculando limiares dinâmicos para novo valor base",
         "reconfiguringDynamicThresholds": "A reconfigurar limiares dinâmicos...",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
-        "oauthRestartRequired": "Definições do provedor de autenticação alteradas. Reinício necessário.",
+        "reconfiguringOauthProviders": "Atualizando os provedores de autenticação...",
         "databaseRestartRequired": "Configurações do banco de dados alteradas. Reinicialização necessária.",
         "loggingRestartRequired": "Configurações de registro alteradas. Reinicialização necessária.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Falha ao iniciar a reinicialização",
     "reasons": {
       "webserver": "Servidor web / configurações de rede",
-      "oauth": "Configurações do provedor de autenticação",
       "database": "Configurações do banco de dados",
       "logging": "Configurações de registro",
       "tlsCertificate": "Certificado TLS"

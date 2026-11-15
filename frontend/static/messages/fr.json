@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Recalcul des seuils dynamiques pour la nouvelle valeur de base",
         "reconfiguringDynamicThresholds": "Reconfiguration des seuils dynamiques...",
         "webserverRestartRequired": "Les paramètres du serveur web ont changé. Redémarrage requis.",
-        "oauthRestartRequired": "Les paramètres du fournisseur d'authentification ont changé. Redémarrage requis.",
+        "reconfiguringOauthProviders": "Mise à jour des fournisseurs d'authentification...",
         "databaseRestartRequired": "Paramètres de la base de données modifiés. Redémarrage requis.",
         "loggingRestartRequired": "Paramètres de journalisation modifiés. Redémarrage requis.",
         "reconfiguringSoundLevel": "Mise à jour de la surveillance du niveau sonore...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Échec du lancement du redémarrage",
     "reasons": {
       "webserver": "Serveur Web / paramètres réseau",
-      "oauth": "Paramètres du fournisseur d'authentification",
       "database": "Paramètres de la base de données",
       "logging": "Paramètres de journalisation",
       "tlsCertificate": "Certificat TLS"

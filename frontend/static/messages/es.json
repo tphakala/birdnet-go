@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Recalculando umbrales dinámicos para nuevo valor base",
         "reconfiguringDynamicThresholds": "Reconfigurando umbrales dinámicos...",
         "webserverRestartRequired": "Los ajustes del servidor web han cambiado. Se requiere reinicio.",
-        "oauthRestartRequired": "Los ajustes del proveedor de autenticación han cambiado. Se requiere reinicio.",
+        "reconfiguringOauthProviders": "Actualizando los proveedores de autenticación...",
         "databaseRestartRequired": "Configuración de la base de datos modificada. Es necesario reiniciar.",
         "loggingRestartRequired": "Configuración de registro modificada. Es necesario reiniciar.",
         "reconfiguringSoundLevel": "Actualizando monitorización del nivel de sonido...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Error al iniciar el reinicio",
     "reasons": {
       "webserver": "Servidor web / configuración de red",
-      "oauth": "Configuración del proveedor de autenticación",
       "database": "Configuración de la base de datos",
       "logging": "Configuración de registro",
       "tlsCertificate": "Certificado TLS"

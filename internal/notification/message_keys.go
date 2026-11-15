@@ -41,8 +41,8 @@ const (
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
 	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
+	MsgSettingsReconfiguringOauthProviders    = "notifications.content.settings.reconfiguringOauthProviders"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
-	MsgSettingsOauthRestart                   = "notifications.content.settings.oauthRestartRequired"
 	MsgSettingsDatabaseRestart                = "notifications.content.settings.databaseRestartRequired"
 	MsgSettingsLoggingRestart                 = "notifications.content.settings.loggingRestartRequired"
 

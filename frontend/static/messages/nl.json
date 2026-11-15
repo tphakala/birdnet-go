@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Dynamische drempels worden herberekend voor nieuwe basiswaarde",
         "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
-        "oauthRestartRequired": "Authenticatieproviderinstellingen gewijzigd. Herstart vereist.",
+        "reconfiguringOauthProviders": "Authenticatieproviders worden bijgewerkt...",
         "databaseRestartRequired": "Database-instellingen gewijzigd. Herstart vereist.",
         "loggingRestartRequired": "Logboek-instellingen gewijzigd. Herstart vereist.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Kan herstart niet starten",
     "reasons": {
       "webserver": "Webserver / netwerkinstellingen",
-      "oauth": "Instellingen authenticatieprovider",
       "database": "Database-instellingen",
       "logging": "Logboek-instellingen",
       "tlsCertificate": "TLS-certificaat"
