@@ -180,9 +180,10 @@ var (
 	// free text. The URL ends at "/", "?", "#", white space or a double quote.
 	urlUserinfoTextPattern = regexp.MustCompile(`(://)[^/?#\s"]*@`)
 
-	// quotedUserinfoPattern matches a double-quoted segment without white space
-	// that contains an "@": Go quotes the URL of a failed request this way.
-	quotedUserinfoPattern = regexp.MustCompile(`"[^"\s]*@[^"\s]*"`)
+	// quotedUserinfoPattern matches a double-quoted segment that contains an
+	// "@", honouring backslash escapes: Go quotes the URL of a failed request
+	// with %q, which escapes a double quote and leaves a space as is.
+	quotedUserinfoPattern = regexp.MustCompile(`"(?:[^"\\]|\\.)*@(?:[^"\\]|\\.)*"`)
 
 	// Notification URL token patterns (Telegram bot tokens, Discord webhooks, etc.)
 	botTokenPattern = regexp.MustCompile(`/bot[A-Za-z0-9:_-]{20,}/`)
@@ -933,7 +934,8 @@ func isSchemeName(s string) bool {
 // value) is redacted with RedactURLUserinfo, which covers the quoted URLs of a
 // failed request, including ones with a raw "/" in the password. A quoted URL
 // that parses with a host and carries userinfo (including a scheme-relative
-// "//user:pw@host") is redacted the same way. A URL with a
+// "//user:pw@host") or an "@" in its path (a password with a numeric prefix
+// and a "/", which parses as a port) is redacted the same way. A URL with a
 // scheme, quoted or not, then loses its userinfo up to the first "/", "?", "#",
 // white space or double quote, so an "@" in a query or in later text is not
 // treated as userinfo. Text without such a URL, and text already processed by
@@ -942,7 +944,10 @@ func isSchemeName(s string) bool {
 func ScrubURLUserinfoInText(text string) string {
 	text = quotedUserinfoPattern.ReplaceAllStringFunc(text, func(quoted string) string {
 		inner := quoted[1 : len(quoted)-1]
-		if u, err := url.Parse(inner); err == nil && u.Host != "" && u.Opaque == "" && u.User == nil {
+		// A URL with a host is left to the unquoted pattern only when it carries
+		// no userinfo and its path holds no "@": "https://user:123/pw@host" parses
+		// as host "user:123" with the rest of the password in the path.
+		if u, err := url.Parse(inner); err == nil && u.Host != "" && u.Opaque == "" && u.User == nil && !strings.Contains(u.Path, "@") {
 			return quoted
 		}
 		return `"` + RedactURLUserinfo(inner) + `"`

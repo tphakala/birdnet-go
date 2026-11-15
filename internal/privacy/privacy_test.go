@@ -2229,6 +2229,21 @@ func TestScrubURLUserinfoInText(t *testing.T) {
 		},
 		{"no URL", "connection refused", "connection refused"},
 		{
+			"quoted opaque URL with a space in the password",
+			`Get "https:alice:secret word@host/x": refused`,
+			`Get "[REDACTED]@host/x": refused`,
+		},
+		{
+			"quoted URL with an escaped quote in the password",
+			`Get "https://alice:pa\"ss@host/x": refused`,
+			`Get "https://[REDACTED]@host/x": refused`,
+		},
+		{
+			"quoted URL whose password has a numeric prefix and a slash",
+			`Get "https://alice:123/secret@host/x": refused`,
+			`Get "https://[REDACTED]@host/x": refused`,
+		},
+		{
 			"scheme-relative URL in a quoted segment",
 			`Get "//alice:pw@idp.example/x": unsupported protocol scheme ""`,
 			`Get "//[REDACTED]@idp.example/x": unsupported protocol scheme ""`,

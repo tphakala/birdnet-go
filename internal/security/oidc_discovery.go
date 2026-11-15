@@ -102,9 +102,10 @@ const urlParseErrorMarker = `parse "`
 var errOIDCDiscoveryCauseUnknown = errors.NewStd("no discovery error was recorded")
 
 // errOIDCDiscoveryURLInvalid replaces the text of an error that contains a URL
-// parse failure. That text quotes the URL and a fragment of its userinfo, and
+// parse failure, in the discovery URL or in a redirect Location the identity
+// provider sent. That text quotes the URL and a fragment of its userinfo, and
 // the discovery URL is logged separately, redacted, in the discovery_url field.
-var errOIDCDiscoveryURLInvalid = errors.NewStd("the discovery URL is not a valid URL")
+var errOIDCDiscoveryURLInvalid = errors.NewStd("a URL in the discovery request or its redirect is not a valid URL")
 
 // redactDiscoveryErr removes URL userinfo from the text of err. net/http masks
 // the password in a transport error but keeps the username, and prints a URL it
