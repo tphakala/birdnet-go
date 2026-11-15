@@ -116,7 +116,8 @@ func (s *Security) OAuthOrigin() string {
 // GetBaseURL returns the base URL for notifications and OAuth redirects.
 // Priority order:
 //  1. BaseURL field (if set, trimmed; empty when it is not a usable URL)
-//  2. Constructed from Host + port + TLSMode scheme
+//  2. Host as given when it carries an http(s) scheme, otherwise built from
+//     Host + port + TLSMode scheme
 //  3. Empty string if no host is available
 //
 // This method does NOT fall back to localhost - callers should handle empty returns.
@@ -133,6 +134,10 @@ func (s *Security) GetBaseURL(port string) string {
 	host := s.trimmedHost()
 	if host == "" {
 		return ""
+	}
+	if hostHasScheme(host) {
+		// Already a full origin: used as given, as the OAuth rule does.
+		return host
 	}
 
 	return s.buildURLFromHost(host, port)
