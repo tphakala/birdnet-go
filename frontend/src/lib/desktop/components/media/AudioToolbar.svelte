@@ -223,32 +223,16 @@
       const scrollTop = menu.scrollTop;
       menu.style.maxHeight = '';
       const height = menu.offsetHeight;
-      // Clamps the menu by its current width into the viewport and, when given, the
-      // horizontal band left visible by clipping scroll boxes; where the band is
-      // narrower than the menu, its start edge stays visible. Placed once before the
-      // room is measured, so a stale position cannot stick out of a scroll box and
-      // give it a scrollbar, and again after the cap below.
-      const placeHorizontally = (band?: { left: number; right: number }) => {
-        const width = menu.offsetWidth;
-        let { left } = computeAnchorPosition({
-          triggerRect: trigger.getBoundingClientRect(),
-          floatingHeight: height,
-          floatingWidth: width,
-          align,
-          viewportMargin: MENU_VIEWPORT_MARGIN_PX,
-        });
-        if (band) {
-          left = Math.min(left, band.right - MENU_VIEWPORT_MARGIN_PX - width);
-          left = Math.max(left, band.left + MENU_VIEWPORT_MARGIN_PX);
-        }
-        menu.style.left = `${left - wrapper.getBoundingClientRect().left}px`;
-      };
-      placeHorizontally();
+
+      // Measure the room with the menu out of layout, so its previous position cannot
+      // stick out of a scroll box and give that box a scrollbar meanwhile
+      menu.style.display = 'none';
       const wrapperRect = wrapper.getBoundingClientRect();
 
       // The visible band: the viewport, cut by every ancestor that clips its overflow
       // (on Search, the results table scrolls sideways and so clips vertically too).
-      // Overflow above a fixed ancestor does not clip it, so the walk stops there.
+      // Overflow above a fixed ancestor does not clip it, so the walk stops there. A
+      // box with no size lays nothing out (display: contents), so it bounds nothing.
       let clipTop = 0;
       let clipBottom = window.innerHeight;
       let clipLeft = 0;
@@ -258,18 +242,20 @@
         if (CLIPPING_OVERFLOW.has(style.overflowX) || CLIPPING_OVERFLOW.has(style.overflowY)) {
           // Content is clipped at the scrollport: inside the borders and any scrollbar
           const rect = el.getBoundingClientRect();
-          const top = rect.top + el.clientTop;
-          const left = rect.left + el.clientLeft;
-          clipTop = Math.max(clipTop, top);
-          clipBottom = Math.min(clipBottom, top + el.clientHeight);
-          // A box with no width lays nothing out (display: contents), so it bounds nothing
+          if (el.clientHeight > 0) {
+            const top = rect.top + el.clientTop;
+            clipTop = Math.max(clipTop, top);
+            clipBottom = Math.min(clipBottom, top + el.clientHeight);
+          }
           if (el.clientWidth > 0) {
+            const left = rect.left + el.clientLeft;
             clipLeft = Math.max(clipLeft, left);
             clipRight = Math.min(clipRight, left + el.clientWidth);
           }
         }
         if (style.position === 'fixed') break;
       }
+      menu.style.display = '';
 
       // Unlike computeAnchorPosition, which prefers below, the menu opens above as it
       // always has. The room is measured from the wrapper: the menu hangs off its
@@ -281,9 +267,21 @@
       menu.style.bottom = below ? 'auto' : '100%';
       menu.style.maxHeight = `${Math.max(0, (below ? roomBelow : roomAbove) - MENU_GAP_PX)}px`;
 
-      // A capped menu gains a scrollbar on systems with classic scrollbars, which
-      // widens a max-content menu, so clamp it again by its width now
-      placeHorizontally({ left: clipLeft, right: clipRight });
+      // Clamped by the width measured after the cap (a capped menu gains a scrollbar on
+      // systems with classic scrollbars, which widens a max-content menu) into the
+      // viewport and the visible band; where the band is narrower than the menu, its
+      // start edge stays visible
+      const width = menu.offsetWidth;
+      let { left } = computeAnchorPosition({
+        triggerRect: trigger.getBoundingClientRect(),
+        floatingHeight: height,
+        floatingWidth: width,
+        align,
+        viewportMargin: MENU_VIEWPORT_MARGIN_PX,
+      });
+      left = Math.min(left, clipRight - MENU_VIEWPORT_MARGIN_PX - width);
+      left = Math.max(left, clipLeft + MENU_VIEWPORT_MARGIN_PX);
+      menu.style.left = `${left - wrapper.getBoundingClientRect().left}px`;
       menu.scrollTop = scrollTop;
     }
 
