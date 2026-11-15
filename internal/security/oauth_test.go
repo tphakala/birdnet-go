@@ -2364,6 +2364,11 @@ func TestReloadOAuthProviders_RegistryFollowsSettings(t *testing.T) {
 		return conf.OAuthProviderConfig{Provider: ConfigGoogle, Enabled: enabled, ClientID: "g-id", ClientSecret: secret}
 	}
 	githubCfg := conf.OAuthProviderConfig{Provider: ConfigGitHub, Enabled: true, ClientID: "h-id", ClientSecret: "h-secret"}
+	// A bare host with TLS off still gets an https callback: identity providers
+	// have the https URL registered, unlike the http link notifications use.
+	bareHostSettings := providerSettings("", google("s2", true), githubCfg)
+	bareHostSettings.Security.Host = "d.example"
+	bareHostSettings.Security.TLSMode = conf.TLSModeNone
 
 	type want struct {
 		google, github bool
@@ -2391,6 +2396,10 @@ func TestReloadOAuthProviders_RegistryFollowsSettings(t *testing.T) {
 			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://b.example/auth/google/callback"}},
 		{name: "the same settings twice", settings: providerSettings("https://b.example", google("s2", true), githubCfg),
 			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://b.example/auth/google/callback"}},
+		{name: "a padded base URL is trimmed for the callback", settings: providerSettings(" https://c.example/ ", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://c.example/auth/google/callback"}},
+		{name: "a bare host gets an https callback whatever the TLS mode", settings: bareHostSettings,
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://d.example/auth/google/callback"}},
 	}
 
 	enableOIDCRetries()
