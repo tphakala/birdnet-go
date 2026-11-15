@@ -11,7 +11,7 @@
   import { generateId } from '$lib/utils/uuid';
 
   interface Props {
-    /** Why the picker is blocked. Giving a reason is what blocks it, and the text is shown beside the title. */
+    /** Why the picker is blocked. A non-empty reason is what blocks it, and the text is shown beside the title. */
     disabledReason?: string;
   }
 
@@ -20,7 +20,8 @@
   const GROUP_LABEL_ID = generateId('color-scheme-label');
   const REASON_ID = generateId('color-scheme-reason');
 
-  let blocked = $derived(disabledReason !== undefined);
+  // An empty reason would block the picker while describing it with nothing.
+  let blocked = $derived((disabledReason ?? '').trim() !== '');
 
   const customColorsStore = scheme.customColors;
 
@@ -83,6 +84,8 @@
   }
 
   function updateCustomPrimary(e: Event) {
+    // A native colour dialog opened before the picker became blocked can still report a value.
+    if (blocked) return;
     const target = e.target as HTMLInputElement;
     const newColors = { ...$customColorsStore, primary: target.value };
     scheme.setCustomColors(newColors);
@@ -94,6 +97,7 @@
   }
 
   function updateCustomAccent(e: Event) {
+    if (blocked) return;
     const target = e.target as HTMLInputElement;
     const newColors = { ...$customColorsStore, accent: target.value };
     scheme.setCustomColors(newColors);
@@ -134,7 +138,7 @@
       </p>
     </div>
     {#if blocked}
-      <p id={REASON_ID} class="shrink-0 text-xs text-[var(--color-base-content)]/70">
+      <p id={REASON_ID} class="text-right text-xs text-[var(--color-base-content)]/70">
         {disabledReason}
       </p>
     {/if}
@@ -164,7 +168,7 @@
             'relative size-10 rounded-full border-2 transition-all forced-color-adjust-none group-aria-disabled:opacity-50',
             fixed && 'bg-[var(--swatch)] dark:bg-[var(--swatch-dark)]',
             $scheme === opt.id
-              ? 'border-[var(--color-base-content)] scale-110 shadow-md'
+              ? 'border-[var(--color-base-content)] forced-colors:border-[CanvasText] scale-110 shadow-md'
               : 'border-transparent group-not-aria-disabled:hover:border-[var(--color-base-content)]/30 group-not-aria-disabled:hover:scale-105'
           )}
           style:background={opt.gradient}
@@ -205,7 +209,7 @@
           type="color"
           value={$customColorsStore.primary}
           oninput={updateCustomPrimary}
-          class="size-9 cursor-pointer rounded border border-[var(--color-base-content)]/20 p-0.5"
+          class="size-9 cursor-pointer rounded border border-[var(--color-base-content)]/20 p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t('settings.appearance.customPrimary')}
           disabled={blocked}
           aria-describedby={blocked ? REASON_ID : undefined}
@@ -224,7 +228,7 @@
           type="color"
           value={$customColorsStore.accent}
           oninput={updateCustomAccent}
-          class="size-9 cursor-pointer rounded border border-[var(--color-base-content)]/20 p-0.5"
+          class="size-9 cursor-pointer rounded border border-[var(--color-base-content)]/20 p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t('settings.appearance.customAccent')}
           disabled={blocked}
           aria-describedby={blocked ? REASON_ID : undefined}

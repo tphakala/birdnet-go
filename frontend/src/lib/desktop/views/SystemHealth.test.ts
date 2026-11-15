@@ -180,6 +180,8 @@ describe('SystemHealth keyboard and run state', () => {
       'forced-colors:forced-color-adjust-none',
       'forced-colors:bg-[Highlight]',
       'forced-colors:text-[HighlightText]',
+      'forced-colors:focus-visible:outline-[HighlightText]',
+      'forced-colors:focus-visible:shadow-none',
     ];
     const radios = windowRadios();
     for (const radio of radios) {

@@ -90,6 +90,28 @@ describe('ColorSchemePicker', () => {
     }
   });
 
+  it('keeps the custom colours when a colour input reports a value while blocked', async () => {
+    scheme.setScheme('custom');
+    const before = get(scheme.customColors);
+    renderTyped(ColorSchemePicker, { props: { disabledReason: BUSY_REASON } });
+
+    // A native colour dialog opened before the block can still report a value.
+    for (const name of ['settings.appearance.customPrimary', 'settings.appearance.customAccent']) {
+      await fireEvent.input(screen.getByLabelText(name), { target: { value: '#000000' } });
+    }
+
+    expect(get(scheme.customColors)).toEqual(before);
+  });
+
+  it('is not blocked by an empty reason', () => {
+    renderTyped(ColorSchemePicker, { props: { disabledReason: '' } });
+
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).not.toHaveAttribute('aria-disabled');
+      expect(radio).not.toHaveAttribute('aria-describedby');
+    }
+  });
+
   it('leaves the logo style alone when the switch is clicked while blocked', async () => {
     logoStyle.setStyle('gradient');
     renderTyped(ColorSchemePicker, { props: { disabledReason: BUSY_REASON } });
@@ -126,6 +148,9 @@ describe('ColorSchemePicker', () => {
       const swatch = container.querySelector(`[data-testid="color-scheme-${id}"] > div`);
       expect(swatch, `${id} swatch`).toHaveClass('forced-color-adjust-none');
     }
+    // The selection ring is drawn in the system text colour, which stays visible on any contrast theme.
+    const selected = container.querySelector('[data-testid="color-scheme-blue"] > div');
+    expect(selected).toHaveClass('forced-colors:border-[CanvasText]');
   });
 
   it('has no Accessibility violations', async () => {
