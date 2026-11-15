@@ -1,0 +1,252 @@
+/**
+ * Selection playback and the clip extraction listeners in AudioPlayer.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
+import {
+  installFakeMediaElement,
+  fakeAudioNodeChain,
+  settle,
+  type FakeMediaController,
+} from '../../../../test/fakeMediaElement';
+import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
+import { getAudioContext } from '$lib/utils/audioContextManager';
+import { AUDIO_RETRY_DELAY_MS, dbToGain } from '$lib/utils/audio';
+import AudioPlayer from './AudioPlayer.svelte';
+
+vi.mock('$lib/utils/audioContextManager', () => ({
+  getAudioContext: vi.fn().mockResolvedValue({ state: 'running' }),
+  isAudioContextSupported: vi.fn().mockReturnValue(true),
+  releaseAudioContext: vi.fn(),
+}));
+
+vi.mock('$lib/utils/audioNodes', () => ({
+  attachAudioGraphWhenRunning: vi.fn(),
+  disconnectAudioNodes: vi.fn(),
+}));
+
+const PLAY_LABEL = 'media.audio.play';
+const PLAY_ERROR_TEXT = 'media.audio.playError';
+const SETTINGS_LABEL = 'media.audio.settings';
+const GAIN_LABEL = 'components.audioPlayer.processing.gain';
+const SKIP_TO_START_LABEL = 'components.audioPlayer.processing.skipToStart';
+const WIDE_CONTAINER_PX = 400;
+const SELECTION_START_PX = 40;
+const SELECTION_END_PX = 200;
+const RAISED_GAIN_DB = 12;
+const LATER_GAIN_DB = 6;
+
+describe('AudioPlayer selection play', () => {
+  let ctl: FakeMediaController;
+  const mockedAttach = vi.mocked(attachAudioGraphWhenRunning);
+  const originalRect = Element.prototype.getBoundingClientRect;
+  const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+
+  function mount(props: Record<string, unknown> = {}) {
+    return render(AudioPlayer, {
+      props: {
+        audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
+        enableClipExtraction: true,
+        showSpectrogram: false,
+        ...props,
+      },
+    });
+  }
+
+  function player(container: HTMLElement): HTMLElement {
+    const el = container.firstElementChild;
+    if (!(el instanceof HTMLElement)) throw new Error('player container missing');
+    return el;
+  }
+
+  async function startDrag(container: HTMLElement) {
+    await fireEvent.mouseDown(player(container), { button: 0, clientX: SELECTION_START_PX });
+    await fireEvent.mouseMove(document, { buttons: 1, clientX: SELECTION_END_PX });
+  }
+
+  async function dragSelection(container: HTMLElement) {
+    await startDrag(container);
+    await fireEvent.mouseUp(document, { clientX: SELECTION_END_PX });
+    // Without a selection the toolbar would start a plain play instead.
+    expect(screen.getByLabelText(SKIP_TO_START_LABEL)).toBeEnabled();
+  }
+
+  async function press() {
+    await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+    await settle();
+  }
+
+  async function setGain(db: number) {
+    await fireEvent.input(screen.getByLabelText(GAIN_LABEL), { target: { value: String(db) } });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    ctl = installFakeMediaElement();
+    mockedAttach.mockReset();
+    mockedAttach.mockImplementation(() => fakeAudioNodeChain());
+    Element.prototype.getBoundingClientRect = () =>
+      new DOMRect(0, 0, WIDE_CONTAINER_PX, WIDE_CONTAINER_PX);
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get: () => WIDE_CONTAINER_PX,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    ctl.restore();
+    Element.prototype.getBoundingClientRect = originalRect;
+    if (originalOffsetWidth) {
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
+    }
+  });
+
+  it('builds the audio graph with the current gain when the first play is a selection', async () => {
+    const chain = fakeAudioNodeChain();
+    mockedAttach.mockImplementation(() => chain);
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await setGain(RAISED_GAIN_DB);
+    await dragSelection(container);
+
+    await press();
+
+    expect(mockedAttach).toHaveBeenCalledWith(
+      expect.anything(),
+      ctl.element,
+      null,
+      expect.objectContaining({ gainDb: RAISED_GAIN_DB, includeCompressor: true })
+    );
+    await setGain(LATER_GAIN_DB);
+    expect(chain.gain.gain.value).toBeCloseTo(dbToGain(LATER_GAIN_DB));
+  });
+
+  it('disables the audio settings when the graph cannot attach on a selection play', async () => {
+    mockedAttach.mockImplementation(() => null);
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await dragSelection(container);
+
+    await press();
+
+    expect(ctl.paused).toBe(false);
+    expect(screen.getByRole('button', { name: SETTINGS_LABEL })).toBeDisabled();
+  });
+
+  it('shows the play error when a selection play is rejected', async () => {
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await dragSelection(container);
+    ctl.rejectNextPlay('NotAllowedError');
+
+    await press();
+
+    expect(screen.getByText(PLAY_ERROR_TEXT)).toBeInTheDocument();
+    expect(screen.getByLabelText(PLAY_LABEL)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['the play button', false],
+    ['a selection play', true],
+  ])(
+    'does not attach the graph or play when unmounted while the context starts for %s',
+    async (_name, withSelection) => {
+      let start: (ctx: AudioContext) => void = () => {};
+      vi.mocked(getAudioContext).mockReturnValueOnce(
+        new Promise<AudioContext>(resolve => {
+          start = resolve;
+        })
+      );
+      const { container, unmount } = mount();
+      ctl.completeLoad();
+      await settle();
+      if (withSelection) await dragSelection(container);
+      await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+
+      unmount();
+      // Only the state is read from the context in this test.
+      start({ state: 'running' } as unknown as AudioContext);
+      await settle();
+
+      expect(mockedAttach).not.toHaveBeenCalled();
+      expect(ctl.play).not.toHaveBeenCalled();
+    }
+  );
+
+  it('does not resume the whole clip when the load of a selection play is retried', async () => {
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await dragSelection(container);
+    ctl.setPlayMode('hold');
+    await press();
+
+    ctl.failLoad();
+    await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+    ctl.completeLoad();
+    await settle();
+
+    expect(ctl.paused).toBe(true);
+    expect(screen.queryByText(PLAY_ERROR_TEXT)).not.toBeInTheDocument();
+  });
+
+  it('does not play a selection that was cleared while the context starts', async () => {
+    let start: (ctx: AudioContext) => void = () => {};
+    vi.mocked(getAudioContext).mockReturnValueOnce(
+      new Promise<AudioContext>(resolve => {
+        start = resolve;
+      })
+    );
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await dragSelection(container);
+    await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    // Only the state is read from the context in this test.
+    start({ state: 'running' } as unknown as AudioContext);
+    await settle();
+
+    expect(ctl.paused).toBe(true);
+  });
+
+  it('follows enableClipExtraction switched on after mount: drag selects, Escape clears', async () => {
+    const { container, rerender } = mount({ enableClipExtraction: false });
+    ctl.completeLoad();
+    await settle();
+
+    await rerender({ enableClipExtraction: true });
+    await dragSelection(container);
+    expect(screen.getByLabelText(SKIP_TO_START_LABEL)).toBeEnabled();
+
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByLabelText(SKIP_TO_START_LABEL)).toBeDisabled();
+
+    await rerender({ enableClipExtraction: false });
+    await rerender({ enableClipExtraction: true });
+    await dragSelection(container);
+    expect(screen.getByLabelText(SKIP_TO_START_LABEL)).toBeEnabled();
+  });
+
+  it('stops blocking text selection when extraction is switched off during a drag', async () => {
+    const { container, rerender } = mount();
+    ctl.completeLoad();
+    await settle();
+    await startDrag(container);
+
+    await rerender({ enableClipExtraction: false });
+
+    const selectStart = new Event('selectstart', { cancelable: true });
+    document.dispatchEvent(selectStart);
+    expect(selectStart.defaultPrevented).toBe(false);
+  });
+});

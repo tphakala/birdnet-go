@@ -185,7 +185,7 @@
   }: Props = $props();
 
   // Audio and UI elements
-  let audioElement: HTMLAudioElement;
+  let audioElement: HTMLAudioElement | undefined;
   let playerContainer: HTMLDivElement;
   // svelte-ignore non_reactive_update
   let playPauseButton!: HTMLButtonElement; // Template-only binding
@@ -791,9 +791,12 @@
     }
   };
 
-  const playSelection = () => {
+  const playSelection = async () => {
+    if (!audioElement || !hasActiveSelection()) return;
+    await prepareToPlay();
+    // The player may have unmounted, or the selection been cleared or moved, while
+    // the audio context started.
     if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
-    ensurePlaybackSource();
 
     const start = Math.min(selectionStartSec, selectionEndSec);
     const end = Math.max(selectionStartSec, selectionEndSec);
@@ -804,15 +807,16 @@
     }
 
     audioElement.currentTime = start;
-    audioElement
-      .play()
-      .then(() => {
-        isPlayingSelection = true;
-        scheduleSelectionEnd(start, end);
-      })
-      .catch((err: unknown) => {
-        logger.error('Failed to play selection:', err);
-      });
+    try {
+      await audioElement.play();
+    } catch (err) {
+      // While a load retry is pending handlePlayRejection queues the press, and the
+      // queued play resumes the whole clip, not this selection: drop the press instead.
+      if (!loadRetryPending()) handlePlayRejection(err);
+      return;
+    }
+    isPlayingSelection = true;
+    scheduleSelectionEnd(start, end);
   };
 
   const scheduleSelectionEnd = (start: number, end: number) => {
@@ -1273,10 +1277,14 @@
     }
   }
 
+  // Whether a load retry, or the probe that may reschedule it, is pending.
+  const loadRetryPending = () =>
+    audioRetryTimer !== undefined || audioProbeController !== undefined;
+
   // Handle a rejected play(). While a retry timer is pending the retry can
   // still succeed, so only remember the play intent.
   function handlePlayRejection(err: unknown) {
-    if (audioRetryTimer !== undefined || audioProbeController !== undefined) {
+    if (loadRetryPending()) {
       playRequestedAfterRetry = true;
       return;
     }
@@ -1367,15 +1375,13 @@
     audioElement.load();
   }
 
-  // Audio event handlers
-  const handlePlayPause = async () => {
+  // Get the element ready for a play the user asked for: the playback source, a
+  // reload when the element failed, and the Web Audio graph (gain, high-pass,
+  // compressor). The play button and selection play both start here, so whichever
+  // comes first builds the graph. The component can unmount while this waits for
+  // the audio context, so callers check audioElement again before they play.
+  const prepareToPlay = async () => {
     if (!audioElement) return;
-
-    if (!audioElement.paused && !audioElement.error) {
-      audioElement.pause();
-      return;
-    }
-
     error = null;
     ensurePlaybackSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
@@ -1392,6 +1398,7 @@
       isInitializingContext = true;
       try {
         audioContext = await initializeAudioContext();
+        if (!audioElement) return;
         // Attach the Web Audio graph only when the context is running;
         // while suspended the element plays through native output and the
         // graph is deferred to a later play (see attachAudioGraphWhenRunning).
@@ -1414,15 +1421,20 @@
         isInitializingContext = false;
       }
     }
+  };
 
-    // Safety check: component may have unmounted during async initialization
+  // Audio event handlers
+  const handlePlayPause = async () => {
     if (!audioElement) return;
 
-    try {
-      await audioElement.play();
-    } catch (err) {
-      handlePlayRejection(err);
+    if (!audioElement.paused && !audioElement.error) {
+      audioElement.pause();
+      return;
     }
+
+    await prepareToPlay();
+    if (!audioElement) return;
+    await audioElement.play().catch(handlePlayRejection);
   };
 
   const updateProgress = () => {
@@ -2240,6 +2252,33 @@
     }
   });
 
+  const handleSelectionKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && (selectionStartSec !== null || selectionEndSec !== null)) {
+      clearSelection();
+    }
+  };
+
+  // Prevent native browser selection during drag operations
+  const handleSelectStart = (e: Event) => {
+    if (isDragSelecting || draggingHandle || isScrubbing) e.preventDefault();
+  };
+
+  // Document listeners for selection drag, click-to-seek and Escape. They follow
+  // enableClipExtraction, which can change while the player is mounted.
+  $effect(() => {
+    if (!enableClipExtraction) return;
+    document.addEventListener('mousemove', handleSelectionMouseMove);
+    document.addEventListener('mouseup', handleSelectionMouseUp);
+    document.addEventListener('keydown', handleSelectionKeydown);
+    document.addEventListener('selectstart', handleSelectStart);
+    return () => {
+      document.removeEventListener('mousemove', handleSelectionMouseMove);
+      document.removeEventListener('mouseup', handleSelectionMouseUp);
+      document.removeEventListener('keydown', handleSelectionKeydown);
+      document.removeEventListener('selectstart', handleSelectStart);
+    };
+  });
+
   // Lifecycle
   onMount(() => {
     debugLog('onMount: component mounted', {
@@ -2280,7 +2319,7 @@
         // Clear any pending delay timeout and immediately signal play start
         clearPlayEndTimeout();
         // Apply playback rate when starting
-        applyPlaybackRate(audioElement, playbackSpeed);
+        if (audioElement) applyPlaybackRate(audioElement, playbackSpeed);
         if (onPlayStart) {
           onPlayStart();
         }
@@ -2403,36 +2442,6 @@
       spectrogramLoader.setLoading(false);
     }
 
-    // Global listeners for selection drag
-    if (enableClipExtraction) {
-      addTrackedEventListener(
-        document as unknown as HTMLElement,
-        'mousemove',
-        handleSelectionMouseMove as EventListener
-      );
-      addTrackedEventListener(
-        document as unknown as HTMLElement,
-        'mouseup',
-        handleSelectionMouseUp as EventListener
-      );
-      addTrackedEventListener(document as unknown as HTMLElement, 'keydown', ((
-        e: KeyboardEvent
-      ) => {
-        if (e.key === 'Escape') {
-          if (selectionStartSec !== null || selectionEndSec !== null) {
-            clearSelection();
-          }
-        }
-      }) as EventListener);
-
-      // Prevent native browser selection during drag operations
-      addTrackedEventListener(document as unknown as HTMLElement, 'selectstart', ((e: Event) => {
-        if (isDragSelecting || draggingHandle || isScrubbing) {
-          e.preventDefault();
-        }
-      }) as EventListener);
-    }
-
     // Cleanup function (Svelte 5 pattern)
     return () => {
       debugLog('cleanup: component destroying', {
@@ -2480,6 +2489,8 @@
       if (audioElement) {
         audioElement.pause();
         audioElement.src = '';
+        // Async work still in flight (context start, probes) checks this and stops.
+        audioElement = undefined;
       }
 
       // Clean up Web Audio API resources using shared utilities
