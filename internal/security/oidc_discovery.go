@@ -45,7 +45,7 @@ func oidcIssuerBase(issuerURL string) string {
 // with an empty query.
 func splitOIDCIssuerQuery(issuerURL string) (withoutQuery, rawQuery string) {
 	u, err := url.Parse(issuerURL)
-	if err != nil || (u.RawQuery == "" && !u.ForceQuery && u.Fragment == "") {
+	if err != nil || !strings.ContainsAny(issuerURL, "?#") {
 		return issuerURL, ""
 	}
 	rawQuery = u.RawQuery

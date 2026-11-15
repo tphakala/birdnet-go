@@ -317,6 +317,8 @@ func TestOIDCDiscoveryURL(t *testing.T) {
 		{name: "pasted discovery URL with a query", issuer: "https://login.example/tenant/v2.0/.well-known/openid-configuration?appid=abc", want: "https://login.example/tenant/v2.0/.well-known/openid-configuration?appid=abc"},
 		{name: "issuer with a query", issuer: "https://login.example/tenant/v2.0/?appid=abc", want: "https://login.example/tenant/v2.0/.well-known/openid-configuration?appid=abc"},
 		{name: "fragment is dropped", issuer: "https://idp.example/realms/home#section", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "empty fragment is dropped", issuer: "https://idp.example/realms/home#", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "empty query is dropped", issuer: "https://idp.example/realms/home?", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
