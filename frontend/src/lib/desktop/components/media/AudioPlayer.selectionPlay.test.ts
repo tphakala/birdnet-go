@@ -36,6 +36,7 @@ const SELECTION_START_PX = 40;
 const SELECTION_END_PX = 200;
 const RAISED_GAIN_DB = 12;
 const LATER_GAIN_DB = 6;
+const MS_PER_SECOND = 1000;
 
 describe('AudioPlayer selection play', () => {
   let ctl: FakeMediaController;
@@ -139,7 +140,7 @@ describe('AudioPlayer selection play', () => {
     expect(chain.gain.gain.value).toBeCloseTo(dbToGain(LATER_GAIN_DB));
   });
 
-  it('reuses the graph built by the full play when a selection is played afterwards', async () => {
+  it('plays only the selection and reuses the graph when it follows a full play', async () => {
     const { container } = mount();
     ctl.completeLoad();
     await settle();
@@ -155,6 +156,14 @@ describe('AudioPlayer selection play', () => {
     // Only a selection play seeks to the selection start.
     const selectionStartSec = (SELECTION_START_PX / WIDE_CONTAINER_PX) * ctl.element.duration;
     expect(ctl.element.currentTime).toBeCloseTo(selectionStartSec);
+
+    // The selection ends on its own timer, not at the end of the clip.
+    const selectionLengthMs =
+      ((SELECTION_END_PX - SELECTION_START_PX) / WIDE_CONTAINER_PX) *
+      ctl.element.duration *
+      MS_PER_SECOND;
+    await vi.advanceTimersByTimeAsync(selectionLengthMs);
+    expect(ctl.paused).toBe(true);
   });
 
   it('disables the audio settings when the graph cannot attach on a selection play', async () => {
