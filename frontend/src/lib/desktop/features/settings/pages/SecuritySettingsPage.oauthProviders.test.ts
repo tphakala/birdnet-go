@@ -102,7 +102,7 @@ describe('SecuritySettingsPage OAuth provider list', () => {
       ).toBe(true);
     });
 
-    it('shows the URL to register as the help text when a base URL is set', async () => {
+    it('shows the register-this-URL help text, not the base URL prompt, when a base URL is set', async () => {
       seedProvider('oidc');
       await openEditForm();
 
