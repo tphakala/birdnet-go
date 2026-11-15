@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib');
 
@@ -19,7 +19,7 @@ describe('Table header scope', () => {
   it('gives every th in a component a scope attribute', () => {
     const offenders = readdirSync(libDir, { recursive: true, encoding: 'utf8' })
       .filter(file => file.endsWith('.svelte'))
-      .filter(file => !PLACEHOLDER_FILES.has(file.split('/').pop() ?? file))
+      .filter(file => !PLACEHOLDER_FILES.has(basename(file)))
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
       .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }))
       .flatMap(({ file, text }) =>
