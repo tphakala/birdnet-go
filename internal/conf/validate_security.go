@@ -149,8 +149,8 @@ func oauthRedirectProblem(p *OAuthProviderConfig, originProblem string) string {
 //
 // This mirrors computeBaseURL in internal/security/oauth.go, including its rule
 // that a host without a scheme is assumed to be https. The logic is duplicated
-// rather than shared for the same reason as the provider name constants above:
-// security imports conf, so the dependency cannot run the other way.
+// rather than shared because security imports conf, so the dependency cannot run the
+// other way.
 //
 // A malformed baseUrl is only reported through this path, when a credentialed
 // provider actually depends on it. Rejecting one that nothing consumes would be the
@@ -293,11 +293,12 @@ func validateOAuthProviderDuplicates(settings *Security) error {
 }
 
 // ValidateOAuthProviderIDs rejects the first security.oauthProviders entry whose
-// provider ID is blank or not a supported provider, enabled or not. The settings
-// API runs it on every save, so a save can neither introduce nor keep such an
-// entry. It is not part of ValidateSettings: config load must keep booting with a
-// stale entry (normalizeOAuthProviders warns about it instead), because refusing to
-// start leaves no UI in which to fix the file.
+// provider ID is blank or not a supported provider, enabled or not. Only the PUT and
+// PATCH settings handlers run it, so those saves can neither introduce nor keep such
+// an entry; other settings writers do not. It is not part of ValidateSettings:
+// config load must keep booting with a stale entry (normalizeOAuthProviders warns
+// about it instead), because refusing to start leaves no UI in which to fix the
+// file.
 func ValidateOAuthProviderIDs(sec *Security) error {
 	for i := range sec.OAuthProviders {
 		id := NormalizeOAuthProviderID(sec.OAuthProviders[i].Provider)
