@@ -427,8 +427,12 @@
   /* A collapsed table border belongs to the table, not to the sticky header
      cells, so it scrolls away with the rows. An inset shadow on each header cell
      travels with the cell instead. :global reaches the th elements that
-     SortableHeader renders, which a scoped th rule would miss. */
-  thead :global(th) {
-    box-shadow: inset 0 -1px 0 var(--border-100);
+     SortableHeader renders, which a scoped th rule would miss. The rule is in the
+     components layer, below Tailwind's utilities, so a shadow or ring utility in
+     column.className replaces it; unlayered component CSS would beat every utility. */
+  @layer components {
+    thead :global(th) {
+      box-shadow: inset 0 -1px 0 var(--border-100);
+    }
   }
 </style>
