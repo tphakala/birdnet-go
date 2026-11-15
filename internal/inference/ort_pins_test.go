@@ -22,7 +22,17 @@ var (
 	dockerfilePinRe = regexp.MustCompile(`(?m)^ARG ONNXRUNTIME_VERSION=(\S+)`)
 	actionPinRe     = regexp.MustCompile(`(?s)onnxruntime-version:.*?default:\s*'([^']+)'`)
 	apiVersionRe    = regexp.MustCompile(`(?m)^#define ORT_API_VERSION\s+(\d+)`)
+	// docPinRe matches the shipped version the install guides state: the
+	// VERSION= lines of the install snippets and the "ship X" sentences.
+	docPinRe = regexp.MustCompile(`(?m)(?:^\$?VERSION\s*=\s*"?|\bship )(\d+\.\d+\.\d+)`)
 )
+
+// installGuides are the user install guides that name the shipped ONNX Runtime
+// version.
+var installGuides = []string{
+	"../../doc/ONNX-Runtime-Installation.md",
+	"../../doc/wiki/onnx-runtime-installation.md",
+}
 
 // firstGroup returns the first capture group of re in the file at path.
 func firstGroup(t *testing.T, path string, re *regexp.Regexp) string {
@@ -49,6 +59,23 @@ func TestORTPinsAgreeAndMeetMinimum(t *testing.T) {
 	meets, known := ortVersionMeetsMinimum(taskfile)
 	assert.True(t, known, "pin %q must parse", taskfile)
 	assert.True(t, meets, "pin %q must meet the minimum %s", taskfile, ORTMinimumVersion())
+}
+
+// TestORTInstallGuidesMatchPin keeps the version the install guides tell users
+// to download in step with the native pin.
+func TestORTInstallGuidesMatchPin(t *testing.T) {
+	t.Parallel()
+
+	pin := firstGroup(t, "../../Taskfile.yml", taskfilePinRe)
+	for _, guide := range installGuides {
+		data, err := os.ReadFile(guide)
+		require.NoError(t, err, "read install guide %s", guide)
+		matches := docPinRe.FindAllSubmatch(data, -1)
+		require.NotEmpty(t, matches, "no shipped version found in %s", guide)
+		for _, m := range matches {
+			assert.Equal(t, pin, string(m[1]), "%s states %s, the Taskfile pins %s", guide, m[1], pin)
+		}
+	}
 }
 
 // TestORTMinimumMatchesBindingAPIVersion ties the minimum version gate to the C
