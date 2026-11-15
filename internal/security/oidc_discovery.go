@@ -26,10 +26,36 @@ const oidcMainLogModule = "security.oidc"
 // oidcDiscoveryPath is appended to the issuer URL to get the discovery document.
 const oidcDiscoveryPath = "/.well-known/openid-configuration"
 
+// oidcIssuerBase returns the issuer URL without a trailing slash. It accepts
+// the issuer itself or the full discovery document URL and strips a trailing
+// oidcDiscoveryPath, so a pasted discovery URL reaches the same document as the
+// issuer it belongs to.
+func oidcIssuerBase(issuerURL string) string {
+	base := strings.TrimSuffix(issuerURL, "/")
+	base = strings.TrimSuffix(base, oidcDiscoveryPath)
+	return strings.TrimSuffix(base, "/")
+}
+
 // oidcDiscoveryURL builds the OIDC discovery document URL per RFC 8414: the
-// document is at {issuer}/.well-known/openid-configuration.
+// document is at {issuer}/.well-known/openid-configuration. The configured
+// value may already be the discovery URL; see oidcIssuerBase.
 func oidcDiscoveryURL(issuerURL string) string {
-	return strings.TrimSuffix(issuerURL, "/") + oidcDiscoveryPath
+	return oidcIssuerBase(issuerURL) + oidcDiscoveryPath
+}
+
+// warnOnOIDCIssuerMismatch logs a warning when the issuer reported by the
+// discovery document differs from the configured issuer URL, ignoring a
+// trailing slash and a pasted discovery path. Registration continues either
+// way: goth checks ID tokens against the discovered issuer, and a provider
+// reached through an internal host name keeps working.
+func warnOnOIDCIssuerMismatch(configuredIssuer, discoveredIssuer, discoveryURL string) {
+	if oidcIssuerBase(configuredIssuer) == strings.TrimSuffix(discoveredIssuer, "/") {
+		return
+	}
+	logOIDCEvent(logger.LogLevelWarn, "OIDC discovery document reports a different issuer than the configured issuer URL, sign-in continues and ID tokens are checked against the discovered issuer",
+		logger.CredentialURL("issuer_url", configuredIssuer),
+		logger.CredentialURL("discovered_issuer", discoveredIssuer),
+		logger.CredentialURL("discovery_url", discoveryURL))
 }
 
 // redactedError carries an error text with credentials removed and still
