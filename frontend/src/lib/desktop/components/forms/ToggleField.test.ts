@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { tick } from 'svelte';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { ShieldCheck } from '@lucide/svelte';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ToggleField from './ToggleField.svelte';
+import ToggleFieldAccepting from './ToggleField.accepting.test.svelte';
 import { opacityClasses } from '../../../../test/class-helpers';
 
 const VARIANTS = ['default', 'card', 'inline'] as const;
@@ -19,7 +21,7 @@ describe('ToggleField', () => {
     });
 
     expect(screen.getByText('Test Toggle')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox')).toBeInTheDocument();
+    expect(screen.getByRole('switch')).toBeInTheDocument();
   });
 
   it('displays current value correctly', () => {
@@ -31,7 +33,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     expect(toggle).toBeChecked();
   });
 
@@ -44,7 +46,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     expect(toggle).not.toBeChecked();
   });
 
@@ -59,7 +61,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     await fireEvent.click(toggle);
 
     expect(onUpdate).toHaveBeenCalledWith(true);
@@ -76,7 +78,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     await fireEvent.click(toggle);
 
     expect(onUpdate).toHaveBeenCalledWith(false);
@@ -144,7 +146,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     // Now uses native Tailwind class for error state
     expect(toggle.className).toContain('checked:bg-[var(--color-error)]');
   });
@@ -158,7 +160,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     // Now uses native Tailwind class for primary state
     expect(toggle.className).toContain('checked:bg-[var(--color-primary)]');
   });
@@ -187,7 +189,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle1 = screen.getByRole('checkbox');
+    const toggle1 = screen.getByRole('switch');
     const id1 = toggle1.getAttribute('id');
 
     unmount();
@@ -200,7 +202,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle2 = screen.getByRole('checkbox');
+    const toggle2 = screen.getByRole('switch');
     const id2 = toggle2.getAttribute('id');
 
     expect(id1).not.toBe(id2);
@@ -217,7 +219,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     const label = screen.getByText('Test Toggle').closest('label');
 
     expect(label).toHaveAttribute('for', toggle.getAttribute('id'));
@@ -250,7 +252,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     await fireEvent.change(toggle, { target: { checked: true } });
 
     expect(onUpdate).toHaveBeenCalledWith(true);
@@ -267,7 +269,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
 
     // Initial state
     expect(toggle).not.toBeChecked();
@@ -287,7 +289,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     const errorId = toggle.getAttribute('aria-describedby');
 
     if (!errorId) throw new Error('aria-describedby is missing');
@@ -305,7 +307,7 @@ describe('ToggleField', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     const describedBy = toggle.getAttribute('aria-describedby');
 
     expect(describedBy).toMatch(/description$/);
@@ -344,6 +346,42 @@ describe('ToggleField', () => {
   });
 });
 
+describe('ToggleField refused change', () => {
+  // A parent that refuses a change (or whose request fails) leaves value as it was; the native
+  // checkbox has already flipped, so it must flip back on the same node and keep focus.
+  it.each(VARIANTS)(
+    '%s: snaps back and keeps focus when the parent keeps the value',
+    async variant => {
+      const user = userEvent.setup();
+      const onUpdate = vi.fn();
+      render(ToggleField, { props: { label: 'Keep', value: false, variant, onUpdate } });
+
+      const toggle = screen.getByRole<HTMLInputElement>('switch');
+      toggle.focus();
+      await user.keyboard(' ');
+
+      expect(onUpdate).toHaveBeenCalledWith(true);
+      await vi.waitFor(() => expect(toggle.checked).toBe(false));
+      expect(screen.getByRole('switch')).toBe(toggle);
+      expect(toggle).toHaveFocus();
+    }
+  );
+
+  // The snap-back must restore the value after the parent's update, not before it: a parent
+  // that accepts inside onUpdate keeps the switch on.
+  it('stays on when the parent accepts the change inside onUpdate', async () => {
+    const user = userEvent.setup();
+    render(ToggleFieldAccepting);
+    const toggle = screen.getByRole<HTMLInputElement>('switch');
+
+    await user.click(toggle);
+
+    await vi.waitFor(() => expect(screen.getByTestId('parent-value')).toHaveTextContent('true'));
+    await tick();
+    expect(toggle.checked).toBe(true);
+  });
+});
+
 describe('ToggleField off-state track contrast', () => {
   it.each(VARIANTS)(
     'draws the %s variant off track with at least 3:1 contrast against its card',
@@ -354,7 +392,7 @@ describe('ToggleField off-state track contrast', () => {
 
       // WCAG 1.4.11: the track is the only cue for the off state. base-content at 60% is at
       // least 3:1 on base-100 and base-200 in both themes; base-300 is about 1.2:1.
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
       expect(toggle).toHaveClass('bg-[var(--color-base-content)]/60');
       expect(toggle).not.toHaveClass('bg-[var(--color-base-300)]');
       expect(toggle).toHaveClass('checked:bg-[var(--color-primary)]');
@@ -373,7 +411,7 @@ describe('ToggleField naming and description', () => {
       },
     });
 
-    const describedBy = screen.getByRole('checkbox').getAttribute('aria-describedby');
+    const describedBy = screen.getByRole('switch').getAttribute('aria-describedby');
 
     if (!describedBy) throw new Error('aria-describedby is missing');
     expect(document.getElementById(describedBy)).toHaveTextContent('Toggle description');
@@ -392,7 +430,7 @@ describe('ToggleField naming and description', () => {
         },
       });
 
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
 
       expect(toggle).toHaveAccessibleName('Test Toggle');
       expect(toggle).toHaveAccessibleDescription('Toggle description');
@@ -417,7 +455,7 @@ describe('ToggleField disabled, required and error state', () => {
           variant,
         },
       });
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
 
       // aria-disabled instead of native disabled, so Tab still reaches it and reads its description
       expect(toggle).not.toBeDisabled();
@@ -442,7 +480,7 @@ describe('ToggleField disabled, required and error state', () => {
     const user = userEvent.setup();
     const props = { label: 'Test Toggle', value: false, onUpdate };
     const { rerender } = render(ToggleField, { props });
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
 
     await user.tab();
     expect(toggle).toHaveFocus();
@@ -468,7 +506,7 @@ describe('ToggleField disabled, required and error state', () => {
       const { container } = render(ToggleField, {
         props: { label: 'Test Toggle', value, onUpdate, disabled: true, variant },
       });
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
       // A capture listener on an ancestor stops the click before it reaches the switch, so the
       // switch's own cancel never runs and the change handler must hold the state itself
       container.addEventListener('click', event => event.stopPropagation(), true);
@@ -487,7 +525,7 @@ describe('ToggleField disabled, required and error state', () => {
       render(ToggleField, {
         props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
       });
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
       const ancestor = toggle.parentElement;
       ancestor?.addEventListener('click', event => event.stopPropagation());
       ancestor?.addEventListener('change', event => event.stopPropagation());
@@ -506,7 +544,7 @@ describe('ToggleField disabled, required and error state', () => {
       const { container } = render(ToggleField, {
         props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
       });
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
       // The click is stopped before the switch and the change on its way up, so neither the
       // click cancel nor a delegated change handler would run
       container.addEventListener('click', event => event.stopPropagation(), true);
@@ -532,7 +570,7 @@ describe('ToggleField disabled, required and error state', () => {
           variant,
         },
       });
-      const checkedColours = [...screen.getByRole('checkbox').classList].filter(c =>
+      const checkedColours = [...screen.getByRole('switch').classList].filter(c =>
         c.startsWith('checked:bg-')
       );
       // The card dims its content wrapper instead, so only the default and inline tracks halve
@@ -550,7 +588,7 @@ describe('ToggleField disabled, required and error state', () => {
       render(ToggleField, {
         props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true, variant },
       });
-      const toggle = screen.getByRole('checkbox');
+      const toggle = screen.getByRole('switch');
 
       expect(opacityClasses(toggle)).toEqual([]);
       expect(toggle).toHaveClass('cursor-not-allowed');
@@ -593,7 +631,7 @@ describe('ToggleField disabled, required and error state', () => {
       props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), required: true, variant },
     });
 
-    expect(screen.getByRole('checkbox')).toBeRequired();
+    expect(screen.getByRole('switch')).toBeRequired();
     expect(screen.getByText('*')).toBeInTheDocument();
   });
 
@@ -609,7 +647,7 @@ describe('ToggleField disabled, required and error state', () => {
     });
 
     expect(screen.getByText('Toggle error')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox')).toHaveClass('checked:bg-[var(--color-error)]');
+    expect(screen.getByRole('switch')).toHaveClass('checked:bg-[var(--color-error)]');
   });
 });
 
@@ -626,7 +664,7 @@ describe('ToggleField error wiring', () => {
       },
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
 
     expect(toggle).toHaveAccessibleName('Test Toggle');
     expect(toggle).toHaveAccessibleDescription('Toggle description Toggle error');
@@ -636,11 +674,11 @@ describe('ToggleField error wiring', () => {
     const props = { label: 'Test Toggle', value: false, onUpdate: vi.fn(), variant };
     const { rerender } = render(ToggleField, { props });
 
-    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByRole('switch')).not.toHaveAttribute('aria-invalid');
 
     await rerender({ ...props, error: 'Toggle error' });
 
-    expect(screen.getByRole('checkbox')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'true');
   });
 });
 
@@ -666,7 +704,7 @@ describe('ToggleField card variant', () => {
     expect(onUpdate).toHaveBeenLastCalledWith(false);
 
     await rerender({ ...baseProps, value: false, onUpdate });
-    await fireEvent.click(screen.getByRole('checkbox'));
+    await fireEvent.click(screen.getByRole('switch'));
     expect(onUpdate).toHaveBeenCalledTimes(3);
     expect(onUpdate).toHaveBeenLastCalledWith(true);
   });
@@ -674,7 +712,7 @@ describe('ToggleField card variant', () => {
   it('shows the checked state on the card and colours the icon primary only when on', async () => {
     const onUpdate = vi.fn();
     const { rerender } = render(ToggleField, { props: { ...baseProps, value: false, onUpdate } });
-    const card = screen.getByRole('checkbox').closest('label');
+    const card = screen.getByRole('switch').closest('label');
     const icon = () => card?.querySelector('svg');
 
     expect(card).toHaveClass('border-[var(--border-200)]');
@@ -689,7 +727,7 @@ describe('ToggleField card variant', () => {
 
   it('draws the focus ring on the card, not on the switch', () => {
     render(ToggleField, { props: { ...baseProps, value: false, onUpdate: vi.fn() } });
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
 
     expect(toggle.closest('label')).toHaveClass(
       'has-[input:focus-visible]:outline-2',
@@ -704,7 +742,7 @@ describe('ToggleField card variant', () => {
     render(ToggleField, {
       props: { ...baseProps, value: false, onUpdate: vi.fn(), disabled: true },
     });
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
     const card = toggle.closest('label');
     const content = toggle.parentElement;
 
@@ -738,7 +776,7 @@ describe('ToggleField card variant', () => {
     'a disabled card with value %s dims its frame through its border colour',
     (value, dimmed, full) => {
       render(ToggleField, { props: { ...baseProps, value, onUpdate: vi.fn(), disabled: true } });
-      const card = screen.getByRole('checkbox').closest('label');
+      const card = screen.getByRole('switch').closest('label');
 
       expect(card).toHaveClass(dimmed);
       expect(card).not.toHaveClass(full);
@@ -747,7 +785,7 @@ describe('ToggleField card variant', () => {
 
   it('an enabled card keeps its content at full opacity', () => {
     render(ToggleField, { props: { ...baseProps, value: false, onUpdate: vi.fn() } });
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
 
     expect(toggle.parentElement).not.toHaveClass('opacity-50');
   });
@@ -755,7 +793,7 @@ describe('ToggleField card variant', () => {
   it('an enabled card shows the pointer cursor and only an unchecked one reacts to hover', async () => {
     const onUpdate = vi.fn();
     const { rerender } = render(ToggleField, { props: { ...baseProps, value: false, onUpdate } });
-    const card = screen.getByRole('checkbox').closest('label');
+    const card = screen.getByRole('switch').closest('label');
 
     expect(card).toHaveClass('cursor-pointer', 'hover:border-[var(--border-300)]');
     expect(card).not.toHaveClass('cursor-not-allowed');
@@ -774,7 +812,7 @@ describe('ToggleField card variant', () => {
         props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), variant },
       });
 
-      expect(screen.getByRole('checkbox')).toHaveClass(
+      expect(screen.getByRole('switch')).toHaveClass(
         'focus-visible:outline-2',
         'focus-visible:outline-[var(--color-primary)]'
       );
@@ -787,7 +825,7 @@ describe('ToggleField inline variant', () => {
     const onUpdate = vi.fn();
     const props = { label: 'Show all', variant: 'inline' as const, onUpdate };
     const { rerender } = render(ToggleField, { props: { ...props, value: false } });
-    const toggle = screen.getByRole('checkbox');
+    const toggle = screen.getByRole('switch');
 
     // The text and the switch share one label, so the gap between them is clickable too
     expect(toggle.closest('label')).toContainElement(screen.getByText('Show all'));
@@ -829,7 +867,7 @@ describe('ToggleField inline variant', () => {
     // 2rem box plus a 0.375rem layer above and below: 2.75rem to touch, never sideways. The
     // layer sits behind the text and the switch inside the label's own stacking context
     // (isolate, -z-10), so pointer hits on them reach them and not the layer.
-    expect(screen.getByRole('checkbox').closest('label')).toHaveClass(
+    expect(screen.getByRole('switch').closest('label')).toHaveClass(
       'relative',
       'isolate',
       'min-h-8',
@@ -852,7 +890,7 @@ describe('ToggleField inline variant', () => {
       },
     });
 
-    const label = screen.getByRole('checkbox').closest('label');
+    const label = screen.getByRole('switch').closest('label');
     const icon = label?.querySelector('svg');
     expect(icon).not.toBeNull();
     // Icon first, then the text: the icon precedes the text in document order

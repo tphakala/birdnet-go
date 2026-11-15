@@ -34,7 +34,6 @@
     "internalServerError": "Belső szerverhiba",
     "actions": {
       "download": "Letöltés",
-      "review": "Áttekintés",
       "play": "Lejátszás",
       "view": "Megtekintés"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Igen",
       "no": "Nem",
       "unknown": "Ismeretlen"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Megjegyzés elrejtése",
         "commentPlaceholder": "Adjon hozzá egy megjegyzést ehhez az észleléshez...",
         "commentCount": "({chars} karakter)",
-        "chars": "karakter",
-        "commentsLabel": "Megjegyzések",
-        "currentStatusTitle": "Jelenlegi állapot",
-        "detectionStatusTitle": "Észlelés állapota",
-        "lockLabel": "Zárolás állapota",
-        "reviewLabel": "Áttekintés állapota",
         "saveReview": "Áttekintés mentése"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Összes észlelés {date}-án"
     },
     "detail": {
-      "species": "Faj",
-      "observation": "Megfigyelés",
+      "species": {
+        "dialogTitle": "Faj módosítása",
+        "current": "Jelenleg azonosítva mint",
+        "fromPredictions": "A modell egyéb előrejelzései",
+        "search": "Fajok keresése",
+        "loadingList": "Fajlista betöltése...",
+        "listFailed": "A fajlista betöltése sikertelen. Zárja be ezt az ablakot, és próbálja újra.",
+        "noMatches": "Nincs egyező faj.",
+        "effect": "Az észlelés helyesként lesz megjelölve, és a modell eredeti választása megmarad a nyilvántartásban.",
+        "pickFirst": "Előbb válasszon ki egy fajt.",
+        "confirm": "Módosítás erre: {species}",
+        "confirmEmpty": "Faj módosítása",
+        "changed": "Faj módosítva erre: {species}",
+        "changeFailed": "A faj módosítása sikertelen. Próbálja újra.",
+        "conflict": "A faj most nem módosítható: az észlelés meg van tartva (zárolva), vagy a régi adatbázis-formátum van használatban.",
+        "notKnownHere": "A(z) {species} még sosem fordult elő és nem is volt előrejelezve ennél az állomásnál, ezért még nem választható ki.",
+        "predictionsTitle": "Egyéb előrejelzések",
+        "noPredictions": "A modell nem tárolt más előrejelzést ehhez a felvételhez.",
+        "allSpecies": "Minden faj",
+        "searchRangePlaceholder": "Ezen a helyen várható faj",
+        "searchAllPlaceholder": "Bármely faj, amelyet a modellek ismernek",
+        "searchHintRange": "Keresés a tartományszűrő szerint itt várható {count} faj között. Kapcsolja be a Minden faj opciót a teljes kereséshez.",
+        "searchHintAll": "Keresés a modellek által ismert mind a(z) {count} faj között.",
+        "noMatchesInRange": "Nincs találat az itt várható fajok között. Kapcsolja be a Minden faj opciót a teljes kereséshez.",
+        "modelPick": "modell választása"
+      },
       "aria": {
-        "downloadAudioClip": "Hangklip letöltése: {name} észleléshez",
-        "audioRecordingFor": "Hangfelvétel és spektrogram: {name}",
         "scientificName": "Tudományos név",
         "classificationBadges": "Faj besorolási jelvények",
         "confidence": "Észlelés megbízhatósága {confidence}%",
-        "metadata": "Észlelés metaadatok",
-        "weatherConditions": "Időjárási viszonyok az észlelés idején",
-        "comments": "Észlelés megjegyzései",
-        "commentText": "Megjegyzés szövege",
-        "commentTimestamp": "Megjegyzés időbélyege",
-        "mainRegion": "Észlelés részletei",
-        "tabsHeading": "Észlelési információk lapjai",
-        "tabList": "Észlelés részleteinek lapjai",
         "speciesHeadingSuffix": "észlelés részletei"
+      },
+      "nav": {
+        "label": "Észlelés navigáció",
+        "back": "Észlelések",
+        "allGroup": "Összes észlelés",
+        "older": "Régebbi észlelés",
+        "noOlder": "Ez a legrégebbi észlelés",
+        "newer": "Újabb észlelés",
+        "noNewer": "Ez a legújabb észlelés",
+        "speciesGroup": "{species} észlelései",
+        "olderSpecies": "Régebbi {species} észlelés",
+        "noOlderSpecies": "Nincs régebbi {species} észlelés",
+        "newerSpecies": "Újabb {species} észlelés",
+        "noNewerSpecies": "Nincs újabb {species} észlelés",
+        "stepLoading": "{label}: szomszédos észlelések keresése",
+        "stepFailed": "{label}: nem sikerült ellenőrizni a szomszédos észleléseket"
+      },
+      "identity": {
+        "date": "Dátum",
+        "time": "Időpont",
+        "beforeSunrise": "{hours} óra {minutes} perc napkelte előtt",
+        "afterSunrise": "{hours} óra {minutes} perc napkelte után",
+        "beforeSunset": "{hours} óra {minutes} perc napnyugta előtt",
+        "afterSunset": "{hours} óra {minutes} perc napnyugta után",
+        "setByReviewer": "Ellenőrző által beállított faj",
+        "timeOfDay": "Napszak",
+        "minutesBeforeSunrise": "{minutes} perc napkelte előtt",
+        "minutesAfterSunrise": "{minutes} perc napkelte után",
+        "minutesBeforeSunset": "{minutes} perc napnyugta előtt",
+        "minutesAfterSunset": "{minutes} perc napnyugta után",
+        "predictionsUnknown": "Egyéb előrejelzések",
+        "predictionsNone": "Nincs más előrejelzés",
+        "predictionsCount": "{count, plural, one {# egyéb előrejelzés} other {# egyéb előrejelzés}}"
+      },
+      "conditions": {
+        "title": "Időpont és körülmények",
+        "skyLabel": "Napi idővonal: észlelve {time}-kor, napkelte {sunrise}, napnyugta {sunset}",
+        "activityLabel": "{species} észlelései napszakonként, órás bontásban",
+        "sunrise": "Napkelte",
+        "sunset": "Napnyugta",
+        "activityLegend": "{species} óránkénti aktivitása, teljes időszak",
+        "feelsLike": "Hőérzet",
+        "moonLit": "{percent}% megvilágítás",
+        "windFrom": "Szélirány: {direction}",
+        "cloudCover": "Felhőborítottság",
+        "precipitation": "Csapadék",
+        "precipitationTypes": {
+          "rain": "eső",
+          "snow": "hó",
+          "sleet": "havas eső"
+        },
+        "observedAt": "Időjárási megfigyelés: {time}",
+        "notObserved": "Ehhez az időponthoz nincs időjárási megfigyelés"
+      },
+      "compass": {
+        "n": "É",
+        "nne": "ÉÉK",
+        "ne": "ÉK",
+        "ene": "KÉK",
+        "e": "K",
+        "ese": "KDK",
+        "se": "DK",
+        "sse": "DDK",
+        "s": "D",
+        "ssw": "DDNy",
+        "sw": "DNy",
+        "wsw": "NyDNy",
+        "w": "Ny",
+        "wnw": "NyÉNy",
+        "nw": "ÉNy",
+        "nnw": "ÉÉNy"
+      },
+      "review": {
+        "title": "Ellenőrzés",
+        "autosave": "Választáskor azonnal mentve",
+        "question": "Ez {species}?",
+        "correct": "Helyes",
+        "falsePositive": "Hamis pozitív",
+        "saving": "Mentés...",
+        "savedCorrect": "Helyesként megjelölve",
+        "savedFalsePositive": "Hamis pozitívként megjelölve",
+        "loginRequired": "Jelentkezzen be az észlelés ellenőrzéséhez.",
+        "lockedHelp": "A megtartott észlelések nem módosíthatók. Előbb kapcsolja ki a Felvétel megtartása opciót.",
+        "keep": "Felvétel megtartása",
+        "keepHelp": "A megtartott észleléseket a karbantartás sosem törli.",
+        "reloadFailed": "Mentve, de az észlelést nem sikerült újra betölteni. Frissítse az oldalt a változás megtekintéséhez.",
+        "ignoredSpecies": "{species} mostantól figyelmen kívül hagyva",
+        "wrongSpecies": "Más faj...",
+        "legacyHelp": "A faj módosításához az új adatbázis-formátum szükséges.",
+        "databaseChecking": "Annak ellenőrzése, hogy a faj módosítható-e.",
+        "databaseUnknown": "A faj nem módosítható, amíg az adatbázis formátuma nem ismert.",
+        "ignoreShort": "Faj mellőzése",
+        "ignoredShort": "Faj mellőzve"
+      },
+      "models": {
+        "title": "Modellek",
+        "summary": "{total} modellből {hit} észlelte",
+        "empty": "Ehhez az észleléshez nincs modellenkénti rekord. A modellek részvétele csak az újabb észleléseknél tárolódik.",
+        "hits": "{count, plural, one {# találat} other {# találat}}",
+        "mean": "átlag {value}",
+        "noHit": "Lefutott ezen a hangon, nincs találat"
+      },
+      "stats": {
+        "title": "A faj ennél az állomásnál",
+        "rangeScore": "Tartományszűrő pontszám",
+        "rangeScoreNote": "Előfordulási valószínűség ezen a helyen ekkor: {date}",
+        "rangeScoreNoteToday": "Előfordulási valószínűség ezen a helyen ma",
+        "total": "Észlelések, összesen",
+        "windowTotal": "Észlelések, elmúlt {days} nap",
+        "firstHeard": "Először hallva",
+        "lastHeard": "Utoljára hallva",
+        "avgConfidence": "Átlagos megbízhatóság",
+        "maxConfidence": "Legmagasabb megbízhatóság",
+        "dailyTitle": "Napi észlelések, {days} nap eddig az észlelésig",
+        "dailyLabel": "{count} észlelés az ezt az észlelést megelőző {days} napban",
+        "allThisDay": "Minden {species} észlelés ezen a napon",
+        "reviewsTitle": "Felhasználók által ellenőrizve",
+        "reviewsCount": "{count, plural, one {# ellenőrzés} other {# ellenőrzés}}",
+        "reviewsCorrect": "{count} helyes",
+        "reviewsFalse": "{count, plural, one {# hamis pozitív} other {# hamis pozitív}}",
+        "oftenRejected": "Gyakran elutasítva itt: az ellenőrzések {percent}%-a hamis pozitív volt",
+        "reviewsNone": "Ennek a fajnak még egyetlen észlelését sem ellenőrizték."
+      },
+      "clip": {
+        "window": "Rögzítési ablak",
+        "length": "Hossz",
+        "seconds": "{count} s",
+        "format": "Formátum",
+        "denoised": "Zajszűrés mentéskor",
+        "denoisedYes": "Igen",
+        "denoisedNo": "Nem",
+        "file": "Fájl",
+        "audioRemoved": "A hangfájlt a megőrzési szabály eltávolította; a spektrogramkép megmaradt.",
+        "noClip": "Ehhez az észleléshez nem lett felvétel mentve."
+      },
+      "log": {
+        "title": "Tevékenységnapló",
+        "subtitle": "Mi történt ezzel az észleléssel",
+        "detected": "{species} észlelve {confidence}% megbízhatósággal",
+        "captureWindow": "Rögzítési ablak {begin}-{end}",
+        "clipSaved": "Felvétel mentve",
+        "clipSavedDenoised": "Felvétel mentve, zajszűrve",
+        "firstReviewed": "Először ellenőrizve",
+        "reviewed": "Megjelölve: {status}",
+        "locked": "Megtartva (zárolva)",
+        "noteAdded": "Jegyzet hozzáadva",
+        "noteEdited": "Szerkesztve: {time}",
+        "timeUnknown": "Időpont nincs rögzítve",
+        "addNote": "Jegyzet hozzáadása",
+        "saveNote": "Jegyzet mentése",
+        "lockedHelp": "Amíg az észlelés meg van tartva (zárolva), nem adható hozzá jegyzet.",
+        "noteEmpty": "Írjon be egy jegyzetet a hozzáadás előtt.",
+        "speciesChanged": "Faj módosítva erről: {from}, erre: {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Felvétel és spektrogram",
       "clipHint": "Kattintson és húzza a spektrogramon egy tartomány kijelöléséhez a kivágás exportálásához"
     },
-    "tabs": {
-      "overview": "Áttekintés",
-      "taxonomy": "Taxonómia",
-      "history": "Előzmények",
-      "notes": "Megjegyzések"
-    },
     "environmental": {
       "title": "Környezeti feltételek"
     },
@@ -1057,18 +1210,9 @@
       "status": "Állapot",
       "locked": "Zárolva"
     },
-    "history": {
-      "title": "Észlelés előzmények",
-      "comingSoon": "Az előzmények követése hamarosan..."
-    },
-    "notes": {
-      "title": "Megjegyzések és kommentek",
-      "noComments": "Nincs komment vagy megjegyzés ehhez az észleléshez."
-    },
     "aria": {
       "loading": "Észlelés részleteinek betöltése...",
       "loaded": "Észlelés részletei betöltve: {species}",
-      "error": "Hiba az észlelés betöltésekor: {error}",
       "loadingResults": "{count} eredmény betöltése...",
       "thumbnailLoading": "{species} bélyegkép betöltése...",
       "thumbnailLoaded": "{species} bélyegkép betöltve",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Faj ritkasága",
       "score": "Pontszám",
-      "basedOnLocation": "Helyszín alapján: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Nagyon gyakori",
         "common": "Gyakori",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonómiai besorolás",
-      "subspecies": "Alfajok",
       "noData": "Nem érhető el taxonómia adat.",
       "labels": {
         "kingdom": "Ország",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Faj követés",
       "newSpecies": "Új faj",
       "newThisYear": "Első az idén",
-      "newThisSeason": "Első ebben az évszakban",
-      "daysSinceFirst": "Napok az első észlelés óta"
+      "newThisSeason": "Első ebben az évszakban"
     }
   },
   "spectrogram": {

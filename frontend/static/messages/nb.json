@@ -34,7 +34,6 @@
     "internalServerError": "Intern serverfeil",
     "actions": {
       "download": "Last ned",
-      "review": "Gjennomgå",
       "play": "Spill av",
       "view": "Vis"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nei",
       "unknown": "Ukjent"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Skjul kommentar",
         "commentPlaceholder": "Legg til en kommentar om denne registreringen...",
         "commentCount": "({chars} tegn)",
-        "chars": "tegn",
-        "commentsLabel": "Kommentarer",
-        "currentStatusTitle": "Nåværende status",
-        "detectionStatusTitle": "Registreringsstatus",
-        "lockLabel": "Låsestatus",
-        "reviewLabel": "Gjennomgangsstatus",
         "saveReview": "Lagre gjennomgang"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Alle registreringer for {date}"
     },
     "detail": {
-      "species": "Art",
-      "observation": "Observasjon",
+      "species": {
+        "dialogTitle": "Endre art",
+        "current": "For øyeblikket identifisert som",
+        "fromPredictions": "Modellens andre prediksjoner",
+        "search": "Søk arter",
+        "loadingList": "Laster artslisten...",
+        "listFailed": "Kunne ikke laste artslisten. Lukk denne dialogboksen og prøv igjen.",
+        "noMatches": "Ingen arter samsvarer.",
+        "effect": "Registreringen merkes som korrekt, og modellens eget valg blir stående i historikken.",
+        "pickFirst": "Velg en art først.",
+        "confirm": "Endre til {species}",
+        "confirmEmpty": "Endre art",
+        "changed": "Art endret til {species}",
+        "changeFailed": "Kunne ikke endre art. Prøv igjen.",
+        "conflict": "Arten kan ikke endres nå: registreringen er beholdt (låst), eller det eldre databaseformatet er i bruk.",
+        "notKnownHere": "{species} har aldri blitt registrert eller forutsagt ved denne stasjonen, så den kan ikke velges ennå.",
+        "predictionsTitle": "Andre prediksjoner",
+        "noPredictions": "Modellen lagret ingen andre prediksjoner for dette opptaket.",
+        "allSpecies": "Alle arter",
+        "searchRangePlaceholder": "En art som forventes på dette stedet",
+        "searchAllPlaceholder": "Enhver art modellene kjenner",
+        "searchHintRange": "Søker blant de {count} artene artsutvalgsfilteret forventer her. Slå på Alle arter for å søke i alt.",
+        "searchHintAll": "Søker blant alle {count} artene modellene kjenner.",
+        "noMatchesInRange": "Ingen treff blant artene som forventes her. Slå på Alle arter for å søke i alt.",
+        "modelPick": "modellens valg"
+      },
       "aria": {
-        "downloadAudioClip": "Last ned lydklipp for {name}-deteksjon",
-        "audioRecordingFor": "Lydopptak og spektrogram for {name}",
         "scientificName": "Vitenskapelig navn",
         "classificationBadges": "Merker for artsklassifisering",
         "confidence": "Registreringssikkerhet {confidence}%",
-        "metadata": "Registreringsmetadata",
-        "weatherConditions": "Værforhold på registreringstidspunktet",
-        "comments": "Kommentarer til registreringen",
-        "commentText": "Kommentartekst",
-        "commentTimestamp": "Tidsstempel for kommentar",
-        "mainRegion": "Registreringsdetaljer",
-        "tabsHeading": "Faner med registreringsinformasjon",
-        "tabList": "Faner for registreringsdetaljer",
         "speciesHeadingSuffix": "registreringsdetaljer"
+      },
+      "nav": {
+        "label": "Registreringsnavigasjon",
+        "back": "Registreringer",
+        "allGroup": "Alle registreringer",
+        "older": "Eldre registrering",
+        "noOlder": "Dette er den eldste registreringen",
+        "newer": "Nyere registrering",
+        "noNewer": "Dette er den nyeste registreringen",
+        "speciesGroup": "Registreringer av {species}",
+        "olderSpecies": "Eldre registrering av {species}",
+        "noOlderSpecies": "Ingen eldre registrering av {species}",
+        "newerSpecies": "Nyere registrering av {species}",
+        "noNewerSpecies": "Ingen nyere registrering av {species}",
+        "stepLoading": "{label}: ser etter nærliggende registreringer",
+        "stepFailed": "{label}: kunne ikke se etter nærliggende registreringer"
+      },
+      "identity": {
+        "date": "Dato",
+        "time": "Tid",
+        "beforeSunrise": "{hours} t {minutes} min før soloppgang",
+        "afterSunrise": "{hours} t {minutes} min etter soloppgang",
+        "beforeSunset": "{hours} t {minutes} min før solnedgang",
+        "afterSunset": "{hours} t {minutes} min etter solnedgang",
+        "setByReviewer": "Art satt av kontrollør",
+        "timeOfDay": "Tid på døgnet",
+        "minutesBeforeSunrise": "{minutes} min før soloppgang",
+        "minutesAfterSunrise": "{minutes} min etter soloppgang",
+        "minutesBeforeSunset": "{minutes} min før solnedgang",
+        "minutesAfterSunset": "{minutes} min etter solnedgang",
+        "predictionsUnknown": "Andre prediksjoner",
+        "predictionsNone": "Ingen andre prediksjoner",
+        "predictionsCount": "{count, plural, one {# annen prediksjon} other {# andre prediksjoner}}"
+      },
+      "conditions": {
+        "title": "Tid og forhold",
+        "skyLabel": "Døgnlinje: registrert kl. {time}, soloppgang {sunrise}, solnedgang {sunset}",
+        "activityLabel": "Registreringer av {species} etter time på døgnet",
+        "sunrise": "Soloppgang",
+        "sunset": "Solnedgang",
+        "activityLegend": "Aktivitet for {species} per time, all tid",
+        "feelsLike": "Føles som",
+        "moonLit": "{percent}% belyst",
+        "windFrom": "Vind fra {direction}",
+        "cloudCover": "Skydekke",
+        "precipitation": "Nedbør",
+        "precipitationTypes": {
+          "rain": "regn",
+          "snow": "snø",
+          "sleet": "sludd"
+        },
+        "observedAt": "Værobservasjon fra {time}",
+        "notObserved": "Ingen værobservasjon for dette tidspunktet"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNØ",
+        "ne": "NØ",
+        "ene": "ØNØ",
+        "e": "Ø",
+        "ese": "ØSØ",
+        "se": "SØ",
+        "sse": "SSØ",
+        "s": "S",
+        "ssw": "SSV",
+        "sw": "SV",
+        "wsw": "VSV",
+        "w": "V",
+        "wnw": "VNV",
+        "nw": "NV",
+        "nnw": "NNV"
+      },
+      "review": {
+        "title": "Gjennomgang",
+        "autosave": "Lagres så snart du velger",
+        "question": "Er dette {species}?",
+        "correct": "Korrekt",
+        "falsePositive": "Falsk positiv",
+        "saving": "Lagrer...",
+        "savedCorrect": "Merket som korrekt",
+        "savedFalsePositive": "Merket som falsk positiv",
+        "loginRequired": "Logg inn for å gjennomgå denne registreringen.",
+        "lockedHelp": "Registreringer som beholdes kan ikke endres. Slå av Behold dette opptaket først.",
+        "keep": "Behold dette opptaket",
+        "keepHelp": "Registreringer som beholdes slettes aldri ved opprydding.",
+        "reloadFailed": "Lagret, men registreringen kunne ikke lastes inn på nytt. Oppdater siden for å se endringen.",
+        "ignoredSpecies": "{species} er nå ignorert",
+        "wrongSpecies": "Feil art...",
+        "legacyHelp": "Endring av art krever det gjeldende databaseformatet.",
+        "databaseChecking": "Sjekker om arten kan endres.",
+        "databaseUnknown": "Arten kan ikke endres før databaseformatet er kjent.",
+        "ignoreShort": "Ignorer art",
+        "ignoredShort": "Art ignorert"
+      },
+      "models": {
+        "title": "Modeller",
+        "summary": "{hit} av {total} registrerte den",
+        "empty": "Ingen modelloversikt for denne registreringen. Modelldeltakelse lagres bare for nyere registreringer.",
+        "hits": "{count, plural, one {# treff} other {# treff}}",
+        "mean": "snitt {value}",
+        "noHit": "Kjørt på denne lyden, ingen treff"
+      },
+      "stats": {
+        "title": "Arten ved denne stasjonen",
+        "rangeScore": "Poengsum for artsutvalgsfilter",
+        "rangeScoreNote": "Sannsynlighet på dette stedet for {date}",
+        "rangeScoreNoteToday": "Sannsynlighet på dette stedet i dag",
+        "total": "Registreringer, all tid",
+        "windowTotal": "Registreringer, siste {days} dager",
+        "firstHeard": "Først hørt",
+        "lastHeard": "Sist hørt",
+        "avgConfidence": "Gjennomsnittlig sikkerhet",
+        "maxConfidence": "Høyeste sikkerhet",
+        "dailyTitle": "Registreringer per dag, {days} dager frem til denne registreringen",
+        "dailyLabel": "{count} registreringer i de {days} dagene frem til denne registreringen",
+        "allThisDay": "Alle registreringer av {species} denne dagen",
+        "reviewsTitle": "Gjennomgått av brukere",
+        "reviewsCount": "{count, plural, one {# gjennomgang} other {# gjennomganger}}",
+        "reviewsCorrect": "{count} korrekte",
+        "reviewsFalse": "{count, plural, one {# falsk positiv} other {# falske positive}}",
+        "oftenRejected": "Ofte avvist her: {percent}% av gjennomgangene var falske positive",
+        "reviewsNone": "Ingen registrering av denne arten er gjennomgått ennå."
+      },
+      "clip": {
+        "window": "Opptaksvindu",
+        "length": "Lengde",
+        "seconds": "{count} s",
+        "format": "Format",
+        "denoised": "Støyredusert ved lagring",
+        "denoisedYes": "Ja",
+        "denoisedNo": "Nei",
+        "file": "Fil",
+        "audioRemoved": "Lyden ble fjernet av oppbevaringsregelen; spektrogrambildet ble beholdt.",
+        "noClip": "Det ble ikke lagret noe opptak for denne registreringen."
+      },
+      "log": {
+        "title": "Aktivitetslogg",
+        "subtitle": "Hva som har skjedd med denne registreringen",
+        "detected": "Registrert {species} med {confidence}% sikkerhet",
+        "captureWindow": "Opptaksvindu {begin}-{end}",
+        "clipSaved": "Opptak lagret",
+        "clipSavedDenoised": "Opptak lagret, støyredusert",
+        "firstReviewed": "Først gjennomgått",
+        "reviewed": "Merket som {status}",
+        "locked": "Beholdt (låst)",
+        "noteAdded": "Notat lagt til",
+        "noteEdited": "Redigert {time}",
+        "timeUnknown": "Tid ikke registrert",
+        "addNote": "Legg til et notat",
+        "saveNote": "Legg til notat",
+        "lockedHelp": "Notater kan ikke legges til mens registreringen er beholdt (låst).",
+        "noteEmpty": "Skriv et notat før du legger det til.",
+        "speciesChanged": "Art endret fra {from} til {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Opptak og spektrogram",
       "clipHint": "Klikk og dra på spektrogrammet for å velge et område til klippeksport"
     },
-    "tabs": {
-      "overview": "Oversikt",
-      "taxonomy": "Taksonomi",
-      "history": "Historikk",
-      "notes": "Notater"
-    },
     "environmental": {
       "title": "Miljøforhold"
     },
@@ -1057,18 +1210,9 @@
       "status": "Status",
       "locked": "Låst"
     },
-    "history": {
-      "title": "Registreringshistorikk",
-      "comingSoon": "Historikksporing kommer snart..."
-    },
-    "notes": {
-      "title": "Notater og kommentarer",
-      "noComments": "Ingen kommentarer eller notater for denne registreringen."
-    },
     "aria": {
       "loading": "Laster registreringsdetaljer...",
       "loaded": "Registreringsdetaljer lastet for {species}",
-      "error": "Feil ved lasting av registrering: {error}",
       "loadingResults": "Laster {count} resultater...",
       "thumbnailLoading": "Laster miniatyrbilde for {species}...",
       "thumbnailLoaded": "Miniatyrbilde for {species} lastet",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Sjeldenhetsgrad",
       "score": "Poeng",
-      "basedOnLocation": "Basert på posisjon: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Svært vanlig",
         "common": "Vanlig",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomisk klassifisering",
-      "subspecies": "Underart",
       "noData": "Ingen taksonomidata tilgjengelig.",
       "labels": {
         "kingdom": "Rike",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Artssporing",
       "newSpecies": "Ny art",
       "newThisYear": "Første gang i år",
-      "newThisSeason": "Første gang denne sesongen",
-      "daysSinceFirst": "Dager siden første observasjon"
+      "newThisSeason": "Første gang denne sesongen"
     }
   },
   "spectrogram": {

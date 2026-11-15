@@ -221,7 +221,7 @@ describe('RTSPUrlManager', () => {
       },
     });
 
-    const toggles = screen.getAllByRole('checkbox');
+    const toggles = screen.getAllByRole('switch');
     const activeToggle = toggles.find(toggle => (toggle as HTMLInputElement).checked);
 
     // Fail fast if toggle not found - also helps TypeScript narrow the type

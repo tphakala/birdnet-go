@@ -34,7 +34,6 @@
     "internalServerError": "Iekšējā servera kļūda",
     "actions": {
       "download": "Lejupielādēt",
-      "review": "Pārskatīt",
       "play": "Atskaņot",
       "view": "Skatīt"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Jā",
       "no": "Nē",
       "unknown": "Nezināms"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Slēpt komentāru",
         "commentPlaceholder": "Pievienojiet komentāru par šo noteikšanu...",
         "commentCount": "({chars} rakstzīmes)",
-        "chars": "rakstzīmes",
-        "commentsLabel": "Komentāri",
-        "currentStatusTitle": "Pašreizējais statuss",
-        "detectionStatusTitle": "Noteikšanas statuss",
-        "lockLabel": "Bloķēšanas statuss",
-        "reviewLabel": "Pārskatīšanas statuss",
         "saveReview": "Saglabāt pārskatīšanu"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Visas atklāšanas datumā {date}"
     },
     "detail": {
-      "species": "Suga",
-      "observation": "Novērojums",
+      "species": {
+        "dialogTitle": "Mainīt sugu",
+        "current": "Pašlaik identificēta kā",
+        "fromPredictions": "Citas modeļa prognozes",
+        "search": "Meklēt sugas",
+        "loadingList": "Ielādē sugu sarakstu...",
+        "listFailed": "Neizdevās ielādēt sugu sarakstu. Aizveriet šo logu un mēģiniet vēlreiz.",
+        "noMatches": "Nav atbilstošu sugu.",
+        "effect": "Noteikšana tiek atzīmēta kā pareiza, un modeļa sākotnējā izvēle saglabājas ierakstā.",
+        "pickFirst": "Vispirms izvēlieties sugu.",
+        "confirm": "Mainīt uz {species}",
+        "confirmEmpty": "Mainīt sugu",
+        "changed": "Suga nomainīta uz {species}",
+        "changeFailed": "Neizdevās nomainīt sugu. Lūdzu, mēģiniet vēlreiz.",
+        "conflict": "Sugu pašlaik nevar mainīt: noteikšana ir paturēta (bloķēta), vai arī tiek izmantots mantotais datubāzes formāts.",
+        "notKnownHere": "Suga {species} šajā stacijā vēl nekad nav tikusi noteikta vai prognozēta, tāpēc to vēl nevar izvēlēties.",
+        "predictionsTitle": "Citas prognozes",
+        "noPredictions": "Modelis šim ierakstam nav saglabājis citas prognozes.",
+        "allSpecies": "Visas sugas",
+        "searchRangePlaceholder": "Šajā vietā sagaidāmā suga",
+        "searchAllPlaceholder": "Jebkura modeļiem zināmā suga",
+        "searchHintRange": "Meklē starp {count} sugām, ko areāla filtrs šeit sagaida. Ieslēdziet Visas sugas, lai meklētu visur.",
+        "searchHintAll": "Meklē starp visām {count} modeļiem zināmajām sugām.",
+        "noMatchesInRange": "Nav sakritību starp šeit sagaidāmajām sugām. Ieslēdziet Visas sugas, lai meklētu visur.",
+        "modelPick": "modeļa izvēle"
+      },
       "aria": {
-        "downloadAudioClip": "Lejupielādēt audio fragmentu {name} noteikšanai",
-        "audioRecordingFor": "Audio ieraksts un spektrogramma {name}",
         "scientificName": "Zinātniskais nosaukums",
         "classificationBadges": "Sugas klasifikācijas nozīmītes",
         "confidence": "Atklāšanas ticamība {confidence}%",
-        "metadata": "Atklāšanas metadati",
-        "weatherConditions": "Laikapstākļi atklāšanas brīdī",
-        "comments": "Atklāšanas komentāri",
-        "commentText": "Komentāra teksts",
-        "commentTimestamp": "Komentāra laika zīmogs",
-        "mainRegion": "Atklāšanas informācija",
-        "tabsHeading": "Atklāšanas informācijas cilnes",
-        "tabList": "Atklāšanas detaļu cilnes",
         "speciesHeadingSuffix": "atklāšanas informācija"
+      },
+      "nav": {
+        "label": "Noteikšanu navigācija",
+        "back": "Noteikšanas",
+        "allGroup": "Visas noteikšanas",
+        "older": "Vecāka noteikšana",
+        "noOlder": "Šī ir vecākā noteikšana",
+        "newer": "Jaunāka noteikšana",
+        "noNewer": "Šī ir jaunākā noteikšana",
+        "speciesGroup": "Sugas {species} noteikšanas",
+        "olderSpecies": "Vecāka sugas {species} noteikšana",
+        "noOlderSpecies": "Nav vecākas sugas {species} noteikšanas",
+        "newerSpecies": "Jaunāka sugas {species} noteikšana",
+        "noNewerSpecies": "Nav jaunākas sugas {species} noteikšanas",
+        "stepLoading": "{label}: pārbauda blakus esošās noteikšanas",
+        "stepFailed": "{label}: neizdevās pārbaudīt blakus esošās noteikšanas"
+      },
+      "identity": {
+        "date": "Datums",
+        "time": "Laiks",
+        "beforeSunrise": "{hours} st {minutes} min pirms saullēkta",
+        "afterSunrise": "{hours} st {minutes} min pēc saullēkta",
+        "beforeSunset": "{hours} st {minutes} min pirms saulrieta",
+        "afterSunset": "{hours} st {minutes} min pēc saulrieta",
+        "setByReviewer": "Sugu norādījis pārskatītājs",
+        "timeOfDay": "Diennakts laiks",
+        "minutesBeforeSunrise": "{minutes} min pirms saullēkta",
+        "minutesAfterSunrise": "{minutes} min pēc saullēkta",
+        "minutesBeforeSunset": "{minutes} min pirms saulrieta",
+        "minutesAfterSunset": "{minutes} min pēc saulrieta",
+        "predictionsUnknown": "Citas prognozes",
+        "predictionsNone": "Nav citu prognožu",
+        "predictionsCount": "{count, plural, zero {# citu prognožu} one {# cita prognoze} other {# citas prognozes}}"
+      },
+      "conditions": {
+        "title": "Laiks un apstākļi",
+        "skyLabel": "Dienas laika skala: noteikts plkst. {time}, saullēkts {sunrise}, saulriets {sunset}",
+        "activityLabel": "Sugas {species} noteikšanas pa diennakts stundām",
+        "sunrise": "Saullēkts",
+        "sunset": "Saulriets",
+        "activityLegend": "{species} aktivitāte pa stundām, viss laiks",
+        "feelsLike": "Jūtas kā",
+        "moonLit": "{percent}% apgaismots",
+        "windFrom": "Vējš no {direction}",
+        "cloudCover": "Mākoņainība",
+        "precipitation": "Nokrišņi",
+        "precipitationTypes": {
+          "rain": "lietus",
+          "snow": "sniegs",
+          "sleet": "slapjš sniegs"
+        },
+        "observedAt": "Laikapstākļu novērojums no {time}",
+        "notObserved": "Šim laikam nav laikapstākļu novērojuma"
+      },
+      "compass": {
+        "n": "Z",
+        "nne": "ZZA",
+        "ne": "ZA",
+        "ene": "AZA",
+        "e": "A",
+        "ese": "ADA",
+        "se": "DA",
+        "sse": "DDA",
+        "s": "D",
+        "ssw": "DDR",
+        "sw": "DR",
+        "wsw": "RDR",
+        "w": "R",
+        "wnw": "RZR",
+        "nw": "ZR",
+        "nnw": "ZZR"
+      },
+      "review": {
+        "title": "Pārskatīšana",
+        "autosave": "Saglabājas uzreiz pēc izvēles",
+        "question": "Vai tā ir {species}?",
+        "correct": "Pareizi",
+        "falsePositive": "Kļūdaini pozitīvs",
+        "saving": "Saglabā...",
+        "savedCorrect": "Atzīmēts kā pareizs",
+        "savedFalsePositive": "Atzīmēts kā kļūdaini pozitīvs",
+        "loginRequired": "Piesakieties, lai pārskatītu šo noteikšanu.",
+        "lockedHelp": "Paturētās noteikšanas nevar mainīt. Vispirms izslēdziet Paturēt šo ierakstu.",
+        "keep": "Paturēt šo ierakstu",
+        "keepHelp": "Paturētās noteikšanas nekad netiek dzēstas tīrīšanas laikā.",
+        "reloadFailed": "Saglabāts, bet noteikšanu neizdevās ielādēt vēlreiz. Atjauniniet lapu, lai redzētu izmaiņas.",
+        "ignoredSpecies": "Suga {species} tagad tiek ignorēta",
+        "wrongSpecies": "Nepareiza suga...",
+        "legacyHelp": "Sugas maiņai nepieciešams pašreizējais datubāzes formāts.",
+        "databaseChecking": "Pārbauda, vai sugu var mainīt.",
+        "databaseUnknown": "Sugu nevar mainīt, kamēr nav zināms datubāzes formāts.",
+        "ignoreShort": "Ignorēt sugu",
+        "ignoredShort": "Suga ignorēta"
+      },
+      "models": {
+        "title": "Modeļi",
+        "summary": "Noteica {hit} no {total}",
+        "empty": "Šai noteikšanai nav ieraksta pa modeļiem. Modeļu dalība tiek saglabāta tikai jaunākām noteikšanām.",
+        "hits": "{count, plural, zero {# trāpījumu} one {# trāpījums} other {# trāpījumi}}",
+        "mean": "vidēji {value}",
+        "noHit": "Darbināts šim audio, bez rezultāta"
+      },
+      "stats": {
+        "title": "Suga šajā stacijā",
+        "rangeScore": "Areāla filtra vērtējums",
+        "rangeScoreNote": "Varbūtība šajā vietā datumā {date}",
+        "rangeScoreNoteToday": "Varbūtība šajā vietā šodien",
+        "total": "Noteikšanas, viss laiks",
+        "windowTotal": "Noteikšanas, pēdējās {days} dienas",
+        "firstHeard": "Pirmo reizi dzirdēta",
+        "lastHeard": "Pēdējo reizi dzirdēta",
+        "avgConfidence": "Vidējā ticamība",
+        "maxConfidence": "Augstākā ticamība",
+        "dailyTitle": "Noteikšanas dienā, {days} dienas līdz šai noteikšanai",
+        "dailyLabel": "{count} noteikšanas {days} dienās līdz šai noteikšanai",
+        "allThisDay": "Visas {species} noteikšanas šajā dienā",
+        "reviewsTitle": "Cilvēku pārskatītie",
+        "reviewsCount": "{count, plural, zero {# pārskatījumu} one {# pārskatījums} other {# pārskatījumi}}",
+        "reviewsCorrect": "{count} pareizi",
+        "reviewsFalse": "{count, plural, zero {# kļūdaini pozitīvu} one {# kļūdaini pozitīvs} other {# kļūdaini pozitīvi}}",
+        "oftenRejected": "Šeit bieži noraidīta: {percent}% pārskatījumu bija kļūdaini pozitīvi",
+        "reviewsNone": "Neviena šīs sugas noteikšana vēl nav pārskatīta."
+      },
+      "clip": {
+        "window": "Tveršanas logs",
+        "length": "Garums",
+        "seconds": "{count} s",
+        "format": "Formāts",
+        "denoised": "Samazināts troksnis saglabājot",
+        "denoisedYes": "Jā",
+        "denoisedNo": "Nē",
+        "file": "Fails",
+        "audioRemoved": "Audio tika dzēsts saskaņā ar saglabāšanas politiku; spektrogrammas attēls tika paturēts.",
+        "noClip": "Šai noteikšanai ieraksts netika saglabāts."
+      },
+      "log": {
+        "title": "Darbību žurnāls",
+        "subtitle": "Kas noticis ar šo noteikšanu",
+        "detected": "Noteikta suga {species} ar {confidence}% ticamību",
+        "captureWindow": "Tveršanas logs {begin}-{end}",
+        "clipSaved": "Ieraksts saglabāts",
+        "clipSavedDenoised": "Ieraksts saglabāts, troksnis samazināts",
+        "firstReviewed": "Pirmoreiz pārskatīts",
+        "reviewed": "Atzīmēts kā {status}",
+        "locked": "Paturēts (bloķēts)",
+        "noteAdded": "Piezīme pievienota",
+        "noteEdited": "Rediģēta {time}",
+        "timeUnknown": "Laiks nav reģistrēts",
+        "addNote": "Pievienot piezīmi",
+        "saveNote": "Pievienot piezīmi",
+        "lockedHelp": "Kamēr noteikšana ir paturēta (bloķēta), piezīmes pievienot nevar.",
+        "noteEmpty": "Pirms pievienošanas uzrakstiet piezīmi.",
+        "speciesChanged": "Suga nomainīta no {from} uz {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Ieraksts un spektrogramma",
       "clipHint": "Noklikšķiniet un velciet uz spektrogrammas, lai atlasītu diapazonu klipu eksportam"
     },
-    "tabs": {
-      "overview": "Pārskats",
-      "taxonomy": "Taksonomija",
-      "history": "Vēsture",
-      "notes": "Piezīmes"
-    },
     "environmental": {
       "title": "Vides apstākļi"
     },
@@ -1057,18 +1210,9 @@
       "status": "Statuss",
       "locked": "Bloķēts"
     },
-    "history": {
-      "title": "Atklāšanu vēsture",
-      "comingSoon": "Vēstures izsekošana drīzumā..."
-    },
-    "notes": {
-      "title": "Piezīmes un komentāri",
-      "noComments": "Šai atklāšanai nav komentāru vai piezīmju."
-    },
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}",
       "loadingResults": "Ielādē {count} rezultātus...",
       "thumbnailLoading": "Ielādē {species} sīktēlu...",
       "thumbnailLoaded": "Sīktēls {species} ielādēts",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Sugas retums",
       "score": "Vērtējums",
-      "basedOnLocation": "Pamatojoties uz atrašanās vietu: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Ļoti izplatīta",
         "common": "Izplatīta",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomiskā klasifikācija",
-      "subspecies": "Pasugas",
       "noData": "Taksonomijas dati nav pieejami.",
       "labels": {
         "kingdom": "Valsts",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Sugu izsekošana",
       "newSpecies": "Jauna suga",
       "newThisYear": "Pirmā šogad",
-      "newThisSeason": "Pirmā šosezon",
-      "daysSinceFirst": "Dienas kopš pirmās novērošanas"
+      "newThisSeason": "Pirmā šosezon"
     }
   },
   "spectrogram": {

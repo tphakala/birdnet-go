@@ -34,7 +34,6 @@
     "internalServerError": "Errore interno del server",
     "actions": {
       "download": "Scarica",
-      "review": "Revisiona",
       "play": "Riproduci",
       "view": "Vedi"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Sì",
       "no": "No",
       "unknown": "Sconosciuto"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Nascondi commento",
         "commentPlaceholder": "Aggiungi un commento su questo rilevamento...",
         "commentCount": "({chars} caratteri)",
-        "chars": "caratteri",
-        "commentsLabel": "Commenti",
-        "currentStatusTitle": "Stato attuale",
-        "detectionStatusTitle": "Stato rilevamento",
-        "lockLabel": "Stato blocco",
-        "reviewLabel": "Stato revisione",
         "saveReview": "Salva revisione"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Tutti i rilevamenti del {date}"
     },
     "detail": {
-      "species": "Specie",
-      "observation": "Osservazione",
+      "species": {
+        "dialogTitle": "Cambia specie",
+        "current": "Attualmente identificato come",
+        "fromPredictions": "Altre previsioni del modello",
+        "search": "Cerca specie",
+        "loadingList": "Caricamento elenco specie...",
+        "listFailed": "Impossibile caricare l'elenco delle specie. Chiudi questa finestra e riprova.",
+        "noMatches": "Nessuna specie corrispondente.",
+        "effect": "Il rilevamento viene contrassegnato come corretto e la scelta originale del modello resta registrata.",
+        "pickFirst": "Seleziona prima una specie.",
+        "confirm": "Cambia in {species}",
+        "confirmEmpty": "Cambia specie",
+        "changed": "Specie cambiata in {species}",
+        "changeFailed": "Impossibile cambiare la specie. Riprova.",
+        "conflict": "La specie non può essere cambiata ora: il rilevamento è conservato (bloccato) oppure è in uso il vecchio formato di database.",
+        "notKnownHere": "La specie {species} non è mai stata rilevata né prevista in questa stazione, quindi non può ancora essere selezionata.",
+        "predictionsTitle": "Altre previsioni",
+        "noPredictions": "Il modello non ha salvato altre previsioni per questa registrazione.",
+        "allSpecies": "Tutte le specie",
+        "searchRangePlaceholder": "Una specie attesa in questa località",
+        "searchAllPlaceholder": "Qualsiasi specie nota ai modelli",
+        "searchHintRange": "Ricerca tra le {count} specie attese qui dal filtro di distribuzione. Attiva Tutte le specie per cercare ovunque.",
+        "searchHintAll": "Ricerca tra tutte le {count} specie note ai modelli.",
+        "noMatchesInRange": "Nessuna corrispondenza tra le specie attese qui. Attiva Tutte le specie per cercare ovunque.",
+        "modelPick": "scelta del modello"
+      },
       "aria": {
-        "downloadAudioClip": "Scarica clip audio per il rilevamento {name}",
-        "audioRecordingFor": "Registrazione audio e spettrogramma per {name}",
         "scientificName": "Nome scientifico",
         "classificationBadges": "Badge di classificazione della specie",
         "confidence": "Confidenza del rilevamento {confidence}%",
-        "metadata": "Metadati del rilevamento",
-        "weatherConditions": "Condizioni meteo al momento del rilevamento",
-        "comments": "Commenti del rilevamento",
-        "commentText": "Testo del commento",
-        "commentTimestamp": "Data e ora del commento",
-        "mainRegion": "Dettagli del rilevamento",
-        "tabsHeading": "Schede informazioni rilevamento",
-        "tabList": "Schede dettagli rilevamento",
         "speciesHeadingSuffix": "dettagli del rilevamento"
+      },
+      "nav": {
+        "label": "Navigazione rilevamenti",
+        "back": "Rilevamenti",
+        "allGroup": "Tutti i rilevamenti",
+        "older": "Rilevamento precedente",
+        "noOlder": "Questo è il rilevamento più vecchio",
+        "newer": "Rilevamento successivo",
+        "noNewer": "Questo è il rilevamento più recente",
+        "speciesGroup": "Rilevamenti di {species}",
+        "olderSpecies": "Rilevamento precedente di {species}",
+        "noOlderSpecies": "Nessun rilevamento precedente di {species}",
+        "newerSpecies": "Rilevamento successivo di {species}",
+        "noNewerSpecies": "Nessun rilevamento successivo di {species}",
+        "stepLoading": "{label}: ricerca dei rilevamenti vicini",
+        "stepFailed": "{label}: impossibile verificare i rilevamenti vicini"
+      },
+      "identity": {
+        "date": "Data",
+        "time": "Ora",
+        "beforeSunrise": "{hours} h {minutes} min prima dell'alba",
+        "afterSunrise": "{hours} h {minutes} min dopo l'alba",
+        "beforeSunset": "{hours} h {minutes} min prima del tramonto",
+        "afterSunset": "{hours} h {minutes} min dopo il tramonto",
+        "setByReviewer": "Specie impostata da un revisore",
+        "timeOfDay": "Momento della giornata",
+        "minutesBeforeSunrise": "{minutes} min prima dell'alba",
+        "minutesAfterSunrise": "{minutes} min dopo l'alba",
+        "minutesBeforeSunset": "{minutes} min prima del tramonto",
+        "minutesAfterSunset": "{minutes} min dopo il tramonto",
+        "predictionsUnknown": "Altre previsioni",
+        "predictionsNone": "Nessun'altra previsione",
+        "predictionsCount": "{count, plural, one {# altra previsione} other {# altre previsioni}}"
+      },
+      "conditions": {
+        "title": "Ora e condizioni",
+        "skyLabel": "Linea del giorno: rilevato alle {time}, alba {sunrise}, tramonto {sunset}",
+        "activityLabel": "Rilevamenti di {species} per ora del giorno",
+        "sunrise": "Alba",
+        "sunset": "Tramonto",
+        "activityLegend": "Attività di {species} per ora, sempre",
+        "feelsLike": "Percepita",
+        "moonLit": "{percent}% illuminata",
+        "windFrom": "Vento da {direction}",
+        "cloudCover": "Nuvolosità",
+        "precipitation": "Precipitazioni",
+        "precipitationTypes": {
+          "rain": "pioggia",
+          "snow": "neve",
+          "sleet": "nevischio"
+        },
+        "observedAt": "Osservazione meteo delle {time}",
+        "notObserved": "Nessuna osservazione meteo per quest'ora"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNE",
+        "ne": "NE",
+        "ene": "ENE",
+        "e": "E",
+        "ese": "ESE",
+        "se": "SE",
+        "sse": "SSE",
+        "s": "S",
+        "ssw": "SSO",
+        "sw": "SO",
+        "wsw": "OSO",
+        "w": "O",
+        "wnw": "ONO",
+        "nw": "NO",
+        "nnw": "NNO"
+      },
+      "review": {
+        "title": "Revisione",
+        "autosave": "Salvato appena scegli",
+        "question": "È {species}?",
+        "correct": "Corretto",
+        "falsePositive": "Falso positivo",
+        "saving": "Salvataggio...",
+        "savedCorrect": "Contrassegnato come corretto",
+        "savedFalsePositive": "Contrassegnato come falso positivo",
+        "loginRequired": "Accedi per revisionare questo rilevamento.",
+        "lockedHelp": "I rilevamenti conservati non possono essere modificati. Disattiva prima Conserva questa registrazione.",
+        "keep": "Conserva questa registrazione",
+        "keepHelp": "I rilevamenti conservati non vengono mai eliminati dalla pulizia.",
+        "reloadFailed": "Salvato, ma non è stato possibile ricaricare il rilevamento. Aggiorna la pagina per vedere la modifica.",
+        "ignoredSpecies": "La specie {species} ora è ignorata",
+        "wrongSpecies": "Specie errata...",
+        "legacyHelp": "Il cambio della specie richiede il formato attuale del database.",
+        "databaseChecking": "Verifica se è possibile cambiare la specie.",
+        "databaseUnknown": "La specie non può essere cambiata finché il formato del database non è noto.",
+        "ignoreShort": "Ignora specie",
+        "ignoredShort": "Specie ignorata"
+      },
+      "models": {
+        "title": "Modelli",
+        "summary": "{hit} su {total} l'hanno rilevata",
+        "empty": "Nessun dettaglio per modello per questo rilevamento. La partecipazione dei modelli viene salvata solo per i rilevamenti più recenti.",
+        "hits": "{count, plural, one {# rilevamento} other {# rilevamenti}}",
+        "mean": "media {value}",
+        "noHit": "Eseguito su questo audio, nessun rilevamento"
+      },
+      "stats": {
+        "title": "Specie in questa stazione",
+        "rangeScore": "Punteggio filtro di distribuzione",
+        "rangeScoreNote": "Probabilità in questa località per il {date}",
+        "rangeScoreNoteToday": "Probabilità in questa località oggi",
+        "total": "Rilevamenti, sempre",
+        "windowTotal": "Rilevamenti, ultimi {days} giorni",
+        "firstHeard": "Primo ascolto",
+        "lastHeard": "Ultimo ascolto",
+        "avgConfidence": "Confidenza media",
+        "maxConfidence": "Confidenza massima",
+        "dailyTitle": "Rilevamenti al giorno, {days} giorni fino a questo rilevamento",
+        "dailyLabel": "{count} rilevamenti nei {days} giorni fino a questo rilevamento",
+        "allThisDay": "Tutti i rilevamenti di {species} in questo giorno",
+        "reviewsTitle": "Revisionato da utenti",
+        "reviewsCount": "{count, plural, one {# revisione} other {# revisioni}}",
+        "reviewsCorrect": "{count} corretti",
+        "reviewsFalse": "{count, plural, one {# falso positivo} other {# falsi positivi}}",
+        "oftenRejected": "Spesso scartata qui: il {percent}% delle revisioni era falso positivo",
+        "reviewsNone": "Nessun rilevamento di questa specie è stato ancora revisionato."
+      },
+      "clip": {
+        "window": "Finestra di acquisizione",
+        "length": "Durata",
+        "seconds": "{count} s",
+        "format": "Formato",
+        "denoised": "Rumore ridotto al salvataggio",
+        "denoisedYes": "Sì",
+        "denoisedNo": "No",
+        "file": "File",
+        "audioRemoved": "L'audio è stato rimosso dalla politica di conservazione; l'immagine dello spettrogramma è stata mantenuta.",
+        "noClip": "Nessuna registrazione è stata salvata per questo rilevamento."
+      },
+      "log": {
+        "title": "Registro attività",
+        "subtitle": "Cosa è accaduto a questo rilevamento",
+        "detected": "Rilevamento di {species} con confidenza del {confidence}%",
+        "captureWindow": "Finestra di acquisizione {begin}-{end}",
+        "clipSaved": "Registrazione salvata",
+        "clipSavedDenoised": "Registrazione salvata, rumore ridotto",
+        "firstReviewed": "Prima revisione",
+        "reviewed": "Contrassegnato come {status}",
+        "locked": "Conservato (bloccato)",
+        "noteAdded": "Nota aggiunta",
+        "noteEdited": "Modificata alle {time}",
+        "timeUnknown": "Ora non registrata",
+        "addNote": "Aggiungi una nota",
+        "saveNote": "Aggiungi nota",
+        "lockedHelp": "Non è possibile aggiungere note mentre il rilevamento è conservato (bloccato).",
+        "noteEmpty": "Scrivi una nota prima di aggiungerla.",
+        "speciesChanged": "Specie cambiata da {from} a {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Registrazione e Spettrogramma",
       "clipHint": "Clicca e trascina sullo spettrogramma per selezionare un intervallo da esportare"
     },
-    "tabs": {
-      "overview": "Panoramica",
-      "taxonomy": "Tassonomia",
-      "history": "Cronologia",
-      "notes": "Note"
-    },
     "environmental": {
       "title": "Condizioni Ambientali"
     },
@@ -1057,18 +1210,9 @@
       "status": "Stato",
       "locked": "Bloccato"
     },
-    "history": {
-      "title": "Cronologia Rilevamento",
-      "comingSoon": "Tracciamento cronologia in arrivo..."
-    },
-    "notes": {
-      "title": "Note e Commenti",
-      "noComments": "Nessun commento o nota per questo rilevamento."
-    },
     "aria": {
       "loading": "Caricamento dettagli rilevamento...",
       "loaded": "Dettagli rilevamento caricati per {species}",
-      "error": "Errore caricamento rilevamento: {error}",
       "loadingResults": "Caricamento di {count} risultati...",
       "thumbnailLoading": "Caricamento miniatura di {species}...",
       "thumbnailLoaded": "Miniatura di {species} caricata",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Rarità Specie",
       "score": "Punteggio",
-      "basedOnLocation": "Basato sulla posizione: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Molto comune",
         "common": "Comune",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Classificazione Tassonomica",
-      "subspecies": "Sottospecie",
       "noData": "Nessun dato tassonomico disponibile.",
       "labels": {
         "kingdom": "Regno",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Tracciamento specie",
       "newSpecies": "Nuova specie",
       "newThisYear": "Prima volta quest'anno",
-      "newThisSeason": "Prima volta questa stagione",
-      "daysSinceFirst": "Giorni dalla prima osservazione"
+      "newThisSeason": "Prima volta questa stagione"
     }
   },
   "spectrogram": {

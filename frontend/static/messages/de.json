@@ -34,7 +34,6 @@
     "internalServerError": "Interner Serverfehler",
     "actions": {
       "download": "Herunterladen",
-      "review": "Überprüfen",
       "play": "Abspielen",
       "view": "Ansehen"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nein",
       "unknown": "Unbekannt"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Kommentar ausblenden",
         "commentPlaceholder": "Fügen Sie einen Kommentar zu dieser Erkennung hinzu...",
         "commentCount": "({chars} Zeichen)",
-        "chars": "Zeichen",
-        "commentsLabel": "Kommentare",
-        "currentStatusTitle": "Aktueller Status",
-        "detectionStatusTitle": "Erkennungsstatus",
-        "lockLabel": "Sperrstatus",
-        "reviewLabel": "Überprüfungsstatus",
         "saveReview": "Überprüfung speichern"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Alle Erkennungen vom {date}"
     },
     "detail": {
-      "species": "Art",
-      "observation": "Beobachtung",
+      "species": {
+        "dialogTitle": "Art ändern",
+        "current": "Aktuell bestimmt als",
+        "fromPredictions": "Weitere Vorhersagen des Modells",
+        "search": "Arten suchen",
+        "loadingList": "Artenliste wird geladen...",
+        "listFailed": "Die Artenliste konnte nicht geladen werden. Schließen Sie dieses Fenster und versuchen Sie es erneut.",
+        "noMatches": "Keine passenden Arten.",
+        "effect": "Die Erkennung wird als korrekt markiert, und die ursprüngliche Wahl des Modells bleibt gespeichert.",
+        "pickFirst": "Wählen Sie zuerst eine Art aus.",
+        "confirm": "Zu {species} ändern",
+        "confirmEmpty": "Art ändern",
+        "changed": "Art zu {species} geändert",
+        "changeFailed": "Die Art konnte nicht geändert werden. Bitte versuchen Sie es erneut.",
+        "conflict": "Die Art kann jetzt nicht geändert werden: Die Erkennung wird behalten (gesperrt), oder es wird das alte Datenbankformat verwendet.",
+        "notKnownHere": "{species} wurde an dieser Station noch nie erkannt oder vorhergesagt und kann daher noch nicht ausgewählt werden.",
+        "predictionsTitle": "Weitere Vorhersagen",
+        "noPredictions": "Das Modell hat für diese Aufnahme keine weiteren Vorhersagen gespeichert.",
+        "allSpecies": "Alle Arten",
+        "searchRangePlaceholder": "Eine an diesem Standort erwartete Art",
+        "searchAllPlaceholder": "Jede Art, die die Modelle kennen",
+        "searchHintRange": "Durchsucht die {count} Arten, die der Reichweitenfilter hier erwartet. Aktivieren Sie Alle Arten, um alles zu durchsuchen.",
+        "searchHintAll": "Durchsucht alle {count} Arten, die die Modelle kennen.",
+        "noMatchesInRange": "Kein Treffer unter den hier erwarteten Arten. Aktivieren Sie Alle Arten, um alles zu durchsuchen.",
+        "modelPick": "Wahl des Modells"
+      },
       "aria": {
-        "downloadAudioClip": "Audioclip für {name}-Erkennung herunterladen",
-        "audioRecordingFor": "Audioaufnahme und Spektrogramm für {name}",
         "scientificName": "Wissenschaftlicher Name",
         "classificationBadges": "Badges zur Artklassifizierung",
         "confidence": "Erkennungskonfidenz {confidence}%",
-        "metadata": "Erkennungsmetadaten",
-        "weatherConditions": "Wetterbedingungen zum Zeitpunkt der Erkennung",
-        "comments": "Kommentare zur Erkennung",
-        "commentText": "Kommentartext",
-        "commentTimestamp": "Zeitstempel des Kommentars",
-        "mainRegion": "Erkennungsdetails",
-        "tabsHeading": "Registerkarten mit Erkennungsinformationen",
-        "tabList": "Registerkarten der Erkennungsdetails",
         "speciesHeadingSuffix": "Erkennungsdetails"
+      },
+      "nav": {
+        "label": "Erkennungsnavigation",
+        "back": "Erkennungen",
+        "allGroup": "Alle Erkennungen",
+        "older": "Ältere Erkennung",
+        "noOlder": "Dies ist die älteste Erkennung",
+        "newer": "Neuere Erkennung",
+        "noNewer": "Dies ist die neueste Erkennung",
+        "speciesGroup": "Erkennungen von {species}",
+        "olderSpecies": "Ältere Erkennung von {species}",
+        "noOlderSpecies": "Keine ältere Erkennung von {species}",
+        "newerSpecies": "Neuere Erkennung von {species}",
+        "noNewerSpecies": "Keine neuere Erkennung von {species}",
+        "stepLoading": "{label}: benachbarte Erkennungen werden geprüft",
+        "stepFailed": "{label}: benachbarte Erkennungen konnten nicht geprüft werden"
+      },
+      "identity": {
+        "date": "Datum",
+        "time": "Zeit",
+        "beforeSunrise": "{hours} Std. {minutes} Min. vor Sonnenaufgang",
+        "afterSunrise": "{hours} Std. {minutes} Min. nach Sonnenaufgang",
+        "beforeSunset": "{hours} Std. {minutes} Min. vor Sonnenuntergang",
+        "afterSunset": "{hours} Std. {minutes} Min. nach Sonnenuntergang",
+        "setByReviewer": "Art bei Überprüfung festgelegt",
+        "timeOfDay": "Tageszeit",
+        "minutesBeforeSunrise": "{minutes} Min. vor Sonnenaufgang",
+        "minutesAfterSunrise": "{minutes} Min. nach Sonnenaufgang",
+        "minutesBeforeSunset": "{minutes} Min. vor Sonnenuntergang",
+        "minutesAfterSunset": "{minutes} Min. nach Sonnenuntergang",
+        "predictionsUnknown": "Weitere Vorhersagen",
+        "predictionsNone": "Keine weiteren Vorhersagen",
+        "predictionsCount": "{count, plural, one {# weitere Vorhersage} other {# weitere Vorhersagen}}"
+      },
+      "conditions": {
+        "title": "Zeit & Bedingungen",
+        "skyLabel": "Tagesverlauf: erkannt um {time}, Sonnenaufgang {sunrise}, Sonnenuntergang {sunset}",
+        "activityLabel": "Erkennungen von {species} nach Tagesstunde",
+        "sunrise": "Sonnenaufgang",
+        "sunset": "Sonnenuntergang",
+        "activityLegend": "{species}-Aktivität nach Stunde, gesamt",
+        "feelsLike": "Gefühlt",
+        "moonLit": "{percent}% beleuchtet",
+        "windFrom": "Wind aus {direction}",
+        "cloudCover": "Bewölkung",
+        "precipitation": "Niederschlag",
+        "precipitationTypes": {
+          "rain": "Regen",
+          "snow": "Schnee",
+          "sleet": "Schneeregen"
+        },
+        "observedAt": "Wetterbeobachtung von {time}",
+        "notObserved": "Keine Wetterbeobachtung für diese Uhrzeit"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNO",
+        "ne": "NO",
+        "ene": "ONO",
+        "e": "O",
+        "ese": "OSO",
+        "se": "SO",
+        "sse": "SSO",
+        "s": "S",
+        "ssw": "SSW",
+        "sw": "SW",
+        "wsw": "WSW",
+        "w": "W",
+        "wnw": "WNW",
+        "nw": "NW",
+        "nnw": "NNW"
+      },
+      "review": {
+        "title": "Überprüfung",
+        "autosave": "Wird sofort nach Auswahl gespeichert",
+        "question": "Ist das {species}?",
+        "correct": "Korrekt",
+        "falsePositive": "Falsch positiv",
+        "saving": "Wird gespeichert...",
+        "savedCorrect": "Als korrekt markiert",
+        "savedFalsePositive": "Als falsch positiv markiert",
+        "loginRequired": "Melden Sie sich an, um diese Erkennung zu überprüfen.",
+        "lockedHelp": "Behaltene Erkennungen können nicht geändert werden. Deaktivieren Sie zuerst Diese Aufnahme behalten.",
+        "keep": "Diese Aufnahme behalten",
+        "keepHelp": "Behaltene Erkennungen werden bei der Bereinigung nie entfernt.",
+        "reloadFailed": "Gespeichert, aber die Erkennung konnte nicht neu geladen werden. Aktualisieren Sie die Seite, um die Änderung zu sehen.",
+        "ignoredSpecies": "{species} wird jetzt ignoriert",
+        "wrongSpecies": "Falsche Art...",
+        "legacyHelp": "Zum Ändern der Art ist das aktuelle Datenbankformat erforderlich.",
+        "databaseChecking": "Es wird geprüft, ob die Art geändert werden kann.",
+        "databaseUnknown": "Die Art kann erst geändert werden, wenn das Datenbankformat bekannt ist.",
+        "ignoreShort": "Art ignorieren",
+        "ignoredShort": "Art ignoriert"
+      },
+      "models": {
+        "title": "Modelle",
+        "summary": "{hit} von {total} haben sie erkannt",
+        "empty": "Kein modellspezifischer Eintrag für diese Erkennung. Die Modellbeteiligung wird nur für neuere Erkennungen gespeichert.",
+        "hits": "{count, plural, one {# Treffer} other {# Treffer}}",
+        "mean": "Mittelwert {value}",
+        "noHit": "Auf diesem Audio ausgeführt, kein Treffer"
+      },
+      "stats": {
+        "title": "Art an dieser Station",
+        "rangeScore": "Reichweitenfilter-Wert",
+        "rangeScoreNote": "Wahrscheinlichkeit an diesem Standort am {date}",
+        "rangeScoreNoteToday": "Wahrscheinlichkeit an diesem Standort heute",
+        "total": "Erkennungen, gesamt",
+        "windowTotal": "Erkennungen, letzte {days} Tage",
+        "firstHeard": "Zuerst gehört",
+        "lastHeard": "Zuletzt gehört",
+        "avgConfidence": "Durchschnittliche Konfidenz",
+        "maxConfidence": "Höchste Konfidenz",
+        "dailyTitle": "Erkennungen pro Tag, {days} Tage bis zu dieser Erkennung",
+        "dailyLabel": "{count} Erkennungen in den {days} Tagen bis zu dieser Erkennung",
+        "allThisDay": "Alle Erkennungen von {species} an diesem Tag",
+        "reviewsTitle": "Von Menschen überprüft",
+        "reviewsCount": "{count, plural, one {# Überprüfung} other {# Überprüfungen}}",
+        "reviewsCorrect": "{count} korrekt",
+        "reviewsFalse": "{count, plural, one {# falsch positiv} other {# falsch positiv}}",
+        "oftenRejected": "Hier oft abgelehnt: {percent} % der Überprüfungen waren falsch positiv",
+        "reviewsNone": "Es wurde noch keine Erkennung dieser Art überprüft."
+      },
+      "clip": {
+        "window": "Aufnahmefenster",
+        "length": "Länge",
+        "seconds": "{count} s",
+        "format": "Format",
+        "denoised": "Beim Speichern entrauscht",
+        "denoisedYes": "Ja",
+        "denoisedNo": "Nein",
+        "file": "Datei",
+        "audioRemoved": "Das Audio wurde durch die Aufbewahrung entfernt; das Spektrogrammbild blieb erhalten.",
+        "noClip": "Für diese Erkennung wurde keine Aufnahme gespeichert."
+      },
+      "log": {
+        "title": "Aktivitätsprotokoll",
+        "subtitle": "Was mit dieser Erkennung passiert ist",
+        "detected": "{species} mit {confidence} % Konfidenz erkannt",
+        "captureWindow": "Aufnahmefenster {begin}-{end}",
+        "clipSaved": "Aufnahme gespeichert",
+        "clipSavedDenoised": "Aufnahme gespeichert, entrauscht",
+        "firstReviewed": "Erstmals überprüft",
+        "reviewed": "Markiert: {status}",
+        "locked": "Behalten (gesperrt)",
+        "noteAdded": "Notiz hinzugefügt",
+        "noteEdited": "Bearbeitet: {time}",
+        "timeUnknown": "Zeit nicht aufgezeichnet",
+        "addNote": "Notiz hinzufügen",
+        "saveNote": "Notiz hinzufügen",
+        "lockedHelp": "Notizen können nicht hinzugefügt werden, solange die Erkennung behalten (gesperrt) ist.",
+        "noteEmpty": "Schreiben Sie eine Notiz, bevor Sie sie hinzufügen.",
+        "speciesChanged": "Art von {from} zu {to} geändert"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Aufnahme & Spektrogramm",
       "clipHint": "Klicken und ziehen Sie auf dem Spektrogramm, um einen Bereich für den Clip-Export auszuwählen"
     },
-    "tabs": {
-      "overview": "Übersicht",
-      "taxonomy": "Taxonomie",
-      "history": "Verlauf",
-      "notes": "Notizen"
-    },
     "environmental": {
       "title": "Umgebungsbedingungen"
     },
@@ -1057,18 +1210,9 @@
       "status": "Status",
       "locked": "Gesperrt"
     },
-    "history": {
-      "title": "Erkennungsverlauf",
-      "comingSoon": "Verlaufsverfolgung in Kürze verfügbar..."
-    },
-    "notes": {
-      "title": "Notizen & Kommentare",
-      "noComments": "Keine Kommentare oder Notizen für diese Erkennung."
-    },
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
-      "error": "Fehler beim Laden der Erkennung: {error}",
       "loadingResults": "Lade {count} Ergebnisse...",
       "thumbnailLoading": "Lade Vorschaubild von {species}...",
       "thumbnailLoaded": "Vorschaubild von {species} geladen",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Seltenheit der Art",
       "score": "Bewertung",
-      "basedOnLocation": "Basierend auf Standort: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Sehr häufig",
         "common": "Häufig",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomische Klassifizierung",
-      "subspecies": "Unterarten",
       "noData": "Keine Taxonomiedaten verfügbar.",
       "labels": {
         "kingdom": "Reich",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Artenbeobachtung",
       "newSpecies": "Neue Art",
       "newThisYear": "Erste Beobachtung dieses Jahr",
-      "newThisSeason": "Erste Beobachtung diese Saison",
-      "daysSinceFirst": "Tage seit erster Beobachtung"
+      "newThisSeason": "Erste Beobachtung diese Saison"
     }
   },
   "spectrogram": {

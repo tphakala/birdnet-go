@@ -259,6 +259,13 @@
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
 }
 
+/* Secondary text at 70% of the body text colour: labels, captions and notes. It follows
+   --color-base-content, so one definition holds in both themes and every scheme; 4.5:1 or
+   more on base-100 and base-200. Not in @theme, where --text-* names font sizes. */
+:root {
+  --text-subtle: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+}
+
 /* ============================================
    BASE LAYER - Default element styling
    ============================================ */
@@ -338,7 +345,11 @@
     cursor: not-allowed;
   }
 
-  .btn:focus-visible {
+  /* .focus-ring gives a custom control the same keyboard focus ring as a .btn. Never pair
+     it with opacity on the element, which would fade the ring; dim a blocked control by
+     colour instead. */
+  .btn:focus-visible,
+  .focus-ring:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }

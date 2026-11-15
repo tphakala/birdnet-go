@@ -184,7 +184,7 @@ describe('System view', () => {
     expect(screen.getByRole('table')).toHaveTextContent('BirdNET-Go');
 
     const releaseAll = hold(ALL_PROCESSES_URL);
-    await fireEvent.click(screen.getByRole('checkbox', { name: t('system.processInfo.showAll') }));
+    await fireEvent.click(screen.getByRole('switch', { name: t('system.processInfo.showAll') }));
     await flush();
     expect(screen.getByText(label).closest('[role="status"]')).not.toBeNull();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();

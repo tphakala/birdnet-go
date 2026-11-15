@@ -34,7 +34,6 @@
     "internalServerError": "Internt serverfel",
     "actions": {
       "download": "Ladda ner",
-      "review": "Granska",
       "play": "Spela upp",
       "view": "Visa"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nej",
       "unknown": "Okänd"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Dölj kommentar",
         "commentPlaceholder": "Lägg till en kommentar om denna detektion...",
         "commentCount": "({chars} tecken)",
-        "chars": "tecken",
-        "commentsLabel": "Kommentarer",
-        "currentStatusTitle": "Nuvarande status",
-        "detectionStatusTitle": "Detektionsstatus",
-        "lockLabel": "Låsstatus",
-        "reviewLabel": "Granskningsstatus",
         "saveReview": "Spara granskning"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Alla detekteringar för {date}"
     },
     "detail": {
-      "species": "Art",
-      "observation": "Observation",
+      "species": {
+        "dialogTitle": "Byt art",
+        "current": "Nuvarande identifierad som",
+        "fromPredictions": "Modellens andra förutsägelser",
+        "search": "Sök arter",
+        "loadingList": "Laddar artlistan...",
+        "listFailed": "Det gick inte att ladda artlistan. Stäng denna dialogruta och försök igen.",
+        "noMatches": "Inga arter matchar.",
+        "effect": "Detekteringen markeras som korrekt, och modellens eget val sparas i historiken.",
+        "pickFirst": "Välj en art först.",
+        "confirm": "Byt till {species}",
+        "confirmEmpty": "Byt art",
+        "changed": "Art ändrad till {species}",
+        "changeFailed": "Det gick inte att byta art. Försök igen.",
+        "conflict": "Arten kan inte ändras nu: detekteringen är sparad (låst), eller så används det gamla databasformatet.",
+        "notKnownHere": "{species} har aldrig detekterats eller förutspåtts vid denna station och kan därför inte väljas ännu.",
+        "predictionsTitle": "Andra förutsägelser",
+        "noPredictions": "Modellen sparade inga andra förutsägelser för den här inspelningen.",
+        "allSpecies": "Alla arter",
+        "searchRangePlaceholder": "En art som förväntas på den här platsen",
+        "searchAllPlaceholder": "Vilken art som helst som modellerna känner till",
+        "searchHintRange": "Söker bland de {count} arter som områdesfiltret förväntar sig här. Slå på Alla arter för att söka bland allt.",
+        "searchHintAll": "Söker bland alla {count} arter som modellerna känner till.",
+        "noMatchesInRange": "Ingen träff bland de arter som förväntas här. Slå på Alla arter för att söka bland allt.",
+        "modelPick": "modellens val"
+      },
       "aria": {
-        "downloadAudioClip": "Ladda ner ljudklipp för {name}-detektion",
-        "audioRecordingFor": "Ljudinspelning och spektrogram för {name}",
         "scientificName": "Vetenskapligt namn",
         "classificationBadges": "Märken för artklassificering",
         "confidence": "Detekteringskonfidens {confidence}%",
-        "metadata": "Detekteringsmetadata",
-        "weatherConditions": "Väderförhållanden vid detekteringstillfället",
-        "comments": "Kommentarer till detekteringen",
-        "commentText": "Kommentarstext",
-        "commentTimestamp": "Tidsstämpel för kommentar",
-        "mainRegion": "Detekteringsinformation",
-        "tabsHeading": "Flikar med detekteringsinformation",
-        "tabList": "Flikar med detekteringsdetaljer",
         "speciesHeadingSuffix": "detekteringsinformation"
+      },
+      "nav": {
+        "label": "Detekteringsnavigering",
+        "back": "Detekteringar",
+        "allGroup": "Alla detekteringar",
+        "older": "Äldre detektering",
+        "noOlder": "Detta är den äldsta detekteringen",
+        "newer": "Nyare detektering",
+        "noNewer": "Detta är den nyaste detekteringen",
+        "speciesGroup": "Detekteringar av {species}",
+        "olderSpecies": "Äldre detektering av {species}",
+        "noOlderSpecies": "Ingen äldre detektering av {species}",
+        "newerSpecies": "Nyare detektering av {species}",
+        "noNewerSpecies": "Ingen nyare detektering av {species}",
+        "stepLoading": "{label}: söker efter intilliggande detekteringar",
+        "stepFailed": "{label}: kunde inte söka efter intilliggande detekteringar"
+      },
+      "identity": {
+        "date": "Datum",
+        "time": "Tid",
+        "beforeSunrise": "{hours} tim {minutes} min före soluppgången",
+        "afterSunrise": "{hours} tim {minutes} min efter soluppgången",
+        "beforeSunset": "{hours} tim {minutes} min före solnedgången",
+        "afterSunset": "{hours} tim {minutes} min efter solnedgången",
+        "setByReviewer": "Art vald av granskare",
+        "timeOfDay": "Tid på dygnet",
+        "minutesBeforeSunrise": "{minutes} min före soluppgången",
+        "minutesAfterSunrise": "{minutes} min efter soluppgången",
+        "minutesBeforeSunset": "{minutes} min före solnedgången",
+        "minutesAfterSunset": "{minutes} min efter solnedgången",
+        "predictionsUnknown": "Andra förutsägelser",
+        "predictionsNone": "Inga andra förutsägelser",
+        "predictionsCount": "{count, plural, one {# annan förutsägelse} other {# andra förutsägelser}}"
+      },
+      "conditions": {
+        "title": "Tid och förhållanden",
+        "skyLabel": "Dagstidslinje: detekterad kl. {time}, soluppgång {sunrise}, solnedgång {sunset}",
+        "activityLabel": "Detekteringar av {species} per timme på dygnet",
+        "sunrise": "Soluppgång",
+        "sunset": "Solnedgång",
+        "activityLegend": "Aktivitet för {species} per timme, totalt",
+        "feelsLike": "Känns som",
+        "moonLit": "{percent}% belyst",
+        "windFrom": "Vind från {direction}",
+        "cloudCover": "Molntäcke",
+        "precipitation": "Nederbörd",
+        "precipitationTypes": {
+          "rain": "regn",
+          "snow": "snö",
+          "sleet": "snöblandat regn"
+        },
+        "observedAt": "Väderobservation från {time}",
+        "notObserved": "Ingen väderobservation för denna tid"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNO",
+        "ne": "NO",
+        "ene": "ONO",
+        "e": "O",
+        "ese": "OSO",
+        "se": "SO",
+        "sse": "SSO",
+        "s": "S",
+        "ssw": "SSV",
+        "sw": "SV",
+        "wsw": "VSV",
+        "w": "V",
+        "wnw": "VNV",
+        "nw": "NV",
+        "nnw": "NNV"
+      },
+      "review": {
+        "title": "Granskning",
+        "autosave": "Sparas så snart du väljer",
+        "question": "Är detta {species}?",
+        "correct": "Korrekt",
+        "falsePositive": "Falskt positiv",
+        "saving": "Sparar...",
+        "savedCorrect": "Markerad som korrekt",
+        "savedFalsePositive": "Markerad som falskt positiv",
+        "loginRequired": "Logga in för att granska denna detektering.",
+        "lockedHelp": "Sparade detekteringar kan inte ändras. Slå av Behåll denna inspelning först.",
+        "keep": "Behåll denna inspelning",
+        "keepHelp": "Sparade detekteringar tas aldrig bort vid rensning.",
+        "reloadFailed": "Sparat, men detekteringen kunde inte laddas om. Uppdatera sidan för att se ändringen.",
+        "ignoredSpecies": "{species} ignoreras nu",
+        "wrongSpecies": "Fel art...",
+        "legacyHelp": "Att byta art kräver det aktuella databasformatet.",
+        "databaseChecking": "Kontrollerar om arten kan ändras.",
+        "databaseUnknown": "Arten kan inte ändras förrän databasformatet är känt.",
+        "ignoreShort": "Ignorera art",
+        "ignoredShort": "Art ignorerad"
+      },
+      "models": {
+        "title": "Modeller",
+        "summary": "{hit} av {total} detekterade den",
+        "empty": "Ingen modellspecifik post för denna detektering. Modelldeltagande sparas endast för nyare detekteringar.",
+        "hits": "{count, plural, one {# träff} other {# träffar}}",
+        "mean": "medel {value}",
+        "noHit": "Kördes på detta ljud, ingen träff"
+      },
+      "stats": {
+        "title": "Art vid denna station",
+        "rangeScore": "Områdesfiltrets poäng",
+        "rangeScoreNote": "Sannolikhet på den här platsen för {date}",
+        "rangeScoreNoteToday": "Sannolikhet på den här platsen idag",
+        "total": "Detekteringar, totalt",
+        "windowTotal": "Detekteringar, senaste {days} dagarna",
+        "firstHeard": "Först hörd",
+        "lastHeard": "Senast hörd",
+        "avgConfidence": "Genomsnittlig konfidens",
+        "maxConfidence": "Högsta konfidens",
+        "dailyTitle": "Detekteringar per dag, {days} dagar fram till denna detektering",
+        "dailyLabel": "{count} detekteringar under de {days} dagarna fram till denna detektering",
+        "allThisDay": "Alla detekteringar av {species} denna dag",
+        "reviewsTitle": "Granskade av användare",
+        "reviewsCount": "{count, plural, one {# granskning} other {# granskningar}}",
+        "reviewsCorrect": "{count} korrekta",
+        "reviewsFalse": "{count, plural, one {# falskt positiv} other {# falskt positiva}}",
+        "oftenRejected": "Ofta avvisad här: {percent}% av granskningarna var falskt positiva",
+        "reviewsNone": "Ingen detektering av denna art har granskats ännu."
+      },
+      "clip": {
+        "window": "Inspelningsfönster",
+        "length": "Längd",
+        "seconds": "{count} s",
+        "format": "Format",
+        "denoised": "Brusreducerad vid sparande",
+        "denoisedYes": "Ja",
+        "denoisedNo": "Nej",
+        "file": "Fil",
+        "audioRemoved": "Ljudet togs bort av lagringspolicyn; spektrogrambilden behölls.",
+        "noClip": "Ingen inspelning sparades för denna detektering."
+      },
+      "log": {
+        "title": "Aktivitetslogg",
+        "subtitle": "Vad som har hänt med denna detektering",
+        "detected": "Detekterade {species} med {confidence}% konfidens",
+        "captureWindow": "Inspelningsfönster {begin}-{end}",
+        "clipSaved": "Inspelning sparad",
+        "clipSavedDenoised": "Inspelning sparad, brusreducerad",
+        "firstReviewed": "Först granskad",
+        "reviewed": "Markerad som {status}",
+        "locked": "Sparad (låst)",
+        "noteAdded": "Anteckning tillagd",
+        "noteEdited": "Redigerad {time}",
+        "timeUnknown": "Tid ej registrerad",
+        "addNote": "Lägg till en anteckning",
+        "saveNote": "Lägg till anteckning",
+        "lockedHelp": "Anteckningar kan inte läggas till medan detekteringen är sparad (låst).",
+        "noteEmpty": "Skriv en anteckning innan du lägger till den.",
+        "speciesChanged": "Art ändrad från {from} till {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Inspelning och spektrogram",
       "clipHint": "Klicka och dra på spektrogrammet för att välja ett intervall för klippexport"
     },
-    "tabs": {
-      "overview": "Översikt",
-      "taxonomy": "Taxonomi",
-      "history": "Historik",
-      "notes": "Anteckningar"
-    },
     "environmental": {
       "title": "Miljöförhållanden"
     },
@@ -1057,18 +1210,9 @@
       "status": "Status",
       "locked": "Låst"
     },
-    "history": {
-      "title": "Detekteringshistorik",
-      "comingSoon": "Historikspårning kommer snart..."
-    },
-    "notes": {
-      "title": "Anteckningar och kommentarer",
-      "noComments": "Inga kommentarer eller anteckningar för denna detektering."
-    },
     "aria": {
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
-      "error": "Fel vid laddning av detektering: {error}",
       "loadingResults": "Laddar {count} resultat...",
       "thumbnailLoading": "Laddar {species} miniatyrbild...",
       "thumbnailLoaded": "Miniatyrbild av {species} laddad",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Arternas sällsynthet",
       "score": "Poäng",
-      "basedOnLocation": "Baserat på plats: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Mycket vanlig",
         "common": "Vanlig",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomisk klassificering",
-      "subspecies": "Underart",
       "noData": "Inga taxonomidata tillgängliga.",
       "labels": {
         "kingdom": "Rike",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Artspårning",
       "newSpecies": "Ny art",
       "newThisYear": "Första i år",
-      "newThisSeason": "Första denna säsong",
-      "daysSinceFirst": "Dagar sedan först sedd"
+      "newThisSeason": "Första denna säsong"
     }
   },
   "spectrogram": {

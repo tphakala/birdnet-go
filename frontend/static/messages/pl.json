@@ -34,7 +34,6 @@
     "internalServerError": "Wewnętrzny Błąd Serwera",
     "actions": {
       "download": "Pobierz",
-      "review": "Przejrzyj",
       "play": "Odtwórz",
       "view": "Zobacz"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Tak",
       "no": "Nie",
       "unknown": "Nieznany"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Ukryj Komentarz",
         "commentPlaceholder": "Dodaj komentarz o tej detekcji...",
         "commentCount": "({chars} znaków)",
-        "chars": "znaków",
-        "commentsLabel": "Komentarze",
-        "currentStatusTitle": "Aktualny Status",
-        "detectionStatusTitle": "Status Detekcji",
-        "lockLabel": "Status Blokady",
-        "reviewLabel": "Status Przeglądu",
         "saveReview": "Zapisz Przegląd"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Wszystkie Detekcje dla {date}"
     },
     "detail": {
-      "species": "Gatunek",
-      "observation": "Obserwacja",
+      "species": {
+        "dialogTitle": "Zmień gatunek",
+        "current": "Obecnie rozpoznano jako",
+        "fromPredictions": "Inne przewidywania modelu",
+        "search": "Szukaj gatunków",
+        "loadingList": "Ładowanie listy gatunków...",
+        "listFailed": "Nie udało się załadować listy gatunków. Zamknij to okno i spróbuj ponownie.",
+        "noMatches": "Brak pasujących gatunków.",
+        "effect": "Detekcja zostanie oznaczona jako poprawna, a własny wybór modelu pozostanie zapisany w historii.",
+        "pickFirst": "Najpierw wybierz gatunek.",
+        "confirm": "Zmień na {species}",
+        "confirmEmpty": "Zmień gatunek",
+        "changed": "Zmieniono gatunek na {species}",
+        "changeFailed": "Nie udało się zmienić gatunku. Spróbuj ponownie.",
+        "conflict": "Nie można teraz zmienić gatunku: detekcja jest zachowana (zablokowana) lub używany jest stary format bazy danych.",
+        "notKnownHere": "Gatunek {species} nie został jeszcze nigdy wykryty ani przewidziany na tej stacji, więc nie można go jeszcze wybrać.",
+        "predictionsTitle": "Inne przewidywania",
+        "noPredictions": "Model nie zapisał żadnych innych przewidywań dla tego nagrania.",
+        "allSpecies": "Wszystkie gatunki",
+        "searchRangePlaceholder": "Gatunek oczekiwany w tej lokalizacji",
+        "searchAllPlaceholder": "Dowolny gatunek znany modelom",
+        "searchHintRange": "Przeszukiwanie {count} gatunków oczekiwanych tutaj przez filtr zasięgu. Włącz Wszystkie gatunki, aby przeszukać wszystko.",
+        "searchHintAll": "Przeszukiwanie wszystkich {count} gatunków znanych modelom.",
+        "noMatchesInRange": "Brak dopasowań wśród gatunków oczekiwanych w tym miejscu. Włącz Wszystkie gatunki, aby przeszukać wszystko.",
+        "modelPick": "wybór modelu"
+      },
       "aria": {
-        "downloadAudioClip": "Pobierz klip audio dla detekcji {name}",
-        "audioRecordingFor": "Nagranie audio i spektrogram dla {name}",
         "scientificName": "Nazwa naukowa",
         "classificationBadges": "Odznaki klasyfikacji gatunku",
         "confidence": "Pewność detekcji {confidence}%",
-        "metadata": "Metadane detekcji",
-        "weatherConditions": "Warunki pogodowe w czasie detekcji",
-        "comments": "Komentarze detekcji",
-        "commentText": "Treść komentarza",
-        "commentTimestamp": "Znacznik czasu komentarza",
-        "mainRegion": "Szczegóły detekcji",
-        "tabsHeading": "Karty informacji o detekcji",
-        "tabList": "Karty szczegółów detekcji",
         "speciesHeadingSuffix": "szczegóły detekcji"
+      },
+      "nav": {
+        "label": "Nawigacja po detekcjach",
+        "back": "Detekcje",
+        "allGroup": "Wszystkie detekcje",
+        "older": "Starsza detekcja",
+        "noOlder": "To jest najstarsza detekcja",
+        "newer": "Nowsza detekcja",
+        "noNewer": "To jest najnowsza detekcja",
+        "speciesGroup": "Detekcje gatunku {species}",
+        "olderSpecies": "Starsza detekcja gatunku {species}",
+        "noOlderSpecies": "Brak starszej detekcji gatunku {species}",
+        "newerSpecies": "Nowsza detekcja gatunku {species}",
+        "noNewerSpecies": "Brak nowszej detekcji gatunku {species}",
+        "stepLoading": "{label}: sprawdzanie sąsiednich detekcji",
+        "stepFailed": "{label}: nie udało się sprawdzić sąsiednich detekcji"
+      },
+      "identity": {
+        "date": "Data",
+        "time": "Czas",
+        "beforeSunrise": "{hours} godz. {minutes} min przed wschodem słońca",
+        "afterSunrise": "{hours} godz. {minutes} min po wschodzie słońca",
+        "beforeSunset": "{hours} godz. {minutes} min przed zachodem słońca",
+        "afterSunset": "{hours} godz. {minutes} min po zachodzie słońca",
+        "setByReviewer": "Gatunek ustawiony przez oceniającego",
+        "timeOfDay": "Pora dnia",
+        "minutesBeforeSunrise": "{minutes} min przed wschodem słońca",
+        "minutesAfterSunrise": "{minutes} min po wschodzie słońca",
+        "minutesBeforeSunset": "{minutes} min przed zachodem słońca",
+        "minutesAfterSunset": "{minutes} min po zachodzie słońca",
+        "predictionsUnknown": "Inne przewidywania",
+        "predictionsNone": "Brak innych przewidywań",
+        "predictionsCount": "{count, plural, one {# inne przewidywanie} few {# inne przewidywania} many {# innych przewidywań} other {# innego przewidywania}}"
+      },
+      "conditions": {
+        "title": "Czas i warunki",
+        "skyLabel": "Oś dnia: wykryto o {time}, wschód słońca {sunrise}, zachód słońca {sunset}",
+        "activityLabel": "Detekcje gatunku {species} według godziny",
+        "sunrise": "Wschód słońca",
+        "sunset": "Zachód słońca",
+        "activityLegend": "Aktywność gatunku {species} według godzin, cały okres",
+        "feelsLike": "Odczuwalna",
+        "moonLit": "{percent}% oświetlenia",
+        "windFrom": "Wiatr z {direction}",
+        "cloudCover": "Zachmurzenie",
+        "precipitation": "Opady",
+        "precipitationTypes": {
+          "rain": "deszcz",
+          "snow": "śnieg",
+          "sleet": "deszcz ze śniegiem"
+        },
+        "observedAt": "Obserwacja pogody z {time}",
+        "notObserved": "Brak obserwacji pogody dla tej godziny"
+      },
+      "compass": {
+        "n": "Pn",
+        "nne": "PnPnW",
+        "ne": "PnW",
+        "ene": "WPnW",
+        "e": "W",
+        "ese": "WPdW",
+        "se": "PdW",
+        "sse": "PdPdW",
+        "s": "Pd",
+        "ssw": "PdPdZ",
+        "sw": "PdZ",
+        "wsw": "ZPdZ",
+        "w": "Z",
+        "wnw": "ZPnZ",
+        "nw": "PnZ",
+        "nnw": "PnPnZ"
+      },
+      "review": {
+        "title": "Ocena",
+        "autosave": "Zapisuje się od razu po wyborze",
+        "question": "Czy to {species}?",
+        "correct": "Poprawne",
+        "falsePositive": "Fałszywie pozytywne",
+        "saving": "Zapisywanie...",
+        "savedCorrect": "Oznaczono jako poprawne",
+        "savedFalsePositive": "Oznaczono jako fałszywie pozytywne",
+        "loginRequired": "Zaloguj się, aby ocenić tę detekcję.",
+        "lockedHelp": "Zachowanych detekcji nie można zmienić. Najpierw wyłącz Zachowaj to nagranie.",
+        "keep": "Zachowaj to nagranie",
+        "keepHelp": "Zachowane detekcje nigdy nie są usuwane podczas czyszczenia.",
+        "reloadFailed": "Zapisano, ale nie udało się ponownie załadować detekcji. Odśwież stronę, aby zobaczyć zmianę.",
+        "ignoredSpecies": "Gatunek {species} jest teraz ignorowany",
+        "wrongSpecies": "Zły gatunek...",
+        "legacyHelp": "Zmiana gatunku wymaga aktualnego formatu bazy danych.",
+        "databaseChecking": "Sprawdzanie, czy można zmienić gatunek.",
+        "databaseUnknown": "Nie można zmienić gatunku, dopóki format bazy danych nie jest znany.",
+        "ignoreShort": "Ignoruj gatunek",
+        "ignoredShort": "Gatunek ignorowany"
+      },
+      "models": {
+        "title": "Modele",
+        "summary": "{hit} z {total} wykryło ten gatunek",
+        "empty": "Brak zapisów dla poszczególnych modeli dla tej detekcji. Udział modeli jest zapisywany tylko dla nowszych detekcji.",
+        "hits": "{count, plural, one {# trafienie} few {# trafienia} many {# trafień} other {# trafienia}}",
+        "mean": "średnio {value}",
+        "noHit": "Uruchomiono na tym nagraniu, brak trafienia"
+      },
+      "stats": {
+        "title": "Gatunek na tej stacji",
+        "rangeScore": "Wynik filtra zasięgu",
+        "rangeScoreNote": "Prawdopodobieństwo w tej lokalizacji na dzień {date}",
+        "rangeScoreNoteToday": "Prawdopodobieństwo w tej lokalizacji dzisiaj",
+        "total": "Detekcje, cały okres",
+        "windowTotal": "Detekcje, ostatnie {days} dni",
+        "firstHeard": "Usłyszano po raz pierwszy",
+        "lastHeard": "Usłyszano ostatnio",
+        "avgConfidence": "Średnia pewność",
+        "maxConfidence": "Najwyższa pewność",
+        "dailyTitle": "Detekcje dziennie, {days} dni do tej detekcji",
+        "dailyLabel": "{count} detekcji w ciągu {days} dni do tej detekcji",
+        "allThisDay": "Wszystkie detekcje gatunku {species} tego dnia",
+        "reviewsTitle": "Ocenione przez ludzi",
+        "reviewsCount": "{count, plural, one {# ocena} few {# oceny} many {# ocen} other {# oceny}}",
+        "reviewsCorrect": "{count} poprawnych",
+        "reviewsFalse": "{count, plural, one {# fałszywie pozytywne} few {# fałszywie pozytywne} many {# fałszywie pozytywnych} other {# fałszywie pozytywnego}}",
+        "oftenRejected": "Często odrzucany tutaj: {percent}% ocen to fałszywie pozytywne",
+        "reviewsNone": "Żadna detekcja tego gatunku nie została jeszcze oceniona."
+      },
+      "clip": {
+        "window": "Okno przechwytywania",
+        "length": "Długość",
+        "seconds": "{count} s",
+        "format": "Format",
+        "denoised": "Redukcja szumów przy zapisie",
+        "denoisedYes": "Tak",
+        "denoisedNo": "Nie",
+        "file": "Plik",
+        "audioRemoved": "Dźwięk został usunięty zgodnie z polityką retencji; obraz spektrogramu został zachowany.",
+        "noClip": "Nie zapisano nagrania dla tej detekcji."
+      },
+      "log": {
+        "title": "Dziennik aktywności",
+        "subtitle": "Co wydarzyło się z tą detekcją",
+        "detected": "Wykryto gatunek {species} z {confidence}% pewnością",
+        "captureWindow": "Okno przechwytywania {begin}-{end}",
+        "clipSaved": "Zapisano nagranie",
+        "clipSavedDenoised": "Zapisano nagranie, zredukowano szumy",
+        "firstReviewed": "Pierwsza ocena",
+        "reviewed": "Oznaczono jako {status}",
+        "locked": "Zachowane (zablokowane)",
+        "noteAdded": "Dodano notatkę",
+        "noteEdited": "Edytowano {time}",
+        "timeUnknown": "Czas nie został zapisany",
+        "addNote": "Dodaj notatkę",
+        "saveNote": "Dodaj notatkę",
+        "lockedHelp": "Nie można dodawać notatek, gdy detekcja jest zachowana (zablokowana).",
+        "noteEmpty": "Napisz notatkę przed jej dodaniem.",
+        "speciesChanged": "Zmieniono gatunek z {from} na {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Nagranie i Spektrogram",
       "clipHint": "Kliknij i przeciągnij na spektrogramie, aby wybrać zakres do eksportu"
     },
-    "tabs": {
-      "overview": "Przegląd",
-      "taxonomy": "Taksonomia",
-      "history": "Historia",
-      "notes": "Notatki"
-    },
     "environmental": {
       "title": "Warunki Środowiskowe"
     },
@@ -1057,18 +1210,9 @@
       "status": "Status",
       "locked": "Zablokowane"
     },
-    "history": {
-      "title": "Historia Detekcji",
-      "comingSoon": "Śledzenie historii już wkrótce..."
-    },
-    "notes": {
-      "title": "Notatki i Komentarze",
-      "noComments": "Brak komentarzy lub notatek dla tej detekcji."
-    },
     "aria": {
       "loading": "Ładowanie szczegółów detekcji...",
       "loaded": "Szczegóły detekcji załadowane dla {species}",
-      "error": "Błąd ładowania detekcji: {error}",
       "loadingResults": "Ładowanie {count} wyników...",
       "thumbnailLoading": "Ładowanie miniatury {species}...",
       "thumbnailLoaded": "Miniatura {species} załadowana",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Rzadkość Gatunku",
       "score": "Wynik",
-      "basedOnLocation": "Na podstawie lokalizacji: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Bardzo pospolity",
         "common": "Pospolity",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Klasyfikacja Taksonomiczna",
-      "subspecies": "Podgatunek",
       "noData": "Brak dostępnych danych taksonomicznych.",
       "labels": {
         "kingdom": "Królestwo",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Śledzenie gatunków",
       "newSpecies": "Nowy gatunek",
       "newThisYear": "Pierwszy raz w tym roku",
-      "newThisSeason": "Pierwszy raz w tym sezonie",
-      "daysSinceFirst": "Dni od pierwszego wykrycia"
+      "newThisSeason": "Pierwszy raz w tym sezonie"
     }
   },
   "spectrogram": {

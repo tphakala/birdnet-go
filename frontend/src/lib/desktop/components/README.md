@@ -100,10 +100,6 @@ This folder contains **shared components** used across the application. Feature-
 - `SpeciesBadges.svelte` - Reusable species status and lock badges for modals
 - `SpeciesThumbnail.svelte` - Reusable species thumbnail image component
 
-## Review
-
-- `ReviewCard.svelte` - Detection review card component
-
 ## UI
 
 - `ActionMenu.svelte` - Dropdown action menu

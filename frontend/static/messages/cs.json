@@ -34,7 +34,6 @@
     "internalServerError": "Interní chyba serveru",
     "actions": {
       "download": "Stáhnout",
-      "review": "Zkontrolovat",
       "play": "Přehrát",
       "view": "Zobrazit"
     },
@@ -149,7 +148,6 @@
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ano",
       "no": "Ne",
       "unknown": "Neznámé"
     },
@@ -182,12 +180,6 @@
         "hideComment": "Skrýt komentář",
         "commentPlaceholder": "Přidejte komentář k této detekci…",
         "commentCount": "({chars} znaků)",
-        "chars": "znaků",
-        "commentsLabel": "Komentáře",
-        "currentStatusTitle": "Aktuální stav",
-        "detectionStatusTitle": "Stav detekce",
-        "lockLabel": "Stav uzamčení",
-        "reviewLabel": "Stav kontroly",
         "saveReview": "Uložit kontrolu"
       },
       "errors": {
@@ -889,23 +881,190 @@
       "allDetections": "Všechny detekce ze dne {date}"
     },
     "detail": {
-      "species": "Druh",
-      "observation": "Pozorování",
+      "species": {
+        "dialogTitle": "Změnit druh",
+        "current": "Aktuálně určeno jako",
+        "fromPredictions": "Další předpovědi modelu",
+        "search": "Hledat druhy",
+        "loadingList": "Načítání seznamu druhů...",
+        "listFailed": "Seznam druhů se nepodařilo načíst. Zavřete toto okno a zkuste to znovu.",
+        "noMatches": "Žádný druh neodpovídá.",
+        "effect": "Detekce bude označena jako správná a původní volba modelu zůstane zaznamenána.",
+        "pickFirst": "Nejprve vyberte druh.",
+        "confirm": "Změnit na {species}",
+        "confirmEmpty": "Změnit druh",
+        "changed": "Druh změněn na {species}",
+        "changeFailed": "Druh se nepodařilo změnit. Zkuste to prosím znovu.",
+        "conflict": "Druh nyní nelze změnit: detekce je ponechána (uzamčena), nebo se používá starý formát databáze.",
+        "notKnownHere": "Druh {species} nebyl na této stanici nikdy detekován ani předpovězen, takže jej zatím nelze vybrat.",
+        "predictionsTitle": "Další předpovědi",
+        "noPredictions": "Model pro tuto nahrávku neuložil žádné další předpovědi.",
+        "allSpecies": "Všechny druhy",
+        "searchRangePlaceholder": "Druh očekávaný v této lokalitě",
+        "searchAllPlaceholder": "Jakýkoli druh, který modely znají",
+        "searchHintRange": "Hledá se mezi {count} druhy, které zde filtr výskytu očekává. Pro hledání ve všech druzích zapněte Všechny druhy.",
+        "searchHintAll": "Hledá se ve všech {count} druzích, které modely znají.",
+        "noMatchesInRange": "Žádná shoda mezi druhy očekávanými v této lokalitě. Pro hledání ve všech druzích zapněte Všechny druhy.",
+        "modelPick": "volba modelu"
+      },
       "aria": {
-        "downloadAudioClip": "Stáhnout zvukový záznam pro detekci {name}",
-        "audioRecordingFor": "Zvukový záznam a spektrogram pro {name}",
         "scientificName": "Vědecký název",
         "classificationBadges": "Odznaky klasifikace druhu",
         "confidence": "Spolehlivost detekce {confidence}%",
-        "metadata": "Metadata detekce",
-        "weatherConditions": "Povětrnostní podmínky v době detekce",
-        "comments": "Komentáře k detekci",
-        "commentText": "Text komentáře",
-        "commentTimestamp": "Časové razítko komentáře",
-        "mainRegion": "Podrobnosti detekce",
-        "tabsHeading": "Karty s informacemi o detekci",
-        "tabList": "Karty podrobností detekce",
         "speciesHeadingSuffix": "podrobnosti detekce"
+      },
+      "nav": {
+        "label": "Navigace v detekcích",
+        "back": "Detekce",
+        "allGroup": "Všechny detekce",
+        "older": "Starší detekce",
+        "noOlder": "Toto je nejstarší detekce",
+        "newer": "Novější detekce",
+        "noNewer": "Toto je nejnovější detekce",
+        "speciesGroup": "Detekce druhu {species}",
+        "olderSpecies": "Starší detekce druhu {species}",
+        "noOlderSpecies": "Žádná starší detekce druhu {species}",
+        "newerSpecies": "Novější detekce druhu {species}",
+        "noNewerSpecies": "Žádná novější detekce druhu {species}",
+        "stepLoading": "{label}: kontrolují se sousední detekce",
+        "stepFailed": "{label}: nepodařilo se zkontrolovat sousední detekce"
+      },
+      "identity": {
+        "date": "Datum",
+        "time": "Čas",
+        "beforeSunrise": "{hours} h {minutes} min před východem slunce",
+        "afterSunrise": "{hours} h {minutes} min po východu slunce",
+        "beforeSunset": "{hours} h {minutes} min před západem slunce",
+        "afterSunset": "{hours} h {minutes} min po západu slunce",
+        "setByReviewer": "Druh nastaven při kontrole",
+        "timeOfDay": "Denní doba",
+        "minutesBeforeSunrise": "{minutes} min před východem slunce",
+        "minutesAfterSunrise": "{minutes} min po východu slunce",
+        "minutesBeforeSunset": "{minutes} min před západem slunce",
+        "minutesAfterSunset": "{minutes} min po západu slunce",
+        "predictionsUnknown": "Další předpovědi",
+        "predictionsNone": "Žádné další předpovědi",
+        "predictionsCount": "{count, plural, one {# další předpověď} few {# další předpovědi} many {# další předpovědi} other {# dalších předpovědí}}"
+      },
+      "conditions": {
+        "title": "Čas a podmínky",
+        "skyLabel": "Časová osa dne: detekováno v {time}, východ slunce {sunrise}, západ slunce {sunset}",
+        "activityLabel": "Detekce druhu {species} podle hodiny dne",
+        "sunrise": "Východ slunce",
+        "sunset": "Západ slunce",
+        "activityLegend": "Aktivita druhu {species} po hodinách, celkem",
+        "feelsLike": "Pocitová teplota",
+        "moonLit": "{percent}% osvětleno",
+        "windFrom": "Vítr od {direction}",
+        "cloudCover": "Oblačnost",
+        "precipitation": "Srážky",
+        "precipitationTypes": {
+          "rain": "déšť",
+          "snow": "sníh",
+          "sleet": "déšť se sněhem"
+        },
+        "observedAt": "Pozorování počasí z {time}",
+        "notObserved": "Pro tento čas není žádné pozorování počasí"
+      },
+      "compass": {
+        "n": "S",
+        "nne": "SSV",
+        "ne": "SV",
+        "ene": "VSV",
+        "e": "V",
+        "ese": "VJV",
+        "se": "JV",
+        "sse": "JJV",
+        "s": "J",
+        "ssw": "JJZ",
+        "sw": "JZ",
+        "wsw": "ZJZ",
+        "w": "Z",
+        "wnw": "ZSZ",
+        "nw": "SZ",
+        "nnw": "SSZ"
+      },
+      "review": {
+        "title": "Kontrola",
+        "autosave": "Uloží se ihned po výběru",
+        "question": "Je to {species}?",
+        "correct": "Správně",
+        "falsePositive": "Falešně pozitivní",
+        "saving": "Ukládání...",
+        "savedCorrect": "Označeno jako správné",
+        "savedFalsePositive": "Označeno jako falešně pozitivní",
+        "loginRequired": "Pro kontrolu této detekce se přihlaste.",
+        "lockedHelp": "Ponechané detekce nelze měnit. Nejprve vypněte Ponechat tuto nahrávku.",
+        "keep": "Ponechat tuto nahrávku",
+        "keepHelp": "Ponechané detekce se při úklidu nikdy neodstraní.",
+        "reloadFailed": "Uloženo, ale detekci se nepodařilo znovu načíst. Obnovte stránku, abyste změnu viděli.",
+        "ignoredSpecies": "Druh {species} je nyní ignorován",
+        "wrongSpecies": "Nesprávný druh...",
+        "legacyHelp": "Změna druhu vyžaduje aktuální formát databáze.",
+        "databaseChecking": "Kontroluje se, zda lze druh změnit.",
+        "databaseUnknown": "Druh nelze změnit, dokud nebude znám formát databáze.",
+        "ignoreShort": "Ignorovat druh",
+        "ignoredShort": "Druh ignorován"
+      },
+      "models": {
+        "title": "Modely",
+        "summary": "Detekováno {hit} z {total}",
+        "empty": "Pro tuto detekci neexistuje záznam podle modelů. Účast modelů se ukládá pouze u novějších detekcí.",
+        "hits": "{count, plural, one {# zásah} few {# zásahy} many {# zásahu} other {# zásahů}}",
+        "mean": "průměr {value}",
+        "noHit": "Analyzovalo tento zvuk, bez zásahu"
+      },
+      "stats": {
+        "title": "Druh na této stanici",
+        "rangeScore": "Skóre filtru výskytu",
+        "rangeScoreNote": "Pravděpodobnost výskytu v této lokalitě dne {date}",
+        "rangeScoreNoteToday": "Pravděpodobnost výskytu v této lokalitě dnes",
+        "total": "Detekce celkem",
+        "windowTotal": "Detekce, posledních {days} dní",
+        "firstHeard": "Poprvé slyšeno",
+        "lastHeard": "Naposledy slyšeno",
+        "avgConfidence": "Průměrná spolehlivost",
+        "maxConfidence": "Nejvyšší spolehlivost",
+        "dailyTitle": "Detekce za den, {days} dní do této detekce",
+        "dailyLabel": "{count} detekcí za {days} dní do této detekce",
+        "allThisDay": "Všechny detekce druhu {species} v tento den",
+        "reviewsTitle": "Zkontrolováno lidmi",
+        "reviewsCount": "{count, plural, one {# kontrola} few {# kontroly} many {# kontroly} other {# kontrol}}",
+        "reviewsCorrect": "{count} správných",
+        "reviewsFalse": "{count, plural, one {# falešně pozitivní} few {# falešně pozitivní} many {# falešně pozitivních} other {# falešně pozitivních}}",
+        "oftenRejected": "Zde často zamítáno: {percent} % kontrol bylo falešně pozitivních",
+        "reviewsNone": "Zatím nebyla zkontrolována žádná detekce tohoto druhu."
+      },
+      "clip": {
+        "window": "Okno záznamu",
+        "length": "Délka",
+        "seconds": "{count} s",
+        "format": "Formát",
+        "denoised": "Odšuměno při uložení",
+        "denoisedYes": "Ano",
+        "denoisedNo": "Ne",
+        "file": "Soubor",
+        "audioRemoved": "Zvuk byl odstraněn podle pravidel uchování; obrázek spektrogramu zůstal zachován.",
+        "noClip": "Pro tuto detekci nebyla uložena žádná nahrávka."
+      },
+      "log": {
+        "title": "Záznam aktivit",
+        "subtitle": "Co se s touto detekcí stalo",
+        "detected": "Detekován druh {species} se spolehlivostí {confidence} %",
+        "captureWindow": "Okno záznamu {begin}-{end}",
+        "clipSaved": "Nahrávka uložena",
+        "clipSavedDenoised": "Nahrávka uložena, odšuměno",
+        "firstReviewed": "Poprvé zkontrolováno",
+        "reviewed": "Označeno: {status}",
+        "locked": "Ponecháno (uzamčeno)",
+        "noteAdded": "Poznámka přidána",
+        "noteEdited": "Upraveno {time}",
+        "timeUnknown": "Čas nezaznamenán",
+        "addNote": "Přidat poznámku",
+        "saveNote": "Přidat poznámku",
+        "lockedHelp": "Poznámky nelze přidávat, dokud je detekce ponechána (uzamčena).",
+        "noteEmpty": "Před přidáním napište poznámku.",
+        "speciesChanged": "Druh změněn z {from} na {to}"
       }
     },
     "headers": {
@@ -1041,12 +1200,6 @@
       "title": "Nahrávka a spektrogram",
       "clipHint": "Klikněte a táhněte na spektrogramu pro výběr rozsahu k exportu klipu"
     },
-    "tabs": {
-      "overview": "Přehled",
-      "taxonomy": "Taxonomie",
-      "history": "Historie",
-      "notes": "Poznámky"
-    },
     "environmental": {
       "title": "Podmínky prostředí"
     },
@@ -1057,18 +1210,9 @@
       "status": "Stav",
       "locked": "Uzamčeno"
     },
-    "history": {
-      "title": "Historie detekcí",
-      "comingSoon": "Sledování historie bude brzy k dispozici…"
-    },
-    "notes": {
-      "title": "Poznámky a komentáře",
-      "noComments": "K této detekci nejsou žádné komentáře ani poznámky."
-    },
     "aria": {
       "loading": "Načítání podrobností detekce…",
       "loaded": "Podrobnosti detekce načteny pro {species}",
-      "error": "Chyba při načítání detekce: {error}",
       "loadingResults": "Načítání {count} výsledků...",
       "thumbnailLoading": "Načítání náhledu {species}...",
       "thumbnailLoaded": "Náhled {species} načten",
@@ -1086,9 +1230,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Vzácnost druhu",
       "score": "Skóre",
-      "basedOnLocation": "Na základě polohy: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Velmi běžný",
         "common": "Běžný",
@@ -1100,7 +1242,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomická klasifikace",
-      "subspecies": "Poddruh",
       "noData": "Taxonomická data nejsou k dispozici.",
       "labels": {
         "kingdom": "Říše",
@@ -1126,11 +1267,9 @@
       }
     },
     "tracking": {
-      "title": "Sledování druhů",
       "newSpecies": "Nový druh",
       "newThisYear": "Poprvé letos",
-      "newThisSeason": "Poprvé v této sezóně",
-      "daysSinceFirst": "Dní od prvního pozorování"
+      "newThisSeason": "Poprvé v této sezóně"
     }
   },
   "spectrogram": {

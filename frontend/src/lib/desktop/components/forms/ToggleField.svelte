@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
-  import type { Component } from 'svelte';
+  import { tick, type Component } from 'svelte';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -23,6 +23,8 @@
     value: boolean;
     /** Blocks changes but keeps the switch focusable (aria-disabled), announced with its description. */
     disabled?: boolean;
+    /** Id of an element outside the field that also describes the switch, read after its own description. */
+    describedBy?: string;
     error?: string;
     onUpdate: (_value: boolean) => void;
     required?: boolean;
@@ -37,6 +39,7 @@
     variant = 'default',
     value = $bindable(),
     disabled = false,
+    describedBy: outsideDescriptionId,
     error,
     onUpdate,
     required = false,
@@ -59,7 +62,7 @@
     if (disabled) event.preventDefault();
   }
 
-  function handleChange(event: Event) {
+  async function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
     // A click cancel can still be skipped when an ancestor stops the click in the capture
     // phase, before it reaches the input, so a disabled switch also restores its state here
@@ -70,6 +73,11 @@
     const newValue = target.checked;
     // Only notify parent via onUpdate, let bindable value handle internal state
     onUpdate(newValue);
+    // The switch shows value, not what was clicked: when the parent refuses the change, or
+    // its request fails later, the native checkbox has already flipped and must flip back.
+    // The same node is kept, so keyboard focus stays on the switch.
+    await tick();
+    target.checked = value;
   }
 
   // Native Tailwind toggle classes: shared base + size variants. The off track is
@@ -172,9 +180,14 @@
     )
   );
 
-  // The description first, then the error: neither is part of the accessible name
+  // The description first, then the error, then an outside description: none is part of the
+  // accessible name
   let describedBy = $derived(
-    [description ? descriptionId : undefined, error ? `${fieldId}-error` : undefined]
+    [
+      description ? descriptionId : undefined,
+      error ? `${fieldId}-error` : undefined,
+      outsideDescriptionId,
+    ]
       .filter(Boolean)
       .join(' ') || undefined
   );
@@ -191,6 +204,7 @@
   <input
     id={fieldId}
     type="checkbox"
+    role="switch"
     class={cn(toggleBaseClasses, variantClasses)}
     checked={value}
     aria-disabled={disabled ? 'true' : undefined}

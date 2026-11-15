@@ -62,7 +62,7 @@ frontend/
 │   ├── App.svelte, main.js      # entry points
 │   ├── lib/
 │   │   ├── desktop/              # tablet and desktop UI (see desktop/AGENTS.md)
-│   │   │   ├── components/       # data, database, forms, media, modals, review, ui
+│   │   │   ├── components/       # data, database, forms, media, modals, ui
 │   │   │   ├── features/         # analytics, dashboard, detections, import-export,
 │   │   │   │                     #   live-stream, settings, system, wizard
 │   │   │   ├── layouts/          # RootLayout, sidebar, header
