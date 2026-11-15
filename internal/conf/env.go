@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // BirdNET core configuration keys for viper config paths.
@@ -174,8 +175,9 @@ func bindEnvVars() error {
 		// Validate the value if validation function is provided
 		if binding.Validate != nil {
 			if err := binding.Validate(envValue); err != nil {
-				// Skip binding for invalid values to preserve defaults/config
-				errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, envValue, err))
+				// Skip binding for invalid values to preserve defaults/config. The value
+				// is shown without URL credentials; a value with no "@" is unchanged.
+				errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, privacy.RedactURLUserinfo(envValue), err))
 				continue
 			}
 		}

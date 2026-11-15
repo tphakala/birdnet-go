@@ -868,6 +868,25 @@ func TestValidateEnvBaseURL_Integration(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be http or https")
 	})
+
+	t.Run("credentials in an invalid BIRDNET_URL stay out of the error", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_URL", "ftp://user:hunter2@birdnet.example.com")
+
+		err := configureEnvironmentVariables()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "BIRDNET_URL")
+		assert.NotContains(t, err.Error(), "hunter2")
+	})
+
+	t.Run("an invalid non-URL value is still shown as given", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv(EnvVarWebServerPort, "notaport")
+
+		err := configureEnvironmentVariables()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `BIRDNET_WEBSERVER_PORT="notaport"`)
+	})
 }
 
 func TestValidateEnvPort(t *testing.T) {
