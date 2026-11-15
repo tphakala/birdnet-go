@@ -3,6 +3,7 @@ package classifier
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -40,6 +41,9 @@ type Bat struct {
 	// differs from the configured Bat.ClassifierModel). Set once at construction;
 	// reported via ResolvedModelPath().
 	modelPath string
+	// embeddingSpace identifies the embedding space this instance's backbone
+	// produces (see resolveEmbeddingSpace). Set once at construction.
+	embeddingSpace string
 }
 
 // BatModelConfig holds configuration for creating a Bat model instance.
@@ -59,6 +63,11 @@ type BatModelConfig struct {
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu")
+
+	// EmbeddingSpace identifies the embedding space of the backbone at
+	// EmbeddingModelPath, reported with every window embedding. See
+	// resolveEmbeddingSpace.
+	EmbeddingSpace string
 }
 
 // NewBat creates a new bat detection model instance.
@@ -150,6 +159,7 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		backend:            backend,
 		precision:          precision,
 		modelPath:          cfg.ClassifierModelPath,
+		embeddingSpace:     cfg.EmbeddingSpace,
 	}, nil
 }
 
@@ -227,6 +237,16 @@ func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.E
 
 // Predict runs the two-stage bat detection pipeline: embedding extraction then bat classification.
 func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
+	results, _, err := b.PredictWithEmbedding(ctx, samples)
+	return results, err
+}
+
+// PredictWithEmbedding runs the same pipeline as Predict and also returns the
+// window's embedding, its space and the highest raw head score. The score is the
+// maximum over every head output, taken before the confidence threshold filter,
+// on the same probability scale the threshold compares against. Implements
+// EmbeddingModel.
+func (b *Bat) PredictWithEmbedding(ctx context.Context, samples [][]float32) ([]datastore.Results, WindowEmbedding, error) {
 	log := GetLogger()
 
 	span, _ := startPredictSpan(ctx, RegistryIDBat, samples)
@@ -238,7 +258,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 	// not counted as predictions, mirroring BirdNET.Predict.
 	if len(samples) == 0 || len(samples[0]) == 0 {
 		span.markErrored(errTypeEmptySample)
-		return nil, errors.Newf("empty audio sample").
+		return nil, WindowEmbedding{}, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			Build()
 	}
@@ -248,7 +268,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 
 	if b.embeddingExtractor == nil || b.batClassifier == nil {
 		span.markErrored(errTypeClassifierNil)
-		return nil, errors.Newf("bat classifier is not initialized").
+		return nil, WindowEmbedding{}, errors.Newf("bat classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
 	}
@@ -266,7 +286,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Context("stage", "embedding_extraction").
 			Build()
 		recordPredictionFailure(span, RegistryIDBat, errTypeEmbeddingExtraction, start, err)
-		return nil, err
+		return nil, WindowEmbedding{}, err
 	}
 
 	if embeddings == nil {
@@ -276,7 +296,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Context("model", RegistryIDBat).
 			Build()
 		recordPredictionFailure(span, RegistryIDBat, errTypeNilEmbeddings, start, err)
-		return nil, err
+		return nil, WindowEmbedding{}, err
 	}
 
 	log.Trace("bat embeddings extracted",
@@ -296,7 +316,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Context("stage", "bat_classification").
 			Build()
 		recordPredictionFailure(span, RegistryIDBat, errTypeBatClassification, start, err)
-		return nil, err
+		return nil, WindowEmbedding{}, err
 	}
 
 	log.Trace("bat classification complete",
@@ -306,13 +326,17 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 	if idx := firstNonFinite(scores); idx != noNonFiniteScore {
 		err = newNonFiniteScoreError(nonFiniteScore{modelID: RegistryIDBat, index: idx, count: len(scores)}, b.RuntimeInfo)
 		recordPredictionFailure(span, RegistryIDBat, errTypeNonFiniteLogits, start, err)
-		return nil, err
+		return nil, WindowEmbedding{}, err
 	}
+
+	// The strongest head score of the window, before the threshold below drops
+	// anything: callers that rank windows must not depend on bat.threshold.
+	topScore := maxScore(scores)
 
 	results, err := pairLabelsAndConfidence(b.batClassifier.Labels(), scores)
 	if err != nil {
 		recordPredictionFailure(span, RegistryIDBat, errTypeLabelMismatch, start, err)
-		return nil, err
+		return nil, WindowEmbedding{}, err
 	}
 
 	threshold := conf.Setting().Bat.Threshold
@@ -349,7 +373,15 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 	// Success: Finish records the single prediction because the span is not errored.
 	recordPredictionSuccess(span, len(topResults), start)
 
-	return topResults, nil
+	return topResults, WindowEmbedding{Vector: embeddings, Space: b.embeddingSpace, TopScore: topScore}, nil
+}
+
+// maxScore returns the largest value in scores, or 0 when scores is empty.
+func maxScore(scores []float32) float32 {
+	if len(scores) == 0 {
+		return 0
+	}
+	return slices.Max(scores)
 }
 
 // Spec returns the audio requirements for the bat model.

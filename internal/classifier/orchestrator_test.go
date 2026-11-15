@@ -38,6 +38,16 @@ func (m *mockModelInstance) Predict(ctx context.Context, samples [][]float32) ([
 	return []datastore.Results{{Species: "Turdus merula", Confidence: 0.95}}, nil
 }
 
+// embeddingMockModelInstance adds the optional EmbeddingModel capability.
+type embeddingMockModelInstance struct {
+	mockModelInstance
+	embedding WindowEmbedding
+}
+
+func (m *embeddingMockModelInstance) PredictWithEmbedding(context.Context, [][]float32) ([]datastore.Results, WindowEmbedding, error) {
+	return []datastore.Results{{Species: "Myotis daubentonii", Confidence: 0.8}}, m.embedding, nil
+}
+
 func (m *mockModelInstance) Spec() ModelSpec { return m.spec }
 func (m *mockModelInstance) ModelID() string { return m.id }
 func (m *mockModelInstance) ModelName() string {
@@ -1252,8 +1262,8 @@ func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) 
 	gid := make(chan string, 1)
 	go func() {
 		gid <- currentGoroutineHeader()
-		_, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
-		done <- outcome{timing, err}
+		pred, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		done <- outcome{pred.Timing, err}
 	}()
 
 	waitUntilBlockedInPredictModelTimed(t, <-gid)
@@ -1325,11 +1335,44 @@ func TestOrchestrator_PredictModelTimed_PredictMatchesModelTime(t *testing.T) {
 			},
 		})
 
-		results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		pred, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
 		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, modelTime, timing.Predict)
-		assert.Zero(t, timing.LockWait)
+		require.Len(t, pred.Results, 1)
+		assert.Equal(t, modelTime, pred.Timing.Predict)
+		assert.Zero(t, pred.Timing.LockWait)
+	})
+}
+
+// TestOrchestrator_PredictModelTimed_CarriesWindowEmbedding verifies that an
+// instance with the EmbeddingModel capability has its embedding returned on the
+// Prediction and that a plain instance yields the zero value.
+func TestOrchestrator_PredictModelTimed_CarriesWindowEmbedding(t *testing.T) {
+	t.Parallel()
+
+	want := WindowEmbedding{Vector: []float32{1, 2, 3}, Space: "test-space", TopScore: 0.75}
+
+	t.Run("embedding model", func(t *testing.T) {
+		t.Parallel()
+		inst := &embeddingMockModelInstance{embedding: want}
+		inst.id = "m1"
+		o := &Orchestrator{
+			models:   map[string]*modelEntry{"m1": {instance: inst}},
+			modelRSS: make(map[string]int64),
+		}
+		pred, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		require.NoError(t, err)
+		require.Len(t, pred.Results, 1)
+		assert.Equal(t, "Myotis daubentonii", pred.Results[0].Species)
+		assert.Equal(t, want, pred.Embedding)
+	})
+
+	t.Run("plain model", func(t *testing.T) {
+		t.Parallel()
+		o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+		pred, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		require.NoError(t, err)
+		require.Len(t, pred.Results, 1)
+		assert.Equal(t, WindowEmbedding{}, pred.Embedding)
 	})
 }
 
@@ -1339,10 +1382,10 @@ func TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming(t *testing.T) {
 	t.Parallel()
 
 	o := newTestOrchestrator(t)
-	results, timing, err := o.PredictModelTimed(t.Context(), "nonexistent", [][]float32{{0.1}})
+	pred, err := o.PredictModelTimed(t.Context(), "nonexistent", [][]float32{{0.1}})
 	require.ErrorIs(t, err, ErrModelNotLoaded)
-	assert.Nil(t, results)
-	assert.Equal(t, PredictTiming{}, timing)
+	assert.Nil(t, pred.Results)
+	assert.Equal(t, PredictTiming{}, pred.Timing)
 }
 
 // TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict verifies a closed
@@ -1353,8 +1396,8 @@ func TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict(t *testing.T) 
 	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
 	o.models["m1"].instance = nil
 
-	results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+	pred, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
 	require.Error(t, err)
-	assert.Nil(t, results)
-	assert.Zero(t, timing.Predict)
+	assert.Nil(t, pred.Results)
+	assert.Zero(t, pred.Timing.Predict)
 }

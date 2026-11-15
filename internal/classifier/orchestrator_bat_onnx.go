@@ -20,6 +20,9 @@ import (
 // pathResolution). ReloadSecondaryModels discards it, which is what keeps a
 // backend or device swap from rewriting the user's paths.
 //
+// The embedding space of the resolved backbone is determined here, so a custom
+// backbone file that cannot be read fails the build.
+//
 // The returned resolution is meaningful only when err == nil; every error return
 // yields the zero pathResolution{}.
 func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, pathResolution, error) {
@@ -44,6 +47,15 @@ func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, pat
 		return nil, pathResolution{}, err
 	}
 
+	embeddingSpace, err := resolveEmbeddingSpace(o.modelsDir, embeddingModel)
+	if err != nil {
+		return nil, pathResolution{}, errors.New(err).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("model", RegistryIDBat).
+			Build()
+	}
+
 	cfg := BatModelConfig{
 		EmbeddingModelPath:  embeddingModel,
 		EmbeddingLabels:     settings.BirdNET.Labels,
@@ -54,6 +66,7 @@ func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, pat
 		Backend:             settings.BirdNET.Backend,
 		OpenVINOPath:        settings.BirdNET.OpenVINOPath,
 		OpenVINODevice:      settings.BirdNET.OpenVINODevice,
+		EmbeddingSpace:      embeddingSpace,
 	}
 
 	bat, err := NewBat(&cfg)

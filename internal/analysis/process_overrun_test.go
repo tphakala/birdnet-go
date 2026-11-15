@@ -16,7 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
@@ -42,11 +41,18 @@ type timedBackend struct {
 	wallWait time.Duration
 	timing   classifier.PredictTiming
 	err      error // returned from PredictModelTimed alongside the timing
+	// embedding is returned on the Prediction, as a model with the embedding
+	// capability would.
+	embedding *classifier.WindowEmbedding
 }
 
-func (b timedBackend) PredictModelTimed(_ context.Context, _ string, _ [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
+func (b timedBackend) PredictModelTimed(_ context.Context, _ string, _ [][]float32) (classifier.Prediction, error) {
 	time.Sleep(b.wallWait)
-	return nil, b.timing, b.err
+	pred := classifier.Prediction{Timing: b.timing}
+	if b.embedding != nil {
+		pred.Embedding = *b.embedding
+	}
+	return pred, b.err
 }
 
 func (b timedBackend) EffectiveBaseOverlap() time.Duration { return overrunTestEffectiveOverlap }
@@ -253,12 +259,15 @@ func TestProcessData_StoredElapsedTimeIncludesLockWait(t *testing.T) {
 func TestProcessData_QueuedResultCarriesInferenceTiming(t *testing.T) {
 	const source = "overrun-carry-src"
 	want := classifier.PredictTiming{LockWait: overrunTestSlow, Predict: overrunTestFast}
-	_, err := runProcessData(t, source, timedBackend{timing: want})
+	embedding := classifier.WindowEmbedding{Vector: []float32{0.25, 0.5}, Space: "test-space", TopScore: 0.6}
+	_, err := runProcessData(t, source, timedBackend{timing: want, embedding: &embedding})
 	require.NoError(t, err)
 
 	select {
 	case res := <-classifier.ResultsQueue:
 		assert.Equal(t, want, res.Inference, "the summary reads inference timing from the queued result")
+		assert.Equal(t, embedding.Vector, res.Embedding, "the window embedding reaches the detection processor")
+		assert.Equal(t, embedding.Space, res.EmbeddingSpace, "the embedding space reaches the detection processor")
 	default:
 		require.FailNow(t, "ProcessData queued no result")
 	}

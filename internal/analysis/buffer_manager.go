@@ -9,7 +9,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -122,7 +121,7 @@ type classifierBackend interface {
 	IsModelActive(modelID string) bool
 	ModelInfos() []classifier.ModelInfo
 	DefaultTargets() []classifier.ModelInfo
-	PredictModelTimed(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, classifier.PredictTiming, error)
+	PredictModelTimed(ctx context.Context, modelID string, sample [][]float32) (classifier.Prediction, error)
 	CurrentSettings() *conf.Settings
 	EffectiveBaseOverlap() time.Duration
 	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
