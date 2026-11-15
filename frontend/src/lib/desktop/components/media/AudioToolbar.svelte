@@ -222,6 +222,20 @@
       const scrollTop = menu.scrollTop;
       menu.style.maxHeight = '';
       const height = menu.offsetHeight;
+      // Clamps the menu into the viewport by its current width. Placed once before
+      // the room is measured, so a stale position cannot stick out of a scroll box
+      // and give it a scrollbar, and again after the cap below.
+      const placeHorizontally = () => {
+        const { left } = computeAnchorPosition({
+          triggerRect: trigger.getBoundingClientRect(),
+          floatingHeight: height,
+          floatingWidth: menu.offsetWidth,
+          align,
+          viewportMargin: MENU_VIEWPORT_MARGIN_PX,
+        });
+        menu.style.left = `${left - wrapper.getBoundingClientRect().left}px`;
+      };
+      placeHorizontally();
       const wrapperRect = wrapper.getBoundingClientRect();
 
       // The visible band: the viewport, cut by every ancestor that clips its overflow
@@ -250,16 +264,9 @@
       menu.style.bottom = below ? 'auto' : '100%';
       menu.style.maxHeight = `${Math.max(0, (below ? roomBelow : roomAbove) - MENU_GAP_PX)}px`;
 
-      // Measured after the cap: a capped menu gains a scrollbar on systems with
-      // classic scrollbars, which widens a max-content menu
-      const { left } = computeAnchorPosition({
-        triggerRect: trigger.getBoundingClientRect(),
-        floatingHeight: height,
-        floatingWidth: menu.offsetWidth,
-        align,
-        viewportMargin: MENU_VIEWPORT_MARGIN_PX,
-      });
-      menu.style.left = `${left - wrapperRect.left}px`;
+      // A capped menu gains a scrollbar on systems with classic scrollbars, which
+      // widens a max-content menu, so clamp it again by its width now
+      placeHorizontally();
       menu.scrollTop = scrollTop;
     }
 
