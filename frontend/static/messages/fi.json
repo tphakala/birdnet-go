@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "Asiakkaan salaisuus OIDC-identiteettipalveluntarjoajaltasi",
           "userIdLabel": "Sallittu käyttäjä (sähköposti tai sub-väite)",
           "issuerUrlLabel": "Myöntäjän URL",
-          "issuerUrlHelpText": "OpenID Connect -identiteettipalveluntarjoajasi myöntäjä-URL (esim. https://auth.example.com)",
+          "issuerUrlHelpText": "OpenID Connect -palveluntarjoajasi perus-URL. BirdNET-Go lisää polun /.well-known/openid-configuration itse, joten jätä se pois. Esimerkit: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Myöntäjän URL vaaditaan OIDC-palveluntarjoajille",
           "issuerUrlInvalid": "Myöntäjän URL:n tulee olla kelvollinen HTTP- tai HTTPS-URL",

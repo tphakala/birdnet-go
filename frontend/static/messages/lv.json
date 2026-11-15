@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "Klienta noslēpums no jūsu OIDC identitātes nodrošinātāja",
           "userIdLabel": "Atļautais lietotājs (e-pasts vai sub apgalvojums)",
           "issuerUrlLabel": "Izdevēja URL",
-          "issuerUrlHelpText": "Jūsu OpenID Connect identitātes nodrošinātāja izdevēja URL (piem., https://auth.example.com)",
+          "issuerUrlHelpText": "Jūsu OpenID Connect nodrošinātāja bāzes URL. BirdNET-Go pats pievieno /.well-known/openid-configuration, tāpēc šo daļu izlaidiet. Piemēri: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "OIDC nodrošinātājiem nepieciešams izdevēja URL",
           "issuerUrlInvalid": "Izdevēja URL jābūt derīgam HTTP vai HTTPS URL",

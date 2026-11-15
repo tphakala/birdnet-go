@@ -1,11 +1,21 @@
 package api
 
 import (
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gorilla/sessions"
+	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/microsoftonline"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -282,4 +292,89 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 
 	allowedAfter, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
 	assert.True(t, allowedAfter, "allowlist change made via UI must apply without a restart")
+}
+
+// beginOAuth runs handleOAuthBegin for the given provider path parameter.
+func beginOAuth(t *testing.T, s *Server, provider string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/auth/"+provider, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	c.SetParamNames("provider")
+	c.SetParamValues(provider)
+	require.NoError(t, s.handleOAuthBegin(c))
+	return rec
+}
+
+// useOAuthSettings publishes settings with one enabled provider for the test.
+func useOAuthSettings(t *testing.T, providerID string) *Server {
+	t.Helper()
+	settings := &conf.Settings{
+		Security: conf.Security{
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{Provider: providerID, Enabled: true, ClientID: "id", ClientSecret: "secret", UserID: "user@example.com"},
+			},
+		},
+	}
+	prev := conf.GetSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+	return &Server{settings: settings}
+}
+
+// TestHandleOAuthBegin_UnregisteredProvider covers an enabled provider that goth
+// does not know (OIDC discovery failed, or the provider was enabled after
+// startup). The visitor gets one fixed sentence and the cause goes to the log.
+// Not parallel: it swaps the global logger, settings and goth registry.
+func TestHandleOAuthBegin_UnregisteredProvider(t *testing.T) {
+	s := useOAuthSettings(t, security.ConfigOIDC)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	logs := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
+	rec := beginOAuth(t, s, security.ProviderOIDC)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, oauthProviderUnavailableMessage, rec.Body.String(), "the body must be the fixed sentence and nothing else")
+	assert.Contains(t, logs.String(), security.ProviderOIDC)
+	assert.Contains(t, logs.String(), "not registered")
+	// The cause returned by ProviderRegistrationError must reach the log.
+	assert.Contains(t, logs.String(), "restart BirdNET-Go to apply")
+}
+
+// TestHandleOAuthBegin_RegisteredProviderRedirects pins that the registration
+// check is keyed on the goth name from the URL, not the config ID: Microsoft is
+// configured as "microsoft" but registered as "microsoftonline".
+// Not parallel: it swaps the settings, the goth registry and gothic.Store.
+func TestHandleOAuthBegin_RegisteredProviderRedirects(t *testing.T) {
+	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(microsoftonline.New("id", "secret", "http://localhost/auth/microsoftonline/callback"))
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewCookieStore([]byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	rec := beginOAuth(t, s, security.ProviderMicrosoft)
+
+	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "login.microsoftonline.com")
+}
+
+// TestHandleOAuthBegin_RegisteredProviderMixedCase pins that a path whose casing
+// differs from the goth name (the provider checks before it match case
+// insensitively) is not reported as an unregistered provider when goth has it.
+// Not parallel: it swaps the settings, the goth registry and gothic.Store.
+func TestHandleOAuthBegin_RegisteredProviderMixedCase(t *testing.T) {
+	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(microsoftonline.New("id", "secret", "http://localhost/auth/microsoftonline/callback"))
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewCookieStore([]byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	rec := beginOAuth(t, s, "MicrosoftOnline")
+
+	assert.NotEqual(t, http.StatusServiceUnavailable, rec.Code, "a registered provider must not be answered as unavailable")
 }

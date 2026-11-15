@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "O client secret do seu fornecedor de identidade OIDC",
           "userIdLabel": "Utilizador Permitido (email ou sub claim)",
           "issuerUrlLabel": "URL do Emissor",
-          "issuerUrlHelpText": "O URL do emissor do seu fornecedor de identidade OpenID Connect (ex: https://auth.example.com)",
+          "issuerUrlHelpText": "URL base do seu fornecedor OpenID Connect. O BirdNET-Go acrescenta /.well-known/openid-configuration sozinho, por isso omita essa parte. Exemplos: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "O URL do emissor é obrigatório para fornecedores OIDC",
           "issuerUrlInvalid": "O URL do emissor deve ser um URL HTTP ou HTTPS válido",

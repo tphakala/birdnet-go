@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "Client Secret z vašeho poskytovatele identity OIDC",
           "userIdLabel": "Povolený uživatel (e-mail nebo sub claim)",
           "issuerUrlLabel": "URL vydavatele",
-          "issuerUrlHelpText": "URL vydavatele vašeho poskytovatele identity OpenID Connect (např. https://auth.example.com)",
+          "issuerUrlHelpText": "Základní URL vašeho poskytovatele OpenID Connect. BirdNET-Go přidá /.well-known/openid-configuration samo, takže tuto část vynechte. Příklady: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "URL vydavatele je u poskytovatelů OIDC povinná",
           "issuerUrlInvalid": "URL vydavatele musí být platná HTTP nebo HTTPS URL",
