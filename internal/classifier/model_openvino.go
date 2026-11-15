@@ -186,8 +186,10 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // f16 without re-running the bat embedding parity check.
 //
 // BirdNET v3.0 and BirdNET+ V3.0 (same architecture) are likewise forced to f32 on
-// EVERY device. The measurements below are for the BirdNET v3.0 preview; no f16 run has
-// been measured for BirdNET+ V3.0, and f32 is the setting that fixed the preview. The
+// EVERY device. The measurements below are for the BirdNET v3.0 preview. BirdNET+ V3.0
+// was measured separately on its published fp32 files: at f16 its scores differed from
+// ONNX Runtime by up to about 0.75 with top-1 changes on the A76 CPU and on Intel GPUs,
+// while f32 stayed within about 3.4e-4 with no top-1 change. The
 // EfficientNetV2-S backbone is numerically unstable at f16 wherever genuine f16 kernels run (the Intel
 // GPU always, and the A76 CPU's native f16), independent of the model file's weight
 // precision. On fp16-weight regional tiles, f16 execution overflows to NaN (Sentry
