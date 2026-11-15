@@ -46,6 +46,7 @@ describe('SpeciesSettingsPage range filter banner without a location', () => {
       error: null,
     }));
     vi.mocked(api.get).mockResolvedValue({
+      participantsLoaded: true,
       active: false,
       fellBack: false,
       mappedSpecies: 0,

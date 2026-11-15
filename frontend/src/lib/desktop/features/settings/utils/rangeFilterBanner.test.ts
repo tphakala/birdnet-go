@@ -6,6 +6,7 @@ import {
 } from './rangeFilterBanner';
 
 const base: RangeFilterStatusSummary = {
+  participantsLoaded: true,
   active: true,
   fellBack: false,
   mappedSpecies: 100,
@@ -66,6 +67,13 @@ describe('rangeFilterBanner', () => {
     ['mappedZero', { geomodel: { version: 'v3.0' }, mappedSpecies: 0 }, 'warning'],
   ] as const)('keeps the existing %s rule', (key, over, level) => {
     expect(rangeFilterBanner({ ...base, ...over })).toMatchObject({ key, level });
+  });
+
+  it('is silent when no model participates in range filtering', () => {
+    const noParticipants = { ...base, participantsLoaded: false, active: false };
+    expect(rangeFilterBanner(noParticipants)).toBeNull();
+    expect(rangeFilterBanner({ ...noParticipants, geomodelIssue: 'not_installed' })).toBeNull();
+    expect(rangeFilterBanner({ ...noParticipants, active: true, reloadFailed: true })).toBeNull();
   });
 
   it('is silent when healthy', () => {

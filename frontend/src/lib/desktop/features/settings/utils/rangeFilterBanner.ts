@@ -10,6 +10,7 @@ export type GeomodelIssue = 'none' | 'not_installed' | 'not_selected' | 'load_fa
 
 /** The subset of GET /api/v2/range/status the banner reads. */
 export interface RangeFilterStatusSummary {
+  participantsLoaded: boolean;
   active: boolean;
   fellBack: boolean;
   mappedSpecies: number;
@@ -48,7 +49,9 @@ const ISSUE_KEYS: Record<Exclude<GeomodelIssue, 'none'>, RangeFilterBannerKey> =
 export function rangeFilterBanner(
   status: RangeFilterStatusSummary | null
 ): RangeFilterBanner | null {
-  if (!status) return null;
+  // No loaded model participates in range filtering (for example a bat-only install):
+  // not applicable, as in the health check. A geomodel issue implies a participant.
+  if (!status?.participantsLoaded) return null;
 
   const models = status.classifiers
     .filter(c => !c.coveredByBackend)
