@@ -167,7 +167,9 @@
     try {
       await api.post(`/api/v2/detections/${id}/review`, {
         verified: 'false_positive',
-        ignore_species: detection.commonName,
+        // The server keeps the exclude list by scientific name (it resolves a common name to
+        // one); a common name can be empty or shared by two species.
+        ignore_species: species,
       });
     } catch (error) {
       logger.error('Failed to ignore species', error, { action: 'ignore' });

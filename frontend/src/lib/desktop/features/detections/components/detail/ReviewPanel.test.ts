@@ -239,6 +239,41 @@ describe('ReviewPanel ignore species reload', () => {
     });
   });
 
+  // The exclude list is kept by scientific name, which every detection has; a common name
+  // can be empty or shared by two species.
+  it('names the species to ignore by its scientific name', async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(String(init?.body));
+        return Promise.resolve(
+          new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        );
+      })
+    );
+    render(ReviewPanel, {
+      props: {
+        detection: { ...detection, verified: 'false_positive', commonName: '' },
+        speciesName: 'Scolopax rusticola',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.review.ignoreShort' })
+    );
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(JSON.parse(bodies[0])).toMatchObject({
+      verified: 'false_positive',
+      ignore_species: 'Scolopax rusticola',
+    });
+  });
+
   // Regression: Ignore was free again before the page's reload landed, and a failed reload
   // went unreported.
   it('stays busy until the page reload settles, and says so when it failed', async () => {
