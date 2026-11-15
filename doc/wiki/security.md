@@ -47,13 +47,13 @@ security:
 
 ### OIDC identity provider with a private certificate authority
 
-BirdNET-Go checks the certificate of an OIDC identity provider against the system certificate store, like every other outgoing TLS connection. When the provider's certificate is signed by a private certificate authority, the console and `logs/security.log` show an `OIDC discovery failed` line with a certificate error. Each request to the identity provider times out after ten seconds.
+BirdNET-Go checks the certificate of an OIDC identity provider against the system certificate store, like other outgoing TLS connections that have no CA setting of their own. When the provider's certificate is signed by a private certificate authority, the console and `logs/security.log` show an `OIDC discovery failed` line with a certificate error. Each request to the identity provider times out after ten seconds.
 
 - **Docker:** mount the CA certificate (PEM) into the container, for example under `/config`, and set `SSL_CERT_FILE` to its path inside the container (`SSL_CERT_FILE=/config/my-ca.pem`). Public certificate authorities stay trusted, because the system certificate directories are still read. `SSL_CERT_DIR` replaces the directory list instead, so include `/etc/ssl/certs` when you use it. The variables are read once at startup, so restart the container after changing them. A path that does not exist is ignored without an error.
 - **Linux without Docker:** add the CA to the system store (`sudo update-ca-certificates` on Debian, Ubuntu and Raspberry Pi OS), or set `SSL_CERT_FILE` in the service environment.
 - **Windows and macOS:** add the CA to the system certificate store. Do not use the variables there, since they replace the system store.
 
-These settings apply to every outgoing TLS connection of BirdNET-Go, not only to OIDC.
+These settings apply to every outgoing TLS connection of BirdNET-Go that uses the system certificate store, not only to OIDC. A connection with its own CA setting, such as MQTT with a CA certificate configured, uses that certificate instead.
 
 ## Authentication Bypass
 
