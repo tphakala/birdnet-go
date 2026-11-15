@@ -309,6 +309,26 @@ describe('AnalysisSettingsPage range filter dialog', () => {
     });
   });
 
+  it('leaves focus on the control the user moved to while the dialog was open', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+    await screen.findByRole('heading', { name: DIALOG_TITLE });
+    await waitFor(() => expect(rangeDialog().contains(document.activeElement)).toBe(true));
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    elsewhere.focus();
+
+    await fireEvent.click(
+      within(rangeDialog()).getByRole('button', {
+        name: 'settings.main.sections.rangeFilter.modal.close',
+      })
+    );
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: DIALOG_TITLE })).toBeNull());
+    expect(elsewhere).toHaveFocus();
+    elsewhere.remove();
+  });
+
   it('does not move focus on close when View Species was removed while the dialog was open', async () => {
     const user = userEvent.setup();
     const viewSpecies = await openDialog(user);

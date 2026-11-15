@@ -29,7 +29,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
-  import { pickOpener } from '$lib/utils/pressedElement';
+  import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
   import type {
     CatalogEntry,
     DownloadProgress,
@@ -999,8 +999,11 @@
         }
       }, 0);
     } else if (previouslyFocusedElement) {
-      // The button may have been removed while the dialog was open
-      if (previouslyFocusedElement.isConnected) previouslyFocusedElement.focus();
+      // The button may have been removed while the dialog was open, and focus the user moved to
+      // another control stays there; the dialog is already gone from the page here
+      if (previouslyFocusedElement.isConnected && canReturnFocus(undefined)) {
+        previouslyFocusedElement.focus();
+      }
       previouslyFocusedElement = null;
     }
 
