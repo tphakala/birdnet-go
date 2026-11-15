@@ -160,6 +160,16 @@ func TestClassify(t *testing.T) {
 		{"homo sapiens taxon is human only", "Homo sapiens", true, false},
 		{"canis familiaris taxon is dog only", "Canis familiaris", false, true},
 		{"uppercase is case-insensitive", "HUMAN_VOICE", true, false},
+		{"Scientific_Common human taxon", "Homo sapiens_Human", true, false},
+		{"Scientific_Common human taxon mixed case", "Homo Sapiens_Human vocal", true, false},
+		{"human taxon with extra underscores in the common name", "Homo sapiens_Human_vocal", true, false},
+		{"dog taxon with extra underscores in the common name", "Canis familiaris_Domestic_Dog", false, true},
+		{"taxon only as a prefix of the scientific name is neither", "Homo sapiens neanderthalensis_Neanderthal", false, false},
+		{"dog taxon only as a prefix of the scientific name is neither", "Canis familiaris dingo_Dingo", false, false},
+		{"dog taxon only in the common name is neither", "Canis lupus_Canis familiaris", false, false},
+		{"human taxon only in the common name is neither", "Canis lupus_Homo sapiens", false, false},
+		{"Scientific_Common domestic dog taxon", "Canis familiaris_Domestic Dog", false, true},
+		{"Scientific_Common wild canid is neither", "Canis lupus_Gray Wolf", false, false},
 		{"a bird is neither", "Turdus merula", false, false},
 		{"collision cicada is neither", "Pacarina schumanni", false, false},
 		{"wild canid is neither", "Canis latrans", false, false},
@@ -187,7 +197,7 @@ func TestPerchHumanLabelsParityWithSoundEvent(t *testing.T) {
 
 	// The complete AudioSet/FSD50K human-class key set. "homo sapiens" is
 	// excluded: it is an iNaturalist taxon, not an AudioSet/FSD50K sound class,
-	// so soundevent does not include it. It lives in perchHumanExtraLabels.
+	// so soundevent does not include it. It is the humanTaxon constant.
 	oldAudioSetKeys := []string{
 		"speech",
 		"speech_synthesizer",
@@ -255,6 +265,7 @@ func TestIsHumanSound(t *testing.T) {
 		{"speech", "Speech", true},
 		{"BirdNET human vocal (de)", "Human vocal_Mensch Stimme", true},
 		{"homo sapiens", "Homo sapiens", true},
+		{"homo sapiens Scientific_Common", "Homo sapiens_Human", true},
 		{"excluded Human_group_actions", "Human_group_actions", true},
 		{"excluded Hands", "Hands", true},
 		{"excluded Chewing_and_mastication", "Chewing_and_mastication", true},
