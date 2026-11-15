@@ -1370,12 +1370,13 @@ describe('Primary and accent content in every color scheme', () => {
     const FOCUS_VARIANT = String.raw`(?:[\w-]+:)*(?:group-|peer-)?(?:focus|focus-visible|focus-within):`;
     // eslint-disable-next-line security/detect-non-literal-regexp -- built from the fixed variant pattern above
     const FADED_FOCUS_INDICATOR = new RegExp(
-      String.raw`(?:^|[\s"'\x60])(${FOCUS_VARIANT}(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+)`,
+      String.raw`(?:^|[\s"'\x60])((${FOCUS_VARIANT})(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+)`,
       'g'
     );
     // eslint-disable-next-line security/detect-non-literal-regexp -- built from the fixed variant pattern above
     const FULL_STRENGTH_FOCUS_BORDER = new RegExp(
-      String.raw`(?:^|[\s"'\x60])${FOCUS_VARIANT}border-\[var\(--[\w-]+\)\](?![/\w])`
+      String.raw`(?:^|[\s"'\x60])(${FOCUS_VARIANT})border-\[var\(--[\w-]+\)\](?![/\w])`,
+      'g'
     );
 
     /** Shipped component markup and style modules; test fixtures and specs are not part of the app. */
@@ -1402,7 +1403,11 @@ describe('Primary and accent content in every color scheme', () => {
         .filter(match => {
           const isFadedBorder = /(?:^|:)border-/.test(match[1]);
           const classes = quotedAround(text, match.index + match[0].length - 1);
-          return isFadedBorder || !FULL_STRENGTH_FOCUS_BORDER.test(classes);
+          // The border must sit under the same focus variant as the ring it excuses
+          const hasSameVariantBorder = [...classes.matchAll(FULL_STRENGTH_FOCUS_BORDER)].some(
+            border => border[1] === match[2]
+          );
+          return isFadedBorder || !hasSameVariantBorder;
         })
         .map(match => match[1]);
     }
@@ -1412,6 +1417,21 @@ describe('Primary and accent content in every color scheme', () => {
         fadedFocusIndicators(text).map(indicator => `${file}: ${indicator}`)
       );
       expect(offenders).toEqual([]);
+    });
+
+    it('the faded focus scan excuses a ring only for a border under the same focus variant', () => {
+      const ring = 'focus:ring-[var(--color-primary)]/20';
+      const darkBorder = 'dark:focus:border-[var(--color-primary)]';
+      // The light theme ring has no border beside it
+      expect(fadedFocusIndicators(`class="${ring} ${darkBorder}"`)).toEqual([ring]);
+      expect(fadedFocusIndicators(`class="${ring} focus:border-[var(--color-primary)]"`)).toEqual(
+        []
+      );
+      const darkRing = 'dark:focus:ring-[var(--color-primary)]/20';
+      expect(fadedFocusIndicators(`class="${darkRing} ${darkBorder}"`)).toEqual([]);
+      expect(
+        fadedFocusIndicators(`class="${darkRing} focus:border-[var(--color-primary)]"`)
+      ).toEqual([darkRing]);
     });
 
     it('the faded focus scan skips test fixtures and specs', () => {
