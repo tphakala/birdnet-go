@@ -1578,6 +1578,7 @@ func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
 }
 
 func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
+	logs := useSplitLogFiles(t)
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
 	t.Cleanup(clearOIDCDiscoveryFailure)
@@ -1652,8 +1653,12 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 		t.Fatal("OIDC retry goroutine did not exit after registering the provider")
 	}
 	goth.ClearProviders()
-	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+	require.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
 		"a successful retry must clear the recorded discovery failure")
+	// The late registration must reach the console and main log, not only the security log.
+	assert.Contains(t, logs.main(), "OIDC provider registered after background retry")
+	assert.Contains(t, logs.main(), "security.oidc")
+	assert.Contains(t, logs.security(), "OIDC provider registered after background retry")
 }
 
 func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
