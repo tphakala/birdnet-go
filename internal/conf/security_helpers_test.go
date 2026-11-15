@@ -300,6 +300,21 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 			want:     "",
 		},
 		{
+			name:     "BaseURL with a port but no hostname - should use the Host",
+			security: Security{BaseURL: "https://:8443", Host: testHostExample},
+			want:     testHostExample,
+		},
+		{
+			name:     "BaseURL that is not a usable URL - should use the Host",
+			security: Security{BaseURL: testHostIgnored, Host: testHostExample},
+			want:     testHostExample,
+		},
+		{
+			name:     "BaseURL with credentials - should use the Host",
+			security: Security{BaseURL: "https://user:pw@" + testHostIgnored, Host: testHostExample},
+			want:     testHostExample,
+		},
+		{
 			name: "BaseURL set with port - should return host:port",
 			security: Security{
 				BaseURL: testURLHTTPS,

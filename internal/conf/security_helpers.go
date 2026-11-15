@@ -207,15 +207,14 @@ func hostnameOf(raw string) string {
 // GetExternalHost returns the external host:port for backward compatibility.
 // This is useful for cases where the full host:port is needed (e.g., HTTP Host header).
 // Priority order:
-//  1. Host:port extracted from BaseURL (if valid)
+//  1. Host:port extracted from BaseURL (if it is a usable URL, as GetBaseURL decides)
 //  2. Host field as fallback (host:port when it carries an http(s) scheme, empty
 //     when that has no hostname)
 //  3. Empty string if neither is available
 func (s *Security) GetExternalHost() string {
-	// Priority 1: Extract from BaseURL if valid
-	if s.BaseURL != "" {
-		parsed, err := url.Parse(strings.TrimSpace(s.BaseURL))
-		if err == nil && parsed.Host != "" {
+	// Priority 1: Extract from BaseURL if usable
+	if baseURL := s.trimmedBaseURL(); baseURL != "" && !s.hasUnusableBaseURL() {
+		if parsed, err := url.Parse(baseURL); err == nil {
 			return parsed.Host
 		}
 	}
