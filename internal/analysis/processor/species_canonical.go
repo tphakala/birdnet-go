@@ -12,10 +12,13 @@ import (
 )
 
 // taxonomyResolver resolves a species label to its scientific name, common name,
-// and taxonomy code. *classifier.Orchestrator satisfies it; tests use a fake. The
-// interface keeps canonicalizeSpecies unit-testable without a loaded model.
+// and taxonomy code, and reports whether a label has a real taxonomy code (as
+// opposed to a synthetic placeholder). *classifier.Orchestrator satisfies it; tests
+// use a fake. The interface keeps canonicalizeSpecies unit-testable without a loaded
+// model.
 type taxonomyResolver interface {
 	EnrichResultWithTaxonomy(label string) (scientific, common, code string)
+	GetSpeciesCode(label string) (code string, found bool)
 }
 
 // canonicalizeSpecies resolves a model-emitted scientific name to its canonical
@@ -25,14 +28,14 @@ type taxonomyResolver interface {
 // inputs pass through unchanged and raw is empty; the resolver is not consulted, so
 // the hot path pays only one alias-map lookup per detection.
 //
-// The eBird code is deliberately NOT re-resolved: the embedded eBird taxonomy is a
-// frozen 2021 snapshot keyed on the legacy name, and eBird species codes are stable
-// across a pure rename (the only kind aliases.json contains), so the legacy name's
-// code IS the canonical taxon's real code. Re-resolving by the canonical name would
-// miss the frozen snapshot and degrade the real code to a synthetic placeholder. The
-// common name, by contrast, IS re-resolved: OpenFauna localizes both the legacy and
-// canonical names, so the canonical resolution is reliable (and equals the legacy
-// one for a genuine alias).
+// The eBird code depends on which kind of alias key the model emitted. A key that
+// is a legacy name held by the embedded eBird snapshot keeps its own code, which is
+// the taxon's real code. A key that is a newer model label the snapshot does not
+// hold arrives with a synthetic placeholder, so the canonical name's code is used
+// when the snapshot has it. When neither name is in the taxonomy the incoming
+// placeholder is kept, and when both are, the raw name's code wins. The common name
+// is re-resolved: OpenFauna localizes both the legacy and canonical names, so the
+// canonical resolution is reliable.
 func canonicalizeSpecies(resolver taxonomyResolver, scientificName, commonName, speciesCode string) (canonicalSci, common, code, raw string) {
 	canonical := openfauna.CanonicalName(scientificName)
 	if canonical == scientificName {
@@ -52,5 +55,13 @@ func canonicalizeSpecies(resolver taxonomyResolver, scientificName, commonName, 
 	if canonicalCommon == "" {
 		canonicalCommon = commonName
 	}
-	return canonical, canonicalCommon, speciesCode, scientificName
+	// Keep the raw name's code when the taxonomy holds it. Otherwise the incoming code
+	// is a placeholder, so prefer the canonical name's real code if it has one.
+	code = speciesCode
+	if _, rawFound := resolver.GetSpeciesCode(scientificName); !rawFound {
+		if canonicalCode, ok := resolver.GetSpeciesCode(canonical); ok {
+			code = canonicalCode
+		}
+	}
+	return canonical, canonicalCommon, code, scientificName
 }
