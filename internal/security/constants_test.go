@@ -1,10 +1,22 @@
 package security
 
 import (
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// TestConfigToGothProvider_MatchesKnownProviderIDs catches a provider ID added to
+// the dispatch table but not to conf's known-ID list (or the reverse): a save would
+// then reject an ID the server can sign in with, or accept one it cannot.
+func TestConfigToGothProvider_MatchesKnownProviderIDs(t *testing.T) {
+	t.Parallel()
+
+	assert.ElementsMatch(t, conf.KnownOAuthProviderIDs(), slices.Collect(maps.Keys(ConfigToGothProvider)))
+}
 
 func TestConfigToGothProvider_ContainsOIDC(t *testing.T) {
 	t.Parallel()

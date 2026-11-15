@@ -247,3 +247,60 @@ func TestUpdateSettingsRestoresOAuthSecretByProviderID(t *testing.T) {
 	rec := sendFullSettings(t, e, controller, s)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+// TestUpdateSettingsRejectsUnknownOAuthProviderID verifies the full settings PUT
+// rejects an unknown or blank provider ID, enabled or not, publishes nothing, and
+// accepts a save that removes a stale entry already stored (as a bad value read
+// from the file would be).
+func TestUpdateSettingsRejectsUnknownOAuthProviderID(t *testing.T) {
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{name: "unknown", id: "gogle"},
+		{name: "blank", id: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, _, controller := setupTestEnvironment(t)
+
+			s := conf.CloneSettings(controller.Settings.Load())
+			s.Security.BaseURL = testOAuthBaseURL
+			s.Security.OAuthProviders = []conf.OAuthProviderConfig{
+				{Provider: tt.id, Enabled: false, ClientID: "id", ClientSecret: testOAuthSecret},
+			}
+			rec := sendFullSettings(t, e, controller, s)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Body.String(), "security.oauthProviders[0]")
+			assert.Empty(t, controller.Settings.Load().Security.OAuthProviders, "a rejected save must not change the stored providers")
+
+			// A save that removes a stale stored entry goes through.
+			controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
+				{Provider: tt.id, Enabled: false, ClientID: "id", ClientSecret: testOAuthSecret},
+			}
+			s = conf.CloneSettings(controller.Settings.Load())
+			s.Security.OAuthProviders = nil
+			putFullSettings(t, e, controller, s)
+			assert.Empty(t, controller.Settings.Load().Security.OAuthProviders)
+		})
+	}
+}
+
+// TestUpdateSectionSettingsRejectsStoredUnknownOAuthProviderID verifies a PATCH of
+// the security section that leaves a stored unknown entry in place is rejected too,
+// not only a request that carries the bad ID itself.
+func TestUpdateSectionSettingsRejectsStoredUnknownOAuthProviderID(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "gogle", Enabled: false},
+	}
+
+	rec := sendSectionPatch(t, e, controller, "security", map[string]any{
+		"allowSubnetBypass": map[string]any{"enabled": false},
+	})
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}

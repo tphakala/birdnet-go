@@ -197,9 +197,9 @@ func (s *Settings) MigrateOAuthConfig() bool {
 		name   string
 		config SocialProvider
 	}{
-		{"google", s.Security.GoogleAuth},
-		{"github", s.Security.GithubAuth},
-		{"microsoft", s.Security.MicrosoftAuth},
+		{OAuthProviderGoogle, s.Security.GoogleAuth},
+		{OAuthProviderGitHub, s.Security.GithubAuth},
+		{OAuthProviderMicrosoft, s.Security.MicrosoftAuth},
 	}
 
 	var migrated bool

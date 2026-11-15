@@ -204,6 +204,9 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 // side-effect or disk-write failure is a compare-and-swap back to the previous
 // snapshot (rollbackSettings).
 //
+// The save is rejected with 400 while any security.oauthProviders entry has a
+// blank or unknown provider ID, including one that was already stored.
+//
 // A request that sends If-Match is applied only if it matches the current
 // settings ETag (settingsETag); otherwise it answers 412 with the current ETag
 // and changes nothing. A request without If-Match is applied as before. The
@@ -304,6 +307,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
+		if err := conf.ValidateOAuthProviderIDs(&updated.Security); err != nil {
+			// The text names the field, so the settings page can show what to fix.
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
 		if err := conf.ValidateSettings(updated); err != nil {
 			return newRejection(err, "Invalid settings", http.StatusBadRequest)
 		}
@@ -417,6 +424,10 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 // previous snapshot. Keeps PATCH race-free against basepath middleware reads
 // and any other reader that goes through conf.GetSettings().
 //
+// Like UpdateSettings, it rejects the save with 400 while the merged settings
+// hold a security.oauthProviders entry with a blank or unknown provider ID,
+// whichever section was patched.
+//
 // If-Match and the ETag response header work as on UpdateSettings: the ETag is
 // the one for the whole settings, not for the section.
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
@@ -508,6 +519,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
+		if err := conf.ValidateOAuthProviderIDs(&updated.Security); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
 		if err := conf.ValidateSettings(updated); err != nil {
 			return newRejection(err, fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 		}
@@ -1266,23 +1280,6 @@ func validateSubnetBypassField(updateMap map[string]any) error {
 	return nil
 }
 
-// validOAuthProviders defines the valid OAuth provider names
-var validOAuthProviders = map[string]bool{
-	"google":    true,
-	"github":    true,
-	"microsoft": true,
-	"line":      true,
-	"kakao":     true,
-	"oidc":      true,
-}
-
-// getValidOAuthProviderNames returns sorted list of valid provider names for error messages
-func getValidOAuthProviderNames() string {
-	names := slices.Collect(maps.Keys(validOAuthProviders))
-	slices.Sort(names)
-	return strings.Join(names, ", ")
-}
-
 // validateOAuthProvidersArray validates the new array-based OAuth providers configuration
 func validateOAuthProvidersArray(updateMap map[string]any) error {
 	providers, exists := updateMap["oauthProviders"]
@@ -1313,8 +1310,9 @@ func validateOAuthProvidersArray(updateMap map[string]any) error {
 	return nil
 }
 
-// validateOAuthProviderName validates the provider name field. The ID is trimmed
-// and lower-cased first, the same way it is stored.
+// validateOAuthProviderName validates the provider name field against
+// conf.KnownOAuthProviderIDs. The ID is trimmed and lower-cased first, the same
+// way it is stored.
 func validateOAuthProviderName(providerMap map[string]any, index int) error {
 	providerName, ok := providerMap["provider"].(string)
 	canonical := conf.NormalizeOAuthProviderID(providerName)
@@ -1322,8 +1320,8 @@ func validateOAuthProviderName(providerMap map[string]any, index int) error {
 		return fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
 	}
 
-	if !validOAuthProviders[canonical] {
-		return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
+	if !conf.IsKnownOAuthProviderID(canonical) {
+		return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, strings.Join(conf.KnownOAuthProviderIDs(), ", "))
 	}
 
 	return nil
