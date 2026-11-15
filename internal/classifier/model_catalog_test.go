@@ -806,6 +806,8 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 				assert.Equalf(t, wantLegacy, v.Legacy, "%s global variant %q Legacy flag", tc.id, v.ID)
 				if wantLegacy {
 					assert.Equalf(t, "no-dft-fp32", v.SupersededBy, "%s withdrawn variant %q successor", tc.id, v.ID)
+					successor := slices.IndexFunc(entry.Variants, func(c CatalogVariant) bool { return c.ID == v.SupersededBy && !c.Legacy })
+					assert.GreaterOrEqualf(t, successor, 0, "%s withdrawn variant %q must be superseded by a live variant of the entry", tc.id, v.ID)
 					assert.Falsef(t, backendRecommended(v), "%s withdrawn variant %q must recommend no backend", tc.id, v.ID)
 				}
 				assert.Falsef(t, v.Default && v.Legacy, "%s default variant %q must not be Legacy", tc.id, v.ID)

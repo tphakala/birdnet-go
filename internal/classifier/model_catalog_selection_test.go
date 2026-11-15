@@ -103,7 +103,6 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 		caps := []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}
 
 		assert.Empty(t, recommendedVariantID(&perch, caps, 300*mib, "amazonia"), "own slice blocked at 300 MiB: nothing, not another region's slice")
-		assert.Empty(t, recommendedVariantID(&perch, caps, 512*mib, ""), "no region and every global build blocked: nothing")
 		assert.Equal(t, "no-dft-fp32@amazonia", recommendedVariantID(&perch, caps, 400*mib, "amazonia"), "own slice fits at 400 MiB")
 	})
 

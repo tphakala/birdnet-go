@@ -303,7 +303,7 @@ func run() error {
 
 // build parses the family's manifest and region table and returns the rendered
 // Go source for each regional variant, sorted by region, then live builds before
-// superseded ones. It hard-fails on
+// superseded ones, and resolves each superseded_by path to a variant id. It hard-fails on
 // any data gap so a malformed manifest can never silently emit a broken catalog.
 func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	m, err := loadManifest(f.manifestFile)
@@ -363,9 +363,14 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	out := make([]string, 0, len(regional))
 	for i := range regional {
 		e := &regional[i]
-		v, buildErr := f.variant(e, table, labels, byPath)
+		v, buildErr := f.variant(e, table, labels)
 		if buildErr != nil {
 			return nil, buildErr
+		}
+		if e.SupersededBy != nil {
+			if v.supersededBy, buildErr = supersededVariantID(e, byPath); buildErr != nil {
+				return nil, buildErr
+			}
 		}
 		if seenID[v.id] {
 			return nil, fmt.Errorf("duplicate variant id %q", v.id)
@@ -413,9 +418,7 @@ type backendRow struct {
 	recommended bool
 }
 
-// variant resolves one regional entry. byPath indexes the family's regional
-// entries by manifest path, to resolve superseded_by.
-func (f *family) variant(e *manifestModel, table *regionTable, labels map[string]labelChecksum, byPath map[string]*manifestModel) (genVariant, error) {
+func (f *family) variant(e *manifestModel, table *regionTable, labels map[string]labelChecksum) (genVariant, error) {
 	if _, ok := table.Regions[e.Region]; !ok {
 		return genVariant{}, fmt.Errorf("variant %s@%s: region slug not in the embedded region table", e.Variant, e.Region)
 	}
@@ -485,11 +488,6 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 	}
 	sort.Slice(backends, func(i, j int) bool { return backends[i].token < backends[j].token })
 
-	superseded, err := supersededVariantID(e, byPath)
-	if err != nil {
-		return genVariant{}, err
-	}
-
 	return genVariant{
 		id:           e.Variant + "@" + e.Region,
 		region:       e.Region,
@@ -500,13 +498,13 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		excludes:     excludes,
 		backends:     backends,
 		benchmarks:   e.Benchmarks,
-		// Legacy is derived from supersededBy only. The manifest's own `legacy`
+		// Legacy is derived from superseded_by only; build fills supersededBy with
+		// the resolved variant id. The manifest's own `legacy`
 		// bool means "published before the current naming scheme" (frozen
 		// filename), NOT "superseded"; CatalogVariant.Legacy means the recommender
 		// hides and penalizes the variant, so passing the manifest flag through
 		// would wrongly bury every regional tile.
-		legacy:         superseded != "",
-		supersededBy:   superseded,
+		legacy:         e.SupersededBy != nil,
 		modelRemote:    e.Path,
 		modelLocalName: f.modelLocalName(e.Region, e.Variant),
 		modelSHA256:    e.SHA256,

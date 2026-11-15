@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,10 +75,10 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 		}
 	}
 
-	_, err := fam.variant(entry("cc"), table, sidecar, nil)
+	_, err := fam.variant(entry("cc"), table, sidecar)
 	require.ErrorContains(t, err, "labels_sha256")
 
-	_, err = fam.variant(entry(""), table, sidecar, nil)
+	_, err = fam.variant(entry(""), table, sidecar)
 	require.ErrorContains(t, err, "labels_sha256", "a calibrated entry must name the labels file it was fitted on")
 
 	// A family without calibration keeps accepting an entry that has no labels_sha256.
@@ -85,10 +86,10 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 	plain.requireScoreCalibration = false
 	noCal := entry("")
 	noCal.ScoreCalibration = nil
-	_, err = plain.variant(noCal, table, sidecar, nil)
+	_, err = plain.variant(noCal, table, sidecar)
 	require.NoError(t, err)
 
-	v, err := fam.variant(entry("aa"), table, sidecar, nil)
+	v, err := fam.variant(entry("aa"), table, sidecar)
 	require.NoError(t, err)
 	assert.Contains(t, render(&v), "ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},")
 }
@@ -148,37 +149,20 @@ func TestCheckRegionCounts(t *testing.T) {
 	}
 }
 
-// TestVariant_SupersededByResolvesToAVariantID checks a manifest superseded_by
-// path becomes the variant id of a live entry in the same region, and that a
-// dangling, cross-region or chained pointer is refused, so SupersededBy never
-// names a variant a new install cannot use.
-func TestVariant_SupersededByResolvesToAVariantID(t *testing.T) {
+// TestSupersededVariantID checks a manifest superseded_by path becomes the
+// variant id of a live entry in the same region, and that a dangling,
+// cross-region or chained pointer is refused, so SupersededBy never names a
+// variant a new install cannot use.
+func TestSupersededVariantID(t *testing.T) {
 	t.Parallel()
 
-	fam := &family{
-		key: "perch-v2", repo: "o/r",
-		modelLocalName:  func(slug, token string) string { return slug + token },
-		labelsLocalName: func(slug string) string { return slug + ".txt" },
-	}
-	table := &regionTable{Regions: map[string]struct {
-		Classes *int `json:"classes"`
-	}{"x": {Classes: new(3)}, "y": {Classes: new(3)}}}
-	sidecar := map[string]labelChecksum{
-		"o/r|regional/x/labels.txt": {SHA256: "aa", SizeBytes: 9, Lines: 3},
-		"o/r|regional/y/labels.txt": {SHA256: "aa", SizeBytes: 9, Lines: 3},
-	}
 	entry := func(variant, region string, supersededBy *string) *manifestModel {
-		return &manifestModel{
-			Path: "regional/" + region + "/" + variant + ".onnx", Variant: variant, Region: region,
-			Labels: "regional/" + region + "/labels.txt", SHA256: "bb", SizeBytes: 1,
-			Requirements: &manifestRequirements{MinRAMMB: 1},
-			SupersededBy: supersededBy,
-		}
+		return &manifestModel{Path: "regional/" + region + "/" + variant + ".onnx", Variant: variant, Region: region, SupersededBy: supersededBy}
 	}
 	live := entry("no-dft-fp32", "x", nil)
 	otherRegion := entry("no-dft-fp32", "y", nil)
-	chainedTo := entry("fp32", "x", new(live.Path))
-	byPath := map[string]*manifestModel{live.Path: live, otherRegion.Path: otherRegion, chainedTo.Path: chainedTo}
+	chained := entry("fp32", "x", new(live.Path))
+	byPath := map[string]*manifestModel{live.Path: live, otherRegion.Path: otherRegion, chained.Path: chained}
 
 	tests := []struct {
 		name         string
@@ -190,23 +174,55 @@ func TestVariant_SupersededByResolvesToAVariantID(t *testing.T) {
 		{name: "same region live entry", supersededBy: new(live.Path), wantID: "no-dft-fp32@x"},
 		{name: "unknown path", supersededBy: new("regional/x/missing.onnx"), wantErr: "not an entry of this family"},
 		{name: "other region", supersededBy: new(otherRegion.Path), wantErr: "different region"},
-		{name: "entry that is itself superseded", supersededBy: new(chainedTo.Path), wantErr: "itself superseded"},
+		{name: "entry that is itself superseded", supersededBy: new(chained.Path), wantErr: "itself superseded"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			v, err := fam.variant(entry("int8-arm", "x", tt.supersededBy), table, sidecar, byPath)
+			got, err := supersededVariantID(entry("int8-arm", "x", tt.supersededBy), byPath)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				require.ErrorContains(t, err, "int8-arm@x", "the error must name the entry")
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, v.supersededBy)
-			assert.Equal(t, tt.wantID != "", v.legacy)
-			if tt.wantID != "" {
-				assert.Contains(t, render(&v), fmt.Sprintf("SupersededBy: %q,", tt.wantID))
-			}
+			assert.Equal(t, tt.wantID, got)
 		})
+	}
+}
+
+// TestBuild_PerchWithdrawnVariantsFollowTheirReplacement runs the generator on
+// the vendored Perch manifest: every region's withdrawn int8-arm variant names
+// that region's no-dft-fp32 variant and renders after it.
+func TestBuild_PerchWithdrawnVariantsFollowTheirReplacement(t *testing.T) {
+	t.Chdir("..") // the generator's manifest and sidecar paths are relative to the classifier package
+
+	labels, err := loadLabelsSidecar()
+	require.NoError(t, err)
+	var perch *family
+	for i := range families {
+		if families[i].key == "perch-v2" {
+			perch = &families[i]
+		}
+	}
+	require.NotNil(t, perch)
+
+	out, err := perch.build(labels)
+	require.NoError(t, err)
+	require.Len(t, out, expectedRegions*perch.variantsPerRegion)
+
+	idRe := regexp.MustCompile(`ID: "([a-z0-9-]+)@([a-z0-9-]+)"`)
+	// out is sorted by region: each region's live variant, then its withdrawn one.
+	for i := 0; i < len(out); i += 2 {
+		live := idRe.FindStringSubmatch(out[i])
+		withdrawn := idRe.FindStringSubmatch(out[i+1])
+		require.NotNil(t, live)
+		require.NotNil(t, withdrawn)
+		assert.Equal(t, "no-dft-fp32", live[1])
+		assert.Equal(t, "int8-arm", withdrawn[1])
+		assert.Equal(t, live[2], withdrawn[2], "a region's two variants are adjacent")
+		assert.NotContains(t, out[i], "Legacy:")
+		assert.Contains(t, out[i+1], "Legacy:")
+		assert.Contains(t, out[i+1], fmt.Sprintf("SupersededBy: %q,", live[1]+"@"+live[2]))
 	}
 }
