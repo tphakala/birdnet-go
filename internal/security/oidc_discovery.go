@@ -2,6 +2,7 @@ package security
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync/atomic"
 
@@ -31,6 +32,34 @@ func oidcDiscoveryURL(issuerURL string) string {
 	return strings.TrimSuffix(issuerURL, "/") + oidcDiscoveryPath
 }
 
+// redactedError carries an error text with credentials removed and still
+// unwraps to the original error.
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+func (e *redactedError) Unwrap() error { return e.err }
+
+// urlUserinfo matches the userinfo of a URL with a scheme inside an error text.
+// The class excludes the slash that ends the authority, so the match runs to the
+// last at sign of the authority and a raw at sign in a password stays inside it.
+var urlUserinfo = regexp.MustCompile(`(?i)(\w+://)[^/\s"]+@`)
+
+// redactDiscoveryErr removes URL userinfo from the text of err. net/http masks
+// the password in a transport error but keeps the username, and prints a URL it
+// cannot parse unchanged, so the text is rewritten before it is logged or
+// recorded. An error without userinfo in its text passes through unchanged. err
+// must not be nil.
+func redactDiscoveryErr(err error) error {
+	msg := urlUserinfo.ReplaceAllString(err.Error(), "${1}"+privacy.RedactedMarker+"@")
+	if msg == err.Error() {
+		return err
+	}
+	return &redactedError{msg: msg, err: err}
+}
+
 // errProviderNotRegistered is returned by ProviderRegistrationError for a
 // provider goth does not know and for which no discovery failure is recorded.
 var errProviderNotRegistered = errors.NewStd("provider is not registered: it was not enabled at startup or its settings changed since, restart BirdNET-Go to apply")
@@ -42,7 +71,7 @@ var lastOIDCDiscoveryErr atomic.Pointer[error]
 // recordOIDCDiscoveryFailure remembers why OIDC discovery failed, with any
 // userinfo in the discovery URL redacted.
 func recordOIDCDiscoveryFailure(discoveryURL string, err error) {
-	wrapped := fmt.Errorf("OIDC discovery request to %s failed: %w", privacy.ScrubCredentialURL(discoveryURL), err)
+	wrapped := fmt.Errorf("OIDC discovery request to %s failed: %w", privacy.ScrubCredentialURL(discoveryURL), redactDiscoveryErr(err))
 	lastOIDCDiscoveryErr.Store(&wrapped)
 }
 
