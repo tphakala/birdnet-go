@@ -154,6 +154,12 @@
     });
   });
 
+  // Clear the sort message when no thresholds are shown (a search with no matches), so rows
+  // returning later do not announce a sort the user did not just make
+  $effect(() => {
+    if (filteredThresholds.length === 0) sortStatus = '';
+  });
+
   let activeThresholds = $derived(thresholds.filter(t => t.isActive));
 
   onMount(() => {

@@ -97,4 +97,30 @@ describe('DynamicThresholdTab sorting', () => {
     await screen.findByRole('button', { name: thresholdLabel });
     expect(screen.getByRole('status').textContent).toBe('');
   });
+
+  it('drops the sort announcement when a search matches no thresholds', async () => {
+    const MANY = 9;
+    apiGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith('/stats')
+          ? stats
+          : {
+              data: Array.from({ length: MANY }, (_, i) => threshold(`Bird ${i}`, 0.1 * i)),
+              total: MANY,
+            }
+      )
+    );
+    renderTyped(DynamicThresholdTab, { props: {} });
+    const thresholdLabel = t('settings.species.dynamicThreshold.header.threshold');
+
+    await fireEvent.click(await screen.findByRole('button', { name: thresholdLabel }));
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await fireEvent.input(
+      screen.getByPlaceholderText(t('settings.species.dynamicThreshold.searchPlaceholder')),
+      { target: { value: 'zzzz' } }
+    );
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+  });
 });
