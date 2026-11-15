@@ -56,7 +56,7 @@ func Categories() []Category {
 // "male_speech_and_man_speaking"). The match is exact against the known class set,
 // case-insensitive. It does NOT match truncated first-token forms; callers that only
 // have the first token (the image provider) must use IsName instead.
-// ok is false for species labels and any unknown label. BirdNET v2.x non-species
+// ok is false for species labels and any unknown label. BirdNET non-species
 // classes define no category of their own; a class whose bare name is also a Perch
 // key (for example "dog") returns that Perch category here.
 func CategoryOf(rawLabel string) (Category, bool) {
@@ -71,7 +71,7 @@ func sanitizeLabel(rawLabel string) string {
 }
 
 // IsLabel reports whether rawLabel is a known sound-event class label from a
-// supported model: a full Perch v2 class label (see CategoryOf), or a BirdNET v2.x
+// supported model: a full Perch v2 class label (see CategoryOf), or a BirdNET
 // label whose part before the first underscore, or the whole label when it has
 // none, is a BirdNET non-species class (for example "Dog_Hund",
 // "Power tools_Power tools", "Gun"). The label is trimmed and carriage returns are
@@ -123,7 +123,7 @@ func IsMultiWordClassPrefix(name string) bool {
 // carry the full label; the first-token match remains for names stored before
 // full labels were kept whole (e.g. "Power" from "power_tool", "Engine" from
 // "engine"), and for the image provider's lookups of those names. It also matches
-// a BirdNET v2.x non-species class by its stored name (for example "Power tools",
+// a BirdNET non-species class by its stored name (for example "Power tools",
 // "Human vocal"). Case-insensitive.
 func IsName(name string) bool {
 	lower := strings.ToLower(name)

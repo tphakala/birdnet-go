@@ -59,7 +59,7 @@ func TestClassesGuard(t *testing.T) {
 func TestBirdNETClassesGuard(t *testing.T) {
 	t.Parallel()
 
-	const expectedBirdNETClassCount = 12
+	const expectedBirdNETClassCount = 24
 
 	require.Len(t, birdnetClasses, expectedBirdNETClassCount, "birdnetClasses must contain exactly %d entries", expectedBirdNETClassCount)
 

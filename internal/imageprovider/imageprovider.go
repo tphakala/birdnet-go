@@ -403,7 +403,7 @@ var fallbackProviders = []string{"avicommons", "wikimedia"}
 // isNonAvianClass returns true if scientificName is a sound-event class that will
 // never have images available from bird image providers, so its negative cache
 // entries never expire. It matches the classes known to soundevent: Perch v2
-// full labels and first tokens, and BirdNET v2.x stored names. Case-insensitive.
+// full labels and first tokens, and BirdNET stored names. Case-insensitive.
 func isNonAvianClass(scientificName string) bool {
 	return soundevent.IsName(scientificName)
 }
