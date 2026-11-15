@@ -193,6 +193,16 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 			want:     testHostIPv6,
 		},
 		{
+			name:     "Host with another scheme - should fall back to BaseURL",
+			security: Security{Host: "ftp://" + testHostIgnored, BaseURL: testURLHTTPSNoPort},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with another scheme and no BaseURL - should be empty",
+			security: Security{Host: "ftp://" + testHostIgnored},
+			want:     "",
+		},
+		{
 			name:     "Host with a scheme but no hostname - should fall back to BaseURL",
 			security: Security{Host: "http://:8080", BaseURL: testURLHTTPSNoPort},
 			want:     testHostExample,
@@ -297,6 +307,11 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 		{
 			name:     "Host with a scheme that does not parse - should be empty",
 			security: Security{Host: "http://bad host"},
+			want:     "",
+		},
+		{
+			name:     "Host with another scheme - should be empty",
+			security: Security{Host: "ftp://" + testHostExample},
 			want:     "",
 		},
 		{
@@ -601,6 +616,8 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 		{name: "credentialed baseUrl is no origin and no link", security: Security{BaseURL: "https://user:pw@" + testHostExample, Host: testHostIgnored}, wantBaseURL: "", wantProblem: "security.baseUrl"},
 		{name: "credentialed schemed host is no origin and no link", security: Security{Host: "https://user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
 		{name: "credentialed host with an uppercase scheme is no origin and no link", security: Security{Host: "HTTPS://user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "host with another scheme is no origin and no link", security: Security{Host: "ftp://" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "host with another scheme in uppercase is no origin and no link", security: Security{Host: "FTP://" + testHostExample, TLSMode: TLSModeAutoTLS}, wantBaseURL: "", wantProblem: "security.host"},
 		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
 		{name: "baseUrl of only a slash is set and unusable, host does not rescue it", security: Security{BaseURL: "/", Host: testHostExample, TLSMode: TLSModeNone}, wantBaseURL: "", wantProblem: "security.baseUrl"},
 		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},

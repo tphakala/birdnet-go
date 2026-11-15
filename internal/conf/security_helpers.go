@@ -78,13 +78,23 @@ func (s *Security) trimmedHost() string {
 	return strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
 }
 
-// hostHasScheme reports whether a trimmed Host already starts with an http or
-// https scheme, in any case. Such a host is a full origin and is used as given;
-// OAuthOrigin, GetBaseURL and the hostname getters all ask here so they cannot
-// disagree about it.
+// schemeSeparator separates a URL scheme from the rest of the URL.
+const schemeSeparator = "://"
+
+// hostHasScheme reports whether a trimmed Host already carries a scheme, any
+// scheme, because a Host is a bare name or a full origin and nothing in between.
+// Whether that scheme is one we accept is hasUnusableHost's decision.
 func hostHasScheme(host string) bool {
-	scheme, _, ok := strings.Cut(host, "://")
-	return ok && (strings.EqualFold(scheme, SchemeHTTP) || strings.EqualFold(scheme, SchemeHTTPS))
+	return strings.Contains(host, schemeSeparator)
+}
+
+// hasUnusableHost reports whether Host is set but cannot be used: one that
+// carries a scheme must be an absolute http(s) URL with a host and no
+// credentials (ValidateBaseURL), as an unusable baseUrl is. OAuthOrigin,
+// GetBaseURL and the hostname getters all ask here so they cannot disagree.
+func (s *Security) hasUnusableHost() bool {
+	host := s.trimmedHost()
+	return host != "" && hostHasScheme(host) && ValidateBaseURL(host) != nil
 }
 
 // hasUnusableBaseURL reports whether BaseURL is set but not a usable URL, the one
@@ -111,7 +121,7 @@ func (s *Security) oauthOriginCandidate() (field, origin string) {
 		return "", ""
 	}
 	if !hostHasScheme(host) {
-		host = SchemeHTTPS + "://" + host
+		host = SchemeHTTPS + schemeSeparator + host
 	}
 	return "security.host", host
 }
@@ -150,7 +160,8 @@ func (s *Security) GetBaseURL(port string) string {
 		return ""
 	}
 	if hostHasScheme(host) {
-		// Already a full origin: the OAuth origin rule applies as it is.
+		// Already a full origin: the OAuth origin rule applies as it is, and an
+		// unusable one gives no link.
 		return s.OAuthOrigin()
 	}
 
@@ -175,21 +186,19 @@ func (s *Security) buildURLFromHost(host, port string) string {
 
 // GetHostnameForCertificates extracts the hostname for TLS certificate generation.
 // Priority order:
-//  1. Host field (if set; a Host with an http(s) scheme is reduced to its
-//     hostname, dropping scheme, port and path, and skipped when it has none)
+//  1. Host field (if set and usable; a Host with an http(s) scheme is reduced to
+//     its hostname, dropping scheme, port and path; an unusable one is skipped)
 //  2. Hostname extracted from BaseURL (without port)
 //  3. Empty string if neither is available
 //
 // IPv6 addresses are returned without brackets.
 func (s *Security) GetHostnameForCertificates() string {
 	// Priority 1: Use Host if set
-	if host := s.trimmedHost(); host != "" {
+	if host := s.trimmedHost(); host != "" && !s.hasUnusableHost() {
 		if !hostHasScheme(host) {
 			return host
 		}
-		if hostname := hostnameOf(host); hostname != "" {
-			return hostname
-		}
+		return hostnameOf(host)
 	}
 
 	// Priority 2: Extract hostname from BaseURL
@@ -211,7 +220,7 @@ func hostnameOf(raw string) string {
 // Priority order:
 //  1. Host:port extracted from BaseURL (if it is a usable URL)
 //  2. Host field as fallback (host:port when it carries an http(s) scheme, empty
-//     when that has no hostname)
+//     when it is unusable)
 //  3. Empty string if neither is available
 func (s *Security) GetExternalHost() string {
 	// Priority 1: Extract from BaseURL if usable
@@ -222,13 +231,14 @@ func (s *Security) GetExternalHost() string {
 
 	// Priority 2: Fall back to Host, reduced to host:port when it has a scheme
 	host := s.trimmedHost()
+	if s.hasUnusableHost() {
+		return ""
+	}
 	if !hostHasScheme(host) {
 		return host
 	}
-	if parsed, err := url.Parse(host); err == nil && parsed.Hostname() != "" {
-		return parsed.Host
-	}
-	return ""
+	parsed, _ := url.Parse(host) // cannot fail: hasUnusableHost validated it
+	return parsed.Host
 }
 
 // IsHTTPSBaseURL reports whether the canonical external BaseURL uses the https
