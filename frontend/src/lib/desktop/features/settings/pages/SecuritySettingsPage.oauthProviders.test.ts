@@ -102,6 +102,31 @@ describe('SecuritySettingsPage OAuth provider list', () => {
       ).toBe(true);
     });
 
+    it('shows the URL to register as the help text when a base URL is set', async () => {
+      seedProvider('oidc');
+      await openEditForm();
+
+      expect(
+        screen.getByText('settings.security.oauth.oidc.postLogoutRedirectHelpText')
+      ).toBeTruthy();
+      expect(
+        screen.queryByText('settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl')
+      ).toBeNull();
+    });
+
+    it('asks for a base URL or host first when neither is set', async () => {
+      seedProvider('oidc');
+      seedSecurity({ baseUrl: '', host: '' });
+      await openEditForm();
+
+      expect(
+        screen.getByText('settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl')
+      ).toBeTruthy();
+      expect(
+        screen.queryByText('settings.security.oauth.oidc.postLogoutRedirectHelpText')
+      ).toBeNull();
+    });
+
     it('is not offered for other providers', async () => {
       seedProvider('google');
       await openEditForm();
