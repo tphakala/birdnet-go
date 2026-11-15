@@ -49,6 +49,11 @@ func TestDetermineModelInfo_Deterministic(t *testing.T) {
 		{"/models/bsgbat_v0.21_r1.onnx", RegistryIDBSGBat},
 		{"/models/bsg-bat-v0.21-r1.onnx", RegistryIDBSGBat},
 		{"/models/BSG_BAT_model.onnx", RegistryIDBSGBat},
+		// BirdNET+ V3.0 file names must not cross-match the BirdNET v3.0 preview
+		// tokens, and the preview file names must keep resolving to the preview.
+		{"/models/birdnet_plus_v3.0_fp32.onnx", RegistryIDBirdNETPlusV3},
+		{"/models/birdnet-plus-v3.0-nordic-fp32-b1.onnx", RegistryIDBirdNETPlusV3},
+		{"/models/birdnet_v3.0_fp32.onnx", RegistryIDBirdNETV3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

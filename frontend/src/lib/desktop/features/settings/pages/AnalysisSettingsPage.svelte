@@ -102,6 +102,7 @@
     bsgBatSettings,
     perchSettings,
     birdNetV3Settings,
+    birdNetPlusSettings,
     type BSGBatSettings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
@@ -149,6 +150,10 @@
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
   /** Catalog ID of the BSG-BAT model (the other bat catalog entries are BattyBirdNET models). */
   const BSG_BAT_CATALOG_ID = 'bsg-bat';
+  /** Catalog ID of the BirdNET+ V3.0 model; the threshold card shows only while it is installed. */
+  const BIRDNET_PLUS_CATALOG_ID = 'birdnet-plus-v3.0';
+  /** Backend default of birdnetplus.threshold, used until the section is loaded. */
+  const BIRDNET_PLUS_DEFAULT_THRESHOLD = 0.5;
   /** Backend default of bsgbat.threshold, used until the section is loaded. */
   const BSG_BAT_DEFAULT_THRESHOLD = 0.5;
   /** Bounds and step of the bat model threshold fields. */
@@ -410,6 +415,12 @@
   let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
   const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
   const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
+  let birdnetPlus = $derived(
+    $birdNetPlusSettings ?? { overrideThreshold: false, threshold: BIRDNET_PLUS_DEFAULT_THRESHOLD }
+  );
+  const hasBirdNetPlusModel = $derived(
+    installedModels.some(m => m.catalogId === BIRDNET_PLUS_CATALOG_ID)
+  );
 
   // ── Change detection ──────────────────────────────────────────────────
   // The saved and the current value of each card, used by the card's unsaved-changes badge
@@ -444,6 +455,13 @@
       threshold: store.originalData.birdnetv3?.threshold ?? 0.5,
     },
     current: { override: birdnetV3.overrideThreshold, threshold: birdnetV3.threshold },
+  });
+  const birdnetPlusChange: ChangePair = $derived({
+    original: {
+      override: store.originalData.birdnetplus?.overrideThreshold ?? false,
+      threshold: store.originalData.birdnetplus?.threshold ?? BIRDNET_PLUS_DEFAULT_THRESHOLD,
+    },
+    current: { override: birdnetPlus.overrideThreshold, threshold: birdnetPlus.threshold },
   });
   const batChange: ChangePair = $derived({
     original: {
@@ -496,10 +514,10 @@
     current: { huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' },
   });
 
-  // A tab shows the change dot when any card badge on it would. The Perch, BirdNET v3.0 and bat
-  // cards count only while they are shown, so the dot and the badges stay in step. For Perch and
-  // BirdNET v3.0 the gate changes nothing today, since the defaults equal the saved-side
-  // fallbacks. For bat it is load-bearing: with no bat section saved, the page's defaults differ
+  // A tab shows the change dot when any card badge on it would. The Perch, BirdNET v3.0, BirdNET+
+  // V3.0 and bat cards count only while they are shown, so the dot and the badges stay in step.
+  // For Perch, BirdNET v3.0 and BirdNET+ V3.0 the gate changes nothing today, since the
+  // defaults equal the saved-side fallbacks. For bat it is load-bearing: with no bat section saved, the page's defaults differ
   // from the saved values and would light the dot for good.
   const settingsTabHasChanges = $derived(
     [
@@ -509,6 +527,7 @@
       advancedChange,
       ...(hasPerchModel ? [perchChange] : []),
       ...(hasBirdNetV3Model ? [birdnetV3Change] : []),
+      ...(hasBirdNetPlusModel ? [birdnetPlusChange] : []),
       ...(hasBatModel ? [batChange] : []),
     ].some(c => hasSettingsChanged(c.original, c.current))
   );
@@ -1434,6 +1453,14 @@
     settingsActions.updateSection('birdnetv3', { threshold: value });
   }
 
+  function updateBirdNetPlusOverride(value: boolean) {
+    settingsActions.updateSection('birdnetplus', { overrideThreshold: value });
+  }
+
+  function updateBirdNetPlusThreshold(value: number) {
+    settingsActions.updateSection('birdnetplus', { threshold: value });
+  }
+
   // ── Gallery tab definitions ───────────────────────────────────────────
   const galleryTabs: TabDefinition[] = $derived([
     {
@@ -1809,7 +1836,7 @@
   }
 </script>
 
-<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0) ── -->
+<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0, BirdNET+ V3.0) ── -->
 {#snippet secondaryModelThreshold(cfg: SecondaryModelThresholdConfig)}
   <SettingsSection
     title={t(cfg.titleKey)}
@@ -2010,6 +2037,20 @@
         change: birdnetV3Change,
         onOverride: updateBirdNetV3Override,
         onThreshold: updateBirdNetV3Threshold,
+      })}
+    {/if}
+
+    <!-- 3b. BirdNET+ V3.0 threshold override (only when the BirdNET+ model is installed) -->
+    {#if hasBirdNetPlusModel}
+      {@render secondaryModelThreshold({
+        titleKey: 'analysis.birdnetplus.title',
+        descKey: 'analysis.birdnetplus.description',
+        thresholdLabelKey: 'analysis.detection.birdnetplusThreshold.label',
+        effectiveThreshold: birdnet?.threshold ?? 0.3,
+        current: birdnetPlus,
+        change: birdnetPlusChange,
+        onOverride: updateBirdNetPlusOverride,
+        onThreshold: updateBirdNetPlusThreshold,
       })}
     {/if}
 

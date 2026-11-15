@@ -98,9 +98,12 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Perch.OverrideThreshold": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- BirdNET v3.0 ---
-	"BirdNETV3":                   {categories: []hotReloadCategory{hotReloadRestart}},
-	"BirdNETV3.Threshold":         {categories: []hotReloadCategory{hotReloadFresh}},
-	"BirdNETV3.OverrideThreshold": {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNETV3":                     {categories: []hotReloadCategory{hotReloadRestart}},
+	"BirdNETV3.Threshold":           {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNETV3.OverrideThreshold":   {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNETPlus":                   {categories: []hotReloadCategory{hotReloadRestart}},
+	"BirdNETPlus.Threshold":         {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNETPlus.OverrideThreshold": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Bat ---
 	"Bat": {categories: []hotReloadCategory{hotReloadFresh}},

@@ -537,11 +537,12 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 // many regional catalog IDs mapping to one registry entry, so there is no
 // single canonical spelling to normalize toward.
 var catalogModelIDAliases = map[string]string{
-	ModelIDBirdNETCatalog:   ModelIDBirdNET,
-	ModelIDBirdNETV3Catalog: ModelIDBirdNETV3,
-	ModelIDPerchV2Catalog:   ModelIDPerchV2,
-	ModelIDBSGCatalog:       ModelIDBSG,
-	ModelIDBSGBatCatalog:    ModelIDBSGBat,
+	ModelIDBirdNETCatalog:       ModelIDBirdNET,
+	ModelIDBirdNETV3Catalog:     ModelIDBirdNETV3,
+	ModelIDBirdNETPlusV3Catalog: ModelIDBirdNETPlusV3,
+	ModelIDPerchV2Catalog:       ModelIDPerchV2,
+	ModelIDBSGCatalog:           ModelIDBSG,
+	ModelIDBSGBatCatalog:        ModelIDBSGBat,
 }
 
 // canonicalizeModelID returns the canonical config ID for a catalog-style

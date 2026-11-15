@@ -84,6 +84,20 @@ func TestPatchMissingSections(t *testing.T) {
 			},
 		},
 		{
+			name:    "birdnetplus section accepts valid update",
+			section: "birdnetplus",
+			body: map[string]any{
+				"overrideThreshold": true,
+				"threshold":         0.65,
+			},
+			verify: func(t *testing.T, settings *conf.Settings) {
+				t.Helper()
+				assert.True(t, settings.BirdNETPlus.OverrideThreshold)
+				assert.InDelta(t, 0.65, settings.BirdNETPlus.Threshold, 1e-9)
+				assert.False(t, settings.BirdNETV3.OverrideThreshold, "the BirdNET v3.0 section must stay untouched")
+			},
+		},
+		{
 			name:    "bsgbat section accepts valid update",
 			section: "bsgbat",
 			body: map[string]any{

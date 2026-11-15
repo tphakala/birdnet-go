@@ -101,6 +101,10 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnetv3.overridethreshold", false)
 	viper.SetDefault("birdnetv3.threshold", 0.5)
 
+	// BirdNET+ V3.0 model configuration (same override semantics as Perch).
+	viper.SetDefault("birdnetplus.overridethreshold", false)
+	viper.SetDefault("birdnetplus.threshold", 0.5)
+
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
 	viper.SetDefault("bat.nighttimeonly", true)

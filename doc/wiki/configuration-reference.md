@@ -107,6 +107,18 @@ BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
 | `birdnetv3.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
 | `birdnetv3.locale` | string | locale for species label translation |
 
+## birdnetplus
+
+BirdNETPlusConfig holds configuration for the BirdNET+ V3.0 acoustic classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `birdnetplus.modelpath` | string | path to BirdNET+ V3.0 ONNX model file |
+| `birdnetplus.labelpath` | string | path to BirdNET+ V3.0 label file |
+| `birdnetplus.overridethreshold` | boolean | when true, gate BirdNET+ V3.0 detections on Threshold instead of following BirdNET.Threshold |
+| `birdnetplus.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
+| `birdnetplus.locale` | string | locale for species label translation |
+
 ## bat
 
 BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.

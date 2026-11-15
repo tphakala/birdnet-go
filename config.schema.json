@@ -522,6 +522,33 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "BirdNETPlusConfig": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BirdNET+ V3.0 ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BirdNET+ V3.0 label file"
+        },
+        "overridethreshold": {
+          "type": "boolean",
+          "description": "when true, gate BirdNET+ V3.0 detections on Threshold instead of following BirdNET.Threshold"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for detections (applied only when OverrideThreshold is true)"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BirdNETPlusConfig holds configuration for the BirdNET+ V3.0 acoustic classifier."
+    },
     "BirdNETV3Config": {
       "properties": {
         "modelpath": {
@@ -2330,6 +2357,10 @@
         "birdnetv3": {
           "$ref": "#/$defs/BirdNETV3Config",
           "description": "BirdNET v3.0 acoustic classifier configuration"
+        },
+        "birdnetplus": {
+          "$ref": "#/$defs/BirdNETPlusConfig",
+          "description": "BirdNET+ V3.0 acoustic classifier configuration"
         },
         "bat": {
           "$ref": "#/$defs/BatConfig",

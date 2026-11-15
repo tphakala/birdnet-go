@@ -71,8 +71,8 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 
 // TestCreateDetectionResult_ThresholdModelAware verifies the stored detection
 // Threshold reflects the model-aware gating threshold: Bat records Bat.Threshold,
-// Perch v2 with its override records the Perch threshold, and every other model
-// (including Perch with the override off) records the BirdNET threshold.
+// Perch v2, BirdNET v3.0 and BirdNET+ V3.0 with their override record their own
+// threshold, and every other model (including those with the override off) records the BirdNET threshold.
 func TestCreateDetectionResult_ThresholdModelAware(t *testing.T) {
 	t.Parallel()
 
@@ -81,26 +81,33 @@ func TestCreateDetectionResult_ThresholdModelAware(t *testing.T) {
 		s.BirdNET.Threshold = 0.80
 		s.Bat.Threshold = 0.30
 		s.Perch.Threshold = 0.50
+		s.BirdNETV3.Threshold = 0.60
+		s.BirdNETPlus.Threshold = 0.40
 		return s
 	}
 
 	tests := []struct {
-		name          string
-		modelID       string
-		perchOverride bool
-		want          float64
+		name     string
+		modelID  string
+		override bool // sets the override toggle of the model under test
+		want     float64
 	}{
 		{"birdnet records birdnet threshold", "BirdNET_V2.4", false, 0.80},
 		{"bat records bat threshold", classifier.RegistryIDBat, false, 0.30},
 		{"perch override off records birdnet threshold", classifier.RegistryIDPerchV2, false, 0.80},
 		{"perch override on records perch threshold", classifier.RegistryIDPerchV2, true, 0.50},
+		{"birdnet plus override off records birdnet threshold", classifier.RegistryIDBirdNETPlusV3, false, 0.80},
+		{"birdnet plus override on records birdnetplus threshold", classifier.RegistryIDBirdNETPlusV3, true, 0.40},
+		{"birdnet v3 override on records birdnetv3 threshold, not birdnetplus", classifier.RegistryIDBirdNETV3, true, 0.60},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			settings := newSettings()
-			settings.Perch.OverrideThreshold = tc.perchOverride
+			settings.Perch.OverrideThreshold = tc.override && tc.modelID == classifier.RegistryIDPerchV2
+			settings.BirdNETV3.OverrideThreshold = tc.override && tc.modelID == classifier.RegistryIDBirdNETV3
+			settings.BirdNETPlus.OverrideThreshold = tc.override && tc.modelID == classifier.RegistryIDBirdNETPlusV3
 			p := &Processor{Settings: settings}
 
 			result := p.createDetectionResult(settings,

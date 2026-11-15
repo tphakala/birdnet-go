@@ -67,20 +67,22 @@ var (
 // ValidAudioModels contains recognized AI model identifiers.
 // Empty string is also valid (defaults to birdnet).
 var ValidAudioModels = map[string]bool{
-	"":               true, // default (birdnet)
-	ModelIDBirdNET:   true,
-	ModelIDBirdNETV3: true,
-	ModelIDPerchV2:   true,
-	ModelIDBat:       true,
-	ModelIDBSG:       true,
-	ModelIDBSGBat:    true,
+	"":                   true, // default (birdnet)
+	ModelIDBirdNET:       true,
+	ModelIDBirdNETV3:     true,
+	ModelIDBirdNETPlusV3: true,
+	ModelIDPerchV2:       true,
+	ModelIDBat:           true,
+	ModelIDBSG:           true,
+	ModelIDBSGBat:        true,
 	// Catalog-style aliases (see consts.go) so a source model set to the
 	// hyphenated catalog ID validates rather than failing startup.
-	ModelIDBirdNETCatalog:   true,
-	ModelIDBirdNETV3Catalog: true,
-	ModelIDPerchV2Catalog:   true,
-	ModelIDBSGCatalog:       true,
-	ModelIDBSGBatCatalog:    true,
+	ModelIDBirdNETCatalog:       true,
+	ModelIDBirdNETV3Catalog:     true,
+	ModelIDBirdNETPlusV3Catalog: true,
+	ModelIDPerchV2Catalog:       true,
+	ModelIDBSGCatalog:           true,
+	ModelIDBSGBatCatalog:        true,
 }
 
 // ValidationError is the set of fatal validation findings produced by
@@ -296,7 +298,7 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
-	// Validate per-model confidence thresholds (bat, perch, birdnetv3). An
+	// Validate per-model confidence thresholds (bat, perch, birdnetv3, birdnetplus). An
 	// out-of-range threshold changes detection gating (>= 1 drops everything,
 	// <= 0 drops nothing), so it is rejected on every write path and on load. The
 	// frontend already constrains these to 0.01-0.99; this closes the raw-API gap.
@@ -417,6 +419,7 @@ func validateModelThresholds(settings *Settings) error {
 		{"bat.threshold", settings.Bat.Threshold},
 		{"perch.threshold", settings.Perch.Threshold},
 		{"birdnetv3.threshold", settings.BirdNETV3.Threshold},
+		{"birdnetplus.threshold", settings.BirdNETPlus.Threshold},
 		{"bsgbat.threshold", settings.BSGBat.Threshold},
 	}
 	for _, c := range checks {

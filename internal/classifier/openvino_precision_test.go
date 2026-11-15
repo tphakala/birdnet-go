@@ -85,6 +85,19 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 			device:  inference.OVDeviceCPU,
 			want:    inference.OVPrecisionF32,
 		},
+		// BirdNET+ V3.0 shares the v3.0 architecture and is forced to f32 on both devices.
+		{
+			name:    "birdnet plus v3.0 on GPU is forced to f32",
+			modelID: RegistryIDBirdNETPlusV3,
+			device:  inference.OVDeviceGPU,
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "birdnet plus v3.0 on CPU is forced to f32",
+			modelID: RegistryIDBirdNETPlusV3,
+			device:  inference.OVDeviceCPU,
+			want:    inference.OVPrecisionF32,
+		},
 	}
 
 	for _, tt := range tests {
@@ -156,6 +169,12 @@ func TestBackendForcesFP32(t *testing.T) {
 			registryID:   RegistryIDBirdNETV3,
 			backendToken: cudaBackendToken,
 			want:         false,
+		},
+		{
+			name:         "birdnet plus v3.0 on openvino cpu is forced to f32",
+			registryID:   RegistryIDBirdNETPlusV3,
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         true,
 		},
 		{
 			name:         "bat on openvino cpu is forced to f32",

@@ -1035,6 +1035,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Perch, nil
 	case "birdnetv3":
 		return &settings.BirdNETV3, nil
+	case "birdnetplus":
+		return &settings.BirdNETPlus, nil
 	case "bat":
 		return &settings.Bat, nil
 	case "bsgbat":
