@@ -87,8 +87,8 @@ func hostHasScheme(host string) bool {
 // carries a scheme must be an absolute http(s) URL with a host and no credentials
 // (ValidateBaseURL), as a baseUrl must be; a bare one must not contain an at
 // sign, which would put userinfo in front of the host in every link built from
-// it. OAuthOrigin, GetBaseURL and the hostname getters all ask here so they
-// cannot disagree.
+// it. OAuthOrigin, GetBaseURL and the hostname getters all ask here, so they
+// agree on a scheme or credentials in Host.
 func (s *Security) hasUnusableHost() bool {
 	host := s.trimmedHost()
 	if host == "" {
@@ -126,15 +126,19 @@ func (s *Security) oauthOriginCandidate() (field, origin string) {
 	if !hostHasScheme(host) {
 		host = SchemeHTTPS + schemeSeparator + host
 	}
-	return "security.host", host
+	return ConfigKeySecurityHost, host
 }
 
 // OAuthOrigin returns the origin OAuth redirect URIs are built from, or "" when
-// none can be: nothing is set, or the value that wins is not a usable URL. A
-// BaseURL that is set but unusable does not fall back to Host.
+// none can be: nothing is set, or the value that wins is not a usable URL (a Host
+// is also unusable when it holds an at sign, see hasUnusableHost). A BaseURL that
+// is set but unusable does not fall back to Host.
 func (s *Security) OAuthOrigin() string {
-	_, origin := s.oauthOriginCandidate()
+	field, origin := s.oauthOriginCandidate()
 	if origin == "" || ValidateBaseURL(origin) != nil {
+		return ""
+	}
+	if field == ConfigKeySecurityHost && s.hasUnusableHost() {
 		return ""
 	}
 	return origin
@@ -159,15 +163,12 @@ func (s *Security) GetBaseURL(port string) string {
 
 	// Priority 2: Host as given when it has a scheme, otherwise built from Host + port + TLSMode
 	host := s.trimmedHost()
-	if host == "" {
-		return ""
-	}
-	if s.hasUnusableHost() {
+	if host == "" || s.hasUnusableHost() {
 		return ""
 	}
 	if hostHasScheme(host) {
-		// Already a full origin: the OAuth origin rule applies as it is.
-		return s.OAuthOrigin()
+		// Already a full, validated origin, used as given.
+		return host
 	}
 
 	return s.buildURLFromHost(host, port)
