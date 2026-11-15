@@ -1048,6 +1048,10 @@ func (s *Server) registerOAuthRoutes() {
 	)
 }
 
+// oauthProviderUnavailableMessage is the only text a visitor gets when an
+// enabled provider is not registered. The cause stays in the security log.
+const oauthProviderUnavailableMessage = "Sign-in with this provider is not available right now. The administrator can find the reason in the BirdNET-Go log."
+
 // handleOAuthBegin initiates the OAuth flow with the requested provider.
 // GET /auth/:provider
 func (s *Server) handleOAuthBegin(c echo.Context) error {
@@ -1073,6 +1077,15 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	if settings := s.currentSettings(); settings == nil || configProvider == "" || !settings.IsOAuthProviderEnabled(configProvider) {
 		log.Warn("OAuth login rejected: provider is disabled or not fully configured")
 		return c.String(http.StatusBadRequest, "OAuth provider not available")
+	}
+
+	// Reject an enabled provider that goth does not know (OIDC discovery failed,
+	// or the provider was enabled after startup) instead of letting gothic answer
+	// with its raw error. The cause is for the security log only; the visitor
+	// gets one fixed sentence.
+	if err := security.ProviderRegistrationError(provider); err != nil {
+		log.Warn("OAuth login rejected: provider is not registered", logger.Error(err))
+		return c.String(http.StatusServiceUnavailable, oauthProviderUnavailableMessage)
 	}
 
 	// Add provider to request context for gothic

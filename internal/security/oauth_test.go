@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
@@ -1406,6 +1407,10 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 	discovery := mockOIDCDiscovery(t)
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
+	// A failure recorded by an earlier discovery attempt must not outlive a
+	// successful registration.
+	recordOIDCDiscoveryFailure(discovery.URL, errors.NewStd("earlier failure"))
+	t.Cleanup(clearOIDCDiscoveryFailure)
 
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -1431,6 +1436,10 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 	provider, ok := providers[ProviderOIDC]
 	require.True(t, ok, "OIDC provider should be registered with goth")
 	assert.IsType(t, &pkceOIDCProvider{}, provider, "OIDC provider should be wrapped with PKCE support")
+
+	goth.ClearProviders()
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a successful registration must clear the recorded discovery failure")
 }
 
 // cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
@@ -1447,6 +1456,7 @@ func cancelAllOIDCRetries() {
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
 	// A prior test's server shutdown may have disabled retries; re-enable so the
 	// discovery-failure path actually starts a background retry.
 	enableOIDCRetries()
@@ -1570,6 +1580,7 @@ func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
 func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
 
 	// Start a server that fails the first discovery request, then succeeds.
 	// Use a sync.Once to ensure exactly the first /.well-known request fails.
@@ -1621,7 +1632,7 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 		UserID:       "user@example.com",
 	}
 
-	startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"})
+	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"})
 
 	// Wait for the server to have served a successful discovery response.
 	// We verify via the server-side counter rather than reading goth's providers map
@@ -1633,6 +1644,16 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 	}, 25*time.Second, 500*time.Millisecond, "OIDC discovery retry should eventually succeed")
 
 	assert.True(t, firstRequestFailed.Load(), "first discovery request should have failed to verify retry behavior")
+
+	// The first attempt failed and recorded a failure; the success must clear it.
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("OIDC retry goroutine did not exit after registering the provider")
+	}
+	goth.ClearProviders()
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a successful retry must clear the recorded discovery failure")
 }
 
 func TestStartOIDCRetry_CanceledByContext(t *testing.T) {

@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "Klienthemmelighed fra din OIDC-identitetsudbyder",
           "userIdLabel": "Tilladt bruger (e-mail eller sub claim)",
           "issuerUrlLabel": "Udsteder-URL",
-          "issuerUrlHelpText": "Udsteder-URL for din OpenID Connect-identitetsudbyder (f.eks. https://auth.example.com)",
+          "issuerUrlHelpText": "Basis-URL for din OpenID Connect-udbyder. BirdNET-Go tilføjer selv /.well-known/openid-configuration, så udelad den del. Eksempler: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Udsteder-URL er påkrævet for OIDC-udbydere",
           "issuerUrlInvalid": "Udsteder-URL skal være en gyldig HTTP- eller HTTPS-URL",

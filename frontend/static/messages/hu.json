@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "A client secret az OpenID Connect identitás szolgáltatójától",
           "userIdLabel": "Engedélyezett felhasználó (e-mail vagy sub claim)",
           "issuerUrlLabel": "Kibocsátó URL",
-          "issuerUrlHelpText": "Az OpenID Connect identitás szolgáltatójának issuer URL-je (pl., https://auth.example.com)",
+          "issuerUrlHelpText": "Az OpenID Connect szolgáltató alap URL-je. A BirdNET-Go maga hozzáfűzi a /.well-known/openid-configuration részt, ezért ezt hagyja ki. Példák: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Az Issuer URL kötelező OIDC szolgáltatókhoz",
           "issuerUrlInvalid": "Az Issuer URL-nek érvényes HTTP vagy HTTPS URL-nek kell lennie",

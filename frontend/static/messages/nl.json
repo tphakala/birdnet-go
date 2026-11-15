@@ -4247,7 +4247,7 @@
           "clientSecretHelpText": "Het clientgeheim van je OIDC-identiteitsprovider",
           "userIdLabel": "Toegestane gebruiker (e-mail of sub claim)",
           "issuerUrlLabel": "Uitgever-URL",
-          "issuerUrlHelpText": "De uitgever-URL van je OpenID Connect-identiteitsprovider (bijv. https://auth.example.com)",
+          "issuerUrlHelpText": "Basis-URL van je OpenID Connect-provider. BirdNET-Go voegt /.well-known/openid-configuration zelf toe, dus laat dat deel weg. Voorbeelden: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Uitgever-URL is vereist voor OIDC-providers",
           "issuerUrlInvalid": "Uitgever-URL moet een geldige HTTP- of HTTPS-URL zijn",
