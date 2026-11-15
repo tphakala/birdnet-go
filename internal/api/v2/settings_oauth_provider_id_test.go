@@ -341,3 +341,19 @@ func TestUpdateSettingsRejectsUnusableBaseURL(t *testing.T) {
 		assert.Equal(t, testOAuthBaseURL, controller.Settings.Load().Security.BaseURL)
 	})
 }
+
+// TestUpdateSectionSettingsRejectsStoredUnusableBaseURL verifies a PATCH of a
+// section other than security is rejected while the stored security.baseUrl is
+// unusable, as the handler documents, and publishes nothing.
+func TestUpdateSectionSettingsRejectsStoredUnusableBaseURL(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	const storedBaseURL = "birds.example.com"
+	controller.Settings.Load().Security.BaseURL = storedBaseURL
+
+	rec := sendSectionPatch(t, e, controller, "audio", map[string]any{
+		"export": map[string]any{"enabled": false},
+	})
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "security.baseUrl")
+}
