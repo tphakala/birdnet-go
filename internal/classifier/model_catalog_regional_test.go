@@ -46,8 +46,9 @@ var allowedRegionalPrecisions = map[string]bool{"fp32": true, "fp16": true, "int
 // TestEmbeddedCatalog_RegionalVariants guards the generated regional catalog data
 // against the failure modes that would silently break region-aware recommendation:
 // a Region set to a display name instead of a slug (region.matched never fires), a
-// tile marked Default or Legacy (wrong preselection / hidden), a missing checksum,
-// or a species count that has drifted from the region table.
+// tile marked Default (wrong preselection), a Legacy marking outside the withdrawn
+// Perch int8-arm builds (hidden tile), a missing checksum, or a species count that
+// has drifted from the region table.
 func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 	t.Parallel()
 
@@ -71,6 +72,10 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 			}
 
 			regional := 0
+			regionHasLive := make(map[string]bool)
+			regionSawLegacy := make(map[string]bool)
+			liveIDs := make(map[string]bool)
+			successors := make(map[string]string) // Legacy variant id -> SupersededBy
 			seenID := make(map[string]bool, len(entry.Variants))
 			seenModelLocal := make(map[string]bool, len(entry.Variants))
 			for i := range entry.Variants {
@@ -88,7 +93,22 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 				assert.Falsef(t, displayNames[v.Region], "variant %q Region %q must be a slug, not a display name", v.ID, v.Region)
 
 				assert.Falsef(t, v.Default, "regional variant %q must not be Default", v.ID)
-				assert.Falsef(t, v.Legacy, "regional variant %q must not be Legacy", v.ID)
+				// Only the withdrawn Perch int8-arm builds are Legacy.
+				withdrawn := entryID == "perch-v2" && strings.HasPrefix(v.ID, "int8-arm@")
+				assert.Equalf(t, withdrawn, v.Legacy, "regional variant %q is Legacy exactly when it is a Perch int8-arm build", v.ID)
+				if v.Legacy {
+					regionSawLegacy[v.Region] = true
+					successors[v.ID] = v.SupersededBy
+					assert.Equalf(t, "no-dft-fp32@"+v.Region, v.SupersededBy, "withdrawn variant %q must name its region's no-dft-fp32 build", v.ID)
+					assert.Falsef(t, backendRecommended(v), "withdrawn variant %q must recommend no backend", v.ID)
+				} else {
+					regionHasLive[v.Region] = true
+					liveIDs[v.ID] = true
+					assert.Emptyf(t, v.SupersededBy, "live variant %q must not name a successor", v.ID)
+					// The two first-match walks over the variants (installed scan and
+					// gallery path resolution) rely on a live build coming first.
+					assert.Falsef(t, regionSawLegacy[v.Region], "live variant %q must precede its region's Legacy variants", v.ID)
+				}
 				assert.Truef(t, allowedRegionalPrecisions[v.Precision], "variant %q precision %q unexpected", v.ID, v.Precision)
 				assert.Equalf(t, reg.Classes, v.SpeciesCount, "variant %q species count must match the region table", v.ID)
 				assert.Positivef(t, v.Requirements.MinRAMMB, "variant %q must carry a RAM floor", v.ID)
@@ -123,7 +143,23 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 					assert.Equalf(t, []string{hwprofile.CapAArch64}, v.Requirements.Arch, "int8-arm variant %q must require aarch64", v.ID)
 				}
 			}
+			for id, successor := range successors {
+				assert.Truef(t, liveIDs[successor], "withdrawn variant %q must be superseded by a live variant of the same entry, got %q", id, successor)
+			}
+			for slug := range tbl.Regions {
+				assert.Truef(t, regionHasLive[slug], "%s region %q must keep a non-Legacy variant", entryID, slug)
+			}
 			assert.Equalf(t, regionalTilesFor(entryID), regional, "%s must expose %d regional tiles", entryID, regionalTilesFor(entryID))
 		})
 	}
+}
+
+// backendRecommended reports whether any backend row of v is Recommended.
+func backendRecommended(v *CatalogVariant) bool {
+	for _, b := range v.Backends {
+		if b.Recommended {
+			return true
+		}
+	}
+	return false
 }

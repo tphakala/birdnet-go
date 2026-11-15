@@ -630,11 +630,14 @@ func TestCatalogChecksum_OmitemptyKeepsOldFilesPristine(t *testing.T) {
 	assert.NotContains(t, string(plain), `"depends_on"`)
 	assert.NotContains(t, string(plain), `"component"`)
 
-	// Only entries that name a successor carry the key; the rest omit it.
+	// Only entries that name a successor carry the entry-level key; the rest omit
+	// it. Variants are stripped: a withdrawn variant carries its own superseded_by.
 	var unsuperseded []CatalogEntry
 	for i := range EmbeddedCatalog {
 		if EmbeddedCatalog[i].SupersededBy == "" {
-			unsuperseded = append(unsuperseded, EmbeddedCatalog[i])
+			e := EmbeddedCatalog[i]
+			e.Variants = nil
+			unsuperseded = append(unsuperseded, e)
 		}
 	}
 	require.NotEmpty(t, unsuperseded)

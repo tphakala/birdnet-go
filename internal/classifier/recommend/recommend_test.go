@@ -80,13 +80,15 @@ func TestRank_HardwareMatrix(t *testing.T) {
 			wantBlocked: [][2]string{{"perch-v2", "int8-arm"}},
 		},
 		{
+			// OpenVINO CPU is supported but no longer recommended for Perch, so the
+			// ONNX Runtime recommendation of the global fp32 build decides.
 			name:        "amd64 openvino cpu",
 			caps:        []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU},
 			ram:         ramHigh,
 			deviceClass: deviceClassX86,
 			entries:     []classifier.CatalogEntry{perch, v3},
 			wantRecommended: map[string]string{
-				"perch-v2":     "no-dft-fp32",
+				"perch-v2":     "fp32",
 				"birdnet-v3.0": "fp32",
 			},
 		},
@@ -102,16 +104,15 @@ func TestRank_HardwareMatrix(t *testing.T) {
 			},
 		},
 		{
-			// Pi5: no low-ram bonus, so int8-arm ties fp32 on score and wins on
-			// smaller size. This is the documented empty-data behavior; a catalog
-			// benchmark pass will rank fp32 higher on the A76.
+			// Pi5: the withdrawn int8-arm build is Legacy and never recommended, so
+			// the fp32 build wins.
 			name:        "aarch64 pi5",
 			caps:        []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapONNXRuntimeCPU, hwprofile.CapFP16Native},
 			ram:         8 * 1024 * 1024 * 1024,
 			deviceClass: deviceClassRPi5,
 			entries:     []classifier.CatalogEntry{perch},
 			wantRecommended: map[string]string{
-				"perch-v2": "int8-arm",
+				"perch-v2": "fp32",
 			},
 		},
 		{
@@ -121,7 +122,7 @@ func TestRank_HardwareMatrix(t *testing.T) {
 			deviceClass: deviceClassRPi4,
 			entries:     []classifier.CatalogEntry{perch},
 			wantRecommended: map[string]string{
-				"perch-v2": "int8-arm",
+				"perch-v2": "fp32",
 			},
 		},
 		{

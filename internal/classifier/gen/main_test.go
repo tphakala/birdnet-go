@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,27 +97,33 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 func TestCheckRegionCounts(t *testing.T) {
 	t.Parallel()
 
-	// uniform returns expectedRegions regions with n variants each.
-	uniform := func(n int) map[string]int {
-		m := make(map[string]int, expectedRegions)
+	// uniform returns expectedRegions regions with n variants each, all live.
+	uniform := func(n int) map[string]regionTally {
+		m := make(map[string]regionTally, expectedRegions)
 		for i := range expectedRegions {
-			m[fmt.Sprintf("r%02d", i)] = n
+			m[fmt.Sprintf("r%02d", i)] = regionTally{total: n, live: n}
 		}
 		return m
 	}
 	// uneven keeps the total of uniform(2) but gives one region three builds
 	// and another one.
 	uneven := uniform(2)
-	uneven["r00"] = 3
-	uneven["r01"] = 1
+	uneven["r00"] = regionTally{total: 3, live: 3}
+	uneven["r01"] = regionTally{total: 1, live: 1}
 	// missing drops one region.
 	missing := uniform(1)
 	delete(missing, "r00")
+	// oneWithdrawn withdraws one of the two builds of a region: still offerable.
+	oneWithdrawn := uniform(2)
+	oneWithdrawn["r00"] = regionTally{total: 2, live: 1}
+	// allWithdrawn leaves a region with nothing a new install can use.
+	allWithdrawn := uniform(2)
+	allWithdrawn["r05"] = regionTally{total: 2, live: 0}
 
 	tests := []struct {
 		name      string
 		perRegion int
-		counts    map[string]int
+		counts    map[string]regionTally
 		wantErr   string
 	}{
 		{"one precision accepts one per region", 1, uniform(1), ""},
@@ -125,6 +132,8 @@ func TestCheckRegionCounts(t *testing.T) {
 		{"two precisions reject one per region", 2, uniform(1), "has 1 variants, want 2"},
 		{"uneven split with the right total is rejected", 2, uneven, "variants, want 2"},
 		{"missing region is rejected", 1, missing, "distinct regions"},
+		{"a withdrawn build next to a live one is accepted", 2, oneWithdrawn, ""},
+		{"a region whose builds are all withdrawn is rejected", 2, allWithdrawn, "region r05 has no variant a new install can use"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -137,5 +146,83 @@ func TestCheckRegionCounts(t *testing.T) {
 			}
 			require.NoError(t, err)
 		})
+	}
+}
+
+// TestSupersededVariantID checks a manifest superseded_by path becomes the
+// variant id of a live entry in the same region, and that a dangling,
+// cross-region or chained pointer is refused, so SupersededBy never names a
+// variant a new install cannot use.
+func TestSupersededVariantID(t *testing.T) {
+	t.Parallel()
+
+	entry := func(variant, region string, supersededBy *string) *manifestModel {
+		return &manifestModel{Path: "regional/" + region + "/" + variant + ".onnx", Variant: variant, Region: region, SupersededBy: supersededBy}
+	}
+	live := entry("no-dft-fp32", "x", nil)
+	otherRegion := entry("no-dft-fp32", "y", nil)
+	chained := entry("fp32", "x", new(live.Path))
+	byPath := map[string]*manifestModel{live.Path: live, otherRegion.Path: otherRegion, chained.Path: chained}
+
+	tests := []struct {
+		name         string
+		supersededBy *string
+		wantID       string
+		wantErr      string
+	}{
+		{name: "no pointer is a live variant"},
+		{name: "same region live entry", supersededBy: new(live.Path), wantID: "no-dft-fp32@x"},
+		{name: "unknown path", supersededBy: new("regional/x/missing.onnx"), wantErr: "not an entry of this family"},
+		{name: "other region", supersededBy: new(otherRegion.Path), wantErr: "different region"},
+		{name: "entry that is itself superseded", supersededBy: new(chained.Path), wantErr: "itself superseded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := supersededVariantID(entry("int8-arm", "x", tt.supersededBy), byPath)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.ErrorContains(t, err, "int8-arm@x", "the error must name the entry")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, got)
+		})
+	}
+}
+
+// TestBuild_PerchWithdrawnVariantsFollowTheirReplacement runs the generator on
+// the vendored Perch manifest: every region's withdrawn int8-arm variant names
+// that region's no-dft-fp32 variant and renders after it.
+func TestBuild_PerchWithdrawnVariantsFollowTheirReplacement(t *testing.T) {
+	t.Chdir("..") // the generator's manifest and sidecar paths are relative to the classifier package
+
+	labels, err := loadLabelsSidecar()
+	require.NoError(t, err)
+	var perch *family
+	for i := range families {
+		if families[i].key == "perch-v2" {
+			perch = &families[i]
+		}
+	}
+	require.NotNil(t, perch)
+
+	out, err := perch.build(labels)
+	require.NoError(t, err)
+	require.Len(t, out, expectedRegions*perch.variantsPerRegion)
+
+	idRe := regexp.MustCompile(`ID: "([a-z0-9-]+)@([a-z0-9-]+)"`)
+	// out is sorted by region: each region's live variant, then its withdrawn one.
+	for i := 0; i < len(out); i += 2 {
+		live := idRe.FindStringSubmatch(out[i])
+		withdrawn := idRe.FindStringSubmatch(out[i+1])
+		require.NotNil(t, live)
+		require.NotNil(t, withdrawn)
+		assert.Equal(t, "no-dft-fp32", live[1])
+		assert.Equal(t, "int8-arm", withdrawn[1])
+		assert.Equal(t, live[2], withdrawn[2], "a region's two variants are adjacent")
+		assert.NotContains(t, out[i], "Legacy:")
+		assert.Contains(t, out[i+1], "Legacy:")
+		assert.Contains(t, out[i+1], fmt.Sprintf("SupersededBy: %q,", live[1]+"@"+live[2]))
 	}
 }

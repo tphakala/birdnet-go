@@ -2,13 +2,14 @@
   "schema": 2,
   "repo": "tphakala/Perch-v2-Models",
   "family": "perch",
-  "updated": "2026-11-02",
+  "updated": "2026-11-15",
   "family_meta": {
     "display_name": "Google Perch v2",
     "description": "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
     "author": "Google Research",
     "license": "Apache-2.0",
     "commercial_use": true,
+    "channel": "stable",
     "upstream_url": "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
     "species_count": 14795
   },
@@ -18,16 +19,17 @@
     "x86-64/onnxruntime": "full/perch_v2_no_dft_fp32.onnx",
     "x86-64/openvino-cpu": "full/perch_v2_no_dft_fp32.onnx",
     "aarch64-a76/openvino": "full/perch_v2_no_dft_fp32.onnx",
-    "aarch64/onnxruntime": "full/perch_v2_int8_arm.onnx",
+    "aarch64/onnxruntime": "full/perch_v2_no_dft_fp32.onnx",
     "cuda": "full/perch_v2_no_dft_fp32.onnx",
-    "low-ram": "regional/<region>/perch_v2_<region>_int8_arm.onnx"
+    "low-ram": "regional/<region>/perch_v2_<region>_no_dft_fp32.onnx"
   },
-  "notes": "Regional slices are bit-exact to the full model on the species they keep. The int8-arm builds were quantized from the with-DFT graph and are ONNX Runtime only (verified to fail on OpenVINO); use no_dft_fp32 for OpenVINO and GPU. Perch confidence is a softmax, so slicing shifts scores; each regional entry carries score_calibration (method softmax-rest-logit), a per-tile constant that puts a slice's scores back on the full model's scale: score = exp(z) / (sum of exp over the kept classes + exp(rest_logit)).",
+  "notes": "Regional slices are bit-exact to the full model on the species they keep. The int8-arm files are withdrawn: each such entry carries withdrawn and superseded_by, stays downloadable for existing installs and must not be offered to new ones. They were quantized from the with-DFT graph and run on ONNX Runtime only; use no_dft_fp32 for every backend. Perch confidence is a softmax, so slicing shifts scores; each regional entry carries score_calibration (method softmax-rest-logit), a per-tile constant that puts a slice's scores back on the full model's scale: score = exp(z) / (sum of exp over the kept classes + exp(rest_logit)).",
   "models": [
     {
       "path": "full/perch_v2_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -83,6 +85,7 @@
       "path": "full/perch_v2_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -105,7 +108,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -131,7 +134,11 @@
       "backend_support_verified": true,
       "sha256": "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5",
       "size_bytes": 130856164,
-      "superseded_by": null,
+      "superseded_by": "full/perch_v2_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "requirements": {
         "min_ram_mb": 350
       }
@@ -140,6 +147,7 @@
       "path": "full/perch_v2_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -162,11 +170,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -193,6 +201,7 @@
       "path": "regional/amazonia/perch_v2_amazonia_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -215,7 +224,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -241,7 +250,11 @@
       "backend_support_verified": true,
       "sha256": "b437370c33478d18cddb2bd0e5ca448b92c8daaa7248b62cca18dd48dc76416b",
       "size_bytes": 61492034,
-      "superseded_by": null,
+      "superseded_by": "regional/amazonia/perch_v2_amazonia_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/amazonia/perch_v2_amazonia_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -255,6 +268,7 @@
       "path": "regional/amazonia/perch_v2_amazonia_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -277,11 +291,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -313,6 +327,7 @@
       "path": "regional/andes/perch_v2_andes_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -335,7 +350,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -361,7 +376,11 @@
       "backend_support_verified": true,
       "sha256": "b991348630b1513f704be6742fa0d83858b3bebaad4a35c1b293417f3fd0316b",
       "size_bytes": 62398142,
-      "superseded_by": null,
+      "superseded_by": "regional/andes/perch_v2_andes_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/andes/perch_v2_andes_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -375,6 +394,7 @@
       "path": "regional/andes/perch_v2_andes_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -397,11 +417,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -433,6 +453,7 @@
       "path": "regional/australia-east/perch_v2_australia-east_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -455,7 +476,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -481,7 +502,11 @@
       "backend_support_verified": true,
       "sha256": "5ea3d89a79ec077ab45bdc0f5995998f1a866b6c034fccab1d8ba35382bc7a7e",
       "size_bytes": 46439545,
-      "superseded_by": null,
+      "superseded_by": "regional/australia-east/perch_v2_australia-east_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/australia-east/perch_v2_australia-east_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -495,6 +520,7 @@
       "path": "regional/australia-east/perch_v2_australia-east_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -517,11 +543,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -553,6 +579,7 @@
       "path": "regional/azores/perch_v2_azores_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -575,7 +602,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -601,7 +628,11 @@
       "backend_support_verified": true,
       "sha256": "952c8408ab8eae9069c8e35fc714a30d07dc504e70c49e8e580a3cb89f6ebb10",
       "size_bytes": 43234264,
-      "superseded_by": null,
+      "superseded_by": "regional/azores/perch_v2_azores_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/azores/perch_v2_azores_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -615,6 +646,7 @@
       "path": "regional/azores/perch_v2_azores_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -637,11 +669,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -673,6 +705,7 @@
       "path": "regional/baltics/perch_v2_baltics_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -695,7 +728,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -721,7 +754,11 @@
       "backend_support_verified": true,
       "sha256": "dbeee9d02760f04efc50d6cb1198fc91c5c183149249dc3b17e451f9d7ec0b0a",
       "size_bytes": 44645820,
-      "superseded_by": null,
+      "superseded_by": "regional/baltics/perch_v2_baltics_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/baltics/perch_v2_baltics_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -735,6 +772,7 @@
       "path": "regional/baltics/perch_v2_baltics_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -757,11 +795,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -793,6 +831,7 @@
       "path": "regional/british-isles/perch_v2_british-isles_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -815,7 +854,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -841,7 +880,11 @@
       "backend_support_verified": true,
       "sha256": "03d4f63413299473397f57f829e14504e54978a9a95de83bf9d9cbc96cc063b1",
       "size_bytes": 45391664,
-      "superseded_by": null,
+      "superseded_by": "regional/british-isles/perch_v2_british-isles_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/british-isles/perch_v2_british-isles_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -855,6 +898,7 @@
       "path": "regional/british-isles/perch_v2_british-isles_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -877,11 +921,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -913,6 +957,7 @@
       "path": "regional/canada-alaska/perch_v2_canada-alaska_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -935,7 +980,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -961,7 +1006,11 @@
       "backend_support_verified": true,
       "sha256": "4a7f3f9946ece497f906621f0383f589cf878595ea938099163ab71e069c2cf5",
       "size_bytes": 46538169,
-      "superseded_by": null,
+      "superseded_by": "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -975,6 +1024,7 @@
       "path": "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -997,11 +1047,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1033,6 +1083,7 @@
       "path": "regional/canary-islands/perch_v2_canary-islands_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1055,7 +1106,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1081,7 +1132,11 @@
       "backend_support_verified": true,
       "sha256": "4db63a7b969324604280a1f915a4f9339791f1dd051d2dd78b04187dbfb73fd4",
       "size_bytes": 44294472,
-      "superseded_by": null,
+      "superseded_by": "regional/canary-islands/perch_v2_canary-islands_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/canary-islands/perch_v2_canary-islands_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1095,6 +1150,7 @@
       "path": "regional/canary-islands/perch_v2_canary-islands_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1117,11 +1173,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1153,6 +1209,7 @@
       "path": "regional/cape-verde/perch_v2_cape-verde_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1175,7 +1232,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1201,7 +1258,11 @@
       "backend_support_verified": true,
       "sha256": "03e10868fcdc90eb0b5215f202f0d3184a7e9c60814866a9385b92ca3317541a",
       "size_bytes": 42741144,
-      "superseded_by": null,
+      "superseded_by": "regional/cape-verde/perch_v2_cape-verde_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/cape-verde/perch_v2_cape-verde_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1215,6 +1276,7 @@
       "path": "regional/cape-verde/perch_v2_cape-verde_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1237,11 +1299,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1273,6 +1335,7 @@
       "path": "regional/central-africa/perch_v2_central-africa_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1295,7 +1358,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1321,7 +1384,11 @@
       "backend_support_verified": true,
       "sha256": "245984e3f3188293cd8efcd3896d886edcd62a7438e646801c5c957ec28ef7b8",
       "size_bytes": 52215214,
-      "superseded_by": null,
+      "superseded_by": "regional/central-africa/perch_v2_central-africa_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/central-africa/perch_v2_central-africa_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1335,6 +1402,7 @@
       "path": "regional/central-africa/perch_v2_central-africa_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1357,11 +1425,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1393,6 +1461,7 @@
       "path": "regional/central-europe/perch_v2_central-europe_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1415,7 +1484,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1441,7 +1510,11 @@
       "backend_support_verified": true,
       "sha256": "a5b7da4d147679b3ef0f2cde39bc4cacabfa7a9c462fed7adac4935c8781813e",
       "size_bytes": 45989572,
-      "superseded_by": null,
+      "superseded_by": "regional/central-europe/perch_v2_central-europe_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/central-europe/perch_v2_central-europe_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1455,6 +1528,7 @@
       "path": "regional/central-europe/perch_v2_central-europe_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1477,11 +1551,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1513,6 +1587,7 @@
       "path": "regional/china-north-central/perch_v2_china-north-central_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1535,7 +1610,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1561,7 +1636,11 @@
       "backend_support_verified": true,
       "sha256": "dae3b0d45eb698662a2d544f53de20d53e5db71e11e4296547dd12526a8cb3b8",
       "size_bytes": 46624464,
-      "superseded_by": null,
+      "superseded_by": "regional/china-north-central/perch_v2_china-north-central_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/china-north-central/perch_v2_china-north-central_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1575,6 +1654,7 @@
       "path": "regional/china-north-central/perch_v2_china-north-central_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1597,11 +1677,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1633,6 +1713,7 @@
       "path": "regional/china-northeast/perch_v2_china-northeast_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1655,7 +1736,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1681,7 +1762,11 @@
       "backend_support_verified": true,
       "sha256": "169c07f6004f8e5473170c8823ad2e84746c509115e0279425b8520972993d34",
       "size_bytes": 46014228,
-      "superseded_by": null,
+      "superseded_by": "regional/china-northeast/perch_v2_china-northeast_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/china-northeast/perch_v2_china-northeast_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1695,6 +1780,7 @@
       "path": "regional/china-northeast/perch_v2_china-northeast_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1717,11 +1803,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1753,6 +1839,7 @@
       "path": "regional/china-southeast/perch_v2_china-southeast_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1775,7 +1862,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1801,7 +1888,11 @@
       "backend_support_verified": true,
       "sha256": "be17c31fae6974213a9f7ae525f27b4c65fa42a29f4e676b0773b7145464dca0",
       "size_bytes": 49071575,
-      "superseded_by": null,
+      "superseded_by": "regional/china-southeast/perch_v2_china-southeast_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/china-southeast/perch_v2_china-southeast_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1815,6 +1906,7 @@
       "path": "regional/china-southeast/perch_v2_china-southeast_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1837,11 +1929,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1873,6 +1965,7 @@
       "path": "regional/china-southwest/perch_v2_china-southwest_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1895,7 +1988,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -1921,7 +2014,11 @@
       "backend_support_verified": true,
       "sha256": "d214093463cc3fbf8c9dccbedd9c26e87575c87ed3839b19b3fda02085c4341d",
       "size_bytes": 49293479,
-      "superseded_by": null,
+      "superseded_by": "regional/china-southwest/perch_v2_china-southwest_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/china-southwest/perch_v2_china-southwest_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -1935,6 +2032,7 @@
       "path": "regional/china-southwest/perch_v2_china-southwest_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -1957,11 +2055,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -1993,6 +2091,7 @@
       "path": "regional/east-africa/perch_v2_east-africa_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2015,7 +2114,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2041,7 +2140,11 @@
       "backend_support_verified": true,
       "sha256": "4113d0a8c05368fd685b4c4dfbc6fa07a4cfbb979cdf43f5428bedcac3c03118",
       "size_bytes": 53916478,
-      "superseded_by": null,
+      "superseded_by": "regional/east-africa/perch_v2_east-africa_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/east-africa/perch_v2_east-africa_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2055,6 +2158,7 @@
       "path": "regional/east-africa/perch_v2_east-africa_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2077,11 +2181,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2113,6 +2217,7 @@
       "path": "regional/eastern-brazil/perch_v2_eastern-brazil_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2135,7 +2240,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2161,7 +2266,11 @@
       "backend_support_verified": true,
       "sha256": "34736f02b138a64f9aef1e5bcffbe5d8bd6a9a5cb4226a052b9d2ff000c89cbc",
       "size_bytes": 54070578,
-      "superseded_by": null,
+      "superseded_by": "regional/eastern-brazil/perch_v2_eastern-brazil_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/eastern-brazil/perch_v2_eastern-brazil_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2175,6 +2284,7 @@
       "path": "regional/eastern-brazil/perch_v2_eastern-brazil_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2197,11 +2307,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2233,6 +2343,7 @@
       "path": "regional/eastern-europe/perch_v2_eastern-europe_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2255,7 +2366,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2281,7 +2392,11 @@
       "backend_support_verified": true,
       "sha256": "5c06c2639b2080f84d93896f1528ebb20962ff19986c09908bd498c41ebaa007",
       "size_bytes": 45163596,
-      "superseded_by": null,
+      "superseded_by": "regional/eastern-europe/perch_v2_eastern-europe_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/eastern-europe/perch_v2_eastern-europe_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2295,6 +2410,7 @@
       "path": "regional/eastern-europe/perch_v2_eastern-europe_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2317,11 +2433,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2353,6 +2469,7 @@
       "path": "regional/galapagos/perch_v2_galapagos_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2375,7 +2492,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2401,7 +2518,11 @@
       "backend_support_verified": true,
       "sha256": "67ef0140c533e3e3658fe5d317ab64558d7d15353f1679650053397e91fbec73",
       "size_bytes": 42679502,
-      "superseded_by": null,
+      "superseded_by": "regional/galapagos/perch_v2_galapagos_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/galapagos/perch_v2_galapagos_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2415,6 +2536,7 @@
       "path": "regional/galapagos/perch_v2_galapagos_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2437,11 +2559,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2473,6 +2595,7 @@
       "path": "regional/hawaii/perch_v2_hawaii_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2495,7 +2618,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2521,7 +2644,11 @@
       "backend_support_verified": true,
       "sha256": "f14cf802633c1e1ff4f1d71046faf49763211352901fd49038b8365d4fd60403",
       "size_bytes": 43554792,
-      "superseded_by": null,
+      "superseded_by": "regional/hawaii/perch_v2_hawaii_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/hawaii/perch_v2_hawaii_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2535,6 +2662,7 @@
       "path": "regional/hawaii/perch_v2_hawaii_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2557,11 +2685,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2593,6 +2721,7 @@
       "path": "regional/himalaya/perch_v2_himalaya_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2615,7 +2744,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2641,7 +2770,11 @@
       "backend_support_verified": true,
       "sha256": "3024a89395052e971f6f3dc14525020c174d964f53ebd43a5ad72cc8cf37da00",
       "size_bytes": 49281151,
-      "superseded_by": null,
+      "superseded_by": "regional/himalaya/perch_v2_himalaya_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/himalaya/perch_v2_himalaya_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2655,6 +2788,7 @@
       "path": "regional/himalaya/perch_v2_himalaya_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2677,11 +2811,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2713,6 +2847,7 @@
       "path": "regional/iberia/perch_v2_iberia_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2735,7 +2870,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2761,7 +2896,11 @@
       "backend_support_verified": true,
       "sha256": "02e6756a3de2f661b7e612e1487800a3d8ac67dd1d10e21f3269547f4ecb21a5",
       "size_bytes": 45884784,
-      "superseded_by": null,
+      "superseded_by": "regional/iberia/perch_v2_iberia_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/iberia/perch_v2_iberia_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2775,6 +2914,7 @@
       "path": "regional/iberia/perch_v2_iberia_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2797,11 +2937,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2833,6 +2973,7 @@
       "path": "regional/iceland/perch_v2_iceland_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2855,7 +2996,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -2881,7 +3022,11 @@
       "backend_support_verified": true,
       "sha256": "6757c6aba4a4eb26ac9ccc6cb195ee298be00a35c0d2beb5aed06b57b3bf82a4",
       "size_bytes": 44251324,
-      "superseded_by": null,
+      "superseded_by": "regional/iceland/perch_v2_iceland_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/iceland/perch_v2_iceland_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -2895,6 +3040,7 @@
       "path": "regional/iceland/perch_v2_iceland_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2917,11 +3063,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -2953,6 +3099,7 @@
       "path": "regional/indo-gangetic/perch_v2_indo-gangetic_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -2975,7 +3122,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3001,7 +3148,11 @@
       "backend_support_verified": true,
       "sha256": "3391d6be6c98637847be9936aa00b00a01dc66bf5d6ee2419690f4321374afeb",
       "size_bytes": 49274987,
-      "superseded_by": null,
+      "superseded_by": "regional/indo-gangetic/perch_v2_indo-gangetic_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/indo-gangetic/perch_v2_indo-gangetic_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3015,6 +3166,7 @@
       "path": "regional/indo-gangetic/perch_v2_indo-gangetic_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3037,11 +3189,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3073,6 +3225,7 @@
       "path": "regional/japan/perch_v2_japan_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3095,7 +3248,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3121,7 +3274,11 @@
       "backend_support_verified": true,
       "sha256": "5839117a9311d7ecf4772a262c8f5b2887debc7d13192d66f7d8d910990bcdeb",
       "size_bytes": 45533436,
-      "superseded_by": null,
+      "superseded_by": "regional/japan/perch_v2_japan_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/japan/perch_v2_japan_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3135,6 +3292,7 @@
       "path": "regional/japan/perch_v2_japan_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3157,11 +3315,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3193,6 +3351,7 @@
       "path": "regional/madeira/perch_v2_madeira_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3215,7 +3374,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3241,7 +3400,11 @@
       "backend_support_verified": true,
       "sha256": "598e826eacc21a3cea1a27c8aec1eca733e308517c63c0a24bd81222cc7ab138",
       "size_bytes": 43437676,
-      "superseded_by": null,
+      "superseded_by": "regional/madeira/perch_v2_madeira_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/madeira/perch_v2_madeira_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3255,6 +3418,7 @@
       "path": "regional/madeira/perch_v2_madeira_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3277,11 +3441,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3313,6 +3477,7 @@
       "path": "regional/mauritius/perch_v2_mauritius_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3335,7 +3500,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3361,7 +3526,11 @@
       "backend_support_verified": true,
       "sha256": "0993bce471bfed702c56e808d8a1b8014b8e25a6905f9f79e0b5dbf2f27846e8",
       "size_bytes": 42285006,
-      "superseded_by": null,
+      "superseded_by": "regional/mauritius/perch_v2_mauritius_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/mauritius/perch_v2_mauritius_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3375,6 +3544,7 @@
       "path": "regional/mauritius/perch_v2_mauritius_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3397,11 +3567,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3433,6 +3603,7 @@
       "path": "regional/new-caledonia/perch_v2_new-caledonia_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3455,7 +3626,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3481,7 +3652,11 @@
       "backend_support_verified": true,
       "sha256": "01787c1a20d7b0ebe1d1ec3e1c28803c97ab45fa2490f6ed8c5c338dde8b0751",
       "size_bytes": 42932228,
-      "superseded_by": null,
+      "superseded_by": "regional/new-caledonia/perch_v2_new-caledonia_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/new-caledonia/perch_v2_new-caledonia_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3495,6 +3670,7 @@
       "path": "regional/new-caledonia/perch_v2_new-caledonia_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3517,11 +3693,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3553,6 +3729,7 @@
       "path": "regional/new-zealand/perch_v2_new-zealand_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3575,7 +3752,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3601,7 +3778,11 @@
       "backend_support_verified": true,
       "sha256": "ebf3c3a7021c2f2c4ab53d1cd2caaf3f92e798483f7f86000e19f7f362e1ded5",
       "size_bytes": 43604104,
-      "superseded_by": null,
+      "superseded_by": "regional/new-zealand/perch_v2_new-zealand_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/new-zealand/perch_v2_new-zealand_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3615,6 +3796,7 @@
       "path": "regional/new-zealand/perch_v2_new-zealand_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3637,11 +3819,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3673,6 +3855,7 @@
       "path": "regional/nordic/perch_v2_nordic_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3695,7 +3878,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3721,7 +3904,11 @@
       "backend_support_verified": true,
       "sha256": "1048a9a73aaa9838a68927148768dfcb46a9a765ac3a97cf62030f4a45d3b3bb",
       "size_bytes": 44541032,
-      "superseded_by": null,
+      "superseded_by": "regional/nordic/perch_v2_nordic_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/nordic/perch_v2_nordic_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3735,6 +3922,7 @@
       "path": "regional/nordic/perch_v2_nordic_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3757,11 +3945,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3793,6 +3981,7 @@
       "path": "regional/north-america-east/perch_v2_north-america-east_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3815,7 +4004,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3841,7 +4030,11 @@
       "backend_support_verified": true,
       "sha256": "5a64e006e1617ac22bc3e1d35012435d8b8db2e9b8b3e8d3298c3d04827abaa0",
       "size_bytes": 46766237,
-      "superseded_by": null,
+      "superseded_by": "regional/north-america-east/perch_v2_north-america-east_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/north-america-east/perch_v2_north-america-east_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3855,6 +4048,7 @@
       "path": "regional/north-america-east/perch_v2_north-america-east_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3877,11 +4071,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -3913,6 +4107,7 @@
       "path": "regional/north-america-west/perch_v2_north-america-west_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3935,7 +4130,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -3961,7 +4156,11 @@
       "backend_support_verified": true,
       "sha256": "deabb5e7192a110838356021d2ac78f3800e25783f61b99e6fdcd491db910915",
       "size_bytes": 46784729,
-      "superseded_by": null,
+      "superseded_by": "regional/north-america-west/perch_v2_north-america-west_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/north-america-west/perch_v2_north-america-west_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -3975,6 +4174,7 @@
       "path": "regional/north-america-west/perch_v2_north-america-west_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -3997,11 +4197,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4033,6 +4233,7 @@
       "path": "regional/reunion/perch_v2_reunion_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4055,7 +4256,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4081,7 +4282,11 @@
       "backend_support_verified": true,
       "sha256": "2a9888cac580e55ec41771e5d27aae9c8a5766434569aa727264d5238525a4b5",
       "size_bytes": 42297334,
-      "superseded_by": null,
+      "superseded_by": "regional/reunion/perch_v2_reunion_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/reunion/perch_v2_reunion_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4095,6 +4300,7 @@
       "path": "regional/reunion/perch_v2_reunion_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4117,11 +4323,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4153,6 +4359,7 @@
       "path": "regional/sao-tome-principe/perch_v2_sao-tome-principe_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4175,7 +4382,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4201,7 +4408,11 @@
       "backend_support_verified": true,
       "sha256": "a9cd8bbe8ff608c97e38098349451766dd02f16acc7e9422a216c831970de99c",
       "size_bytes": 42605534,
-      "superseded_by": null,
+      "superseded_by": "regional/sao-tome-principe/perch_v2_sao-tome-principe_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/sao-tome-principe/perch_v2_sao-tome-principe_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4215,6 +4426,7 @@
       "path": "regional/sao-tome-principe/perch_v2_sao-tome-principe_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4237,11 +4449,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4273,6 +4485,7 @@
       "path": "regional/seychelles/perch_v2_seychelles_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4295,7 +4508,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4321,7 +4534,11 @@
       "backend_support_verified": true,
       "sha256": "543a734df159e86c50f112d83d7bdb9cb6143442ac540ed1796725adb0b9b843",
       "size_bytes": 42568550,
-      "superseded_by": null,
+      "superseded_by": "regional/seychelles/perch_v2_seychelles_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/seychelles/perch_v2_seychelles_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4335,6 +4552,7 @@
       "path": "regional/seychelles/perch_v2_seychelles_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4357,11 +4575,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4393,6 +4611,7 @@
       "path": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4415,7 +4634,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4441,7 +4660,11 @@
       "backend_support_verified": true,
       "sha256": "a84c872c56ddb5d5a76f6abb0c27926807b9da336de526c8bb91194c1c5bf4b9",
       "size_bytes": 46026556,
-      "superseded_by": null,
+      "superseded_by": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4455,6 +4678,7 @@
       "path": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4477,11 +4701,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4513,6 +4737,7 @@
       "path": "regional/southern-africa/perch_v2_southern-africa_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4535,7 +4760,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4561,7 +4786,11 @@
       "backend_support_verified": true,
       "sha256": "d2e6ae6d660d717a53f93d3cacfae2c851c907f8c873e99739181017e7e39a73",
       "size_bytes": 46784728,
-      "superseded_by": null,
+      "superseded_by": "regional/southern-africa/perch_v2_southern-africa_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/southern-africa/perch_v2_southern-africa_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4575,6 +4804,7 @@
       "path": "regional/southern-africa/perch_v2_southern-africa_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4597,11 +4827,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4633,6 +4863,7 @@
       "path": "regional/southern-cone/perch_v2_southern-cone_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4655,7 +4886,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4681,7 +4912,11 @@
       "backend_support_verified": true,
       "sha256": "e8584ffa2c7cd23e8a6dc9af2f85a2af6b02b9fe181555abb6c3f9143e353c22",
       "size_bytes": 52042622,
-      "superseded_by": null,
+      "superseded_by": "regional/southern-cone/perch_v2_southern-cone_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/southern-cone/perch_v2_southern-cone_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4695,6 +4930,7 @@
       "path": "regional/southern-cone/perch_v2_southern-cone_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4717,11 +4953,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4753,6 +4989,7 @@
       "path": "regional/southern-europe/perch_v2_southern-europe_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4775,7 +5012,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4801,7 +5038,11 @@
       "backend_support_verified": true,
       "sha256": "6957554e294967aa26d72f332f62b68e8a6aa08ed6766791a28f0b4ff10d880c",
       "size_bytes": 45779996,
-      "superseded_by": null,
+      "superseded_by": "regional/southern-europe/perch_v2_southern-europe_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/southern-europe/perch_v2_southern-europe_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4815,6 +5056,7 @@
       "path": "regional/southern-europe/perch_v2_southern-europe_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4837,11 +5079,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4873,6 +5115,7 @@
       "path": "regional/svalbard/perch_v2_svalbard_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4895,7 +5138,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -4921,7 +5164,11 @@
       "backend_support_verified": true,
       "sha256": "eb98b17da3822b356b3b53d152e8a087a4bb6d9cf58e72fcd1ecc7190cf3819d",
       "size_bytes": 43567120,
-      "superseded_by": null,
+      "superseded_by": "regional/svalbard/perch_v2_svalbard_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/svalbard/perch_v2_svalbard_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -4935,6 +5182,7 @@
       "path": "regional/svalbard/perch_v2_svalbard_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -4957,11 +5205,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -4993,6 +5241,7 @@
       "path": "regional/tibet/perch_v2_tibet_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -5015,7 +5264,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -5041,7 +5290,11 @@
       "backend_support_verified": true,
       "sha256": "78daa7110aa3dec88aa2d5cb1587c7af7c59ce3c70f4c74fc8cdd8ff98c053d9",
       "size_bytes": 49281151,
-      "superseded_by": null,
+      "superseded_by": "regional/tibet/perch_v2_tibet_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/tibet/perch_v2_tibet_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -5055,6 +5308,7 @@
       "path": "regional/tibet/perch_v2_tibet_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -5077,11 +5331,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -5113,6 +5367,7 @@
       "path": "regional/west-africa/perch_v2_west-africa_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -5135,7 +5390,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -5161,7 +5416,11 @@
       "backend_support_verified": true,
       "sha256": "e88f50be2254a4f134d6cf8d896c1b4f47aecab27f7d89a2856c305735f62845",
       "size_bytes": 48677078,
-      "superseded_by": null,
+      "superseded_by": "regional/west-africa/perch_v2_west-africa_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/west-africa/perch_v2_west-africa_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -5175,6 +5434,7 @@
       "path": "regional/west-africa/perch_v2_west-africa_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -5197,11 +5457,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
@@ -5233,6 +5493,7 @@
       "path": "regional/western-palearctic/perch_v2_western-palearctic_int8_arm.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -5255,7 +5516,7 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-cpu": {
           "supported": false,
@@ -5281,7 +5542,11 @@
       "backend_support_verified": true,
       "sha256": "5417cf33b6d7a195810e63c825e9108e73c30889a12da72130616297255c4154",
       "size_bytes": 50464638,
-      "superseded_by": null,
+      "superseded_by": "regional/western-palearctic/perch_v2_western-palearctic_no_dft_fp32.onnx",
+      "withdrawn": {
+        "date": "2026-11-15",
+        "reason": "MatMul-only INT8 changes the result too often on real audio: against the fp32 file, top-1 agrees on 82% of 5,560 station windows for the global model and on 75.5% of 94 windows for the nordic tile, which keeps only 71% of the fp32 detections at 0.5 on the same label. It fails the publish gate's int8 floor (at least 95% top-1 agreement where fp32 scores 0.25 or more, at least 90% of fp32 0.5 detections kept, at most 1% int8-only detections). The file stays downloadable for existing installs; use the entry named in superseded_by."
+      },
       "indices": "regional/western-palearctic/perch_v2_western-palearctic_indices.txt",
       "score_calibration": {
         "method": "softmax-rest-logit",
@@ -5295,6 +5560,7 @@
       "path": "regional/western-palearctic/perch_v2_western-palearctic_no_dft_fp32.onnx",
       "family": "perch",
       "upstream_version": "2",
+      "channel": "stable",
       "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
       "build": 1,
       "legacy": true,
@@ -5317,11 +5583,11 @@
       "backends": {
         "onnxruntime-cpu": {
           "supported": true,
-          "recommended": false
+          "recommended": true
         },
         "openvino-cpu": {
           "supported": true,
-          "recommended": true
+          "recommended": false
         },
         "openvino-gpu": {
           "supported": true,
