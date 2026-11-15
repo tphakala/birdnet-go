@@ -55,9 +55,14 @@ func ValidateBaseURL(value string) error {
 }
 
 // trimmedBaseURL returns BaseURL without surrounding whitespace or a trailing
-// slash, whether or not it is usable.
+// slash, whether or not it is usable. A value that is only a slash is kept, so
+// it counts as set (and unusable) rather than unset.
 func (s *Security) trimmedBaseURL() string {
-	return strings.TrimSuffix(strings.TrimSpace(s.BaseURL), "/")
+	baseURL := strings.TrimSpace(s.BaseURL)
+	if trimmed := strings.TrimSuffix(baseURL, "/"); trimmed != "" {
+		return trimmed
+	}
+	return baseURL
 }
 
 // trimmedHost returns Host without surrounding whitespace or a trailing slash.

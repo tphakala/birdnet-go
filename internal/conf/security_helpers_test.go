@@ -589,6 +589,7 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 		{name: "host scheme is recognised in any case", security: Security{Host: "HTTPS://" + testHostExample, TLSMode: TLSModeNone}, wantOrigin: "HTTPS://" + testHostExample, wantBaseURL: "HTTPS://" + testHostExample},
 		{name: "host with a scheme but no hostname is no origin and no link", security: Security{Host: "http://:8080"}, wantBaseURL: "", wantProblem: "security.host"},
 		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
+		{name: "baseUrl of only a slash is set and unusable, host does not rescue it", security: Security{BaseURL: "/", Host: testHostExample, TLSMode: TLSModeNone}, wantBaseURL: "", wantProblem: "security.baseUrl"},
 		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},
 		{name: "nothing set", security: Security{}, wantBaseURL: "", wantProblem: "no redirect URL"},
 		{name: "bare host, TLS off: OAuth assumes https, links follow the TLS mode", security: Security{Host: testHostExample, TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
@@ -633,6 +634,7 @@ func TestValidateSecurityBaseURL(t *testing.T) {
 	require.NoError(t, ValidateSecurityBaseURL(&Security{}))
 	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: "  "}))
 	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: " " + testURLHTTPS + " "}))
+	require.Error(t, ValidateSecurityBaseURL(&Security{BaseURL: "/"}), "a lone slash is set, not unset")
 
 	err := ValidateSecurityBaseURL(&Security{BaseURL: "ftp://user:hunter2@" + testHostExample})
 	require.Error(t, err)
