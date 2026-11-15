@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {An installed model has a newer release} other {# installed models have newer releases}}",
-        "message": "A newer release replaces: {models}. Open Settings > Analysis > Models, install the newer model and remove the old one."
+        "message": "An installed model is a preview version, and its final release is now available: {models}. Open Settings > Analysis > Models, install the final release and remove the preview."
       },
       "alert": {
         "firedTitle": "{rule_name}",

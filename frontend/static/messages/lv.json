@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, zero {# instalētajiem modeļiem ir jaunākas versijas} one {Instalētajam modelim ir jaunāka versija} other {# instalētajiem modeļiem ir jaunākas versijas}}",
-        "message": "Jaunāka versija aizstāj: {models}. Atveriet Iestatījumi > Analīze > Modeļi, instalējiet jaunāko modeli un noņemiet veco."
+        "message": "Instalētais modelis ir priekšskatījuma versija, un tā galīgā versija tagad ir pieejama: {models}. Atveriet Iestatījumi > Analīze > Modeļi, instalējiet galīgo versiju un noņemiet priekšskatījuma versiju."
       },
       "alert": {
         "firedTitle": "{rule_name}",

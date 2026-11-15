@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {Zainstalowany model ma nowsze wydanie} few {# zainstalowane modele mają nowsze wydania} many {# zainstalowanych modeli ma nowsze wydania} other {# zainstalowanych modeli ma nowsze wydania}}",
-        "message": "Nowsze wydanie zastępuje: {models}. Otwórz Ustawienia > Analiza > Modele, zainstaluj nowszy model i usuń stary."
+        "message": "Zainstalowany model jest wersją zapoznawczą, a jego ostateczne wydanie jest już dostępne: {models}. Otwórz Ustawienia > Analiza > Modele, zainstaluj ostateczne wydanie i usuń wersję zapoznawczą."
       },
       "alert": {
         "firedTitle": "{rule_name}",

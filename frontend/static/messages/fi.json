@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {Asennetulla mallilla on uudempi julkaisu} other {# asennetulla mallilla on uudempi julkaisu}}",
-        "message": "Uudempi julkaisu korvaa: {models}. Avaa Asetukset > Analyysi > Mallit, asenna uudempi malli ja poista vanha."
+        "message": "Asennettu malli on esiversio, ja sen lopullinen julkaisu on nyt saatavilla: {models}. Avaa Asetukset > Analyysi > Mallit, asenna lopullinen julkaisu ja poista esiversio."
       },
       "alert": {
         "firedTitle": "{rule_name}",

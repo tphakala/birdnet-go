@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {Un modelo instalado tiene una versión más reciente} other {# modelos instalados tienen versiones más recientes}}",
-        "message": "Una versión más reciente sustituye a: {models}. Abra Configuración > Análisis > Modelos, instale el modelo más reciente y elimine el antiguo."
+        "message": "Un modelo instalado es una versión preliminar y su versión final ya está disponible: {models}. Abra Configuración > Análisis > Modelos, instale la versión final y elimine la versión preliminar."
       },
       "alert": {
         "firedTitle": "{rule_name}",

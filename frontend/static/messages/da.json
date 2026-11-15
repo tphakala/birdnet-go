@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {En installeret model har en nyere udgave} other {# installerede modeller har nyere udgaver}}",
-        "message": "En nyere udgave erstatter: {models}. Åbn Indstillinger > Analyse > Modeller, installer den nyere model, og fjern den gamle."
+        "message": "En installeret model er en forhåndsversion, og den endelige udgave er nu tilgængelig: {models}. Åbn Indstillinger > Analyse > Modeller, installer den endelige udgave, og fjern forhåndsversionen."
       },
       "alert": {
         "firedTitle": "{rule_name}",

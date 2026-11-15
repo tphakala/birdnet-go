@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {Een geïnstalleerd model heeft een nieuwere uitgave} other {# geïnstalleerde modellen hebben nieuwere uitgaven}}",
-        "message": "Een nieuwere uitgave vervangt: {models}. Open Instellingen > Analyse > Modellen, installeer het nieuwere model en verwijder het oude."
+        "message": "Een geïnstalleerd model is een voorvertoningsversie en de definitieve uitgave is nu beschikbaar: {models}. Open Instellingen > Analyse > Modellen, installeer de definitieve uitgave en verwijder de voorvertoning."
       },
       "alert": {
         "firedTitle": "{rule_name}",

@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {Nainštalovaný model má novšie vydanie} few {# nainštalované modely majú novšie vydania} many {# nainštalovaného modelu má novšie vydania} other {# nainštalovaných modelov má novšie vydania}}",
-        "message": "Novšie vydanie nahrádza: {models}. Otvorte Nastavenia > Analýza > Modely, nainštalujte novší model a odstráňte starý."
+        "message": "Nainštalovaný model je náhľadová verzia a jeho finálne vydanie je teraz k dispozícii: {models}. Otvorte Nastavenia > Analýza > Modely, nainštalujte finálne vydanie a odstráňte náhľadovú verziu."
       },
       "alert": {
         "firedTitle": "{rule_name}",

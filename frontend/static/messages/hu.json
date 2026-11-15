@@ -499,7 +499,7 @@
       },
       "modelSuperseded": {
         "title": "{count, plural, one {Egy telepített modellnek újabb kiadása van} other {# telepített modellnek újabb kiadása van}}",
-        "message": "Újabb kiadás váltja le a következőket: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, telepítse az újabb modellt, és távolítsa el a régit."
+        "message": "Egy telepített modell előzetes verzió, és a végleges kiadása már elérhető: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, telepítse a végleges kiadást, és távolítsa el az előzetes verziót."
       },
       "alert": {
         "firedTitle": "{rule_name}",

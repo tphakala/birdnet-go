@@ -108,7 +108,10 @@ func (c *Handler) applySupersededNotice(svc noticeService, offers []supersededOf
 
 // newSupersededNotification builds the bell notice for a non-empty offer set.
 // Each model reads "Old name → New name", which keeps the list language-neutral;
-// the English fallbacks mirror en.json.
+// the English fallbacks mirror en.json. The message calls the installed model a
+// preview and its successor the final release, which holds for every
+// SupersededBy in the catalog today (the BirdNET v3.0 preview); reword it if a
+// stable model is ever superseded.
 func newSupersededNotification(offers []supersededOffer) *notification.Notification {
 	pairs := make([]string, len(offers))
 	for i := range offers {
@@ -120,7 +123,7 @@ func newSupersededNotification(offers []supersededOffer) *notification.Notificat
 		title = "1 installed model has a newer release"
 	}
 	message := fmt.Sprintf(
-		"A newer release replaces: %s. Open Settings > Analysis > Models, install the newer model and remove the old one.",
+		"An installed model is a preview version, and its final release is now available: %s. Open Settings > Analysis > Models, install the final release and remove the preview.",
 		models)
 	return notification.NewNotification(
 		notification.TypeInfo,
