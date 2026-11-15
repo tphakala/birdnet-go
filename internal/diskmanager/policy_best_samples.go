@@ -39,10 +39,7 @@ func selectBestClipsPerSpecies(files []FileInfo, minClipsPerSpecies int) map[str
 			return left.Path < right.Path
 		})
 
-		limit := minClipsPerSpecies
-		if limit > len(indices) {
-			limit = len(indices)
-		}
+		limit := min(minClipsPerSpecies, len(indices))
 		for _, index := range indices[:limit] {
 			bestClipPaths[files[index].Path] = struct{}{}
 		}
