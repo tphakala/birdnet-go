@@ -65,16 +65,13 @@ func (s *Security) trimmedHost() string {
 	return strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
 }
 
-// hasPrefixFold reports whether s starts with prefix, ignoring ASCII case.
-func hasPrefixFold(s, prefix string) bool {
-	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
-}
-
 // hostHasScheme reports whether a trimmed Host already starts with an http or
 // https scheme, in any case. Such a host is a full origin and is used as given;
-// OAuthOrigin and GetBaseURL both ask here so they cannot disagree about it.
+// OAuthOrigin, GetBaseURL and the hostname getters all ask here so they cannot
+// disagree about it.
 func hostHasScheme(host string) bool {
-	return hasPrefixFold(host, SchemeHTTP+"://") || hasPrefixFold(host, SchemeHTTPS+"://")
+	scheme, _, ok := strings.Cut(host, "://")
+	return ok && (strings.EqualFold(scheme, SchemeHTTP) || strings.EqualFold(scheme, SchemeHTTPS))
 }
 
 // hasUnusableBaseURL reports whether BaseURL is set but not a usable URL, the one
@@ -140,11 +137,8 @@ func (s *Security) GetBaseURL(port string) string {
 		return ""
 	}
 	if hostHasScheme(host) {
-		// Already a full origin: used as given when usable, as the OAuth rule does.
-		if ValidateBaseURL(host) != nil {
-			return ""
-		}
-		return host
+		// Already a full origin: the OAuth origin rule applies as it is.
+		return s.OAuthOrigin()
 	}
 
 	return s.buildURLFromHost(host, port)
@@ -180,21 +174,22 @@ func (s *Security) GetHostnameForCertificates() string {
 		if !hostHasScheme(host) {
 			return host
 		}
-		if parsed, err := url.Parse(host); err == nil && parsed.Hostname() != "" {
-			return parsed.Hostname()
+		if hostname := hostnameOf(host); hostname != "" {
+			return hostname
 		}
 	}
 
 	// Priority 2: Extract hostname from BaseURL
-	if s.BaseURL == "" {
+	return hostnameOf(s.trimmedBaseURL())
+}
+
+// hostnameOf returns the hostname of a URL without port, or "" when it does not
+// parse or has none. IPv6 addresses come back without brackets.
+func hostnameOf(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
 		return ""
 	}
-
-	parsed, err := url.Parse(strings.TrimSpace(s.BaseURL))
-	if err != nil || parsed.Host == "" {
-		return ""
-	}
-
 	return parsed.Hostname()
 }
 
