@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Genberegner dynamiske tærskler for ny basisværdi",
         "reconfiguringDynamicThresholds": "Genkonfigurerer dynamiske tærskler...",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
-        "oauthRestartRequired": "Godkendelsesudbyderindstillinger ændret. Genstart påkrævet.",
+        "reconfiguringOauthProviders": "Opdaterer godkendelsesudbydere...",
         "databaseRestartRequired": "Databaseindstillinger ændret. Genstart påkrævet.",
         "loggingRestartRequired": "Logningsindstillinger ændret. Genstart påkrævet.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Kunne ikke starte genstart",
     "reasons": {
       "webserver": "Webserver / netværksindstillinger",
-      "oauth": "Indstillinger for godkendelsesudbyder",
       "database": "Databaseindstillinger",
       "logging": "Logningsindstillinger",
       "tlsCertificate": "TLS certifikat"

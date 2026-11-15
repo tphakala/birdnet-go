@@ -326,8 +326,7 @@ func useOAuthSettings(t *testing.T, providerID string) *Server {
 }
 
 // TestHandleOAuthBegin_UnregisteredProvider covers an enabled provider that goth
-// does not know (OIDC discovery failed, or the provider was enabled after
-// startup). The visitor gets one fixed sentence and the cause goes to the log.
+// does not know (OIDC discovery failed or has not finished). The visitor gets one fixed sentence and the cause goes to the log.
 // Not parallel: it swaps the global logger, settings and goth registry.
 func TestHandleOAuthBegin_UnregisteredProvider(t *testing.T) {
 	s := useOAuthSettings(t, security.ConfigOIDC)
@@ -342,7 +341,7 @@ func TestHandleOAuthBegin_UnregisteredProvider(t *testing.T) {
 	assert.Contains(t, logs.String(), security.ProviderOIDC)
 	assert.Contains(t, logs.String(), "not registered")
 	// The cause returned by ProviderRegistrationError must reach the log.
-	assert.Contains(t, logs.String(), "restart BirdNET-Go to apply")
+	assert.Contains(t, logs.String(), "registration after startup or a settings change has not completed")
 }
 
 // TestHandleOAuthBegin_RegisteredProviderRedirects pins that the registration

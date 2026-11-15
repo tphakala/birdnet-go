@@ -3,15 +3,12 @@ package security
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/markbates/goth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mismatchWarning is the message logged when the discovery document reports a
@@ -73,26 +70,13 @@ func TestInitializeProviders_OIDCIssuerComparison(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logs := useSplitLogFiles(t)
-			goth.ClearProviders()
-			t.Cleanup(goth.ClearProviders)
 			t.Cleanup(clearOIDCDiscoveryFailure)
 
 			idp := newIssuerIdP(t, tt.documentIssuer)
 
-			initializeProviders(&conf.Settings{
-				Security: conf.Security{
-					Host:            "localhost",
-					SessionSecret:   "test-secret-that-is-long-enough-32chars",
-					SessionDuration: 24 * time.Hour,
-					OAuthProviders: []conf.OAuthProviderConfig{{
-						Provider:     ConfigOIDC,
-						Enabled:      true,
-						ClientID:     "test-client",
-						ClientSecret: testOIDCClientSecret,
-						IssuerURL:    tt.configuredIssuer(idp.URL),
-					}},
-				},
-			})
+			// The discovery goroutine logs any mismatch before it exits, so
+			// waiting for it makes the log assertions deterministic.
+			waitDone(t, registerProviders(t, oidcSettings(tt.configuredIssuer(idp.URL))))
 
 			_, err := goth.GetProvider(ProviderOIDC)
 			require.NoError(t, err, "the provider must register whatever the issuer comparison says")
@@ -109,28 +93,27 @@ func TestInitializeProviders_OIDCIssuerComparison(t *testing.T) {
 	}
 }
 
-func TestStartOIDCRetry_WarnsOnIssuerMismatch(t *testing.T) {
+// TestStartOIDCDiscovery_WarnsOnIssuerMismatchAfterRetry pins the warning on a
+// registration that succeeds only after a failed first attempt.
+func TestStartOIDCDiscovery_WarnsOnIssuerMismatchAfterRetry(t *testing.T) {
 	logs := useSplitLogFiles(t)
-	goth.ClearProviders()
-	t.Cleanup(goth.ClearProviders)
 	t.Cleanup(clearOIDCDiscoveryFailure)
 
-	idp := newIssuerIdP(t, func(string) string { return "https://public.example/realm" })
-	config := conf.OAuthProviderConfig{
-		Provider:     ConfigOIDC,
-		Enabled:      true,
-		ClientID:     "test-client",
-		ClientSecret: testOIDCClientSecret,
-		IssuerURL:    idp.URL,
-	}
+	var requests atomic.Int32
+	mismatching := newIssuerIdP(t, func(string) string { return "https://public.example/realm" })
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		mismatching.Config.Handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(idp.Close)
 
-	done := startOIDCRetry(t.Context(), config, "http://localhost/auth/openid-connect/callback", []string{"openid"}, errors.NewStd("initial discovery failure"))
-	select {
-	case <-done:
-	case <-time.After(OIDCRetryInitialBackoff + 20*time.Second):
-		t.Fatal("OIDC retry goroutine did not exit after registering the provider")
-	}
+	ctx, gen := beginDiscoveryForTest(t)
+	waitDone(t, startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), testOIDCPolicy))
 
+	require.GreaterOrEqual(t, requests.Load(), int32(2), "the first attempt failed, so a retry must have run")
 	_, err := goth.GetProvider(ProviderOIDC)
 	require.NoError(t, err, "the provider must register whatever the issuer comparison says")
 	assert.Contains(t, logs.main(), mismatchWarning)

@@ -241,9 +241,7 @@ Set `security.redirecttohttps: false` and restart. With it enabled, session cook
 ### Basic-auth / OIDC questions
 
 - A basic-auth change that doesn't take effect: update to the latest nightly (auth now reads live config); on older builds, restart.
-- OIDC sign-in says the provider is not available (older builds: "no provider for openid-connect exists"): the OIDC provider is not registered. There are two causes:
-  - OIDC was enabled in the settings after BirdNET-Go started. Providers are registered only at startup, so restart BirdNET-Go.
-  - BirdNET-Go could not reach the provider's discovery document at startup. The cause is printed in the console or container log and in `logs/security.log` as an `OIDC discovery failed` line. The **Issuer URL** is the provider's base URL, without `/.well-known/openid-configuration` (for example `https://auth.example.com/realms/myrealm`). Fix it and restart BirdNET-Go.
+- OIDC sign-in says the provider is not available (older builds: "no provider for openid-connect exists"): BirdNET-Go could not reach the provider's discovery document. The cause is printed in the console or container log and in `logs/security.log` as an `OIDC discovery failed` line. The **Issuer URL** is the provider's base URL, without `/.well-known/openid-configuration` (for example `https://auth.example.com/realms/myrealm`). Correct it and save: provider changes apply at once, with no restart. Discovery runs in the background and is retried for five minutes after startup or after a provider settings change. If it still fails once that time has passed and the settings are correct, restart BirdNET-Go when the provider is reachable.
 - **Let's Encrypt / AutoTLS is currently broken** (it binds the wrong port and doesn't persist certificates). Until it is fixed, disable built-in TLS and terminate TLS at a reverse proxy instead.
 
 ### I locked myself out of authentication

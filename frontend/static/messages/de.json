@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Dynamische Schwellenwerte werden für neuen Basiswert neu berechnet",
         "reconfiguringDynamicThresholds": "Dynamische Schwellenwerte werden neu konfiguriert...",
         "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
-        "oauthRestartRequired": "Authentifizierungsanbieter-Einstellungen geändert. Neustart erforderlich.",
+        "reconfiguringOauthProviders": "Authentifizierungsanbieter werden aktualisiert...",
         "databaseRestartRequired": "Datenbankeinstellungen geändert. Neustart erforderlich.",
         "loggingRestartRequired": "Protokollierungseinstellungen geändert. Neustart erforderlich.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Neustart konnte nicht eingeleitet werden",
     "reasons": {
       "webserver": "Webserver- / Netzwerkeinstellungen",
-      "oauth": "Einstellungen für Authentifizierungsanbieter",
       "database": "Datenbankeinstellungen",
       "logging": "Protokollierungseinstellungen",
       "tlsCertificate": "TLS-Zertifikat"

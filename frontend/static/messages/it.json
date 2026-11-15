@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Ricalcolo delle soglie dinamiche per il nuovo valore base",
         "reconfiguringDynamicThresholds": "Riconfigurazione delle soglie dinamiche...",
         "webserverRestartRequired": "Impostazioni del server web modificate. Riavvio necessario.",
-        "oauthRestartRequired": "Impostazioni del provider di autenticazione modificate. Riavvio necessario.",
+        "reconfiguringOauthProviders": "Aggiornamento dei provider di autenticazione...",
         "databaseRestartRequired": "Impostazioni del database modificate. Riavvio richiesto.",
         "loggingRestartRequired": "Impostazioni di registrazione modificate. Riavvio richiesto.",
         "reconfiguringSoundLevel": "Aggiornamento del monitoraggio del livello sonoro...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Impossibile avviare il riavvio",
     "reasons": {
       "webserver": "Server Web / impostazioni di rete",
-      "oauth": "Impostazioni del provider di autenticazione",
       "database": "Impostazioni del database",
       "logging": "Impostazioni di registrazione",
       "tlsCertificate": "Certificato TLS"

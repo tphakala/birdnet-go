@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Beräknar om dynamiska tröskelvärden för nytt basvärde",
         "reconfiguringDynamicThresholds": "Konfigurerar om dynamiska tröskelvärden...",
         "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
-        "oauthRestartRequired": "Autentiseringsleverantörsinställningar ändrade. Omstart krävs.",
+        "reconfiguringOauthProviders": "Uppdaterar autentiseringsleverantörer...",
         "databaseRestartRequired": "Databasinställningar har ändrats. Omstart krävs.",
         "loggingRestartRequired": "Logginställningar har ändrats. Omstart krävs.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Det gick inte att starta om",
     "reasons": {
       "webserver": "Webbserver / nätverksinställningar",
-      "oauth": "Inställningar för autentiseringsleverantör",
       "database": "Databasinställningar",
       "logging": "Logginställningar",
       "tlsCertificate": "TLS-certifikat"

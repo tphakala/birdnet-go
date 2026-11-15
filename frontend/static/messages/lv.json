@@ -420,7 +420,7 @@
         "recalculatingThresholds": "Pārrēķina dinamiskos sliekšņus jaunai bāzes vērtībai",
         "reconfiguringDynamicThresholds": "Pārkonfigurē dinamiskos sliekšņus...",
         "webserverRestartRequired": "Tīmekļa servera iestatījumi mainīti. Nepieciešama restartēšana.",
-        "oauthRestartRequired": "Autentifikācijas nodrošinātāja iestatījumi mainīti. Nepieciešama restartēšana.",
+        "reconfiguringOauthProviders": "Tiek atjaunināti autentifikācijas pakalpojumu sniedzēji...",
         "databaseRestartRequired": "Datu bāzes iestatījumi mainīti. Nepieciešams restarts.",
         "loggingRestartRequired": "Žurnalēšanas iestatījumi mainīti. Nepieciešams restarts.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",
@@ -6058,7 +6058,6 @@
     "restartFailed": "Neizdevās sākt restartēšanu",
     "reasons": {
       "webserver": "Tīmekļa servera / tīkla iestatījumi",
-      "oauth": "Autentifikācijas pakalpojumu sniedzēja iestatījumi",
       "database": "Datu bāzes iestatījumi",
       "logging": "Žurnalēšanas iestatījumi",
       "tlsCertificate": "TLS sertifikāts"

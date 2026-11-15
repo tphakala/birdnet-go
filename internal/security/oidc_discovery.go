@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/markbates/goth"
 
@@ -132,21 +133,25 @@ func redactDiscoveryErr(err error) error {
 
 // errProviderNotRegistered is returned by ProviderRegistrationError for a
 // provider goth does not know and for which no discovery failure is recorded.
-var errProviderNotRegistered = errors.NewStd("provider is not registered: it was not enabled at startup or its settings changed since, restart BirdNET-Go to apply")
+// The provider is not enabled, or its registration after startup or a settings
+// change has not completed yet.
+var errProviderNotRegistered = errors.NewStd("provider is not registered: it is not enabled, or its registration after startup or a settings change has not completed")
 
-// lastOIDCDiscoveryErr holds the most recent OIDC discovery failure, or nil
-// when discovery has not failed or the provider has registered since.
+// lastOIDCDiscoveryErr holds the most recent OIDC discovery failure of the
+// current registration generation, or nil when discovery has not failed or the
+// provider has registered since. A new registration pass clears it.
 var lastOIDCDiscoveryErr atomic.Pointer[error]
 
 // recordOIDCDiscoveryFailure remembers why OIDC discovery failed, with any
 // userinfo in the discovery URL redacted. A nil err is recorded as
-// errOIDCDiscoveryCauseUnknown.
+// errOIDCDiscoveryCauseUnknown. Production callers hold oidcMu.
 func recordOIDCDiscoveryFailure(discoveryURL string, err error) {
 	wrapped := fmt.Errorf("OIDC discovery request to %s failed: %w", privacy.ScrubCredentialURL(discoveryURL), redactDiscoveryErr(err))
 	lastOIDCDiscoveryErr.Store(&wrapped)
 }
 
-// clearOIDCDiscoveryFailure forgets the recorded discovery failure.
+// clearOIDCDiscoveryFailure forgets the recorded discovery failure. Production
+// callers hold oidcMu.
 func clearOIDCDiscoveryFailure() {
 	lastOIDCDiscoveryErr.Store(nil)
 }
@@ -155,9 +160,16 @@ func clearOIDCDiscoveryFailure() {
 // name cannot start. It returns nil when goth has the provider registered.
 // Otherwise it returns the recorded OIDC discovery failure when gothProvider is
 // ProviderOIDC and one is recorded, and a generic "not registered" error in
-// every other case. It is safe for concurrent use. The error is meant for the
-// server log and must not be sent to a client.
+// every other case. The recorded failure belongs to the current registration
+// generation, so a failure of superseded settings is never reported. It is
+// safe for concurrent use: it reads the registry and the recorded failure under
+// oidcMu, the lock a discovery attempt holds while it registers the provider
+// and clears the failure, so it never reports the failure of an attempt that
+// has just registered. The error is meant for the server log and must not be
+// sent to a client.
 func ProviderRegistrationError(gothProvider string) error {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
 	if _, err := goth.GetProvider(gothProvider); err == nil {
 		return nil
 	}
@@ -180,12 +192,13 @@ func logOIDCEvent(level logger.LogLevel, msg string, fields ...logger.Field) {
 // logOIDCRetryExhausted reports that the background discovery retry gave up.
 // discoveryURL is the discovery document URL that was retried. lastErr is the most
 // recent discovery error and may be nil, in which case errOIDCDiscoveryCauseUnknown
-// is logged. Userinfo in lastErr is redacted before it is logged.
-func logOIDCRetryExhausted(issuerURL, discoveryURL string, lastErr error) {
+// is logged. Userinfo in lastErr is redacted before it is logged. retriedFor is
+// the length of the retry window.
+func logOIDCRetryExhausted(issuerURL, discoveryURL string, lastErr error, retriedFor time.Duration) {
 	logOIDCEvent(logger.LogLevelError,
-		"OIDC discovery retries exhausted, restart BirdNET-Go after fixing the issuer URL or the connection to the identity provider",
+		"OIDC discovery retries exhausted. If the issuer URL is wrong, correct it in the authentication settings and save, which starts discovery again. If the settings are correct, restart BirdNET-Go once the identity provider is reachable",
 		logger.CredentialURL("issuer_url", issuerURL),
 		logger.CredentialURL("discovery_url", discoveryURL),
 		logger.Error(redactDiscoveryErr(lastErr)),
-		logger.Duration("retried_for", OIDCRetryMaxDuration))
+		logger.Duration("retried_for", retriedFor))
 }

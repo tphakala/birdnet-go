@@ -11,12 +11,15 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/providers/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -567,4 +570,116 @@ func assertRestoredContent(t *testing.T, initial *conf.Settings, c *Controller) 
 	assert.Equal(t, initial.Models.Enabled, published.Models.Enabled, "a rollback must restore the previous models")
 	assert.NotEqual(t, initial.Revision(), published.Revision(), "a rollback must publish under a fresh revision")
 	assert.Same(t, published, c.ControllerSettings())
+}
+
+// TestUpdateSettings_SaveFailureRestoresOAuthProviders pins that a save failure
+// which rolls back a provider change leaves goth registered from the restored
+// settings, not from the snapshot that was taken back: the apply step registered
+// the new providers before the save failed. A rolled-back write that leaves the
+// providers alone does not touch the registry.
+func TestUpdateSettings_SaveFailureRestoresOAuthProviders(t *testing.T) {
+	const googleBody = `{"security":{"oauthProviders":[{"provider":"google","enabled":true,"clientId":"cid","clientSecret":"secret","redirectUri":"https://birds.example.com/auth/google/callback"}]}}`
+	tests := []struct {
+		name string
+		body string
+		// wantSeededKept reports whether the GitHub provider registered before the
+		// save must survive it, which holds only when the write leaves the
+		// providers alone.
+		wantSeededKept bool
+	}{
+		{name: "provider change is undone", body: googleBody},
+		{name: "unrelated change keeps the registry", body: fmt.Sprintf(`{"realtime":{"interval":%d}}`, writeLockTestInterval), wantSeededKept: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial := getTestSettings(t)
+			require.Empty(t, initial.Security.OAuthProviders)
+			e := echo.New()
+			c := newGlobalOwnerController(t, e, initial)
+			c.SetTestContext(t.Context(), func() {})
+			c.DisableSaveSettings = false
+			failSettingsSave(t)
+
+			goth.ClearProviders()
+			t.Cleanup(goth.ClearProviders)
+			goth.UseProviders(github.New("seed", "seed", "http://localhost/cb"))
+
+			req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader([]byte(tt.body)))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			require.NoError(t, c.UpdateSettings(e.NewContext(req, rec)))
+			require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), msgSaveFailedRolledBack)
+			c.Wait()
+
+			_, googleErr := goth.GetProvider("google")
+			require.Error(t, googleErr, "the rolled-back provider must not stay registered")
+			_, seedErr := goth.GetProvider("github")
+			if tt.wantSeededKept {
+				require.NoError(t, seedErr, "a write that leaves providers alone must not rebuild the registry")
+			} else {
+				require.Error(t, seedErr, "the registry must be rebuilt from the restored settings")
+			}
+		})
+	}
+}
+
+// TestFinishSettingsWrite_ApplyFailureRestoresOAuthProviders pins the undo in
+// finishSettingsWrite: when the apply step has already re-registered the OAuth
+// providers and then fails, a successful rollback also re-registers them from
+// the restored settings. When another writer published on top, the registry is
+// left alone. The apply step is stood in for by a closure, because the audio
+// step of handleSettingsChanges has no error source to inject; the position of
+// the provider pass inside handleSettingsChanges is therefore not pinned here.
+func TestFinishSettingsWrite_ApplyFailureRestoresOAuthProviders(t *testing.T) {
+	errApply := errors.NewStd("apply failed")
+	tests := []struct {
+		name           string
+		publishOnTop   bool
+		wantGoogleKept bool
+	}{
+		{name: "rolled back"},
+		{name: "superseded rollback keeps the registry", publishOnTop: true, wantGoogleKept: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial := getTestSettings(t)
+			require.Empty(t, initial.Security.OAuthProviders)
+			c := newGlobalOwnerController(t, echo.New(), initial)
+			c.DisableSaveSettings = false
+
+			goth.ClearProviders()
+			t.Cleanup(goth.ClearProviders)
+
+			current, updated, err := c.commitSettings(func(_, updated *conf.Settings) error {
+				updated.Security.OAuthProviders = []conf.OAuthProviderConfig{{
+					Provider: "google", Enabled: true, ClientID: "cid", ClientSecret: "secret",
+					RedirectURI: "https://birds.example.com/auth/google/callback",
+				}}
+				return nil
+			})
+			require.NoError(t, err)
+
+			_, err = c.finishSettingsWrite(current, updated, func() error {
+				// The provider pass of handleSettingsChanges, then a later failure.
+				security.ReloadOAuthProviders(updated)
+				if tt.publishOnTop {
+					_, _, pubErr := conf.UpdateSettings(func(_, next *conf.Settings) error {
+						next.Realtime.Interval = writeLockTestInterval
+						return nil
+					})
+					require.NoError(t, pubErr)
+				}
+				return errApply
+			})
+			require.Error(t, err)
+
+			_, googleErr := goth.GetProvider("google")
+			if tt.wantGoogleKept {
+				require.NoError(t, googleErr, "a superseded rollback keeps the newer snapshot and its registry")
+			} else {
+				require.Error(t, googleErr, "the rolled-back provider must not stay registered")
+			}
+		})
+	}
 }
