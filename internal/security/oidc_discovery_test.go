@@ -556,12 +556,12 @@ func TestOIDCDiscovery_ExhaustionLogsAndKeepsFailure(t *testing.T) {
 	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
 		initialBackoff: 5 * time.Millisecond,
 		maxBackoff:     10 * time.Millisecond,
-		maxDuration:    50 * time.Millisecond,
+		maxDuration:    500 * time.Millisecond,
 	})
 
 	testutil.WaitForChannel(t, done, testutil.LongTestTimeout, "OIDC discovery did not stop after its retry window")
 	assert.Contains(t, logs.main(), "OIDC discovery retries exhausted")
-	assert.Contains(t, logs.main(), `"retried_for":"50ms"`, "the log must carry the retry window of the policy")
+	assert.Contains(t, logs.main(), `"retried_for":"500ms"`, "the log must carry the retry window of the policy")
 	err := ProviderRegistrationError(ProviderOIDC)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, errProviderNotRegistered, "the last failure must stay recorded after exhaustion")
