@@ -159,7 +159,7 @@ func oauthOriginProblem(settings *Security) string {
 	if settings.OAuthOrigin() != "" {
 		return ""
 	}
-	return fmt.Sprintf("%s does not form an absolute http(s) URL (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, privacy.RedactURLUserinfo(origin))
+	return fmt.Sprintf("%s does not form an absolute http(s) URL without credentials (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, privacy.RedactURLUserinfo(origin))
 }
 
 // ValidateSecurityBaseURL rejects a security.baseUrl that is set but is not an
@@ -172,7 +172,7 @@ func ValidateSecurityBaseURL(sec *Security) error {
 	if !sec.hasUnusableBaseURL() {
 		return nil
 	}
-	return errors.Newf("security.baseUrl must be an absolute http or https URL with a host, such as https://birds.example.com").
+	return errors.Newf("security.baseUrl must be an absolute http or https URL with a host and without credentials, such as https://birds.example.com").
 		Component("conf").
 		Category(errors.CategoryValidation).
 		Context("operation", "validate_security_base_url").

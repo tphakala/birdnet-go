@@ -22,7 +22,7 @@ const (
 )
 
 // ValidateBaseURL checks a base URL as BIRDNET_URL and security.baseUrl accept it:
-// non-empty after trimming, an http or https scheme, and a hostname. The error
+// non-empty after trimming, an http or https scheme, a hostname and no userinfo. The error
 // does not repeat the whole value, which may carry credentials, but it can quote short fragments of it (the scheme, a port, an escape sequence), so callers that log it must not pass it on unredacted.
 func ValidateBaseURL(value string) error {
 	value = strings.TrimSpace(value)
@@ -49,6 +49,12 @@ func ValidateBaseURL(value string) error {
 
 	if parsed.Hostname() == "" {
 		return fmt.Errorf("URL must include a valid hostname")
+	}
+
+	// A base URL ends up in links, redirect URIs and logs, so credentials in it
+	// would be published with them.
+	if parsed.User != nil {
+		return fmt.Errorf("URL must not include credentials (user or password before the host)")
 	}
 
 	return nil

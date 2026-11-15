@@ -588,6 +588,9 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 		{name: "host with an http scheme gets no second scheme and no port, TLS on", security: Security{Host: " " + testURLHTTPNoPort + " ", TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPNoPort, wantBaseURL: testURLHTTPNoPort},
 		{name: "host scheme is recognised in any case", security: Security{Host: "HTTPS://" + testHostExample, TLSMode: TLSModeNone}, wantOrigin: "HTTPS://" + testHostExample, wantBaseURL: "HTTPS://" + testHostExample},
 		{name: "host with a scheme but no hostname is no origin and no link", security: Security{Host: "http://:8080"}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "credentialed baseUrl is no origin and no link", security: Security{BaseURL: "https://user:pw@" + testHostExample, Host: testHostIgnored}, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "credentialed schemed host is no origin and no link", security: Security{Host: "https://user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
+		{name: "credentialed host with an uppercase scheme is no origin and no link", security: Security{Host: "HTTPS://user:pw@" + testHostExample}, wantBaseURL: "", wantProblem: "security.host"},
 		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
 		{name: "baseUrl of only a slash is set and unusable, host does not rescue it", security: Security{BaseURL: "/", Host: testHostExample, TLSMode: TLSModeNone}, wantBaseURL: "", wantProblem: "security.baseUrl"},
 		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},
@@ -636,10 +639,12 @@ func TestValidateSecurityBaseURL(t *testing.T) {
 	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: " " + testURLHTTPS + " "}))
 	require.Error(t, ValidateSecurityBaseURL(&Security{BaseURL: "/"}), "a lone slash is set, not unset")
 
-	err := ValidateSecurityBaseURL(&Security{BaseURL: "ftp://user:hunter2@" + testHostExample})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "security.baseUrl")
-	assert.NotContains(t, err.Error(), "hunter2")
+	for _, value := range []string{"ftp://user:hunter2@" + testHostExample, "https://user:hunter2@" + testHostExample} {
+		err := ValidateSecurityBaseURL(&Security{BaseURL: value})
+		require.Error(t, err, value)
+		assert.Contains(t, err.Error(), "security.baseUrl")
+		assert.NotContains(t, err.Error(), "hunter2")
+	}
 }
 
 // TestValidateBaseURL_ErrorOmitsValue verifies a parse failure does not repeat the

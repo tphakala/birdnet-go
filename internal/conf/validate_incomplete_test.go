@@ -1351,7 +1351,7 @@ func TestValidateOAuthProviderIDs(t *testing.T) {
 func TestNormalizeBaseURL(t *testing.T) {
 	t.Parallel()
 
-	for _, value := range []string{"birds.example.com", "ftp://user:hunter2@birds.example.com"} {
+	for _, value := range []string{"birds.example.com", "ftp://user:hunter2@birds.example.com", "https://user:hunter2@birds.example.com"} {
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
 			s := &Settings{}

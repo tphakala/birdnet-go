@@ -131,7 +131,7 @@ func (s *Settings) normalizeBaseURL() {
 		return
 	}
 	s.recordValidationWarning(warnComponentSecurity,
-		"security.baseUrl %q is not an absolute http(s) URL with a host, so links and OAuth callbacks cannot be built from it; it is ignored until corrected",
+		"security.baseUrl %q is not an absolute http(s) URL with a host and without credentials, so links and OAuth callbacks cannot be built from it; it is ignored until corrected",
 		privacy.RedactURLUserinfo(s.Security.BaseURL))
 }
 

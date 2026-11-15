@@ -803,8 +803,10 @@ func TestValidateBaseURL(t *testing.T) {
 		// Edge cases
 		{"URL with query string", "https://birdnet.example.com?foo=bar", false, ""},
 		{"URL with fragment", "https://birdnet.example.com#section", false, ""},
-		{"URL with userinfo", "https://user:pass@birdnet.example.com", false, ""},
-		{"URL with all components", "https://user:pass@birdnet.example.com:8080/path?q=1#frag", false, ""},
+		{"URL with userinfo", "https://user:pass@birdnet.example.com", true, "must not include credentials"},
+		{"URL with a user only", "https://user@birdnet.example.com", true, "must not include credentials"},
+		{"URL with an uppercase scheme and userinfo", "HTTPS://user:pass@birdnet.example.com", true, "must not include credentials"},
+		{"URL with all components but userinfo", "https://birdnet.example.com:8080/path?q=1#frag", false, ""},
 	}
 
 	for _, tt := range tests {
