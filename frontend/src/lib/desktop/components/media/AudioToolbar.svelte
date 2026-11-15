@@ -231,7 +231,6 @@
         viewportMargin: MENU_VIEWPORT_MARGIN_PX,
       });
       menu.style.left = `${left - wrapperRect.left}px`;
-      menu.style.right = 'auto';
 
       // The visible band: the viewport, cut by every ancestor that clips its overflow
       // (on Search, the results table scrolls sideways and so clips vertically too).
@@ -516,10 +515,6 @@
     flex: 1 1 24rem;
   }
 
-  .processing-controls {
-    flex: 0 1 auto;
-  }
-
   .toolbar-group {
     display: flex;
     flex: 0 0 auto;
@@ -529,7 +524,6 @@
   }
 
   .playback-time {
-    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     opacity: 0.7;
@@ -613,7 +607,6 @@
 
   .toolbar-control {
     display: flex;
-    flex: 0 1 auto;
     align-items: center;
     gap: 0.25rem;
     min-width: 0;
@@ -635,7 +628,6 @@
   }
 
   .control-value {
-    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
     min-width: 3rem;
   }
@@ -643,7 +635,6 @@
   .denoise-dropdown,
   .export-dropdown {
     position: relative;
-    flex: 0 1 auto;
     min-width: 0;
   }
 
@@ -717,7 +708,6 @@
   }
 
   .time-range {
-    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
     min-width: 6.5rem;
     text-align: center;

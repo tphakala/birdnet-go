@@ -60,6 +60,20 @@ function barContentRight(): number {
   );
 }
 
+/** Names of the controls and text that end past the bar's content box. */
+function controlsPastBar(): string[] {
+  const contentRight = barContentRight();
+  const controls: Record<string, Element> = {
+    ...hitAreas(),
+    time: el('.playback-time'),
+    range: el('.time-range'),
+    gainValue: el('.control-value'),
+  };
+  return Object.entries(controls)
+    .filter(([, control]) => control.getBoundingClientRect().right > contentRight + 0.5)
+    .map(([name]) => name);
+}
+
 function hitAreas(): Record<string, Element> {
   return {
     play: el('.play-btn'),
@@ -124,16 +138,7 @@ describe('AudioToolbar wrapping in a real browser', () => {
   it('keeps every control inside a 660 px bar', async () => {
     await renderToolbar();
 
-    const contentRight = barContentRight();
-    const controls = [
-      ...Object.values(hitAreas()),
-      el('.playback-time'),
-      el('.time-range'),
-      el('.control-value'),
-    ];
-    for (const control of controls) {
-      expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(contentRight + 0.5);
-    }
+    expect(controlsPastBar()).toEqual([]);
     expect(bar().scrollWidth).toBeLessThanOrEqual(bar().clientWidth);
   });
 
@@ -194,12 +199,7 @@ describe('AudioToolbar wrapping in a real browser', () => {
     try {
       await renderToolbar();
 
-      const contentRight = barContentRight();
-      const pastBar = Object.entries(hitAreas())
-        .filter(([, control]) => control.getBoundingClientRect().right > contentRight + 0.5)
-        .map(([name]) => name);
-
-      expect(pastBar).toEqual([]);
+      expect(controlsPastBar()).toEqual([]);
       expect(bar().scrollWidth).toBeLessThanOrEqual(bar().clientWidth);
     } finally {
       document.documentElement.style.removeProperty('font-size');
