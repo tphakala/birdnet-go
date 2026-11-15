@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mismatchWarning is the message logged when the discovery document reports a
@@ -101,4 +102,32 @@ func TestInitializeProviders_OIDCIssuerComparison(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStartOIDCRetry_WarnsOnIssuerMismatch(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
+
+	idp := newIssuerIdP(t, func(string) string { return "https://public.example/realm" })
+	config := conf.OAuthProviderConfig{
+		Provider:     ConfigOIDC,
+		Enabled:      true,
+		ClientID:     "test-client",
+		ClientSecret: testOIDCClientSecret,
+		IssuerURL:    idp.URL,
+	}
+
+	done := startOIDCRetry(t.Context(), config, "http://localhost/auth/openid-connect/callback", []string{"openid"}, errors.NewStd("initial discovery failure"))
+	select {
+	case <-done:
+	case <-time.After(OIDCRetryInitialBackoff + 20*time.Second):
+		t.Fatal("OIDC retry goroutine did not exit after registering the provider")
+	}
+
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err, "the provider must register whatever the issuer comparison says")
+	assert.Contains(t, logs.main(), mismatchWarning)
+	assert.Contains(t, logs.security(), mismatchWarning)
 }
