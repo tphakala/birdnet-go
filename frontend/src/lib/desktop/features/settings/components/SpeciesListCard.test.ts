@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { CirclePlus } from '@lucide/svelte';
 import { t } from '$lib/i18n';
 import SpeciesListCard from './SpeciesListCard.svelte';
@@ -519,5 +519,33 @@ describe('SpeciesListCard sorting', () => {
     renderCard({ species: ['Blue Jay'] });
 
     expect(screen.getByRole('table', { name: 'Always Include' })).toBeInTheDocument();
+  });
+
+  it('drops the sort announcement when the list empties', async () => {
+    const view = render(SpeciesListCard, {
+      props: {
+        title: 'Always Include',
+        species: ['Blue Jay', 'American Robin'],
+        icon: CirclePlus,
+        predictions: [],
+        inputValue: '',
+        inputLabel: 'Add species',
+        inputPlaceholder: 'Type a species name',
+        emptyMessage: 'No species',
+        localizeLabel,
+        onAdd: vi.fn(),
+        onRemove: vi.fn(),
+        onInput: vi.fn(),
+      },
+    });
+    const label = t('settings.species.activeSpecies.columns.commonName');
+
+    await fireEvent.click(screen.getByRole('button', { name: label }));
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: label })
+    );
+
+    await view.rerender({ species: [] });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
   });
 });

@@ -188,6 +188,11 @@
   // Announced once per sort, from the handler, so first render says nothing
   let sortStatus = $state('');
 
+  // The table goes away with the last species; do not announce the old sort when the list refills
+  $effect(() => {
+    if (species.length === 0) sortStatus = '';
+  });
+
   // Header labels, shared by the header cells and the sort announcement
   const sortHeaderLabels: Record<SortColumn, () => string> = {
     commonName: () => t('settings.species.activeSpecies.columns.commonName'),
