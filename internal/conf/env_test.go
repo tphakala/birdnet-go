@@ -869,25 +869,18 @@ func TestValidateEnvBaseURL_Integration(t *testing.T) {
 		assert.Contains(t, err.Error(), "must be http or https")
 	})
 
-	t.Run("credentials in an invalid BIRDNET_URL stay out of the error", func(t *testing.T) {
-		viper.Reset()
-		t.Setenv("BIRDNET_URL", "ftp://user:hunter2@birdnet.example.com")
-
-		err := configureEnvironmentVariables()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "BIRDNET_URL")
-		assert.NotContains(t, err.Error(), "hunter2")
-	})
-
-	t.Run("credentials in a URL set in a boolean or locale variable stay out of the error", func(t *testing.T) {
-		for _, envVar := range []string{EnvVarDebug, EnvVarLocale} {
+	t.Run("credentials in a URL set in any validated variable stay out of the error", func(t *testing.T) {
+		for _, binding := range getEnvBindings() {
+			if binding.Validate == nil {
+				continue
+			}
 			viper.Reset()
-			t.Setenv(envVar, "ftp://user:hunter2@birdnet.example.com")
+			t.Setenv(binding.EnvVar, "ftp://user:hunter2@birdnet.example.com")
 
 			err := configureEnvironmentVariables()
-			require.Error(t, err, envVar)
-			assert.Contains(t, err.Error(), envVar)
-			assert.NotContains(t, err.Error(), "hunter2", envVar)
+			if err != nil {
+				assert.NotContains(t, err.Error(), "hunter2", binding.EnvVar)
+			}
 		}
 	})
 

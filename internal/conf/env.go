@@ -175,9 +175,11 @@ func bindEnvVars() error {
 		// Validate the value if validation function is provided
 		if binding.Validate != nil {
 			if err := binding.Validate(envValue); err != nil {
-				// Skip binding for invalid values to preserve defaults/config. The value
-				// is shown without URL credentials; a value with no "@" is unchanged.
-				errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, privacy.RedactURLUserinfo(envValue), err))
+				// Skip binding for invalid values to preserve defaults/config. The
+				// whole message, value and validator reason alike (strconv errors
+				// repeat the input), is scrubbed of URL credentials; text without
+				// an "@" is unchanged.
+				errs = append(errs, fmt.Errorf("%s", privacy.ScrubURLUserinfoInText(fmt.Sprintf("%s=%q: %s", binding.EnvVar, envValue, err))))
 				continue
 			}
 		}
@@ -355,7 +357,7 @@ func validateEnvPath(value string) error {
 
 	// Require absolute paths for security
 	if !filepath.IsAbs(cleanedPath) {
-		return fmt.Errorf("path must be absolute, got relative path: %s", cleanedPath)
+		return fmt.Errorf("path must be absolute, got a relative path")
 	}
 
 	// filepath.Clean already handles path traversal, so no need for additional checks
