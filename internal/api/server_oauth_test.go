@@ -553,7 +553,7 @@ func TestHandleOAuthCallback_QueryProviderCannotOverridePath(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Zero(t, googleStub.fetchs, "the query parameter must not select the Google provider")
 	_, err := authProvider(rec, cookies)
-	assert.Error(t, err, "no session may be established")
+	require.Error(t, err, "no session may be established")
 
 	// Control: the same flow finished under its own path name succeeds, whatever
 	// the query says.
