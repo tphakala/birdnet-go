@@ -2221,17 +2221,24 @@ func (s *Settings) NormalizeOAuthProviderIDs() {
 // API rejects such duplicates instead (see validateOAuthProviderDuplicates).
 func (s *Settings) ReconcileOAuthProviderDuplicates() {
 	providers := s.Security.OAuthProviders
+	// Preference of an entry when several share a provider ID, highest first.
+	const (
+		rankOther = iota
+		rankEnabled
+		rankComplete
+		rankEnabledComplete
+	)
 	rank := func(p *OAuthProviderConfig) int {
 		complete := p.ClientID != "" && p.ClientSecret != ""
 		switch {
 		case p.Enabled && complete:
-			return 3
+			return rankEnabledComplete
 		case complete:
-			return 2
+			return rankComplete
 		case p.Enabled:
-			return 1
+			return rankEnabled
 		default:
-			return 0
+			return rankOther
 		}
 	}
 	keep := make(map[string]int, len(providers))
