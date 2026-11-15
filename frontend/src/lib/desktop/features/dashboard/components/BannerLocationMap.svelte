@@ -10,6 +10,7 @@
   import { MAP_CONFIG, createMapStyle } from '$lib/desktop/features/settings/utils/mapConfig';
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
+  import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
 
   const logger = getLogger('BannerLocationMap');
 
@@ -42,7 +43,7 @@
   let expandedMap: import('maplibre-gl').Map | undefined;
   let expandedMarker: import('maplibre-gl').Marker | undefined;
   let closeButtonRef: HTMLButtonElement | undefined = $state();
-  let previouslyFocused: HTMLElement | null = $state(null);
+  let previouslyFocused: HTMLElement | SVGElement | null = $state(null);
 
   onMount(() => {
     let mounted = true;
@@ -148,11 +149,13 @@
   // Focus management for expanded map dialog.
   $effect(() => {
     if (!expanded) return;
-    previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // No dialog to exclude: it is rendered only while expanded, so nothing in it can be focused or pressed yet
+    previouslyFocused = pickOpener(undefined) ?? null;
     queueMicrotask(() => closeButtonRef?.focus());
     return () => {
-      previouslyFocused?.focus();
+      // The opener may have been removed while the map was expanded, and focus the user moved to
+      // another control stays there; the map itself is already gone from the page here
+      if (previouslyFocused?.isConnected && canReturnFocus(undefined)) previouslyFocused.focus();
       previouslyFocused = null;
     };
   });

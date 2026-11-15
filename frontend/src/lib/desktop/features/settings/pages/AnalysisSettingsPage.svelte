@@ -27,8 +27,9 @@
   @component
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
+  import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
   import type {
     CatalogEntry,
     DownloadProgress,
@@ -911,6 +912,8 @@
 
   let rangeFilterState = $state<{
     speciesCount: number | null;
+    // True once a count request has finished, so a missing count then means it failed
+    countSettled: boolean;
     loading: boolean;
     testing: boolean;
     downloading: boolean;
@@ -919,6 +922,7 @@
     species: RangeFilterSpecies[];
   }>({
     speciesCount: null,
+    countSettled: false,
     loading: false,
     testing: false,
     downloading: false,
@@ -928,7 +932,7 @@
   });
 
   // Focus management for modal accessibility
-  let previouslyFocusedElement: HTMLElement | null = null;
+  let previouslyFocusedElement: HTMLElement | SVGElement | null = null;
 
   function getFocusableElements(container: HTMLElement): HTMLElement[] {
     const focusableSelectors = [
@@ -978,7 +982,9 @@
     let focusTimer: ReturnType<typeof setTimeout> | undefined;
 
     if (rangeFilterState.showModal) {
-      previouslyFocusedElement = document.activeElement as HTMLElement;
+      // untrack: the dialog element binds after this runs and must not re-run the effect and its cleanup
+      const opener = pickOpener(untrack(() => rangeDialogElement));
+      if (opener !== undefined) previouslyFocusedElement = opener;
 
       focusTimer = setTimeout(() => {
         const modal = rangeDialogElement;
@@ -996,8 +1002,11 @@
         }
       }, 0);
     } else if (previouslyFocusedElement) {
-      // The button may have been removed while the dialog was open
-      if (previouslyFocusedElement.isConnected) previouslyFocusedElement.focus();
+      // The button may have been removed while the dialog was open, and focus the user moved to
+      // another control stays there; the dialog is already gone from the page here
+      if (previouslyFocusedElement.isConnected && canReturnFocus(undefined)) {
+        previouslyFocusedElement.focus();
+      }
       previouslyFocusedElement = null;
     }
 
@@ -1016,6 +1025,8 @@
   let rangeFilterAbortController: AbortController | null = null;
 
   function debouncedTestRangeFilter() {
+    // A new count is on its way: until it settles, a missing count reads as loading, not failed
+    rangeFilterState.countSettled = false;
     rangeFilterAbortController?.abort();
     rangeFilterAbortController = null;
     clearTimeout(debounceTimer);
@@ -1025,6 +1036,7 @@
   }
 
   async function loadRangeFilterCount() {
+    rangeFilterState.countSettled = false;
     try {
       interface CountResponse {
         count: number;
@@ -1035,6 +1047,7 @@
       logger.error('Failed to load range filter count:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterCountFailed');
     }
+    rangeFilterState.countSettled = true;
   }
 
   async function testCurrentRangeFilter() {
@@ -1061,6 +1074,7 @@
       );
 
       rangeFilterState.speciesCount = data.count;
+      rangeFilterState.countSettled = true;
 
       if (rangeFilterState.showModal) {
         rangeFilterState.species = data.species || [];
@@ -1070,12 +1084,38 @@
       logger.error('Failed to test range filter:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       rangeFilterState.speciesCount = null;
+      rangeFilterState.countSettled = true;
     } finally {
       clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
       rangeFilterAbortController = null;
     }
   }
+
+  // Why the View Species button is blocked, or undefined when it works. The reason is shown next
+  // to the button and the button points at it.
+  let viewSpeciesBlockedReason = $derived.by(() => {
+    // The location reads as unset until the settings arrive
+    if (store.isLoading) return t('settings.loading');
+    if (!birdnet?.locationConfigured) {
+      return t('settings.species.activeSpecies.locationNotConfigured.title');
+    }
+    if (rangeFilterState.loading)
+      return t('settings.main.sections.rangeFilter.modal.loadingSpecies');
+    if (rangeFilterState.testing)
+      return t('settings.main.sections.rangeFilter.speciesCount.loading');
+    if (rangeFilterState.speciesCount === null) {
+      // Loading only while the first count is pending; after that a missing count is a failure
+      return rangeFilterState.countSettled
+        ? t('settings.main.errors.rangeFilterCountFailed')
+        : t('settings.main.sections.rangeFilter.speciesCount.loading');
+    }
+    if (rangeFilterState.speciesCount === 0) {
+      return t('settings.main.sections.rangeFilter.modal.noSpeciesFound');
+    }
+    return undefined;
+  });
+  let viewSpeciesBlocked = $derived(viewSpeciesBlockedReason !== undefined);
 
   async function loadRangeFilterSpecies() {
     if (rangeFilterState.loading || !birdnet?.locationConfigured) return;
@@ -2154,14 +2194,16 @@
                   : ''}
             </span>
           </div>
-          <div class="flex gap-2 mt-2">
+          <div class="flex flex-wrap items-center gap-2 mt-2">
+            <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
+                 natively disabled button would drop focus before the dialog could return it here -->
             <button
               type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.loading ||
-                !birdnet?.locationConfigured}
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
+              aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
+              aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
               onclick={() => {
+                if (viewSpeciesBlocked) return;
                 rangeFilterState.showModal = true;
                 loadRangeFilterSpecies();
               }}
@@ -2179,6 +2221,15 @@
               <Download class="size-4" />
               {t('analytics.filters.exportCsv')}
             </button>
+            <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
+            {#if viewSpeciesBlockedReason}
+              <span
+                id="range-species-blocked-reason"
+                class="text-xs text-[var(--color-base-content)]/70"
+              >
+                {viewSpeciesBlockedReason}
+              </span>
+            {/if}
           </div>
           <span class="help-text mt-1">
             {t('settings.main.sections.rangeFilter.speciesCount.helpText')}

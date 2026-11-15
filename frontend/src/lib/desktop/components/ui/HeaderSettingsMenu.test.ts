@@ -3,6 +3,7 @@ import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-li
 import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { theme } from '$lib/stores/theme';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 
 /**
@@ -19,7 +20,8 @@ import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 // flow through the same mock).
 const EDIT_LABEL = t('dashboard.editMode.editDashboard');
 const RESET_LABEL = t('dashboard.editMode.resetDashboard');
-const THEME_LABEL = t('navigation.theme');
+const SWITCH_TO_DARK_LABEL = t('navigation.switchToDarkTheme');
+const SWITCH_TO_LIGHT_LABEL = t('navigation.switchToLightTheme');
 const REPORT_BUG_LABEL = t('navigation.reportBug');
 const MENU_LABEL = t('navigation.settingsMenu');
 
@@ -43,16 +45,18 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it('hides Edit and Reset Dashboard from unauthenticated guests', async () => {
+    theme.set('light');
     const menu = await renderAndOpen({ securityEnabled: true, accessAllowed: false });
 
     expect(menu.queryByText(EDIT_LABEL)).toBeNull();
     expect(menu.queryByText(RESET_LABEL)).toBeNull();
 
     // Neutral, guest-safe items remain available.
-    expect(menu.getByText(THEME_LABEL)).toBeInTheDocument();
+    expect(menu.getByText(SWITCH_TO_DARK_LABEL)).toBeInTheDocument();
     expect(menu.getByText(REPORT_BUG_LABEL)).toBeInTheDocument();
   });
 
@@ -68,6 +72,18 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
 
     expect(menu.getByText(EDIT_LABEL)).toBeInTheDocument();
     expect(menu.getByText(RESET_LABEL)).toBeInTheDocument();
+  });
+
+  it('names the theme item by the theme it switches to', async () => {
+    theme.set('light');
+    const menu = await renderAndOpen({});
+    expect(menu.getByRole('button', { name: SWITCH_TO_DARK_LABEL })).toBeInTheDocument();
+    expect(menu.queryByRole('button', { name: SWITCH_TO_LIGHT_LABEL })).toBeNull();
+
+    await fireEvent.click(menu.getByRole('button', { name: SWITCH_TO_DARK_LABEL }));
+
+    expect(menu.getByRole('button', { name: SWITCH_TO_LIGHT_LABEL })).toBeInTheDocument();
+    expect(menu.queryByRole('button', { name: SWITCH_TO_DARK_LABEL })).toBeNull();
   });
 
   describe('focus after the Reset Dashboard confirmation closes', () => {

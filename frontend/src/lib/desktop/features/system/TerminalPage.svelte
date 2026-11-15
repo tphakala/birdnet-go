@@ -14,6 +14,7 @@
 <script lang="ts">
   /* global WebSocket, ResizeObserver, Element */
   /* eslint-disable security/detect-object-injection -- theme lookups use controlled TerminalThemeId keys */
+  import { tick } from 'svelte';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { t } from '$lib/i18n';
@@ -111,6 +112,13 @@
   let isFullscreen = $state(false);
   let isExpanded = $state(false);
   let isDetached = $state(false);
+  // The detached notice, focused when the terminal moves to the popup
+  let detachedNotice = $state<HTMLDivElement | null>(null);
+  // Set when the popup closes while the terminal is enabled, so the next connect() hands focus to
+  // the rebuilt terminal. A terminal disabled at that moment reconnects later in the background and
+  // must not take focus. Plain, not $state: it is only read inside connect() and must not retrigger
+  // the effect.
+  let focusOnReconnect = false;
   let showThemeMenu = $state(false);
   let activeThemeId = $state<TerminalThemeId>(loadThemeId());
 
@@ -243,6 +251,12 @@
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
     });
+
+    // The terminal comes back after the popup closed: put focus where toolbar actions leave it
+    if (focusOnReconnect) {
+      focusOnReconnect = false;
+      term.focus();
+    }
   }
 
   function cleanup() {
@@ -322,6 +336,8 @@
 
     popoutWindow = popup;
     isDetached = true;
+    // The focused Detach button is about to leave the page: keep focus on the notice that replaces it
+    void tick().then(() => detachedNotice?.focus());
 
     // Tear down the inline terminal (ws is already transferred above)
     resizeObserver?.disconnect();
@@ -465,6 +481,7 @@
       ws = detachedWs;
       popoutWindow = null;
       isDetached = false;
+      focusOnReconnect = isEnabled;
       connect();
       return;
     }
@@ -476,6 +493,7 @@
       detachedWs.close();
       popoutWindow = null;
       isDetached = false;
+      focusOnReconnect = isEnabled;
       setTimeout(() => {
         if (terminalContainer && isEnabled && !term) {
           connect();
@@ -680,6 +698,7 @@
         detachedWs.close();
         popoutWindow = null;
         isDetached = false;
+        focusOnReconnect = isEnabled;
 
         // Reconnect in the main window on next tick
         setTimeout(() => {
@@ -732,6 +751,9 @@
   // case where the user enables the terminal and saves settings while already
   // on this page - onMount would miss that second scenario.
   $effect(() => {
+    // A terminal disabled before it could reconnect after the popup closed comes back later on
+    // its own, and must not take focus then
+    if (!isEnabled) focusOnReconnect = false;
     if (isEnabled && terminalContainer && !term) {
       connect();
     }
@@ -771,7 +793,11 @@
     </div>
   {:else if isDetached}
     <!-- Detached state - terminal is in a separate window -->
-    <div class="flex flex-col items-center justify-center h-full gap-4 text-muted">
+    <div
+      bind:this={detachedNotice}
+      tabindex="-1"
+      class="focus-ring-inset flex flex-col items-center justify-center h-full gap-4 text-muted"
+    >
       <ExternalLink class="size-12" />
       <div class="text-center">
         <p class="text-lg font-medium">{t('terminal.detached')}</p>

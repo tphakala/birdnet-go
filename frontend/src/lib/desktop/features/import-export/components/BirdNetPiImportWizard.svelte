@@ -853,7 +853,7 @@
                     id="elevation-password"
                     type="password"
                     bind:value={sudoPassword}
-                    class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+                    class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus-ring"
                     autocomplete="current-password"
                   />
                 </div>

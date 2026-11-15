@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, fireEvent, waitFor, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { get } from 'svelte/store';
 
@@ -101,15 +101,19 @@ function restoreGlobalsAfterEach() {
   });
 }
 
-function enableTerminal() {
+function setTerminalEnabled(enableTerminal: boolean) {
   const state = get(settingsStore);
   settingsStore.set({
     ...state,
     originalData: {
       ...state.originalData,
-      webServer: { ...state.originalData.webServer, enableTerminal: true },
+      webServer: { ...state.originalData.webServer, enableTerminal },
     },
   });
+}
+
+function enableTerminal() {
+  setTerminalEnabled(true);
 }
 
 describe('TerminalPage toolbar', () => {
@@ -182,6 +186,8 @@ describe('TerminalPage toolbar', () => {
     const { getByRole } = render(TerminalPage);
     await tick();
     const [terminal] = created.terminals;
+    // The first connect on page load leaves focus where it is
+    expect(terminal.focusCount).toBe(0);
 
     await fireEvent.click(getByRole('button', { name: 'terminal.copySelection' }));
     expect(terminal.focusCount).toBe(1);
@@ -241,7 +247,9 @@ describe('TerminalPage detached window', () => {
   // Every socket the page opens; the last one belongs to the popup
   const sockets: { onclose?: () => void }[] = [];
 
-  async function detach() {
+  // Renders the page with a live inline terminal and an iframe standing in for the popup, and
+  // clicks Detach. The popup toolbar wiring still waits for the popup's DOM settle delay.
+  async function startDetach({ withoutTerminalElement = false } = {}) {
     sockets.length = 0;
     vi.stubGlobal(
       'WebSocket',
@@ -261,14 +269,34 @@ describe('TerminalPage detached window', () => {
     const popup = frame.contentWindow;
     if (!popup) throw new Error('iframe has no window');
     vi.spyOn(window, 'open').mockReturnValue(popup);
+    if (withoutTerminalElement) {
+      // The popup page failed to build: the page looks for its terminal element and finds none
+      const lookUp = popup.document.getElementById.bind(popup.document);
+      vi.spyOn(popup.document, 'getElementById').mockImplementation(id =>
+        id === 'terminal' ? null : lookUp(id)
+      );
+    }
 
     const { getByRole } = render(TerminalPage);
     await tick();
     await fireEvent.click(getByRole('button', { name: 'terminal.detach' }));
+    return popup;
+  }
+
+  async function detach() {
+    const popup = await startDetach();
     // The popup toolbar wiring runs after the popup's DOM settle delay
     await waitFor(() => expect(popup.document.getElementById('theme-light')).not.toBeNull());
     await waitFor(() => expect(created.terminals.length).toBeGreaterThan(1));
     return popup.document;
+  }
+
+  // Focus calls on the terminals rebuilt in the main window after the first one was torn down
+  function rebuiltInlineFocusCount() {
+    return created.terminals
+      .slice(1)
+      .filter(terminal => terminal.textarea?.ownerDocument === document)
+      .reduce((sum, terminal) => sum + terminal.focusCount, 0);
   }
 
   // Computed colour and opacity of each toolbar text element
@@ -349,6 +377,88 @@ describe('TerminalPage detached window', () => {
     expect(focusRule?.cssText).toContain('opacity: 1');
     // A real outline, so forced colors still draws the ring
     expect(focusRule?.cssText).toContain('outline: 2px solid currentColor');
+  });
+
+  it('moves focus to the detached notice', async () => {
+    await detach();
+
+    const notice = screen.getByText('terminal.detached').closest<HTMLElement>('[tabindex="-1"]');
+    expect(notice).not.toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(notice));
+  });
+
+  it('hands focus back to the terminal after the popup closes', async () => {
+    const doc = await detach();
+    const [inlineTerminal] = created.terminals;
+    expect(inlineTerminal.focusCount).toBe(0);
+
+    doc.defaultView?.dispatchEvent(new Event('beforeunload'));
+
+    // The inline terminal is rebuilt in the main window once the popup has gone
+    await waitFor(() => expect(created.terminals.length).toBe(3));
+    await waitFor(() => expect(created.terminals[2].focusCount).toBe(1));
+  });
+
+  it('hands focus back to the terminal after the popup closes before it has settled', async () => {
+    const popup = await startDetach();
+
+    popup.dispatchEvent(new Event('beforeunload'));
+
+    await waitFor(() => expect(rebuiltInlineFocusCount()).toBe(1));
+  });
+
+  it('hands focus back to the terminal when the popup page cannot be built', async () => {
+    await startDetach({ withoutTerminalElement: true });
+
+    await waitFor(() => expect(rebuiltInlineFocusCount()).toBe(1));
+  });
+
+  it('does not take focus on a later reconnect when the popup closed while the terminal was disabled', async () => {
+    const doc = await detach();
+    setTerminalEnabled(false);
+    await tick();
+
+    doc.defaultView?.dispatchEvent(new Event('beforeunload'));
+    await tick();
+    setTerminalEnabled(true);
+
+    // The terminal is rebuilt in the background, unprompted by the user
+    await waitFor(() =>
+      expect(
+        created.terminals.some(
+          t => t.textarea?.ownerDocument === document && t !== created.terminals[0]
+        )
+      ).toBe(true)
+    );
+    expect(rebuiltInlineFocusCount()).toBe(0);
+  });
+
+  it('does not take focus on a later reconnect when the terminal was disabled right after the popup closed', async () => {
+    const doc = await detach();
+
+    // Both happen before the page has reconnected the terminal
+    doc.defaultView?.dispatchEvent(new Event('beforeunload'));
+    setTerminalEnabled(false);
+    await tick();
+    setTerminalEnabled(true);
+
+    await waitFor(() =>
+      expect(
+        created.terminals.some(
+          terminal =>
+            terminal.textarea?.ownerDocument === document && terminal !== created.terminals[0]
+        )
+      ).toBe(true)
+    );
+    expect(rebuiltInlineFocusCount()).toBe(0);
+  });
+
+  it('draws the detached notice focus ring inside the notice, which fills a clipping wrapper', async () => {
+    await detach();
+
+    const notice = screen.getByText('terminal.detached').closest<HTMLElement>('[tabindex="-1"]');
+    expect(notice).toHaveClass('focus-ring-inset');
+    expect(notice).not.toHaveClass('focus-ring');
   });
 
   it('forgets an armed Escape when the detached terminal input loses focus', async () => {

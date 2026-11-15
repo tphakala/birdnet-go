@@ -690,7 +690,7 @@
                 {@const isSelected = currentSpectrogramStyle === style.value}
                 <button
                   type="button"
-                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 {isSelected
+                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus-ring {isSelected
                     ? 'border-[var(--color-primary)]/60 bg-[var(--color-primary)]/10 shadow-[0_0_0_1px_rgba(37,99,235,0.3)]'
                     : 'border-[var(--border-200)] bg-[var(--color-base-100)] hover:border-[var(--color-base-content)]/30'}"
                   disabled={store.isLoading || store.isSaving}

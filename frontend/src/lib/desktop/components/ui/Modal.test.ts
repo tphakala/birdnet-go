@@ -1206,6 +1206,19 @@ describe('Modal', () => {
       expect(focusSpy).not.toHaveBeenCalled();
     });
 
+    it('does not pull focus back to the opener when the user moved focus elsewhere before closing', async () => {
+      renderTyped(ModalToggleHost, {});
+      button('Toggle lower').focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      // Focus leaves the dialog for another control of the page
+      button('Page button').focus();
+
+      await press('Toggle lower');
+
+      expect(button('Page button')).toHaveFocus();
+    });
+
     it('returns focus to focusable SVG content it was opened from', async () => {
       renderTyped(ModalToggleHost, {});
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1321,6 +1334,47 @@ describe('Modal', () => {
         await press('Toggle lower');
 
         expect(button('Page button')).toHaveFocus();
+      });
+
+      it('returns focus to a custom button pressed through a tabindex=-1 child', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(screen.getByTestId('custom-button-icon'));
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(screen.getByText('Custom button')).toHaveFocus();
+      });
+
+      it('does not take a role=button that is itself out of the tab order as the opener', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(screen.getByTestId('skipped-custom-button-icon'));
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('does not use a press once the user activation behind it has lapsed', async () => {
+        renderTyped(ModalToggleHost, {});
+        Object.defineProperty(navigator, 'userActivation', {
+          value: { isActive: false },
+          configurable: true,
+        });
+        try {
+          await fireEvent.pointerDown(button('Page button'));
+          await openAndCloseLower();
+          expect(document.body).toHaveFocus();
+        } finally {
+          Reflect.deleteProperty(navigator, 'userActivation');
+        }
+      });
+
+      it('forgets the press once a key is pressed', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Page button'));
+        await fireEvent.keyDown(document.body, { key: 'Shift' });
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
       });
 
       it('does not take a focusable region around a tabindex=-1 wrapper as the opener', async () => {

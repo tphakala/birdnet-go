@@ -12,6 +12,16 @@
   >Page button<span tabindex="-1" aria-hidden="true" data-testid="page-button-icon"></span></button
 >
 <button type="button" disabled>Disabled button</button>
+<div role="button" tabindex="0">
+  Custom button<span tabindex="-1" aria-hidden="true" data-testid="custom-button-icon"></span>
+</div>
+<div role="button" tabindex="-1">
+  Skipped custom button<span
+    tabindex="-1"
+    aria-hidden="true"
+    data-testid="skipped-custom-button-icon"
+  ></span>
+</div>
 <section tabindex="-1" aria-label="Wrapper"><p>Wrapper text</p></section>
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <section tabindex="0" aria-label="Region">

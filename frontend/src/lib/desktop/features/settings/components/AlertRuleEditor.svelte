@@ -399,7 +399,7 @@
           type="text"
           bind:value={name}
           placeholder={t('settings.alerts.editor.namePlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
       <div>
@@ -414,7 +414,7 @@
           type="text"
           bind:value={description}
           placeholder={t('settings.alerts.editor.descriptionPlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
     </div>
@@ -671,7 +671,7 @@
               <select
                 bind:value={condition.property}
                 aria-label={t('settings.alerts.editor.property')}
-                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer focus-ring"
               >
                 {#each propertyOptions as prop (prop.value)}
                   <option value={prop.value}>{prop.label}</option>
@@ -681,7 +681,7 @@
               <select
                 bind:value={condition.operator}
                 aria-label={t('settings.alerts.editor.operator')}
-                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer focus-ring"
               >
                 {#each operatorsForProperty(condition.property ?? '') as op (op.value)}
                   <option value={op.value}>{op.label}</option>
@@ -693,7 +693,7 @@
                 bind:value={condition.value}
                 aria-label={t('settings.alerts.editor.value')}
                 placeholder={t('settings.alerts.editor.valuePlaceholder')}
-                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 tabular-nums placeholder:text-[var(--color-base-content)]/40"
+                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] focus-ring tabular-nums placeholder:text-[var(--color-base-content)]/40"
               />
               <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
@@ -706,7 +706,7 @@
                     min="0"
                     step="1"
                     aria-label={t('settings.alerts.editor.duration')}
-                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none tabular-nums focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] focus-ring tabular-nums"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
                       const v = Number(e.currentTarget.value);
@@ -790,7 +790,7 @@
           id="rule-cooldown"
           type="number"
           min="0"
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors tabular-nums"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] focus-ring focus:border-[var(--color-primary)] transition-colors tabular-nums"
           value={cooldownSec}
           step="1"
           onchange={e => {
@@ -821,7 +821,7 @@
                 type="text"
                 bind:value={action.template_title}
                 placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
             <div>
@@ -836,7 +836,7 @@
                 type="text"
                 bind:value={action.template_message}
                 placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
           </div>

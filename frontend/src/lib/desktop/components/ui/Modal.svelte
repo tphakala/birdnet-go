@@ -1,4 +1,10 @@
 <script module lang="ts">
+  import {
+    canReturnFocus,
+    pickOpener,
+    TABBABLE_CANDIDATE_SELECTOR,
+  } from '$lib/utils/pressedElement';
+
   // Open Modal instances, oldest first. Only the last one (the topmost) acts on
   // Tab and Escape, so a dialog opened over another (the setup wizard and its
   // leave confirmation) does not have its keys handled twice.
@@ -13,18 +19,6 @@
     /** Moves focus to this dialog's first tabbable control, else its box */
     focusInto: () => void;
   }
-
-  // CSS selector for elements that may be keyboard focusable. getTabbable()
-  // narrows the matches to the ones the Tab key actually reaches.
-  const NATIVE_INTERACTIVE_SELECTOR =
-    'button, a[href], area[href], input, select, textarea, summary';
-  const TABBABLE_CANDIDATE_SELECTOR = `${NATIVE_INTERACTIVE_SELECTOR}, [tabindex]`;
-
-  // Controls a press cannot activate: disabled, or inside an inert or disabled subtree
-  const UNPRESSABLE_SELECTOR = ':disabled, [inert], fieldset[disabled]';
-
-  // MouseEvent.button of a primary press: left mouse button, touch contact, pen tip
-  const PRIMARY_POINTER_BUTTON = 0;
 
   // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
   const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
@@ -127,70 +121,6 @@
     if (!isRadio(a) || !isRadio(b)) return false;
     const key = radioGroupKey(a);
     return key !== null && key === radioGroupKey(b);
-  }
-
-  // The focusable element of the last press, while focus has not moved since and no press
-  // landed on plain content after it. Safari and iPadOS do not focus a clicked button, so
-  // document.activeElement is body when a dialog opens from one; this is then the opener.
-  let pressedElement: HTMLElement | SVGElement | null = null;
-
-  function isElement(node: unknown): node is HTMLElement | SVGElement {
-    return node instanceof HTMLElement || node instanceof SVGElement;
-  }
-
-  /** The control a press landed on, or null for plain content, a disabled control or a negative tabindex wrapper */
-  function pressedControl(target: unknown): HTMLElement | SVGElement | null {
-    if (!isElement(target)) return null;
-    const nearest = target.closest<HTMLElement | SVGElement>(TABBABLE_CANDIDATE_SELECTOR);
-    if (!nearest) return null;
-    // A tabindex=-1 element (an icon inside a button) belongs to the native control around it, if any
-    const candidate =
-      nearest.matches(NATIVE_INTERACTIVE_SELECTOR) || nearest.tabIndex >= 0
-        ? nearest
-        : nearest.closest<HTMLElement>(NATIVE_INTERACTIVE_SELECTOR);
-    return candidate && !candidate.closest(UNPRESSABLE_SELECTOR) ? candidate : null;
-  }
-
-  if (typeof document !== 'undefined') {
-    document.addEventListener(
-      'pointerdown',
-      event => {
-        pressedElement =
-          event.button === PRIMARY_POINTER_BUTTON ? pressedControl(event.target) : null;
-      },
-      true
-    );
-    // A scroll that starts on a button sends pointerdown, then pointercancel, and no click
-    document.addEventListener(
-      'pointercancel',
-      () => {
-        pressedElement = null;
-      },
-      true
-    );
-    document.addEventListener(
-      'focusin',
-      () => {
-        pressedElement = null;
-      },
-      true
-    );
-  }
-
-  /**
-   * The element to return focus to when a dialog opens: the focused element, or the
-   * pressed one when focus is on body or nowhere, else null. Undefined when focus is
-   * inside the dialog itself, which keeps the earlier opener.
-   */
-  function pickOpener(
-    dialog: HTMLElement | undefined
-  ): HTMLElement | SVGElement | null | undefined {
-    const active = document.activeElement;
-    if (isElement(active) && dialog?.contains(active)) return undefined;
-    const nothingFocused =
-      !isElement(active) || active === document.body || active === document.documentElement;
-    if (!nothingFocused) return active;
-    return pressedElement?.isConnected && !dialog?.contains(pressedElement) ? pressedElement : null;
   }
 </script>
 
@@ -521,8 +451,10 @@
     return stop;
   }
 
-  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
+  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus, and
+  // focus the user moved to another control of the page stays there
   function restoreFocus(target: HTMLElement | SVGElement | null) {
+    if (!canReturnFocus(stackEntry.dialog)) return;
     if (target?.isConnected && 'focus' in target) target.focus();
   }
 
