@@ -344,7 +344,8 @@ func TestRedactDiscoveryErr(t *testing.T) {
 		want string
 	}{
 		{name: "masked password keeps the username", err: errors.NewStd(`Get "https://tok:***@idp.example/x": refused`), want: `Get "https://[REDACTED]@idp.example/x": refused`},
-		{name: "raw at sign inside the password", err: errors.NewStd(`parse "http://tok:pw@Zq7@idp.example:12x/x": invalid port`), want: `parse "http://[REDACTED]@idp.example:12x/x": invalid port`},
+		{name: "raw at sign inside the password", err: errors.NewStd(`dial http://tok:pw@Zq7@idp.example:12x/x refused`), want: `dial http://[REDACTED]@idp.example:12x/x refused`},
+		{name: "nested parse failure is replaced by a fixed sentence", err: errors.NewStd(`Get "http://idp.example/x": failed to parse Location header "https://a:p/s@h": parse "https://a:p/s@h": invalid port ":p" after host`), want: errOIDCDiscoveryURLInvalid.Error()},
 		{name: "no userinfo passes through", err: errors.NewStd("Non-success code for Discovery URL: 404"), want: "Non-success code for Discovery URL: 404"},
 		{
 			name: "transport url.Error with a username",
@@ -436,8 +437,9 @@ func TestOIDCDiscoveryFailure_RedactsRedirectLocation(t *testing.T) {
 		"security log": logs.security(),
 		"recorded":     err.Error(),
 	} {
-		assert.Contains(t, content, "failed to parse Location header", name)
+		assert.Contains(t, content, errOIDCDiscoveryURLInvalid.Error(), name)
 		assert.NotContains(t, content, "pa/ss", name)
+		assert.NotContains(t, content, ":pa", name)
 		assert.NotContains(t, content, "alice", name)
 	}
 }

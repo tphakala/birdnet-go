@@ -92,32 +92,34 @@ type redactedError struct {
 func (e *redactedError) Error() string { return e.msg }
 func (e *redactedError) Unwrap() error { return e.err }
 
-// urlParseOp is the Op net/url sets on the *url.Error it returns when a URL does
-// not parse.
-const urlParseOp = "parse"
+// urlParseErrorMarker starts the text of a net/url parse failure. It also
+// appears inside the text of another error that quotes such a failure, for
+// example net/http reporting a Location header it could not parse.
+const urlParseErrorMarker = `parse "`
 
 // errOIDCDiscoveryCauseUnknown stands in for a discovery failure whose cause was
 // not passed on.
 var errOIDCDiscoveryCauseUnknown = errors.NewStd("no discovery error was recorded")
 
-// errOIDCDiscoveryURLInvalid replaces the text of a discovery URL that does not
-// parse. The text of that error quotes the URL and part of its userinfo, and the
-// URL is logged separately in the discovery_url field.
+// errOIDCDiscoveryURLInvalid replaces the text of an error that contains a URL
+// parse failure. That text quotes the URL and a fragment of its userinfo, and
+// the discovery URL is logged separately, redacted, in the discovery_url field.
 var errOIDCDiscoveryURLInvalid = errors.NewStd("the discovery URL is not a valid URL")
 
 // redactDiscoveryErr removes URL userinfo from the text of err. net/http masks
 // the password in a transport error but keeps the username, and prints a URL it
 // cannot parse unchanged, so the text is rewritten before it is logged or
-// recorded. An error without userinfo in its text passes through unchanged. A
-// nil err is reported as errOIDCDiscoveryCauseUnknown.
+// recorded. An error whose text contains a URL parse failure is replaced by
+// errOIDCDiscoveryURLInvalid. An error without userinfo in its text passes
+// through unchanged. A nil err is reported as errOIDCDiscoveryCauseUnknown.
 func redactDiscoveryErr(err error) error {
 	if err == nil {
 		return errOIDCDiscoveryCauseUnknown
 	}
 	msg := err.Error()
-	if ue, ok := errors.AsType[*url.Error](err); ok && ue.Op == urlParseOp {
+	if strings.Contains(msg, urlParseErrorMarker) {
 		// The reason of a parse failure can quote a fragment of the password,
-		// and ue.URL can be cut before the "@".
+		// and the quoted URL can be cut before the "@".
 		msg = errOIDCDiscoveryURLInvalid.Error()
 	}
 	msg = privacy.ScrubURLUserinfoInText(msg)
