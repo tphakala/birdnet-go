@@ -2,6 +2,7 @@ package security
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/markbates/goth"
@@ -20,6 +21,15 @@ import (
 // logger.Global().Module(oidcMainLogModule); GetLogger().Module("oidc") shares
 // the security file handler and never reaches the console.
 const oidcMainLogModule = "security.oidc"
+
+// oidcDiscoveryPath is appended to the issuer URL to get the discovery document.
+const oidcDiscoveryPath = "/.well-known/openid-configuration"
+
+// oidcDiscoveryURL builds the OIDC discovery document URL per RFC 8414: the
+// document is at {issuer}/.well-known/openid-configuration.
+func oidcDiscoveryURL(issuerURL string) string {
+	return strings.TrimSuffix(issuerURL, "/") + oidcDiscoveryPath
+}
 
 // errProviderNotRegistered is returned by ProviderRegistrationError for a
 // provider goth does not know and for which no discovery failure is recorded.
@@ -68,11 +78,13 @@ func logOIDCEvent(level logger.LogLevel, msg string, fields ...logger.Field) {
 }
 
 // logOIDCRetryExhausted reports that the background discovery retry gave up.
-// lastErr may be nil.
-func logOIDCRetryExhausted(issuerURL string, lastErr error) {
+// discoveryURL is the discovery document URL that was retried. lastErr is the most
+// recent discovery error and may be nil.
+func logOIDCRetryExhausted(issuerURL, discoveryURL string, lastErr error) {
 	logOIDCEvent(logger.LogLevelError,
 		"OIDC discovery retries exhausted, restart BirdNET-Go after fixing the issuer URL or the connection to the identity provider",
 		logger.CredentialURL("issuer_url", issuerURL),
+		logger.CredentialURL("discovery_url", discoveryURL),
 		logger.Error(lastErr),
 		logger.Duration("retried_for", OIDCRetryMaxDuration))
 }

@@ -1483,9 +1483,8 @@ func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	// Should not panic; just log error and skip
 	initializeProviders(settings)
 
-	providers := goth.GetProviders()
-	_, ok := providers[ProviderOIDC]
-	assert.False(t, ok, "OIDC provider should not be registered when discovery fails")
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.Error(t, err, "OIDC provider should not be registered when discovery fails")
 }
 
 func TestInitializeProviders_OIDC_DefaultScopes(t *testing.T) {
@@ -1633,12 +1632,13 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 		UserID:       "user@example.com",
 	}
 
-	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"})
+	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"}, errors.NewStd("initial discovery failure"))
 
 	// Wait for the server to have served a successful discovery response.
 	// We verify via the server-side counter rather than reading goth's providers map
-	// directly, since goth's global map is not concurrency-safe and would trigger
-	// the race detector. The successful response proves openidConnect.New() succeeded
+	// with goth.GetProviders, which returns the global map without taking the lock
+	// that UseProviders holds and would trigger the race detector (GetProvider does
+	// lock). The successful response proves openidConnect.New() succeeded
 	// and goth.UseProviders() was called.
 	require.Eventually(t, func() bool {
 		return successCount.Load() > 0
@@ -1658,6 +1658,7 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 	// The late registration must reach the console and main log, not only the security log.
 	assert.Contains(t, logs.main(), "OIDC provider registered after background retry")
 	assert.Contains(t, logs.main(), "security.oidc")
+	assert.Contains(t, logs.main(), server.URL+"/.well-known/openid-configuration", "the event must carry the discovery URL")
 	assert.Contains(t, logs.security(), "OIDC provider registered after background retry")
 }
 
@@ -1676,7 +1677,7 @@ func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
 		UserID:       "user@example.com",
 	}
 
-	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
+	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"}, errors.NewStd("initial discovery failure"))
 
 	// Cancel immediately; goroutine is waiting in time.After(5s) and will
 	// see ctx.Done() on the next select iteration without ever attempting discovery

@@ -110,8 +110,10 @@ func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) bool {
 
 // startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
 // The goroutine is canceled when the context is canceled (on shutdown).
+// initialErr is the error of the discovery attempt that made the retry necessary; it is the
+// cause reported if the window ends before any retry attempt fails.
 // Returns a channel that is closed when the goroutine exits (for testing synchronization).
-func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
+func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string, initialErr error) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
 	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
 	secLog.Info("Starting background OIDC discovery retry",
 		logger.String("issuer_url", providerConfig.IssuerURL),
@@ -120,7 +122,8 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 	backoff := OIDCRetryInitialBackoff
 	deadline := time.Now().Add(OIDCRetryMaxDuration)
 	done := make(chan struct{})
-	var lastErr error
+	discoveryURL := oidcDiscoveryURL(providerConfig.IssuerURL)
+	lastErr := initialErr
 
 	go func() {
 		defer close(done)
@@ -147,7 +150,7 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 				return
 			case <-timer.C:
 				if time.Now().After(deadline) {
-					logOIDCRetryExhausted(providerConfig.IssuerURL, lastErr)
+					logOIDCRetryExhausted(providerConfig.IssuerURL, discoveryURL, lastErr)
 					return
 				}
 
@@ -155,7 +158,6 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 					logger.String("issuer_url", providerConfig.IssuerURL),
 					logger.Duration("backoff", backoff))
 
-				discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
 				oidcProvider, err := openidConnect.New(
 					providerConfig.ClientID,
 					providerConfig.ClientSecret,
@@ -179,7 +181,8 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 				// missing may still read the old failure, never the reverse.
 				clearOIDCDiscoveryFailure()
 				logOIDCEvent(logger.LogLevelInfo, "OIDC provider registered after background retry",
-					logger.CredentialURL("issuer_url", providerConfig.IssuerURL))
+					logger.CredentialURL("issuer_url", providerConfig.IssuerURL),
+					logger.CredentialURL("discovery_url", discoveryURL))
 				return
 			}
 		}
@@ -737,9 +740,7 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 	if !slices.Contains(scopes, "openid") {
 		scopes = append([]string{"openid"}, scopes...)
 	}
-	// Build the OIDC discovery document URL per RFC 8414:
-	// the discovery document is at {issuer}/.well-known/openid-configuration
-	discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
+	discoveryURL := oidcDiscoveryURL(providerConfig.IssuerURL)
 	oidcProvider, err := openidConnect.New(
 		providerConfig.ClientID,
 		providerConfig.ClientSecret,
@@ -763,7 +764,7 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 		if !setOIDCRetryCancel(providerConfig.IssuerURL, cancel) {
 			return nil
 		}
-		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
+		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes, err)
 		return nil
 	}
 	clearOIDCDiscoveryFailure()

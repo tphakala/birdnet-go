@@ -119,11 +119,12 @@ func TestOIDCRetryExhausted_ReachesMainLogAndSaysRestart(t *testing.T) {
 	logs := useSplitLogFiles(t)
 
 	const issuer = "https://idp.example.com/realms/home"
-	logOIDCRetryExhausted(issuer, errors.NewStd("last discovery error text"))
+	logOIDCRetryExhausted(issuer, oidcDiscoveryURL(issuer), errors.NewStd("last discovery error text"))
 
 	mainLog, securityLog := logs.main(), logs.security()
 	for name, content := range map[string]string{"main log": mainLog, "security log": securityLog} {
 		assert.Contains(t, content, issuer, name)
+		assert.Contains(t, content, issuer+"/.well-known/openid-configuration", name)
 		assert.Contains(t, content, "last discovery error text", name)
 		assert.Contains(t, content, "restart", name)
 		assert.NotContains(t, content, "Save settings", name)
@@ -148,10 +149,10 @@ func TestProviderRegistrationError_Transitions(t *testing.T) {
 		name       string
 		steps      func()
 		query      string
-		wantErr    error  // the returned error must wrap this; nil means the provider is registered and no error is expected
-		notErr     error  // the returned error must not wrap this
-		wantText   string // substring of the error text
-		wantNoText string // substring that must not appear in the error text
+		wantErr    error    // the returned error must wrap this; nil means the provider is registered and no error is expected
+		notErr     error    // the returned error must not wrap this
+		wantText   string   // substring of the error text
+		wantNoText []string // substrings that must not appear in the error text
 	}{
 		{
 			name:    "nothing recorded, nothing registered",
@@ -173,7 +174,7 @@ func TestProviderRegistrationError_Transitions(t *testing.T) {
 			},
 			query:      ProviderOIDC,
 			wantErr:    cause,
-			wantNoText: "secretpw",
+			wantNoText: []string{"secretpw", "user"},
 		},
 		{
 			name: "later failure replaces the earlier one",
@@ -236,9 +237,21 @@ func TestProviderRegistrationError_Transitions(t *testing.T) {
 			if tt.wantText != "" {
 				assert.Contains(t, err.Error(), tt.wantText)
 			}
-			if tt.wantNoText != "" {
-				assert.NotContains(t, err.Error(), tt.wantNoText)
+			for _, absent := range tt.wantNoText {
+				assert.NotContains(t, err.Error(), absent)
 			}
+		})
+	}
+}
+
+func TestOIDCDiscoveryURL(t *testing.T) {
+	tests := []struct{ name, issuer, want string }{
+		{name: "without trailing slash", issuer: "https://idp.example/realms/home", want: "https://idp.example/realms/home/.well-known/openid-configuration"},
+		{name: "with trailing slash", issuer: "https://idp.example/application/o/app/", want: "https://idp.example/application/o/app/.well-known/openid-configuration"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, oidcDiscoveryURL(tt.issuer))
 		})
 	}
 }
