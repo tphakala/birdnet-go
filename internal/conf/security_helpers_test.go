@@ -576,6 +576,9 @@ func TestSecurity_OAuthOrigin_Host(t *testing.T) {
 	assert.Contains(t, oauthOriginProblem(&unusable), "security.host")
 
 	assert.Equal(t, testURLHTTPNoPort, (&Security{Host: testURLHTTPNoPort + "/"}).OAuthOrigin())
+	upper := Security{Host: "HTTPS://" + testHostExample}
+	assert.Equal(t, "HTTPS://"+testHostExample, upper.OAuthOrigin(), "a scheme is recognised in any case")
+	assert.Empty(t, oauthOriginProblem(&upper))
 	assert.Equal(t, testURLHTTPSNoPort, (&Security{Host: testURLHTTPSNoPort}).OAuthOrigin())
 }
 

@@ -65,6 +65,14 @@ func (s *Security) trimmedHost() string {
 	return strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
 }
 
+// hostHasScheme reports whether a trimmed Host already starts with an http or
+// https scheme, in any case. Such a host is a full origin and is used as given;
+// OAuthOrigin and GetBaseURL both ask here so they cannot disagree about it.
+func hostHasScheme(host string) bool {
+	lower := strings.ToLower(host)
+	return strings.HasPrefix(lower, SchemeHTTP+"://") || strings.HasPrefix(lower, SchemeHTTPS+"://")
+}
+
 // hasUnusableBaseURL reports whether BaseURL is set but not a usable URL, the one
 // case where it is ignored without Host taking over.
 func (s *Security) hasUnusableBaseURL() bool {
@@ -88,7 +96,7 @@ func (s *Security) oauthOriginCandidate() (field, origin string) {
 	if host == "" {
 		return "", ""
 	}
-	if !strings.HasPrefix(host, SchemeHTTP+"://") && !strings.HasPrefix(host, SchemeHTTPS+"://") {
+	if !hostHasScheme(host) {
 		host = SchemeHTTPS + "://" + host
 	}
 	return "security.host", host
