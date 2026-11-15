@@ -108,7 +108,10 @@
       sortDirection = col === 'type' ? 'asc' : 'desc';
     }
     const column = columns.find(c => c.key === col);
-    if (column) sortStatus = sortAnnouncement(t(column.labelKey), sortDirection);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && safeBackups.length > 0) {
+      sortStatus = sortAnnouncement(t(column.labelKey), sortDirection);
+    }
   }
 
   function statusClasses(status: string): string {

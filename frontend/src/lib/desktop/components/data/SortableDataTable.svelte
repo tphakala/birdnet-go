@@ -155,7 +155,9 @@
       sortDirection = initialDirection(field);
     }
     const column = columns.find(c => c.key === field);
-    if (column) sortStatus = sortAnnouncement(column.header, sortDirection);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && sortedData.length > 0)
+      sortStatus = sortAnnouncement(column.header, sortDirection);
   }
 
   let filteredData = $derived.by(() => {

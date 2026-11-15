@@ -184,6 +184,8 @@
     appliedSortOrder = next;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
     // filteredSpecies is $derived and re-sorts automatically on appliedSortOrder.
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (filteredSpecies.length === 0) return;
     sortStatus = sortAnnouncement(t(column.labelKey), next === column.asc ? 'asc' : 'desc');
   }
 
