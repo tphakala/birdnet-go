@@ -104,12 +104,14 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import { navigation } from '$lib/stores/navigation.svelte';
-import { settingsActions } from '$lib/stores/settings';
+import { settingsActions, settingsStore } from '$lib/stores/settings';
+import { get } from 'svelte/store';
 import { api } from '$lib/utils/api';
 
 const DIALOG_TITLE = 'settings.main.sections.rangeFilter.modal.title';
 const REASON_LOADING_SPECIES = 'settings.main.sections.rangeFilter.modal.loadingSpecies';
 const REASON_NO_SPECIES = 'settings.main.sections.rangeFilter.modal.noSpeciesFound';
+const REASON_SETTINGS_LOADING = 'settings.loading';
 const REASON_NO_LOCATION = 'settings.species.activeSpecies.locationNotConfigured.title';
 const VIEW_SPECIES = /settings\.main\.sections\.rangeFilter\.speciesCount\.viewSpecies/;
 
@@ -252,6 +254,22 @@ describe('AnalysisSettingsPage range filter dialog', () => {
         expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
         expect(reasonOf(viewSpecies)).toBe(REASON_NO_LOCATION);
       } finally {
+        birdnetStore.set(birdnetStore.initial);
+      }
+    });
+
+    it('names the settings load before the location, which is unset until they arrive', async () => {
+      const original = get(settingsStore);
+      settingsStore.set({ ...original, isLoading: true });
+      birdnetStore.set({ ...birdnetStore.initial, locationConfigured: false });
+      try {
+        render(AnalysisSettingsPage);
+        const viewSpecies = await screen.findByRole('button', { name: VIEW_SPECIES });
+
+        expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
+        expect(reasonOf(viewSpecies)).toBe(REASON_SETTINGS_LOADING);
+      } finally {
+        settingsStore.set(original);
         birdnetStore.set(birdnetStore.initial);
       }
     });

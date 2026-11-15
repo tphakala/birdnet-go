@@ -1083,6 +1083,8 @@
   // Why the View Species button is blocked, or undefined when it works. The reason is shown next
   // to the button and the button points at it.
   let viewSpeciesBlockedReason = $derived.by(() => {
+    // The location reads as unset until the settings arrive
+    if (store.isLoading) return t('settings.loading');
     if (!birdnet?.locationConfigured) {
       return t('settings.species.activeSpecies.locationNotConfigured.title');
     }
