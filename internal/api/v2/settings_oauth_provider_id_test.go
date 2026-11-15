@@ -99,3 +99,23 @@ func TestUpdateSettingsKeepsOAuthSecretWhenProviderIDCaseChanges(t *testing.T) {
 	assert.Equal(t, "google", got[0].Provider)
 	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
 }
+
+// TestUpdateSectionSettingsKeepsOAuthSecretWhenProviderIDCaseChanges verifies the
+// section PATCH canonicalizes the ID before redacted secrets are restored, so a
+// case-only change of the ID while the secret is hidden keeps the stored secret.
+func TestUpdateSectionSettingsKeepsOAuthSecretWhenProviderIDCaseChanges(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{{
+		Provider: "google", Enabled: true, ClientID: "id", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed,
+	}}
+
+	patchSection(t, e, controller, "security", map[string]any{
+		"oauthProviders": []any{oauthProviderPayload("Google", map[string]any{"clientSecret": redactedValue})},
+	})
+
+	got := controller.Settings.Load().Security.OAuthProviders
+	require.Len(t, got, 1)
+	assert.Equal(t, "google", got[0].Provider)
+	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
+}
