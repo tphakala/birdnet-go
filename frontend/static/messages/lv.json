@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Areāla filtrs neatbilda nevienai sugai",
             "description": "Ģeomodeļa areāla filtrs neatbilda nevienai aktīvā modeļa sugai, tāpēc tiktu izfiltrētas visas noteikšanas. Pārbaudiet, vai areāla filtra etiķešu fails atbilst aktīvajam modelim."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel nav instalēts",
+            "description": "Šiem modeļiem ir vajadzīgs BirdNET Geomodel, lai filtrētu atpazīšanas rezultātus pēc atrašanās vietas: {models}. Instalējiet BirdNET Geomodel v3.0 Analīzes iestatījumu cilnē Modeļi."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel netiek izmantots",
+            "description": "BirdNET Geomodel ir instalēts, taču areāla filtrs ir iestatīts izmantot citu modeli, tāpēc šie modeļi netiek filtrēti pēc atrašanās vietas: {models}. Lai to izmantotu, noņemiet birdnet.rangefilter.model un birdnet.rangefilter.modelpath no konfigurācijas faila vai vides."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel neizdevās ielādēt",
+            "description": "BirdNET Geomodel neizdevās ielādēt, tāpēc šie modeļi netiek filtrēti pēc atrašanās vietas: {models}. Pārbaudiet lietotnes žurnālu un instalējiet vai pārinstalējiet BirdNET Geomodel v3.0 Analīzes iestatījumu cilnē Modeļi."
+          },
+          "reloadFailed": {
+            "title": "Areāla filtra pārlāde neizdevās",
+            "description": "Pēdējā areāla filtra pārlāde neizdevās, tāpēc joprojām tiek izmantots iepriekš ielādētais areāla filtrs. Pārbaudiet lietotnes žurnālu un restartējiet BirdNET-Go, lai mēģinātu vēlreiz."
+          },
+          "openModels": "Atvērt Modeļi"
         },
         "columns": {
           "commonName": "Parastais nosaukums",

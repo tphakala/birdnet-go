@@ -1432,6 +1432,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		mappedSpecies int
 		kind          = rfKindNone
 		state         *rangeFilterState
+		reloadFailed  bool
 	)
 	if rfs := o.rangeFilter; rfs != nil {
 		// Take ONE state snapshot for the whole response so active, fellBack, kind, the
@@ -1440,6 +1441,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		state = rfs.loadState()
 		active = state.backend != nil
 		fellBack = state.fellBack
+		reloadFailed = state.reloadFailed
 		if kind = state.kind; kind == "" {
 			kind = rfKindNone // normalize the zero value, mirroring backendKind()
 		}
@@ -1501,6 +1503,8 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	// consumes. Bat/BSG are not range-filter participants, so rangeFilterView never
 	// includes them; a Perch-only or v3.0-only install is reported without a v2.4 gate.
 	classifiers := buildClassifierViews(view, geoLabels)
+	// The stat runs only when a geomodel-needing participant lacks the geomodel backend.
+	stockPresent := view.wantsGeomodel && kind != rfKindGeomodelV3 && geomodelFilesPresent(view.modelsDir)
 	resp := RangeFilterStatusResponse{
 		Geomodel:            geomodel,
 		Classifiers:         make([]ClassifierCoverage, 0, len(classifiers)),
@@ -1513,6 +1517,8 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		MappedSpecies:       mappedSpecies,
 		Backend:             string(kind),
 		ParticipantsLoaded:  len(view.participants) > 0,
+		GeomodelIssue:       geomodelIssueFor(&rf, view.wantsGeomodel, kind, stockPresent),
+		ReloadFailed:        reloadFailed,
 	}
 	for _, cm := range classifiers {
 		name := cm.id

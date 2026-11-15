@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "O filtro de alcance não correspondeu a nenhuma espécie",
             "description": "O filtro de alcance do geomodelo não correspondeu a nenhuma das espécies do modelo ativo, pelo que todas as deteções seriam filtradas. Verifique se o ficheiro de etiquetas do filtro de alcance corresponde ao modelo ativo."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "O BirdNET Geomodel não está instalado",
+            "description": "Estes modelos precisam do BirdNET Geomodel para filtrar as deteções por localização: {models}. Instale o BirdNET Geomodel v3.0 no separador Modelos das definições de Análise."
+          },
+          "geomodelNotSelected": {
+            "title": "O BirdNET Geomodel não está em uso",
+            "description": "O BirdNET Geomodel está instalado, mas o filtro de alcance está configurado para usar outro modelo, por isso estes modelos não são filtrados por localização: {models}. Para o usar, remova birdnet.rangefilter.model e birdnet.rangefilter.modelpath do ficheiro de configuração ou do ambiente."
+          },
+          "geomodelLoadFailed": {
+            "title": "Não foi possível carregar o BirdNET Geomodel",
+            "description": "Não foi possível carregar o BirdNET Geomodel, por isso estes modelos não são filtrados por localização: {models}. Verifique o registo da aplicação e instale ou reinstale o BirdNET Geomodel v3.0 no separador Modelos das definições de Análise."
+          },
+          "reloadFailed": {
+            "title": "Falha ao recarregar o filtro de alcance",
+            "description": "O último recarregamento do filtro de alcance falhou, por isso continua em uso o filtro de alcance carregado anteriormente. Verifique o registo da aplicação e reinicie o BirdNET-Go para tentar novamente."
+          },
+          "openModels": "Abrir Modelos"
         },
         "columns": {
           "commonName": "Nome comum",

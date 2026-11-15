@@ -1168,6 +1168,24 @@ type ClassifierCoverage struct {
 	CoveredByBackend bool `json:"coveredByBackend"`
 }
 
+// GeomodelIssue diagnoses why a loaded model that needs the BirdNET Geomodel (Perch or
+// BirdNET v3.0) is not served by the geomodel range filter backend.
+type GeomodelIssue string
+
+const (
+	// GeomodelIssueNone means no loaded model needs the geomodel, or the geomodel backend
+	// is active.
+	GeomodelIssueNone GeomodelIssue = "none"
+	// GeomodelIssueNotInstalled means the stock geomodel files are missing.
+	GeomodelIssueNotInstalled GeomodelIssue = "not_installed"
+	// GeomodelIssueNotSelected means the geomodel files are installed but the range
+	// filter configuration selects another model.
+	GeomodelIssueNotSelected GeomodelIssue = "not_selected"
+	// GeomodelIssueLoadFailed means the configuration selects the geomodel but no
+	// geomodel backend is serving.
+	GeomodelIssueLoadFailed GeomodelIssue = "load_failed"
+)
+
 // RangeFilterStatusResponse holds the complete range filter status including
 // per-classifier geomodel coverage. Used by the API to expose geomodel state
 // without coupling callers to internal types.
@@ -1195,6 +1213,12 @@ type RangeFilterStatusResponse struct {
 	// filtering (v2.4, v3.0, Perch). False at N=0 (nothing to filter). Distinct from
 	// Active (whether a range-filter BACKEND is loaded).
 	ParticipantsLoaded bool `json:"participantsLoaded"`
+	// GeomodelIssue explains why a loaded Perch or BirdNET v3.0 model is not served by the
+	// BirdNET Geomodel (never empty; "none" when there is no such problem).
+	GeomodelIssue GeomodelIssue `json:"geomodelIssue"`
+	// ReloadFailed reports that the last range filter reload failed. When Active is true
+	// the previously loaded backend is still in use.
+	ReloadFailed bool `json:"reloadFailed"`
 }
 
 // shouldAutoSelectV3Geomodel reports whether the v3 geomodel should be
@@ -1228,6 +1252,27 @@ func geomodelFilesPresent(modelsDir string) bool {
 		return false
 	}
 	return true
+}
+
+// geomodelIssueFor diagnoses why the geomodel backend is not serving a participant set
+// that needs it. The rules apply in order: nothing needs the geomodel or the geomodel
+// backend is active (none); the config selects a geomodel (load_failed); the stock files
+// are installed (not_selected); otherwise not_installed. The auto-select terms mirror
+// buildMetaModel Rule 1 (auto-select model, no explicit model path); keep them in step.
+func geomodelIssueFor(rf *conf.RangeFilterSettings, wantsGeomodel bool, kind rangeFilterBackendKind, stockFilesPresent bool) GeomodelIssue {
+	if !wantsGeomodel || kind == rfKindGeomodelV3 {
+		return GeomodelIssueNone
+	}
+	selectsGeomodel := resolveRangeFilterBackend(rf) == rangeFilterBackendMappedGeomodel ||
+		(isAutoSelectRangeFilterModel(rf.Model) && rf.ModelPath == "" && stockFilesPresent)
+	switch {
+	case selectsGeomodel:
+		return GeomodelIssueLoadFailed
+	case stockFilesPresent:
+		return GeomodelIssueNotSelected
+	default:
+		return GeomodelIssueNotInstalled
+	}
 }
 
 // shouldAutoSelectV3GeomodelForConfig reports whether initializeMetaModel should

@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Bereichsfilter hat keine Arten gefunden",
             "description": "Der Geomodell-Bereichsfilter stimmte mit keiner der Arten des aktiven Modells überein, daher würde jede Erkennung herausgefiltert. Stellen Sie sicher, dass die Bereichsfilter-Labeldatei zum aktiven Modell passt."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel ist nicht installiert",
+            "description": "Diese Modelle benötigen das BirdNET Geomodel, um Erkennungen nach Standort zu filtern: {models}. Installieren Sie BirdNET Geomodel v3.0 auf dem Tab Modelle in den Analyse-Einstellungen."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel wird nicht verwendet",
+            "description": "Das BirdNET Geomodel ist installiert, aber der Bereichsfilter ist für ein anderes Modell konfiguriert, daher werden diese Modelle nicht nach Standort gefiltert: {models}. Entfernen Sie birdnet.rangefilter.model und birdnet.rangefilter.modelpath aus der Konfigurationsdatei oder der Umgebung, um es zu verwenden."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel konnte nicht geladen werden",
+            "description": "Das BirdNET Geomodel konnte nicht geladen werden, daher werden diese Modelle nicht nach Standort gefiltert: {models}. Prüfen Sie das Anwendungsprotokoll und installieren oder reinstallieren Sie BirdNET Geomodel v3.0 auf dem Tab Modelle in den Analyse-Einstellungen."
+          },
+          "reloadFailed": {
+            "title": "Neuladen des Bereichsfilters fehlgeschlagen",
+            "description": "Das letzte Neuladen des Bereichsfilters ist fehlgeschlagen, daher wird weiterhin der zuvor geladene Bereichsfilter verwendet. Prüfen Sie das Anwendungsprotokoll und starten Sie BirdNET-Go neu, um es erneut zu versuchen."
+          },
+          "openModels": "Modelle öffnen"
         },
         "columns": {
           "commonName": "Name",

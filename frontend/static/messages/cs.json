@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Filtr rozsahu neodpovídá žádnému druhu",
             "description": "Filtr rozsahu geomodelu neodpovídá žádnému z druhů aktivního modelu, takže by byla odfiltrována každá detekce. Zkontrolujte, zda soubor štítků filtru rozsahu odpovídá aktivnímu modelu."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel není nainstalován",
+            "description": "Tyto modely potřebují BirdNET Geomodel k filtrování detekcí podle polohy: {models}. Nainstalujte BirdNET Geomodel v3.0 na kartě Modely v nastavení Analýzy."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel se nepoužívá",
+            "description": "BirdNET Geomodel je nainstalován, ale filtr rozsahu je nastaven na jiný model, proto tyto modely nejsou filtrovány podle polohy: {models}. Chcete-li jej použít, odeberte birdnet.rangefilter.model a birdnet.rangefilter.modelpath z konfiguračního souboru nebo z prostředí."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel se nepodařilo načíst",
+            "description": "BirdNET Geomodel se nepodařilo načíst, proto tyto modely nejsou filtrovány podle polohy: {models}. Zkontrolujte log aplikace a nainstalujte nebo přeinstalujte BirdNET Geomodel v3.0 na kartě Modely v nastavení Analýzy."
+          },
+          "reloadFailed": {
+            "title": "Opětovné načtení filtru rozsahu selhalo",
+            "description": "Poslední opětovné načtení filtru rozsahu selhalo, proto se nadále používá dříve načtený filtr rozsahu. Zkontrolujte log aplikace a restartujte BirdNET-Go, aby se akce zopakovala."
+          },
+          "openModels": "Otevřít Modely"
         },
         "columns": {
           "commonName": "Název",

@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Bereikfilter kwam met geen enkele soort overeen",
             "description": "Het geomodel-bereikfilter kwam met geen enkele soort van het actieve model overeen, dus elke detectie zou worden weggefilterd. Controleer of het labelbestand van het bereikfilter overeenkomt met het actieve model."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel is niet geïnstalleerd",
+            "description": "Deze modellen hebben het BirdNET Geomodel nodig om detecties op locatie te filteren: {models}. Installeer BirdNET Geomodel v3.0 via het tabblad Modellen in de Analyse-instellingen."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel wordt niet gebruikt",
+            "description": "Het BirdNET Geomodel is geïnstalleerd, maar het bereikfilter is ingesteld op een ander model, dus deze modellen worden niet op locatie gefilterd: {models}. Verwijder birdnet.rangefilter.model en birdnet.rangefilter.modelpath uit het configuratiebestand of de omgeving om het te gebruiken."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel kon niet worden geladen",
+            "description": "Het BirdNET Geomodel kon niet worden geladen, dus deze modellen worden niet op locatie gefilterd: {models}. Controleer het applicatielogboek en installeer of herinstalleer BirdNET Geomodel v3.0 via het tabblad Modellen in de Analyse-instellingen."
+          },
+          "reloadFailed": {
+            "title": "Opnieuw laden van het bereikfilter mislukt",
+            "description": "Het laatste herladen van het bereikfilter is mislukt, dus het eerder geladen bereikfilter blijft in gebruik. Controleer het applicatielogboek en herstart BirdNET-Go om het opnieuw te proberen."
+          },
+          "openModels": "Modellen openen"
         },
         "columns": {
           "commonName": "Naam",

@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "Aluesuodatin ei vastannut yhtäkään lajia",
             "description": "Geomallin aluesuodatin ei vastannut yhtäkään aktiivisen mallin lajia, joten kaikki havainnot suodatettaisiin pois. Tarkista, että aluesuodattimen nimiötiedosto vastaa aktiivista mallia."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel ei ole asennettu",
+            "description": "Nämä mallit tarvitsevat BirdNET Geomodelin suodattaakseen havainnot sijainnin mukaan: {models}. Asenna BirdNET Geomodel v3.0 Analyysi-asetusten Mallit-välilehdeltä."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel ei ole käytössä",
+            "description": "BirdNET Geomodel on asennettu, mutta aluesuodatin on määritetty käyttämään toista mallia, joten näitä malleja ei suodateta sijainnin mukaan: {models}. Voit ottaa sen käyttöön poistamalla birdnet.rangefilter.model- ja birdnet.rangefilter.modelpath-asetukset asetustiedostosta tai ympäristöstä."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodelia ei voitu ladata",
+            "description": "BirdNET Geomodelia ei voitu ladata, joten näitä malleja ei suodateta sijainnin mukaan: {models}. Tarkista sovelluksen loki sekä asenna tai asenna uudelleen BirdNET Geomodel v3.0 Analyysi-asetusten Mallit-välilehdeltä."
+          },
+          "reloadFailed": {
+            "title": "Aluesuodattimen uudelleenlataus epäonnistui",
+            "description": "Aluesuodattimen viimeisin uudelleenlataus epäonnistui, joten aiemmin ladattu aluesuodatin on edelleen käytössä. Tarkista sovelluksen loki ja yritä uudelleen käynnistämällä BirdNET-Go uudelleen."
+          },
+          "openModels": "Avaa Mallit"
         },
         "columns": {
           "commonName": "Nimi",

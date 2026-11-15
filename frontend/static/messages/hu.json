@@ -4476,7 +4476,24 @@
           "mappedZero": {
             "title": "A tartomány szűrő egyetlen fajra sem illeszkedett",
             "description": "A geomodell tartomány szűrő az aktív modell egyetlen fajára sem illeszkedett, így minden észlelés kiszűrésre kerülne. Ellenőrizd, hogy a tartomány szűrő címkefájlja megegyezik-e az aktív modellel."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "A BirdNET Geomodel nincs telepítve",
+            "description": "Ezeknek a modelleknek szükségük van a BirdNET Geomodelre, hogy a felismeréseket hely szerint szűrjék: {models}. Telepítse a BirdNET Geomodel v3.0-t az Elemzés beállítások Modellek lapjáról."
+          },
+          "geomodelNotSelected": {
+            "title": "A BirdNET Geomodel nincs használatban",
+            "description": "A BirdNET Geomodel telepítve van, de a tartomány szűrő másik modell használatára van beállítva, ezért ezeket a modelleket nem szűri hely szerint: {models}. A használatához távolítsa el a birdnet.rangefilter.model és birdnet.rangefilter.modelpath beállítást a konfigurációs fájlból vagy a környezetből."
+          },
+          "geomodelLoadFailed": {
+            "title": "A BirdNET Geomodel betöltése sikertelen",
+            "description": "A BirdNET Geomodel nem tölthető be, ezért ezeket a modelleket nem szűri hely szerint: {models}. Ellenőrizze az alkalmazás naplóját, majd telepítse vagy telepítse újra a BirdNET Geomodel v3.0-t az Elemzés beállítások Modellek lapjáról."
+          },
+          "reloadFailed": {
+            "title": "A tartomány szűrő újratöltése sikertelen",
+            "description": "A tartomány szűrő legutóbbi újratöltése sikertelen volt, ezért továbbra is a korábban betöltött tartomány szűrő van használatban. Ellenőrizze az alkalmazás naplóját, és az újrapróbáláshoz indítsa újra a BirdNET-Go-t."
+          },
+          "openModels": "Modellek megnyitása"
         },
         "columns": {
           "commonName": "Közhasználatú név",
