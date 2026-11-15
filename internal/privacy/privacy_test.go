@@ -2161,6 +2161,13 @@ func TestScrubCredentialURL_UnparseableFallback(t *testing.T) {
 		assert.Equal(t, "https://[REDACTED]@host/x", ScrubCredentialURL("https://alice:123/secret@host/x"))
 	})
 
+	t.Run("token in the path is scrubbed on the fallback path too", func(t *testing.T) {
+		t.Parallel()
+		const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890"
+		got := ScrubCredentialURL("https://notify.example/@tenant/123456789012345678/" + token)
+		assert.NotContains(t, got, token)
+	})
+
 	t.Run("parseable pathless URL with at sign in the query is unchanged", func(t *testing.T) {
 		t.Parallel()
 		const in = "https://idp.example?login_hint=a@b.example"

@@ -846,7 +846,8 @@ func ScrubToken(token string) string {
 // and generic URLs with userinfo (user:pass@host). A value url.Parse rejects, and
 // an opaque, scheme-less or host-less value that it accepts without a User, or
 // a URL without a User that has an "@" in its path, is redacted with
-// RedactURLUserinfo instead.
+// RedactURLUserinfo instead. Token-like path and query values are scrubbed on
+// every path.
 func ScrubCredentialURL(rawURL string) string {
 	if rawURL == "" {
 		return ""
@@ -855,7 +856,7 @@ func ScrubCredentialURL(rawURL string) string {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		// A value url.Parse rejects cannot be normalized by parsing it.
-		return RedactURLUserinfo(rawURL)
+		return scrubURLTokenPatterns(RedactURLUserinfo(rawURL))
 	}
 
 	// url.Parse accepts an opaque ("https:user:pw@host"), scheme-less
@@ -863,14 +864,14 @@ func ScrubCredentialURL(rawURL string) string {
 	// structure cannot locate its userinfo.
 	if parsedURL.Host == "" && (strings.Contains(parsedURL.Opaque, "@") ||
 		(!strings.HasPrefix(parsedURL.Path, "/") && strings.Contains(parsedURL.Path, "@"))) {
-		return RedactURLUserinfo(rawURL)
+		return scrubURLTokenPatterns(RedactURLUserinfo(rawURL))
 	}
 
 	// A password with a numeric prefix and a "/" ("https://user:123/pw@host")
 	// parses as host "user:123" with the rest of the password in the path, so an
 	// "@" in the path of a URL without a User is treated as userinfo.
 	if parsedURL.User == nil && parsedURL.Host != "" && strings.Contains(parsedURL.Path, "@") {
-		return RedactURLUserinfo(rawURL)
+		return scrubURLTokenPatterns(RedactURLUserinfo(rawURL))
 	}
 
 	// Remove userinfo (credentials) from URL
