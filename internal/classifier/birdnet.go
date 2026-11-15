@@ -1168,8 +1168,8 @@ type ClassifierCoverage struct {
 	CoveredByBackend bool `json:"coveredByBackend"`
 }
 
-// GeomodelIssue diagnoses why a loaded model that needs the BirdNET Geomodel (Perch or
-// BirdNET v3.0) is not served by the geomodel range filter backend.
+// GeomodelIssue diagnoses why a loaded model that needs the BirdNET Geomodel (Perch, BirdNET v3.0
+// or BirdNET+ V3.0) is not served by the geomodel range filter backend.
 type GeomodelIssue string
 
 const (
@@ -1210,10 +1210,10 @@ type RangeFilterStatusResponse struct {
 	// mdata_v1, or none), so a mixed classifier set is honest about what is filtering.
 	Backend string `json:"backend"`
 	// ParticipantsLoaded reports whether any loaded acoustic model participates in range
-	// filtering (v2.4, v3.0, Perch). False at N=0 (nothing to filter). Distinct from
+	// filtering (v2.4, v3.0, BirdNET+ V3.0, Perch). False at N=0 (nothing to filter). Distinct from
 	// Active (whether a range-filter BACKEND is loaded).
 	ParticipantsLoaded bool `json:"participantsLoaded"`
-	// GeomodelIssue explains why a loaded Perch or BirdNET v3.0 model is not served by the
+	// GeomodelIssue explains why a loaded Perch, BirdNET v3.0 or BirdNET+ V3.0 model is not served by the
 	// BirdNET Geomodel (never empty; "none" when there is no such problem).
 	GeomodelIssue GeomodelIssue `json:"geomodelIssue"`
 	// ReloadFailed reports that the last range filter reload failed. When Active is true

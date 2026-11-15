@@ -84,6 +84,16 @@ func TestFamilyFields(t *testing.T) {
 			wantOK:        true,
 		},
 		{
+			name:          "birdnet plus v3 has model, labels, threshold, override, locale from the birdnetplus section",
+			registryID:    RegistryIDBirdNETPlusV3,
+			wantModel:     &s.BirdNETPlus.ModelPath,
+			wantLabels:    &s.BirdNETPlus.LabelPath,
+			wantThreshold: &s.BirdNETPlus.Threshold,
+			wantOverride:  &s.BirdNETPlus.OverrideThreshold,
+			wantLocale:    &s.BirdNETPlus.Locale,
+			wantOK:        true,
+		},
+		{
 			name:       "bsg has model, labels, locale; no threshold, override or embeddings",
 			registryID: RegistryIDBSG,
 			wantModel:  &s.BSG.ModelPath,

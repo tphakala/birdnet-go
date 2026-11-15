@@ -164,7 +164,7 @@ export interface BSGBatSettings {
   stepFrames?: number;
 }
 
-// Secondary acoustic classifiers (Perch v2, BirdNET v3.0). Their detections
+// Secondary acoustic classifiers (Perch v2, BirdNET v3.0, BirdNET+ V3.0). Their detections
 // follow the primary BirdNET threshold unless overrideThreshold is enabled, in
 // which case `threshold` gates them instead. modelPath/labelPath/locale are
 // managed by the model gallery, not the detection-settings form.
@@ -177,6 +177,14 @@ export interface PerchSettings {
 }
 
 export interface BirdNetV3Settings {
+  modelPath?: string | null;
+  labelPath?: string | null;
+  overrideThreshold: boolean;
+  threshold: number;
+  locale?: string;
+}
+
+export interface BirdNetPlusSettings {
   modelPath?: string | null;
   labelPath?: string | null;
   overrideThreshold: boolean;
@@ -919,6 +927,7 @@ export interface SettingsFormData {
   bsgbat?: BSGBatSettings;
   perch?: PerchSettings;
   birdnetv3?: BirdNetV3Settings;
+  birdnetplus?: BirdNetPlusSettings;
   input?: unknown; // Not exposed via JSON
   realtime?: RealtimeSettings;
   webServer?: WebServerSettings;
@@ -1012,6 +1021,10 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
       threshold: 0.5,
     },
     birdnetv3: {
+      overrideThreshold: false,
+      threshold: 0.5,
+    },
+    birdnetplus: {
       overrideThreshold: false,
       threshold: 0.5,
     },
@@ -1307,6 +1320,7 @@ export const bsgBatSettings = derived(settingsStore, $store => $store.formData.b
 export const perchSettings = derived(settingsStore, $store => $store.formData.perch);
 
 export const birdNetV3Settings = derived(settingsStore, $store => $store.formData.birdnetv3);
+export const birdNetPlusSettings = derived(settingsStore, $store => $store.formData.birdnetplus);
 
 export const realtimeSettings = derived(settingsStore, $store => $store.formData.realtime);
 

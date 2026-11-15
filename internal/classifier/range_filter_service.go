@@ -79,7 +79,7 @@ type rangeFilterView struct {
 	// v2.4 is loaded.
 	v24Labels []string
 	// wantsGeomodel is true when any participant's label space fits the mapped
-	// geomodel v3 backend (rangeFilterCompatGeomodel: Perch v2, BirdNET v3.0). A
+	// geomodel v3 backend (rangeFilterCompatGeomodel: Perch v2, BirdNET v3.0, BirdNET+ V3.0). A
 	// v2.4-only install leaves this false and stays on MData.
 	wantsGeomodel bool
 }

@@ -4263,6 +4263,7 @@ export type TranslationKey =
   | 'analysis.detection.secondaryThreshold.followsBirdnet'
   | 'analysis.detection.perchThreshold.label'
   | 'analysis.detection.birdnetv3Threshold.label'
+  | 'analysis.detection.birdnetplusThreshold.label'
   | 'analysis.rangeFilter.birdOnlyNote'
   | 'analysis.rangeFilter.status.title'
   | 'analysis.rangeFilter.status.geomodelInfo' // params: version, species
@@ -4448,6 +4449,8 @@ export type TranslationKey =
   | 'analysis.perch.description'
   | 'analysis.birdnetv3.title'
   | 'analysis.birdnetv3.description'
+  | 'analysis.birdnetplus.title'
+  | 'analysis.birdnetplus.description'
   | 'restart.applicationRestart'
   | 'restart.containerRestart'
   | 'restart.confirmTitle'

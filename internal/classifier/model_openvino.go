@@ -65,7 +65,7 @@ type openVINOPlan struct {
 // of the auto path (a non-win); an explicit "cpu" device is still allowed on amd64
 // for benchmarking/advanced use. On arm64 the auto backend declines the OpenVINO
 // CPU before any OpenVINO library is loaded (see autoDeclinesOpenVINOCPU); backend
-// "openvino" or device "cpu" opts back in. Perch, bat and v3.0 require ONNX
+// "openvino" or device "cpu" opts back in. Perch, bat, v3.0 and BirdNET+ V3.0 require ONNX
 // Runtime before they plan (their builders call checkORTOrFail), so this entry
 // point passes ONNX Runtime as available and auto always declines the arm64 CPU
 // for them; BirdNET v2.4 plans through birdnetV24BasePlan, which passes the live
@@ -185,8 +185,10 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // flipping detections. Unlike Perch v2 this is not GPU-only. Do NOT relax it to
 // f16 without re-running the bat embedding parity check.
 //
-// BirdNET v3.0 is likewise forced to f32 on EVERY device. Its EfficientNetV2-S
-// backbone is numerically unstable at f16 wherever genuine f16 kernels run (the Intel
+// BirdNET v3.0 and BirdNET+ V3.0 (same architecture) are likewise forced to f32 on
+// EVERY device. The measurements below are for the BirdNET v3.0 preview; no f16 run has
+// been measured for BirdNET+ V3.0, and f32 is the setting that fixed the preview. The
+// EfficientNetV2-S backbone is numerically unstable at f16 wherever genuine f16 kernels run (the Intel
 // GPU always, and the A76 CPU's native f16), independent of the model file's weight
 // precision. On fp16-weight regional tiles, f16 execution overflows to NaN (Sentry
 // BIRDNET-GO-2H6: the 800-class north-america-east tile, "non-finite score (index 0
@@ -200,7 +202,7 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // inference/openvino_parity_functional_test.go on a genuine f16 device (the Intel GPU
 // and the A76 CPU) with an fp16-weight regional tile.
 func openVINOPrecisionFor(modelID, device string) string {
-	if modelID == DefaultModelVersion || modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 {
+	if modelID == DefaultModelVersion || modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 || modelID == RegistryIDBirdNETPlusV3 {
 		return inference.OVPrecisionF32
 	}
 	if device == inference.OVDeviceGPU && modelID == RegistryIDPerchV2 {
@@ -379,8 +381,8 @@ func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization, ortAvai
 
 // birdnetV24BasePlan is the device and precision plan birdnetV24OpenVINOPlan
 // starts from, before the quantization policy is applied. BirdNET v2.4 is the one
-// model with a live ONNX Runtime-missing case on arm64 auto (Perch, bat and v3.0
-// require ONNX Runtime first), so it takes the ONNX Runtime answer from its
+// model with a live ONNX Runtime-missing case on arm64 auto (Perch, bat, v3.0 and BirdNET+
+// V3.0 require ONNX Runtime first), so it takes the ONNX Runtime answer from its
 // caller. It is a variable only so tests can replace it: in the default (untagged)
 // build openVINOPlanWithHost always declines with ovReasonNotBuilt, which would
 // leave the policy unreachable through the production entry points.

@@ -66,6 +66,7 @@ vi.mock('$lib/stores/settings', async () => {
     bsgBatSettings: writable({}),
     perchSettings: writable({}),
     birdNetV3Settings: writable({}),
+    birdNetPlusSettings: writable({}),
   };
 });
 

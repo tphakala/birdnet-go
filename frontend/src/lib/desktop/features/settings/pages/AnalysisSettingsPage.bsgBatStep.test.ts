@@ -90,6 +90,7 @@ vi.mock('$lib/stores/settings', async () => {
     bsgBatSettings: derived(mockStore, state => state.formData.bsgbat),
     perchSettings: derived(mockStore, state => state.formData.perch),
     birdNetV3Settings: derived(mockStore, state => state.formData.birdnetv3),
+    birdNetPlusSettings: derived(mockStore, state => state.formData.birdnetplus),
   };
 });
 

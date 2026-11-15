@@ -9,7 +9,7 @@ import (
 // Known model sample counts and output counts for auto-detection.
 const (
 	sampleCountV24   = 144000 // BirdNET v2.4: 48kHz * 3s
-	sampleCountV30   = 160000 // BirdNET v3.0 / Perch v2: 32kHz * 5s
+	sampleCountV30   = 160000 // BirdNET v3.0 / BirdNET+ V3.0 / Perch v2: 32kHz * 5s
 	numOutputsV24    = 1      // BirdNET v2.4: logits only
 	numOutputsV24Emb = 2      // BirdNET v2.4 with embeddings: logits + embeddings
 	numOutputsV30    = 2      // BirdNET v3.0: embeddings + logits

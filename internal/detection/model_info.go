@@ -7,6 +7,11 @@ import "github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 // resolved here and the name stored with the model row cannot drift apart.
 const ModelNameBSGBat = "BSG-BAT"
 
+// ModelNameBirdNETPlus is the detection model name of the BirdNET+ family. The
+// classifier registry's DetectionName for BirdNET+ V3.0 is this constant, so the
+// model type resolved here and the stored model row cannot drift apart.
+const ModelNameBirdNETPlus = "BirdNET+"
+
 // Default model constants.
 const (
 	DefaultModelName    = "BirdNET"
@@ -48,13 +53,13 @@ func DefaultModelInfo() ModelInfo {
 }
 
 // ResolveModelType determines the entity ModelType from a model's name and version.
-// BattyBirdNET and BSG-BAT models are bat, BirdNET v3.0+ and Perch are multi-taxa wildlife,
+// BattyBirdNET and BSG-BAT models are bat, BirdNET v3.0+, BirdNET+ and Perch are multi-taxa wildlife,
 // and everything else (BirdNET v2.4, BSG, unknown) is bird.
 func ResolveModelType(name, version string) entities.ModelType {
 	switch {
 	case name == "BattyBirdNET", name == ModelNameBSGBat:
 		return entities.ModelTypeBat
-	case name == "Perch":
+	case name == "Perch", name == ModelNameBirdNETPlus:
 		return entities.ModelTypeMulti
 	case name == "BirdNET" && version != "" && version != "2.4":
 		return entities.ModelTypeMulti

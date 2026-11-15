@@ -47,7 +47,7 @@ Device resolution:
 In practice:
 
 - **amd64 + Intel iGPU** → `auto`/`auto` offloads BirdNET v2.4 and Perch v2 to the iGPU.
-- **Raspberry Pi 5 (A76)** → `auto`/`auto` runs every ONNX model on ONNX Runtime and does not load OpenVINO while ONNX Runtime is usable (there is no GPU); a native install that still uses the embedded TFLite model stays on TFLite, so select an eligible ONNX model first. To use the OpenVINO CPU (f32 for BirdNET v2.4, BirdNET v3.0 and the bat model, f16 for Perch v2), set `birdnet.backend: openvino`; `birdnet.openvinodevice: cpu` alone also works for models with eligible weights, while INT8 or unrecognized weights additionally need `birdnet.backend: openvino`. Without ONNX Runtime, an FP32 BirdNET v2.4 build still runs on the OpenVINO CPU on `auto`.
+- **Raspberry Pi 5 (A76)** → `auto`/`auto` runs every ONNX model on ONNX Runtime and does not load OpenVINO while ONNX Runtime is usable (there is no GPU); a native install that still uses the embedded TFLite model stays on TFLite, so select an eligible ONNX model first. To use the OpenVINO CPU (f32 for BirdNET v2.4, BirdNET v3.0, BirdNET+ V3.0 and the bat model, f16 for Perch v2), set `birdnet.backend: openvino`; `birdnet.openvinodevice: cpu` alone also works for models with eligible weights, while INT8 or unrecognized weights additionally need `birdnet.backend: openvino`. Without ONNX Runtime, an FP32 BirdNET v2.4 build still runs on the OpenVINO CPU on `auto`.
 - **Anything else** → OpenVINO is declined and ORT is used.
 
 ## Enabling OpenVINO in Docker
@@ -258,7 +258,7 @@ Check the model is OpenVINO-eligible (see [What OpenVINO Accelerates](#what-open
 
 ### Detections look wrong after forcing GPU f16
 
-Do not override precision manually. BirdNET v2.4 is intentionally run at f32 on every device because f16 breaks it on both the iGPU and the ARM A76 CPU; the bat embedding model and BirdNET v3.0 are f32 on every device as well. `auto` handles this for you.
+Do not override precision manually. BirdNET v2.4 is intentionally run at f32 on every device because f16 breaks it on both the iGPU and the ARM A76 CPU; the bat embedding model, BirdNET v3.0 and BirdNET+ V3.0 are f32 on every device as well. `auto` handles this for you.
 
 ## Platform Support Matrix
 

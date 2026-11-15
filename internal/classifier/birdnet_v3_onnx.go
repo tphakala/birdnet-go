@@ -15,7 +15,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// BirdNETV3 represents a loaded BirdNET v3.0 acoustic classifier.
+// BirdNETV3 represents a loaded BirdNET v3.0 acoustic classifier. The same type
+// serves the BirdNET+ V3.0 family, which shares the architecture: the registry
+// entry chosen through BirdNETV3Config.RegistryID decides identity and names.
 // Implements ModelInstance. Goroutine-safe via internal mutex.
 type BirdNETV3 struct {
 	classifier inference.Classifier
@@ -42,6 +44,10 @@ type BirdNETV3 struct {
 
 // BirdNETV3Config holds configuration for creating a BirdNET v3.0 model instance.
 type BirdNETV3Config struct {
+	// RegistryID selects the registry entry the instance reports (identity, names,
+	// spec). Empty means RegistryIDBirdNETV3; RegistryIDBirdNETPlusV3 selects the
+	// BirdNET+ V3.0 family.
+	RegistryID      string
 	ModelPath       string // Path to the BirdNET v3.0 ONNX model file
 	LabelPath       string // Path to the BirdNET v3.0 label file
 	ONNXRuntimePath string // Path to ONNX Runtime shared library
@@ -57,9 +63,24 @@ type BirdNETV3Config struct {
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu")
 }
 
-// NewBirdNETV3 creates a new BirdNET v3.0 model instance.
+// registryID returns the configured registry ID, defaulting to the BirdNET v3.0 preview.
+func (c *BirdNETV3Config) registryID() string {
+	if c.RegistryID == "" {
+		return RegistryIDBirdNETV3
+	}
+	return c.RegistryID
+}
+
+// NewBirdNETV3 creates a new BirdNET v3.0 (or BirdNET+ V3.0) model instance.
 func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	log := GetLogger()
+
+	info, known := ModelRegistry[cfg.registryID()]
+	if !known {
+		return nil, errors.Newf("unknown model registry ID %q for the BirdNET v3.0 architecture", cfg.registryID()).
+			Category(errors.CategoryModelInit).
+			Build()
+	}
 
 	// Load and parse labels
 	labelData, err := os.ReadFile(cfg.LabelPath)
@@ -131,11 +152,10 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 		precision = string(detectQuantization(cfg.ModelPath))
 	}
 
-	info := ModelRegistry[RegistryIDBirdNETV3]
-	info.Description = fmt.Sprintf("BirdNET v3.0 acoustic classifier with %d species", len(labels))
+	info.Description = fmt.Sprintf("%s acoustic classifier with %d species", info.Name, len(labels))
 	info.NumSpecies = len(labels)
 
-	log.Info("BirdNET v3.0 model initialized",
+	log.Info(info.Name+" model initialized",
 		logger.String("model_path", cfg.ModelPath),
 		logger.String("backend", backend),
 		logger.String("device", device),
@@ -152,7 +172,8 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	}, nil
 }
 
-// tryBirdNETV3OpenVINO attempts to build an OpenVINO classifier for BirdNET v3.0.
+// tryBirdNETV3OpenVINO attempts to build an OpenVINO classifier for BirdNET v3.0
+// or BirdNET+ V3.0 (whichever cfg.RegistryID names; both are forced to f32).
 // It returns (classifier, device, precision, true) on success or
 // (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
 // device the classifier bound to (inference.OVDeviceCPU/OVDeviceGPU) and precision is
@@ -166,13 +187,14 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 	// model metadata to resolve the predictions port once OpenVINO is actually in
 	// play. This avoids a wasted metadata read on the common non-OpenVINO build. The
 	// output index passed here is a placeholder, overwritten below once detected.
-	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDBirdNETV3, cfg.OpenVINOPath, 0)
+	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, cfg.registryID(), cfg.OpenVINOPath, 0)
 	if !ok {
-		logOpenVINODeclined(RegistryIDBirdNETV3, cfg.Backend, reason)
+		logOpenVINODeclined(cfg.registryID(), cfg.Backend, reason)
 		return nil, "", "", false
 	}
 
 	log := GetLogger()
+	name := ModelRegistry[cfg.registryID()].Name
 
 	// Resolve the predictions output port by size (the output whose dimension equals
 	// the label count). The v3.0 graph also exposes a 1280-dim embeddings output, and
@@ -181,7 +203,7 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 	// OpenVINO and fall back to ORT, which derives the port internally.
 	outIdx, err := inference.DetectPredictionsOutput(cfg.ModelPath, len(labels))
 	if err != nil {
-		log.Warn("BirdNET v3.0 OpenVINO predictions-output detection failed; using ONNX Runtime",
+		log.Warn(name+" OpenVINO predictions-output detection failed; using ONNX Runtime",
 			logger.String("model_path", cfg.ModelPath),
 			logger.Error(err))
 		return nil, "", "", false
@@ -192,7 +214,7 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 	// core to enumerate devices, but the explicit-CPU plan path does not, so init
 	// here to cover it. A load failure means no usable OpenVINO; fall back to ORT.
 	if err := inference.InitOpenVINO(cfg.OpenVINOPath); err != nil {
-		log.Warn("BirdNET v3.0 OpenVINO init failed; using ONNX Runtime", logger.Error(err))
+		log.Warn(name+" OpenVINO init failed; using ONNX Runtime", logger.Error(err))
 		return nil, "", "", false
 	}
 
@@ -205,13 +227,13 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 		PrecisionHint: plan.precision, // openVINOPrecisionFor forces f32 for v3.0 (f16 is numerically broken; see BIRDNET-GO-2H6)
 	})
 	if err != nil {
-		log.Warn("BirdNET v3.0 OpenVINO classifier init failed; using ONNX Runtime",
+		log.Warn(name+" OpenVINO classifier init failed; using ONNX Runtime",
 			logger.String("device", plan.device),
 			logger.Error(err))
 		return nil, "", "", false
 	}
 
-	log.Info("BirdNET v3.0 model using OpenVINO backend",
+	log.Info(name+" model using OpenVINO backend",
 		logger.String("device", plan.device),
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
@@ -219,10 +241,11 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 	return classifier, plan.device, openVINOEffectivePrecision(plan.precision), true
 }
 
-// Predict runs inference on the given audio samples.
+// Predict runs inference on the given audio samples. Telemetry, errors and the
+// non-finite guard are tagged with the instance's own registry ID.
 // Implements ModelInstance.
 func (b *BirdNETV3) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
-	span, _ := startPredictSpan(ctx, RegistryIDBirdNETV3, samples)
+	span, _ := startPredictSpan(ctx, b.info.ID, samples)
 	defer span.Finish()
 
 	start := time.Now()
@@ -242,7 +265,7 @@ func (b *BirdNETV3) Predict(ctx context.Context, samples [][]float32) ([]datasto
 	// Guard against nil classifier (e.g., after Close() is called concurrently)
 	if b.classifier == nil {
 		span.markErrored(errTypeClassifierNil)
-		return nil, errors.Newf("BirdNET v3.0 classifier is not initialized").
+		return nil, errors.Newf("%s classifier is not initialized", b.info.Name).
 			Category(errors.CategoryModelInit).
 			Build()
 	}
@@ -255,9 +278,9 @@ func (b *BirdNETV3) Predict(ctx context.Context, samples [][]float32) ([]datasto
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			Context("model", RegistryIDBirdNETV3).
+			Context("model", b.info.ID).
 			Build()
-		recordPredictionFailure(span, RegistryIDBirdNETV3, errTypeInvokeFailed, start, err)
+		recordPredictionFailure(span, b.info.ID, errTypeInvokeFailed, start, err)
 		return nil, err
 	}
 
@@ -265,15 +288,15 @@ func (b *BirdNETV3) Predict(ctx context.Context, samples [][]float32) ([]datasto
 	// is a backend fault (see newNonFiniteScoreError) and must not become a
 	// detection.
 	if idx := firstNonFinite(scores); idx != noNonFiniteScore {
-		err = newNonFiniteScoreError(nonFiniteScore{modelID: RegistryIDBirdNETV3, index: idx, count: len(scores)}, b.RuntimeInfo)
-		recordPredictionFailure(span, RegistryIDBirdNETV3, errTypeNonFiniteLogits, start, err)
+		err = newNonFiniteScoreError(nonFiniteScore{modelID: b.info.ID, index: idx, count: len(scores)}, b.RuntimeInfo)
+		recordPredictionFailure(span, b.info.ID, errTypeNonFiniteLogits, start, err)
 		return nil, err
 	}
 
 	// Pair labels with predictions
 	results, err := pairLabelsAndConfidence(b.labels, scores)
 	if err != nil {
-		recordPredictionFailure(span, RegistryIDBirdNETV3, errTypeLabelMismatch, start, err)
+		recordPredictionFailure(span, b.info.ID, errTypeLabelMismatch, start, err)
 		return nil, err
 	}
 

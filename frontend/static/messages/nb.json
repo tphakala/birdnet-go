@@ -5805,6 +5805,9 @@
       },
       "birdnetv3Threshold": {
         "label": "BirdNET v3.0 Confidence Threshold"
+      },
+      "birdnetplusThreshold": {
+        "label": "Konfidensterskel for BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -6047,6 +6050,10 @@
     "birdnetv3": {
       "title": "BirdNET v3.0 Detection",
       "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+    },
+    "birdnetplus": {
+      "title": "BirdNET+ V3.0-gjenkjenning",
+      "description": "Angi en egen konfidensterskel for BirdNET+ V3.0-gjenkjenninger, uavhengig av hovedterskelen for BirdNET."
     }
   },
   "restart": {

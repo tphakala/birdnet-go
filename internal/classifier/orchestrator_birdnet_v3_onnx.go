@@ -1,4 +1,4 @@
-//nolint:dupl // Parallel to orchestrator_perch_onnx.go by design: each single-file secondary ONNX classifier (Perch v2, BirdNET v3.0) has its own loader file that shares this build/load/warm-up skeleton but differs in its settings fields, registry ID, config type, and constructor.
+//nolint:dupl // Parallel to orchestrator_perch_onnx.go by design: each single-file secondary ONNX classifier (Perch v2, the BirdNET v3.0 architecture family) has its own loader file that shares this build/load/warm-up skeleton but differs in its settings fields, registry ID, config type, and constructor.
 package classifier
 
 import (
@@ -7,8 +7,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// buildBirdNETV3 constructs a BirdNET v3.0 model instance from the given settings
-// snapshot WITHOUT registering it in o.models. loadBirdNETV3 uses it for the
+// buildBirdNETV3 constructs a model instance of the BirdNET v3.0 architecture
+// (the BirdNET v3.0 preview or BirdNET+ V3.0, chosen by registryID; paths and
+// thresholds come from the family's settings section via familyFields) from the
+// given settings snapshot WITHOUT registering it in o.models. loadBirdNETV3 uses it for the
 // initial registration; the hot-reload path (ReloadSecondaryModels) uses it
 // directly so it can build the new instance on the new backend/device before
 // transactionally swapping it into the existing modelEntry.
@@ -23,27 +25,36 @@ import (
 //
 // The returned resolution is meaningful only when err == nil; every error return
 // yields the zero pathResolution{}.
-func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*BirdNETV3, pathResolution, error) {
-	res := o.resolveFamilyPaths(RegistryIDBirdNETV3, modelFileSet{
-		model:  settings.BirdNETV3.ModelPath,
-		labels: settings.BirdNETV3.LabelPath,
+func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, registryID string, threads int) (*BirdNETV3, pathResolution, error) {
+	info, known := ModelRegistry[registryID]
+	fields, haveFields := familyFields(settings, registryID)
+	if !known || !haveFields {
+		return nil, pathResolution{}, errors.Newf("unknown model registry ID %q for the BirdNET v3.0 architecture", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Build()
+	}
+	res := o.resolveFamilyPaths(registryID, modelFileSet{
+		model:  *fields.Model,
+		labels: *fields.Labels,
 	}, false)
 	modelPath := res.resolved.model
 	labelPath := res.resolved.labels
 
 	if modelPath == "" || labelPath == "" {
-		return nil, pathResolution{}, errors.Newf("BirdNET v3.0 model files not installed or configured").
+		return nil, pathResolution{}, errors.Newf("%s model files not installed or configured", info.Name).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
-			Context("model", RegistryIDBirdNETV3).
+			Context("model", registryID).
 			Build()
 	}
 
-	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "BirdNET v3.0", RegistryIDBirdNETV3, "classifier.orchestrator"); err != nil {
+	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, info.Name, registryID, "classifier.orchestrator"); err != nil {
 		return nil, pathResolution{}, err
 	}
 
 	cfg := BirdNETV3Config{
+		RegistryID:      registryID,
 		ModelPath:       modelPath,
 		LabelPath:       labelPath,
 		ONNXRuntimePath: settings.BirdNET.ONNXRuntimePath,
@@ -58,7 +69,7 @@ func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*Bi
 		return nil, pathResolution{}, errors.New(err).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
-			Context("model", RegistryIDBirdNETV3).
+			Context("model", registryID).
 			Build()
 	}
 
@@ -68,6 +79,18 @@ func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*Bi
 // loadBirdNETV3 creates and registers a BirdNET v3.0 model instance from settings.
 // o.mu.Lock() is held by the caller.
 func (o *Orchestrator) loadBirdNETV3(threads int) error {
+	return o.loadBirdNETV3Family(RegistryIDBirdNETV3, threads)
+}
+
+// loadBirdNETPlusV3 creates and registers a BirdNET+ V3.0 model instance from
+// settings. o.mu.Lock() is held by the caller.
+func (o *Orchestrator) loadBirdNETPlusV3(threads int) error {
+	return o.loadBirdNETV3Family(RegistryIDBirdNETPlusV3, threads)
+}
+
+// loadBirdNETV3Family is the shared loader for the BirdNET v3.0 architecture
+// families, keyed by registry ID. o.mu.Lock() is held by the caller.
+func (o *Orchestrator) loadBirdNETV3Family(registryID string, threads int) error {
 	// Capture the settings snapshot once so the recorded backend triplet matches
 	// the exact configuration the instance was built against (mirroring loadPerch).
 	// This is what makes an out-of-band runtime install (LoadModel) reconcile
@@ -75,7 +98,7 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 	// ReloadSecondaryModels rebuilds it only when the backend/device changes.
 	settings := o.currentSettings()
 	before := o.captureRSSBefore()
-	model, res, err := o.buildBirdNETV3(settings, threads)
+	model, res, err := o.buildBirdNETV3(settings, registryID, threads)
 	if err != nil {
 		return err
 	}
@@ -88,7 +111,7 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 	// because the configured path was stale. Uses the resolution the build
 	// already performed, so the repair can only ever persist the paths this
 	// instance was actually built from. Drained after o.mu is released.
-	o.queuePathCorrection(RegistryIDBirdNETV3, res)
+	o.queuePathCorrection(registryID, res)
 
 	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
 	// warm-up inference runs via the serialized inference path instead of stalling
@@ -100,7 +123,7 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 	// scientific and common name ("Scientific name_Common name"), like BirdNET
 	// v2.4, so downstream species-string parsing resolves the common name directly.
 
-	GetLogger().Info("BirdNET v3.0 model loaded into Orchestrator",
+	GetLogger().Info(ModelRegistry[registryID].Name+" model loaded into Orchestrator",
 		logger.String("model_id", model.ModelID()),
 		logger.Int("species", model.NumSpecies()))
 

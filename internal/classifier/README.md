@@ -19,14 +19,15 @@ The `classifier` package loads the acoustic models, runs inference on audio wind
 
 `ModelRegistry` in `model_registry.go` defines these models (registry ID, backend, input):
 
-| Registry ID    | Name            | Backend                                                              | Input                                                                                                                                |
-| -------------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `BirdNET_V2.4` | BirdNET v2.4    | TFLite (ONNX INT8-ARM variant on arm64 and on builds without TFLite) | 48 kHz, 3 s                                                                                                                          |
-| `BirdNET_V3.0` | BirdNET v3.0    | ONNX                                                                 | 32 kHz, 5 s                                                                                                                          |
-| `Perch_V2`     | Google Perch v2 | ONNX                                                                 | 32 kHz, 5 s                                                                                                                          |
-| `Bat`          | Bat classifier  | ONNX classifier head on BirdNET v2.4 embeddings                      | 3 s windows of raw ultrasonic audio (at least 96 kHz capture)                                                                        |
-| `BSG_BAT`      | BSG-BAT         | ONNX spectrogram CNN                                                 | 384 kHz mel spectrogram windows of 393472 samples, configurable step (`bsgbat.stepframes`, default 0.5 s) (at least 192 kHz capture) |
-| `BSG`          | BSG Finland     | ONNX                                                                 | 48 kHz, 3 s                                                                                                                          |
+| Registry ID         | Name            | Backend                                                              | Input                                                                                                                                |
+| ------------------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `BirdNET_V2.4`      | BirdNET v2.4    | TFLite (ONNX INT8-ARM variant on arm64 and on builds without TFLite) | 48 kHz, 3 s                                                                                                                          |
+| `BirdNET_V3.0`      | BirdNET v3.0    | ONNX                                                                 | 32 kHz, 5 s                                                                                                                          |
+| `BirdNET_Plus_V3.0` | BirdNET+ V3.0   | ONNX                                                                 | 32 kHz, 5 s                                                                                                                          |
+| `Perch_V2`          | Google Perch v2 | ONNX                                                                 | 32 kHz, 5 s                                                                                                                          |
+| `Bat`               | Bat classifier  | ONNX classifier head on BirdNET v2.4 embeddings                      | 3 s windows of raw ultrasonic audio (at least 96 kHz capture)                                                                        |
+| `BSG_BAT`           | BSG-BAT         | ONNX spectrogram CNN                                                 | 384 kHz mel spectrogram windows of 393472 samples, configurable step (`bsgbat.stepframes`, default 0.5 s) (at least 192 kHz capture) |
+| `BSG`               | BSG Finland     | ONNX                                                                 | 48 kHz, 3 s                                                                                                                          |
 
 BirdNET v2.4 is the stock default and ships embedded in the binary (builds with the `noembed` tag expect external files). The other models are downloaded through the gallery. `models.enabled` in the configuration selects which models load. BSG is registered and has a catalog entry, but it is hidden in the gallery and has no loader in `modelLoaders` yet, so it cannot be loaded.
 
@@ -46,7 +47,7 @@ Every loaded model implements `ModelInstance` (`model.go`): `Predict`, `Spec`, `
 The runtimes live in `internal/inference` and are selected through its interfaces (`Classifier`, `EmbeddingExtractor`, `CustomClassifier`, range filters):
 
 - `tflite`: TensorFlow Lite, used by the stock BirdNET v2.4 model and its embedded range filter.
-- `onnx`: ONNX Runtime, used by BirdNET v3.0, Perch v2, the bat classifier and the ONNX range filters.
+- `onnx`: ONNX Runtime, used by BirdNET v3.0, BirdNET+ V3.0, Perch v2, the bat classifier and the ONNX range filters.
 - `openvino`: an execution provider for ONNX models, chosen with the `birdnet.backend` setting. It appears as the live backend in `RuntimeInfo`, never as a model file type.
 - `vad`: a Silero voice activity detector used by the speech privacy filter in `internal/analysis/processor`, not by the classifier.
 
@@ -75,7 +76,7 @@ The range filter (`rangeFilterService`) keeps species that are probable at the s
 - a strict ONNX filter whose output must match the classifier labels one to one;
 - the mapped geomodel, an ONNX model with its own label set whose scores are matched onto each classifier's labels by scientific name (`mappedRangeFilter`).
 
-Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0 and Perch use the geomodel, and Bat, BSG-BAT and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
+Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0, BirdNET+ V3.0 and Perch use the geomodel, and Bat, BSG-BAT and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
 
 ## Labels and species identity
 

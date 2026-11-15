@@ -25,8 +25,8 @@ const (
 // passed to BufferDimensions/BufferInterval. A spec that sets StepSamples fixes
 // its own step instead, and both methods ignore the overlap for it.
 type ModelSpec struct {
-	SampleRate            int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, Perch)
-	ClipLength            time.Duration // 3s (BirdNET v2.4), 5s (v3.0, Perch)
+	SampleRate            int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, BirdNET+ V3.0, Perch)
+	ClipLength            time.Duration // 3s (BirdNET v2.4), 5s (v3.0, BirdNET+ V3.0, Perch)
 	RawSampleRate         int           // Hz: when non-zero, the model expects raw audio at this rate (e.g. 256000 for bat detection)
 	MinRawSampleRate      int           // Hz: minimum source capture rate for this model (0 = no constraint)
 	RecommendedSampleRate int           // Hz: recommended source capture rate (0 = no constraint)

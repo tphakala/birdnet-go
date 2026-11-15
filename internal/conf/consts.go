@@ -7,10 +7,13 @@ const (
 	// Model IDs identify the inference backends available for detection.
 	ModelIDBirdNET   = "birdnet"
 	ModelIDBirdNETV3 = "birdnet_v3.0"
-	ModelIDPerchV2   = "perch_v2"
-	ModelIDBat       = "bat"
-	ModelIDBSG       = "bsg"
-	ModelIDBSGBat    = "bsg_bat"
+	// ModelIDBirdNETPlusV3 is the BirdNET+ V3.0 model ID (its own family, separate
+	// from the BirdNET v3.0 preview above).
+	ModelIDBirdNETPlusV3 = "birdnet_plus_v3.0"
+	ModelIDPerchV2       = "perch_v2"
+	ModelIDBat           = "bat"
+	ModelIDBSG           = "bsg"
+	ModelIDBSGBat        = "bsg_bat"
 
 	// Catalog-style model IDs mirror the hyphenated model *catalog* entry IDs
 	// (classifier/model_catalog.go) and are accepted as aliases for the canonical
@@ -20,9 +23,11 @@ const (
 	// "perch-v2" was rejected as an unknown model ID).
 	ModelIDBirdNETCatalog   = "birdnet-v2.4"
 	ModelIDBirdNETV3Catalog = "birdnet-v3.0"
-	ModelIDPerchV2Catalog   = "perch-v2"
-	ModelIDBSGCatalog       = "bsg-finland"
-	ModelIDBSGBatCatalog    = "bsg-bat"
+	// ModelIDBirdNETPlusV3Catalog is the catalog-style spelling of ModelIDBirdNETPlusV3.
+	ModelIDBirdNETPlusV3Catalog = "birdnet-plus-v3.0"
+	ModelIDPerchV2Catalog       = "perch-v2"
+	ModelIDBSGCatalog           = "bsg-finland"
+	ModelIDBSGBatCatalog        = "bsg-bat"
 
 	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer

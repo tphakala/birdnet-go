@@ -1419,7 +1419,7 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 
 // RangeFilterStatus returns introspection data about the range filter,
 // including per-classifier geomodel coverage for all active non-bat models and a
-// diagnosis of why a loaded Perch or BirdNET v3.0 model is not served by the geomodel.
+// diagnosis of why a loaded Perch, BirdNET v3.0 or BirdNET+ V3.0 model is not served by the geomodel.
 func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	settings := o.CurrentSettings()
 	rf := settings.BirdNET.RangeFilter
@@ -1950,11 +1950,12 @@ func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 // this map are recognized but not yet implemented; callers log a warning
 // and skip. Adding a new loader only requires one entry here.
 var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
-	RegistryIDBirdNETV24: (*Orchestrator).loadBirdNETV24,
-	RegistryIDBirdNETV3:  (*Orchestrator).loadBirdNETV3,
-	RegistryIDPerchV2:    (*Orchestrator).loadPerch,
-	RegistryIDBat:        (*Orchestrator).loadBat,
-	RegistryIDBSGBat:     (*Orchestrator).loadBSGBat,
+	RegistryIDBirdNETV24:    (*Orchestrator).loadBirdNETV24,
+	RegistryIDBirdNETV3:     (*Orchestrator).loadBirdNETV3,
+	RegistryIDBirdNETPlusV3: (*Orchestrator).loadBirdNETPlusV3,
+	RegistryIDPerchV2:       (*Orchestrator).loadPerch,
+	RegistryIDBat:           (*Orchestrator).loadBat,
+	RegistryIDBSGBat:        (*Orchestrator).loadBSGBat,
 }
 
 // entryBuilder constructs (but does not register) a fresh model instance from a
@@ -1978,7 +1979,15 @@ var openvinoCapableSecondaryBuilders = map[string]entryBuilder{
 		// The path resolution is deliberately discarded: a backend or device swap
 		// must never rewrite the user's configured paths, so the reload path does
 		// not call queuePathCorrection.
-		m, _, err := o.buildBirdNETV3(settings, threads)
+		m, _, err := o.buildBirdNETV3(settings, RegistryIDBirdNETV3, threads)
+		if err != nil {
+			return nil, err
+		}
+		return m, nil
+	},
+	RegistryIDBirdNETPlusV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Same typed-nil and path-resolution rules as the BirdNET v3.0 entry above.
+		m, _, err := o.buildBirdNETV3(settings, RegistryIDBirdNETPlusV3, threads)
 		if err != nil {
 			return nil, err
 		}

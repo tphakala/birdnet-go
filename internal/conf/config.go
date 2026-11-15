@@ -1435,6 +1435,15 @@ type BirdNETV3Config struct {
 	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
+// BirdNETPlusConfig holds configuration for the BirdNET+ V3.0 acoustic classifier.
+type BirdNETPlusConfig struct {
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET+ V3.0 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET+ V3.0 label file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate BirdNET+ V3.0 detections on Threshold instead of following BirdNET.Threshold
+	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
+	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+}
+
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 type BatConfig struct {
 	EmbeddingModel      string                      `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
@@ -2050,13 +2059,14 @@ type Settings struct {
 		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `yaml:"main" json:"main"`
 
-	BirdNET   BirdNETConfig   `yaml:"birdnet" json:"birdnet"`     // BirdNET configuration
-	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
-	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdnetv3"` // BirdNET v3.0 acoustic classifier configuration
-	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
-	BSGBat    BSGBatConfig    `yaml:"bsgbat" json:"bsgbat"`       // BSG-BAT bat classifier configuration
-	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
-	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
+	BirdNET     BirdNETConfig     `yaml:"birdnet" json:"birdnet"`         // BirdNET configuration
+	Perch       PerchConfig       `yaml:"perch" json:"perch"`             // Perch v2 model configuration
+	BirdNETV3   BirdNETV3Config   `yaml:"birdnetv3" json:"birdnetv3"`     // BirdNET v3.0 acoustic classifier configuration
+	BirdNETPlus BirdNETPlusConfig `yaml:"birdnetplus" json:"birdnetplus"` // BirdNET+ V3.0 acoustic classifier configuration
+	Bat         BatConfig         `yaml:"bat" json:"bat"`                 // Bat detection configuration
+	BSGBat      BSGBatConfig      `yaml:"bsgbat" json:"bsgbat"`           // BSG-BAT bat classifier configuration
+	BSG         BSGConfig         `yaml:"bsg" json:"bsg"`                 // BSG regional bird model configuration
+	Models      ModelsConfig      `yaml:"models" json:"models"`           // Global model enablement and management
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 

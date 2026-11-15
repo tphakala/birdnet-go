@@ -5805,6 +5805,9 @@
       },
       "birdnetv3Threshold": {
         "label": "BirdNET v3.0 megbízhatósági küszöbérték"
+      },
+      "birdnetplusThreshold": {
+        "label": "BirdNET+ V3.0 megbízhatósági küszöbérték"
       }
     },
     "rangeFilter": {
@@ -6047,6 +6050,10 @@
     "birdnetv3": {
       "title": "BirdNET v3.0 észlelés",
       "description": "Állítson be egy dedikált megbízhatósági küszöbértéket a BirdNET v3.0 észlelésekhez, a fő BirdNET küszöbértékétől függetlenül."
+    },
+    "birdnetplus": {
+      "title": "BirdNET+ V3.0 észlelés",
+      "description": "Állítson be egy dedikált megbízhatósági küszöbértéket a BirdNET+ V3.0 észlelésekhez, a fő BirdNET küszöbértékétől függetlenül."
     }
   },
   "restart": {

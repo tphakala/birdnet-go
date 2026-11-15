@@ -380,6 +380,7 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 		"Models.Directory":        "models directory resolved once at startup (ResolveModelsDir/NewModelManager); Models.Enabled hot-reloads via reconcile_models",
 		"Perch":                   "perch model path; not wired",
 		"BirdNETV3":               "BirdNET v3.0 model path; not wired",
+		"BirdNETPlus":             "BirdNET+ V3.0 model path; not wired (same as BirdNET v3.0)",
 		"BSGBat":                  "BSG-BAT model path; not wired (same as Perch)",
 		"BSG":                     "BSG model path; not wired",
 		"Realtime.Audio.Watchdog": "no UI controls (project decision)",

@@ -90,6 +90,7 @@ vi.mock('$lib/stores/settings', async () => {
     bsgBatSettings: derived(mockStore, state => state.formData.bsgbat),
     perchSettings: derived(mockStore, state => state.formData.perch),
     birdNetV3Settings: derived(mockStore, state => state.formData.birdnetv3),
+    birdNetPlusSettings: derived(mockStore, state => state.formData.birdnetplus),
   };
 });
 
@@ -117,10 +118,12 @@ const SETTINGS_SECTION_TITLE = {
   bat: 'analysis.bat.title',
   perch: 'analysis.perch.title',
   birdnetv3: 'analysis.birdnetv3.title',
+  birdnetplus: 'analysis.birdnetplus.title',
 } as const;
 
 const PERCH_CATALOG_ID = 'perch-v2';
 const BIRDNET_V3_CATALOG_ID = 'birdnet-v3.0';
+const BIRDNET_PLUS_CATALOG_ID = 'birdnet-plus-v3.0';
 const BAT_CATALOG_ID = 'bat-test';
 const BSG_BAT_CATALOG_ID = 'bsg-bat';
 const EDITED_THRESHOLD = 0.7;
@@ -329,6 +332,18 @@ describe('AnalysisSettingsPage tab change dots', () => {
         install: () => {
           vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([
             installedModel(BIRDNET_V3_CATALOG_ID),
+          ]);
+        },
+      },
+      {
+        name: 'BirdNET+ V3.0',
+        section: 'birdnetplus',
+        saved: { overrideThreshold: false, threshold: 0.5 },
+        edit: { overrideThreshold: true, threshold: EDITED_THRESHOLD },
+        titleKey: SETTINGS_SECTION_TITLE.birdnetplus,
+        install: () => {
+          vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([
+            installedModel(BIRDNET_PLUS_CATALOG_ID),
           ]);
         },
       },
