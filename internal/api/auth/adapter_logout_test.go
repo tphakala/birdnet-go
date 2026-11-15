@@ -158,6 +158,7 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	got := adapter.GetProviderLogoutURL(c)
 
 	if row.wantURL {
+		require.NotEmpty(t, got, "a row that wants a sign-out URL must get one")
 		if !row.noIDToken {
 			assert.Contains(t, got, "id_token_hint="+logoutTestIDToken)
 		}
