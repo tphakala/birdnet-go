@@ -87,6 +87,7 @@ func TestValidateSecuritySettings_OAuthProviderDuplicates(t *testing.T) {
 	tests := []struct {
 		name      string
 		providers []OAuthProviderConfig
+		noHost    bool // no Host, so the redirect rule fails as well
 		wantErr   string
 	}{
 		{name: "exact duplicate google", providers: []OAuthProviderConfig{entry("google", true), entry("google", true)}, wantErr: "security.oauthProviders[1]: duplicate"},
@@ -94,6 +95,7 @@ func TestValidateSecuritySettings_OAuthProviderDuplicates(t *testing.T) {
 		{name: "enabled entry after a different kind", providers: []OAuthProviderConfig{entry("github", true), entry("google", true), entry("google", true)}, wantErr: "security.oauthProviders[2]: duplicate"},
 		{name: "one enabled one disabled", providers: []OAuthProviderConfig{entry("google", true), entry("google", false)}, wantErr: "security.oauthProviders[1]: duplicate"},
 		{name: "two disabled", providers: []OAuthProviderConfig{entry("github", false), entry("github", false)}, wantErr: "security.oauthProviders[1]: duplicate"},
+		{name: "duplicate is reported before the redirect rule", providers: []OAuthProviderConfig{entry("google", true), entry("google", true)}, noHost: true, wantErr: "security.oauthProviders[1]: duplicate"},
 		{name: "single entry of each kind", providers: []OAuthProviderConfig{
 			entry("google", true), entry("github", true), entry("microsoft", true),
 			entry("line", true), entry("kakao", true), entry("oidc", true),
@@ -104,6 +106,9 @@ func TestValidateSecuritySettings_OAuthProviderDuplicates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			s := Security{Host: "example.com", SessionDuration: 24 * time.Hour, OAuthProviders: tt.providers}
+			if tt.noHost {
+				s.Host = ""
+			}
 
 			err := validateSecuritySettings(&s)
 

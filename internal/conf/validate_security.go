@@ -106,15 +106,17 @@ func validateSecuritySettings(settings *Security) error {
 		settings.SessionDuration = DefaultSessionDuration // 7 days, matches viper default
 	}
 
+	// Reject two entries with the same provider ID, enabled or not, for every
+	// kind. Runs first so a duplicate is always reported with its index, ahead
+	// of any per-entry rule the duplicate also breaks.
+	if err := validateOAuthProviderDuplicates(settings); err != nil {
+		return err
+	}
+
 	// Reject providers that would force authentication on without being able to
 	// complete a sign-in. Runs before validateOIDCProviders so that the reason an
 	// operator cannot get in is reported ahead of the OIDC-only issuer rules.
 	if err := validateOAuthRedirects(settings); err != nil {
-		return err
-	}
-
-	// Reject two entries with the same provider ID, enabled or not, for every kind.
-	if err := validateOAuthProviderDuplicates(settings); err != nil {
 		return err
 	}
 
