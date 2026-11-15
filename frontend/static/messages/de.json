@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Client-Geheimnis",
         "clientSecretHelpText": "Das OAuth 2.0 Client-Geheimnis aus der Entwicklerkonsole Ihres Anbieters",
         "userIdLabel": "Zugelassene Benutzer",
-        "userIdHelpText": "Kommagetrennte E-Mails oder Benutzer-IDs, die sich mit diesem Anbieter anmelden dürfen. Wenn leer, kann sich niemand anmelden.",
+        "userIdHelpText": "Kommagetrennte E-Mails oder Benutzer-IDs, die sich mit diesem Anbieter anmelden dürfen. Eine Benutzer-ID wird empfohlen, da sich eine E-Mail-Adresse ändern kann. Wenn leer, kann sich niemand anmelden.",
         "allowedUsersEmptyWarning": "Dieser Anbieter hat keine zugelassenen Benutzer, daher wird jeder Anmeldeversuch abgelehnt. Fügen Sie mindestens eine E-Mail oder Benutzer-ID hinzu, um den Zugriff zu erlauben.",
         "allowedUsersMissingBadge": "Keine zugelassenen Benutzer festgelegt - Anmeldung schlägt fehl",
         "google": {

@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Klienta noslēpums",
         "clientSecretHelpText": "OAuth 2.0 klienta noslēpums no jūsu nodrošinātāja izstrādātāju konsoles",
         "userIdLabel": "Atļautie lietotāji",
-        "userIdHelpText": "Ar komatu atdalīti e-pasti vai lietotāju ID, kuriem atļauts pieteikties ar šo pakalpojumu sniedzēju. Ja atstāts tukšs, neviens nevarēs pieteikties.",
+        "userIdHelpText": "Ar komatu atdalīti e-pasti vai lietotāju ID, kuriem atļauts pieteikties ar šo pakalpojumu sniedzēju. Ieteicams lietotāja ID, jo e-pasta adrese var mainīties. Ja atstāts tukšs, neviens nevarēs pieteikties.",
         "allowedUsersEmptyWarning": "Šim pakalpojumu sniedzējam nav atļauto lietotāju, tāpēc katrs pieteikšanās mēģinājums tiks noraidīts. Pievienojiet vismaz vienu e-pastu vai lietotāja ID, lai atļautu piekļuvi.",
         "allowedUsersMissingBadge": "Nav iestatīts neviens atļautais lietotājs - pieteikšanās neizdosies",
         "google": {

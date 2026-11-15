@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Klienthemmelighet",
         "clientSecretHelpText": "OAuth 2.0 klienthemmelighet fra leverandørens utviklerkonsoll",
         "userIdLabel": "Bruker-ID (valgfritt)",
-        "userIdHelpText": "Begrens tilgang til en bestemt brukerkonto via e-post eller ID",
+        "userIdHelpText": "Begrens tilgang til en bestemt brukerkonto via e-post eller ID. En bruker-ID anbefales, siden en e-postadresse kan endres.",
         "allowedUsersEmptyWarning": "Denne leverandøren har ingen tillatte brukere konfigurert.",
         "allowedUsersMissingBadge": "Ingen tillatte brukere angitt - innlogging vil mislyktes",
         "google": {

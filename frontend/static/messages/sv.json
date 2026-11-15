@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Klienthemlighet",
         "clientSecretHelpText": "OAuth 2.0 Klienthemlighet från din leverantörs utvecklarkonsol",
         "userIdLabel": "Tillåtna användare",
-        "userIdHelpText": "Kommaseparerade e-postadresser eller användar-ID:n som får logga in med denna leverantör. Om fältet lämnas tomt kan ingen logga in.",
+        "userIdHelpText": "Kommaseparerade e-postadresser eller användar-ID:n som får logga in med denna leverantör. Ett användar-ID rekommenderas, eftersom en e-postadress kan ändras. Om fältet lämnas tomt kan ingen logga in.",
         "allowedUsersEmptyWarning": "Den här leverantören har inga tillåtna användare, så varje inloggningsförsök nekas. Lägg till minst en e-postadress eller ett användar-ID för att tillåta åtkomst.",
         "allowedUsersMissingBadge": "Inga tillåtna användare angivna - inloggningen misslyckas",
         "google": {

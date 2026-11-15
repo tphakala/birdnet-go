@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Kliens titok",
         "clientSecretHelpText": "Az OAuth 2.0 Client Secret a szolgáltató fejlesztői konzoljáról",
         "userIdLabel": "Felhasználói ID (opcionális)",
-        "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
+        "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint. Felhasználói ID ajánlott, mert az e-mail-cím megváltozhat.",
         "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
         "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva: a bejelentkezés sikertelen lesz",
         "google": {

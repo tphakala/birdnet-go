@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Asiakassalaisuus",
         "clientSecretHelpText": "OAuth 2.0 -asiakassalaisuus tarjoajasi kehittäjäkonsolista",
         "userIdLabel": "Sallitut käyttäjät",
-        "userIdHelpText": "Pilkuilla erotellut sähköpostit tai käyttäjätunnukset, jotka voivat kirjautua tällä palveluntarjoajalla. Jos kenttä on tyhjä, kukaan ei voi kirjautua.",
+        "userIdHelpText": "Pilkuilla erotellut sähköpostit tai käyttäjätunnukset, jotka voivat kirjautua tällä palveluntarjoajalla. Käyttäjätunnusta suositellaan, koska sähköpostiosoite voi muuttua. Jos kenttä on tyhjä, kukaan ei voi kirjautua.",
         "allowedUsersEmptyWarning": "Tällä palveluntarjoajalla ei ole sallittuja käyttäjiä, joten jokainen kirjautumisyritys hylätään. Lisää vähintään yksi sähköposti tai käyttäjätunnus salliaksesi pääsyn.",
         "allowedUsersMissingBadge": "Sallittuja käyttäjiä ei ole määritetty - kirjautuminen epäonnistuu",
         "google": {

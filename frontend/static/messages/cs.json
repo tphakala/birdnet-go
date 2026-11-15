@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Tajný klíč klienta",
         "clientSecretHelpText": "OAuth 2.0 Client Secret z vývojářské konzole vašeho poskytovatele",
         "userIdLabel": "Povolení uživatelé",
-        "userIdHelpText": "E-maily nebo ID uživatelů oddělené čárkami, kteří se mohou přihlásit přes tohoto poskytovatele. Pokud zůstane prázdné, nikdo se nepřihlásí.",
+        "userIdHelpText": "E-maily nebo ID uživatelů oddělené čárkami, kteří se mohou přihlásit přes tohoto poskytovatele. Doporučujeme ID uživatele, protože e-mailová adresa se může změnit. Pokud zůstane prázdné, nikdo se nepřihlásí.",
         "allowedUsersEmptyWarning": "Tento poskytovatel nemá žádné povolené uživatele, takže každý pokus o přihlášení bude odmítnut. Přidejte alespoň jeden e-mail nebo ID uživatele pro povolení přístupu.",
         "allowedUsersMissingBadge": "Nejsou nastaveni žádní povolení uživatelé - přihlášení selže",
         "google": {

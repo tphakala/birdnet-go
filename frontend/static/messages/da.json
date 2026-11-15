@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Klienthemmelighed",
         "clientSecretHelpText": "OAuth 2.0 klienthemmelighed fra din udbyders udviklerkonsol",
         "userIdLabel": "Tilladte brugere",
-        "userIdHelpText": "Kommaseparerede e-mails eller bruger-id'er, der må logge ind med denne udbyder. Hvis feltet er tomt, kan ingen logge ind.",
+        "userIdHelpText": "Kommaseparerede e-mails eller bruger-id'er, der må logge ind med denne udbyder. Et bruger-id anbefales, da en e-mailadresse kan ændres. Hvis feltet er tomt, kan ingen logge ind.",
         "allowedUsersEmptyWarning": "Denne udbyder har ingen tilladte brugere, så alle loginforsøg afvises. Tilføj mindst én e-mail eller et bruger-id for at give adgang.",
         "allowedUsersMissingBadge": "Ingen tilladte brugere angivet - login vil mislykkes",
         "google": {

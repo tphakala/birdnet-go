@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Segreto Client",
         "clientSecretHelpText": "Il Segreto Client OAuth 2.0 dalla console sviluppatori del tuo fornitore",
         "userIdLabel": "Utenti consentiti",
-        "userIdHelpText": "Email o ID utente separati da virgole autorizzati ad accedere con questo provider. Se vuoto, nessuno può accedere.",
+        "userIdHelpText": "Email o ID utente separati da virgole autorizzati ad accedere con questo provider. Si consiglia l'ID utente, perché un indirizzo email può cambiare. Se vuoto, nessuno può accedere.",
         "allowedUsersEmptyWarning": "Questo provider non ha utenti consentiti, quindi ogni tentativo di accesso verrà rifiutato. Aggiungi almeno un'email o un ID utente per consentire l'accesso.",
         "allowedUsersMissingBadge": "Nessun utente consentito impostato - l'accesso fallirà",
         "google": {

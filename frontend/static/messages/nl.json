@@ -4179,7 +4179,7 @@
         "clientSecretLabel": "Clientgeheim",
         "clientSecretHelpText": "Het OAuth 2.0 Client Secret van de ontwikkelaarsconsole van uw provider",
         "userIdLabel": "Toegestane gebruikers",
-        "userIdHelpText": "Door komma's gescheiden e-mails of gebruikers-ID's die mogen inloggen met deze provider. Als dit leeg is, kan niemand inloggen.",
+        "userIdHelpText": "Door komma's gescheiden e-mails of gebruikers-ID's die mogen inloggen met deze provider. Een gebruikers-ID wordt aanbevolen, omdat een e-mailadres kan veranderen. Als dit leeg is, kan niemand inloggen.",
         "allowedUsersEmptyWarning": "Deze provider heeft geen toegestane gebruikers, dus elke inlogpoging wordt geweigerd. Voeg ten minste één e-mail of gebruikers-ID toe om toegang te verlenen.",
         "allowedUsersMissingBadge": "Geen toegestane gebruikers ingesteld - inloggen mislukt",
         "google": {

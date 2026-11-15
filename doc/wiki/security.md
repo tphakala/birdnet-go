@@ -45,6 +45,10 @@ security:
     redirecturi: "https://your.domain.com/auth/github/callback"
 ```
 
+#### Allowed users: prefer user IDs
+
+The allowed users list accepts user IDs and email addresses. Use the user ID the provider issues where you can (for an OIDC provider, the `sub` claim). An email address is not a stable identifier: a provider may let users change their address or reuse it for another account, and OpenID Connect Core 1.0 (section 5.7) advises against using it to identify a user. BirdNET-Go matches the address the provider sends and does not check whether the provider verified it. With Microsoft sign-in this matters most, because the address comes from an account attribute that the administrator of any Microsoft Entra tenant can set, so allow Microsoft users by user ID.
+
 ### OIDC identity provider with a private certificate authority
 
 BirdNET-Go checks the certificate of an OIDC identity provider against the system certificate store, like other outgoing TLS connections that have no CA setting of their own. When the provider's certificate is signed by a private certificate authority, the console and `logs/security.log` show an `OIDC discovery failed` line with a certificate error. Each request to the identity provider times out after ten seconds.
