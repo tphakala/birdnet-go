@@ -629,7 +629,18 @@ func TestCatalogChecksum_OmitemptyKeepsOldFilesPristine(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(plain), `"depends_on"`)
 	assert.NotContains(t, string(plain), `"component"`)
-	assert.NotContains(t, string(plain), `"superseded_by"`)
+
+	// Only entries that name a successor carry the key; the rest omit it.
+	var unsuperseded []CatalogEntry
+	for i := range EmbeddedCatalog {
+		if EmbeddedCatalog[i].SupersededBy == "" {
+			unsuperseded = append(unsuperseded, EmbeddedCatalog[i])
+		}
+	}
+	require.NotEmpty(t, unsuperseded)
+	omitted, err := json.Marshal(unsuperseded)
+	require.NoError(t, err)
+	assert.NotContains(t, string(omitted), `"superseded_by"`)
 
 	named, err := json.Marshal(CatalogEntry{ID: "old", SupersededBy: "new"})
 	require.NoError(t, err)

@@ -215,7 +215,7 @@ tasks:
           exit 1
         fi
         # Embedded region tables (bbox / tier / countries) read at runtime.
-        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json; do
+        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json BirdNET-Plus-V3.0.regions.json; do
           cp "$SRC/$f" "{{.REGION_DATA_DIR}}/$f"
           echo "synced $f"
         done
@@ -224,7 +224,7 @@ tasks:
         # ./internal/classifier" joins models.json against regions.json, so a
         # stale models.json here silently regenerates the catalog against the old
         # region set (the two inputs disagree on which tiles exist).
-        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json; do
+        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json BirdNET-Plus-V3.0.models.json; do
           cp "$SRC/$f" "{{.GEN_MANIFESTS_DIR}}/$f"
           echo "synced $f"
         done

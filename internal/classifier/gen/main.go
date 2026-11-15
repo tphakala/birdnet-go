@@ -2,10 +2,11 @@
 // package (internal/classifier/model_catalog_regional_gen.go). It reads the
 // vendored acoustic-models manifests (gen/manifests/*.models.json), the embedded
 // region tables (region/data/*.regions.json), and a labels-checksum sidecar
-// (gen/manifests/labels-checksums.json), then emits one Go file with two
-// functions, birdnetV30RegionalVariants and perchV2RegionalVariants, each
-// returning the region-sliced CatalogVariant literals for its family
-// (expectedRegions slugs, variantsPerRegion precision builds each).
+// (gen/manifests/labels-checksums.json), then emits one Go file with one
+// function per family (birdnetV30RegionalVariants, perchV2RegionalVariants and
+// birdnetPlusV30RegionalVariants), each returning the region-sliced
+// CatalogVariant literals for its family (expectedRegions slugs, the family's
+// variantsPerRegion precision builds each).
 //
 // The generator takes the per-region labels checksums from the sidecar rather
 // than from the manifests (older manifests hashed only the .onnx model files).
@@ -72,6 +73,7 @@ var families = []family{
 		labelsLocalName: func(slug string) string {
 			return fmt.Sprintf("birdnet_v3.0_%s_labels.txt", slug)
 		},
+		variantsPerRegion: 2,
 	},
 	{
 		key:          "perch-v2",
@@ -89,6 +91,23 @@ var families = []family{
 		labelsLocalName: func(slug string) string {
 			return fmt.Sprintf("perch_v2_%s_labels.txt", slug)
 		},
+		variantsPerRegion: 2,
+	},
+	{
+		key:          "birdnet-plus-v3.0",
+		funcName:     "birdnetPlusV30RegionalVariants",
+		repo:         "tphakala/BirdNET-Plus-V3.0",
+		manifestFile: "gen/manifests/BirdNET-Plus-V3.0.models.json",
+		regionsFile:  "region/data/BirdNET-Plus-V3.0.regions.json",
+		// birdnet_plus_v3.0_<slug>_<token>.onnx for the model, one
+		// birdnet_plus_v3.0_<slug>_labels.txt per region. Only fp32 ships.
+		modelLocalName: func(slug, token string) string {
+			return fmt.Sprintf("birdnet_plus_v3.0_%s_%s.onnx", slug, token)
+		},
+		labelsLocalName: func(slug string) string {
+			return fmt.Sprintf("birdnet_plus_v3.0_%s_labels.txt", slug)
+		},
+		variantsPerRegion: 1,
 	},
 }
 
@@ -115,8 +134,21 @@ type family struct {
 	// (Perch v2 softmax). A family with per-class sigmoid scores (BirdNET v3.0)
 	// must not carry the field.
 	requireScoreCalibration bool
-	modelLocalName          func(slug, token string) string
-	labelsLocalName         func(slug string) string
+	// variantsPerRegion is the number of precision builds the family ships for
+	// each region (2 for fp32 plus fp16, 1 for fp32 only).
+	variantsPerRegion int
+	modelLocalName    func(slug, token string) string
+	labelsLocalName   func(slug string) string
+}
+
+// checkVariantCount fails unless got equals expectedRegions times the family's
+// variantsPerRegion, so a dropped or duplicated tile cannot pass unnoticed.
+func (f *family) checkVariantCount(got int) error {
+	want := expectedRegions * f.variantsPerRegion
+	if got != want {
+		return fmt.Errorf("family %s: got %d regional variants, want %d", f.key, got, want)
+	}
+	return nil
 }
 
 // manifest and its nested types mirror only the acoustic-models schema-2 fields
@@ -199,9 +231,7 @@ const (
 	// or removal must be acknowledged here at generate time, together with the
 	// golden tier snapshot in the region package. Do not derive it from the
 	// region table, which would make the count check vacuous.
-	expectedRegions   = 43
-	variantsPerRegion = 2 // each region ships two precision variants
-	regionalPerFam    = expectedRegions * variantsPerRegion
+	expectedRegions = 43
 )
 
 func main() {
@@ -227,15 +257,18 @@ func run() error {
 
 	var buf bytes.Buffer
 	buf.WriteString(fileHeader)
-	for _, fam := range families {
+	total := 0
+	for i := range families {
+		fam := &families[i]
 		variants, genErr := fam.build(labels)
 		if genErr != nil {
 			return fmt.Errorf("family %s: %w", fam.key, genErr)
 		}
-		if len(variants) != regionalPerFam {
-			return fmt.Errorf("family %s: got %d regional variants, want %d", fam.key, len(variants), regionalPerFam)
+		if countErr := fam.checkVariantCount(len(variants)); countErr != nil {
+			return countErr
 		}
-		fmt.Fprintf(&buf, "\n// %s returns the %d region-sliced variants of the %s model,\n", fam.funcName, regionalPerFam, fam.key)
+		total += len(variants)
+		fmt.Fprintf(&buf, "\n// %s returns the %d region-sliced variants of the %s model,\n", fam.funcName, len(variants), fam.key)
 		fmt.Fprintf(&buf, "// generated from %s.\n", path.Base(fam.manifestFile))
 		fmt.Fprintf(&buf, "func %s() []CatalogVariant {\n\treturn []CatalogVariant{\n", fam.funcName)
 		for _, v := range variants {
@@ -251,7 +284,7 @@ func run() error {
 	if err := os.WriteFile(outputFile, formatted, 0o644); err != nil { //nolint:gosec // generated, non-secret source file
 		return fmt.Errorf("write %s: %w", outputFile, err)
 	}
-	fmt.Printf("wrote %s (%d variants across %d families)\n", outputFile, len(families)*regionalPerFam, len(families))
+	fmt.Printf("wrote %s (%d variants across %d families)\n", outputFile, total, len(families))
 	return nil
 }
 
@@ -268,7 +301,7 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 		return nil, err
 	}
 
-	regional := make([]manifestModel, 0, regionalPerFam)
+	regional := make([]manifestModel, 0, expectedRegions*f.variantsPerRegion)
 	for i := range m.Models {
 		if m.Models[i].Region != "" {
 			regional = append(regional, m.Models[i])

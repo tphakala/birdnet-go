@@ -91,3 +91,31 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, render(&v), "ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},")
 }
+
+func TestCheckVariantCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		perRegion int
+		got       int
+		wantErr   bool
+	}{
+		{"one precision accepts one per region", 1, expectedRegions, false},
+		{"one precision rejects two per region", 1, 2 * expectedRegions, true},
+		{"two precisions accept two per region", 2, 2 * expectedRegions, false},
+		{"two precisions reject one per region", 2, expectedRegions, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fam := &family{key: "x", variantsPerRegion: tt.perRegion}
+			err := fam.checkVariantCount(tt.got)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
