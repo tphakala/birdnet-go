@@ -123,6 +123,20 @@ describe('FormField', () => {
     });
   });
 
+  describe('Generated ids', () => {
+    it('gives fields with the same name distinct ids and labels', () => {
+      formFieldTest.render({ type: 'number', name: 'threshold', label: 'First', helpText: 'A' });
+      formFieldTest.render({ type: 'number', name: 'threshold', label: 'Second', helpText: 'B' });
+
+      const first = screen.getByLabelText('First');
+      const second = screen.getByLabelText('Second');
+      expect(first.id).not.toBe(second.id);
+      expect(first.getAttribute('aria-describedby')).not.toBe(
+        second.getAttribute('aria-describedby')
+      );
+    });
+  });
+
   describe('Email Input', () => {
     it('validates email format', async () => {
       const user = userEvent.setup();
