@@ -47,7 +47,7 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 			manifestFile: filepath.Join("gen", "manifests", path.Base(e.HuggingFaceRepo)+".models.json"),
 		})
 	}
-	require.GreaterOrEqualf(t, len(cases), 2, "expected at least the birdnet-v3.0 and perch-v2 regional families")
+	require.GreaterOrEqualf(t, len(cases), 3, "expected at least the birdnet-v3.0, perch-v2 and birdnet-plus-v3.0 regional families")
 
 	for _, tc := range cases {
 		t.Run(tc.entryID, func(t *testing.T) {
@@ -124,9 +124,106 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 				// value verbatim; the sigmoid-scored BirdNET v3.0 entries carry none.
 				assertGeneratedScoreCalibration(t, entry.RegistryID == RegistryIDPerchV2, e.Path, e.ScoreCalibration, v.ScoreCalibration)
 			}
-			assert.Equalf(t, regionalTilesPerFamily, regional, "manifest %s must describe %d regional tiles", tc.manifestFile, regionalTilesPerFamily)
-			assert.Lenf(t, byModelPath, regionalTilesPerFamily, "%s must expose exactly %d regional model paths", tc.entryID, regionalTilesPerFamily)
+			assert.Equalf(t, regionalTilesFor(tc.entryID), regional, "manifest %s must describe %d regional tiles", tc.manifestFile, regionalTilesFor(tc.entryID))
+			assert.Lenf(t, byModelPath, regionalTilesFor(tc.entryID), "%s must expose exactly %d regional model paths", tc.entryID, regionalTilesFor(tc.entryID))
 		})
+	}
+}
+
+// TestGlobalVariants_MatchManifest cross-checks the hand-written global variants
+// of every family with a vendored manifest against that manifest: each manifest
+// model without a region must match a catalog variant by model path on checksum,
+// size, RAM floor, backend support, benchmarks and labels file, and the family metadata (license, commercial
+// use, species count and, when the manifest states one, channel) must equal the
+// entry's. It catches a mistyped hash or size in a hand-written entry, which the
+// generator cannot see.
+func TestGlobalVariants_MatchManifest(t *testing.T) {
+	t.Parallel()
+
+	checked := 0
+	for i := range EmbeddedCatalog {
+		entry := &EmbeddedCatalog[i]
+		manifestFile := filepath.Join("gen", "manifests", path.Base(entry.HuggingFaceRepo)+".models.json")
+		if _, err := os.Stat(manifestFile); err != nil {
+			continue // no vendored manifest for this entry
+		}
+		checked++
+		t.Run(entry.ID, func(t *testing.T) {
+			t.Parallel()
+
+			manifest := loadTestManifest(t, manifestFile)
+			assert.Equal(t, entry.License, manifest.FamilyMeta.License, "license")
+			assert.Equal(t, entry.CommercialUse, manifest.FamilyMeta.CommercialUse, "commercial use")
+			assert.Equal(t, entry.SpeciesCount, manifest.FamilyMeta.SpeciesCount, "species count")
+			if manifest.FamilyMeta.Channel != nil {
+				wantChannel := entry.Channel
+				if wantChannel == "" {
+					wantChannel = ChannelStable
+				}
+				assert.Equal(t, wantChannel, *manifest.FamilyMeta.Channel, "channel")
+			}
+
+			byModelPath := make(map[string]*CatalogVariant)
+			for j := range entry.Variants {
+				v := &entry.Variants[j]
+				for k := range v.Files {
+					if v.Files[k].Role == RoleModel {
+						byModelPath[v.Files[k].RemotePath] = v
+					}
+				}
+			}
+
+			global := 0
+			for j := range manifest.Models {
+				e := &manifest.Models[j]
+				if e.Region != "" {
+					continue
+				}
+				global++
+				v, found := byModelPath[e.Path]
+				if !assert.Truef(t, found, "no catalog variant carries global model path %q", e.Path) {
+					continue
+				}
+				assertGlobalVariantMatchesManifest(t, v, e)
+			}
+			assert.Positivef(t, global, "manifest %s must describe at least one global model", manifestFile)
+		})
+	}
+	require.GreaterOrEqual(t, checked, 3, "expected at least the birdnet-v3.0, perch-v2 and birdnet-plus-v3.0 manifests")
+}
+
+// assertGlobalVariantMatchesManifest compares one hand-written global variant
+// with its manifest model: RAM floor, backend support (both directions: a
+// backend the manifest omits must be unsupported), benchmarks, and the model
+// and labels files.
+func assertGlobalVariantMatchesManifest(t *testing.T, v *CatalogVariant, e *testManifestModel) {
+	t.Helper()
+	require.NotNilf(t, e.Requirements, "manifest entry %q must carry requirements", e.Path)
+	assert.Equalf(t, e.Requirements.MinRAMMB, v.Requirements.MinRAMMB, "RAM floor for %q", e.Path)
+	for name, b := range e.Backends {
+		assert.Equalf(t, BackendSupport{Supported: b.Supported, Recommended: b.Recommended}, v.Backends[name], "backend %s for %q", name, e.Path)
+	}
+	for name, got := range v.Backends {
+		if _, listed := e.Backends[name]; !listed {
+			assert.Equalf(t, BackendSupport{}, got, "backend %s of %q is not in the manifest", name, e.Path)
+		}
+	}
+	wantBench := make([]Benchmark, 0, len(e.Benchmarks))
+	for _, b := range e.Benchmarks {
+		wantBench = append(wantBench, Benchmark{Device: b.Device, Backend: b.Backend, LatencyMs: b.LatencyMs, RSSMB: b.RSSMB})
+	}
+	assert.ElementsMatchf(t, wantBench, v.Benchmarks, "benchmarks for %q", e.Path)
+	for k := range v.Files {
+		f := &v.Files[k]
+		switch {
+		case f.Role == RoleModel && f.RemotePath == e.Path:
+			assert.Equalf(t, e.SHA256, f.SHA256, "model checksum for %q", e.Path)
+			assert.Equalf(t, e.SizeBytes, f.SizeBytes, "model size for %q", e.Path)
+		case f.Role == RoleLabels:
+			assert.Equalf(t, e.Labels, f.RemotePath, "labels path for %q", e.Path)
+			assert.Equalf(t, e.LabelsSHA256, f.SHA256, "labels checksum for %q", e.Path)
+			assert.Equalf(t, e.LabelsSize, f.SizeBytes, "labels size for %q", e.Path)
+		}
 	}
 }
 
@@ -148,21 +245,43 @@ func assertGeneratedScoreCalibration(t *testing.T, wantPresent bool, modelPath s
 }
 
 // testManifest mirrors only the manifest fields this test compares.
+// testManifestModel mirrors only the manifest model fields this test compares.
+type testManifestModel struct {
+	Path         string `json:"path"`
+	Variant      string `json:"variant"`
+	Precision    string `json:"precision"`
+	Region       string `json:"region"`
+	Classes      *int   `json:"classes"`
+	SHA256       string `json:"sha256"`
+	SizeBytes    int64  `json:"size_bytes"`
+	Labels       string `json:"labels"`
+	LabelsSHA256 string `json:"labels_sha256"`
+	LabelsSize   int64  `json:"labels_size_bytes"`
+	Requirements *struct {
+		MinRAMMB int      `json:"min_ram_mb"`
+		Excludes []string `json:"excludes"`
+	} `json:"requirements"`
+	Backends map[string]struct {
+		Supported   bool `json:"supported"`
+		Recommended bool `json:"recommended"`
+	} `json:"backends"`
+	Benchmarks []struct {
+		Device    string `json:"device"`
+		Backend   string `json:"backend"`
+		LatencyMs int    `json:"latency_ms"`
+		RSSMB     int    `json:"rss_mb"`
+	} `json:"benchmarks"`
+	ScoreCalibration *ScoreCalibration `json:"score_calibration"`
+}
+
 type testManifest struct {
-	Models []struct {
-		Path         string `json:"path"`
-		Variant      string `json:"variant"`
-		Precision    string `json:"precision"`
-		Region       string `json:"region"`
-		Classes      *int   `json:"classes"`
-		SHA256       string `json:"sha256"`
-		SizeBytes    int64  `json:"size_bytes"`
-		Requirements *struct {
-			MinRAMMB int      `json:"min_ram_mb"`
-			Excludes []string `json:"excludes"`
-		} `json:"requirements"`
-		ScoreCalibration *ScoreCalibration `json:"score_calibration"`
-	} `json:"models"`
+	Models     []testManifestModel `json:"models"`
+	FamilyMeta struct {
+		License       string  `json:"license"`
+		CommercialUse bool    `json:"commercial_use"`
+		SpeciesCount  int     `json:"species_count"`
+		Channel       *string `json:"channel"`
+	} `json:"family_meta"`
 }
 
 // normalizeManifestPrecision mirrors the generator's normalizePrecision, kept as

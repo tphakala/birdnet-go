@@ -12,15 +12,21 @@ import (
 )
 
 // regionalPrecisionsPerTile is how many precision builds the generator emits for
-// each region slug.
-const regionalPrecisionsPerTile = 2
+// each region slug, per catalog entry (gen/main.go family.variantsPerRegion).
+var regionalPrecisionsPerTile = map[string]int{
+	"birdnet-v3.0":      2,
+	"perch-v2":          2,
+	"birdnet-plus-v3.0": 1,
+}
 
-// regionalTilesPerFamily is how many region-sliced variants the generator emits
-// per family: every slug in the embedded region table, once per precision build.
-// Both families share one slug set (TestCrossFamilyGeometryIdentity), so the
-// BirdNET v3.0 table stands for both. The tile set itself is pinned by the
-// golden tier snapshot in the region package, not by a count here.
-var regionalTilesPerFamily = regionalPrecisionsPerTile * regionTileCount()
+// regionalTilesFor is how many region-sliced variants the generator emits for an
+// entry: every slug in the embedded region table, once per precision build. All
+// families share one slug set (TestCrossFamilyGeometryIdentity), so the BirdNET
+// v3.0 table stands for all of them. The tile set itself is pinned by the golden
+// tier snapshot in the region package, not by a count here.
+func regionalTilesFor(entryID string) int {
+	return regionalPrecisionsPerTile[entryID] * regionTileCount()
+}
 
 // regionTileCount returns the number of slugs in the embedded BirdNET v3.0
 // region table, or 0 when the table is missing so every count assertion fails.
@@ -48,7 +54,7 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 	tables, err := region.Tables()
 	require.NoError(t, err, "load embedded region tables")
 
-	for _, entryID := range []string{"birdnet-v3.0", "perch-v2"} {
+	for _, entryID := range []string{"birdnet-v3.0", "perch-v2", "birdnet-plus-v3.0"} {
 		t.Run(entryID, func(t *testing.T) {
 			t.Parallel()
 
@@ -117,7 +123,7 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 					assert.Equalf(t, []string{hwprofile.CapAArch64}, v.Requirements.Arch, "int8-arm variant %q must require aarch64", v.ID)
 				}
 			}
-			assert.Equalf(t, regionalTilesPerFamily, regional, "%s must expose %d regional tiles", entryID, regionalTilesPerFamily)
+			assert.Equalf(t, regionalTilesFor(entryID), regional, "%s must expose %d regional tiles", entryID, regionalTilesFor(entryID))
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -90,4 +91,51 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 	v, err := fam.variant(entry("aa"), table, sidecar)
 	require.NoError(t, err)
 	assert.Contains(t, render(&v), "ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},")
+}
+
+func TestCheckRegionCounts(t *testing.T) {
+	t.Parallel()
+
+	// uniform returns expectedRegions regions with n variants each.
+	uniform := func(n int) map[string]int {
+		m := make(map[string]int, expectedRegions)
+		for i := range expectedRegions {
+			m[fmt.Sprintf("r%02d", i)] = n
+		}
+		return m
+	}
+	// uneven keeps the total of uniform(2) but gives one region three builds
+	// and another one.
+	uneven := uniform(2)
+	uneven["r00"] = 3
+	uneven["r01"] = 1
+	// missing drops one region.
+	missing := uniform(1)
+	delete(missing, "r00")
+
+	tests := []struct {
+		name      string
+		perRegion int
+		counts    map[string]int
+		wantErr   string
+	}{
+		{"one precision accepts one per region", 1, uniform(1), ""},
+		{"one precision rejects two per region", 1, uniform(2), "has 2 variants, want 1"},
+		{"two precisions accept two per region", 2, uniform(2), ""},
+		{"two precisions reject one per region", 2, uniform(1), "has 1 variants, want 2"},
+		{"uneven split with the right total is rejected", 2, uneven, "variants, want 2"},
+		{"missing region is rejected", 1, missing, "distinct regions"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fam := &family{key: "x", variantsPerRegion: tt.perRegion}
+			err := fam.checkRegionCounts(tt.counts)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

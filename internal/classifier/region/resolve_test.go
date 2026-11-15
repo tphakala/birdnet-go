@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	perchRepo   = "tphakala/Perch-v2-Models"
-	birdnetRepo = "tphakala/BirdNET-v3.0-Models"
+	perchRepo       = "tphakala/Perch-v2-Models"
+	birdnetRepo     = "tphakala/BirdNET-v3.0-Models"
+	birdnetPlusRepo = "tphakala/BirdNET-Plus-V3.0"
 )
 
 // perchTable loads the embedded Perch v2 region table, the shared geometry the
