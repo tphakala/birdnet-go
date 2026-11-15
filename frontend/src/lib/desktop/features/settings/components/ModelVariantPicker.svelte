@@ -310,9 +310,6 @@
             })}</span
           >
         {/if}
-        {#if variant.headlineLatencyMs && variant.headlineLatencyMs > 0}
-          <span>{t('analysis.gallery.variants.latency', { ms: variant.headlineLatencyMs })}</span>
-        {/if}
       </div>
 
       {#if variant.recommended && variant.reasons?.length}

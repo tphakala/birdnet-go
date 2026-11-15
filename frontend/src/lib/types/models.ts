@@ -30,7 +30,6 @@ export interface CatalogVariant {
   /** True for the embedded baseline variant (the built-in BirdNET v2.4 model); it carries no downloadable files. */
   builtIn?: boolean;
   sizeBytes: number;
-  headlineLatencyMs?: number;
   compatible: boolean;
   recommended: boolean;
   reasons?: VariantReason[];

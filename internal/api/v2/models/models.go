@@ -188,9 +188,8 @@ type CatalogVariantResponse struct {
 	Installed    bool   `json:"installed"`
 	// BuiltIn marks the embedded baseline variant (the built-in BirdNET v2.4 model).
 	// It carries no downloadable files; the gallery labels it and shows no size.
-	BuiltIn           bool  `json:"builtIn,omitempty"`
-	SizeBytes         int64 `json:"sizeBytes"`
-	HeadlineLatencyMs int   `json:"headlineLatencyMs,omitempty"`
+	BuiltIn   bool  `json:"builtIn,omitempty"`
+	SizeBytes int64 `json:"sizeBytes"`
 	// Compatible reports whether this variant can run on the host. It defaults to
 	// true (no hardware evaluation performed) so a client that did not receive
 	// recommendations does not render every variant as incompatible.
@@ -445,8 +444,9 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 // buildVariantResponses maps a catalog entry's variants to their API form,
 // joining in the per-variant recommendations when recs is non-nil (recs is nil
 // when the request is not eligible for hardware recommendations, and is keyed by
-// variant ID). It returns nil for a flat (single-variant) entry so the field is
-// omitted, and hides a Legacy (superseded) variant unless it is the one
+// variant ID). It returns nil for a flat entry (no Variants) so the field is
+// omitted, carries no latency (catalog benchmarks are measured on a few named
+// devices, so no single number holds for every host), and hides a Legacy (superseded) variant unless it is the one
 // currently installed, so the gallery never offers a fresh install of a
 // deprecated build.
 func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, installedVariantID string, recs map[string]recommend.Recommendation, hostArch string) []CatalogVariantResponse {
@@ -464,25 +464,15 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 		variantFiles, _ := classifier.EffectiveFiles(entry, v.ID)
 		sizeBytes := sumFileSizes(variantFiles)
 
-		// Headline latency: the smallest positive measured latency across this
-		// variant's benchmarks, or 0 when none were measured.
-		headlineLatencyMs := 0
-		for _, b := range v.Benchmarks {
-			if b.LatencyMs > 0 && (headlineLatencyMs == 0 || b.LatencyMs < headlineLatencyMs) {
-				headlineLatencyMs = b.LatencyMs
-			}
-		}
-
 		resp := CatalogVariantResponse{
-			ID:                v.ID,
-			Region:            v.Region,
-			Precision:         v.Precision,
-			SpeciesCount:      v.SpeciesCount,
-			Default:           v.Default,
-			Installed:         isInstalledVariant,
-			BuiltIn:           v.BuiltIn,
-			SizeBytes:         sizeBytes,
-			HeadlineLatencyMs: headlineLatencyMs,
+			ID:           v.ID,
+			Region:       v.Region,
+			Precision:    v.Precision,
+			SpeciesCount: v.SpeciesCount,
+			Default:      v.Default,
+			Installed:    isInstalledVariant,
+			BuiltIn:      v.BuiltIn,
+			SizeBytes:    sizeBytes,
 			// Neutral default: without a recommendation the variant is not claimed
 			// incompatible. Overwritten below when recommendations are present.
 			Compatible: true,

@@ -5905,7 +5905,6 @@
         "filterPlaceholder": "Régiók szűrése",
         "filterAria": "Régióra szabott buildek szűrése",
         "filterNoMatch": "Egyetlen régió sem felel meg ennek: \"{query}\"",
-        "latency": "~{ms} ms",
         "precisionInfo": "A pontosságról és a változatokról",
         "precisionHelp": "A pontosság (FP32, FP16, INT8) a méret és a sebesség javára csökkenti a pontosságot: az FP32 a legpontosabb, az INT8 a legkisebb és leggyorsabb. Az Ajánlott a hardveréhez legjobban illő verzió; az Alapértelmezett a modell szabvány build-je."
       },

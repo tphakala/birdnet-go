@@ -4339,7 +4339,6 @@ export type TranslationKey =
   | 'analysis.gallery.variants.filterPlaceholder'
   | 'analysis.gallery.variants.filterAria'
   | 'analysis.gallery.variants.filterNoMatch' // params: query
-  | 'analysis.gallery.variants.latency' // params: ms
   | 'analysis.gallery.variants.precisionInfo'
   | 'analysis.gallery.variants.precisionHelp'
   | 'analysis.gallery.actionInProgress'
@@ -5203,7 +5202,6 @@ export type TranslationParams = {
   'analysis.gallery.variants.showAllRegions': { count: string | number };
   'analysis.gallery.variants.regionContext': { region: string | number };
   'analysis.gallery.variants.filterNoMatch': { query: string | number };
-  'analysis.gallery.variants.latency': { ms: string | number };
   'analysis.gallery.removeSuccess': { name: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
   'analysis.gallery.reasons.backendSupported': { backend: string | number };

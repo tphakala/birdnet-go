@@ -5905,7 +5905,6 @@
         "filterPlaceholder": "Filtrer regioner",
         "filterAria": "Filtrer regiontilpassede bygg",
         "filterNoMatch": "Ingen regioner matcher \"{query}\"",
-        "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
