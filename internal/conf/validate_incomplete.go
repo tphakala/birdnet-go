@@ -120,7 +120,7 @@ func normalizeIncompleteFeatures(s *Settings) {
 }
 
 // normalizeBaseURL warns about a security.baseUrl that is set but not a usable
-// absolute http(s) URL. The value is kept: the settings page then shows it for
+// absolute http(s) URL with a host and no credentials. The value is kept: the settings page then shows it for
 // correction, and GetHostnameForCertificates still reads the AutoTLS hostname from
 // it, so clearing it could turn a scheme typo into a startup failure. Every origin
 // producer already treats it as unusable (see OAuthOrigin and GetBaseURL), and the
