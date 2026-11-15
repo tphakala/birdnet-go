@@ -10,7 +10,7 @@
   import { MAP_CONFIG, createMapStyle } from '$lib/desktop/features/settings/utils/mapConfig';
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
-  import { pickOpener } from '$lib/utils/pressedElement';
+  import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
 
   const logger = getLogger('BannerLocationMap');
 
@@ -153,8 +153,9 @@
     previouslyFocused = pickOpener(undefined) ?? null;
     queueMicrotask(() => closeButtonRef?.focus());
     return () => {
-      // The opener may have been removed while the map was expanded
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      // The opener may have been removed while the map was expanded, and focus the user moved to
+      // another control stays there; the map itself is already gone from the page here
+      if (previouslyFocused?.isConnected && canReturnFocus(undefined)) previouslyFocused.focus();
       previouslyFocused = null;
     };
   });

@@ -1206,6 +1206,19 @@ describe('Modal', () => {
       expect(focusSpy).not.toHaveBeenCalled();
     });
 
+    it('does not pull focus back to the opener when the user moved focus elsewhere before closing', async () => {
+      renderTyped(ModalToggleHost, {});
+      button('Toggle lower').focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      // Focus leaves the dialog for another control of the page
+      button('Page button').focus();
+
+      await press('Toggle lower');
+
+      expect(button('Page button')).toHaveFocus();
+    });
+
     it('returns focus to focusable SVG content it was opened from', async () => {
       renderTyped(ModalToggleHost, {});
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

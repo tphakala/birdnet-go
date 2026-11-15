@@ -49,4 +49,21 @@ describe('BannerLocationMap', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: DIALOG_NAME })).toBeNull());
     expect(focusSpy).not.toHaveBeenCalled();
   });
+
+  it('does not pull focus back to the expand button when the user moved focus elsewhere', async () => {
+    renderMap();
+    const expand = screen.getByRole('button', { name: EXPAND_NAME });
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    expand.focus();
+    await fireEvent.click(expand);
+    await waitFor(() => expect(screen.getByRole('button', { name: CLOSE_NAME })).toHaveFocus());
+    elsewhere.focus();
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: DIALOG_NAME })).toBeNull());
+    expect(elsewhere).toHaveFocus();
+    elsewhere.remove();
+  });
 });

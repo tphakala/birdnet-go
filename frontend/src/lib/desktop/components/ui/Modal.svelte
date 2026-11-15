@@ -1,5 +1,9 @@
 <script module lang="ts">
-  import { pickOpener, TABBABLE_CANDIDATE_SELECTOR } from '$lib/utils/pressedElement';
+  import {
+    canReturnFocus,
+    pickOpener,
+    TABBABLE_CANDIDATE_SELECTOR,
+  } from '$lib/utils/pressedElement';
 
   // Open Modal instances, oldest first. Only the last one (the topmost) acts on
   // Tab and Escape, so a dialog opened over another (the setup wizard and its
@@ -447,8 +451,10 @@
     return stop;
   }
 
-  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
+  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus, and
+  // focus the user moved to another control of the page stays there
   function restoreFocus(target: HTMLElement | SVGElement | null) {
+    if (!canReturnFocus(stackEntry.dialog)) return;
     if (target?.isConnected && 'focus' in target) target.focus();
   }
 

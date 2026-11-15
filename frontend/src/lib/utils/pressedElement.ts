@@ -102,3 +102,15 @@ export function pickOpener(
   if (!userActivationIsActive()) return null;
   return pressedElement?.isConnected && !dialog?.contains(pressedElement) ? pressedElement : null;
 }
+
+/**
+ * Whether a closing dialog may move focus back to its opener: focus is on body or nowhere, or on
+ * a control of the dialog itself. When the user moved focus to another control meanwhile, it stays
+ * there.
+ */
+export function canReturnFocus(dialog: HTMLElement | undefined): boolean {
+  const active = document.activeElement;
+  if (!isElement(active)) return true;
+  if (active === document.body || active === document.documentElement) return true;
+  return dialog?.contains(active) ?? false;
+}
