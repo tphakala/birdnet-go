@@ -705,4 +705,10 @@ func TestValidateBaseURL_ErrorOmitsValue(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid URL format")
 	assert.NotContains(t, err.Error(), "hunter2")
+	assert.NotContains(t, err.Error(), "notaport", "no parser detail is quoted")
+
+	// A scheme-less value parses with its user name as the scheme.
+	err = ValidateBaseURL("hunter2:pw@" + testHostExample)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "hunter2")
 }

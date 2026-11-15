@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // URL scheme constants for URL construction.
@@ -23,9 +21,8 @@ const (
 
 // ValidateBaseURL checks a base URL as BIRDNET_URL and security.baseUrl accept it:
 // non-empty after trimming, an http or https scheme, a hostname and no userinfo.
-// The error does not repeat the whole value, which may carry credentials, but it
-// can quote short fragments of it (the scheme, a port, an escape sequence), so
-// callers that log it must not pass it on unredacted.
+// Every error is a fixed message that quotes nothing from the value, which may
+// carry credentials, so callers can log it as it is.
 func ValidateBaseURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -34,11 +31,9 @@ func ValidateBaseURL(value string) error {
 
 	parsed, err := url.Parse(value)
 	if err != nil {
-		// url.Error repeats the whole value; keep only the reason.
-		if urlErr, ok := errors.AsType[*url.Error](err); ok {
-			err = urlErr.Err
-		}
-		return fmt.Errorf("invalid URL format: %w", err)
+		// The parser's reason can quote part of the value (a port token that is
+		// really a password), so none of it is kept.
+		return fmt.Errorf("invalid URL format")
 	}
 
 	if parsed.Scheme == "" {
@@ -46,7 +41,7 @@ func ValidateBaseURL(value string) error {
 	}
 
 	if parsed.Scheme != SchemeHTTP && parsed.Scheme != SchemeHTTPS {
-		return fmt.Errorf("URL scheme must be http or https, got: %s", parsed.Scheme)
+		return fmt.Errorf("URL scheme must be http or https")
 	}
 
 	if parsed.Hostname() == "" {

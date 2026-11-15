@@ -892,19 +892,25 @@ func TestValidateEnvBaseURL_Integration(t *testing.T) {
 	})
 
 	t.Run("credentials in a URL set in any validated variable stay out of the error", func(t *testing.T) {
-		for _, binding := range getEnvBindings() {
-			if binding.Validate == nil {
-				continue
-			}
-			t.Run(binding.EnvVar, func(t *testing.T) {
-				viper.Reset()
-				t.Setenv(binding.EnvVar, "ftp://user:hunter2@birdnet.example.com")
+		// The second value fails to parse, and the parser's reason names the password.
+		for _, value := range []string{
+			"ftp://user:hunter2@birdnet.example.com",
+			"https://user:hunter2/path@birds.example.com",
+		} {
+			for _, binding := range getEnvBindings() {
+				if binding.Validate == nil {
+					continue
+				}
+				t.Run(binding.EnvVar+" "+value, func(t *testing.T) {
+					viper.Reset()
+					t.Setenv(binding.EnvVar, value)
 
-				err := configureEnvironmentVariables()
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), binding.EnvVar)
-				assert.NotContains(t, err.Error(), "hunter2")
-			})
+					err := configureEnvironmentVariables()
+					require.Error(t, err)
+					assert.Contains(t, err.Error(), binding.EnvVar)
+					assert.NotContains(t, err.Error(), "hunter2")
+				})
+			}
 		}
 	})
 
