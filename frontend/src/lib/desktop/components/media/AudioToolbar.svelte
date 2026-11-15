@@ -610,9 +610,12 @@
     white-space: nowrap;
   }
 
-  /* Shrinkable, so the gain group still fits a very narrow bar */
+  /* Shrinkable, so the gain group still fits a very narrow bar. The width is not
+     redundant with the flex basis: without it the row's max-content size uses the
+     browser's default range width, about 130 px. */
   .gain-slider {
     flex: 1 1 5rem;
+    width: 5rem;
     min-width: 3rem;
     height: var(--audio-toolbar-target);
     margin: 0;
