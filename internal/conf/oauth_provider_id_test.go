@@ -142,6 +142,13 @@ func TestLoad_ReconcilesSameIDOAuthProviders(t *testing.T) {
       userId: user@example.com
 %s`, provider, enabled, clientID, extra)
 	}
+	// unfinished is enabled but has no client secret, which incomplete-feature
+	// normalisation would disable.
+	const unfinished = `    - provider: google
+      enabled: true
+      clientId: unfinished
+      userId: user@example.com
+`
 	const issuer = "      issuerUrl: https://idp.example.com\n"
 
 	tests := []struct {
@@ -154,6 +161,7 @@ func TestLoad_ReconcilesSameIDOAuthProviders(t *testing.T) {
 		{name: "two enabled, case variant", entries: entry("google", "first", true, "") + entry("Google", "second", true, ""), wantProvider: "google", wantClientID: "first", wantEnabled: true},
 		{name: "two enabled oidc", entries: entry("oidc", "first", true, issuer) + entry("OIDC", "second", true, issuer), wantProvider: "oidc", wantClientID: "first", wantEnabled: true},
 		{name: "disabled first, enabled second", entries: entry("google", "leftover", false, "") + entry("google", "live", true, ""), wantProvider: "google", wantClientID: "live", wantEnabled: true},
+		{name: "enabled entry without credentials first", entries: unfinished + entry("Google", "working", true, ""), wantProvider: "google", wantClientID: "working", wantEnabled: true},
 		{name: "two disabled", entries: entry("github", "first", false, "") + entry("GitHub", "second", false, ""), wantProvider: "github", wantClientID: "first", wantEnabled: false},
 	}
 
@@ -202,4 +210,42 @@ func TestGetOAuthProvider(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, "g", got.ClientID)
 	assert.Nil(t, s.GetOAuthProvider("kakao"))
+}
+
+// TestLoad_ReconcileDoesNotRewriteDuplicatesOnDisk pins that dropping a duplicate
+// provider entry in memory leaves the file as the user wrote it, even when a later
+// migration saves the config.
+func TestLoad_ReconcileDoesNotRewriteDuplicatesOnDisk(t *testing.T) {
+	_, configPath := loadConfigFromYAML(t, `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+  baseurl: "https://birds.example.com"
+  oauthProviders:
+    - provider: google
+      enabled: false
+      clientId: leftover
+      clientSecret: leftover-secret
+    - provider: Google
+      enabled: true
+      clientId: live
+      clientSecret: live-secret
+      userId: user@example.com
+realtime:
+  audio:
+    export:
+      enabled: true
+      type: aac
+      path: clips/
+      length: 15
+      bitrate: ""
+`)
+
+	persisted := readPersistedSettings(t, configPath)
+
+	require.Len(t, persisted.Security.OAuthProviders, 2)
+	assert.Equal(t, "google", persisted.Security.OAuthProviders[0].Provider)
+	assert.Equal(t, "Google", persisted.Security.OAuthProviders[1].Provider)
+	assert.Equal(t, "leftover-secret", persisted.Security.OAuthProviders[0].ClientSecret)
+	assert.Equal(t, DefaultAudioExportBitrate, persisted.Realtime.Audio.Export.Bitrate,
+		"the migration that saves the file must have run")
 }

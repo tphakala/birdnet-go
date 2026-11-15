@@ -113,7 +113,7 @@ func validateSecuritySettings(settings *Security) error {
 		return err
 	}
 
-	// Reject two enabled entries with the same provider ID, for every kind.
+	// Reject two entries with the same provider ID, enabled or not, for every kind.
 	if err := validateOAuthProviderDuplicates(settings); err != nil {
 		return err
 	}

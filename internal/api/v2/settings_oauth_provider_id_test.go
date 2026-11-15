@@ -105,6 +105,16 @@ func TestUpdateSectionSettingsRejectsSameIDOAuthProviders(t *testing.T) {
 			})
 
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Empty(t, controller.Settings.Load().Security.OAuthProviders, "a rejected save must not change the stored providers")
+
+			// The same payload with a different second provider is accepted, so the
+			// duplicate ID is what the save was rejected for.
+			patchSection(t, e, controller, "security", map[string]any{
+				"oauthProviders": []any{
+					oauthProviderPayload("google", nil),
+					oauthProviderPayload("github", map[string]any{"enabled": !tt.secondDisabled}),
+				},
+			})
 		})
 	}
 }
@@ -178,6 +188,12 @@ func TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates(t *testing.T) {
 	rec := sendFullSettings(t, e, controller, s)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Empty(t, controller.Settings.Load().Security.OAuthProviders, "a rejected save must not change the stored providers")
+
+	// The same payload with a different second provider is accepted, so the
+	// duplicate ID is what the save was rejected for.
+	s.Security.OAuthProviders[1].Provider = "github"
+	putFullSettings(t, e, controller, s)
 }
 
 // TestUpdateSettingsRestoresSecretWhenClientIDChanges verifies a redacted secret is

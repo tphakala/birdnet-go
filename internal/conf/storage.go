@@ -118,13 +118,6 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "OAuth")
 	}
 
-	// Canonicalize provider IDs so every exact comparison below and in the
-	// validators sees lower-case IDs, then collapse entries that share an ID so
-	// neither the incomplete-feature pass nor validation sees a duplicate. Not
-	// persisted: the file keeps what the user wrote until the next save.
-	settings.NormalizeOAuthProviderIDs()
-	settings.ReconcileOAuthProviderDuplicates()
-
 	// Migrate legacy RTSP URLs to new streams format
 	if settings.MigrateRTSPConfig() {
 		persistMigration(settings, "RTSP")
@@ -245,6 +238,13 @@ func Load() (*Settings, error) {
 			persistMigration(settings, "profiling token")
 		}
 	}
+
+	// Canonicalize provider IDs and collapse entries that share one, so neither the
+	// incomplete-feature pass nor validation sees a duplicate. This runs after the
+	// last persistMigration on purpose: the file keeps what the user wrote, dropped
+	// entries and their credentials included, until the next save.
+	settings.NormalizeOAuthProviderIDs()
+	settings.ReconcileOAuthProviderDuplicates()
 
 	// Resolve features that are switched on but were never configured, before the
 	// validators get to see them. A config file can age into that state across

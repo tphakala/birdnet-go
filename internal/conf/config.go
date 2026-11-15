@@ -2210,18 +2210,30 @@ func (s *Settings) NormalizeOAuthProviderIDs() {
 }
 
 // ReconcileOAuthProviderDuplicates collapses entries that share a canonical
-// provider ID into one: the first enabled entry, or the first entry when none is
-// enabled. The others are dropped and one warning per dropped entry names its
-// index, provider ID and enabled state (never a secret). It expects IDs already
-// canonical (see NormalizeOAuthProviderIDs), and runs on config load so that a
-// hand-edited file with duplicates still starts. The settings API rejects such
-// duplicates instead (see validateOAuthProviderDuplicates).
+// provider ID into one: the first enabled entry that has credentials, else the
+// first enabled entry, else the first entry. The credential check keeps a working
+// entry from losing to an unfinished one that incomplete-feature normalisation
+// would disable afterwards. The others are dropped and one warning per dropped
+// entry names its index, provider ID and enabled state (never a secret). It
+// expects IDs already canonical (see NormalizeOAuthProviderIDs), and runs on
+// config load so that a hand-edited file with duplicates still starts. The settings
+// API rejects such duplicates instead (see validateOAuthProviderDuplicates).
 func (s *Settings) ReconcileOAuthProviderDuplicates() {
 	providers := s.Security.OAuthProviders
+	rank := func(p *OAuthProviderConfig) int {
+		switch {
+		case p.Enabled && p.ClientID != "" && p.ClientSecret != "":
+			return 2
+		case p.Enabled:
+			return 1
+		default:
+			return 0
+		}
+	}
 	keep := make(map[string]int, len(providers))
 	for i := range providers {
 		kept, seen := keep[providers[i].Provider]
-		if !seen || (providers[i].Enabled && !providers[kept].Enabled) {
+		if !seen || rank(&providers[i]) > rank(&providers[kept]) {
 			keep[providers[i].Provider] = i
 		}
 	}
@@ -2232,7 +2244,7 @@ func (s *Settings) ReconcileOAuthProviderDuplicates() {
 			reconciled = append(reconciled, providers[i])
 			continue
 		}
-		GetLogger().Warn("Dropped duplicate OAuth provider entry; keeping the first enabled entry for this provider ID",
+		GetLogger().Warn("Dropped duplicate OAuth provider entry; keeping the best entry for this provider ID",
 			logger.Int("index", i),
 			logger.String("provider", providers[i].Provider),
 			logger.Bool("enabled", providers[i].Enabled))
