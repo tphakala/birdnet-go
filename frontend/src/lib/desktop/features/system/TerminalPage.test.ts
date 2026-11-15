@@ -433,6 +433,26 @@ describe('TerminalPage detached window', () => {
     expect(rebuiltInlineFocusCount()).toBe(0);
   });
 
+  it('does not take focus on a later reconnect when the terminal was disabled right after the popup closed', async () => {
+    const doc = await detach();
+
+    // Both happen before the page has reconnected the terminal
+    doc.defaultView?.dispatchEvent(new Event('beforeunload'));
+    setTerminalEnabled(false);
+    await tick();
+    setTerminalEnabled(true);
+
+    await waitFor(() =>
+      expect(
+        created.terminals.some(
+          terminal =>
+            terminal.textarea?.ownerDocument === document && terminal !== created.terminals[0]
+        )
+      ).toBe(true)
+    );
+    expect(rebuiltInlineFocusCount()).toBe(0);
+  });
+
   it('draws the detached notice focus ring inside the notice, which fills a clipping wrapper', async () => {
     await detach();
 

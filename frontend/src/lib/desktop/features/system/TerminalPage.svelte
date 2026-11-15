@@ -751,6 +751,9 @@
   // case where the user enables the terminal and saves settings while already
   // on this page - onMount would miss that second scenario.
   $effect(() => {
+    // A terminal disabled before it could reconnect after the popup closed comes back later on
+    // its own, and must not take focus then
+    if (!isEnabled) focusOnReconnect = false;
     if (isEnabled && terminalContainer && !term) {
       connect();
     }
