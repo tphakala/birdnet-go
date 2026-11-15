@@ -1721,7 +1721,7 @@ func TestOIDCDiscovery_ShutdownSupersedesInFlightAttempt(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Cleanup(func() { enableOIDCRetries() })
 			idp := newGatedIDP(t, tt.lateSucceeds)
-			done := registerProviders(t, oidcSettings(idp.URL))
+			done := idp.registerProviders(t, oidcSettings(idp.URL))
 			idp.waitEntered(t)
 
 			shutdownOIDCRetries()
@@ -1744,7 +1744,7 @@ func TestOIDCDiscovery_ShutdownForgetsActiveRegistration(t *testing.T) {
 	t.Cleanup(func() { enableOIDCRetries() })
 	idp := newGatedIDP(t, true)
 	settings := oidcSettings(idp.URL)
-	done := registerProviders(t, settings)
+	done := idp.registerProviders(t, settings)
 	idp.waitEntered(t)
 
 	shutdownOIDCRetries()

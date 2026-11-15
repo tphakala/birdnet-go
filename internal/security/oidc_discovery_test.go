@@ -488,19 +488,23 @@ func TestStartOIDCDiscovery_RedactsItsLogsAndReportsExhaustion(t *testing.T) {
 
 	logs := useSplitLogFiles(t)
 
+	var recorded error
 	synctest.Test(t, func(t *testing.T) {
 		// The context is created inside the bubble so the loop's wait on it is
 		// durably blocked and the fake clock can advance.
 		ctx, gen := beginDiscoveryForTest(t)
 		done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(issuer), defaultOIDCRetryPolicy())
 		<-done
+		// Read the recorded failure before the bubble's cleanup resets it.
+		recorded = ProviderRegistrationError(ProviderOIDC)
 	})
 
 	mainLog, securityLog := logs.main(), logs.security()
 	assert.Contains(t, securityLog, "Retrying OIDC discovery")
 	assert.Contains(t, securityLog, "OIDC discovery retry failed")
-	recorded := ProviderRegistrationError(ProviderOIDC)
 	require.Error(t, recorded)
+	require.NotErrorIs(t, recorded, errProviderNotRegistered, "the last failure must be the recorded cause")
+	assert.Contains(t, recorded.Error(), "connection refused")
 	for name, content := range map[string]string{"main log": mainLog, "security log": securityLog} {
 		assert.Contains(t, content, "OIDC discovery retries exhausted", name)
 		assert.Contains(t, content, "connection refused", name)
@@ -597,6 +601,16 @@ func newGatedIDP(t *testing.T, succeed bool) *gatedIDP {
 	return &gatedIDP{Server: server, entered: entered, release: release}
 }
 
+// registerProviders runs a registration pass for settings and releases the gate
+// in a cleanup that runs before the pass's own, so a test that fails before
+// releasing cannot leave resetProviders waiting on a blocked attempt.
+func (g *gatedIDP) registerProviders(t *testing.T, settings *conf.Settings) <-chan struct{} {
+	t.Helper()
+	done := registerProviders(t, settings)
+	t.Cleanup(g.release)
+	return done
+}
+
 func (g *gatedIDP) waitEntered(t *testing.T) {
 	t.Helper()
 	testutil.WaitForChannel(t, g.entered, testutil.DefaultTestTimeout, "the discovery request never reached the identity provider")
@@ -623,7 +637,7 @@ func TestOIDCDiscovery_SupersededAttemptWritesNothing(t *testing.T) {
 			stale := newGatedIDP(t, tt.lateSucceeds)
 			current := mockOIDCDiscovery(t)
 
-			done1 := registerProviders(t, oidcSettings(stale.URL))
+			done1 := stale.registerProviders(t, oidcSettings(stale.URL))
 			stale.waitEntered(t)
 
 			// Pass 2 switches to a working issuer while attempt 1 is in flight.
@@ -644,7 +658,7 @@ func TestOIDCDiscovery_SupersededAttemptWritesNothing(t *testing.T) {
 
 	t.Run("disabled while in flight", func(t *testing.T) {
 		stale := newGatedIDP(t, true)
-		done := registerProviders(t, oidcSettings(stale.URL))
+		done := stale.registerProviders(t, oidcSettings(stale.URL))
 		stale.waitEntered(t)
 
 		// Pass 3 disables OIDC.
@@ -744,7 +758,7 @@ func TestReloadOAuthProviders_UnrelatedEditKeepsRegisteredOIDC(t *testing.T) {
 // with unchanged OIDC settings leaves a discovery that is still running alone.
 func TestReloadOAuthProviders_UnrelatedEditKeepsRunningDiscovery(t *testing.T) {
 	idp := newGatedIDP(t, true)
-	done := registerProviders(t, oidcAndGoogleSettings(idp.URL, "s1"))
+	done := idp.registerProviders(t, oidcAndGoogleSettings(idp.URL, "s1"))
 	idp.waitEntered(t)
 
 	assert.Nil(t, initializeProviders(oidcAndGoogleSettings(idp.URL, "s2")), "the running discovery must be left running")
