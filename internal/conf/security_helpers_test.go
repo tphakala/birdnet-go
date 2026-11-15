@@ -280,6 +280,16 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 		want     string
 	}{
 		{
+			name:     "Host with a scheme, port and path - should return host:port",
+			security: Security{Host: testURLHTTPS + "/birdnet"},
+			want:     testHostExample + ":" + testPort5500,
+		},
+		{
+			name:     "Host with an uppercase scheme and padding - should return the host",
+			security: Security{Host: " HTTP://" + testHostExample + " "},
+			want:     testHostExample,
+		},
+		{
 			name: "BaseURL set with port - should return host:port",
 			security: Security{
 				BaseURL: testURLHTTPS,

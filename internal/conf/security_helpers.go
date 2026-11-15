@@ -202,7 +202,7 @@ func (s *Security) GetHostnameForCertificates() string {
 // This is useful for cases where the full host:port is needed (e.g., HTTP Host header).
 // Priority order:
 //  1. Host:port extracted from BaseURL (if valid)
-//  2. Host field as fallback
+//  2. Host field as fallback (host:port when it carries an http(s) scheme)
 //  3. Empty string if neither is available
 func (s *Security) GetExternalHost() string {
 	// Priority 1: Extract from BaseURL if valid
@@ -213,8 +213,15 @@ func (s *Security) GetExternalHost() string {
 		}
 	}
 
-	// Priority 2: Fall back to Host
-	return s.Host
+	// Priority 2: Fall back to Host, reduced to host:port when it has a scheme
+	host := s.trimmedHost()
+	if !hostHasScheme(host) {
+		return host
+	}
+	if parsed, err := url.Parse(host); err == nil {
+		return parsed.Host
+	}
+	return ""
 }
 
 // IsHTTPSBaseURL reports whether the canonical external BaseURL uses the https
