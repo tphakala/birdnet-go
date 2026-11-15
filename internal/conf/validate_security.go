@@ -10,6 +10,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Provider IDs used in security.oauthProviders, and by the deprecated
@@ -319,15 +320,18 @@ func validateOIDCProviders(settings *Security) error {
 		}
 		parsed, err := url.Parse(provider.IssuerURL)
 		if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
-			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid http(s) URL", provider.IssuerURL).
+			// The value may be scheme-less or opaque, which ScrubCredentialURL
+			// does not handle, so use the single-value redactor.
+			redactedIssuer := privacy.RedactURLUserinfo(provider.IssuerURL)
+			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid http(s) URL", redactedIssuer).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-invalid").
-				Context("issuer_url", provider.IssuerURL).
+				Context("issuer_url", redactedIssuer).
 				Build()
 		}
 		if parsed.Scheme == SchemeHTTP {
-			GetLogger().Warn("OIDC issuerUrl uses HTTP instead of HTTPS — acceptable for local development only",
-				logger.String("issuer_url", provider.IssuerURL))
+			GetLogger().Warn("OIDC issuerUrl uses HTTP instead of HTTPS: acceptable for local development only",
+				logger.CredentialURL("issuer_url", provider.IssuerURL))
 		}
 	}
 	return nil
@@ -348,7 +352,7 @@ var privateTLDs = []string{
 }
 
 // validateAutoTLSHostname checks that a hostname is suitable for Let's Encrypt.
-// Let's Encrypt requires a publicly resolvable FQDN — not an IP, not a private
+// Let's Encrypt requires a publicly resolvable FQDN, not an IP, not a private
 // name, and not a bare hostname without dots.
 func validateAutoTLSHostname(hostname string) error {
 	// Must not be an IP address

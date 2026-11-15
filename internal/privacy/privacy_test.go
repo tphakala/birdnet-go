@@ -2137,6 +2137,99 @@ func TestScrubCredentialURL(t *testing.T) {
 	})
 }
 
+// TestScrubCredentialURL_UnparseableFallback pins that a URL url.Parse rejects
+// is redacted by the single-value redactor, and that a parseable pathless URL
+// with an at sign in its query is never altered.
+func TestScrubCredentialURL_UnparseableFallback(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unparseable URL with raw at sign in the password", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubCredentialURL("http://alice@corp.example:secret@host:12x/path")
+		assert.Equal(t, "http://[REDACTED]@host:12x/path", got)
+	})
+
+	t.Run("parseable pathless URL with at sign in the query is unchanged", func(t *testing.T) {
+		t.Parallel()
+		const in = "https://idp.example?login_hint=a@b.example"
+		assert.Equal(t, in, ScrubCredentialURL(in))
+	})
+}
+
+// TestRedactURLUserinfo covers the single-value redactor for values that were
+// meant to be URLs and may not parse.
+func TestRedactURLUserinfo(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"raw at sign in the password", "https://user:p@ss@host:12x/x", "https://[REDACTED]@host:12x/x"},
+		{"email style username", "https://a@b.example:pw@host:12x/x", "https://[REDACTED]@host:12x/x"},
+		{"empty username", "https://:pw@host:12x", "https://[REDACTED]@host:12x"},
+		{"empty password", "https://user:@host:12x", "https://[REDACTED]@host:12x"},
+		{"username only", "https://user@host:12x", "https://[REDACTED]@host:12x"},
+		// "user:" is shaped like a scheme, so it is kept; the password is not.
+		{"scheme-less", "user:pw@host", "user:[REDACTED]@host"},
+		{"scheme-less without colon", "user@host", "[REDACTED]@host"},
+		{"opaque", "https:user:pw@host", "https:[REDACTED]@host"},
+		{"scheme-relative", "//user:pw@host", "//[REDACTED]@host"},
+		{"no userinfo", "https://host:12x/path", "https://host:12x/path"},
+		{"slash in the password", "http://user:pa/ss@host:12x/x", "http://[REDACTED]@host:12x/x"},
+		{"question mark in the password", "http://user:pa?ss@host:12x/x", "http://[REDACTED]@host:12x/x"},
+		{"hash in the password", "http://user:pa#ss@host:12x/x", "http://[REDACTED]@host:12x/x"},
+		// Documented cost: a rejected value without credentials but with an at
+		// sign in its path is shown with the part before that sign replaced.
+		{"at sign only in the path", "http://host:12x/path?email=a@b.example", "http://[REDACTED]@b.example"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := RedactURLUserinfo(tt.input)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, got, RedactURLUserinfo(got), "redaction must be idempotent")
+		})
+	}
+}
+
+// TestScrubURLUserinfoInText covers redaction of URLs embedded in free text.
+func TestScrubURLUserinfoInText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"transport error with masked password",
+			`Get "https://alice:***@idp.example/.well-known/openid-configuration": dial tcp: connection refused`,
+			`Get "https://[REDACTED]@idp.example/.well-known/openid-configuration": dial tcp: connection refused`,
+		},
+		{
+			"two URLs and an e-mail address",
+			"first https://a:b@one.example/x then http://c@two.example/y mail ops@corp.example",
+			"first https://[REDACTED]@one.example/x then http://[REDACTED]@two.example/y mail ops@corp.example",
+		},
+		{
+			"pathless URL with at sign in the query",
+			"Get https://idp.example?login_hint=a@b.example: refused",
+			"Get https://idp.example?login_hint=a@b.example: refused",
+		},
+		{"no URL", "connection refused", "connection refused"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubURLUserinfoInText(tt.input)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, got, ScrubURLUserinfoInText(got), "redaction must be idempotent")
+		})
+	}
+}
+
 // TestSanitizeStreamUrl tests the multi-protocol URL sanitization function
 func TestSanitizeStreamUrl(t *testing.T) {
 	t.Parallel()

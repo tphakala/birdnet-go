@@ -57,6 +57,11 @@ var (
 	// cancelAllOIDCRetriesLocked). The map is therefore bounded by the number of
 	// distinct configured issuer URLs, not by retry attempts.
 	oidcRetryCancels = make(map[string]context.CancelFunc)
+
+	// oidcRetryGoroutines counts running OIDC discovery retry goroutines. It
+	// exists so tests can wait for them to exit; shutdown does not wait on it,
+	// because a discovery request in flight cannot be cancelled.
+	oidcRetryGoroutines sync.WaitGroup
 )
 
 // cancelAllOIDCRetriesLocked cancels and forgets every in-flight OIDC discovery
@@ -113,7 +118,7 @@ func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) bool {
 // retry for the same issuer replaces it (see setOIDCRetryCancel).
 // initialErr is the error of the discovery attempt that made the retry necessary; it is
 // redacted with redactDiscoveryErr and is the cause reported if the window ends before any
-// retry attempt fails. It may be nil.
+// retry attempt fails. It may be nil, which is reported as errOIDCDiscoveryCauseUnknown.
 // Returns a channel that is closed when the goroutine exits (for testing synchronization).
 func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string, initialErr error) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
 	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
@@ -125,12 +130,9 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 	deadline := time.Now().Add(OIDCRetryMaxDuration)
 	done := make(chan struct{})
 	discoveryURL := oidcDiscoveryURL(providerConfig.IssuerURL)
-	lastErr := initialErr
-	if lastErr != nil {
-		lastErr = redactDiscoveryErr(lastErr)
-	}
+	lastErr := redactDiscoveryErr(initialErr)
 
-	go func() {
+	oidcRetryGoroutines.Go(func() {
 		defer close(done)
 		// A single reusable timer (Reset per iteration) instead of time.After
 		// inside the loop, so an early ctx cancellation does not leave an
@@ -192,7 +194,7 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 				return
 			}
 		}
-	}()
+	})
 
 	return done
 }

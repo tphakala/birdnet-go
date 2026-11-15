@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // TestValidateSecuritySettings_OIDC covers the OIDC rules that block startup. An
@@ -171,4 +173,75 @@ func TestValidateSecuritySettings_OIDC(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidateSecuritySettings_OIDCIssuerNeverEchoesCredentials pins that a
+// rejected issuer URL reaches neither the error text nor the error context
+// (which is reported to telemetry) with its userinfo.
+func TestValidateSecuritySettings_OIDCIssuerNeverEchoesCredentials(t *testing.T) {
+	t.Parallel()
+
+	const password = "s3cr3tpw"
+
+	tests := []struct {
+		name   string
+		issuer string
+		// username is asserted absent too, except for a scheme-less value: its
+		// "user:" prefix is shaped like a scheme, so the redactor keeps it.
+		username string
+	}{
+		{name: "unparseable with userinfo", issuer: "https://admin:" + password + "@idp.example.com:notaport", username: "admin"},
+		{name: "password with a slash", issuer: "https://admin:s3cr3t/pw@idp.example.com:notaport", username: "admin"},
+		{name: "scheme-less with userinfo", issuer: "admin:" + password + "@idp.example.com"},
+		{name: "unsupported scheme with userinfo", issuer: "ftp://admin:" + password + "@idp.example.com", username: "admin"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := Security{
+				Host:            "example.com",
+				SessionDuration: 24 * time.Hour,
+				OAuthProviders: []OAuthProviderConfig{
+					{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: tt.issuer, UserID: "user@example.com"},
+				},
+			}
+			err := validateSecuritySettings(&s)
+			require.Error(t, err)
+			assert.NotContains(t, err.Error(), "s3cr3t")
+			if tt.username != "" {
+				assert.NotContains(t, err.Error(), tt.username)
+			}
+
+			enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok, "issuer errors must be enhanced errors")
+			issuerCtx, found := enhanced.GetContext()["issuer_url"].(string)
+			require.True(t, found, "the issuer_url context must be set")
+			assert.NotContains(t, issuerCtx, "s3cr3t")
+			if tt.username != "" {
+				assert.NotContains(t, issuerCtx, tt.username)
+			}
+		})
+	}
+}
+
+// TestValidateSecuritySettings_OIDCHTTPWarningNeverEchoesCredentials pins that
+// the warning for a plain HTTP issuer does not log the issuer's userinfo.
+func TestValidateSecuritySettings_OIDCHTTPWarningNeverEchoesCredentials(t *testing.T) {
+	// Not parallel: captures the process-global logger.
+	buf := logtest.CaptureBuffer(t)
+
+	s := Security{
+		Host:            "example.com",
+		SessionDuration: 24 * time.Hour,
+		OAuthProviders: []OAuthProviderConfig{
+			{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: "http://admin:s3cr3tpw@localhost:8080", UserID: "user@example.com"},
+		},
+	}
+	require.NoError(t, validateSecuritySettings(&s))
+
+	out := buf.String()
+	require.Contains(t, out, "OIDC issuerUrl uses HTTP", "the HTTP warning must be logged")
+	assert.NotContains(t, out, "s3cr3tpw")
+	assert.NotContains(t, out, "admin")
 }
