@@ -7,9 +7,8 @@
  * dialogs import this module.
  */
 
-/** CSS selector for native controls that may be keyboard focusable */
-export const NATIVE_INTERACTIVE_SELECTOR =
-  'button, a[href], area[href], input, select, textarea, summary';
+// Native controls that may be keyboard focusable
+const NATIVE_INTERACTIVE_SELECTOR = 'button, a[href], area[href], input, select, textarea, summary';
 
 /** CSS selector for elements that may be keyboard focusable, narrowed by each caller to what Tab reaches */
 export const TABBABLE_CANDIDATE_SELECTOR = `${NATIVE_INTERACTIVE_SELECTOR}, [tabindex]`;
@@ -31,6 +30,11 @@ function isElement(node: unknown): node is HTMLElement | SVGElement {
   return node instanceof HTMLElement || node instanceof SVGElement;
 }
 
+// A native control, or any element in the tab order
+function isTabbableControl(el: HTMLElement | SVGElement): boolean {
+  return el.matches(NATIVE_INTERACTIVE_SELECTOR) || el.tabIndex >= 0;
+}
+
 /**
  * The control a press landed on, or null for plain content, a disabled control or a negative
  * tabindex wrapper
@@ -42,10 +46,9 @@ function pressedControl(target: unknown): HTMLElement | SVGElement | null {
   // A tabindex=-1 element (an icon inside a button) belongs to the control around it, if any:
   // a native one, or a custom role="button" that is itself in the tab order
   let candidate: HTMLElement | SVGElement | null = nearest;
-  if (!nearest.matches(NATIVE_INTERACTIVE_SELECTOR) && nearest.tabIndex < 0) {
+  if (!isTabbableControl(nearest)) {
     const owner = nearest.closest<HTMLElement>(PRESSABLE_ANCESTOR_SELECTOR);
-    candidate =
-      owner && (owner.matches(NATIVE_INTERACTIVE_SELECTOR) || owner.tabIndex >= 0) ? owner : null;
+    candidate = owner && isTabbableControl(owner) ? owner : null;
   }
   return candidate && !candidate.closest(UNPRESSABLE_SELECTOR) ? candidate : null;
 }
@@ -53,6 +56,10 @@ function pressedControl(target: unknown): HTMLElement | SVGElement | null {
 /** Whether the browser still counts the user's last gesture as recent; true where the API is missing */
 function userActivationIsActive(): boolean {
   return !('userActivation' in navigator) || navigator.userActivation.isActive;
+}
+
+function forgetPress() {
+  pressedElement = null;
 }
 
 if (typeof document !== 'undefined') {
@@ -64,30 +71,14 @@ if (typeof document !== 'undefined') {
     },
     true
   );
-  // A scroll that starts on a button sends pointerdown, then pointercancel, and no click
-  document.addEventListener(
-    'pointercancel',
-    () => {
-      pressedElement = null;
-    },
-    true
-  );
-  document.addEventListener(
-    'focusin',
-    () => {
-      pressedElement = null;
-    },
-    true
-  );
-  // A key press renews user activation, which would otherwise let an old press stand as the
-  // opener of a dialog that a script opens much later
-  document.addEventListener(
-    'keydown',
-    () => {
-      pressedElement = null;
-    },
-    true
-  );
+  // Each of these means the press no longer says where the user is:
+  // - pointercancel: a scroll that starts on a button sends pointerdown, then pointercancel, and no click
+  // - focusin: focus moved to an element of its own
+  // - keydown: a key press renews user activation, which would otherwise let an old press stand
+  //   as the opener of a dialog that a script opens much later
+  for (const type of ['pointercancel', 'focusin', 'keydown']) {
+    document.addEventListener(type, forgetPress, true);
+  }
 }
 
 /**
