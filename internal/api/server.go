@@ -1099,10 +1099,10 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 // provider cannot be used right now. Begin and callback share it so the two
 // cannot drift. stage names the step in the log lines.
 func (s *Server) rejectUnusableOAuthProvider(c echo.Context, log logger.Logger, stage, configProvider, provider string) (handled bool, err error) {
-	// Reject providers that are not currently enabled and fully configured before
-	// sending the user on the provider round-trip, so a disabled or half-configured
-	// provider fails fast with a clear security.log entry here instead of an opaque
-	// error after the redirect (issue #3381). The visitor only sees a generic message.
+	// Reject a provider that is not currently enabled and fully configured, so a
+	// disabled or half-configured provider fails fast with a clear security.log
+	// entry here instead of an opaque error from gothic (issue #3381). The visitor
+	// only sees a generic message.
 	if settings := s.currentSettings(); settings == nil || !settings.IsOAuthProviderEnabled(configProvider) {
 		log.Warn(stage + " rejected: provider is disabled or not fully configured")
 		return true, c.String(http.StatusBadRequest, "OAuth provider not available")
