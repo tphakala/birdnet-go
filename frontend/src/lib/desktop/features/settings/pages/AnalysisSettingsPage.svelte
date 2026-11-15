@@ -2225,19 +2225,23 @@
                   <thead>
                     <tr class="border-b border-[var(--color-base-300)]">
                       <th
+                        scope="col"
                         class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
                         >{t('analysis.rangeFilter.status.classifier')}</th
                       >
                       <th
+                        scope="col"
                         class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
                         >{t('analysis.rangeFilter.status.totalSpecies')}</th
                       >
                       <th
+                        scope="col"
                         class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
                         title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withRangeData')}</th
                       >
                       <th
+                        scope="col"
                         class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
                         title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withoutRangeData')}</th

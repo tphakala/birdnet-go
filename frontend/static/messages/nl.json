@@ -5096,7 +5096,8 @@
       "noData": "Geen gegevens beschikbaar",
       "loading": "Gegevens inlezen ...",
       "error": "Gegevens inlezen is mislukt",
-      "sortBy": "Sorteer op {column}",
+      "sortedAscending": "Gesorteerd op {column}, oplopend",
+      "sortedDescending": "Gesorteerd op {column}, aflopend",
       "rowsPerPage": "Rijen per pagina",
       "pageInfo": "Toont van {from} tot en met {to} van {total} resultaten"
     },

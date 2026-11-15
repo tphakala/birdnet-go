@@ -37,6 +37,8 @@
   import { Search } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import { createFocusReturn } from '$lib/utils/focusReturn';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
   import { textAlignClass, type Column } from './DataTable.types';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
@@ -137,6 +139,14 @@
   let sortDirection = $state<'asc' | 'desc'>(initialDirection(defaultSortKey));
   let searchQuery = $state('');
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
+  // The table is replaced by the loading state while it holds focus (a sort button or the
+  // scroll body), so focus moves to the title instead of dropping to the page body.
+  let titleElement = $state<HTMLElement>();
+  const { track } = createFocusReturn(() => [titleElement]);
+
   function handleSort(field: string): void {
     if (sortColumn === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -144,6 +154,10 @@
       sortColumn = field;
       sortDirection = initialDirection(field);
     }
+    const column = columns.find(c => c.key === field);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && sortedData.length > 0)
+      sortStatus = sortAnnouncement(column.header, sortDirection);
   }
 
   let filteredData = $derived.by(() => {
@@ -172,6 +186,12 @@
       }
       return cmp * direction;
     });
+  });
+
+  // Clear the sort message when no rows are shown (loading, no data, a search with no matches)
+  // so a later reload or refill does not announce a sort the user did not just make.
+  $effect(() => {
+    if (loading || sortedData.length === 0) sortStatus = '';
   });
 
   let displayCount = $derived(count ?? filteredData.length);
@@ -229,7 +249,11 @@
           {/if}
           {#if title}
             <div class="min-w-0">
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted truncate">
+              <h3
+                bind:this={titleElement}
+                tabindex="-1"
+                class="text-xs font-semibold uppercase tracking-wider text-muted truncate focus-ring"
+              >
                 {title}
               </h3>
               {#if description}
@@ -288,6 +312,8 @@
     {#if loading}
       <LoadingSpinner size="md" aria-hidden="true" />
       <span>{loadingLabel ?? t('common.loading')}</span>
+    {:else if sortStatus}
+      <span class="sr-only">{sortStatus}</span>
     {/if}
   </div>
   {#if loading}
@@ -305,6 +331,9 @@
   {:else}
     {#snippet tableMarkup()}
       <table class="w-full text-sm">
+        {#if title}
+          <caption class="sr-only">{title}</caption>
+        {/if}
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
           <tr>
             {#each columns as column (column.key)}
@@ -361,34 +390,36 @@
       </table>
     {/snippet}
 
-    {#if resizable}
-      <ResizableContainer
-        {defaultHeight}
-        {minHeight}
-        {maxHeight}
-        scrollTabStop={bodyNeedsFocus}
-        scrollLabel={scrollRegionLabel}
-      >
-        {@render tableMarkup()}
-      </ResizableContainer>
-    {:else}
-      <!-- The body can scroll, so it needs a tab stop for the arrow keys unless a sort
-           button inside it can already hold focus. -->
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <div
-        class={cn(
-          'overflow-x-auto',
-          bodyMaxHeight &&
-            'max-h-(--table-body-max-height) overflow-y-auto rounded-b-xl scroll-shadow-y'
-        )}
-        style:--table-body-max-height={bodyMaxHeight}
-        tabindex={bodyNeedsFocus ? 0 : undefined}
-        role={scrollRegionLabel ? 'region' : undefined}
-        aria-label={scrollRegionLabel}
-      >
-        {@render tableMarkup()}
-      </div>
-    {/if}
+    <div use:track>
+      {#if resizable}
+        <ResizableContainer
+          {defaultHeight}
+          {minHeight}
+          {maxHeight}
+          scrollTabStop={bodyNeedsFocus}
+          scrollLabel={scrollRegionLabel}
+        >
+          {@render tableMarkup()}
+        </ResizableContainer>
+      {:else}
+        <!-- The body can scroll, so it needs a tab stop for the arrow keys unless a sort
+             button inside it can already hold focus. -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <div
+          class={cn(
+            'overflow-x-auto',
+            bodyMaxHeight &&
+              'max-h-(--table-body-max-height) overflow-y-auto rounded-b-xl scroll-shadow-y'
+          )}
+          style:--table-body-max-height={bodyMaxHeight}
+          tabindex={bodyNeedsFocus ? 0 : undefined}
+          role={scrollRegionLabel ? 'region' : undefined}
+          aria-label={scrollRegionLabel}
+        >
+          {@render tableMarkup()}
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -396,8 +427,12 @@
   /* A collapsed table border belongs to the table, not to the sticky header
      cells, so it scrolls away with the rows. An inset shadow on each header cell
      travels with the cell instead. :global reaches the th elements that
-     SortableHeader renders, which a scoped th rule would miss. */
-  thead :global(th) {
-    box-shadow: inset 0 -1px 0 var(--border-100);
+     SortableHeader renders, which a scoped th rule would miss. The rule is in the
+     components layer, below Tailwind's utilities, so a shadow or ring utility in
+     column.className replaces it; unlayered component CSS would beat every utility. */
+  @layer components {
+    thead :global(th) {
+      box-shadow: inset 0 -1px 0 var(--border-100);
+    }
   }
 </style>

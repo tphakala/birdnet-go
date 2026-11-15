@@ -133,7 +133,8 @@ const translations: Record<string, string> = {
   'components.forms.species.noSuggestions': 'No species suggestions available',
   // Data display
   'dataDisplay.table.noData': 'No data available',
-  'dataDisplay.table.sortBy': 'Sort by',
+  'dataDisplay.table.sortedAscending': 'Sorted by {column}, ascending',
+  'dataDisplay.table.sortedDescending': 'Sorted by {column}, descending',
   'settings.species.customConfiguration.title': 'Custom Configuration',
   'settings.species.customConfiguration.description': 'Configure custom settings for species',
   'common.ui.loading': 'Loading...',

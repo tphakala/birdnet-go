@@ -955,13 +955,13 @@
               <table class="w-full text-xs table-fixed">
                 <thead class="text-muted">
                   <tr>
-                    <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
+                    <th scope="col" class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
                       >{t('system.inference.vad.colWhen')}</th
                     >
-                    <th class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
+                    <th scope="col" class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
                       >{t('system.inference.vad.colProbability')}</th
                     >
-                    <th class="text-left font-normal py-0.5"
+                    <th scope="col" class="text-left font-normal py-0.5"
                       >{t('system.inference.vad.colSource')}</th
                     >
                   </tr>
@@ -1290,20 +1290,22 @@
                   <table class="w-full text-xs table-fixed">
                     <thead class="text-muted">
                       <tr>
-                        <th class="text-left font-normal py-0.5 pr-2">
+                        <th scope="col" class="text-left font-normal py-0.5 pr-2">
                           {t('system.inference.species')}
                         </th>
                         <th
+                          scope="col"
                           class="text-left font-normal py-0.5 w-12 whitespace-nowrap"
                           title={t('common.labels.confidence')}
                           aria-label={t('common.labels.confidence')}
                         >
                           {t('system.inference.confidenceColumn')}
                         </th>
-                        <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
+                        <th scope="col" class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
                           {t('system.inference.heardWhen')}
                         </th>
                         <th
+                          scope="col"
                           class="text-left font-normal py-0.5 pl-2 w-20 whitespace-nowrap"
                           title={t('system.inference.coDetectedHelp', {
                             seconds: CO_DETECTION_TOLERANCE_SEC,

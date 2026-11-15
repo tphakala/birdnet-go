@@ -10,6 +10,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { onMount, onDestroy } from 'svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
@@ -163,6 +164,9 @@
     activeColumn?.desc === appliedSortOrder ? 'desc' : 'asc'
   );
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
   // Clicking a header: re-clicking the active column toggles direction; a new
   // column starts at its default (ascending for species name, descending else).
   function handleSort(field: string) {
@@ -180,6 +184,9 @@
     appliedSortOrder = next;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
     // filteredSpecies is $derived and re-sorts automatically on appliedSortOrder.
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (filteredSpecies.length === 0) return;
+    sortStatus = sortAnnouncement(t(column.labelKey), next === column.asc ? 'asc' : 'desc');
   }
 
   // Set default dates on mount
@@ -213,6 +220,9 @@
     isLoading = true;
     // Apply Filters (and mount/reset) commit the pending dropdown selection.
     appliedSortOrder = filters.sortOrder;
+    // The commit can restore a different sort (Reset); drop the old sort message so the next
+    // identical sort is a new text for the live region
+    sortStatus = '';
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
     // Commit the search term immediately too, cancelling any pending debounce so
     // a just-typed term is not re-applied a moment later.
@@ -381,6 +391,12 @@
     }
 
     return filtered.map(row => row.species);
+  });
+
+  // Clear the sort message when no species are shown (no data, a search with no matches), so
+  // rows returning later do not announce a sort the user did not just make
+  $effect(() => {
+    if (filteredSpecies.length === 0) sortStatus = '';
   });
 
   function getFilteredCount(): number {
@@ -564,6 +580,7 @@
       <!-- View Toggle -->
       <div class="flex justify-between items-center mb-4">
         <h2 class="card-title">{t('analytics.species.speciesList')}</h2>
+        <p role="status" class="sr-only">{sortStatus}</p>
         <div class="join hidden sm:flex">
           <button
             class="btn btn-sm join-item"
@@ -633,6 +650,7 @@
       {#if !isLoading && viewMode === 'list'}
         <div class="overflow-x-auto">
           <table class="table w-full hidden sm:table">
+            <caption class="sr-only">{t('analytics.species.speciesList')}</caption>
             <thead>
               <tr>
                 {#each SORTABLE_COLUMNS as { field, labelKey } (field)}

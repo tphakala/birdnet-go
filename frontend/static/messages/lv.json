@@ -5096,7 +5096,8 @@
       "noData": "Nav pieejamu datu",
       "loading": "Ielādē datus...",
       "error": "Neizdevās ielādēt datus",
-      "sortBy": "Kārtot pēc {column}",
+      "sortedAscending": "Kārtots pēc {column}, augošā secībā",
+      "sortedDescending": "Kārtots pēc {column}, dilstošā secībā",
       "rowsPerPage": "Rindas lapā",
       "pageInfo": "Rāda {from} līdz {to} no {total} rezultātiem"
     },

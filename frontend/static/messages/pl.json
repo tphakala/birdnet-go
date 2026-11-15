@@ -5096,7 +5096,8 @@
       "noData": "Brak dostępnych danych",
       "loading": "Ładowanie danych...",
       "error": "Nie udało się załadować danych",
-      "sortBy": "Sortuj według {column}",
+      "sortedAscending": "Posortowano według {column}, rosnąco",
+      "sortedDescending": "Posortowano według {column}, malejąco",
       "rowsPerPage": "Wierszy na stronę",
       "pageInfo": "Pokazywanie {from} do {to} z {total} wyników"
     },

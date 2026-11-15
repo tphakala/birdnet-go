@@ -5096,7 +5096,8 @@
       "noData": "Ei tietoja saatavilla",
       "loading": "Ladataan tietoja...",
       "error": "Tietojen lataus epäonnistui",
-      "sortBy": "Lajittele {column}",
+      "sortedAscending": "Lajiteltu sarakkeen {column} mukaan, nouseva",
+      "sortedDescending": "Lajiteltu sarakkeen {column} mukaan, laskeva",
       "rowsPerPage": "Rivejä sivulla",
       "pageInfo": "Näytetään {from}-{to} / {total} tuloksesta"
     },

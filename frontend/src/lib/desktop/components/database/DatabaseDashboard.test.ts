@@ -200,7 +200,9 @@ describe('DatabaseDashboard migration errors', () => {
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
     // The alert sits above the views, so it alone does not prove the skeleton went away
     await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
-    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
   });
 
   it('shows a translated message when the status request fails without an API error', async () => {
@@ -637,7 +639,9 @@ describe('DatabaseDashboard migration errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
     // Backups come from their own endpoint and stay; the state cards would claim "Idle"
-    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(t('system.database.migration.strip.readyToMigrate'))
     ).not.toBeInTheDocument();
@@ -680,7 +684,9 @@ describe('DatabaseDashboard migration errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Status unavailable');
-    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: t('common.retry') })).toBeInTheDocument();
   });
 
@@ -751,7 +757,7 @@ describe('DatabaseDashboard migration errors', () => {
     serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
     finish(idleStatus);
 
-    await screen.findByText(t('system.database.backup.history.title'));
+    await screen.findByRole('heading', { name: t('system.database.backup.history.title') });
   });
 });
 

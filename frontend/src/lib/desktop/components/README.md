@@ -29,7 +29,7 @@ This folder contains **shared components** used across the application. Feature-
   - A body with no sortable column is a tab stop so the arrow keys can scroll it; with a `title` it is also a region named by it
   - `notice` snippet renders between the header bar and the body in every state (an `ErrorAlert` above rows that stay visible); `empty` snippet replaces the default `EmptyState`
   - Columns with `align: 'right'` right-align header and cells and use tabular figures; a `sortable` column without `sortValue` sorts by its raw field value
-  - `SortableHeader.svelte` (in `ui/`) is the sortable `<th>` it uses; standalone tables can use it too. Its `align` prop puts the indicator before the label for right-aligned columns
+  - `SortableHeader.svelte` (in `ui/`) is the sortable `<th>` it uses; standalone tables can use it too. The button is named by the column label, `aria-sort` is set on the active column only, and the button's hit area and focus ring cover the whole header cell. Its `align` prop puts the indicator before the label for right-aligned columns
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
 - `WeatherDetails.svelte` - Detailed weather display for modals (vertical layout, icons always visible)

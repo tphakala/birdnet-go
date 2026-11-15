@@ -5096,7 +5096,8 @@
       "noData": "Ingen data tilgjengelig",
       "loading": "Laster data...",
       "error": "Innlasting av data mislyktes",
-      "sortBy": "Sorter etter {column}",
+      "sortedAscending": "Sortert etter {column}, stigende",
+      "sortedDescending": "Sortert etter {column}, synkende",
       "rowsPerPage": "Rader per side",
       "pageInfo": "Viser {from}-{to} av {total} resultater"
     },

@@ -5096,7 +5096,8 @@
       "noData": "Nenhum dado disponível",
       "loading": "Carregando dados...",
       "error": "Falha ao carregar dados",
-      "sortBy": "Ordenar por {column}",
+      "sortedAscending": "Ordenado por {column}, ascendente",
+      "sortedDescending": "Ordenado por {column}, descendente",
       "rowsPerPage": "Linhas por página",
       "pageInfo": "Mostrando {from} a {to} de {total} resultados"
     },
