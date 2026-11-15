@@ -393,6 +393,11 @@
     const touched = [change.scientificName, change.changedTo];
     if (change.speciesStats && speciesDataFor && touched.includes(speciesDataFor)) {
       loadStats(speciesDataFor);
+      // A species change moved a detection into or out of the species on screen, so its
+      // hourly activity changed too.
+      if (change.changedTo && speciesController) {
+        loadHourly(speciesDataFor, speciesController.signal);
+      }
     }
     if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) {
       return Promise.resolve(true);
@@ -611,6 +616,14 @@
       isPlainObject,
       value => (taxonomy = isTaxonomy(value?.taxonomy) ? value.taxonomy : null)
     );
+    loadHourly(det.scientificName, signal);
+    loadStats(det.scientificName);
+    void fetchImageAttribution(det.scientificName);
+  }
+
+  /** The species' detections by hour of day, all time; tied to the species' requests. */
+  function loadHourly(scientificName: string, signal: AbortSignal) {
+    const species = encodeURIComponent(scientificName);
     load(
       `/api/v2/analytics/time/distribution/hourly?start_date=${ACTIVITY_START_DATE}&end_date=${getLocalDateString()}&species=${species}`,
       signal,
@@ -618,9 +631,6 @@
       value => (hourlyActivity = value),
       'hourly'
     );
-
-    loadStats(det.scientificName);
-    void fetchImageAttribution(det.scientificName);
   }
 
   /**

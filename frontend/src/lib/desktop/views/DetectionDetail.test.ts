@@ -859,6 +859,26 @@ describe('DetectionDetail statistics after a species change', () => {
 
   // Regression: a save that answered after a step to a detection of the new species left
   // that species' total one short.
+  // Regression: only the statistics of the species on screen were asked again; its hourly
+  // activity still left out the detection that had moved into it.
+  it('asks again for the hourly activity of the species on screen after a change', async () => {
+    const { calls, rerender, answerPut } = await changeSpecies([
+      ['/api/v2/detections/92', makeDetection({ id: 92, scientificName: NEW })],
+    ]);
+    const hourly = () =>
+      calls.filter(
+        call =>
+          call.url.includes('/analytics/time/distribution/hourly') &&
+          call.url.includes('species=Turdus%20philomelos')
+      ).length;
+    await rerender({ detectionId: '92' });
+    await waitFor(() => expect(hourly()).toBe(1));
+
+    answerPut(jsonResponse({}));
+
+    await waitFor(() => expect(hourly()).toBe(2));
+  });
+
   it('shows the new species\u2019 new total when the save answers after a step to it', async () => {
     const { rerender, answerPut } = await changeSpecies([
       ['/api/v2/detections/92', makeDetection({ id: 92, scientificName: NEW })],
