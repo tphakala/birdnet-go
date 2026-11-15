@@ -1294,58 +1294,38 @@ func validateOAuthProvidersArray(updateMap map[string]any) error {
 		return fmt.Errorf("oauthProviders must be an array")
 	}
 
-	// Track configured providers to detect duplicates
-	configuredProviders := make(map[string]bool)
-
+	// Two enabled entries with the same provider ID are rejected by
+	// conf.ValidateSettings, which runs on the merged settings after this check.
 	for i, item := range providersArray {
-		providerName, err := validateOAuthProviderEntry(item, i, configuredProviders)
-		if err != nil {
+		providerMap, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("oauthProviders[%d] must be an object", i)
+		}
+		if err := validateOAuthProviderName(providerMap, i); err != nil {
 			return err
 		}
-		configuredProviders[providerName] = true
+		if err := validateOAuthProviderEnabled(providerMap, i); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// validateOAuthProviderEntry validates a single OAuth provider entry in the array.
-// Returns the provider name if valid, or an error if validation fails.
-func validateOAuthProviderEntry(item any, index int, configuredProviders map[string]bool) (string, error) {
-	providerMap, ok := item.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("oauthProviders[%d] must be an object", index)
-	}
-
-	providerName, err := validateOAuthProviderName(providerMap, index, configuredProviders)
-	if err != nil {
-		return "", err
-	}
-
-	if err := validateOAuthProviderEnabled(providerMap, index); err != nil {
-		return "", err
-	}
-
-	return providerName, nil
-}
-
-// validateOAuthProviderName validates the provider name field and checks for
-// duplicates. It returns the canonical (trimmed, lower case) provider ID.
-func validateOAuthProviderName(providerMap map[string]any, index int, configuredProviders map[string]bool) (string, error) {
+// validateOAuthProviderName validates the provider name field. The ID is trimmed
+// and lower-cased first, the same way it is stored.
+func validateOAuthProviderName(providerMap map[string]any, index int) error {
 	providerName, ok := providerMap["provider"].(string)
-	if !ok || providerName == "" {
-		return "", fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
-	}
-
 	canonical := conf.NormalizeOAuthProviderID(providerName)
+	if !ok || canonical == "" {
+		return fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
+	}
+
 	if !validOAuthProviders[canonical] {
-		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
+		return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
 	}
 
-	if configuredProviders[canonical] {
-		return "", fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
-	}
-
-	return canonical, nil
+	return nil
 }
 
 // validateOAuthProviderEnabled validates the enabled field and required credentials.
@@ -1809,16 +1789,26 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 }
 
 // findStoredOAuthProvider returns the stored entry an incoming entry with a
-// redacted secret stands for. An entry with the same provider ID and client ID is
-// the same entry, even when its enabled state changed in this save. Failing that,
-// the entry with the same ID and enabled state is used (see conf.FindOAuthProvider),
-// so a disabled entry sharing the ID of an enabled one does not donate its secret
-// when the client ID was edited too.
+// redacted secret stands for. Entries are matched by provider ID with client ID
+// and enabled state both equal, then by client ID alone (the same entry whose
+// enabled state changed in this save), then by enabled state alone (see
+// conf.FindOAuthProvider). Each step keeps a disabled leftover sharing the ID of an
+// enabled entry from donating its secret.
 func findStoredOAuthProvider(stored []conf.OAuthProviderConfig, incoming *conf.OAuthProviderConfig) *conf.OAuthProviderConfig {
+	var sameClientID *conf.OAuthProviderConfig
 	for i := range stored {
-		if stored[i].Provider == incoming.Provider && stored[i].ClientID == incoming.ClientID {
+		if stored[i].Provider != incoming.Provider || stored[i].ClientID != incoming.ClientID {
+			continue
+		}
+		if stored[i].Enabled == incoming.Enabled {
 			return &stored[i]
 		}
+		if sameClientID == nil {
+			sameClientID = &stored[i]
+		}
+	}
+	if sameClientID != nil {
+		return sameClientID
 	}
 	return conf.FindOAuthProvider(stored, incoming.Provider, incoming.Enabled)
 }
