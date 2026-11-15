@@ -173,6 +173,25 @@ environment:
 
 ---
 
+### `SSL_CERT_FILE` / `SSL_CERT_DIR`
+
+**Purpose:** Trust a private certificate authority, for example for an OIDC identity provider with a certificate from your own CA.
+
+**Usage:**
+
+```yaml
+environment:
+  - SSL_CERT_FILE=/config/my-ca.pem
+```
+
+**Description:**
+
+- Standard Go variables, read once at startup; restart the container after changing them
+- The CA file must be mounted into the container
+- See [OIDC identity provider with a private certificate authority](../doc/wiki/security.md#oidc-identity-provider-with-a-private-certificate-authority)
+
+---
+
 ## Container Health Check
 
 The container includes a built-in health check that monitors the application's web interface.

@@ -567,6 +567,130 @@ func TestOIDCDiscovery_ExhaustionLogsAndKeepsFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "503")
 }
 
+// hangingIDP accepts the connection, reads the request and never answers it,
+// until the client gives up or the test ends.
+func hangingIDP(t *testing.T, entered chan<- struct{}) *httptest.Server {
+	t.Helper()
+	gate := make(chan struct{})
+	var once sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+		}
+	}))
+	// Handlers must be released before Close waits for them.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { once.Do(func() { close(gate) }) })
+	return server
+}
+
+// TestOIDCDiscovery_CancelStopsInFlightRequest pins that cancelling a
+// generation ends a discovery request that the identity provider never answers,
+// long before the client timeout, and that the cancellation is not reported as
+// a discovery failure.
+func TestOIDCDiscovery_CancelStopsInFlightRequest(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	entered := make(chan struct{}, 1)
+	idp := hangingIDP(t, entered)
+
+	done := registerProviders(t, oidcSettings(idp.URL))
+	testutil.WaitForChannel(t, entered, testutil.DefaultTestTimeout, "the discovery request never reached the identity provider")
+
+	// A pass that disables OIDC supersedes the generation.
+	registerProviders(t, &conf.Settings{})
+	testutil.WaitForChannel(t, done, 2*time.Second, "cancelling the generation did not stop the request in flight")
+
+	assert.NotContains(t, logs.main(), "OIDC discovery failed")
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a cancelled attempt must not record a failure")
+}
+
+// TestOIDCDiscovery_WindowDeadlineStopsInFlightRequest pins that the end of the
+// retry window cuts a request in flight, reports the exhaustion once and keeps
+// the earlier real cause instead of "context deadline exceeded".
+func TestOIDCDiscovery_WindowDeadlineStopsInFlightRequest(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	var requests atomic.Int32
+	gate := make(chan struct{})
+	var once sync.Once
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(idp.Close)
+	t.Cleanup(func() { once.Do(func() { close(gate) }) })
+
+	ctx, gen := beginDiscoveryForTest(t)
+	start := time.Now()
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
+		initialBackoff: 5 * time.Millisecond,
+		maxBackoff:     10 * time.Millisecond,
+		maxDuration:    300 * time.Millisecond,
+	})
+
+	testutil.WaitForChannel(t, done, 2*time.Second, "the retry window did not stop the request in flight")
+	assert.Less(t, time.Since(start), OIDCHTTPTimeout/2, "the window, not the client timeout, must end the attempt")
+	assert.Equal(t, 1, strings.Count(logs.main(), "OIDC discovery retries exhausted"))
+	err := ProviderRegistrationError(ProviderOIDC)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "503")
+	assert.NotContains(t, err.Error(), "deadline exceeded")
+}
+
+// TestOIDCDiscovery_WindowEndsDuringFirstAttempt pins that when the window ends
+// while the first attempt is still in flight, the cut request is recorded as the
+// cause, since no real one exists, and the exhaustion is reported.
+func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	idp := hangingIDP(t, nil)
+
+	ctx, gen := beginDiscoveryForTest(t)
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
+		initialBackoff: 5 * time.Millisecond,
+		maxBackoff:     10 * time.Millisecond,
+		maxDuration:    100 * time.Millisecond,
+	})
+
+	testutil.WaitForChannel(t, done, 2*time.Second, "the retry window did not stop the first attempt")
+	assert.Contains(t, logs.main(), "OIDC discovery retries exhausted")
+	err := ProviderRegistrationError(ProviderOIDC)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errProviderNotRegistered, "the cut first attempt must leave a recorded cause")
+}
+
+// TestDiscoverOIDC_UsesBoundedClient pins that discovery goes through
+// oidcHTTPClient: a provider that never answers is given up on when the client
+// timeout passes, with no context deadline involved.
+func TestDiscoverOIDC_UsesBoundedClient(t *testing.T) {
+	idp := hangingIDP(t, nil)
+	original := oidcHTTPClient
+	oidcHTTPClient = &http.Client{Timeout: 200 * time.Millisecond}
+	t.Cleanup(func() { oidcHTTPClient = original })
+
+	finished := make(chan error, 1)
+	go func() {
+		_, err := discoverOIDC(t.Context(), testOIDCRegistration(idp.URL))
+		finished <- err
+	}()
+	select {
+	case err := <-finished:
+		require.Error(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("discovery was not bounded by the client timeout")
+	}
+}
+
 // gatedIDP is an identity provider whose discovery document request blocks until
 // release is called, then answers with a valid document or a 503.
 type gatedIDP struct {
@@ -678,7 +802,7 @@ func TestOIDCDiscovery_SupersededAttemptWritesNothing(t *testing.T) {
 func TestFinishOIDCDiscovery_StaleGenerationWritesNothing(t *testing.T) {
 	idp := mockOIDCDiscovery(t)
 	reg := testOIDCRegistration(idp.URL)
-	provider, err := discoverOIDC(reg)
+	provider, err := discoverOIDC(t.Context(), reg)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -798,30 +922,24 @@ func TestInitializeProviders_RestartsExhaustedDiscovery(t *testing.T) {
 	assert.NotEqual(t, gen, next)
 }
 
-// TestEndDiscoveryIfExpired pins that the end of the retry window marks the
+// TestEndOIDCDiscoveryWindow pins that the end of the retry window marks the
 // generation's discovery stopped in the same step, so a pass that arrives after
 // the decision starts discovery again rather than finding it running.
-func TestEndDiscoveryIfExpired(t *testing.T) {
+func TestEndOIDCDiscoveryWindow(t *testing.T) {
 	reg := testOIDCRegistration("http://begin.test")
 	_, gen := beginDiscoveryForTest(t)
 
-	expired, _ := endDiscoveryIfExpired(gen, time.Now().Add(time.Hour))
-	require.False(t, expired, "a window that is not over must not end discovery")
 	_, same, start := beginProviderRegistration(nil, reg)
 	require.False(t, start, "discovery within its window is left running")
 	require.Equal(t, gen, same)
 
-	expired, current := endDiscoveryIfExpired(gen, time.Now().Add(-time.Second))
-	require.True(t, expired)
-	require.True(t, current)
+	require.True(t, endOIDCDiscoveryWindow(gen))
 	_, next, start := beginProviderRegistration(nil, reg)
 	assert.True(t, start, "a pass after the window ended must start discovery again")
 	assert.NotEqual(t, gen, next)
 
 	// A superseded generation does not touch the running flag of the current one.
-	expired, current = endDiscoveryIfExpired(gen, time.Now().Add(-time.Second))
-	assert.True(t, expired)
-	assert.False(t, current)
+	assert.False(t, endOIDCDiscoveryWindow(gen))
 	_, again, start := beginProviderRegistration(nil, reg)
 	assert.False(t, start, "the current generation's discovery must stay running")
 	assert.Equal(t, next, again)

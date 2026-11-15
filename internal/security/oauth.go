@@ -585,7 +585,7 @@ type oidcRegistration struct {
 
 // buildGothProviders builds every enabled provider that needs no network call
 // from the settings. The first enabled and configured OIDC entry is returned as
-// a registration for background discovery instead, because openidConnect.New
+// a registration for background discovery instead, because goth's OpenID Connect constructor
 // fetches the discovery document.
 func buildGothProviders(settings *conf.Settings) (providers []goth.Provider, oidc *oidcRegistration) {
 	secLog := GetLogger()
@@ -784,28 +784,37 @@ func finishOIDCDiscovery(gen uint64, reg *oidcRegistration, provider *openidConn
 	return true
 }
 
-// endDiscoveryIfExpired decides under oidcMu whether the retry window of
-// generation gen is over. When it is, the generation's discovery is marked
-// stopped in the same step, so a pass that arrives afterwards starts discovery
-// again instead of finding it "running". current reports whether gen is still
-// the current generation.
-func endDiscoveryIfExpired(gen uint64, deadline time.Time) (expired, current bool) {
+// endOIDCDiscoveryWindow ends the discovery of generation gen at the end of its
+// retry window, under oidcMu. The generation's discovery is marked stopped in
+// the same step, so a pass that arrives afterwards starts discovery again
+// instead of finding it "running". It reports whether gen is still the current
+// generation.
+func endOIDCDiscoveryWindow(gen uint64) (current bool) {
 	oidcMu.Lock()
 	defer oidcMu.Unlock()
-	if !time.Now().After(deadline) {
-		return false, gen == oidcGeneration
-	}
 	current = gen == oidcGeneration
 	if current {
 		oidcDiscoveryRunning = false
 	}
-	return true, current
+	return current
 }
 
-// discoverOIDC fetches the discovery document and builds the goth OIDC provider.
-// It is the only place that calls openidConnect.New.
-func discoverOIDC(reg *oidcRegistration) (*openidConnect.Provider, error) {
-	return openidConnect.New(
+// oidcHTTPClient is the one client for every request to the identity provider:
+// discovery, token exchange, userinfo and token refresh. Its Timeout bounds
+// each request. The nil Transport is http.DefaultTransport, which keeps the
+// proxy environment variables and the system root store, including the
+// SSL_CERT_FILE and SSL_CERT_DIR overrides, so trust is not changed.
+var oidcHTTPClient = &http.Client{Timeout: OIDCHTTPTimeout}
+
+// discoverOIDC fetches the discovery document and builds the goth OIDC provider
+// with oidcHTTPClient. ctx bounds the discovery request together with the
+// client timeout. It is the only place that calls goth's OpenID Connect
+// constructor.
+func discoverOIDC(ctx context.Context, reg *oidcRegistration) (*openidConnect.Provider, error) {
+	return openidConnect.NewCustomisedHttpClientContext(
+		ctx,
+		oidcHTTPClient,
+		"", // empty name keeps goth's default, ProviderOIDC
 		reg.clientID,
 		reg.clientSecret,
 		reg.redirectURI,
@@ -816,18 +825,22 @@ func discoverOIDC(reg *oidcRegistration) (*openidConnect.Provider, error) {
 
 // startOIDCDiscovery starts the background OIDC discovery of registration
 // generation gen. The first attempt runs at once; failed attempts are retried
-// with exponential backoff until policy.maxDuration has passed. The goroutine
-// stops when ctx is cancelled, and its results are committed through
+// with exponential backoff until policy.maxDuration has passed. Cancelling ctx
+// and the end of the retry window both stop the goroutine, also in the middle
+// of a request to the identity provider. Results are committed through
 // finishOIDCDiscovery, so an attempt that a newer generation has superseded
-// writes nothing. Returns a channel that is closed when the goroutine exits.
+// writes nothing, and a cancelled attempt is not recorded as a failure.
+// Returns a channel that is closed when the goroutine exits.
 func startOIDCDiscovery(ctx context.Context, gen uint64, reg *oidcRegistration, policy oidcRetryPolicy) <-chan struct{} {
 	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
 	done := make(chan struct{})
-	start := time.Now()
-	deadline := start.Add(policy.maxDuration)
+	// windowCtx ends with ctx or when the retry window is over, whichever comes
+	// first, so the window also cuts a request in flight.
+	windowCtx, cancelWindow := context.WithTimeout(ctx, policy.maxDuration)
 
 	oidcDiscoveryGoroutines.Go(func() {
 		defer close(done)
+		defer cancelWindow()
 		defer markOIDCDiscoveryStopped(gen)
 		backoff := policy.initialBackoff
 		var lastErr error
@@ -850,28 +863,37 @@ func startOIDCDiscovery(ctx context.Context, gen uint64, reg *oidcRegistration, 
 			}
 
 			select {
-			case <-ctx.Done():
+			case <-windowCtx.Done():
+				if ctx.Err() == nil {
+					endOIDCRetryWindow(gen, reg, lastErr, policy)
+					return
+				}
 				secLog.Info("OIDC discovery canceled")
 				return
 			case <-timer.C:
 			}
 
 			if attempt > 1 {
-				if exhausted, current := endDiscoveryIfExpired(gen, deadline); exhausted {
-					if current {
-						logOIDCRetryExhausted(reg.issuerURL, reg.discoveryURL, lastErr, policy.maxDuration)
-					}
-					return
-				}
 				secLog.Info("Retrying OIDC discovery",
 					logger.CredentialURL("issuer_url", reg.issuerURL),
 					logger.Duration("backoff", backoff))
 			}
 
-			oidcProvider, err := discoverOIDC(reg)
+			oidcProvider, err := discoverOIDC(windowCtx, reg)
 			// A cancelled attempt is not a failure: skip recording and logging.
 			if ctx.Err() != nil {
 				secLog.Info("OIDC discovery canceled")
+				return
+			}
+			// The retry window ended during the attempt: the request was cut, so
+			// its error is not a discovery failure. It is recorded only when no
+			// real cause exists yet, and the window is reported as exhausted.
+			if err != nil && windowCtx.Err() != nil {
+				if lastErr == nil {
+					lastErr = redactDiscoveryErr(err)
+					finishOIDCDiscovery(gen, reg, nil, err)
+				}
+				endOIDCRetryWindow(gen, reg, lastErr, policy)
 				return
 			}
 			if !finishOIDCDiscovery(gen, reg, oidcProvider, err) {
@@ -911,6 +933,15 @@ func startOIDCDiscovery(ctx context.Context, gen uint64, reg *oidcRegistration, 
 	})
 
 	return done
+}
+
+// endOIDCRetryWindow ends the discovery of generation gen at the end of its
+// retry window and, when gen is still current, logs the exhaustion with the last
+// real cause.
+func endOIDCRetryWindow(gen uint64, reg *oidcRegistration, lastErr error, policy oidcRetryPolicy) {
+	if endOIDCDiscoveryWindow(gen) {
+		logOIDCRetryExhausted(reg.issuerURL, reg.discoveryURL, lastErr, policy.maxDuration)
+	}
 }
 
 // initializeProviders registers the OAuth providers (Google, GitHub, Microsoft,

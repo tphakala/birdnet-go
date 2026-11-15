@@ -2417,9 +2417,16 @@ func TestReloadOAuthProviders_OIDCIssuerChange(t *testing.T) {
 	waitDone(t, registerProviders(t, oidc(issuerA.URL)))
 	require.Equal(t, issuerA.URL+"/authorize", authEndpoint(t))
 
+	// The provider uses the shared bounded client for token exchange and userinfo.
+	registered, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err)
+	client := registered.(*pkceOIDCProvider).HTTPClient
+	require.Same(t, oidcHTTPClient, client)
+	assert.Equal(t, OIDCHTTPTimeout, client.Timeout)
+
 	// Issuer B answers 503: A's registration is gone at once and the failure names B.
 	done := registerProviders(t, oidc(failing.URL))
-	_, err := goth.GetProvider(ProviderOIDC)
+	_, err = goth.GetProvider(ProviderOIDC)
 	require.Error(t, err, "the registration of the old issuer must be gone right after the pass")
 	require.Error(t, ProviderRegistrationError(ProviderOIDC))
 	requireOIDCFailureRecorded(t)

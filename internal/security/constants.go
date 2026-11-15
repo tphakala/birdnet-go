@@ -64,6 +64,10 @@ const (
 	OIDCRetryMaxBackoff     = 60 * time.Second
 	OIDCRetryMaxDuration    = 5 * time.Minute
 	OIDCRetryBackoffFactor  = 2
+
+	// OIDCHTTPTimeout bounds each request to the identity provider (discovery,
+	// token exchange, userinfo and token refresh).
+	OIDCHTTPTimeout = 10 * time.Second
 )
 
 // ConfigToGothProvider maps config provider IDs to goth provider names.
