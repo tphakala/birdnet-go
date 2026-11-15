@@ -207,7 +207,7 @@ realtime:
       bitrate: 192k # Bitrate for audio export
       retention:
         debug: false # Enable retention debug
-        policy: none # Retention policy: none, age, or usage
+        policy: none # Retention policy: none, age, usage, or best_samples
         maxage: 30d # Maximum age of audio clips to keep
         maxusage: 85% # Maximum disk usage percentage before cleanup
         minclips: 5 # Minimum number of clips per species to keep
@@ -1391,11 +1391,12 @@ Configure these options under `realtime.audio.export.retention` in your `config.
 
 - **`policy`**: Sets the retention strategy. Options are:
   - **`none`** (Default): No automatic deletion. You are responsible for managing the clip files.
-  - **`age`**: Deletes clips older than the specified `maxage`.
-  - **`usage`**: Deletes the oldest clips _only when_ the disk usage of the partition containing the clips directory exceeds the `maxusage` percentage. This policy tries to keep at least `minclips` per species, deleting the oldest clips first when cleanup is needed.
-- **`maxage`**: (Used with `policy: age`) Maximum age for clips (e.g., `30d` for 30 days, `7d` for 7 days, `24h` for 24 hours). Clips older than this will be deleted.
+  - **`age`**: Deletes clips older than the specified `maxage`, while keeping at least `minclips` per species.
+  - **`usage`**: Deletes the oldest clips _only when_ disk usage exceeds `maxusage`. This policy preserves at least `minclips` clips per species per month folder.
+  - **`best_samples`**: Always keeps clips younger than `maxage` for manual review, plus the `minclips` highest-confidence clips per species regardless of age. Older clips outside those best samples are deleted.
+- **`maxage`**: The age threshold for `age` and `best_samples` (e.g., `30d`, `7d`, `24h`). For `best_samples`, every clip younger than this age is retained.
 - **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (e.g., `85%`). Cleanup triggers when usage exceeds this threshold.
-- **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species, even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
+- **`minclips`**: Minimum clips to retain according to the selected policy. `best_samples` keeps the highest-confidence clips per species; `age` keeps a minimum per species; `usage` maintains diversity per species and month folder.
 - **`checkInterval`**: How often to check if cleanup is needed, in minutes (default: 15). Higher values reduce CPU/IO overhead but may delay cleanup. For usage-based policy, disk usage is checked first before scanning files, so setting this too low won't waste resources when disk usage is below threshold.
 
 ### Security Features

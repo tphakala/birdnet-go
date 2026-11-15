@@ -997,6 +997,18 @@ func TestNormalizeAudioExport_AppliesDefaults(t *testing.T) {
 	require.NoError(t, ValidateSettings(s))
 }
 
+func TestNormalizeBestSamplesRetention_AppliesDefaultMaxAge(t *testing.T) {
+	t.Parallel()
+
+	s := createMinimalValidSettings()
+	s.Realtime.Audio.Export.Retention = RetentionSettings{Policy: RetentionPolicyBestSamples}
+
+	normalizeIncompleteFeatures(s)
+
+	assert.Equal(t, DefaultRetentionMaxAge, s.Realtime.Audio.Export.Retention.MaxAge)
+	require.NoError(t, ValidateSettings(s))
+}
+
 // TestValidateNotificationSettings_IgnoresDisabledUnknownProvider verifies that a
 // leftover provider entry with a type this build no longer knows does not block
 // startup while it is switched off.

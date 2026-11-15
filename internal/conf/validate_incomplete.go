@@ -559,8 +559,8 @@ func (s *Settings) normalizeAudioExport() {
 }
 
 // normalizeRetention fills in the retention limit belonging to the selected
-// policy. An empty policy already means "no cleanup", so only the two active
-// policies can be left half-configured.
+// policy. An empty policy already means "no cleanup", so active policies can
+// be left half-configured.
 func (s *Settings) normalizeRetention() {
 	retention := &s.Realtime.Audio.Export.Retention
 	switch retention.Policy {
@@ -569,6 +569,13 @@ func (s *Settings) normalizeRetention() {
 			retention.MaxAge = DefaultRetentionMaxAge
 			s.recordValidationWarning(warnComponentAudio,
 				"age-based retention is selected but no maximum age is set; using the default %s",
+				DefaultRetentionMaxAge)
+		}
+	case RetentionPolicyBestSamples:
+		if retention.MaxAge == "" {
+			retention.MaxAge = DefaultRetentionMaxAge
+			s.recordValidationWarning(warnComponentAudio,
+				"best-samples retention is selected but no sample age window is set; using the default %s",
 				DefaultRetentionMaxAge)
 		}
 	case RetentionPolicyUsage:

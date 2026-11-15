@@ -4053,7 +4053,7 @@
         "title": "Opbevaring af lydklip",
         "description": "Konfigurer automatisk oprydning af gemte lydklip",
         "policyLabel": "Opbevaringspolitik",
-        "policyHelp": "Vælg, hvordan lydklip automatisk slettes. Ingen: behold alle klip. Alder: slet klip ældre end angivet. Forbrug: slet ældste klip, når diskforbruget overskrider grænsen.",
+        "policyHelp": "Vælg oprydning af klip: behold alle, slet efter alder eller diskforbrug, eller behold nyere klip og klip med høj sikkerhed.",
         "maxAgeLabel": "Maksimal alder",
         "maxAgeHelp": "Slet lydklip ældre end denne varighed. Format: tal efterfulgt af enhed (h=timer, d=dage, w=uger, m=måneder). Eksempler: '7d' for 7 dage, '4w' for 4 uger.",
         "maxUsageLabel": "Maksimalt diskforbrug",
@@ -4065,14 +4065,18 @@
         "policies": {
           "none": "Ingen - Behold alle",
           "age": "Aldersbaseret",
-          "usage": "Diskforbrugsbaseret"
+          "usage": "Diskforbrugsbaseret",
+          "bestSamples": "Bedste prøver"
         },
         "noRetentionTitle": "Alle klip bevares",
         "noRetentionDescription": "Lydklip bevares på ubestemt tid. Overvåg diskforbruget for at undgå lagringsproblemer.",
         "ageRetentionTitle": "Aldersbaseret oprydning",
         "ageRetentionDescription": "Klip ældre end den angivne alder slettes automatisk, mens minimumantallet pr. art bevares.",
         "usageRetentionTitle": "Forbrugsbaseret oprydning",
-        "usageRetentionDescription": "Når diskforbruget overskrider tærsklen, slettes de ældste klip, indtil forbruget er inden for grænserne."
+        "usageRetentionDescription": "Når diskforbruget overskrider tærsklen, slettes de ældste klip, indtil forbruget er inden for grænserne.",
+        "bestSamplesMaxAgeLabel": "Periode for nyere prøver",
+        "bestSamplesMaxAgeHelp": "Behold alle klip, der er nyere end denne periode, til manuel gennemgang. Ældre klip beholdes kun, hvis de har den højeste sikkerhed for arten.",
+        "bestSamplesMinClipsHelp": "Behold dette antal klip med den højeste sikkerhed for hver art ud over alle klip i den nyere periode."
       },
       "formats": {
         "wav": "WAV",

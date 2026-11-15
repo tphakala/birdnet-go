@@ -4053,7 +4053,7 @@
         "title": "Rétention des clips audio",
         "description": "Configurer le nettoyage des clips audio",
         "policyLabel": "Politique de rétention",
-        "policyHelp": "Choisissez comment les clips audio sont automatiquement supprimés. Aucune : conserver tous les clips. Âge : supprimer les clips plus anciens que spécifié. Utilisation : supprimer les clips les plus anciens lorsque l'utilisation du disque dépasse la limite.",
+        "policyHelp": "Choisissez le nettoyage des clips : tout conserver, supprimer selon l’âge ou l’utilisation du disque, ou conserver les échantillons récents et les plus fiables.",
         "maxAgeLabel": "Âge maximum",
         "maxAgeHelp": "Supprimer les clips audio plus anciens que cette durée. Format : nombre suivi de l'unité (h=heures, d=jours, w=semaines, m=mois). Exemples : '7d' pour 7 jours, '4w' pour 4 semaines.",
         "maxUsageLabel": "Utilisation maximale du disque",
@@ -4065,14 +4065,18 @@
         "policies": {
           "none": "Aucune",
           "age": "Âge",
-          "usage": "Utilisation"
+          "usage": "Utilisation",
+          "bestSamples": "Meilleurs échantillons"
         },
         "noRetentionTitle": "Tous les clips conservés",
         "noRetentionDescription": "Les clips audio seront conservés indéfiniment. Surveillez l'utilisation du disque pour éviter les problèmes de stockage.",
         "ageRetentionTitle": "Nettoyage par ancienneté",
         "ageRetentionDescription": "Les clips plus anciens que l'âge spécifié seront automatiquement supprimés, tout en conservant le nombre minimum par espèce.",
         "usageRetentionTitle": "Nettoyage par utilisation",
-        "usageRetentionDescription": "Lorsque l'utilisation du disque dépasse le seuil, les clips les plus anciens seront supprimés jusqu'à ce que l'utilisation soit dans les limites."
+        "usageRetentionDescription": "Lorsque l'utilisation du disque dépasse le seuil, les clips les plus anciens seront supprimés jusqu'à ce que l'utilisation soit dans les limites.",
+        "bestSamplesMaxAgeLabel": "Période des échantillons récents",
+        "bestSamplesMaxAgeHelp": "Conservez tous les clips plus récents que cette durée pour une vérification manuelle. Les clips plus anciens ne sont conservés que s’ils font partie des plus fiables de leur espèce.",
+        "bestSamplesMinClipsHelp": "Conservez ce nombre de clips ayant la confiance la plus élevée par espèce, en plus de tous les clips de la période récente."
       },
       "formats": {
         "wav": "WAV",

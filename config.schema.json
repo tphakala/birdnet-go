@@ -2082,11 +2082,11 @@
         },
         "policy": {
           "type": "string",
-          "description": "retention policy, \"none\", \"age\" or \"usage\""
+          "description": "retention policy: \"none\", \"age\", \"usage\" or \"best_samples\""
         },
         "maxage": {
           "type": "string",
-          "description": "maximum age of audio clips to keep"
+          "description": "age threshold for age-based and best-samples retention"
         },
         "maxusage": {
           "type": "string",

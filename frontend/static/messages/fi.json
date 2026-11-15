@@ -4053,7 +4053,7 @@
         "title": "Äänileikkeiden säilytys",
         "description": "Määritä äänileikkeiden siivous",
         "policyLabel": "Säilytyskäytäntö",
-        "policyHelp": "Valitse, miten äänileikkeet poistetaan automaattisesti. Ei mitään: säilytä kaikki leikkeet. Ikä: poista tiettyä vanhemmat leikkeet. Käyttö: poista vanhimmat leikkeet kun levyn käyttö ylittää rajan.",
+        "policyHelp": "Valitse leikkeiden siivoustapa: säilytä kaikki, poista iän tai levyn käytön perusteella tai säilytä tuoreet ja luotettavimmat näytteet.",
         "maxAgeLabel": "Enimmäisikä",
         "maxAgeHelp": "Poista tätä vanhemmat äänileikkeet. Muoto: numero ja yksikkö (h=tunnit, d=päivät, w=viikot, m=kuukaudet). Esimerkkejä: '7d' 7 päivälle, '4w' 4 viikolle.",
         "maxUsageLabel": "Levyn enimmäiskäyttö",
@@ -4065,14 +4065,18 @@
         "policies": {
           "none": "Ei mitään",
           "age": "Ikä",
-          "usage": "Käyttö"
+          "usage": "Käyttö",
+          "bestSamples": "Parhaat näytteet"
         },
         "noRetentionTitle": "Kaikki leikkeet säilytetään",
         "noRetentionDescription": "Äänileikkeitä säilytetään toistaiseksi. Seuraa levytilan käyttöä estääksesi tallennusongelmia.",
         "ageRetentionTitle": "Ikään perustuva siivous",
         "ageRetentionDescription": "Määritettyä ikää vanhemmat leikkeet poistetaan automaattisesti, säilyttäen kuitenkin vähimmäismäärän lajia kohden.",
         "usageRetentionTitle": "Käyttöön perustuva siivous",
-        "usageRetentionDescription": "Kun levytilan käyttö ylittää kynnysarvon, vanhimmat leikkeet poistetaan, kunnes käyttö on rajojen sisällä."
+        "usageRetentionDescription": "Kun levytilan käyttö ylittää kynnysarvon, vanhimmat leikkeet poistetaan, kunnes käyttö on rajojen sisällä.",
+        "bestSamplesMaxAgeLabel": "Tuoreiden näytteiden aikaväli",
+        "bestSamplesMaxAgeHelp": "Säilytä kaikki tätä ajanjaksoa tuoreemmat leikkeet manuaalista tarkistusta varten. Vanhemmat leikkeet säilytetään vain, jos ne kuuluvat lajinsa varmimpiin havaintoihin.",
+        "bestSamplesMinClipsHelp": "Säilytä tämä määrä kunkin lajin korkeimman luottamuksen leikkeitä tuoreen ajanjakson kaikkien leikkeiden lisäksi."
       },
       "formats": {
         "wav": "WAV",

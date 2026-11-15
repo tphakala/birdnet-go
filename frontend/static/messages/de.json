@@ -4053,7 +4053,7 @@
         "title": "Audioclip-Aufbewahrung",
         "description": "Audioclip-Bereinigung konfigurieren",
         "policyLabel": "Aufbewahrungsrichtlinie",
-        "policyHelp": "Wählen Sie aus, wie Audioclips automatisch gelöscht werden. Keine: alle Clips behalten. Alter: Clips älter als angegeben löschen. Nutzung: älteste Clips löschen, wenn die Festplattennutzung die Grenze überschreitet.",
+        "policyHelp": "Wählen Sie die Bereinigung: alle Clips behalten, nach Alter oder Speicherverbrauch löschen oder aktuelle und besonders zuverlässige Clips behalten.",
         "maxAgeLabel": "Maximales Alter",
         "maxAgeHelp": "Audioclips löschen, die älter als diese Dauer sind. Format: Zahl gefolgt von Einheit (h=Stunden, d=Tage, w=Wochen, m=Monate). Beispiele: '7d' für 7 Tage, '4w' für 4 Wochen.",
         "maxUsageLabel": "Maximale Festplattennutzung",
@@ -4065,14 +4065,18 @@
         "policies": {
           "none": "Keine",
           "age": "Alter",
-          "usage": "Nutzung"
+          "usage": "Nutzung",
+          "bestSamples": "Beste Aufnahmen"
         },
         "noRetentionTitle": "Alle Clips behalten",
         "noRetentionDescription": "Audioclips werden unbegrenzt gespeichert. Überwachen Sie die Festplattennutzung, um Speicherprobleme zu vermeiden.",
         "ageRetentionTitle": "Altersbasierte Bereinigung",
         "ageRetentionDescription": "Clips, die älter als das angegebene Alter sind, werden automatisch gelöscht, während die Mindestanzahl pro Art erhalten bleibt.",
         "usageRetentionTitle": "Nutzungsbasierte Bereinigung",
-        "usageRetentionDescription": "Wenn die Festplattennutzung den Schwellenwert überschreitet, werden die ältesten Clips gelöscht, bis die Nutzung innerhalb der Grenzen liegt."
+        "usageRetentionDescription": "Wenn die Festplattennutzung den Schwellenwert überschreitet, werden die ältesten Clips gelöscht, bis die Nutzung innerhalb der Grenzen liegt.",
+        "bestSamplesMaxAgeLabel": "Zeitraum für aktuelle Aufnahmen",
+        "bestSamplesMaxAgeHelp": "Alle Clips, die jünger als dieser Zeitraum sind, bleiben zur manuellen Prüfung erhalten. Ältere Clips bleiben nur erhalten, wenn sie zu den sichersten Aufnahmen ihrer Art gehören.",
+        "bestSamplesMinClipsHelp": "Behalten Sie zusätzlich zu allen Clips im aktuellen Zeitraum diese Anzahl der Clips mit der höchsten Konfidenz pro Art."
       },
       "formats": {
         "wav": "WAV",

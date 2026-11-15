@@ -4053,7 +4053,7 @@
         "title": "Retencja Klipów Audio",
         "description": "Konfiguruj automatyczne czyszczenie zapisanych klipów audio",
         "policyLabel": "Polityka Retencji",
-        "policyHelp": "Wybierz, jak klipy audio są automatycznie usuwane. Brak: zachowaj wszystkie klipy. Wiek: usuń klipy starsze niż określone. Użycie: usuń najstarsze klipy, gdy użycie dysku przekroczy limit.",
+        "policyHelp": "Wybierz sposób czyszczenia nagrań: zachowaj wszystkie, usuwaj według wieku lub użycia dysku albo zachowuj najnowsze i najbardziej wiarygodne próbki.",
         "maxAgeLabel": "Maksymalny Wiek",
         "maxAgeHelp": "Usuń klipy audio starsze niż ten okres. Format: liczba po której następuje jednostka (h=godziny, d=dni, w=tygodnie, m=miesiące). Przykłady: '7d' dla 7 dni, '4w' dla 4 tygodni.",
         "maxUsageLabel": "Maksymalne Użycie Dysku",
@@ -4065,14 +4065,18 @@
         "policies": {
           "none": "Brak - Zachowaj Wszystko",
           "age": "Na Podstawie Wieku",
-          "usage": "Na Podstawie Użycia Dysku"
+          "usage": "Na Podstawie Użycia Dysku",
+          "bestSamples": "Najlepsze próbki"
         },
         "noRetentionTitle": "Wszystkie Klipy Zachowane",
         "noRetentionDescription": "Klipy audio będą przechowywane bezterminowo. Monitoruj użycie dysku, aby zapobiec problemom z miejscem.",
         "ageRetentionTitle": "Czyszczenie na Podstawie Wieku",
         "ageRetentionDescription": "Klipy starsze niż określony wiek zostaną automatycznie usunięte, zachowując minimalną liczbę dla każdego gatunku.",
         "usageRetentionTitle": "Czyszczenie na Podstawie Użycia",
-        "usageRetentionDescription": "Gdy użycie dysku przekroczy próg, najstarsze klipy zostaną usunięte, aż użycie będzie w granicach limitu."
+        "usageRetentionDescription": "Gdy użycie dysku przekroczy próg, najstarsze klipy zostaną usunięte, aż użycie będzie w granicach limitu.",
+        "bestSamplesMaxAgeLabel": "Okno najnowszych próbek",
+        "bestSamplesMaxAgeHelp": "Zachowaj wszystkie nagrania nowsze niż ten okres do ręcznej weryfikacji. Starsze nagrania pozostaną tylko wtedy, gdy należą do najbardziej wiarygodnych dla danego gatunku.",
+        "bestSamplesMinClipsHelp": "Oprócz wszystkich nagrań z bieżącego okresu zachowaj tę liczbę nagrań o najwyższej wiarygodności dla każdego gatunku."
       },
       "formats": {
         "wav": "WAV",

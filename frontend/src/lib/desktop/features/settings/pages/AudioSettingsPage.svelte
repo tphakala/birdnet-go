@@ -127,6 +127,7 @@
       { value: 'none', label: t('settings.audio.audioClipRetention.policies.none') },
       { value: 'age', label: t('settings.audio.audioClipRetention.policies.age') },
       { value: 'usage', label: t('settings.audio.audioClipRetention.policies.usage') },
+      { value: 'best_samples', label: t('settings.audio.audioClipRetention.policies.bestSamples') },
     ];
   });
 
@@ -1529,14 +1530,18 @@
             menuSize="sm"
           />
 
-          <!-- Max Age (shown when policy is 'age') -->
-          {#if retentionSettings.policy === 'age'}
+          <!-- Age window is used by age and best-samples policies -->
+          {#if retentionSettings.policy === 'age' || retentionSettings.policy === 'best_samples'}
             <TextInput
               id="retention-max-age"
               value={retentionSettings.maxAge}
-              label={t('settings.audio.audioClipRetention.maxAgeLabel')}
+              label={retentionSettings.policy === 'best_samples'
+                ? t('settings.audio.audioClipRetention.bestSamplesMaxAgeLabel')
+                : t('settings.audio.audioClipRetention.maxAgeLabel')}
               placeholder="7d"
-              helpText={t('settings.audio.audioClipRetention.maxAgeHelp')}
+              helpText={retentionSettings.policy === 'best_samples'
+                ? t('settings.audio.audioClipRetention.bestSamplesMaxAgeHelp')
+                : t('settings.audio.audioClipRetention.maxAgeHelp')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateRetentionMaxAge}
             />
@@ -1566,7 +1571,9 @@
               onUpdate={updateRetentionMinClips}
               min={0}
               placeholder="10"
-              helpText={t('settings.audio.audioClipRetention.minClipsHelp')}
+              helpText={retentionSettings.policy === 'best_samples'
+                ? t('settings.audio.audioClipRetention.bestSamplesMinClipsHelp')
+                : t('settings.audio.audioClipRetention.minClipsHelp')}
               disabled={store.isLoading || store.isSaving}
             />
 
