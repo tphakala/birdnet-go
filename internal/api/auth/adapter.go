@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
@@ -383,7 +384,13 @@ func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderNam
 
 	logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
 	if err != nil {
-		logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelWarn, gothProviderName, "could not build the end-session URL", logger.Error(err))
+		// A parse error embeds the endpoint URL, query included, so it is
+		// reported by kind only; other errors carry no URL.
+		if _, isURLErr := errors.AsType[*url.Error](err); isURLErr {
+			logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelWarn, gothProviderName, "the end-session endpoint is not a valid URL")
+		} else {
+			logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelWarn, gothProviderName, "could not build the end-session URL", logger.Error(err))
+		}
 		return ""
 	}
 

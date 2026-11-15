@@ -27,6 +27,9 @@ const (
 	logoutSkipMessage  = "OIDC sign-out at the identity provider skipped"
 	logoutOIDCModule   = "security.oidc"
 	logoutTestEndpoint = "idp.example.test/end-session"
+	// logoutTestEndpointSecret sits in the query of a malformed end-session
+	// endpoint and must never reach a log line.
+	logoutTestEndpointSecret = "endpoint-query-must-not-be-logged"
 )
 
 // logoutRow describes one GetProviderLogoutURL scenario.
@@ -54,6 +57,7 @@ func TestGetProviderLogoutURL_ReportsSkippedSignOut(t *testing.T) {
 		{name: "https endpoint returns URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true},
 		{name: "provider not registered", oidcEnabled: true, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN"},
 		{name: "empty end-session endpoint", oidcEnabled: true, registerOIDC: true, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN"},
+		{name: "malformed endpoint is reported without its URL", oidcEnabled: true, registerOIDC: true, endSession: "https://idp.example.test/%zz?token=" + logoutTestEndpointSecret, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN"},
 		{name: "http endpoint rejected", oidcEnabled: true, registerOIDC: true, endSession: "http://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN", wantSkipHost: "idp.example.test"},
 		{name: "no provider in session, OIDC enabled", oidcEnabled: true, wantSkipLogs: 1, wantLevel: "INFO"},
 		{name: "no provider in session, OIDC disabled"},
@@ -131,6 +135,7 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	}
 	assert.NotContains(t, logs, logoutTestIDToken)
 	assert.NotContains(t, logs, logoutTestQuery)
+	assert.NotContains(t, logs, logoutTestEndpointSecret)
 
 	var skipLines []string
 	oidcLines := 0
