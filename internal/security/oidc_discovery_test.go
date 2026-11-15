@@ -361,6 +361,11 @@ func TestRedactDiscoveryErr(t *testing.T) {
 			err:  &url.Error{Op: "Get", URL: pathlessURL, Err: errors.NewStd("refused")},
 			want: `Get "` + pathlessURL + `": refused`,
 		},
+		{
+			name: "transport url.Error with an opaque URL",
+			err:  &url.Error{Op: "Get", URL: "https:tok:pw@idp.example/x", Err: errors.NewStd("unsupported protocol scheme")},
+			want: `Get "[REDACTED]@idp.example/x": unsupported protocol scheme`,
+		},
 		{name: "nil cause", err: nil, want: errOIDCDiscoveryCauseUnknown.Error()},
 	}
 	for _, tt := range tests {
@@ -391,6 +396,50 @@ func TestOIDCDiscoveryFailure_NilCause(t *testing.T) {
 	logOIDCRetryExhausted(issuer, oidcDiscoveryURL(issuer), nil)
 	assert.Contains(t, logs.main(), errOIDCDiscoveryCauseUnknown.Error())
 	assert.Contains(t, logs.security(), errOIDCDiscoveryCauseUnknown.Error())
+}
+
+// TestOIDCDiscoveryFailure_RedactsRedirectLocation covers a discovery server that
+// redirects to a Location net/http cannot parse: the client error quotes both
+// URLs as text, and the inner parse error is not part of the error chain.
+func TestOIDCDiscoveryFailure_RedactsRedirectLocation(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
+	enableOIDCRetries()
+	t.Cleanup(cancelAllOIDCRetries)
+
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://alice:pa/ss@idp.example", http.StatusFound)
+	}))
+	t.Cleanup(idp.Close)
+
+	initializeProviders(&conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{{
+				Provider:     ConfigOIDC,
+				Enabled:      true,
+				ClientID:     "test-client",
+				ClientSecret: testOIDCClientSecret,
+				IssuerURL:    idp.URL,
+			}},
+		},
+	})
+
+	err := ProviderRegistrationError(ProviderOIDC)
+	require.Error(t, err)
+	for name, content := range map[string]string{
+		"main log":     logs.main(),
+		"security log": logs.security(),
+		"recorded":     err.Error(),
+	} {
+		assert.Contains(t, content, "failed to parse Location header", name)
+		assert.NotContains(t, content, "pa/ss", name)
+		assert.NotContains(t, content, "alice", name)
+	}
 }
 
 // TestOIDCRetryExhausted_RedactsUserinfoInTheCause pins that the exhaustion log

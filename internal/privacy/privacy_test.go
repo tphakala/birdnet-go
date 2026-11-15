@@ -2149,6 +2149,13 @@ func TestScrubCredentialURL_UnparseableFallback(t *testing.T) {
 		assert.Equal(t, "http://[REDACTED]@host:12x/path", got)
 	})
 
+	t.Run("opaque and scheme-less values that parse are redacted", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "[REDACTED]@host/x", ScrubCredentialURL("https:user:pw@host/x"))
+		assert.Equal(t, "[REDACTED]@host", ScrubCredentialURL("user:pw@host"))
+		assert.Equal(t, "[REDACTED]@host", ScrubCredentialURL("user@host"))
+	})
+
 	t.Run("parseable pathless URL with at sign in the query is unchanged", func(t *testing.T) {
 		t.Parallel()
 		const in = "https://idp.example?login_hint=a@b.example"
@@ -2221,6 +2228,21 @@ func TestScrubURLUserinfoInText(t *testing.T) {
 			"Get https://idp.example?login_hint=a@b.example: refused",
 		},
 		{"no URL", "connection refused", "connection refused"},
+		{
+			"opaque URL in a quoted segment",
+			`Get "https:user:pw@host/x": refused`,
+			`Get "[REDACTED]@host/x": refused`,
+		},
+		{
+			"quoted URL that does not parse",
+			`failed to parse Location header "https://alice:pa/ss@idp.example": refused`,
+			`failed to parse Location header "https://[REDACTED]@idp.example": refused`,
+		},
+		{
+			"quoted pathless URL with at sign in the query",
+			`Get "https://idp.example?login_hint=a@b.example": refused`,
+			`Get "https://idp.example?login_hint=a@b.example": refused`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
