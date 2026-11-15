@@ -158,12 +158,6 @@
     if (column) sortStatus = sortAnnouncement(column.header, sortDirection);
   }
 
-  // The status region shows the loading label while loading; clear the sort message so
-  // the end of a later load does not announce a sort the user did not just make.
-  $effect(() => {
-    if (loading) sortStatus = '';
-  });
-
   let filteredData = $derived.by(() => {
     if (!searchable || !searchAccessor) return data;
     const query = searchQuery.trim().toLowerCase();
@@ -190,6 +184,12 @@
       }
       return cmp * direction;
     });
+  });
+
+  // Clear the sort message when no rows are shown (loading, no data, a search with no matches)
+  // so a later reload or refill does not announce a sort the user did not just make.
+  $effect(() => {
+    if (loading || sortedData.length === 0) sortStatus = '';
   });
 
   let displayCount = $derived(count ?? filteredData.length);

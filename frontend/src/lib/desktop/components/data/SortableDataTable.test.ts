@@ -228,6 +228,33 @@ describe('SortableDataTable', () => {
     outside.remove();
   });
 
+  it('drops the sort announcement when a search matches no rows', async () => {
+    const user = userEvent.setup();
+    renderTable({
+      searchable: true,
+      searchAccessor: (r: Row) => r.name,
+      searchPlaceholder: 'Search',
+      defaultSortKey: 'name',
+    });
+    await user.click(screen.getByTestId('sort-score'));
+    expect(screen.getByRole('status')).toHaveTextContent('Sorted by Score');
+
+    await user.type(screen.getByPlaceholderText('Search'), 'zzz');
+
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  it('drops the sort announcement when the data is replaced by an empty list', async () => {
+    const user = userEvent.setup();
+    const view = renderTable({ defaultSortKey: 'name' });
+    await user.click(screen.getByTestId('sort-score'));
+    expect(screen.getByRole('status')).toHaveTextContent('Sorted by Score');
+
+    await view.rerender({ data: [] });
+
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
   it('uses the count prop for the badge when provided, overriding the row count', () => {
     const { container } = renderTable({ count: 99 });
     const badge = container.querySelector('span.rounded-full');
