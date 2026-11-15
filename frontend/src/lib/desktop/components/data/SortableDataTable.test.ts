@@ -210,6 +210,7 @@ describe('SortableDataTable', () => {
 
     await view.rerender({ loading: true });
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Things' })).toHaveFocus());
+    expect(screen.getByRole('heading', { name: 'Things' })).toHaveClass('focus-ring');
   });
 
   it('leaves focus alone when the table did not hold it', async () => {

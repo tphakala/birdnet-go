@@ -250,7 +250,7 @@
               <h3
                 bind:this={titleElement}
                 tabindex="-1"
-                class="text-xs font-semibold uppercase tracking-wider text-muted truncate"
+                class="text-xs font-semibold uppercase tracking-wider text-muted truncate focus-ring"
               >
                 {title}
               </h3>
