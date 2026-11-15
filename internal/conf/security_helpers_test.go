@@ -178,6 +178,31 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 			want: testHostExample,
 		},
 		{
+			name:     "Host with a scheme, port and path - should return the bare hostname",
+			security: Security{Host: testURLHTTPS + "/birdnet", BaseURL: testURLDifferent},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with an uppercase scheme and padding - should return the bare hostname",
+			security: Security{Host: " HTTPS://" + testHostExample + " "},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with a scheme and an IPv6 literal - should return it without brackets",
+			security: Security{Host: "http://[" + testHostIPv6 + "]:8080"},
+			want:     testHostIPv6,
+		},
+		{
+			name:     "Host with a scheme but no hostname - should fall back to BaseURL",
+			security: Security{Host: "http://:8080", BaseURL: testURLHTTPSNoPort},
+			want:     testHostExample,
+		},
+		{
+			name:     "Host with a scheme but no hostname and no BaseURL - should be empty",
+			security: Security{Host: "http://:8080"},
+			want:     "",
+		},
+		{
 			name: "Host empty, BaseURL set without port - should extract hostname",
 			security: Security{
 				Host:    "",

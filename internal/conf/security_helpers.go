@@ -168,15 +168,21 @@ func (s *Security) buildURLFromHost(host, port string) string {
 
 // GetHostnameForCertificates extracts the hostname for TLS certificate generation.
 // Priority order:
-//  1. Host field (if set)
+//  1. Host field (if set; a Host with an http(s) scheme is reduced to its
+//     hostname, dropping scheme, port and path, and skipped when it has none)
 //  2. Hostname extracted from BaseURL (without port)
 //  3. Empty string if neither is available
 //
 // IPv6 addresses are returned without brackets.
 func (s *Security) GetHostnameForCertificates() string {
 	// Priority 1: Use Host if set
-	if s.Host != "" {
-		return s.Host
+	if host := s.trimmedHost(); host != "" {
+		if !hostHasScheme(host) {
+			return host
+		}
+		if parsed, err := url.Parse(host); err == nil && parsed.Hostname() != "" {
+			return parsed.Hostname()
+		}
 	}
 
 	// Priority 2: Extract hostname from BaseURL
