@@ -251,9 +251,11 @@ describe('AnalysisSettingsPage range filter dialog', () => {
         render(AnalysisSettingsPage);
         const viewSpecies = await screen.findByRole('button', { name: VIEW_SPECIES });
 
-        // The blocked button stays focusable; opacity on the element would fade its ring too.
+        // The blocked button stays focusable; it is dimmed by colour, because opacity on the
+        // element would fade its focus ring too.
         expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
-        expect(viewSpecies).toHaveClass('focus-ring', 'aria-disabled:focus-visible:opacity-100');
+        expect(viewSpecies).toHaveClass('focus-ring');
+        expect(viewSpecies.className).not.toMatch(/(^|\s)[\w:-]*opacity-/);
       } finally {
         birdnetStore.set(birdnetStore.initial);
       }

@@ -2184,7 +2184,7 @@
                  natively disabled button would drop focus before the dialog could return it here -->
             <button
               type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
               aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
               aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
               onclick={() => {
@@ -2195,14 +2195,6 @@
             >
               {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
             </button>
-            {#if viewSpeciesBlockedReason}
-              <span
-                id="range-species-blocked-reason"
-                class="self-center text-xs text-[var(--color-base-content)]/70"
-              >
-                {viewSpeciesBlockedReason}
-              </span>
-            {/if}
             <button
               type="button"
               class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2214,6 +2206,15 @@
               <Download class="size-4" />
               {t('analytics.filters.exportCsv')}
             </button>
+            <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
+            {#if viewSpeciesBlockedReason}
+              <span
+                id="range-species-blocked-reason"
+                class="text-xs text-[var(--color-base-content)]/70"
+              >
+                {viewSpeciesBlockedReason}
+              </span>
+            {/if}
           </div>
           <span class="help-text mt-1">
             {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
