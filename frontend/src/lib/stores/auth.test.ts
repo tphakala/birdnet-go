@@ -20,6 +20,7 @@ vi.mock('$lib/utils/logger', () => ({
 }));
 
 import { auth } from './auth';
+import { loggers } from '$lib/utils/logger';
 
 describe('Auth Store', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -154,6 +155,21 @@ describe('Auth Store', () => {
       await auth.logout();
 
       expect(window.location.href).toBe('https://idp.example.com/logout?id_token_hint=abc');
+    });
+
+    it('should warn without the URL and redirect to /ui/ when providerLogoutUrl is not HTTPS', async () => {
+      const providerLogoutUrl = 'http://idp.example.com/logout?id_token_hint=secret-token';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, providerLogoutUrl }),
+      });
+
+      await auth.logout();
+
+      expect(window.location.href).toBe('/ui/');
+      expect(loggers.auth.warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(vi.mocked(loggers.auth.warn).mock.calls)).not.toContain('idp.example');
     });
 
     it('should treat 401 as successful logout (expired session)', async () => {

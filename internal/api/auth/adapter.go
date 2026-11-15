@@ -276,24 +276,41 @@ func (a *SecurityAdapter) Logout(c echo.Context) error {
 	return gothic.Logout(c.Response().Writer, c.Request())
 }
 
+// oidcLogoutSkippedPrefix starts every message that reports a skipped OIDC
+// sign-out at the identity provider.
+const oidcLogoutSkippedPrefix = "OIDC sign-out at the identity provider skipped: "
+
 // GetProviderLogoutURL returns the provider's end-session URL for RP-Initiated Logout.
 // Returns empty string if the active provider doesn't support it.
 func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirectURI string) string {
 	log := a.log()
 
-	// Try direct lookup via stored auth_provider session key first
-	if logoutURL := a.getProviderLogoutURLDirect(c, postLogoutRedirectURI, log); logoutURL != "" {
-		return logoutURL
+	// Prefer the stored auth_provider session key. When it is present the
+	// outcome is final: the fallback scan could only find the same provider.
+	if activeProvider := a.getActiveAuthProvider(c, log); activeProvider != "" {
+		return a.buildProviderLogoutURL(c, activeProvider, postLogoutRedirectURI, log)
 	}
 
 	// Fall back to iterating all providers for backward compatibility
 	// (existing sessions may not have the auth_provider key)
-	return a.getProviderLogoutURLFallback(c, postLogoutRedirectURI, log)
+	logoutURL, found := a.getProviderLogoutURLFallback(c, postLogoutRedirectURI, log)
+	if found {
+		return logoutURL
+	}
+
+	settings := a.OAuth2Server.CurrentSettings()
+	if settings != nil && settings.IsOAuthProviderEnabled(security.ConfigOIDC) {
+		security.LogOIDCLogoutEvent(logger.LogLevelInfo,
+			oidcLogoutSkippedPrefix+"the session was not created by an OAuth provider")
+	} else {
+		log.Debug("No OAuth provider session found, skipping provider logout")
+	}
+	return ""
 }
 
-// getProviderLogoutURLDirect attempts to build the logout URL using the stored auth_provider session key.
-// Returns empty string if the key is missing or the provider doesn't support logout.
-func (a *SecurityAdapter) getProviderLogoutURLDirect(c echo.Context, postLogoutRedirectURI string, log logger.Logger) string {
+// getActiveAuthProvider returns the provider name stored under the auth_provider
+// session key, or an empty string if the key is missing.
+func (a *SecurityAdapter) getActiveAuthProvider(c echo.Context, log logger.Logger) string {
 	activeProvider, err := gothic.GetFromSession(security.SessionKeyAuthProvider, c.Request())
 	if err != nil || activeProvider == "" {
 		log.Debug("No auth_provider key in session, will try fallback iteration")
@@ -301,15 +318,16 @@ func (a *SecurityAdapter) getProviderLogoutURLDirect(c echo.Context, postLogoutR
 	}
 
 	log.Debug("Found active auth provider in session", logger.String("provider", activeProvider))
-	return a.buildProviderLogoutURL(c, activeProvider, postLogoutRedirectURI, log)
+	return activeProvider
 }
 
 // getProviderLogoutURLFallback iterates all configured providers to find the active session.
 // This handles sessions created before the auth_provider key was introduced.
-func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, postLogoutRedirectURI string, log logger.Logger) string {
+// found reports whether a provider session key exists, whether or not it yielded a URL.
+func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, postLogoutRedirectURI string, log logger.Logger) (logoutURL string, found bool) {
 	settings := a.OAuth2Server.CurrentSettings()
 	if settings == nil {
-		return ""
+		return "", false
 	}
 	for configProvider, gothProviderName := range security.ConfigToGothProvider {
 		provider := settings.GetOAuthProvider(configProvider)
@@ -324,24 +342,38 @@ func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, postLogou
 		}
 
 		if logoutURL := a.buildProviderLogoutURL(c, gothProviderName, postLogoutRedirectURI, log); logoutURL != "" {
-			return logoutURL
+			return logoutURL, true
 		}
+		found = true
 	}
-	return ""
+	return "", found
+}
+
+// logLogoutSkipped reports that provider sign-out was skipped. For the OIDC
+// provider it reaches the console as well as the security log; other providers
+// never support provider sign-out, so they stay on the package logger.
+func logLogoutSkipped(log logger.Logger, level logger.LogLevel, gothProviderName, reason string, fields ...logger.Field) {
+	if gothProviderName == security.ProviderOIDC {
+		security.LogOIDCLogoutEvent(level, oidcLogoutSkippedPrefix+reason, fields...)
+		return
+	}
+	fields = append(fields, logger.String("provider", gothProviderName))
+	log.Log(level, reason, fields...)
 }
 
 // buildProviderLogoutURL builds the end-session URL for a specific goth provider.
 // Returns empty string if the provider doesn't support RP-Initiated Logout or URL validation fails.
+// The URL carries the ID token hint, so it is never logged.
 func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderName, postLogoutRedirectURI string, log logger.Logger) string {
 	gothProvider, err := goth.GetProvider(gothProviderName)
 	if err != nil {
-		log.Debug("Could not get goth provider", logger.String("provider", gothProviderName), logger.Error(err))
+		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "provider is not registered", logger.Error(err))
 		return ""
 	}
 
 	logoutProvider, ok := gothProvider.(goth.LogoutProvider)
 	if !ok {
-		log.Debug("Provider does not support RP-Initiated Logout", logger.String("provider", gothProviderName))
+		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "provider does not support RP-Initiated Logout")
 		return ""
 	}
 
@@ -350,18 +382,24 @@ func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderNam
 
 	logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
 	if err != nil {
-		log.Warn("Failed to build end-session URL", logger.String("provider", gothProviderName), logger.Error(err))
+		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "could not build the end-session URL", logger.Error(err))
 		return ""
 	}
 
 	// Validate the URL is HTTPS with a valid host
 	parsed, parseErr := url.Parse(logoutURL)
 	if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		log.Warn("Rejected invalid provider logout URL", logger.String("provider", gothProviderName))
+		var fields []logger.Field
+		if parseErr == nil {
+			fields = append(fields, logger.String("scheme", parsed.Scheme), logger.String("host", parsed.Host))
+		}
+		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "end-session URL is not HTTPS or has no host", fields...)
 		return ""
 	}
 
-	log.Info("Built RP-Initiated Logout URL", logger.String("provider", gothProviderName))
+	log.Info("Built RP-Initiated Logout URL",
+		logger.String("provider", gothProviderName),
+		logger.Bool("id_token_hint", idToken != ""))
 	return parsed.String()
 }
 

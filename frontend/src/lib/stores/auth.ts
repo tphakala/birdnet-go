@@ -143,9 +143,12 @@ function createAuthStore() {
                   const parsed = new URL(candidate);
                   if (parsed.protocol === 'https:' && parsed.host.length > 0) {
                     providerLogoutUrl = candidate;
+                  } else {
+                    logger.warn('Ignoring provider logout URL: not HTTPS or has no host');
                   }
                 } catch {
                   // Invalid URL, fall through to default redirect
+                  logger.warn('Ignoring provider logout URL: not a valid URL');
                 }
               }
             } catch {
