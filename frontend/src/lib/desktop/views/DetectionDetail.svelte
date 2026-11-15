@@ -781,7 +781,7 @@
       aria-busy={isLoadingDetection}
     >
       <div class="dd-column">
-        <ModelsCard contributions={detection.modelContributions} />
+        <ModelsCard contributions={detection.modelContributions} detectedAt={detection.timestamp} />
         {#key detection.id}
           <ActivityLog {detection} speciesName={displayName} {canReview} onChanged={onSaved} />
         {/key}

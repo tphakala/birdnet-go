@@ -10,14 +10,16 @@
   import { t } from '$lib/i18n';
   import DetailCard from './DetailCard.svelte';
   import { formatModelLabel, formatPercent, PERCENT, toPercent } from './detailFormat';
-  import { wallClockTime } from './detailTime';
+  import { inOffsetOf, wallClockTime } from './detailTime';
   import type { ModelContribution } from './detailTypes';
 
   interface Props {
     contributions?: ModelContribution[] | null;
+    /** The detection's timestamp: hit times are shown on its UTC offset. */
+    detectedAt?: string;
   }
 
-  let { contributions = null }: Props = $props();
+  let { contributions = null, detectedAt }: Props = $props();
 
   // Narrowest confidence span drawn, in percent, so a single hit stays visible.
   const MIN_SPAN_PERCENT = 1.5;
@@ -38,8 +40,8 @@
   }
 
   function hitTimes(row: ModelContribution): string {
-    const first = wallClockTime(row.firstHitAt, true);
-    const last = wallClockTime(row.lastHitAt, true);
+    const first = wallClockTime(inOffsetOf(row.firstHitAt, detectedAt), true);
+    const last = wallClockTime(inOffsetOf(row.lastHitAt, detectedAt), true);
     if (!first) return '';
     return !last || first === last ? first : `${first}-${last}`;
   }

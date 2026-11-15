@@ -28,7 +28,7 @@
   import { generateId } from '$lib/utils/uuid';
   import DetailCard from './DetailCard.svelte';
   import { replacedModelPick, toPercent } from './detailFormat';
-  import { formatCalendarDateTime, wallClockTime } from './detailTime';
+  import { formatCalendarDateTime, inOffsetOf, wallClockTime } from './detailTime';
   import type { DetectionDetailData, SavedChange } from './detailTypes';
 
   type EntryKind =
@@ -87,8 +87,8 @@
   let entries = $derived.by(() => {
     const list: Entry[] = [];
     const detectedAt = detection.timestamp ?? '';
-    const begin = wallClockTime(detection.beginTime, true);
-    const end = wallClockTime(detection.endTime, true);
+    const begin = wallClockTime(onDetectionOffset(detection.beginTime), true);
+    const end = wallClockTime(onDetectionOffset(detection.endTime), true);
 
     // After a reviewer changed the species, the detection entry names what the model heard.
     list.push({
@@ -170,21 +170,43 @@
         title: t('detections.detail.log.noteAdded'),
         detail: edited
           ? t('detections.detail.log.noteEdited', {
-              time: formatCalendarDateTime(comment.updatedAt),
+              time: formatCalendarDateTime(onDetectionOffset(comment.updatedAt)),
             })
           : undefined,
         body: comment.entry,
       });
     }
 
-    // Entries without a recorded time keep their place after the timed ones.
+    // Ordered by instant. Entries without a readable time keep their place after the
+    // timed ones.
     return list.sort((a, b) => {
-      if (!a.at && !b.at) return 0;
-      if (!a.at) return 1;
-      if (!b.at) return -1;
-      return Date.parse(a.at) - Date.parse(b.at);
+      const first = instant(a.at);
+      const second = instant(b.at);
+      if (first === null && second === null) return 0;
+      if (first === null) return 1;
+      if (second === null) return -1;
+      return first - second;
     });
   });
+
+  /** The instant of an RFC3339 time in milliseconds, or null when it has none or is unreadable. */
+  function instant(at: string): number | null {
+    const value = Date.parse(at);
+    return Number.isNaN(value) ? null : value;
+  }
+
+  /**
+   * A time written on the detection's own UTC offset. The server writes some times (notes)
+   * in its own zone, so without this the clocks of the log would not agree.
+   */
+  function onDetectionOffset(at: string | undefined): string | undefined {
+    return inOffsetOf(at, detection.timestamp);
+  }
+
+  /** The date and clock of an entry on the detection's offset, or the "no time" text. */
+  function entryTime(at: string): string {
+    return formatCalendarDateTime(onDetectionOffset(at)) || t('detections.detail.log.timeUnknown');
+  }
 
   // The panel is keyed by detection: stepping away destroys it while a save may still be
   // out. Such a save can no longer show its failure here, so it is reported as a toast.
@@ -241,7 +263,7 @@
         </span>
         <div class="dd-log-content">
           <p class="dd-log-time">
-            {entry.at ? formatCalendarDateTime(entry.at) : t('detections.detail.log.timeUnknown')}
+            {entryTime(entry.at)}
           </p>
           <p class="dd-log-title">{entry.title}</p>
           {#if entry.detail}

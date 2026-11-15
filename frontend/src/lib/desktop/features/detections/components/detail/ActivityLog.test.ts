@@ -83,6 +83,51 @@ describe('ActivityLog entries', () => {
     expect(change).toContain('detections.detail.log.timeUnknown');
   });
 
+  // The server can write a note's time in its own zone; the log shows every time on the
+  // detection's offset, so its clocks agree with each other and with the rest of the page.
+  it('shows a note time on the detection offset and orders it by its instant', () => {
+    const entries = renderLog({
+      ...base,
+      verified: 'correct',
+      firstReviewedAt: '2026-11-14T08:30:00+02:00',
+      lastReviewedAt: '2026-11-14T08:30:00+02:00',
+      comments: [
+        {
+          id: 1,
+          entry: 'Heard it again',
+          createdAt: '2026-11-14T06:00:00Z',
+          updatedAt: '2026-11-14T06:00:00Z',
+        },
+      ],
+    });
+
+    const note = entries.findIndex(entry => entry.includes('Heard it again'));
+    const review = entries.findIndex(entry => entry.includes('detections.detail.log.reviewed'));
+    expect(entries.at(note)).toContain('08:00');
+    expect(note).toBeLessThan(review);
+  });
+
+  it('places an entry with an unreadable time after the timed ones', () => {
+    const entries = renderLog({
+      ...base,
+      verified: 'correct',
+      firstReviewedAt: 'not a time',
+      lastReviewedAt: 'not a time',
+      comments: [
+        {
+          id: 1,
+          entry: 'A note',
+          createdAt: '2026-11-14T06:00:00Z',
+          updatedAt: '2026-11-14T06:00:00Z',
+        },
+      ],
+    });
+
+    expect(entries.at(0)).toContain('detections.detail.log.detected');
+    expect(entries.at(1)).toContain('A note');
+    expect(entries.at(2)).toContain('detections.detail.log.reviewed');
+  });
+
   it('adds no species change entry once the species is back to the model’s pick', () => {
     const entries = renderLog({
       ...base,

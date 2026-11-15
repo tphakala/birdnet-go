@@ -19,7 +19,7 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import DetailCard from './DetailCard.svelte';
   import { formatDecimal } from './detailFormat';
-  import { secondsBetween, wallClockTime } from './detailTime';
+  import { inOffsetOf, secondsBetween, wallClockTime } from './detailTime';
   import type { DetectionDetailData } from './detailTypes';
 
   interface Props {
@@ -35,8 +35,9 @@
   let clipExtractionEnabled = $derived($isAuthenticated);
 
   let captureWindow = $derived.by(() => {
-    const begin = wallClockTime(detection.beginTime, true);
-    const end = wallClockTime(detection.endTime, true);
+    // On the detection's own offset, like every other clock on the page.
+    const begin = wallClockTime(inOffsetOf(detection.beginTime, detection.timestamp), true);
+    const end = wallClockTime(inOffsetOf(detection.endTime, detection.timestamp), true);
     return begin && end ? `${begin}-${end}` : '';
   });
 
