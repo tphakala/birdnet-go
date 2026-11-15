@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"net/http"
@@ -1381,6 +1382,33 @@ func TestCheckProviderAuth(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
+}
+
+// TestCheckProviderAuthMismatchDoesNotLogAllowlist verifies that a provider
+// session for a user outside the allowlist is rejected without writing the
+// configured allowlist (email addresses, user IDs) to the log.
+func TestCheckProviderAuthMismatchDoesNotLogAllowlist(t *testing.T) {
+	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
+	server := &OAuth2Server{settings: &conf.Settings{}}
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req = storeMultipleInSession(t, req, ProviderGoogle, "stranger-sub")
+
+	const allowlist = "admin@example.com, 1234567890"
+	buf := &bytes.Buffer{}
+	log := logger.NewSlogLogger(buf, logger.LogLevelDebug, time.UTC)
+
+	result := server.checkProviderAuth(req, "stranger@example.com", log, providerAuthConfig{
+		providerName:   ProviderGoogle,
+		enabled:        true,
+		allowedUserIds: allowlist,
+	})
+
+	require.False(t, result, "a user outside the allowlist must be rejected")
+	output := buf.String()
+	assert.Contains(t, output, "does not match allowed IDs", "the mismatch must still be logged")
+	assert.NotContains(t, output, "admin@example.com", "the allowlist must not be logged")
+	assert.NotContains(t, output, "1234567890", "the allowlist must not be logged")
 }
 
 // mockOIDCDiscovery creates an httptest server that serves a minimal OIDC discovery document.

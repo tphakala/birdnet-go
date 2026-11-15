@@ -1140,7 +1140,8 @@ func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log Sec
 		log.Info("User authenticated: valid session found for allowed user ID", logger.String("provider", cfg.providerName))
 		return true
 	}
-	log.Warn("Provider session found, but userId does not match allowed IDs", logger.String("provider", cfg.providerName), logger.String("allowed_ids", cfg.allowedUserIds))
+	// The allowlist holds email addresses and user IDs, so it is never logged.
+	log.Warn("Provider session found, but userId does not match allowed IDs", logger.String("provider", cfg.providerName))
 	return false
 }
 
