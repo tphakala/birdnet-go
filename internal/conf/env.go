@@ -3,7 +3,6 @@ package conf
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -150,7 +149,7 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyWebServerPort, EnvVarWebServerPort, validateEnvPort},
 
 		// Security Configuration
-		{ConfigKeyBaseURL, EnvVarBaseURL, validateEnvBaseURL},
+		{ConfigKeyBaseURL, EnvVarBaseURL, ValidateBaseURL},
 		{ConfigKeySecurityHost, EnvVarSecurityHost, nil},
 		{ConfigKeySecurityAutoTLS, EnvVarSecurityAutoTLS, validateEnvBool},
 		{ConfigKeySecurityTLSMode, EnvVarSecurityTLSMode, validateEnvTLSMode},
@@ -358,34 +357,6 @@ func validateEnvPath(value string) error {
 
 	// filepath.Clean already handles path traversal, so no need for additional checks
 	// Only return fatal errors - let caller handle existence warnings
-	return nil
-}
-
-// validateEnvBaseURL validates the BIRDNET_URL environment variable
-// The URL must include a scheme (http or https) and a valid hostname
-func validateEnvBaseURL(value string) error {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fmt.Errorf("URL must not be empty")
-	}
-
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return fmt.Errorf("invalid URL format: %w", err)
-	}
-
-	if parsed.Scheme == "" {
-		return fmt.Errorf("URL must include scheme (http:// or https://)")
-	}
-
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("URL scheme must be http or https, got: %s", parsed.Scheme)
-	}
-
-	if parsed.Hostname() == "" {
-		return fmt.Errorf("URL must include a valid hostname")
-	}
-
 	return nil
 }
 

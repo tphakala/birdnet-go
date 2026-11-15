@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test constants for Security helper methods.
@@ -512,4 +513,123 @@ func TestSecurity_IsHTTPSBaseURL(t *testing.T) {
 		var nilSec *Security
 		assert.False(t, nilSec.IsHTTPSBaseURL(), "nil *Security must not panic and returns false")
 	})
+}
+
+// TestValidateBaseURL pins the one rule shared by BIRDNET_URL and security.baseUrl.
+func TestValidateBaseURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{name: "https URL", value: "https://birds.example.com"},
+		{name: "padded valid URL", value: "  https://birds.example.com \n"},
+		{name: "port and path", value: "http://192.168.1.10:8080/birdnet"},
+		{name: "IPv6 literal", value: "http://[2001:db8::1]:8080"},
+		{name: "empty", value: "", wantErr: "must not be empty"},
+		{name: "whitespace only", value: "  ", wantErr: "must not be empty"},
+		{name: "scheme-less host", value: "birds.example.com", wantErr: "must include scheme"},
+		{name: "wrong scheme", value: "ftp://birds.example.com", wantErr: "scheme must be http or https"},
+		{name: "scheme without host", value: "https://", wantErr: "valid hostname"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateBaseURL(tt.value)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+// TestSecurity_OriginDerivation pins what OAuthOrigin and GetBaseURL return for
+// the same settings, and that oauthOriginProblem is empty exactly when OAuthOrigin
+// is usable, so the validator cannot drift from the code that builds the callback.
+//
+// The scheme-less host rows pin a known difference on purpose: OAuth assumes https
+// for a bare security.host, while notification links follow the TLS mode and port.
+// Callback URLs registered at identity providers depend on the first, so changing
+// either answer must show up here as a deliberate edit.
+func TestSecurity_OriginDerivation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		port      = testPortCustom
+		badOrigin = ""
+	)
+	tests := []struct {
+		name        string
+		security    Security
+		wantOrigin  string
+		wantBaseURL string
+		wantProblem string
+	}{
+		{name: "valid baseUrl", security: Security{BaseURL: testURLHTTPS}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
+		{name: "trailing slash and padding are trimmed", security: Security{BaseURL: " " + testURLTrailingSlash + "\t"}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort},
+		{name: "baseUrl wins over host", security: Security{BaseURL: testURLHTTPS, Host: testHostIgnored}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
+		{name: "scheme-less baseUrl is no origin and host does not rescue it", security: Security{BaseURL: testHostExample, Host: testHostIgnored}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "wrong scheme", security: Security{BaseURL: "ftp://" + testHostExample}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "scheme without host", security: Security{BaseURL: "https://"}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
+		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "no redirect URL"},
+		{name: "nothing set", security: Security{}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "no redirect URL"},
+		{name: "bare host, TLS off: OAuth assumes https, links follow the TLS mode", security: Security{Host: testHostExample, TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
+		{name: "bare host, TLS on: both https", security: Security{Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
+		{name: "padded bare host", security: Security{Host: "  " + testHostExample + " ", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
+		{name: "whitespace-only host", security: Security{Host: "   "}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "no redirect URL"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.wantOrigin, tt.security.OAuthOrigin())
+			assert.Equal(t, tt.wantBaseURL, tt.security.GetBaseURL(port))
+
+			problem := oauthOriginProblem(&tt.security)
+			if tt.wantProblem == "" {
+				assert.Empty(t, problem)
+			} else {
+				assert.Contains(t, problem, tt.wantProblem)
+			}
+			assert.Equal(t, problem == "", tt.security.OAuthOrigin() != "",
+				"oauthOriginProblem must be empty exactly when OAuthOrigin is usable")
+		})
+	}
+}
+
+// TestSecurity_OAuthOrigin_Host covers the security.host forms the table above
+// cannot run through GetBaseURL: one that already carries a scheme is used as it
+// is, minus a trailing slash, and one that cannot form a URL is no origin.
+func TestSecurity_OAuthOrigin_Host(t *testing.T) {
+	t.Parallel()
+
+	unusable := Security{Host: "bad host"}
+	assert.Empty(t, unusable.OAuthOrigin())
+	assert.Contains(t, oauthOriginProblem(&unusable), "security.host")
+
+	assert.Equal(t, testURLHTTPNoPort, (&Security{Host: testURLHTTPNoPort + "/"}).OAuthOrigin())
+	assert.Equal(t, testURLHTTPSNoPort, (&Security{Host: testURLHTTPSNoPort}).OAuthOrigin())
+}
+
+// TestValidateSecurityBaseURL pins the save-time rule: a set baseUrl must be a
+// usable URL, an unset or whitespace-only one is fine, and the error names the
+// field without echoing credentials.
+func TestValidateSecurityBaseURL(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateSecurityBaseURL(&Security{}))
+	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: "  "}))
+	require.NoError(t, ValidateSecurityBaseURL(&Security{BaseURL: " " + testURLHTTPS + " "}))
+
+	err := ValidateSecurityBaseURL(&Security{BaseURL: "ftp://user:hunter2@" + testHostExample})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "security.baseUrl")
+	assert.NotContains(t, err.Error(), "hunter2")
 }

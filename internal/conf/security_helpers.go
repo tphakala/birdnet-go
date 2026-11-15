@@ -19,30 +19,109 @@ const (
 	DefaultHTTPSPort = "443"
 )
 
+// ValidateBaseURL checks a base URL as BIRDNET_URL and security.baseUrl accept it:
+// non-empty after trimming, an http or https scheme, and a hostname. Parse errors
+// repeat the value, so callers that may hold credentials must not echo the error.
+func ValidateBaseURL(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("URL must not be empty")
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	if parsed.Scheme == "" {
+		return fmt.Errorf("URL must include scheme (http:// or https://)")
+	}
+
+	if parsed.Scheme != SchemeHTTP && parsed.Scheme != SchemeHTTPS {
+		return fmt.Errorf("URL scheme must be http or https, got: %s", parsed.Scheme)
+	}
+
+	if parsed.Hostname() == "" {
+		return fmt.Errorf("URL must include a valid hostname")
+	}
+
+	return nil
+}
+
+// trimmedBaseURL returns BaseURL without surrounding whitespace or a trailing
+// slash, whether or not it is usable.
+func (s *Security) trimmedBaseURL() string {
+	return strings.TrimSuffix(strings.TrimSpace(s.BaseURL), "/")
+}
+
+// validBaseURL returns trimmedBaseURL, or "" when BaseURL is unset or not a
+// usable URL. An unusable value is never repaired and never replaced by Host.
+func (s *Security) validBaseURL() string {
+	baseURL := s.trimmedBaseURL()
+	if baseURL == "" || ValidateBaseURL(baseURL) != nil {
+		return ""
+	}
+	return baseURL
+}
+
+// oauthOriginCandidate returns the origin OAuth callbacks are built from, before
+// it is checked, and the setting it came from: BaseURL when set, otherwise Host
+// with https assumed when it has no scheme. It returns "" for both when neither
+// is set.
+//
+// A bare Host gets https here but follows the TLS mode and port in GetBaseURL.
+// Callback URLs registered at identity providers depend on the first, links in
+// notifications on the second, so the two are kept apart on purpose.
+func (s *Security) oauthOriginCandidate() (field, origin string) {
+	if baseURL := s.trimmedBaseURL(); baseURL != "" {
+		return "security.baseUrl", baseURL
+	}
+	host := strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
+	if host == "" {
+		return "", ""
+	}
+	if !strings.HasPrefix(host, SchemeHTTP+"://") && !strings.HasPrefix(host, SchemeHTTPS+"://") {
+		host = SchemeHTTPS + "://" + host
+	}
+	return "security.host", host
+}
+
+// OAuthOrigin returns the origin OAuth redirect URIs are built from, or "" when
+// none can be: nothing is set, or the value that wins is not a usable URL. A
+// BaseURL that is set but unusable does not fall back to Host.
+func (s *Security) OAuthOrigin() string {
+	_, origin := s.oauthOriginCandidate()
+	if origin == "" || ValidateBaseURL(origin) != nil {
+		return ""
+	}
+	return origin
+}
+
 // GetBaseURL returns the base URL for notifications and OAuth redirects.
 // Priority order:
-//  1. BaseURL field (if set, used as-is with trailing slash trimmed)
+//  1. BaseURL field (if set, trimmed; empty when it is not a usable URL)
 //  2. Constructed from Host + port + TLSMode scheme
 //  3. Empty string if no host is available
 //
 // This method does NOT fall back to localhost - callers should handle empty returns.
 func (s *Security) GetBaseURL(port string) string {
-	// Priority 1: Use BaseURL if set
-	if baseURL := strings.TrimSuffix(strings.TrimSpace(s.BaseURL), "/"); baseURL != "" {
-		return baseURL
+	// Priority 1: BaseURL, which wins even when unusable
+	if s.trimmedBaseURL() != "" {
+		return s.validBaseURL()
 	}
 
 	// Priority 2: Construct from Host + port + TLSMode
-	if s.Host == "" {
+	host := strings.TrimSpace(s.Host)
+	if host == "" {
 		return ""
 	}
 
-	return s.buildURLFromHost(port)
+	return s.buildURLFromHost(host, port)
 }
 
-// buildURLFromHost constructs a URL from Host, port, and TLSMode settings.
+// buildURLFromHost constructs a URL from host, port, and TLSMode settings.
 // Default ports (80 for HTTP, 443 for HTTPS) are omitted for cleaner URLs.
-func (s *Security) buildURLFromHost(port string) string {
+func (s *Security) buildURLFromHost(host, port string) string {
 	scheme := SchemeHTTP
 	if s.TLSMode != TLSModeNone {
 		scheme = SchemeHTTPS
@@ -50,10 +129,10 @@ func (s *Security) buildURLFromHost(port string) string {
 
 	// Omit default ports for cleaner URLs
 	if (scheme == SchemeHTTPS && port == DefaultHTTPSPort) || (scheme == SchemeHTTP && port == DefaultHTTPPort) {
-		return fmt.Sprintf("%s://%s", scheme, s.Host)
+		return fmt.Sprintf("%s://%s", scheme, host)
 	}
 
-	return fmt.Sprintf("%s://%s:%s", scheme, s.Host, port)
+	return fmt.Sprintf("%s://%s:%s", scheme, host, port)
 }
 
 // GetHostnameForCertificates extracts the hostname for TLS certificate generation.

@@ -167,15 +167,14 @@ func TestValidateOAuthRedirects_ScopedToLockOutShape(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "bare host gains the https scheme computeBaseURL assumes",
+			name: "bare host gains the https scheme OAuthOrigin assumes",
 			security: Security{Host: "example.com", OAuthProviders: []OAuthProviderConfig{
 				{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
 			}},
 		},
 		{
-			// computeBaseURL returns baseUrl verbatim and prefers it over host, so a
-			// malformed one yields a callback the identity provider rejects and a
-			// valid host cannot rescue it.
+			// OAuthOrigin prefers baseUrl over host, so a malformed one yields a
+			// callback the identity provider rejects and a valid host cannot rescue it.
 			name: "malformed baseUrl is not a usable origin",
 			security: Security{BaseURL: "example.com", Host: "https://real.example.com", OAuthProviders: []OAuthProviderConfig{
 				{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
@@ -1344,4 +1343,38 @@ func TestValidateOAuthProviderIDs(t *testing.T) {
 			assert.Contains(t, err.Error(), "supported")
 		})
 	}
+}
+
+// TestNormalizeBaseURL pins the load-time policy for security.baseUrl: an unusable
+// value is warned about once and kept, never cleared and never fatal when no
+// credentialed provider depends on it, and the warning carries no credentials.
+func TestNormalizeBaseURL(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"birds.example.com", "ftp://user:hunter2@birds.example.com"} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			s := &Settings{}
+			s.Security.BaseURL = value
+
+			normalizeIncompleteFeatures(s)
+			normalizeIncompleteFeatures(s)
+
+			require.NoError(t, ValidateSettings(s))
+			assert.Equal(t, value, s.Security.BaseURL, "the value stays so the settings page can show it for correction")
+			require.Len(t, s.ValidationWarnings, 1, "one warning, however often the pass runs")
+			assert.Contains(t, s.ValidationWarnings[0], "security.baseUrl")
+			assert.NotContains(t, s.ValidationWarnings[0], "hunter2")
+		})
+	}
+
+	t.Run("usable or unset values record nothing", func(t *testing.T) {
+		t.Parallel()
+		for _, value := range []string{"", "  ", " https://birds.example.com/ "} {
+			s := &Settings{}
+			s.Security.BaseURL = value
+			normalizeIncompleteFeatures(s)
+			assert.Empty(t, s.ValidationWarnings, "baseUrl %q", value)
+		}
+	})
 }

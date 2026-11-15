@@ -811,7 +811,7 @@ func TestValidateEnvBaseURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateEnvBaseURL(tt.value)
+			err := ValidateBaseURL(tt.value)
 			if tt.wantErr {
 				require.Error(t, err, "Expected error for value: %q", tt.value)
 				if tt.errMsg != "" {
