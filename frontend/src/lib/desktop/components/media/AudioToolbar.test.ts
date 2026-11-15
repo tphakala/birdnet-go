@@ -519,6 +519,7 @@ describe('AudioToolbar menus', () => {
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(
         new DOMRect(0, box.top, 1024, box.bottom - box.top)
       );
+      vi.spyOn(container, 'clientHeight', 'get').mockReturnValue(box.bottom - box.top);
       placeTrigger('export', 400, 500, triggerTop);
       stubMenuSize();
 

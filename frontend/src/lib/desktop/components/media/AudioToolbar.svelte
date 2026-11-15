@@ -241,9 +241,10 @@
       for (let el = wrapper.parentElement; el; el = el.parentElement) {
         const style = getComputedStyle(el);
         if (CLIPPING_OVERFLOW.has(style.overflowX) || CLIPPING_OVERFLOW.has(style.overflowY)) {
-          const rect = el.getBoundingClientRect();
-          clipTop = Math.max(clipTop, rect.top);
-          clipBottom = Math.min(clipBottom, rect.bottom);
+          // Content is clipped at the scrollport: inside the borders and any scrollbar
+          const top = el.getBoundingClientRect().top + el.clientTop;
+          clipTop = Math.max(clipTop, top);
+          clipBottom = Math.min(clipBottom, top + el.clientHeight);
         }
         if (style.position === 'fixed') break;
       }
