@@ -71,6 +71,12 @@ func (c *BirdNETV3Config) registryID() string {
 	return c.RegistryID
 }
 
+// isBirdNETV3Architecture reports whether a registry ID names a model that runs on
+// the BirdNET v3.0 architecture: the developer preview or BirdNET+ V3.0.
+func isBirdNETV3Architecture(registryID string) bool {
+	return registryID == RegistryIDBirdNETV3 || registryID == RegistryIDBirdNETPlusV3
+}
+
 // NewBirdNETV3 creates a new BirdNET v3.0 (or BirdNET+ V3.0) model instance.
 func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	log := GetLogger()
@@ -78,6 +84,11 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	info, known := ModelRegistry[cfg.registryID()]
 	if !known {
 		return nil, errors.Newf("unknown model registry ID %q for the BirdNET v3.0 architecture", cfg.registryID()).
+			Category(errors.CategoryModelInit).
+			Build()
+	}
+	if !isBirdNETV3Architecture(info.ID) {
+		return nil, errors.Newf("model registry ID %q is not a BirdNET v3.0 architecture model", info.ID).
 			Category(errors.CategoryModelInit).
 			Build()
 	}

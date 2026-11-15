@@ -161,6 +161,19 @@ func TestNewBirdNETV3_UnknownRegistryID(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown model registry ID")
 }
 
+// TestNewBirdNETV3_RejectsOtherArchitecture verifies the constructor refuses a
+// registry ID that exists but belongs to another model architecture, so a Perch or
+// BirdNET v2.4 identity can never be attached to the BirdNET v3.0 loader.
+func TestNewBirdNETV3_RejectsOtherArchitecture(t *testing.T) {
+	t.Parallel()
+
+	for _, id := range []string{RegistryIDPerchV2, RegistryIDBirdNETV24} {
+		_, err := NewBirdNETV3(&BirdNETV3Config{RegistryID: id})
+		require.Error(t, err, id)
+		assert.Contains(t, err.Error(), "not a BirdNET v3.0 architecture model", id)
+	}
+}
+
 // TestBirdNETV3_CatalogEntry guards the catalog entry shape: correct repo, visible
 // in the gallery, and the expected model/labels/geomodel/taxonomy companion files.
 func TestBirdNETV3_CatalogEntry(t *testing.T) {

@@ -471,7 +471,7 @@ func openVINOPrecisionLabel(precision string) string {
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
 // default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
 // explicit override OVPrecisionF32 (Perch v2 on the GPU, and BirdNET v2.4, the bat
-// embedding model and BirdNET v3.0 on every device) maps to FP32.
+// embedding model, BirdNET v3.0 and BirdNET+ V3.0 on every device) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)
