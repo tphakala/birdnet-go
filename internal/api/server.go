@@ -1083,7 +1083,9 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	// or the provider was enabled after startup) instead of letting gothic answer
 	// with its raw error. The cause is for the security log only; the visitor
 	// gets one fixed sentence.
-	if err := security.ProviderRegistrationError(provider); err != nil {
+	// The registry matches goth names exactly, while the checks above match the
+	// path case-insensitively, so look the provider up by its canonical name.
+	if err := security.ProviderRegistrationError(security.ConfigToGothProvider[configProvider]); err != nil {
 		log.Warn("OAuth login rejected: provider is not registered", logger.Error(err))
 		return c.String(http.StatusServiceUnavailable, oauthProviderUnavailableMessage)
 	}

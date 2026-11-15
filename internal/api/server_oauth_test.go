@@ -338,6 +338,8 @@ func TestHandleOAuthBegin_UnregisteredProvider(t *testing.T) {
 	assert.Equal(t, oauthProviderUnavailableMessage, rec.Body.String(), "the body must be the fixed sentence and nothing else")
 	assert.Contains(t, logs.String(), security.ProviderOIDC)
 	assert.Contains(t, logs.String(), "not registered")
+	// The cause returned by ProviderRegistrationError must reach the log.
+	assert.Contains(t, logs.String(), "restart BirdNET-Go to apply")
 }
 
 // TestHandleOAuthBegin_RegisteredProviderRedirects pins that the registration
@@ -357,4 +359,22 @@ func TestHandleOAuthBegin_RegisteredProviderRedirects(t *testing.T) {
 
 	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 	assert.Contains(t, rec.Header().Get("Location"), "login.microsoftonline.com")
+}
+
+// TestHandleOAuthBegin_RegisteredProviderMixedCase pins that a path whose casing
+// differs from the goth name (the provider checks before it match case
+// insensitively) is not reported as an unregistered provider when goth has it.
+// Not parallel: it swaps the settings, the goth registry and gothic.Store.
+func TestHandleOAuthBegin_RegisteredProviderMixedCase(t *testing.T) {
+	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(microsoftonline.New("id", "secret", "http://localhost/auth/microsoftonline/callback"))
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewCookieStore([]byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	rec := beginOAuth(t, s, "MicrosoftOnline")
+
+	assert.NotEqual(t, http.StatusServiceUnavailable, rec.Code, "a registered provider must not be answered as unavailable")
 }
