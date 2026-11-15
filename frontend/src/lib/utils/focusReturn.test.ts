@@ -121,6 +121,21 @@ describe('createFocusReturn', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it('leaves focus alone after a press on a button that did not take focus is followed by a press outside', async () => {
+      setup();
+      const page = document.createElement('p');
+      document.body.appendChild(page);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      page.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+      page.remove();
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('runs the fallback after a press on a button the browser did not focus', async () => {
       setup();
       const { track } = createFocusReturn(() => [outside]);

@@ -43,6 +43,8 @@ export interface FocusReturn {
  * until focus moves to another element. A press on plain content inside the container,
  * including content inside a tabindex element, does not count by itself: it leaves focus
  * on the page body, or focuses the tabindex element, which its own focusin then records.
+ * A press on the page outside the container, while focus is not inside it, clears a mark that
+ * came from a press alone.
  * Focus that was inside and then left for nothing (a click on plain page content) still
  * counts, so removal then runs the fallback. A fallback that returns an empty list
  * leaves focus where it is.
@@ -87,13 +89,23 @@ export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
     }
   }
 
+  // A press on the page outside the container while focus is not inside it: a control pressed
+  // earlier that the browser did not focus (Safari) is no longer where the user is. Capture, so
+  // a handler that stops propagation cannot hide the press.
+  function handleOutsidePress(event: PointerEvent) {
+    if (!(event.target instanceof Node) || root?.contains(event.target)) return;
+    if (!root?.contains(document.activeElement)) holdsFocus = false;
+  }
+
   const track: Action<HTMLElement> = node => {
     root = node;
+    document.addEventListener('pointerdown', handleOutsidePress, true);
     node.addEventListener('focusin', handleFocusIn);
     node.addEventListener('focusout', handleFocusOut);
     node.addEventListener('pointerdown', handleHold);
     return {
       destroy() {
+        document.removeEventListener('pointerdown', handleOutsidePress, true);
         node.removeEventListener('focusin', handleFocusIn);
         node.removeEventListener('focusout', handleFocusOut);
         node.removeEventListener('pointerdown', handleHold);
