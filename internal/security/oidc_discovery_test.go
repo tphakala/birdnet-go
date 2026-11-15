@@ -567,39 +567,17 @@ func TestOIDCDiscovery_ExhaustionLogsAndKeepsFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "503")
 }
 
-// hangingIDP accepts the connection, reads the request and never answers it,
-// until the client gives up or the test ends.
-func hangingIDP(t *testing.T, entered chan<- struct{}) *httptest.Server {
-	t.Helper()
-	gate := make(chan struct{})
-	var once sync.Once
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case entered <- struct{}{}:
-		default:
-		}
-		select {
-		case <-gate:
-		case <-r.Context().Done():
-		}
-	}))
-	// Handlers must be released before Close waits for them.
-	t.Cleanup(server.Close)
-	t.Cleanup(func() { once.Do(func() { close(gate) }) })
-	return server
-}
-
 // TestOIDCDiscovery_CancelStopsInFlightRequest pins that cancelling a
 // generation ends a discovery request that the identity provider never answers,
 // long before the client timeout, and that the cancellation is not reported as
 // a discovery failure.
 func TestOIDCDiscovery_CancelStopsInFlightRequest(t *testing.T) {
 	logs := useSplitLogFiles(t)
-	entered := make(chan struct{}, 1)
-	idp := hangingIDP(t, entered)
+	// Never released: the provider accepts the request and never answers it.
+	idp := newGatedIDP(t, false)
 
 	done := registerProviders(t, oidcSettings(idp.URL))
-	testutil.WaitForChannel(t, entered, testutil.DefaultTestTimeout, "the discovery request never reached the identity provider")
+	idp.waitEntered(t)
 
 	// A pass that disables OIDC supersedes the generation.
 	registerProviders(t, &conf.Settings{})
@@ -653,7 +631,7 @@ func TestOIDCDiscovery_WindowDeadlineStopsInFlightRequest(t *testing.T) {
 // cause, since no real one exists, and the exhaustion is reported.
 func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
 	logs := useSplitLogFiles(t)
-	idp := hangingIDP(t, nil)
+	idp := newGatedIDP(t, false)
 
 	ctx, gen := beginDiscoveryForTest(t)
 	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
@@ -673,22 +651,19 @@ func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
 // oidcHTTPClient: a provider that never answers is given up on when the client
 // timeout passes, with no context deadline involved.
 func TestDiscoverOIDC_UsesBoundedClient(t *testing.T) {
-	idp := hangingIDP(t, nil)
+	idp := newGatedIDP(t, false)
 	original := oidcHTTPClient
 	oidcHTTPClient = &http.Client{Timeout: 200 * time.Millisecond}
 	t.Cleanup(func() { oidcHTTPClient = original })
 
-	finished := make(chan error, 1)
+	var discoverErr error
+	finished := make(chan struct{})
 	go func() {
-		_, err := discoverOIDC(t.Context(), testOIDCRegistration(idp.URL))
-		finished <- err
+		defer close(finished)
+		_, discoverErr = discoverOIDC(t.Context(), testOIDCRegistration(idp.URL))
 	}()
-	select {
-	case err := <-finished:
-		require.Error(t, err)
-	case <-time.After(2 * time.Second):
-		t.Fatal("discovery was not bounded by the client timeout")
-	}
+	testutil.WaitForChannel(t, finished, 2*time.Second, "discovery was not bounded by the client timeout")
+	require.Error(t, discoverErr)
 }
 
 // gatedIDP is an identity provider whose discovery document request blocks until

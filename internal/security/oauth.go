@@ -585,8 +585,8 @@ type oidcRegistration struct {
 
 // buildGothProviders builds every enabled provider that needs no network call
 // from the settings. The first enabled and configured OIDC entry is returned as
-// a registration for background discovery instead, because goth's OpenID Connect constructor
-// fetches the discovery document.
+// a registration for background discovery instead, because goth's OpenID
+// Connect constructor fetches the discovery document.
 func buildGothProviders(settings *conf.Settings) (providers []goth.Provider, oidc *oidcRegistration) {
 	secLog := GetLogger()
 	providers = make([]goth.Provider, 0, InitialProviderCapacity)
