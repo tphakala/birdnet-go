@@ -88,13 +88,21 @@ func hostHasScheme(host string) bool {
 	return strings.Contains(host, schemeSeparator)
 }
 
-// hasUnusableHost reports whether Host is set but cannot be used: one that
-// carries a scheme must be an absolute http(s) URL with a host and no
-// credentials (ValidateBaseURL), as an unusable baseUrl is. OAuthOrigin,
-// GetBaseURL and the hostname getters all ask here so they cannot disagree.
+// hasUnusableHost reports whether Host is set but cannot be used. One that
+// carries a scheme must be an absolute http(s) URL with a host and no credentials
+// (ValidateBaseURL), as a baseUrl must be; a bare one must not contain an at
+// sign, which would put userinfo in front of the host in every link built from
+// it. OAuthOrigin, GetBaseURL and the hostname getters all ask here so they
+// cannot disagree.
 func (s *Security) hasUnusableHost() bool {
 	host := s.trimmedHost()
-	return host != "" && hostHasScheme(host) && ValidateBaseURL(host) != nil
+	if host == "" {
+		return false
+	}
+	if hostHasScheme(host) {
+		return ValidateBaseURL(host) != nil
+	}
+	return strings.Contains(host, "@")
 }
 
 // hasUnusableBaseURL reports whether BaseURL is set but not a usable URL, the one
@@ -159,9 +167,11 @@ func (s *Security) GetBaseURL(port string) string {
 	if host == "" {
 		return ""
 	}
+	if s.hasUnusableHost() {
+		return ""
+	}
 	if hostHasScheme(host) {
-		// Already a full origin: the OAuth origin rule applies as it is, and an
-		// unusable one gives no link.
+		// Already a full origin: the OAuth origin rule applies as it is.
 		return s.OAuthOrigin()
 	}
 
