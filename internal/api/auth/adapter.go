@@ -350,15 +350,16 @@ func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, postLogou
 }
 
 // logLogoutSkipped reports that provider sign-out was skipped. For the OIDC
-// provider it reaches the console as well as the security log; other providers
-// never support provider sign-out, so they stay on the package logger.
-func logLogoutSkipped(log logger.Logger, level logger.LogLevel, gothProviderName, reason string, fields ...logger.Field) {
+// provider it reaches the console as well as the security log, at oidcLevel.
+// Other providers stay on the package logger at otherLevel: most of them never
+// support provider sign-out, so that outcome is not worth more than Debug.
+func logLogoutSkipped(log logger.Logger, oidcLevel, otherLevel logger.LogLevel, gothProviderName, reason string, fields ...logger.Field) {
 	if gothProviderName == security.ProviderOIDC {
-		security.LogOIDCLogoutEvent(level, oidcLogoutSkippedPrefix+reason, fields...)
+		security.LogOIDCLogoutEvent(oidcLevel, oidcLogoutSkippedPrefix+reason, fields...)
 		return
 	}
 	fields = append(fields, logger.String("provider", gothProviderName))
-	log.Log(level, reason, fields...)
+	log.Log(otherLevel, reason, fields...)
 }
 
 // buildProviderLogoutURL builds the end-session URL for a specific goth provider.
@@ -367,13 +368,13 @@ func logLogoutSkipped(log logger.Logger, level logger.LogLevel, gothProviderName
 func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderName, postLogoutRedirectURI string, log logger.Logger) string {
 	gothProvider, err := goth.GetProvider(gothProviderName)
 	if err != nil {
-		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "provider is not registered", logger.Error(err))
+		logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelDebug, gothProviderName, "provider is not registered", logger.Error(err))
 		return ""
 	}
 
 	logoutProvider, ok := gothProvider.(goth.LogoutProvider)
 	if !ok {
-		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "provider does not support RP-Initiated Logout")
+		logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelDebug, gothProviderName, "provider does not support RP-Initiated Logout")
 		return ""
 	}
 
@@ -382,7 +383,7 @@ func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderNam
 
 	logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
 	if err != nil {
-		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "could not build the end-session URL", logger.Error(err))
+		logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelWarn, gothProviderName, "could not build the end-session URL", logger.Error(err))
 		return ""
 	}
 
@@ -393,7 +394,7 @@ func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderNam
 		if parseErr == nil {
 			fields = append(fields, logger.String("scheme", parsed.Scheme), logger.String("host", parsed.Host))
 		}
-		logLogoutSkipped(log, logger.LogLevelWarn, gothProviderName, "end-session URL is not HTTPS or has no host", fields...)
+		logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelWarn, gothProviderName, "end-session URL is not HTTPS or has no host", fields...)
 		return ""
 	}
 

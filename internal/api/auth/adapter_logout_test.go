@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/github"
 	"github.com/markbates/goth/providers/openidConnect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,9 @@ type logoutRow struct {
 	registerOIDC bool
 	endSession   string
 	authProvider string // value stored under auth_provider, empty for none
+	legacyKey    bool   // store the provider's own session key instead of auth_provider
+	registerGH   bool   // register a provider that has no RP-Initiated Logout
+	noWarn       bool   // the log must hold no WARN line at all
 	wantURL      bool
 	wantSkipLogs int
 	wantLevel    string
@@ -53,6 +57,9 @@ func TestGetProviderLogoutURL_ReportsSkippedSignOut(t *testing.T) {
 		{name: "http endpoint rejected", oidcEnabled: true, registerOIDC: true, endSession: "http://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN", wantSkipHost: "idp.example.test"},
 		{name: "no provider in session, OIDC enabled", oidcEnabled: true, wantSkipLogs: 1, wantLevel: "INFO"},
 		{name: "no provider in session, OIDC disabled"},
+		{name: "legacy session returns URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, legacyKey: true, wantURL: true},
+		{name: "legacy session with empty endpoint warns once", oidcEnabled: true, registerOIDC: true, authProvider: security.ProviderOIDC, legacyKey: true, wantSkipLogs: 1, wantLevel: "WARN"},
+		{name: "provider without logout support stays quiet", oidcEnabled: true, registerGH: true, authProvider: "github", noWarn: true},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -87,6 +94,10 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 		goth.UseProviders(p)
 	}
 
+	if row.registerGH {
+		goth.UseProviders(github.New("client", "secret", "http://localhost/cb"))
+	}
+
 	e := echo.New()
 	// Write the session cookie the way the OAuth callback does: each write goes
 	// through a request that carries the cookie of the previous one.
@@ -99,7 +110,10 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 			req.AddCookie(cookie)
 		}
 	}
-	if row.authProvider != "" {
+	switch {
+	case row.legacyKey:
+		store(row.authProvider, "user")
+	case row.authProvider != "":
 		store(security.SessionKeyAuthProvider, row.authProvider)
 	}
 	store("id_token", logoutTestIDToken)
@@ -134,6 +148,10 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	if row.wantSkipHost != "" {
 		assert.Contains(t, skipLines[0], row.wantSkipHost)
 		assert.NotContains(t, skipLines[0], logoutTestEndpoint)
+	}
+	if row.noWarn {
+		assert.NotContains(t, logs, "WARN")
+		assert.Zero(t, oidcLines, "no OIDC console line for another provider")
 	}
 	if !row.oidcEnabled {
 		assert.Zero(t, oidcLines, "no console line without an enabled OIDC provider")
