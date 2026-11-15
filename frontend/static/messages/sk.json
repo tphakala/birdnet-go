@@ -5096,7 +5096,8 @@
       "noData": "Žiadne dáta nie sú k dispozícii",
       "loading": "Načítavajú sa dáta...",
       "error": "Nepodarilo sa načítať dáta",
-      "sortBy": "Zoradiť podľa {column}",
+      "sortedAscending": "Zoradené podľa {column}, vzostupne",
+      "sortedDescending": "Zoradené podľa {column}, zostupne",
       "rowsPerPage": "Riadkov na stranu",
       "pageInfo": "Zobrazuje sa {from} až {to} z {total} výsledkov"
     },

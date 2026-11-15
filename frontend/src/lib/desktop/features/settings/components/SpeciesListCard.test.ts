@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { CirclePlus } from '@lucide/svelte';
+import { t } from '$lib/i18n';
 import SpeciesListCard from './SpeciesListCard.svelte';
 import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
 import { OPTION_HIGHLIGHT_OUTLINE_CLASS } from '$lib/desktop/components/forms/SelectDropdown.styles';
@@ -491,5 +492,32 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     await fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onAdd).toHaveBeenCalledWith('American Crow');
+  });
+});
+
+describe('SpeciesListCard sorting', () => {
+  it('sorts from a header button, marks only that column and announces it', async () => {
+    renderCard({ species: ['Blue Jay', 'American Robin'] });
+    const label = t('settings.species.activeSpecies.columns.commonName');
+
+    const button = screen.getByRole('button', { name: label });
+    const header = screen.getByRole('columnheader', { name: label });
+    expect(header).toContainElement(button);
+    expect(screen.getByRole('status').textContent).toBe('');
+
+    await fireEvent.click(button);
+
+    const sorted = screen.getAllByRole('columnheader').filter(th => th.hasAttribute('aria-sort'));
+    expect(sorted).toEqual([header]);
+    expect(header).toHaveAttribute('aria-sort', 'ascending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: label })
+    );
+  });
+
+  it('names the table by its title', () => {
+    renderCard({ species: ['Blue Jay'] });
+
+    expect(screen.getByRole('table', { name: 'Always Include' })).toBeInTheDocument();
   });
 });

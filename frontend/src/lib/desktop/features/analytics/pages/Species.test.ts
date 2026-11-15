@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { t } from '$lib/i18n';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import Species from './Species.svelte';
@@ -184,17 +185,26 @@ describe('Species (analytics page) — sortable column headers', () => {
     const { container } = await renderListView();
     const countButton = container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX];
 
+    const countLabel = countButton.textContent.trim();
+    expect(screen.getByRole('status').textContent).toBe('');
+
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: countLabel })
+    );
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('descending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedDescending', { column: countLabel })
+    );
   });
 
   it('persists the chosen sort order to localStorage', async () => {

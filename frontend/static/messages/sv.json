@@ -5096,7 +5096,8 @@
       "noData": "Inga data tillgängliga",
       "loading": "Laddar data...",
       "error": "Kunde inte ladda data",
-      "sortBy": "Sortera efter {column}",
+      "sortedAscending": "Sorterat efter {column}, stigande",
+      "sortedDescending": "Sorterat efter {column}, fallande",
       "rowsPerPage": "Rader per sida",
       "pageInfo": "Visar {from} till {to} av {total} resultat"
     },

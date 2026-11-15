@@ -5096,7 +5096,8 @@
       "noData": "Žádná data nejsou k dispozici",
       "loading": "Načítání dat…",
       "error": "Data se nepodařilo načíst",
-      "sortBy": "Seřadit podle {column}",
+      "sortedAscending": "Seřazeno podle {column}, vzestupně",
+      "sortedDescending": "Seřazeno podle {column}, sestupně",
       "rowsPerPage": "Řádků na stránku",
       "pageInfo": "Zobrazuje se {from} až {to} z {total} výsledků"
     },

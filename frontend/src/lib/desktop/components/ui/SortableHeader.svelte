@@ -7,6 +7,12 @@
   Draws ChevronUp or ChevronDown on the sorted column and a ChevronsUpDown
   icon on the others.
 
+  The button is named by the column label alone (no "Sort by" prefix, so the
+  accessible name matches the visible text); the sort state is carried by
+  aria-sort on the <th>, which is set on the active column only. The button's
+  hit area and focus ring cover the whole header cell, whatever padding the
+  table gives the cell.
+
   The unsorted indicator is drawn at 80% of the header text color: for the grey
   header text the tables use, text at 4.5:1 or more leaves it at 3:1 or more, so
   it stays visible without competing with the active column's chevron.
@@ -22,14 +28,12 @@
     conflicting utilities. Right-aligned headers draw the indicator before the
     label, so the label's right edge lines up with right-aligned cell values.
   - className?: string - Additional CSS classes on <th>
-  - srOnly?: string - Screen reader text override
   - width?: string - Optional fixed column width (applied as inline style on <th>)
 -->
 <script lang="ts">
   import { textAlignClass, type ColumnAlign } from '$lib/desktop/components/data/DataTable.types';
   import { ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
-  import { t } from '$lib/i18n';
 
   interface Props {
     label: string;
@@ -39,7 +43,6 @@
     onSort: (_field: string) => void;
     align?: ColumnAlign;
     className?: string;
-    srOnly?: string;
     width?: string;
   }
 
@@ -51,7 +54,6 @@
     onSort,
     align = 'left',
     className = '',
-    srOnly,
     width,
   }: Props = $props();
 
@@ -62,13 +64,12 @@
   scope="col"
   class={cn(textAlignClass(align), className)}
   style:width
-  aria-sort={isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+  aria-sort={isActive ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}
 >
   <button
     type="button"
     class="inline-flex items-center gap-1 [text-align:inherit] hover:text-[var(--color-primary)] transition-colors"
     onclick={() => onSort(field)}
-    aria-label={srOnly ?? t('dataDisplay.table.sortBy', { column: label })}
     data-testid={`sort-${field}`}
   >
     {#if align === 'right'}
@@ -96,3 +97,27 @@
     {/if}
   </span>
 {/snippet}
+
+<style>
+  /* The button's hit area and focus ring cover the whole header cell, whatever padding the
+     table gives the cell. The ring is inset: scroll containers and sticky headers clip
+     anything drawn outside the cell. */
+  th {
+    position: relative;
+  }
+
+  button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  button:focus-visible {
+    outline: none;
+  }
+
+  button:focus-visible::after {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+</style>

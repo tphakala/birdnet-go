@@ -286,7 +286,7 @@ describe('SystemProcessTable', () => {
       await fireEvent.click(retry);
       retry.blur();
       await fireEvent.click(cell);
-      const title = screen.getByText(t('system.processInfo.title'));
+      const title = screen.getByRole('heading', { name: t('system.processInfo.title') });
       await fireEvent.pointerDown(title);
       await fireEvent.click(title);
 

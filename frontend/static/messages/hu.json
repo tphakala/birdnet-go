@@ -5096,7 +5096,8 @@
       "noData": "Nincs elérhető adat",
       "loading": "Adatok betöltése...",
       "error": "Az adatok betöltése sikertelen",
-      "sortBy": "Rendezés: {column} szerint",
+      "sortedAscending": "Rendezve a(z) {column} szerint, növekvő sorrendben",
+      "sortedDescending": "Rendezve a(z) {column} szerint, csökkenő sorrendben",
       "rowsPerPage": "Sorok oldalanként",
       "pageInfo": "Megjelenítés: {from} - {to} / {total} eredmény"
     },

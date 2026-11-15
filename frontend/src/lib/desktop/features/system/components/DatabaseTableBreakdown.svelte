@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
   import type { TableStats } from '$lib/types/database';
 
@@ -37,6 +38,9 @@
     });
   });
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
   function toggleSort(col: string): void {
     if (sortColumn === col) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -44,6 +48,8 @@
       sortColumn = col;
       sortDirection = col === 'name' || col === 'engine' ? 'asc' : 'desc';
     }
+    const column = columns.find(c => c.key === col);
+    if (column) sortStatus = sortAnnouncement(column.label, sortDirection);
   }
 
   type ColumnDef = { key: string; label: string };
@@ -76,8 +82,11 @@
     </span>
   </div>
 
+  <p role="status" class="sr-only">{sortStatus}</p>
+
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
+      <caption class="sr-only">{t('system.database.dashboard.tables.title')}</caption>
       <thead>
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
@@ -87,7 +96,7 @@
               activeField={sortColumn}
               direction={sortDirection}
               onSort={toggleSort}
-              className="p-0 text-xs font-medium text-muted select-none [&>button]:w-full [&>button]:px-3 [&>button]:py-2 [&>button]:focus-visible:outline-2 [&>button]:focus-visible:-outline-offset-2 [&>button]:focus-visible:outline-[var(--color-primary)]"
+              className="py-2 px-3 text-xs font-medium text-muted select-none"
             />
           {/each}
           <th scope="col" class="text-left py-2 px-3 text-xs font-medium text-muted">

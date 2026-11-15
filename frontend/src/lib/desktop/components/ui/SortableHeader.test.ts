@@ -41,16 +41,25 @@ describe('SortableHeader', () => {
   });
 
   it.each([
-    { activeField: 'score', direction: 'asc' as const, expected: 'ascending' },
-    { activeField: 'score', direction: 'desc' as const, expected: 'descending' },
-    { activeField: 'name', direction: 'asc' as const, expected: 'none' },
+    { direction: 'asc' as const, expected: 'ascending' },
+    { direction: 'desc' as const, expected: 'descending' },
   ])(
-    'sets aria-sort to $expected when active=$activeField and direction=$direction',
-    ({ activeField, direction, expected }) => {
-      renderHeader({ activeField, direction });
+    'sets aria-sort to $expected on the active column when direction=$direction',
+    ({ direction, expected }) => {
+      renderHeader({ activeField: 'score', direction });
       expect(header()).toHaveAttribute('aria-sort', expected);
     }
   );
+
+  it('sets no aria-sort on an inactive column', () => {
+    renderHeader({ activeField: 'name' });
+    expect(header()).not.toHaveAttribute('aria-sort');
+  });
+
+  it('names the sort button by its column label', () => {
+    renderHeader();
+    expect(screen.getByRole('button', { name: 'Score' })).toBeInTheDocument();
+  });
 
   it('calls onSort with its field when the button is clicked', async () => {
     const user = userEvent.setup();

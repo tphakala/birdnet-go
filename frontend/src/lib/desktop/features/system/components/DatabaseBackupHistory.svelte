@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
+  import { Download, Clock, Loader2 } from '@lucide/svelte';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
 
   interface BackupJob {
     job_id: string;
@@ -89,6 +91,9 @@
     });
   });
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
   function toggleSort(col: string): void {
     if (sortColumn === col) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -96,6 +101,8 @@
       sortColumn = col;
       sortDirection = col === 'type' ? 'asc' : 'desc';
     }
+    const column = columns.find(c => c.key === col);
+    if (column) sortStatus = sortAnnouncement(t(column.labelKey), sortDirection);
   }
 
   function statusClasses(status: string): string {
@@ -160,6 +167,8 @@
     </button>
   </div>
 
+  <p role="status" class="sr-only">{sortStatus}</p>
+
   {#if createError}
     <ErrorAlert
       className="mb-3"
@@ -187,39 +196,18 @@
   {:else if safeBackups.length > 0}
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
+        <caption class="sr-only">{t('system.database.backup.history.title')}</caption>
         <thead>
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                scope="col"
-                tabindex="0"
-                aria-sort={sortColumn === col.key
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => toggleSort(col.key)}
-                onkeydown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    toggleSort(col.key);
-                  }
-                }}
-              >
-                <div class="flex items-center gap-1">
-                  {t(col.labelKey)}
-                  {#if sortColumn === col.key}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
+              <SortableHeader
+                label={t(col.labelKey)}
+                field={col.key}
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={toggleSort}
+                className="py-2 px-3 text-xs font-medium select-none text-muted"
+              />
             {/each}
             <th scope="col" class="text-right py-2 px-3 text-xs font-medium text-muted">
               {t('system.database.backup.history.columns.actions')}

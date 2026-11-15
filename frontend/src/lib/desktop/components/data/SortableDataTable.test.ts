@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import SortableDataTable from './SortableDataTable.svelte';
 import type { Column } from './DataTable.types';
@@ -171,6 +171,57 @@ describe('SortableDataTable', () => {
     await view.rerender({ loading: false });
     expect(screen.getByRole('status')).toBe(region);
     expect(region).toBeEmptyDOMElement();
+  });
+
+  it('announces a sort in the one status region and stays silent before the first sort', async () => {
+    const user = userEvent.setup();
+    renderTable({ defaultSortKey: 'name' });
+    const region = screen.getByRole('status');
+    expect(region.textContent).toBe('');
+
+    await user.click(screen.getByTestId('sort-score'));
+    expect(screen.getAllByRole('status')).toEqual([region]);
+    expect(region).toHaveTextContent('Sorted by Score, descending');
+
+    await user.click(screen.getByTestId('sort-score'));
+    expect(region).toHaveTextContent('Sorted by Score, ascending');
+  });
+
+  it('does not repeat an old sort announcement when a later load ends', async () => {
+    const user = userEvent.setup();
+    const view = renderTable({ defaultSortKey: 'name' });
+    await user.click(screen.getByTestId('sort-score'));
+    expect(screen.getByRole('status')).toHaveTextContent('Sorted by Score');
+
+    await view.rerender({ loading: true });
+    await view.rerender({ loading: false });
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  it('names the table by its title through a caption', () => {
+    renderTable({ title: 'Things' });
+    expect(screen.getByRole('table', { name: 'Things' })).toBeInTheDocument();
+  });
+
+  it('moves focus to the table title when the rows unmount under a focused sort button', async () => {
+    const view = renderTable({ title: 'Things' });
+    screen.getByTestId('sort-name').focus();
+    expect(screen.getByTestId('sort-name')).toHaveFocus();
+
+    await view.rerender({ loading: true });
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Things' })).toHaveFocus());
+  });
+
+  it('leaves focus alone when the table did not hold it', async () => {
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    const view = renderTable({ title: 'Things' });
+    outside.focus();
+
+    await view.rerender({ loading: true });
+    await Promise.resolve();
+    expect(outside).toHaveFocus();
+    outside.remove();
   });
 
   it('uses the count prop for the badge when provided, overriding the row count', () => {

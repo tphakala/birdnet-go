@@ -632,11 +632,11 @@
           <table class="table w-full">
             <thead>
               <tr>
-                <th>{t('analytics.recentDetections.headers.dateTime')}</th>
-                <th>{t('analytics.recentDetections.headers.species')}</th>
-                <th>{t('analytics.recentDetections.headers.confidence')}</th>
-                <th>{t('analytics.recentDetections.headers.source')}</th>
-                <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.dateTime')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.species')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.confidence')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.source')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.timeOfDay')}</th>
               </tr>
             </thead>
             <tbody>

@@ -771,12 +771,18 @@
                     <table class="w-full text-xs">
                       <thead>
                         <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
-                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorComponent')}</th>
-                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorMessage')}</th>
-                          <th class="px-3 py-1.5 font-medium text-right"
+                          <th scope="col" class="px-3 py-1.5 font-medium"
+                            >{t('health.logs.errorComponent')}</th
+                          >
+                          <th scope="col" class="px-3 py-1.5 font-medium"
+                            >{t('health.logs.errorMessage')}</th
+                          >
+                          <th scope="col" class="px-3 py-1.5 font-medium text-right"
                             >{t('health.logs.errorCount')}</th
                           >
-                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorLevel')}</th>
+                          <th scope="col" class="px-3 py-1.5 font-medium"
+                            >{t('health.logs.errorLevel')}</th
+                          >
                         </tr>
                       </thead>
                       <tbody>
@@ -906,9 +912,13 @@
                       <table class="w-full text-xs">
                         <thead>
                           <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
-                            <th class="px-3 py-1.5 font-medium">{t('health.detail.time')}</th>
-                            <th class="px-3 py-1.5 font-medium">{t('health.detail.source')}</th>
-                            <th class="px-3 py-1.5 font-medium text-right"
+                            <th scope="col" class="px-3 py-1.5 font-medium"
+                              >{t('health.detail.time')}</th
+                            >
+                            <th scope="col" class="px-3 py-1.5 font-medium"
+                              >{t('health.detail.source')}</th
+                            >
+                            <th scope="col" class="px-3 py-1.5 font-medium text-right"
                               >{t('health.detail.count')}</th
                             >
                           </tr>

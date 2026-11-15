@@ -5096,7 +5096,8 @@
       "noData": "Ingen data tilgængelig",
       "loading": "Indlæser data...",
       "error": "Kunne ikke indlæse data",
-      "sortBy": "Sortér efter {column}",
+      "sortedAscending": "Sorteret efter {column}, stigende",
+      "sortedDescending": "Sorteret efter {column}, faldende",
       "rowsPerPage": "Rækker per side",
       "pageInfo": "Viser {from} til {to} af {total} resultater"
     },

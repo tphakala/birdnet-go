@@ -18,7 +18,6 @@
     Activity,
     ChevronDown,
     ChevronUp,
-    ChevronsUpDown,
     Trash2,
     AlertTriangle,
     RefreshCw,
@@ -39,6 +38,9 @@
   import { formatDateTime } from '$lib/utils/formatters';
   import SettingsNote from './SettingsNote.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
+  import { cn } from '$lib/utils/cn';
 
   const logger = loggers.settings;
 
@@ -53,6 +55,9 @@
   } from '$lib/types/dynamic-threshold';
   import { getLevelDisplay, getTimeRemaining } from '$lib/types/dynamic-threshold';
   import type { ThresholdChangeReason } from '$lib/types/dynamic-threshold';
+
+  // Shared cell classes of the sortable headers
+  const SORT_HEADER_CLASS = 'py-2 px-3 text-xs font-medium select-none text-muted';
 
   // Sort types
   type SortColumn = 'species' | 'scientificName' | 'threshold' | 'expires';
@@ -74,14 +79,38 @@
   let sortColumn = $state<SortColumn>('species');
   let sortDirection = $state<SortDirection>('asc');
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
+  const SORT_COLUMNS: Set<string> = new Set<SortColumn>([
+    'species',
+    'scientificName',
+    'threshold',
+    'expires',
+  ]);
+
+  function isSortColumn(value: string): value is SortColumn {
+    return SORT_COLUMNS.has(value);
+  }
+
+  // Header labels, shared by the header cells and the sort announcement
+  const sortHeaderLabels: Record<SortColumn, () => string> = {
+    species: () => t('settings.species.activeSpecies.columns.commonName'),
+    scientificName: () => t('settings.species.activeSpecies.columns.scientificName'),
+    threshold: () => t('settings.species.dynamicThreshold.header.threshold'),
+    expires: () => t('settings.species.dynamicThreshold.header.expires'),
+  };
+
   // Handle column header click to toggle sort
-  function handleSort(column: SortColumn) {
+  function handleSort(column: string) {
+    if (!isSortColumn(column)) return;
     if (sortColumn === column) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = column;
       sortDirection = 'asc';
     }
+    sortStatus = sortAnnouncement(sortHeaderLabels[column](), sortDirection);
   }
 
   // Derived state - filter and sort by selected column
@@ -336,7 +365,7 @@
               type="text"
               placeholder={t('settings.species.dynamicThreshold.searchPlaceholder')}
               aria-label={t('settings.species.dynamicThreshold.searchPlaceholder')}
-              class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus-ring"
               bind:value={searchQuery}
               autocomplete="off"
               data-1p-ignore
@@ -369,6 +398,7 @@
         {/if}
       </div>
     </div>
+    <p role="status" class="sr-only">{sortStatus}</p>
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <div
@@ -384,131 +414,52 @@
     {:else}
       <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
         <table class="w-full text-sm">
+          <caption class="sr-only">{t('settings.species.dynamicThreshold.header.species')}</caption>
           <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
             <tr class="border-b border-[var(--border-100)]">
-              <th class="w-8 py-2 px-2"><span class="sr-only">{t('common.toggle')}</span></th>
-              <th class="w-10 py-2 px-1"><span class="sr-only">{t('common.image')}</span></th>
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'species'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('species')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('species');
-                  }
-                }}
+              <th scope="col" class="w-8 py-2 px-2"
+                ><span class="sr-only">{t('common.toggle')}</span></th
               >
-                <div class="flex items-center gap-1">
-                  {t('settings.species.activeSpecies.columns.commonName')}
-                  {#if sortColumn === 'species'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'scientificName'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('scientificName')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('scientificName');
-                  }
-                }}
+              <th scope="col" class="w-10 py-2 px-1"
+                ><span class="sr-only">{t('common.image')}</span></th
               >
-                <div class="flex items-center gap-1">
-                  {t('settings.species.activeSpecies.columns.scientificName')}
-                  {#if sortColumn === 'scientificName'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
-              <th
-                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted w-24"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'threshold'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('threshold')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('threshold');
-                  }
-                }}
+              <SortableHeader
+                label={sortHeaderLabels.species()}
+                field="species"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                className={SORT_HEADER_CLASS}
+              />
+              <SortableHeader
+                label={sortHeaderLabels.scientificName()}
+                field="scientificName"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                className={SORT_HEADER_CLASS}
+              />
+              <SortableHeader
+                label={sortHeaderLabels.threshold()}
+                field="threshold"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className={cn(SORT_HEADER_CLASS, 'w-24')}
+              />
+              <SortableHeader
+                label={sortHeaderLabels.expires()}
+                field="expires"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className={cn(SORT_HEADER_CLASS, 'w-24')}
+              />
+              <th scope="col" class="w-12"
+                ><span class="sr-only">{t('common.actionsColumn')}</span></th
               >
-                <div class="flex items-center justify-center gap-1">
-                  {t('settings.species.dynamicThreshold.header.threshold')}
-                  {#if sortColumn === 'threshold'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
-              <th
-                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted w-24"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'expires'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('expires')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('expires');
-                  }
-                }}
-              >
-                <div class="flex items-center justify-center gap-1">
-                  {t('settings.species.dynamicThreshold.header.expires')}
-                  {#if sortColumn === 'expires'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
-              <th class="w-12"><span class="sr-only">{t('common.actionsColumn')}</span></th>
             </tr>
           </thead>
           <tbody>

@@ -27,11 +27,13 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import type { LucideProps } from '@lucide/svelte';
-  import { Trash2, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
+  import { Trash2, Search, Plus } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { generateId } from '$lib/utils/uuid';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
   import { getOptionStateClasses } from '$lib/desktop/components/forms/SelectDropdown.styles';
   import {
     activeOptionId,
@@ -114,6 +116,9 @@
   // eslint-disable-next-line security/detect-object-injection -- iconColorClass is a prop with a fixed set of color values
   let colors = $derived(colorMap[iconColorClass] ?? colorMap.emerald);
 
+  // Shared cell classes of the sortable headers
+  const SORT_HEADER_CLASS = 'py-2 px-3 text-xs font-medium select-none text-muted';
+
   type SortColumn = 'commonName' | 'scientificName';
 
   let searchQuery = $state('');
@@ -176,13 +181,28 @@
     return result;
   });
 
-  function toggleSort(column: SortColumn): void {
+  function isSortColumn(value: string): value is SortColumn {
+    return value === 'commonName' || value === 'scientificName';
+  }
+
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
+  // Header labels, shared by the header cells and the sort announcement
+  const sortHeaderLabels: Record<SortColumn, () => string> = {
+    commonName: () => t('settings.species.activeSpecies.columns.commonName'),
+    scientificName: () => t('settings.species.activeSpecies.columns.scientificName'),
+  };
+
+  function toggleSort(column: string): void {
+    if (!isSortColumn(column)) return;
     if (sortColumn === column) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = column;
       sortDirection = 'asc';
     }
+    sortStatus = sortAnnouncement(sortHeaderLabels[column](), sortDirection);
   }
 
   // Ids are per instance: two cards can share an iconColorClass
@@ -337,79 +357,40 @@
           data-1p-ignore
           data-lpignore="true"
           data-form-type="other"
-          class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus-ring"
         />
       </div>
     {/if}
   </div>
 
+  <p role="status" class="sr-only">{sortStatus}</p>
+
   <!-- Species List -->
   {#if species.length > 0}
     <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
       <table class="w-full text-sm">
+        <caption class="sr-only">{title}</caption>
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
           <tr class="border-b border-[var(--border-100)]">
-            <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-              role="columnheader"
-              tabindex="0"
-              aria-sort={sortColumn === 'commonName'
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              onclick={() => toggleSort('commonName')}
-              onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort('commonName');
-                }
-              }}
+            <SortableHeader
+              label={sortHeaderLabels.commonName()}
+              field="commonName"
+              activeField={sortColumn ?? ''}
+              direction={sortDirection}
+              onSort={toggleSort}
+              className={SORT_HEADER_CLASS}
+            />
+            <SortableHeader
+              label={sortHeaderLabels.scientificName()}
+              field="scientificName"
+              activeField={sortColumn ?? ''}
+              direction={sortDirection}
+              onSort={toggleSort}
+              className={SORT_HEADER_CLASS}
+            />
+            <th scope="col" class="w-12"
+              ><span class="sr-only">{t('common.actionsColumn')}</span></th
             >
-              <div class="flex items-center gap-1">
-                {t('settings.species.activeSpecies.columns.commonName')}
-                {#if sortColumn === 'commonName'}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
-            </th>
-            <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-              role="columnheader"
-              tabindex="0"
-              aria-sort={sortColumn === 'scientificName'
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              onclick={() => toggleSort('scientificName')}
-              onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort('scientificName');
-                }
-              }}
-            >
-              <div class="flex items-center gap-1">
-                {t('settings.species.activeSpecies.columns.scientificName')}
-                {#if sortColumn === 'scientificName'}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
-            </th>
-            <th class="w-12"><span class="sr-only">{t('common.actionsColumn')}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -485,7 +466,7 @@
           aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
           aria-label={inputLabel}
-          class="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <button
           type="button"

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/svelte';
+import { t } from '$lib/i18n';
 import { renderTyped } from '../../../../../test/render-helpers';
 import type { TableStats } from '$lib/types/database';
 import DatabaseTableBreakdown from './DatabaseTableBreakdown.svelte';
@@ -21,44 +22,17 @@ const header = (field: string) => screen.getByTestId(`sort-${field}`).closest('t
 describe('DatabaseTableBreakdown sorting', () => {
   afterEach(cleanup);
 
-  it('renders each sortable column header as a button inside a th with aria-sort', () => {
+  it('renders each sortable column header as a button inside a th and marks only the active one with aria-sort', () => {
     renderTyped(DatabaseTableBreakdown, { props: { tables } });
 
     for (const field of ['name', 'row_count', 'size_bytes']) {
       const button = screen.getByTestId(`sort-${field}`);
       expect(button.tagName).toBe('BUTTON');
-      expect(button.closest('th')).toHaveAttribute('aria-sort');
+      expect(button.closest('th')).not.toBeNull();
     }
     expect(header('size_bytes')).toHaveAttribute('aria-sort', 'descending');
-    expect(header('name')).toHaveAttribute('aria-sort', 'none');
+    expect(header('name')).not.toHaveAttribute('aria-sort');
     expect(screen.queryByTestId('sort-engine')).not.toBeInTheDocument();
-  });
-
-  it('makes the sort button fill the whole header cell', () => {
-    renderTyped(DatabaseTableBreakdown, { props: { tables } });
-
-    // The th carries no padding and the button takes it, so a click anywhere in the cell sorts.
-    // jsdom has no layout: the rendered size is a browser-only check.
-    for (const field of ['name', 'row_count', 'size_bytes']) {
-      const cell = header(field);
-      expect(cell).toHaveClass('p-0');
-      expect(cell?.className).toContain('[&>button]:w-full');
-      expect(cell?.className).toContain('[&>button]:py-2');
-      expect(cell?.className).toContain('[&>button]:px-3');
-    }
-  });
-
-  it('draws the sort button focus ring inside the button so the scroll wrapper cannot clip it', () => {
-    renderTyped(DatabaseTableBreakdown, { props: { tables } });
-
-    // The table sits in an overflow-x-auto wrapper that cuts an outline drawn outside the button.
-    // Ring thickness on every side and its contrast are browser-only checks.
-    for (const field of ['name', 'row_count', 'size_bytes']) {
-      const cell = header(field);
-      expect(cell?.className).toContain('[&>button]:focus-visible:outline-2');
-      expect(cell?.className).toContain('[&>button]:focus-visible:-outline-offset-2');
-      expect(cell?.className).toContain('[&>button]:focus-visible:outline-[var(--color-primary)]');
-    }
   });
 
   it('sorts a numeric column descending first and then toggles', async () => {
@@ -80,6 +54,31 @@ describe('DatabaseTableBreakdown sorting', () => {
 
     expect(rowNames()).toEqual(['alpha', 'beta', 'gamma']);
     expect(header('name')).toHaveAttribute('aria-sort', 'ascending');
+  });
+
+  it('announces the column and direction once after a sort', async () => {
+    renderTyped(DatabaseTableBreakdown, { props: { tables } });
+    const tableColumnLabel = t('system.database.dashboard.tables.table');
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe('');
+
+    await fireEvent.click(screen.getByTestId('sort-name'));
+    expect(status).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: tableColumnLabel })
+    );
+
+    await fireEvent.click(screen.getByTestId('sort-name'));
+    expect(status).toHaveTextContent(
+      t('dataDisplay.table.sortedDescending', { column: tableColumnLabel })
+    );
+  });
+
+  it('names the table by its visible title', () => {
+    renderTyped(DatabaseTableBreakdown, { props: { tables } });
+
+    expect(
+      screen.getByRole('table', { name: t('system.database.dashboard.tables.title') })
+    ).toBeInTheDocument();
   });
 
   it('adds an engine column header when showEngine is set', () => {

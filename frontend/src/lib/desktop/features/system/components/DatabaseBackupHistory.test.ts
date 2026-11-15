@@ -89,4 +89,30 @@ describe('DatabaseBackupHistory', () => {
 
     expect(screen.getAllByRole('alert')).toHaveLength(2);
   });
+
+  it('sorts from a header button, marks only that column and announces it', async () => {
+    renderHistory({ backups: [completedBackup] });
+    const sizeLabel = t('system.database.backup.history.columns.size');
+    const sizeHeader = screen.getByRole('columnheader', { name: sizeLabel });
+
+    expect(within(sizeHeader).getByRole('button', { name: sizeLabel })).toBeInTheDocument();
+    expect(screen.getByRole('status').textContent).toBe('');
+
+    await fireEvent.click(screen.getByTestId('sort-size'));
+
+    const sorted = screen.getAllByRole('columnheader').filter(th => th.hasAttribute('aria-sort'));
+    expect(sorted).toEqual([sizeHeader]);
+    expect(sizeHeader).toHaveAttribute('aria-sort', 'descending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedDescending', { column: sizeLabel })
+    );
+  });
+
+  it('names the table by its visible title', () => {
+    renderHistory({ backups: [completedBackup] });
+
+    expect(
+      screen.getByRole('table', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
+  });
 });

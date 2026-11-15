@@ -3763,7 +3763,8 @@ export type TranslationKey =
   | 'dataDisplay.table.noData'
   | 'dataDisplay.table.loading'
   | 'dataDisplay.table.error'
-  | 'dataDisplay.table.sortBy' // params: column
+  | 'dataDisplay.table.sortedAscending' // params: column
+  | 'dataDisplay.table.sortedDescending' // params: column
   | 'dataDisplay.table.rowsPerPage'
   | 'dataDisplay.table.pageInfo' // params: from, to, total
   | 'dataDisplay.pagination.ariaLabel'
@@ -5093,7 +5094,8 @@ export type TranslationParams = {
   'settings.alerts.status.imported': { imported: string | number; total: string | number };
   'settings.userInterface.audioPlayback.denoiseLossyNote': { minBitrate: string | number };
   'auth.errors.rateLimited': { minutes: string | number };
-  'dataDisplay.table.sortBy': { column: string | number };
+  'dataDisplay.table.sortedAscending': { column: string | number };
+  'dataDisplay.table.sortedDescending': { column: string | number };
   'dataDisplay.table.pageInfo': {
     from: string | number;
     to: string | number;
