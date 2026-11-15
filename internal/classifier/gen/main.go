@@ -141,12 +141,18 @@ type family struct {
 	labelsLocalName   func(slug string) string
 }
 
-// checkVariantCount fails unless got equals expectedRegions times the family's
-// variantsPerRegion, so a dropped or duplicated tile cannot pass unnoticed.
-func (f *family) checkVariantCount(got int) error {
-	want := expectedRegions * f.variantsPerRegion
-	if got != want {
-		return fmt.Errorf("family %s: got %d regional variants, want %d", f.key, got, want)
+// checkRegionCounts fails unless perRegion names exactly expectedRegions
+// regions and each one ships exactly the family's variantsPerRegion builds, so
+// a dropped, duplicated or extra tile cannot pass unnoticed, even when the
+// total still matches.
+func (f *family) checkRegionCounts(perRegion map[string]int) error {
+	if len(perRegion) != expectedRegions {
+		return fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(perRegion), expectedRegions)
+	}
+	for region, n := range perRegion {
+		if n != f.variantsPerRegion {
+			return fmt.Errorf("region %s has %d variants, want %d", region, n, f.variantsPerRegion)
+		}
 	}
 	return nil
 }
@@ -264,9 +270,6 @@ func run() error {
 		if genErr != nil {
 			return fmt.Errorf("family %s: %w", fam.key, genErr)
 		}
-		if countErr := fam.checkVariantCount(len(variants)); countErr != nil {
-			return countErr
-		}
 		total += len(variants)
 		fmt.Fprintf(&buf, "\n// %s returns the %d region-sliced variants of the %s model,\n", fam.funcName, len(variants), fam.key)
 		fmt.Fprintf(&buf, "// generated from %s.\n", path.Base(fam.manifestFile))
@@ -310,12 +313,12 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	if len(table.Regions) != expectedRegions {
 		return nil, fmt.Errorf("region table has %d slugs, want %d", len(table.Regions), expectedRegions)
 	}
-	distinctRegions := make(map[string]bool, expectedRegions)
+	perRegion := make(map[string]int, expectedRegions)
 	for i := range regional {
-		distinctRegions[regional[i].Region] = true
+		perRegion[regional[i].Region]++
 	}
-	if len(distinctRegions) != expectedRegions {
-		return nil, fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(distinctRegions), expectedRegions)
+	if err := f.checkRegionCounts(perRegion); err != nil {
+		return nil, err
 	}
 
 	// Deterministic order: region slug, then variant token.
