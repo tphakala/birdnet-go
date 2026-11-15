@@ -70,6 +70,12 @@ func TestValidateEnvBool(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("error omits the input", func(t *testing.T) {
+		err := validateEnvBool("user:hunter2@not a bool")
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "hunter2")
+	})
 }
 
 func TestValidateEnvLocale(t *testing.T) {
@@ -102,6 +108,14 @@ func TestValidateEnvLocale(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("errors omit the input", func(t *testing.T) {
+		for _, value := range []string{"user:hunter2@not a locale", "hun@ter2"} {
+			err := validateEnvLocale(value)
+			require.Error(t, err, value)
+			assert.NotContains(t, err.Error(), "hunter2", value)
+		}
+	})
 }
 
 func TestValidateEnvPath(t *testing.T) {
@@ -145,6 +159,12 @@ func TestValidateEnvPath(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("error omits the input", func(t *testing.T) {
+		err := validateEnvPath("user:hunter2@not-a-path")
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "hunter2")
+	})
 }
 
 func TestConfigureEnvironmentVariables(t *testing.T) {
