@@ -445,8 +445,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 // joining in the per-variant recommendations when recs is non-nil (recs is nil
 // when the request is not eligible for hardware recommendations, and is keyed by
 // variant ID). It returns nil for a flat entry (no Variants) so the field is
-// omitted, carries no latency (catalog benchmarks are measured on a few named
-// devices, so no single number holds for every host), and hides a Legacy (superseded) variant unless it is the one
+// omitted, and hides a Legacy (superseded) variant unless it is the one
 // currently installed, so the gallery never offers a fresh install of a
 // deprecated build.
 func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, installedVariantID string, recs map[string]recommend.Recommendation, hostArch string) []CatalogVariantResponse {
