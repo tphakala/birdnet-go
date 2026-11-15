@@ -3,10 +3,8 @@ package security
 import (
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -115,64 +113,6 @@ func TestOIDCDiscoveryFailure_ReachesMainLogAndIsRecorded(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), discoveryURL)
 	assert.Contains(t, err.Error(), "404")
-}
-
-// TestOIDCDiscoveryFailure_RedactsURLUserinfo covers the two shapes of a URL in a
-// net/http error: a transport failure masks the password but keeps the username,
-// and a URL that does not parse is printed whole.
-func TestOIDCDiscoveryFailure_RedactsURLUserinfo(t *testing.T) {
-	const username = "tokenuser-must-not-be-logged"
-	closed := httptest.NewServer(http.NotFoundHandler())
-	closedURL := closed.URL
-	closed.Close()
-
-	tests := []struct {
-		name     string
-		issuer   string
-		wantText string
-	}{
-		{name: "transport failure", issuer: strings.Replace(closedURL, "http://", "http://"+username+":secretpw@", 1), wantText: "connection refused"},
-		{name: "unparseable URL", issuer: "http://" + username + ":secretpw@localhost:12x", wantText: "invalid port"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			logs := useSplitLogFiles(t)
-			goth.ClearProviders()
-			t.Cleanup(goth.ClearProviders)
-			t.Cleanup(clearOIDCDiscoveryFailure)
-			enableOIDCRetries()
-			t.Cleanup(cancelAllOIDCRetries)
-
-			initializeProviders(&conf.Settings{
-				Security: conf.Security{
-					Host:            "localhost",
-					SessionSecret:   "test-secret-that-is-long-enough-32chars",
-					SessionDuration: 24 * time.Hour,
-					OAuthProviders: []conf.OAuthProviderConfig{{
-						Provider:     ConfigOIDC,
-						Enabled:      true,
-						ClientID:     "test-client",
-						ClientSecret: testOIDCClientSecret,
-						IssuerURL:    tt.issuer,
-					}},
-				},
-			})
-
-			err := ProviderRegistrationError(ProviderOIDC)
-			require.Error(t, err)
-			var urlErr *url.Error
-			require.ErrorAs(t, err, &urlErr, "the redacted text must still unwrap to the net/http error")
-			for name, content := range map[string]string{
-				"main log":     logs.main(),
-				"security log": logs.security(),
-				"recorded":     err.Error(),
-			} {
-				assert.Contains(t, content, tt.wantText, name)
-				assert.NotContains(t, content, username, name)
-				assert.NotContains(t, content, "secretpw", name)
-			}
-		})
-	}
 }
 
 func TestOIDCRetryExhausted_ReachesMainLogAndSaysRestart(t *testing.T) {

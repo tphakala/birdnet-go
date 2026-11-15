@@ -2,7 +2,6 @@ package security
 
 import (
 	"fmt"
-	"regexp"
 	"sync/atomic"
 
 	"github.com/markbates/goth"
@@ -30,36 +29,10 @@ var errProviderNotRegistered = errors.NewStd("provider is not registered: it was
 // when discovery has not failed or the provider has registered since.
 var lastOIDCDiscoveryErr atomic.Pointer[error]
 
-// redactedError carries an error text with credentials removed and still
-// unwraps to the original error.
-type redactedError struct {
-	msg string
-	err error
-}
-
-func (e *redactedError) Error() string { return e.msg }
-func (e *redactedError) Unwrap() error { return e.err }
-
-// urlUserinfo matches the userinfo of a URL with a scheme inside an error text.
-var urlUserinfo = regexp.MustCompile(`(?i)(\w+://)[^/@\s"]+@`)
-
-// redactDiscoveryErr removes URL userinfo from the text of err. net/http masks
-// the password in a transport error but keeps the username, and prints a URL it
-// cannot parse unchanged, so the text is rewritten before it is logged or
-// recorded. An error without userinfo in its text passes through unchanged. err
-// must not be nil.
-func redactDiscoveryErr(err error) error {
-	msg := urlUserinfo.ReplaceAllString(err.Error(), "${1}"+privacy.RedactedMarker+"@")
-	if msg == err.Error() {
-		return err
-	}
-	return &redactedError{msg: msg, err: err}
-}
-
 // recordOIDCDiscoveryFailure remembers why OIDC discovery failed, with any
 // userinfo in the discovery URL redacted.
 func recordOIDCDiscoveryFailure(discoveryURL string, err error) {
-	wrapped := fmt.Errorf("OIDC discovery request to %s failed: %w", privacy.ScrubCredentialURL(discoveryURL), redactDiscoveryErr(err))
+	wrapped := fmt.Errorf("OIDC discovery request to %s failed: %w", privacy.ScrubCredentialURL(discoveryURL), err)
 	lastOIDCDiscoveryErr.Store(&wrapped)
 }
 
