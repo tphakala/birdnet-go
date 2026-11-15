@@ -118,6 +118,11 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "OAuth")
 	}
 
+	// Canonicalize provider IDs so every exact comparison below and in the
+	// validators sees lower-case IDs. Not persisted: the file keeps what the
+	// user wrote until the next save.
+	settings.NormalizeOAuthProviderIDs()
+
 	// Migrate legacy RTSP URLs to new streams format
 	if settings.MigrateRTSPConfig() {
 		persistMigration(settings, "RTSP")

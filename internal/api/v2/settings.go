@@ -248,6 +248,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			return newRejection(err, "Failed to apply settings update", http.StatusBadRequest)
 		}
 
+		// Canonicalize provider IDs before the secret restore matches them by ID.
+		updated.NormalizeOAuthProviderIDs()
+
 		// Restore redacted secret placeholders to their live values so the merge does
 		// not persist the placeholder over a real secret. current is the source of
 		// truth for pre-update secrets (same argument order and ordering as PATCH).
@@ -442,6 +445,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := updateSettingsSection(updated, section, requestBody); err != nil {
 			return newRejection(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 		}
+
+		// Canonicalize provider IDs before the secret restore matches them by ID.
+		updated.NormalizeOAuthProviderIDs()
 
 		// Restore redacted secret fields to their current values so the merge
 		// does not overwrite real secrets with the placeholder. current is the
@@ -1266,6 +1272,7 @@ var validOAuthProviders = map[string]bool{
 	"microsoft": true,
 	"line":      true,
 	"kakao":     true,
+	"oidc":      true,
 }
 
 // getValidOAuthProviderNames returns sorted list of valid provider names for error messages
@@ -1321,22 +1328,24 @@ func validateOAuthProviderEntry(item any, index int, configuredProviders map[str
 	return providerName, nil
 }
 
-// validateOAuthProviderName validates the provider name field and checks for duplicates.
+// validateOAuthProviderName validates the provider name field and checks for
+// duplicates. It returns the canonical (trimmed, lower case) provider ID.
 func validateOAuthProviderName(providerMap map[string]any, index int, configuredProviders map[string]bool) (string, error) {
 	providerName, ok := providerMap["provider"].(string)
 	if !ok || providerName == "" {
 		return "", fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
 	}
 
-	if !validOAuthProviders[providerName] {
+	canonical := conf.NormalizeOAuthProviderID(providerName)
+	if !validOAuthProviders[canonical] {
 		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
 	}
 
-	if configuredProviders[providerName] {
+	if configuredProviders[canonical] {
 		return "", fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
 	}
 
-	return providerName, nil
+	return canonical, nil
 }
 
 // validateOAuthProviderEnabled validates the enabled field and required credentials.

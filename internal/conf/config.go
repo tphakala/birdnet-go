@@ -2194,6 +2194,21 @@ type AlertSettings struct {
 	HistoryRetentionDays int `json:"historyRetentionDays" yaml:"history_retention_days" mapstructure:"history_retention_days"` // Days to retain alert history (0 = unlimited)
 }
 
+// NormalizeOAuthProviderID returns the canonical form of an OAuth provider ID:
+// trimmed and lower case. Provider IDs are compared exactly throughout the
+// settings code, so every ingestion point stores them in this form.
+func NormalizeOAuthProviderID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// NormalizeOAuthProviderIDs rewrites every Security.OAuthProviders[i].Provider
+// to its canonical form. It is idempotent and never drops or disables an entry.
+func (s *Settings) NormalizeOAuthProviderIDs() {
+	for i := range s.Security.OAuthProviders {
+		s.Security.OAuthProviders[i].Provider = NormalizeOAuthProviderID(s.Security.OAuthProviders[i].Provider)
+	}
+}
+
 // GetOAuthProvider returns the OAuth provider configuration for the given provider ID.
 // Returns nil if the provider is not configured.
 func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
