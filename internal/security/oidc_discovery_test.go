@@ -616,12 +616,17 @@ func TestOIDCDiscovery_CancelledContextIsNotAFailure(t *testing.T) {
 func TestOIDCDiscovery_WindowDeadlineStopsInFlightRequest(t *testing.T) {
 	logs := useSplitLogFiles(t)
 	var requests atomic.Int32
+	secondEntered := make(chan struct{}, 1)
 	gate := make(chan struct{})
 	var once sync.Once
 	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requests.Add(1) == 1 {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
+		}
+		select {
+		case secondEntered <- struct{}{}:
+		default:
 		}
 		select {
 		case <-gate:
@@ -635,11 +640,18 @@ func TestOIDCDiscovery_WindowDeadlineStopsInFlightRequest(t *testing.T) {
 	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
 		initialBackoff: 5 * time.Millisecond,
 		maxBackoff:     10 * time.Millisecond,
-		maxDuration:    time.Second,
+		maxDuration:    2 * time.Second,
 	})
 
 	// The wait is below OIDCHTTPTimeout, so only the window can end the attempt.
 	testutil.WaitForChannel(t, done, OIDCHTTPTimeout/2, "the retry window did not stop the request in flight")
+	// The cut must have been of the second request, not a loop that ended between attempts.
+	select {
+	case <-secondEntered:
+	default:
+		t.Fatal("the second discovery request never reached the identity provider before the window ended")
+	}
+	assert.GreaterOrEqual(t, requests.Load(), int32(2))
 	assert.Equal(t, 1, strings.Count(logs.main(), "OIDC discovery retries exhausted"))
 	err := ProviderRegistrationError(ProviderOIDC)
 	require.Error(t, err)
@@ -658,9 +670,11 @@ func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
 	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
 		initialBackoff: 5 * time.Millisecond,
 		maxBackoff:     10 * time.Millisecond,
-		maxDuration:    100 * time.Millisecond,
+		maxDuration:    time.Second,
 	})
 
+	// The request must be in flight before the window can cut it.
+	idp.waitEntered(t)
 	testutil.WaitForChannel(t, done, OIDCHTTPTimeout/2, "the retry window did not stop the first attempt")
 	assert.Contains(t, logs.main(), "OIDC discovery retries exhausted")
 	err := ProviderRegistrationError(ProviderOIDC)
@@ -730,7 +744,11 @@ func newGatedIDP(t *testing.T, succeed bool) *gatedIDP {
 	var once sync.Once
 	release := func() { once.Do(func() { close(gate) }) }
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		entered <- struct{}{}
+		// Never block on the signal: nothing may drain it after the test body.
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
 		select {
 		case <-gate:
 		case <-r.Context().Done():
