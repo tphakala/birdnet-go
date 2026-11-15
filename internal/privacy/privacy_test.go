@@ -2244,6 +2244,16 @@ func TestScrubURLUserinfoInText(t *testing.T) {
 			`Get "https://[REDACTED]@host/x": refused`,
 		},
 		{
+			"quoted URL after a quoted value and an unquoted address",
+			`context "hint" ops@example.com: Get "https:alice:secret@host/x": refused`,
+			`context "hint" ops@example.com: Get "[REDACTED]@host/x": refused`,
+		},
+		{
+			"text between two quoted segments is not a segment",
+			`Get "https://idp.example/x": user ops@example.com saw "done"`,
+			`Get "https://idp.example/x": user ops@example.com saw "done"`,
+		},
+		{
 			"scheme-relative URL in a quoted segment",
 			`Get "//alice:pw@idp.example/x": unsupported protocol scheme ""`,
 			`Get "//[REDACTED]@idp.example/x": unsupported protocol scheme ""`,

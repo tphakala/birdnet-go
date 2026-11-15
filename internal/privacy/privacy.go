@@ -180,10 +180,12 @@ var (
 	// free text. The URL ends at "/", "?", "#", white space or a double quote.
 	urlUserinfoTextPattern = regexp.MustCompile(`(://)[^/?#\s"]*@`)
 
-	// quotedUserinfoPattern matches a double-quoted segment that contains an
-	// "@", honouring backslash escapes: Go quotes the URL of a failed request
-	// with %q, which escapes a double quote and leaves a space as is.
-	quotedUserinfoPattern = regexp.MustCompile(`"(?:[^"\\]|\\.)*@(?:[^"\\]|\\.)*"`)
+	// quotedSegmentPattern matches every double-quoted segment, left to right,
+	// honouring backslash escapes: Go quotes the URL of a failed request with
+	// %q, which escapes a double quote and leaves a space as is. Matching every
+	// segment, not only those holding an "@", keeps the quotes paired, so the
+	// text between two quoted segments is never taken for one.
+	quotedSegmentPattern = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 
 	// Notification URL token patterns (Telegram bot tokens, Discord webhooks, etc.)
 	botTokenPattern = regexp.MustCompile(`/bot[A-Za-z0-9:_-]{20,}/`)
@@ -942,8 +944,11 @@ func isSchemeName(s string) bool {
 // this function, is returned unchanged. A quoted value that is not a URL but
 // contains an "@" (an e-mail address) is redacted too.
 func ScrubURLUserinfoInText(text string) string {
-	text = quotedUserinfoPattern.ReplaceAllStringFunc(text, func(quoted string) string {
+	text = quotedSegmentPattern.ReplaceAllStringFunc(text, func(quoted string) string {
 		inner := quoted[1 : len(quoted)-1]
+		if !strings.Contains(inner, "@") {
+			return quoted
+		}
 		// A URL with a host is left to the unquoted pattern only when it carries
 		// no userinfo and its path holds no "@": "https://user:123/pw@host" parses
 		// as host "user:123" with the rest of the password in the path.
