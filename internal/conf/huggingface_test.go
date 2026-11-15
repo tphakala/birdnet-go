@@ -1,12 +1,14 @@
 package conf
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // TestResolveHuggingFaceEndpoint_Precedence covers the documented resolution
@@ -242,13 +244,11 @@ func TestNormalizeHuggingFaceEndpoint_ErrorsNeverEchoCredentials(t *testing.T) {
 		{name: "invalid port", configured: "https://user:" + password + "@hf-mirror.com:notaport"},
 		{name: "invalid escape", configured: "https://user:" + password + "@hf-mirror.com/%zz"},
 		{name: "control character", configured: "https://user:" + password + "@hf-mirror.com/\x7f"},
-		// Empty username: privacy.ScrubCredentialURL's patterns require at least
-		// one character before the colon, so scrubbing the url.Error string left
-		// this shape untouched. Pinned so the reason can never go back to being
+		// Empty username: pinned so the reason can never go back to being
 		// derived from the raw value.
 		{name: "empty username with invalid port", configured: "https://:" + password + "@hf-mirror.com:notaport"},
 		{name: "empty username parses cleanly", configured: "https://:" + password + "@hf-mirror.com"},
-		// A literal "@" inside the password leaked its tail through the scrubber.
+		// A literal "@" inside the password must not leak its tail.
 		{name: "at sign inside the password", configured: "https://user:p@" + password + "@hf-mirror.com:notaport"},
 		// Shapes with no "://" at all. All are rejected, and all would be echoed
 		// with credentials intact by a redactor that keys on the "://" separator.
@@ -278,6 +278,62 @@ func TestNormalizeHuggingFaceEndpoint_ErrorsNeverEchoCredentials(t *testing.T) {
 						"error context %q is reported to telemetry and must not echo the password", k)
 				}
 			}
+		})
+	}
+}
+
+// TestResolveHuggingFaceEndpoint_WarningNeverEchoesCredentials pins that the
+// fallback warning carries no part of a rejected endpoint's userinfo, in the
+// endpoint field or in the error.
+func TestResolveHuggingFaceEndpoint_WarningNeverEchoesCredentials(t *testing.T) {
+	// Not parallel: captures the process-global logger.
+	tests := []struct {
+		name       string
+		configured string
+	}{
+		{name: "unparseable", configured: "https://svcacct:p4ssw0rd@hf-mirror.com:notaport"},
+		{name: "password with a slash", configured: "https://svcacct:p4ss/w0rd@hf-mirror.com"},
+		{name: "opaque", configured: "https:svcacct:p4ssw0rd@hf-mirror.com"},
+		{name: "parses with userinfo", configured: "https://svcacct:p4ssw0rd@hf-mirror.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := logtest.CaptureBuffer(t)
+			assert.Equal(t, DefaultHuggingFaceEndpoint, ResolveHuggingFaceEndpoint(tt.configured))
+			out := buf.String()
+			require.Contains(t, out, "Ignoring invalid HuggingFace endpoint")
+			assert.NotContains(t, out, "p4ss")
+			assert.NotContains(t, out, "w0rd")
+			assert.NotContains(t, out, "svcacct")
+		})
+	}
+}
+
+// TestParseFailureReason covers the reason text for a value url.Parse rejects.
+// The inner reason can quote a fragment of the value, so it is dropped whenever
+// the value could carry credentials.
+func TestParseFailureReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		// url.Parse takes "user:hunter" as the host of this value and reports
+		// the text after the colon as an invalid port.
+		{name: "slash inside the password", raw: "https://user:hunter/2@hf-mirror.com", want: parseFailureCredentialsReason},
+		{name: "invalid escape in the password", raw: "https://user:p%zzw@hf-mirror.com", want: parseFailureCredentialsReason},
+		{name: "no userinfo keeps the reason", raw: "https://hf-mirror.com:notaport", want: `invalid port ":notaport" after host`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := url.Parse(tt.raw)
+			require.Error(t, err)
+			got := parseFailureReason(tt.raw, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/markbates/goth"
@@ -133,7 +134,7 @@ func TestOIDCDiscoveryFailure_RedactsURLUserinfo(t *testing.T) {
 		wantText string
 	}{
 		{name: "transport failure", issuer: strings.Replace(closedURL, "http://", "http://"+username+":secretpw@", 1), wantText: "connection refused"},
-		{name: "unparseable URL", issuer: "http://" + username + ":secretpw@localhost:12x", wantText: "invalid port"},
+		{name: "unparseable URL", issuer: "http://" + username + ":secretpw@localhost:12x", wantText: errOIDCDiscoveryURLInvalid.Error()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -330,23 +331,183 @@ func TestOIDCDiscoveryURL(t *testing.T) {
 }
 
 func TestRedactDiscoveryErr(t *testing.T) {
+	parseErr := func(raw string) error {
+		_, err := url.Parse(raw)
+		require.Error(t, err)
+		return err
+	}
+	const pathlessURL = "https://idp.example?login_hint=a@b.example/.well-known/openid-configuration"
+
 	tests := []struct {
 		name string
-		text string
+		err  error
 		want string
 	}{
-		{name: "masked password keeps the username", text: `Get "https://tok:***@idp.example/x": refused`, want: `Get "https://[REDACTED]@idp.example/x": refused`},
-		{name: "raw at sign inside the password", text: `parse "http://tok:pw@Zq7@idp.example:12x/x": invalid port`, want: `parse "http://[REDACTED]@idp.example:12x/x": invalid port`},
-		{name: "no userinfo passes through", text: "Non-success code for Discovery URL: 404", want: "Non-success code for Discovery URL: 404"},
+		{name: "masked password keeps the username", err: errors.NewStd(`Get "https://tok:***@idp.example/x": refused`), want: `Get "https://[REDACTED]@idp.example/x": refused`},
+		{name: "raw at sign inside the password", err: errors.NewStd(`dial http://tok:pw@Zq7@idp.example:12x/x refused`), want: `dial http://[REDACTED]@idp.example:12x/x refused`},
+		{name: "nested parse failure is replaced by a fixed sentence", err: errors.NewStd(`Get "http://idp.example/x": failed to parse Location header "https://a:p/s@h": parse "https://a:p/s@h": invalid port ":p" after host`), want: errOIDCDiscoveryURLInvalid.Error()},
+		{name: "no userinfo passes through", err: errors.NewStd("Non-success code for Discovery URL: 404"), want: "Non-success code for Discovery URL: 404"},
+		{
+			name: "transport url.Error with a username",
+			err:  &url.Error{Op: "Get", URL: "https://tok:***@idp.example/.well-known/openid-configuration", Err: errors.NewStd("dial tcp: connection refused")},
+			want: `Get "https://[REDACTED]@idp.example/.well-known/openid-configuration": dial tcp: connection refused`,
+		},
+		{
+			name: "parse url.Error is replaced by a fixed sentence",
+			err:  parseErr("http://user:pa#ss@host:12x/x"),
+			want: errOIDCDiscoveryURLInvalid.Error(),
+		},
+		{
+			name: "url.Error with a pathless URL keeps the host",
+			err:  &url.Error{Op: "Get", URL: pathlessURL, Err: errors.NewStd("refused")},
+			want: `Get "` + pathlessURL + `": refused`,
+		},
+		{
+			name: "transport url.Error with an opaque URL",
+			err:  &url.Error{Op: "Get", URL: "https:tok:pw@idp.example/x", Err: errors.NewStd("unsupported protocol scheme")},
+			want: `Get "[REDACTED]@idp.example/x": unsupported protocol scheme`,
+		},
+		{name: "nil cause", err: nil, want: errOIDCDiscoveryCauseUnknown.Error()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cause := errors.NewStd(tt.text)
-			got := redactDiscoveryErr(cause)
+			got := redactDiscoveryErr(tt.err)
+			require.Error(t, got)
 			assert.Equal(t, tt.want, got.Error())
-			require.ErrorIs(t, got, cause)
+			if tt.err != nil {
+				require.ErrorIs(t, got, tt.err)
+			}
+			assert.Equal(t, got.Error(), redactDiscoveryErr(got).Error(), "redaction must be idempotent")
 		})
 	}
+}
+
+// TestOIDCDiscoveryFailure_NilCause pins that a missing cause is recorded and
+// logged as a sentinel instead of panicking or logging an empty cause.
+func TestOIDCDiscoveryFailure_NilCause(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
+
+	const issuer = "https://idp.example"
+	require.NotPanics(t, func() { recordOIDCDiscoveryFailure(oidcDiscoveryURL(issuer), nil) })
+	require.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errOIDCDiscoveryCauseUnknown)
+
+	logOIDCRetryExhausted(issuer, oidcDiscoveryURL(issuer), nil)
+	assert.Contains(t, logs.main(), errOIDCDiscoveryCauseUnknown.Error())
+	assert.Contains(t, logs.security(), errOIDCDiscoveryCauseUnknown.Error())
+}
+
+// TestOIDCDiscoveryFailure_RedactsRedirectLocation covers a discovery server that
+// redirects to a Location net/http cannot parse: the client error quotes both
+// URLs as text, and the inner parse error is not part of the error chain.
+func TestOIDCDiscoveryFailure_RedactsRedirectLocation(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
+	enableOIDCRetries()
+	t.Cleanup(cancelAllOIDCRetries)
+
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://alice:pa/ss@idp.example", http.StatusFound)
+	}))
+	t.Cleanup(idp.Close)
+
+	initializeProviders(&conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{{
+				Provider:     ConfigOIDC,
+				Enabled:      true,
+				ClientID:     "test-client",
+				ClientSecret: testOIDCClientSecret,
+				IssuerURL:    idp.URL,
+			}},
+		},
+	})
+
+	err := ProviderRegistrationError(ProviderOIDC)
+	require.Error(t, err)
+	for name, content := range map[string]string{
+		"main log":     logs.main(),
+		"security log": logs.security(),
+		"recorded":     err.Error(),
+	} {
+		assert.Contains(t, content, errOIDCDiscoveryURLInvalid.Error(), name)
+		assert.NotContains(t, content, "pa/ss", name)
+		assert.NotContains(t, content, ":pa", name)
+		assert.NotContains(t, content, "alice", name)
+	}
+}
+
+// TestOIDCRetryExhausted_RedactsUserinfoInTheCause pins that the exhaustion log
+// redacts a cause that still carries a username, as net/http leaves it in a
+// transport error, whatever the caller passed.
+func TestOIDCRetryExhausted_RedactsUserinfoInTheCause(t *testing.T) {
+	logs := useSplitLogFiles(t)
+
+	const username = "tokenuser-must-not-be-logged"
+	const issuer = "https://idp.example.com"
+	cause := &url.Error{
+		Op:  "Get",
+		URL: "https://" + username + ":***@idp.example.com/.well-known/openid-configuration",
+		Err: errors.NewStd("dial tcp: connection refused"),
+	}
+	logOIDCRetryExhausted(issuer, oidcDiscoveryURL(issuer), cause)
+
+	for name, content := range map[string]string{"main log": logs.main(), "security log": logs.security()} {
+		assert.Contains(t, content, "connection refused", name)
+		assert.NotContains(t, content, username, name)
+	}
+}
+
+// TestStartOIDCRetry_RedactsItsLogsAndReportsExhaustion runs the retry loop to
+// the end of its window under a fake clock. net/http keeps the username in the
+// text of a transport error, so a loop that stored or logged the raw error would
+// leak it, and the exhaustion branch must report the last cause.
+func TestStartOIDCRetry_RedactsItsLogsAndReportsExhaustion(t *testing.T) {
+	const (
+		username = "tokenuser-must-not-be-logged"
+		password = "secretpw-must-not-be-logged"
+	)
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closedURL := closed.URL
+	closed.Close()
+	issuer := strings.Replace(closedURL, "http://", "http://"+username+":"+password+"@", 1)
+
+	logs := useSplitLogFiles(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(clearOIDCDiscoveryFailure)
+
+	synctest.Test(t, func(t *testing.T) {
+		done := startOIDCRetry(t.Context(), conf.OAuthProviderConfig{
+			Provider:     ConfigOIDC,
+			Enabled:      true,
+			ClientID:     "test-client",
+			ClientSecret: testOIDCClientSecret,
+			IssuerURL:    issuer,
+		}, testOIDCRedirectURI, []string{"openid"}, nil)
+		<-done
+	})
+
+	mainLog, securityLog := logs.main(), logs.security()
+	assert.Contains(t, securityLog, "Retrying OIDC discovery")
+	assert.Contains(t, securityLog, "OIDC discovery retry failed")
+	recorded := ProviderRegistrationError(ProviderOIDC)
+	require.Error(t, recorded)
+	for name, content := range map[string]string{"main log": mainLog, "security log": securityLog} {
+		assert.Contains(t, content, "OIDC discovery retries exhausted", name)
+		assert.Contains(t, content, "connection refused", name)
+		assert.NotContains(t, content, username, name)
+		assert.NotContains(t, content, password, name)
+	}
+	assert.NotContains(t, recorded.Error(), username)
+	assert.NotContains(t, recorded.Error(), password)
 }
 
 // TestStartOIDCRetry_RecordsEachFailure pins that the retry loop records its own

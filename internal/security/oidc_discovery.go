@@ -3,7 +3,6 @@ package security
 import (
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync/atomic"
 
@@ -93,18 +92,38 @@ type redactedError struct {
 func (e *redactedError) Error() string { return e.msg }
 func (e *redactedError) Unwrap() error { return e.err }
 
-// urlUserinfo matches the userinfo of a URL with a scheme inside an error text.
-// The class excludes the slash that ends the authority, so the match runs to the
-// last at sign of the authority and a raw at sign in a password stays inside it.
-var urlUserinfo = regexp.MustCompile(`(?i)(\w+://)[^/\s"]+@`)
+// urlParseErrorMarker starts the text of a net/url parse failure. It also
+// appears inside the text of another error that quotes such a failure, for
+// example net/http reporting a Location header it could not parse.
+const urlParseErrorMarker = `parse "`
+
+// errOIDCDiscoveryCauseUnknown stands in for a discovery failure whose cause was
+// not passed on.
+var errOIDCDiscoveryCauseUnknown = errors.NewStd("no discovery error was recorded")
+
+// errOIDCDiscoveryURLInvalid replaces the text of an error that contains a URL
+// parse failure, in the discovery URL or in a redirect Location the identity
+// provider sent. That text quotes the URL and a fragment of its userinfo, and
+// the discovery URL is logged separately, redacted, in the discovery_url field.
+var errOIDCDiscoveryURLInvalid = errors.NewStd("a URL in the discovery request or its redirect is not a valid URL")
 
 // redactDiscoveryErr removes URL userinfo from the text of err. net/http masks
 // the password in a transport error but keeps the username, and prints a URL it
 // cannot parse unchanged, so the text is rewritten before it is logged or
-// recorded. An error without userinfo in its text passes through unchanged. err
-// must not be nil.
+// recorded. An error whose text contains a URL parse failure is replaced by
+// errOIDCDiscoveryURLInvalid. An error without userinfo in its text passes
+// through unchanged. A nil err is reported as errOIDCDiscoveryCauseUnknown.
 func redactDiscoveryErr(err error) error {
-	msg := urlUserinfo.ReplaceAllString(err.Error(), "${1}"+privacy.RedactedMarker+"@")
+	if err == nil {
+		return errOIDCDiscoveryCauseUnknown
+	}
+	msg := err.Error()
+	if strings.Contains(msg, urlParseErrorMarker) {
+		// The reason of a parse failure can quote a fragment of the password,
+		// and the quoted URL can be cut before the "@".
+		msg = errOIDCDiscoveryURLInvalid.Error()
+	}
+	msg = privacy.ScrubURLUserinfoInText(msg)
 	if msg == err.Error() {
 		return err
 	}
@@ -120,7 +139,8 @@ var errProviderNotRegistered = errors.NewStd("provider is not registered: it was
 var lastOIDCDiscoveryErr atomic.Pointer[error]
 
 // recordOIDCDiscoveryFailure remembers why OIDC discovery failed, with any
-// userinfo in the discovery URL redacted.
+// userinfo in the discovery URL redacted. A nil err is recorded as
+// errOIDCDiscoveryCauseUnknown.
 func recordOIDCDiscoveryFailure(discoveryURL string, err error) {
 	wrapped := fmt.Errorf("OIDC discovery request to %s failed: %w", privacy.ScrubCredentialURL(discoveryURL), redactDiscoveryErr(err))
 	lastOIDCDiscoveryErr.Store(&wrapped)
@@ -159,12 +179,13 @@ func logOIDCEvent(level logger.LogLevel, msg string, fields ...logger.Field) {
 
 // logOIDCRetryExhausted reports that the background discovery retry gave up.
 // discoveryURL is the discovery document URL that was retried. lastErr is the most
-// recent discovery error and may be nil.
+// recent discovery error and may be nil, in which case errOIDCDiscoveryCauseUnknown
+// is logged. Userinfo in lastErr is redacted before it is logged.
 func logOIDCRetryExhausted(issuerURL, discoveryURL string, lastErr error) {
 	logOIDCEvent(logger.LogLevelError,
 		"OIDC discovery retries exhausted, restart BirdNET-Go after fixing the issuer URL or the connection to the identity provider",
 		logger.CredentialURL("issuer_url", issuerURL),
 		logger.CredentialURL("discovery_url", discoveryURL),
-		logger.Error(lastErr),
+		logger.Error(redactDiscoveryErr(lastErr)),
 		logger.Duration("retried_for", OIDCRetryMaxDuration))
 }

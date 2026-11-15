@@ -1442,15 +1442,18 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 		"a successful registration must clear the recorded discovery failure")
 }
 
-// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
+// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry,
+// then waits for their goroutines to exit so that a test's cleanups (closing its
+// logger, clearing goth providers) cannot race with a retry still running.
 // Test-only helper for resetting OIDC retry state between tests. Production reaps
 // these on shutdown via cancelAllOIDCRetriesLocked (shutdownOIDCRetries); there is
 // no settings-reload path that rebuilds providers at runtime, so this wrapper lives
 // with the tests rather than in the production binary.
 func cancelAllOIDCRetries() {
 	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
 	cancelAllOIDCRetriesLocked()
+	oidcRetryCancelMu.Unlock()
+	oidcRetryGoroutines.Wait()
 }
 
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
