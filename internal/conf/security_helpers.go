@@ -65,12 +65,16 @@ func (s *Security) trimmedHost() string {
 	return strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
 }
 
+// hasPrefixFold reports whether s starts with prefix, ignoring ASCII case.
+func hasPrefixFold(s, prefix string) bool {
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
+}
+
 // hostHasScheme reports whether a trimmed Host already starts with an http or
 // https scheme, in any case. Such a host is a full origin and is used as given;
 // OAuthOrigin and GetBaseURL both ask here so they cannot disagree about it.
 func hostHasScheme(host string) bool {
-	lower := strings.ToLower(host)
-	return strings.HasPrefix(lower, SchemeHTTP+"://") || strings.HasPrefix(lower, SchemeHTTPS+"://")
+	return hasPrefixFold(host, SchemeHTTP+"://") || hasPrefixFold(host, SchemeHTTPS+"://")
 }
 
 // hasUnusableBaseURL reports whether BaseURL is set but not a usable URL, the one
@@ -116,8 +120,8 @@ func (s *Security) OAuthOrigin() string {
 // GetBaseURL returns the base URL for notifications and OAuth redirects.
 // Priority order:
 //  1. BaseURL field (if set, trimmed; empty when it is not a usable URL)
-//  2. Host as given when it carries an http(s) scheme, otherwise built from
-//     Host + port + TLSMode scheme
+//  2. Host as given when it carries an http(s) scheme (empty when it is not a
+//     usable URL), otherwise built from Host + port + TLSMode scheme
 //  3. Empty string if no host is available
 //
 // This method does NOT fall back to localhost - callers should handle empty returns.
@@ -136,7 +140,10 @@ func (s *Security) GetBaseURL(port string) string {
 		return ""
 	}
 	if hostHasScheme(host) {
-		// Already a full origin: used as given, as the OAuth rule does.
+		// Already a full origin: used as given when usable, as the OAuth rule does.
+		if ValidateBaseURL(host) != nil {
+			return ""
+		}
 		return host
 	}
 

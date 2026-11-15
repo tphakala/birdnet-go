@@ -542,6 +542,7 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 		{name: "host with an http scheme is used as given, TLS off", security: Security{Host: testURLHTTPNoPort + "/", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPNoPort, wantBaseURL: testURLHTTPNoPort},
 		{name: "host with an https scheme gets no second scheme and no port", security: Security{Host: " " + testURLHTTPSNoPort + " ", TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort},
 		{name: "host scheme is recognised in any case", security: Security{Host: "HTTPS://" + testHostExample, TLSMode: TLSModeNone}, wantOrigin: "HTTPS://" + testHostExample, wantBaseURL: "HTTPS://" + testHostExample},
+		{name: "host with a scheme but no hostname is no origin and no link", security: Security{Host: "http://:8080"}, wantBaseURL: "", wantProblem: "security.host"},
 		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
 		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},
 		{name: "nothing set", security: Security{}, wantBaseURL: "", wantProblem: "no redirect URL"},
@@ -568,21 +569,14 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 	}
 }
 
-// TestSecurity_OAuthOrigin_Host covers the security.host forms the table above
-// cannot run through GetBaseURL: one that already carries a scheme is used as it
-// is, minus a trailing slash, and one that cannot form a URL is no origin.
+// TestSecurity_OAuthOrigin_Host covers a security.host that cannot form a URL,
+// which the table above cannot express through GetBaseURL: it is no origin.
 func TestSecurity_OAuthOrigin_Host(t *testing.T) {
 	t.Parallel()
 
 	unusable := Security{Host: "bad host"}
 	assert.Empty(t, unusable.OAuthOrigin())
 	assert.Contains(t, oauthOriginProblem(&unusable), "security.host")
-
-	assert.Equal(t, testURLHTTPNoPort, (&Security{Host: testURLHTTPNoPort + "/"}).OAuthOrigin())
-	upper := Security{Host: "HTTPS://" + testHostExample}
-	assert.Equal(t, "HTTPS://"+testHostExample, upper.OAuthOrigin(), "a scheme is recognised in any case")
-	assert.Empty(t, oauthOriginProblem(&upper))
-	assert.Equal(t, testURLHTTPSNoPort, (&Security{Host: testURLHTTPSNoPort}).OAuthOrigin())
 }
 
 // TestValidateSecurityBaseURL pins the save-time rule: a set baseUrl must be a
