@@ -15,7 +15,7 @@ import { render } from 'vitest-browser-svelte';
 import { userEvent } from 'vitest/browser';
 
 import AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte';
-import { audioToolbarProps } from '../audioToolbarProps';
+import { AUDIO_TOOLBAR_GLOBAL_CSS, audioToolbarProps } from '../audioToolbarProps';
 
 const PRIMARY_COLOR = 'rgb(10, 20, 30)';
 const HOVER_COLOR = 'rgb(200, 200, 200)';
@@ -35,7 +35,7 @@ describe('AudioToolbar hover styling in a real browser', () => {
     // The buttons transition all properties; without this a read right after the
     // hover sees a mid-transition value and the test can pass on the bug.
     noTransitions = document.createElement('style');
-    noTransitions.textContent = '* { transition: none !important; }';
+    noTransitions.textContent = `${AUDIO_TOOLBAR_GLOBAL_CSS} * { transition: none !important; }`;
     document.head.appendChild(noTransitions);
   });
 

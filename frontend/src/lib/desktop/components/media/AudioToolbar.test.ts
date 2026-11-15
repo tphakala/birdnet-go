@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ComponentProps } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import { fireEvent } from '@testing-library/svelte';
@@ -372,5 +372,157 @@ describe('AudioToolbar Accessibility', () => {
     expect(group).not.toBeNull();
 
     await expectNoA11yViolations(group ?? container);
+  });
+});
+
+describe('AudioToolbar layout', () => {
+  // jsdom computes no layout, so the real wrapping is checked in the browser-mode test
+  // audio-toolbar-wrap.browser.test.ts, which CI does not run. This pins the declaration
+  // whose removal lets the controls run past a narrow bar again.
+  it('lets the bar wrap instead of overflowing', () => {
+    const css = toolbarSource.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    expect(css).toMatch(/\.audio-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
+  });
+});
+
+describe('AudioToolbar menus', () => {
+  const toolbarTest = createComponentTestFactory(AudioToolbar);
+  const EXPORT_NAME = 'components.audioPlayer.processing.export';
+  // Measured menu size the layout stubs report
+  const MENU_WIDTH_PX = 150;
+  const MENU_HEIGHT_PX = 266;
+  // A 44 px tall trigger, and the wrapper that holds it with the same box
+  const TRIGGER_HEIGHT_PX = 44;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    document.querySelectorAll('[data-testid="after-toolbar"]').forEach(el => el.remove());
+  });
+
+  function renderToolbar() {
+    toolbarTest.render({
+      props: audioToolbarProps({ selectionStart: 1, selectionEnd: 3, hasSelection: true }),
+    });
+  }
+
+  function trigger(menu: 'export' | 'denoise'): HTMLElement {
+    const button =
+      menu === 'export'
+        ? screen.getByRole('button', { name: EXPORT_NAME })
+        : screen.getByRole('button', { name: DENOISE_BUTTON_NAME });
+    return button;
+  }
+
+  function wrapper(menu: 'export' | 'denoise'): HTMLElement {
+    const el = trigger(menu).closest<HTMLElement>(`.${menu}-dropdown`);
+    if (!el) throw new Error(`${menu} dropdown wrapper not rendered`);
+    return el;
+  }
+
+  function openedMenu(menu: 'export' | 'denoise'): HTMLElement {
+    const el = document.querySelector<HTMLElement>(`.${menu}-menu`);
+    if (!el) throw new Error(`${menu} menu not rendered`);
+    return el;
+  }
+
+  // Places the trigger and its wrapper at the given viewport box and gives every
+  // element the measured menu size, since jsdom lays nothing out.
+  function placeTrigger(menu: 'export' | 'denoise', left: number, right: number, top: number) {
+    const rect = new DOMRect(left, top, right - left, TRIGGER_HEIGHT_PX);
+    vi.spyOn(trigger(menu), 'getBoundingClientRect').mockReturnValue(rect);
+    vi.spyOn(wrapper(menu), 'getBoundingClientRect').mockReturnValue(rect);
+  }
+
+  function stubMenuSize() {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(MENU_WIDTH_PX);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(MENU_HEIGHT_PX);
+  }
+
+  /** Left edge of the open menu in viewport coordinates. */
+  function menuLeft(menu: 'export' | 'denoise'): number {
+    return wrapper(menu).getBoundingClientRect().left + parseFloat(openedMenu(menu).style.left);
+  }
+
+  function menuSide(menu: 'export' | 'denoise'): 'above' | 'below' {
+    const style = openedMenu(menu).style;
+    if (style.bottom === '100%' && style.top === 'auto') return 'above';
+    if (style.top === '100%' && style.bottom === 'auto') return 'below';
+    throw new Error(`unexpected menu side: top ${style.top}, bottom ${style.bottom}`);
+  }
+
+  it.each(['export', 'denoise'] as const)(
+    'moves focus from the %s button into its menu with Tab',
+    async menu => {
+      const user = userEvent.setup();
+      renderToolbar();
+      // Without a focusable element after the bar, a menu moved to the end of
+      // the body would still be next in Tab order and the test would pass.
+      const sentinel = document.createElement('button');
+      sentinel.dataset.testid = 'after-toolbar';
+      document.body.appendChild(sentinel);
+
+      await user.click(trigger(menu));
+      await user.tab();
+
+      const firstOption = openedMenu(menu).querySelector('button');
+      expect(firstOption).toHaveFocus();
+      expect(sentinel).not.toHaveFocus();
+    }
+  );
+
+  it.each([
+    ['export', 'end aligned', { left: 400, right: 500, top: 400 }, 350, 'above'],
+    ['denoise', 'start aligned', { left: 400, right: 500, top: 400 }, 400, 'above'],
+    ['export', 'clamped at the right edge', { left: 980, right: 1100, top: 400 }, 866, 'above'],
+    ['export', 'below, with no room above', { left: 400, right: 500, top: 100 }, 350, 'below'],
+  ] as const)(
+    'places the %s menu against its trigger, inside the viewport (%s)',
+    async (menu, _case, box, expectedLeft, expectedSide) => {
+      const user = userEvent.setup();
+      renderToolbar();
+      placeTrigger(menu, box.left, box.right, box.top);
+      stubMenuSize();
+
+      await user.click(trigger(menu));
+
+      expect(menuLeft(menu)).toBe(expectedLeft);
+      expect(menuSide(menu)).toBe(expectedSide);
+    }
+  );
+
+  it('caps the menu height to the room below it in a short viewport', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('innerHeight', 480);
+    renderToolbar();
+    placeTrigger('export', 400, 500, 200);
+    stubMenuSize();
+
+    await user.click(trigger('export'));
+
+    // 480 - 244 - 8 px margin leaves 228 px below; minus the 4 px gap
+    expect(menuSide('export')).toBe('below');
+    expect(openedMenu('export').style.maxHeight).toBe('224px');
+  });
+
+  it.each([
+    ['resize', () => window.dispatchEvent(new Event('resize'))],
+    // Scroll events do not bubble, so this only arrives through a captured listener
+    ['scroll', () => document.body.dispatchEvent(new Event('scroll'))],
+  ])('re-clamps an open menu on %s', async (_event, dispatch) => {
+    const user = userEvent.setup();
+    renderToolbar();
+    placeTrigger('export', 400, 500, 400);
+    stubMenuSize();
+    await user.click(trigger('export'));
+    expect(menuLeft('export')).toBe(350);
+
+    vi.restoreAllMocks();
+    placeTrigger('export', 600, 700, 400);
+    stubMenuSize();
+    dispatch();
+
+    expect(menuLeft('export')).toBe(550);
   });
 });
