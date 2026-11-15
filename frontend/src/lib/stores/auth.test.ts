@@ -172,6 +172,20 @@ describe('Auth Store', () => {
       expect(JSON.stringify(vi.mocked(loggers.auth.warn).mock.calls)).not.toContain('idp.example');
     });
 
+    it('should warn and redirect to /ui/ when providerLogoutUrl is not a URL', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, providerLogoutUrl: 'not a url' }),
+      });
+
+      await auth.logout();
+
+      expect(window.location.href).toBe('/ui/');
+      expect(loggers.auth.warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(vi.mocked(loggers.auth.warn).mock.calls)).not.toContain('not a url');
+    });
+
     it('should treat 401 as successful logout (expired session)', async () => {
       // Set initial logged in state
       auth.setLoggedIn(true);
