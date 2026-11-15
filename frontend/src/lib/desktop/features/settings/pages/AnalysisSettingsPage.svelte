@@ -1080,10 +1080,25 @@
     }
   }
 
-  // The View Species button is blocked without a species count or location, and while the list loads
-  let viewSpeciesBlocked = $derived(
-    !rangeFilterState.speciesCount || rangeFilterState.loading || !birdnet?.locationConfigured
-  );
+  // Why the View Species button is blocked, or undefined when it works. The reason is shown next
+  // to the button and the button points at it.
+  let viewSpeciesBlockedReason = $derived.by(() => {
+    if (!birdnet?.locationConfigured) {
+      return t('settings.species.activeSpecies.locationNotConfigured.title');
+    }
+    if (rangeFilterState.loading)
+      return t('settings.main.sections.rangeFilter.modal.loadingSpecies');
+    if (rangeFilterState.testing)
+      return t('settings.main.sections.rangeFilter.speciesCount.loading');
+    if (rangeFilterState.speciesCount === null) {
+      return rangeFilterState.error ?? t('settings.main.sections.rangeFilter.speciesCount.loading');
+    }
+    if (rangeFilterState.speciesCount === 0) {
+      return t('settings.main.sections.rangeFilter.modal.noSpeciesFound');
+    }
+    return undefined;
+  });
+  let viewSpeciesBlocked = $derived(viewSpeciesBlockedReason !== undefined);
 
   async function loadRangeFilterSpecies() {
     if (rangeFilterState.loading || !birdnet?.locationConfigured) return;
@@ -2167,9 +2182,9 @@
                  natively disabled button would drop focus before the dialog could return it here -->
             <button
               type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
               aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
-              aria-describedby={rangeFilterState.loading ? 'range-species-busy' : undefined}
+              aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
               onclick={() => {
                 if (viewSpeciesBlocked) return;
                 rangeFilterState.showModal = true;
@@ -2178,12 +2193,12 @@
             >
               {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
             </button>
-            {#if rangeFilterState.loading}
+            {#if viewSpeciesBlockedReason}
               <span
-                id="range-species-busy"
+                id="range-species-blocked-reason"
                 class="self-center text-xs text-[var(--color-base-content)]/70"
               >
-                {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
+                {viewSpeciesBlockedReason}
               </span>
             {/if}
             <button
