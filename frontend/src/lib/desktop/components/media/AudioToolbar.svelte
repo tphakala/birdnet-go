@@ -530,8 +530,9 @@
     min-width: 5rem;
   }
 
-  /* The slider box is the 44 px hit area; the visible track is a full-width child,
-     so a click maps onto the track exactly (no padding or border here). */
+  /* The slider box is the hit area (the toolbar target: 32 px, 44 px for touch); the
+     visible track is a full-width child, so a click maps onto the track exactly (no
+     padding or border here). */
   .progress-bar {
     display: flex;
     flex: 1 1 6rem;
