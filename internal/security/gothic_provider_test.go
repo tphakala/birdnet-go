@@ -32,17 +32,20 @@ func TestGothicProviderNameUsesContextOnly(t *testing.T) {
 	primeReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	require.NoError(t, gothic.StoreInSession(ProviderGoogle, "state", primeReq, primeRec))
 
+	oidc, empty := ProviderOIDC, ""
 	tests := []struct {
 		name    string
 		target  string
 		cookies []*http.Cookie
-		useCtx  bool
+		ctx     *string
 		want    string
 		wantErr bool
 	}{
-		{name: "context value", target: "/", useCtx: true, want: ProviderOIDC},
-		{name: "context value wins over query", target: "/?provider=google", useCtx: true, want: ProviderOIDC},
+		{name: "context value", target: "/", ctx: &oidc, want: ProviderOIDC},
+		{name: "context value wins over query", target: "/?provider=google", ctx: &oidc, want: ProviderOIDC},
+		{name: "empty context value", target: "/", ctx: &empty, wantErr: true},
 		{name: "query only", target: "/?provider=google", wantErr: true},
+		{name: "colon query only", target: "/?:provider=google", wantErr: true},
 		{name: "session only", target: "/", cookies: primeRec.Result().Cookies(), wantErr: true},
 	}
 	for _, tt := range tests {
@@ -51,8 +54,8 @@ func TestGothicProviderNameUsesContextOnly(t *testing.T) {
 			for _, cookie := range tt.cookies {
 				req.AddCookie(cookie)
 			}
-			if tt.useCtx {
-				req = gothic.GetContextWithProvider(req, ProviderOIDC)
+			if tt.ctx != nil {
+				req = gothic.GetContextWithProvider(req, *tt.ctx)
 			}
 
 			got, err := gothic.GetProviderName(req)
