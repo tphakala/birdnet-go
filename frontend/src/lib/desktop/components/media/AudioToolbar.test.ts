@@ -601,6 +601,27 @@ describe('AudioToolbar menus', () => {
     expect(openedMenu('export').style.maxHeight).toBe('224px');
   });
 
+  it('clamps a capped export menu by its width including the scrollbar', async () => {
+    const user = userEvent.setup();
+    const scrollbarPx = 15;
+    vi.stubGlobal('innerHeight', 480);
+    renderToolbar();
+    placeTrigger('export', 980, 1100, 200);
+    // With classic scrollbars a capped max-content menu grows by the scrollbar width
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (
+      this: HTMLElement
+    ) {
+      const cap = parseFloat(this.style.maxHeight);
+      return cap < MENU_HEIGHT_PX ? MENU_WIDTH_PX + scrollbarPx : MENU_WIDTH_PX;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(MENU_HEIGHT_PX);
+
+    await user.click(trigger('export'));
+
+    // 1024 viewport - 8 px margin - (150 + 15) px menu
+    expect(menuLeft('export')).toBe(851);
+  });
+
   it.each([
     ['resize', () => window.dispatchEvent(new Event('resize'))],
     // Scroll events do not bubble, so this only arrives through a captured listener

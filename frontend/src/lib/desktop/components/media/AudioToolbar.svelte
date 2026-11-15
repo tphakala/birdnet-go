@@ -223,14 +223,6 @@
       menu.style.maxHeight = '';
       const height = menu.offsetHeight;
       const wrapperRect = wrapper.getBoundingClientRect();
-      const { left } = computeAnchorPosition({
-        triggerRect: trigger.getBoundingClientRect(),
-        floatingHeight: height,
-        floatingWidth: menu.offsetWidth,
-        align,
-        viewportMargin: MENU_VIEWPORT_MARGIN_PX,
-      });
-      menu.style.left = `${left - wrapperRect.left}px`;
 
       // The visible band: the viewport, cut by every ancestor that clips its overflow
       // (on Search, the results table scrolls sideways and so clips vertically too).
@@ -257,6 +249,17 @@
       menu.style.top = below ? '100%' : 'auto';
       menu.style.bottom = below ? 'auto' : '100%';
       menu.style.maxHeight = `${Math.max(0, (below ? roomBelow : roomAbove) - MENU_GAP_PX)}px`;
+
+      // Measured after the cap: a capped menu gains a scrollbar on systems with
+      // classic scrollbars, which widens a max-content menu
+      const { left } = computeAnchorPosition({
+        triggerRect: trigger.getBoundingClientRect(),
+        floatingHeight: height,
+        floatingWidth: menu.offsetWidth,
+        align,
+        viewportMargin: MENU_VIEWPORT_MARGIN_PX,
+      });
+      menu.style.left = `${left - wrapperRect.left}px`;
       menu.scrollTop = scrollTop;
     }
 
