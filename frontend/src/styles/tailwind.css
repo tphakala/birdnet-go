@@ -354,6 +354,17 @@
     outline-offset: 2px;
   }
 
+  /* .focus-ring-inset is the keyboard focus ring for a segment of a group that clips overflow,
+     where a ring drawn outside the element would be cut off. Two bands: the outer one in the
+     text colour, the inner one in the primary content colour, so one of them stands out against
+     the segment and its neighbour in every state. The outer band is a real outline, so forced
+     colours keeps it. */
+  .focus-ring-inset:focus-visible {
+    outline: 2px solid var(--color-base-content);
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--color-primary-content);
+  }
+
   /* Button variants */
   .btn-primary {
     background-color: var(--color-primary);

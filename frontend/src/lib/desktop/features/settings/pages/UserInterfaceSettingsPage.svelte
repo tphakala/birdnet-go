@@ -50,6 +50,15 @@
   let activeTab = $state('appearance');
   let store = $derived($settingsStore);
 
+  /** Why the settings cannot be changed right now, or undefined while they can. */
+  let settingsBusyReason = $derived(
+    store.isLoading
+      ? t('settings.loading')
+      : store.isSaving
+        ? t('settings.actions.saving')
+        : undefined
+  );
+
   // --- Locale options (same pattern as MainSettingsPage) ---
   interface LocaleOption extends SelectOption {
     localeCode: FlagLocale;
@@ -337,7 +346,7 @@
         logoStyle: store.formData.realtime?.dashboard?.logoStyle,
       }}
     >
-      <ColorSchemePicker disabled={store.isLoading || store.isSaving} />
+      <ColorSchemePicker disabledReason={settingsBusyReason} />
     </SettingsSection>
   </div>
 {/snippet}

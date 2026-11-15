@@ -660,9 +660,9 @@
               aria-disabled={running ? 'true' : undefined}
               aria-describedby={running ? RUN_STATUS_ID : undefined}
               onclick={() => selectWindow(w)}
-              class="px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-base-content)] focus-visible:shadow-[inset_0_0_0_4px_var(--color-primary-content)] aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed {selectedWindow ===
+              class="px-2.5 py-1 text-xs font-medium transition-colors focus-ring-inset aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
-                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
+                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)] forced-colors:forced-color-adjust-none forced-colors:bg-[Highlight] forced-colors:text-[HighlightText] forced-colors:focus-visible:outline-[HighlightText] forced-colors:focus-visible:shadow-none'
                 : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] not-aria-disabled:hover:bg-[var(--color-base-300)]'}"
             >
               {t(`health.window.${w}`)}

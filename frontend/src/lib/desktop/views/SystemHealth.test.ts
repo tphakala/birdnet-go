@@ -172,19 +172,28 @@ describe('SystemHealth keyboard and run state', () => {
     render(SystemHealth);
     await screen.findByText('health.metricFooter.allPassing');
 
-    // The group keeps overflow-hidden for its rounded corners; an outside ring would be cut off.
-    // The ring has two bands, an outer outline in the text colour and an inner inset band in the
-    // primary content colour, so one of them stands out on any neighbouring fill. It stays at full
-    // strength while a run fades the control. Rendered contrast and clipping are browser-only checks.
-    for (const radio of windowRadios()) {
-      expect(radio).toHaveClass('focus-visible:outline-2');
-      expect(radio).toHaveClass('focus-visible:-outline-offset-2');
-      expect(radio).not.toHaveClass('focus-visible:outline-offset-2');
-      expect(radio).toHaveClass('focus-visible:outline-[var(--color-base-content)]');
-      expect(radio).toHaveClass(
-        'focus-visible:shadow-[inset_0_0_0_4px_var(--color-primary-content)]'
-      );
+    // The group keeps overflow-hidden for its rounded corners; an outside ring would be cut off,
+    // so every radio takes the shared inset ring. It stays at full strength while a run fades the
+    // control. The checked radio paints the system selection pair in forced colours; the unchecked
+    // ones keep their own fill. Rendered contrast and clipping are browser-only checks.
+    const forcedColorsFill = [
+      'forced-colors:forced-color-adjust-none',
+      'forced-colors:bg-[Highlight]',
+      'forced-colors:text-[HighlightText]',
+      'forced-colors:focus-visible:outline-[HighlightText]',
+      'forced-colors:focus-visible:shadow-none',
+    ];
+    const radios = windowRadios();
+    for (const radio of radios) {
+      expect(radio).toHaveClass('focus-ring-inset');
       expect(radio).toHaveClass('aria-disabled:focus-visible:opacity-100');
+    }
+    const checked = radios.filter(radio => radio.getAttribute('aria-checked') === 'true');
+    const unchecked = radios.filter(radio => radio.getAttribute('aria-checked') !== 'true');
+    expect(checked).toHaveLength(1);
+    for (const utility of forcedColorsFill) {
+      expect(checked[0]).toHaveClass(utility);
+      for (const radio of unchecked) expect(radio).not.toHaveClass(utility);
     }
   });
 
