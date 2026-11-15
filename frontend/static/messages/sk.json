@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# model má lepšie zostavenie pre tento systém} few {# modely majú lepšie zostavenia pre tento systém} many {# modelov má lepšie zostavenia pre tento systém} other {# modelov má lepšie zostavenia pre tento systém}}",
         "message": "Zostavenie, ktoré lepšie zodpovedá hardvéru alebo polohe tohto systému, je k dispozícii pre: {models}. Otvorte Nastavenia > Analýza > Modely a zvoľte Optimalizovať."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {Nainštalovaný model má novšie vydanie} few {# nainštalované modely majú novšie vydania} many {# nainštalovaného modelu má novšie vydania} other {# nainštalovaných modelov má novšie vydania}}",
+        "message": "Novšie vydanie nahrádza: {models}. Otvorte Nastavenia > Analýza > Modely, nainštalujte novší model a odstráňte starý."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",

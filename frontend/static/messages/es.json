@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# modelo tiene una versión mejor para este sistema} other {# modelos tienen versiones mejores para este sistema}}",
         "message": "Hay disponible una versión mejor adaptada al hardware o a la ubicación de este sistema para: {models}. Abra Configuración > Análisis > Modelos y elija Optimizar para cambiar."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {Un modelo instalado tiene una versión más reciente} other {# modelos instalados tienen versiones más recientes}}",
+        "message": "Una versión más reciente sustituye a: {models}. Abra Configuración > Análisis > Modelos, instale el modelo más reciente y elimine el antiguo."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",

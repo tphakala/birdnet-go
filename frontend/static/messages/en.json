@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# model has a better build for this system} other {# models have better builds for this system}}",
         "message": "A build better matched to this system's hardware or location is available for: {models}. Open Settings > Analysis > Models and choose Optimize to switch."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {An installed model has a newer release} other {# installed models have newer releases}}",
+        "message": "A newer release replaces: {models}. Open Settings > Analysis > Models, install the newer model and remove the old one."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",

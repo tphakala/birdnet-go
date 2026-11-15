@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# model har en bedre version til dette system} other {# modeller har bedre versioner til dette system}}",
         "message": "En version, der passer bedre til systemets hardware eller placering, er tilgængelig for: {models}. Åbn Indstillinger > Analyse > Modeller, og vælg Optimer for at skifte."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {En installeret model har en nyere udgave} other {# installerede modeller har nyere udgaver}}",
+        "message": "En nyere udgave erstatter: {models}. Åbn Indstillinger > Analyse > Modeller, installer den nyere model, og fjern den gamle."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",

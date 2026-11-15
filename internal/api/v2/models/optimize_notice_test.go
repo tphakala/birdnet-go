@@ -122,10 +122,16 @@ func variantEntry(id, name string, variantIDs ...string) classifier.CatalogEntry
 func TestOptimizeOffers(t *testing.T) {
 	t.Parallel()
 
+	superseded := variantEntry("old", "Old model", "base", "fast")
+	superseded.SupersededBy = "a"
+	orphan := variantEntry("orphan", "Orphan model", "base", "fast")
+	orphan.SupersededBy = "not-in-catalog"
 	entries := []classifier.CatalogEntry{
 		variantEntry("a", "Model A", "base", "fast"),
 		variantEntry("b", "Model B", "base", "fast"),
 		{ID: "flat", Name: "Flat model"},
+		superseded,
+		orphan,
 	}
 	compatible := func(ids ...string) map[string]recommend.Recommendation {
 		m := make(map[string]recommend.Recommendation, len(ids))
@@ -186,6 +192,19 @@ func TestOptimizeOffers(t *testing.T) {
 			byVariant:   map[string]map[string]recommend.Recommendation{"b": compatible("fast")},
 			recommended: map[string]string{"b": "fast"},
 			want:        []optimizeOffer{{CatalogID: "b", ModelName: "Model B", FromVariantID: "retired", ToVariantID: "fast"}},
+		},
+		{
+			name:        "superseded entry with a visible successor gets no variant offer",
+			installed:   map[string]string{"old": "base"},
+			byVariant:   map[string]map[string]recommend.Recommendation{"old": compatible("base", "fast")},
+			recommended: map[string]string{"old": "fast"},
+		},
+		{
+			name:        "superseded entry whose successor is not visible still offers",
+			installed:   map[string]string{"orphan": "base"},
+			byVariant:   map[string]map[string]recommend.Recommendation{"orphan": compatible("base", "fast")},
+			recommended: map[string]string{"orphan": "fast"},
+			want:        []optimizeOffer{{CatalogID: "orphan", ModelName: "Orphan model", FromVariantID: "base", ToVariantID: "fast"}},
 		},
 		{
 			name:      "several offers keep catalog order",
