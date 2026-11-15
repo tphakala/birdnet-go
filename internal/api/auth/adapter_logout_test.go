@@ -59,6 +59,7 @@ func TestGetProviderLogoutURL_ReportsSkippedSignOut(t *testing.T) {
 		{name: "no provider in session, OIDC disabled"},
 		{name: "legacy session returns URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, legacyKey: true, wantURL: true},
 		{name: "legacy session with empty endpoint warns once", oidcEnabled: true, registerOIDC: true, authProvider: security.ProviderOIDC, legacyKey: true, wantSkipLogs: 1, wantLevel: "WARN"},
+		{name: "unregistered provider other than OIDC stays quiet", oidcEnabled: true, authProvider: security.ProviderGitHub, noWarn: true},
 		{name: "provider without logout support stays quiet", oidcEnabled: true, registerGH: true, authProvider: security.ProviderGitHub, noWarn: true},
 	}
 	for _, row := range rows {
