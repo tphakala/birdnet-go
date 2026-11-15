@@ -298,7 +298,9 @@ func validateOAuthProviderDuplicates(settings *Security) error {
 			continue
 		}
 		return errors.Newf("security.oauthProviders[%d]: duplicate enabled entry for provider %q, already configured at security.oauthProviders[%d]", i, provider.Provider, first).
+			Component("conf").
 			Category(errors.CategoryValidation).
+			Context("operation", "validate_oauth_provider_duplicates").
 			Context("validation_type", "security-oauth-duplicate").
 			Context("provider", provider.Provider).
 			Build()

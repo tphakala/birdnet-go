@@ -166,6 +166,30 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			changed: true,
 		},
 		{
+			name: "same-ID enabled and disabled pair unchanged, no restart",
+			old: []conf.OAuthProviderConfig{
+				provider("google", "cid", "user@example.com", true),
+				provider("google", "leftover", "user@example.com", false),
+			},
+			current: []conf.OAuthProviderConfig{
+				provider("google", "cid", "user@example.com", true),
+				provider("google", "leftover", "user@example.com", false),
+			},
+			changed: false,
+		},
+		{
+			name: "same-ID pair, enabled entry client id change requires restart",
+			old: []conf.OAuthProviderConfig{
+				provider("google", "leftover", "user@example.com", false),
+				provider("google", "old", "user@example.com", true),
+			},
+			current: []conf.OAuthProviderConfig{
+				provider("google", "leftover", "user@example.com", false),
+				provider("google", "new", "user@example.com", true),
+			},
+			changed: true,
+		},
+		{
 			name:    "enabled toggle requires restart",
 			old:     []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", false)},
 			current: []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", true)},

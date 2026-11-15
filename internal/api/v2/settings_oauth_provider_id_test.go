@@ -146,3 +146,26 @@ func TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+// TestUpdateSettingsRestoresSecretOfMatchingOAuthEntry verifies the redacted secret
+// is restored from the stored entry with the same ID and enabled state, so a
+// disabled leftover listed first does not donate its secret to the enabled entry.
+func TestUpdateSettingsRestoresSecretOfMatchingOAuthEntry(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	const leftoverSecret = "leftover-secret"
+	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
+	controller.Settings.Load().Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: leftoverSecret, UserID: testOAuthUserAllowed},
+		{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
+	}
+
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Security.OAuthProviders[0].ClientSecret = redactedValue
+	s.Security.OAuthProviders[1].ClientSecret = redactedValue
+	putFullSettings(t, e, controller, s)
+
+	got := controller.Settings.Load().Security.OAuthProviders
+	require.Len(t, got, 2)
+	assert.Equal(t, leftoverSecret, got[0].ClientSecret)
+	assert.Equal(t, testOAuthSecret, got[1].ClientSecret)
+}

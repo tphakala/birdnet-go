@@ -138,3 +138,37 @@ security:
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate")
 }
+
+// TestGetOAuthProvider_PrefersEnabledEntry pins that a disabled leftover with the
+// same ID never hides the enabled entry, whichever comes first, because goth
+// registers the enabled one.
+func TestGetOAuthProvider_PrefersEnabledEntry(t *testing.T) {
+	t.Parallel()
+
+	disabled := OAuthProviderConfig{Provider: "google", Enabled: false, ClientID: "leftover", ClientSecret: "old"}
+	enabled := OAuthProviderConfig{Provider: "google", Enabled: true, ClientID: "live", ClientSecret: "new"}
+
+	tests := []struct {
+		name      string
+		providers []OAuthProviderConfig
+		wantID    string
+		wantOn    bool
+	}{
+		{name: "disabled first", providers: []OAuthProviderConfig{disabled, enabled}, wantID: "live", wantOn: true},
+		{name: "enabled first", providers: []OAuthProviderConfig{enabled, disabled}, wantID: "live", wantOn: true},
+		{name: "only disabled", providers: []OAuthProviderConfig{disabled}, wantID: "leftover", wantOn: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Settings{Security: Security{OAuthProviders: tt.providers}}
+
+			got := s.GetOAuthProvider("google")
+
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantID, got.ClientID)
+			assert.Equal(t, tt.wantOn, s.IsOAuthProviderEnabled("google"))
+		})
+	}
+}

@@ -2209,15 +2209,33 @@ func (s *Settings) NormalizeOAuthProviderIDs() {
 	}
 }
 
-// GetOAuthProvider returns the OAuth provider configuration for the given provider ID.
-// Returns nil if the provider is not configured.
-func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
-	for i := range s.Security.OAuthProviders {
-		if s.Security.OAuthProviders[i].Provider == providerID {
-			return &s.Security.OAuthProviders[i]
+// FindOAuthProvider returns the first entry with the given provider ID and enabled
+// state, or the first entry with that ID when none has that state, or nil. A
+// disabled leftover with the same ID as an enabled entry is tolerated by
+// validation, and only the enabled one is registered with goth, so lookups that
+// stand for the registered provider pass enabled=true and never land on the
+// leftover whatever the order.
+func FindOAuthProvider(providers []OAuthProviderConfig, providerID string, enabled bool) *OAuthProviderConfig {
+	var fallback *OAuthProviderConfig
+	for i := range providers {
+		if providers[i].Provider != providerID {
+			continue
+		}
+		if providers[i].Enabled == enabled {
+			return &providers[i]
+		}
+		if fallback == nil {
+			fallback = &providers[i]
 		}
 	}
-	return nil
+	return fallback
+}
+
+// GetOAuthProvider returns the OAuth provider configuration for the given provider
+// ID, preferring an enabled entry over a disabled one with the same ID. Returns nil
+// if the provider is not configured.
+func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
+	return FindOAuthProvider(s.Security.OAuthProviders, providerID, true)
 }
 
 // IsOAuthProviderEnabled returns true if the specified OAuth provider is enabled.

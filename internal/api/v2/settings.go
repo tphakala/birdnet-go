@@ -1839,11 +1839,11 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
 			continue
 		}
-		for j := range current.Security.OAuthProviders {
-			if current.Security.OAuthProviders[j].Provider == incoming.Security.OAuthProviders[i].Provider {
-				incoming.Security.OAuthProviders[i].ClientSecret = current.Security.OAuthProviders[j].ClientSecret
-				break
-			}
+		// Match the stored entry with the same ID and enabled state, so a disabled
+		// leftover sharing the ID of an enabled entry never donates its secret.
+		incomingEntry := &incoming.Security.OAuthProviders[i]
+		if stored := conf.FindOAuthProvider(current.Security.OAuthProviders, incomingEntry.Provider, incomingEntry.Enabled); stored != nil {
+			incomingEntry.ClientSecret = stored.ClientSecret
 		}
 	}
 
@@ -3116,27 +3116,22 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 // Provider registration (the goth providers built from client id/secret and the
 // callback URL derived from the base URL) binds once at startup via
 // security.InitializeGoth and does not hot-reload, so a change needs a restart to
-// take effect. Comparison is keyed by provider ID so reordering the list alone is
-// not treated as a change. UserID is intentionally excluded: the per-provider
-// allowlist is read live by the auth check (via currentSettings), so allowlist
-// edits already hot-reload without a restart.
+// take effect. Entries are matched by provider ID and enabled state so reordering
+// the list alone is not treated as a change. UserID is intentionally excluded:
+// the per-provider allowlist is read live by the auth check (via currentSettings),
+// so allowlist edits already hot-reload without a restart.
 func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldProviders := oldSettings.Security.OAuthProviders
 	newProviders := currentSettings.Security.OAuthProviders
 	if len(oldProviders) != len(newProviders) {
 		return true
 	}
-	// Keyed by provider ID; duplicate IDs (a malformed config) collapse last-wins,
-	// which is acceptable and fail-safe: a missed change only delays a not-yet-active
-	// provider from registering until the next restart, never grants access.
-	newByID := make(map[string]*conf.OAuthProviderConfig, len(newProviders))
-	for i := range newProviders {
-		newByID[newProviders[i].Provider] = &newProviders[i]
-	}
 	for i := range oldProviders {
 		oldProvider := &oldProviders[i]
-		newProvider, ok := newByID[oldProvider.Provider]
-		if !ok {
+		// Compare with the entry of the same ID and enabled state, so a same-ID
+		// pair of enabled and disabled entries is compared entry by entry.
+		newProvider := conf.FindOAuthProvider(newProviders, oldProvider.Provider, oldProvider.Enabled)
+		if newProvider == nil {
 			return true
 		}
 		if oldProvider.Enabled != newProvider.Enabled ||
