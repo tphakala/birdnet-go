@@ -412,7 +412,7 @@ func postLogoutReturnURL(gothProviderName string, entry *conf.OAuthProviderConfi
 // buildProviderLogoutURL builds the end-session URL for a specific goth provider.
 // Returns empty string if the provider doesn't support RP-Initiated Logout or URL validation fails
 // (the scheme must be https, or http when the OIDC issuer URL is http).
-// For OIDC with the post-logout return option on, the URL also carries the return URL.
+// For OIDC the URL also carries the return URL when postLogoutReturnURL returns one.
 // The URL carries the ID token hint, so it is never logged.
 func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderName string, log logger.Logger) string {
 	gothProvider, err := goth.GetProvider(gothProviderName)
