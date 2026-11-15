@@ -281,7 +281,8 @@ func Rank(in *Input) []Recommendation {
 }
 
 // rankEntry ranks the variants of a single entry, marking the top compatible
-// one Recommended.
+// one Recommended, skipping a Legacy variant and a regional slice that does not
+// match the host's resolved region (both stay listed).
 func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 	bench := benchmarkScores(entry, in)
 
@@ -303,7 +304,11 @@ func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 	scoredVariants := make([]scoredVariant, 0, len(entry.Variants))
 	for j := range entry.Variants {
 		v := &entry.Variants[j]
-		scoredVariants = append(scoredVariants, evaluateVariant(entry, v, in, bench[v.ID], hasMatchingRegion))
+		sv := evaluateVariant(entry, v, in, bench[v.ID], hasMatchingRegion)
+		// A regional slice covers only its own region's species, so it is never
+		// the recommendation for a host in another region or with none resolved.
+		sv.foreignRegion = v.Region != "" && v.Region != in.ResolvedRegion
+		scoredVariants = append(scoredVariants, sv)
 	}
 
 	sortScored(scoredVariants)
@@ -316,8 +321,10 @@ func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 		// the gallery hides it (buildVariantResponses) unless it is the installed
 		// one, so recommending it would point at a variant absent from the client's
 		// variant list. When the only compatible variant is Legacy, the entry gets
-		// no recommendation, which is correct.
-		if !recommendedChosen && rec.Compatible && !scoredVariants[k].legacy {
+		// no recommendation, which is correct. The same holds for a slice of another
+		// region: when the host's own slice does not fit (or no region resolved) and
+		// the globals are blocked, no recommendation beats species the slice lacks.
+		if !recommendedChosen && rec.Compatible && !scoredVariants[k].legacy && !scoredVariants[k].foreignRegion {
 			rec.Recommended = true
 			recommendedChosen = true
 		}
@@ -334,6 +341,9 @@ type scoredVariant struct {
 	backendRank int
 	sizeBytes   int64
 	legacy      bool
+	// foreignRegion marks a regional slice that does not match the host's
+	// resolved region; it stays listed and ranked but is never Recommended.
+	foreignRegion bool
 }
 
 // evaluateVariant computes the verdict for one variant: its blockers (hard

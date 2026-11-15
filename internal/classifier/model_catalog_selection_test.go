@@ -93,40 +93,54 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 		})
 	}
 
-	// The withdrawn int8 builds raised the Perch floor: below a tile's no-dft-fp32
-	// floor its own region's slice is blocked (the recommender then falls to
-	// another compatible tile, which is not asserted here), and with no region
-	// every global build (700, 750; int8-arm is Legacy) stays blocked at 512 MiB.
-	t.Run("floors-after-int8-withdrawal", func(t *testing.T) {
+	// A tile covers only its region's species, so a host whose own region's slice
+	// does not fit, or that has no resolved region, gets no recommendation rather
+	// than a foreign tile. The withdrawn int8 builds raised the Perch floor, which
+	// is what exposes this: amazonia's slice needs 350 MiB, and every global build
+	// needs 700 MiB or more (int8-arm is Legacy).
+	t.Run("no-foreign-tile-recommended", func(t *testing.T) {
 		t.Parallel()
 		caps := []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}
 
-		for _, tc := range []struct {
-			name, region string
-			ramMiB       int64
-			variantID    string // blocked when non-empty
-		}{
-			{"amazonia slice needs 350 MiB", "amazonia", 300, "no-dft-fp32@amazonia"},
-			{"no region, globals blocked", "", 512, ""},
-		} {
-			recs := recommend.Rank(&recommend.Input{
-				Capabilities:   caps,
-				TotalRAMBytes:  tc.ramMiB * mib,
-				ResolvedRegion: tc.region,
-				Entries:        []classifier.CatalogEntry{perch},
-			})
-			for _, rec := range recs {
-				switch {
-				case rec.VariantID == tc.variantID:
-					assert.Falsef(t, rec.Compatible, "%s: %s must be blocked", tc.name, rec.VariantID)
-					assert.Falsef(t, rec.Recommended, "%s: %s must not be recommended", tc.name, rec.VariantID)
-				case tc.variantID == "" && !strings.Contains(rec.VariantID, "@") && rec.VariantID != "int8-arm":
-					assert.Falsef(t, rec.Compatible, "%s: global variant %s must be blocked", tc.name, rec.VariantID)
-				}
-				assert.Falsef(t, rec.VariantID == "int8-arm" && rec.Recommended, "%s: the withdrawn global int8-arm must never be recommended", tc.name)
-			}
-		}
+		assert.Empty(t, recommendedVariantID(&perch, caps, 300*mib, "amazonia"), "own slice blocked at 300 MiB: nothing, not another region's slice")
+		assert.Empty(t, recommendedVariantID(&perch, caps, 512*mib, ""), "no region and every global build blocked: nothing")
+		assert.Equal(t, "no-dft-fp32@amazonia", recommendedVariantID(&perch, caps, 400*mib, "amazonia"), "own slice fits at 400 MiB")
 	})
+
+	// The same rule holds for every family shape: below the global floors, with
+	// regional slices that would fit, a host with no region or an unmatched
+	// region is recommended nothing.
+	for _, id := range []string{"perch-v2", "birdnet-v3.0", "birdnet-plus-v3.0"} {
+		t.Run("no-foreign-tile-"+id, func(t *testing.T) {
+			t.Parallel()
+			entry, ok := classifier.GetCatalogEntry(id)
+			require.True(t, ok)
+
+			// RAM just under the smallest live global floor, and a tile that fits it.
+			var floorMiB int64
+			for i := range entry.Variants {
+				v := &entry.Variants[i]
+				if v.Region == "" && !v.Legacy && (floorMiB == 0 || int64(v.Requirements.MinRAMMB) < floorMiB) {
+					floorMiB = int64(v.Requirements.MinRAMMB)
+				}
+			}
+			require.Positive(t, floorMiB)
+			ram := (floorMiB - 1) * mib
+			caps := []string{hwprofile.CapX86_64, hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU}
+
+			fitting := ""
+			for _, rec := range recommend.Rank(&recommend.Input{Capabilities: caps, TotalRAMBytes: ram, Entries: []classifier.CatalogEntry{entry}}) {
+				if rec.Compatible && strings.Contains(rec.VariantID, "@") {
+					fitting = rec.VariantID
+					break
+				}
+			}
+			require.NotEmptyf(t, fitting, "%s needs a regional slice that fits %d MiB for this test to bite", id, ram/mib)
+
+			assert.Emptyf(t, recommendedVariantID(&entry, caps, ram, ""), "%s: no region resolved must not recommend a tile", id)
+			assert.Emptyf(t, recommendedVariantID(&entry, caps, ram, "no-such-region"), "%s: an unmatched region must not recommend a tile", id)
+		})
+	}
 
 	// Guard: with no region resolved, a regional tile must never be recommended;
 	// the global variant wins on its fallback bonus.
