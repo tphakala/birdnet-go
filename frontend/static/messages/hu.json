@@ -5996,6 +5996,10 @@
         "cardNotice": "Kísérleti a BirdNET-Góban. A modell publikált, de a teljesítménye a BirdNET-Góban még nem bizonyított, ezért az eredmények kevésbé megbízhatóak lehetnek.",
         "dialogNotice": "Olyan modellt telepít, amely a BirdNET-Góban kísérleti. A teljesítménye még nem bizonyított, ezért ellenőrizze az észleléseit, mielőtt támaszkodna rá."
       },
+      "superseded": {
+        "cardNotice": "Leváltotta a(z) {name}. Használja helyette az újabb modellt.",
+        "dialogNotice": "Ezt a modellt leváltotta a(z) {name}. Fontolja meg a(z) {name} telepítését helyette."
+      },
       "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
       "regionGlobal": "Globális",
       "hardwareLabel": "Hardver",

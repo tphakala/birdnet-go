@@ -5996,6 +5996,10 @@
         "cardNotice": "Eksperimentel i BirdNET-Go. Modellen er udgivet, men dens ydeevne i BirdNET-Go er endnu ikke bevist, så resultaterne kan være mindre pålidelige.",
         "dialogNotice": "Du installerer en model, der er eksperimentel i BirdNET-Go. Dens ydeevne er endnu ikke bevist, så kontrollér dens detektioner, før du stoler på den."
       },
+      "superseded": {
+        "cardNotice": "Afløst af {name}. Brug den nyere model i stedet.",
+        "dialogNotice": "Denne model er afløst af {name}. Overvej at installere {name} i stedet."
+      },
       "entryIncompatible": "Denne model er ikke tilgængelig på dette system.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

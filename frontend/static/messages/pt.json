@@ -5996,6 +5996,10 @@
         "cardNotice": "Experimental no BirdNET-Go. O modelo está publicado, mas o seu desempenho no BirdNET-Go ainda não está comprovado, por isso os resultados podem ser menos fiáveis.",
         "dialogNotice": "Está a instalar um modelo experimental no BirdNET-Go. O seu desempenho ainda não está comprovado, por isso verifique as suas deteções antes de confiar nele."
       },
+      "superseded": {
+        "cardNotice": "Substituído por {name}. Use o modelo mais recente em vez deste.",
+        "dialogNotice": "Este modelo foi substituído por {name}. Considere instalar {name} em vez dele."
+      },
       "entryIncompatible": "Este modelo não está disponível neste sistema.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

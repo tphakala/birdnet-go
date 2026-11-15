@@ -249,6 +249,21 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(t).toHaveBeenCalledWith('analysis.gallery.preview.dialogNotice', { build: '9.9' });
   });
 
+  it('shows the superseded notice with the successor name in the license dialog', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ supersededBy: { id: 'newer', name: 'Newer Model' } })],
+    });
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+
+    expect(await screen.findByText('analysis.gallery.superseded.dialogNotice')).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith('analysis.gallery.superseded.dialogNotice', {
+      name: 'Newer Model',
+    });
+  });
+
   it('shows no experimental notice in the license dialog of a stable model', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [birdEntry({ channel: 'stable' })],
@@ -262,6 +277,7 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(
       screen.queryByText('analysis.gallery.experimental.dialogNotice')
     ).not.toBeInTheDocument();
+    expect(screen.queryByText('analysis.gallery.superseded.dialogNotice')).not.toBeInTheDocument();
   });
 
   async function startTestBirdInstall(): Promise<void> {

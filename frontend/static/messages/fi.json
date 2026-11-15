@@ -5996,6 +5996,10 @@
         "cardNotice": "Kokeellinen BirdNET-Gossa. Malli on julkaistu, mutta sen suorituskykyä BirdNET-Gossa ei ole vielä todistettu, joten tulokset voivat olla epäluotettavampia.",
         "dialogNotice": "Asennat mallin, joka on BirdNET-Gossa kokeellinen. Sen suorituskykyä ei ole vielä todistettu, joten tarkista sen havainnot ennen kuin luotat niihin."
       },
+      "superseded": {
+        "cardNotice": "Korvattu mallilla {name}. Käytä sen sijaan uudempaa mallia.",
+        "dialogNotice": "Tämän mallin on korvannut {name}. Harkitse mallin {name} asentamista sen sijaan."
+      },
       "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä.",
       "regionGlobal": "Globaali",
       "hardwareLabel": "Laitteisto",

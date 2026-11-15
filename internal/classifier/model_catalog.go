@@ -79,7 +79,12 @@ type CatalogEntry struct {
 	Channel string `json:"channel,omitempty"`
 	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
 	// channel (e.g. "preview3.1"). Empty for stable releases. omitempty as above.
-	BuildLabel      string        `json:"build_label,omitempty"`
+	BuildLabel string `json:"build_label,omitempty"`
+	// SupersededBy is the catalog id of the entry that replaces this one. The
+	// gallery shows a note on this entry and the entry stays installable. Empty
+	// when nothing replaces it. Not to be confused with CatalogVariant.SupersededBy,
+	// which names a replacement variant of the same entry. omitempty as above.
+	SupersededBy    string        `json:"superseded_by,omitempty"`
 	GeomodelVersion string        `json:"geomodel_version"`  // geomodel range filter version (e.g., "v3"); empty if no geomodel
 	RegistryID      string        `json:"registry_id"`       // maps to a ModelRegistry key; empty if loader not yet implemented
 	Hidden          bool          `json:"hidden"`            // if true, entry is excluded from the gallery UI

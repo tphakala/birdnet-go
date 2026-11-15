@@ -127,10 +127,14 @@ type CatalogEntryResponse struct {
 	Channel string `json:"channel"`
 	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
 	// channel (e.g. "preview3.1"); omitted for stable releases.
-	BuildLabel  string `json:"buildLabel,omitempty"`
-	UpstreamURL string `json:"upstreamUrl,omitempty"`
-	Installed   bool   `json:"installed"`
-	Compatible  bool   `json:"compatible"`
+	BuildLabel string `json:"buildLabel,omitempty"`
+	// SupersededBy names the visible catalog entry that replaces this one. Omitted
+	// when nothing replaces it or the successor is hidden, so the gallery never
+	// points at a model it does not show.
+	SupersededBy *CatalogSuccessorResponse `json:"supersededBy,omitempty"`
+	UpstreamURL  string                    `json:"upstreamUrl,omitempty"`
+	Installed    bool                      `json:"installed"`
+	Compatible   bool                      `json:"compatible"`
 	// IncompatibleReason is a structured, localizable code (an i18n key stem such
 	// as "backend.onnx_unavailable"), never a raw English message, so the fully
 	// i18n'd gallery can translate it; a client renders it through the same reason
@@ -162,6 +166,12 @@ type CatalogEntryResponse struct {
 	// Omitted for flat entries and when the request is not eligible for hardware
 	// recommendations (an unauthenticated request on an auth-enabled instance).
 	RecommendedVariantID string `json:"recommendedVariantId,omitempty"`
+}
+
+// CatalogSuccessorResponse identifies the catalog entry that supersedes another.
+type CatalogSuccessorResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // CatalogVariantResponse describes one selectable hardware or regional variant of
@@ -312,8 +322,26 @@ func (c *Handler) beginOperationError(ctx echo.Context, err error) error {
 	return c.HandleError(ctx, err, "failed to start model operation", http.StatusInternalServerError)
 }
 
+// visibleSuccessor resolves a SupersededBy id against the visible entries and
+// returns nil when the id is empty or names an entry the gallery does not show.
+// Only the immediate successor is considered: a chain that passes through a
+// hidden entry stops there, so hiding an entry also withdraws the notes that
+// point at it.
+func visibleSuccessor(visible []classifier.CatalogEntry, id string) *CatalogSuccessorResponse {
+	if id == "" {
+		return nil
+	}
+	for i := range visible {
+		if visible[i].ID == id {
+			return &CatalogSuccessorResponse{ID: visible[i].ID, Name: visible[i].Name}
+		}
+	}
+	return nil
+}
+
 // GetModelCatalog returns the embedded model catalog enriched with install
-// status and compatibility information.
+// status and compatibility information. An entry's successor is reported only when
+// the successor is itself visible.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
@@ -375,6 +403,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			Version:              entry.Version,
 			Channel:              channelOrDefault(entry.Channel),
 			BuildLabel:           entry.BuildLabel,
+			SupersededBy:         visibleSuccessor(visible, entry.SupersededBy),
 			UpstreamURL:          entry.UpstreamURL,
 			Installed:            installed,
 			Compatible:           compatible,

@@ -5996,6 +5996,10 @@
         "cardNotice": "Eksperimentāls programmā BirdNET-Go. Modelis ir publicēts, taču tā veiktspēja BirdNET-Go vēl nav pierādīta, tāpēc rezultāti var būt mazāk uzticami.",
         "dialogNotice": "Jūs instalējat modeli, kas BirdNET-Go ir eksperimentāls. Tā veiktspēja vēl nav pierādīta, tāpēc pārbaudiet tā atpazīšanas rezultātus, pirms uz tiem paļaujaties."
       },
+      "superseded": {
+        "cardNotice": "Aizstāts ar {name}. Izmantojiet tā vietā jaunāko modeli.",
+        "dialogNotice": "Šo modeli ir aizstājis {name}. Apsveriet {name} instalēšanu tā vietā."
+      },
       "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
       "regionGlobal": "Globāls",
       "hardwareLabel": "Aparatūra",

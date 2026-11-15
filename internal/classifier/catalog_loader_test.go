@@ -575,6 +575,29 @@ func TestValidateCatalog_Dependencies(t *testing.T) {
 			c[2].Files = []CatalogFile{{RemotePath: "t", LocalName: "geo.onnx", Role: RoleTaxonomy}}
 			return c
 		}},
+		{name: "successor is a known entry", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].SupersededBy = "geo"
+			return c
+		}},
+		{name: "successors form a chain", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].SupersededBy = "geo"
+			c[1].SupersededBy = "tax"
+			return c
+		}},
+		{name: "successors form a cycle", want: "cycle", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].SupersededBy = "geo"
+			c[1].SupersededBy = "tax"
+			c[2].SupersededBy = "top"
+			return c
+		}},
+		{name: "successor is unknown", want: "unknown", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].SupersededBy = "missing"
+			return c
+		}},
+		{name: "successor is the entry itself", want: "itself", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].SupersededBy = "top"
+			return c
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -606,6 +629,11 @@ func TestCatalogChecksum_OmitemptyKeepsOldFilesPristine(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(plain), `"depends_on"`)
 	assert.NotContains(t, string(plain), `"component"`)
+	assert.NotContains(t, string(plain), `"superseded_by"`)
+
+	named, err := json.Marshal(CatalogEntry{ID: "old", SupersededBy: "new"})
+	require.NoError(t, err)
+	assert.Contains(t, string(named), `"superseded_by":"new"`)
 
 	var round []CatalogEntry
 	require.NoError(t, json.Unmarshal(plain, &round))
