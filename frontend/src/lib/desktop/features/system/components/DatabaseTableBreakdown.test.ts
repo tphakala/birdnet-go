@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { renderTyped } from '../../../../../test/render-helpers';
 import type { TableStats } from '$lib/types/database';
@@ -71,6 +71,16 @@ describe('DatabaseTableBreakdown sorting', () => {
     expect(status).toHaveTextContent(
       t('dataDisplay.table.sortedDescending', { column: tableColumnLabel })
     );
+  });
+
+  it('drops the sort announcement when the tables disappear', async () => {
+    const view = render(DatabaseTableBreakdown, { props: { tables } });
+    await fireEvent.click(screen.getByTestId('sort-name'));
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await view.rerender({ tables: [] });
+
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 
   it('names the table by its visible title', () => {

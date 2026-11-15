@@ -38,6 +38,12 @@
     });
   });
 
+  // Clear the sort message when there are no tables, so a refill does not announce a sort the
+  // user did not just make
+  $effect(() => {
+    if (tables.length === 0) sortStatus = '';
+  });
+
   // Announced once per sort, from the handler, so first render says nothing
   let sortStatus = $state('');
 
