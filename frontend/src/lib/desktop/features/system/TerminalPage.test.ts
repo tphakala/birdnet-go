@@ -243,7 +243,9 @@ describe('TerminalPage detached window', () => {
   // Every socket the page opens; the last one belongs to the popup
   const sockets: { onclose?: () => void }[] = [];
 
-  async function detach() {
+  // Renders the page with a live inline terminal and an iframe standing in for the popup, and
+  // clicks Detach. The popup toolbar wiring still waits for the popup's DOM settle delay.
+  async function startDetach({ withoutTerminalElement = false } = {}) {
     sockets.length = 0;
     vi.stubGlobal(
       'WebSocket',
@@ -263,14 +265,34 @@ describe('TerminalPage detached window', () => {
     const popup = frame.contentWindow;
     if (!popup) throw new Error('iframe has no window');
     vi.spyOn(window, 'open').mockReturnValue(popup);
+    if (withoutTerminalElement) {
+      // The popup page failed to build: the page looks for its terminal element and finds none
+      const lookUp = popup.document.getElementById.bind(popup.document);
+      vi.spyOn(popup.document, 'getElementById').mockImplementation(id =>
+        id === 'terminal' ? null : lookUp(id)
+      );
+    }
 
     const { getByRole } = render(TerminalPage);
     await tick();
     await fireEvent.click(getByRole('button', { name: 'terminal.detach' }));
+    return popup;
+  }
+
+  async function detach() {
+    const popup = await startDetach();
     // The popup toolbar wiring runs after the popup's DOM settle delay
     await waitFor(() => expect(popup.document.getElementById('theme-light')).not.toBeNull());
     await waitFor(() => expect(created.terminals.length).toBeGreaterThan(1));
     return popup.document;
+  }
+
+  // Focus calls on the terminals rebuilt in the main window after the first one was torn down
+  function rebuiltInlineFocusCount() {
+    return created.terminals
+      .slice(1)
+      .filter(terminal => terminal.textarea?.ownerDocument === document)
+      .reduce((sum, terminal) => sum + terminal.focusCount, 0);
   }
 
   // Computed colour and opacity of each toolbar text element
@@ -371,6 +393,20 @@ describe('TerminalPage detached window', () => {
     // The inline terminal is rebuilt in the main window once the popup has gone
     await waitFor(() => expect(created.terminals.length).toBe(3));
     await waitFor(() => expect(created.terminals[2].focusCount).toBe(1));
+  });
+
+  it('hands focus back to the terminal after the popup closes before it has settled', async () => {
+    const popup = await startDetach();
+
+    popup.dispatchEvent(new Event('beforeunload'));
+
+    await waitFor(() => expect(rebuiltInlineFocusCount()).toBe(1));
+  });
+
+  it('hands focus back to the terminal when the popup page cannot be built', async () => {
+    await startDetach({ withoutTerminalElement: true });
+
+    await waitFor(() => expect(rebuiltInlineFocusCount()).toBe(1));
   });
 
   it('forgets an armed Escape when the detached terminal input loses focus', async () => {
