@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { cleanup, screen, within, fireEvent, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, within, fireEvent, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { renderTyped } from '../../../../../test/render-helpers';
 import DatabaseBackupHistory from './DatabaseBackupHistory.svelte';
@@ -114,5 +114,20 @@ describe('DatabaseBackupHistory', () => {
     expect(
       screen.getByRole('table', { name: t('system.database.backup.history.title') })
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    { name: 'the list empties', next: { backups: [] } },
+    { name: 'the list fails to load', next: { loadError: 'Backups unavailable' } },
+  ])('drops the sort announcement when $name', async ({ next }) => {
+    const view = render(DatabaseBackupHistory, {
+      props: { backups: [completedBackup], onCreateBackup: () => {} },
+    });
+    await fireEvent.click(screen.getByTestId('sort-size'));
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await view.rerender(next);
+
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 });

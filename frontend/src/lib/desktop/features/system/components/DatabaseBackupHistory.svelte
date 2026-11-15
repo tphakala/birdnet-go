@@ -91,6 +91,12 @@
     });
   });
 
+  // Clear the sort message when the list is empty or failed to load, so a refill does not
+  // announce a sort the user did not just make
+  $effect(() => {
+    if (safeBackups.length === 0 || loadError) sortStatus = '';
+  });
+
   // Announced once per sort, from the handler, so first render says nothing
   let sortStatus = $state('');
 
