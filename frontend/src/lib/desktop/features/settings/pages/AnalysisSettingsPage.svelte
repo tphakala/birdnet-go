@@ -1080,6 +1080,11 @@
     }
   }
 
+  // The View Species button is blocked without a species count or location, and while the list loads
+  let viewSpeciesBlocked = $derived(
+    !rangeFilterState.speciesCount || rangeFilterState.loading || !birdnet?.locationConfigured
+  );
+
   async function loadRangeFilterSpecies() {
     if (rangeFilterState.loading || !birdnet?.locationConfigured) return;
 
@@ -2158,19 +2163,29 @@
             </span>
           </div>
           <div class="flex gap-2 mt-2">
+            <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
+                 natively disabled button would drop focus before the dialog could return it here -->
             <button
               type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.loading ||
-                !birdnet?.locationConfigured}
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+              aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
+              aria-describedby={rangeFilterState.loading ? 'range-species-busy' : undefined}
               onclick={() => {
+                if (viewSpeciesBlocked) return;
                 rangeFilterState.showModal = true;
                 loadRangeFilterSpecies();
               }}
             >
               {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
             </button>
+            {#if rangeFilterState.loading}
+              <span
+                id="range-species-busy"
+                class="self-center text-xs text-[var(--color-base-content)]/70"
+              >
+                {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
+              </span>
+            {/if}
             <button
               type="button"
               class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

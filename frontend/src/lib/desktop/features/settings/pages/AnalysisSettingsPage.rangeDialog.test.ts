@@ -85,6 +85,7 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { settingsActions } from '$lib/stores/settings';
 
 const DIALOG_TITLE = 'settings.main.sections.rangeFilter.modal.title';
 const VIEW_SPECIES = /settings\.main\.sections\.rangeFilter\.speciesCount\.viewSpecies/;
@@ -177,6 +178,28 @@ describe('AnalysisSettingsPage range filter dialog', () => {
 
     await waitFor(() => expect(screen.queryByRole('heading', { name: DIALOG_TITLE })).toBeNull());
     expect(viewSpecies).toHaveFocus();
+  });
+
+  it('keeps View Species focusable while the species load and returns focus to it on an early close', async () => {
+    // A load that never settles keeps the dialog in its loading state
+    vi.mocked(settingsActions.loadRangeFilterSpecies).mockImplementationOnce(
+      () => new Promise(() => {})
+    );
+    const user = userEvent.setup();
+    const viewSpecies = await openDialog(user);
+    await screen.findByRole('heading', { name: DIALOG_TITLE });
+    await waitFor(() => expect(rangeDialog().contains(document.activeElement)).toBe(true));
+
+    // A natively disabled button would have dropped focus to body when the load began
+    expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
+    expect(viewSpecies).not.toBeDisabled();
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: DIALOG_TITLE })).toBeNull());
+    expect(viewSpecies).toHaveFocus();
+    // A click while the species load must not reopen the dialog
+    await user.click(viewSpecies);
+    expect(screen.queryByRole('heading', { name: DIALOG_TITLE })).toBeNull();
   });
 
   it('does not move focus on close when View Species was removed while the dialog was open', async () => {
