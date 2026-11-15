@@ -53,7 +53,12 @@ function pressedControl(target: unknown): HTMLElement | SVGElement | null {
   return candidate && !candidate.closest(UNPRESSABLE_SELECTOR) ? candidate : null;
 }
 
-/** Whether the browser still counts the user's last gesture as recent; true where the API is missing */
+/**
+ * Whether the browser still counts the user's last gesture as recent. The window is the browser's
+ * own, so a dialog that opens shortly after an awaited request still uses the press, and one that
+ * opens later gets no opener. Where navigator.userActivation is missing this is always true, so a
+ * recorded press then expires only through the listeners below, never by time.
+ */
 function userActivationIsActive(): boolean {
   return !('userActivation' in navigator) || navigator.userActivation.isActive;
 }
