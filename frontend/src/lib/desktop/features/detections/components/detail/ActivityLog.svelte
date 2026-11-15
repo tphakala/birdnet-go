@@ -138,11 +138,13 @@
       });
     }
 
+    // The time of a species change is not kept (a later review save moves the last-saved
+    // time), so the entry has none and goes with the other entries without a time.
     if (originalSpeciesName) {
       list.push({
         key: 'species',
         kind: 'species',
-        at: detection.lastReviewedAt ?? detection.firstReviewedAt ?? '',
+        at: '',
         title: t('detections.detail.log.speciesChanged', {
           from: originalSpeciesName,
           to: speciesName,

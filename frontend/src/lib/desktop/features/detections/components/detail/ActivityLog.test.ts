@@ -63,6 +63,26 @@ describe('ActivityLog entries', () => {
     expect(reviewed).toBeGreaterThan(locked);
   });
 
+  // Regression: the species change took the time of the latest review save, which any
+  // later save moves; the API keeps no time of the change itself.
+  it('shows the species change without a time, after the timed entries', () => {
+    const entries = renderLog({
+      ...base,
+      verified: 'correct',
+      firstReviewedAt: '2026-11-14T08:00:00+02:00',
+      lastReviewedAt: '2026-11-14T09:00:00+02:00',
+      originalSpecies: {
+        scientificName: 'Turdus merula',
+        commonName: 'Blackbird',
+        speciesCode: 'eurbla',
+      },
+    });
+
+    const change = entries.at(-1) ?? '';
+    expect(change).toContain('detections.detail.log.speciesChanged');
+    expect(change).toContain('detections.detail.log.timeUnknown');
+  });
+
   it('adds no species change entry once the species is back to the model’s pick', () => {
     const entries = renderLog({
       ...base,
