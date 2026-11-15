@@ -34,9 +34,27 @@
     padding: 16px 24px;
   }
 
-  /* Stands in for the Tailwind sticky utility, which the browser harness does not load */
-  :global(.sticky) {
-    position: sticky;
-    top: 0;
+  /* Same layer order the app stylesheet declares first (tailwind.css imports Tailwind, which
+     declares it), so the component rule in the components layer competes with the position
+     utilities below as it does in the app. */
+  @layer theme, base, components, utilities;
+
+  /* Stand-ins for the Tailwind position utilities, which the browser harness does not load,
+     in the layer Tailwind puts utilities in. A variant has its own class name, so
+     `md:sticky` is not matched by a rule that lists `.sticky`. */
+  @layer utilities {
+    :global(.sticky) {
+      position: sticky;
+      top: 0;
+    }
+
+    :global(.md\:sticky) {
+      position: sticky;
+      top: 0;
+    }
+
+    :global(.absolute) {
+      position: absolute;
+    }
   }
 </style>

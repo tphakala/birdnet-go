@@ -101,11 +101,14 @@
 <style>
   /* The button's hit area and focus ring cover the whole header cell, whatever padding the
      table gives the cell. The ring is inset: scroll containers and sticky headers clip
-     anything drawn outside the cell. A cell whose className holds the bare sticky, absolute
-     or fixed class is a containing block itself, so the rule skips it. A variant of those
-     classes (md:sticky, sticky!) is not recognised and still gets position: relative. */
-  th:not(:global(.sticky, .absolute, .fixed)) {
-    position: relative;
+     anything drawn outside the cell. The cell is positioned so the button's overlay is
+     anchored to it. The rule is in the components layer, below Tailwind's utilities, so a
+     position class in className (sticky, md:sticky, absolute) replaces it; unlayered
+     component CSS would beat every utility. */
+  @layer components {
+    th {
+      position: relative;
+    }
   }
 
   button::after {
