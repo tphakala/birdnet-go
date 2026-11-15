@@ -141,12 +141,14 @@
   // - related: weather and sun times, tied to the detection and its date;
   // - lists: neighbours, predictions and daily counts, which also change with the species;
   // - species and attribution: tied to the species, kept while stepping within one species;
-  // - stats: the species statistics, also asked for again after a save changed them.
+  // - stats and hourly: the species statistics and hourly activity, also asked for again
+  //   after a save changed them.
   let detectionController: AbortController | null = null;
   let relatedController: AbortController | null = null;
   let listsController: AbortController | null = null;
   let speciesController: AbortController | null = null;
   let statsController: AbortController | null = null;
+  let hourlyController: AbortController | null = null;
   let attributionController: AbortController | null = null;
 
   let displayName = $derived(
@@ -262,6 +264,7 @@
     return () => {
       speciesController?.abort();
       statsController?.abort();
+      hourlyController?.abort();
       attributionController?.abort();
       cancelAttributionRetry();
     };
@@ -395,9 +398,7 @@
       loadStats(speciesDataFor);
       // A species change moved a detection into or out of the species on screen, so its
       // hourly activity changed too.
-      if (change.changedTo && speciesController) {
-        loadHourly(speciesDataFor, speciesController.signal);
-      }
+      if (change.changedTo) loadHourly(speciesDataFor);
     }
     if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) {
       return Promise.resolve(true);
@@ -616,19 +617,27 @@
       isPlainObject,
       value => (taxonomy = isTaxonomy(value?.taxonomy) ? value.taxonomy : null)
     );
-    loadHourly(det.scientificName, signal);
+    loadHourly(det.scientificName);
     loadStats(det.scientificName);
     void fetchImageAttribution(det.scientificName);
   }
 
-  /** The species' detections by hour of day, all time; tied to the species' requests. */
-  function loadHourly(scientificName: string, signal: AbortSignal) {
+  /**
+   * The species' detections by hour of day, all time. Like loadStats, a newer request (after
+   * a change, or for another species) cancels the one still out, so the latest answer is
+   * the one shown; the activity on screen stays until it arrives, and stays when it fails.
+   * A change of species clears it before asking (loadSpeciesData).
+   */
+  function loadHourly(scientificName: string) {
+    hourlyController = renew(hourlyController);
     const species = encodeURIComponent(scientificName);
     load(
       `/api/v2/analytics/time/distribution/hourly?start_date=${ACTIVITY_START_DATE}&end_date=${getLocalDateString()}&species=${species}`,
-      signal,
+      hourlyController.signal,
       isHourlyBuckets,
-      value => (hourlyActivity = value),
+      value => {
+        hourlyActivity = value ?? hourlyActivity;
+      },
       'hourly'
     );
   }

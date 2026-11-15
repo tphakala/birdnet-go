@@ -879,6 +879,67 @@ describe('DetectionDetail statistics after a species change', () => {
     await waitFor(() => expect(hourly()).toBe(2));
   });
 
+  /** The counts of the hourly activity table, by row; empty while it has no data. */
+  const hourlyCounts = () =>
+    [...document.querySelectorAll('.dd-sky table tbody td')].map(cell => cell.textContent);
+
+  // Regression: the reload after a change and the first load shared one signal, so the first
+  // answer arriving last put the older activity back.
+  it('keeps the newer hourly activity when an older request answers last', async () => {
+    const hourlyAnswers: ((_response: Response) => void)[] = [];
+    const { rerender, answerPut } = await changeSpecies([
+      ['/api/v2/detections/92', makeDetection({ id: 92, scientificName: NEW })],
+      [
+        'distribution/hourly',
+        (call: Call) =>
+          call.url.includes('species=Turdus%20philomelos')
+            ? new Promise<Response>(resolve => {
+                hourlyAnswers.push(resolve);
+              })
+            : Promise.resolve(jsonResponse([])),
+      ],
+    ]);
+    await rerender({ detectionId: '92' });
+    await waitFor(() => expect(hourlyAnswers).toHaveLength(1));
+    answerPut(jsonResponse({}));
+    await waitFor(() => expect(hourlyAnswers).toHaveLength(2));
+
+    hourlyAnswers[1]?.(jsonResponse([{ hour: 5, count: 4 }]));
+    await waitFor(() => expect(hourlyCounts()).toContain('4'));
+    hourlyAnswers[0]?.(jsonResponse([{ hour: 3, count: 9 }]));
+    await settle();
+
+    expect(hourlyCounts()).toContain('4');
+    expect(hourlyCounts()).not.toContain('9');
+  });
+
+  it('keeps the hourly activity on screen when its reload after a change fails', async () => {
+    let hourlyRequests = 0;
+    const { rerender, answerPut } = await changeSpecies([
+      ['/api/v2/detections/92', makeDetection({ id: 92, scientificName: NEW })],
+      [
+        'distribution/hourly',
+        (call: Call) => {
+          if (!call.url.includes('species=Turdus%20philomelos')) {
+            return Promise.resolve(jsonResponse([]));
+          }
+          hourlyRequests += 1;
+          return Promise.resolve(
+            hourlyRequests === 1 ? jsonResponse([{ hour: 5, count: 4 }]) : jsonResponse({}, 500)
+          );
+        },
+      ],
+    ]);
+    await rerender({ detectionId: '92' });
+    await waitFor(() => expect(hourlyCounts()).toContain('4'));
+
+    answerPut(jsonResponse({}));
+    await waitFor(() => expect(hourlyRequests).toBe(2));
+    await settle();
+
+    expect(hourlyCounts()).toContain('4');
+  });
+
   it('shows the new species\u2019 new total when the save answers after a step to it', async () => {
     const { rerender, answerPut } = await changeSpecies([
       ['/api/v2/detections/92', makeDetection({ id: 92, scientificName: NEW })],
