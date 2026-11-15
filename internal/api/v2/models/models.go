@@ -66,6 +66,9 @@ type Handler struct {
 	// (optimize_notice.go). Handler is only ever used by pointer, so the mutexes
 	// inside are never copied.
 	optimize optimizeNotice
+	// superseded latches the superseded-model bell notice (superseded_notice.go),
+	// evaluated alongside the optimize notice.
+	superseded supersededNotice
 }
 
 // New builds a models Handler around the shared core and the facade-injected

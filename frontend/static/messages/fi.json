@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# mallille on saatavilla parempi versio tälle järjestelmälle} other {# mallille on saatavilla parempia versioita tälle järjestelmälle}}",
         "message": "Tämän järjestelmän laitteistoon tai sijaintiin paremmin sopiva versio on saatavilla seuraaville malleille: {models}. Avaa Asetukset > Analyysi > Mallit ja vaihda valitsemalla Optimoi."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {Asennetulla mallilla on uudempi julkaisu} other {# asennetulla mallilla on uudempi julkaisu}}",
+        "message": "Uudempi julkaisu korvaa: {models}. Avaa Asetukset > Analyysi > Mallit, asenna uudempi malli ja poista vanha."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",

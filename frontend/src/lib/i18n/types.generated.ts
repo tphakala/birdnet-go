@@ -418,6 +418,8 @@ export type TranslationKey =
   | 'notifications.content.acousticModels.loadFailedMessage'
   | 'notifications.content.modelOptimize.title' // params: count
   | 'notifications.content.modelOptimize.message' // params: models
+  | 'notifications.content.modelSuperseded.title' // params: count
+  | 'notifications.content.modelSuperseded.message' // params: models
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
@@ -4655,6 +4657,8 @@ export type TranslationParams = {
   };
   'notifications.content.modelOptimize.title': { count: string | number };
   'notifications.content.modelOptimize.message': { models: string | number };
+  'notifications.content.modelSuperseded.title': { count: string | number };
+  'notifications.content.modelSuperseded.message': { models: string | number };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
   'notifications.content.alert.metricExceeded': {
     value: string | number;

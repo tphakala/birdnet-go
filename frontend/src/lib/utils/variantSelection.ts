@@ -232,13 +232,15 @@ export interface OptimizeOffer {
  * differs from the host-recommended variant, and that recommended variant is
  * compatible and present in the list. The permanent BirdNET v2.4 model participates
  * like any other installed model (its BuiltIn baseline is the installed variant when
- * no DFT build is active).
+ * no DFT build is active). An entry with `supersededBy` (the server sets it only when
+ * the successor is visible) gets no offer: the superseded notice tells the user to
+ * move to the successor instead of switching builds of the old model.
  */
 export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
   const offers: OptimizeOffer[] = [];
   for (const entry of catalog) {
     const variants = entry.variants ?? [];
-    if (variants.length === 0 || !entry.installed) continue;
+    if (variants.length === 0 || !entry.installed || entry.supersededBy) continue;
 
     const installedId = entry.installedVariantId;
     const recommendedId = entry.recommendedVariantId;

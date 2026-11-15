@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# Modell hat einen besseren Build für dieses System} other {# Modelle haben bessere Builds für dieses System}}",
         "message": "Ein Build, der besser zur Hardware oder zum Standort dieses Systems passt, ist verfügbar für: {models}. Öffnen Sie Einstellungen > Analyse > Modelle und wählen Sie Optimieren, um zu wechseln."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {Ein installiertes Modell hat eine neuere Version} other {# installierte Modelle haben neuere Versionen}}",
+        "message": "Eine neuere Version ersetzt: {models}. Öffnen Sie Einstellungen > Analyse > Modelle, installieren Sie das neuere Modell und entfernen Sie das alte."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",

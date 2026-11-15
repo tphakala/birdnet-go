@@ -365,6 +365,23 @@ describe('optimizeOffers', () => {
     expect(optimizeOffers([e])).toHaveLength(0);
   });
 
+  it('makes no offer for an entry superseded by a visible successor', () => {
+    // The superseded notice already tells the user to move to the successor, so the
+    // entry gets no prompt to switch builds of itself. The API omits supersededBy
+    // when the successor is hidden, so the field is the visibility signal.
+    const e = v24Entry({ supersededBy: { id: 'birdnet-plus', name: 'BirdNET+' } });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('keeps offering later entries after skipping a superseded one', () => {
+    const superseded = v24Entry({
+      id: 'old-model',
+      supersededBy: { id: 'birdnet-plus', name: 'BirdNET+' },
+    });
+    const offers = optimizeOffers([superseded, v24Entry()]);
+    expect(offers.map(o => o.entry.id)).toEqual(['birdnet-v2.4']);
+  });
+
   it('still offers a swap when the installed variant was dropped from the catalog', () => {
     // The installed variant id no longer matches any catalog variant (deprecated and
     // removed): the offer must still surface so the user moves off the dead variant,

@@ -651,6 +651,17 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
     expect(screen.queryByText('analysis.gallery.optimize.bannerTitle')).toBeNull();
   });
 
+  it('shows no optimize banner for an installed model superseded by a visible successor', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [v24Installed({ supersededBy: { id: 'newer', name: 'Newer Model' } })],
+    });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.installed/ });
+    expect(screen.queryByText('analysis.gallery.optimize.bannerTitle')).toBeNull();
+    expect(screen.queryByRole('button', { name: /analysis\.gallery\.optimize\.swap/ })).toBeNull();
+  });
+
   it('renders the permanent card with a built-in badge, no Remove/Reinstall, and an Optimize action', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [v24Installed()] });
     render(AnalysisSettingsPage);

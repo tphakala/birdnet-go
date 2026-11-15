@@ -253,6 +253,11 @@ const (
 	MsgModelOptimizeTitle   = "notifications.content.modelOptimize.title"
 	MsgModelOptimizeMessage = "notifications.content.modelOptimize.message"
 
+	// Model superseded notifications (an installed model has a successor in the
+	// model gallery; recommend-only, never swaps a model by itself)
+	MsgModelSupersededTitle   = "notifications.content.modelSuperseded.title"
+	MsgModelSupersededMessage = "notifications.content.modelSuperseded.message"
+
 	// Inference failure notice: a loaded model failed its last analyses in a row.
 	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"
 	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"

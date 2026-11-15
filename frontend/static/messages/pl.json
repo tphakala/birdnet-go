@@ -497,6 +497,10 @@
         "title": "{count, plural, one {# model ma lepszą wersję dla tego systemu} few {# modele mają lepsze wersje dla tego systemu} many {# modeli ma lepsze wersje dla tego systemu} other {# modeli ma lepsze wersje dla tego systemu}}",
         "message": "Wersja lepiej dopasowana do sprzętu lub lokalizacji tego systemu jest dostępna dla: {models}. Otwórz Ustawienia > Analiza > Modele i wybierz Optymalizuj, aby przełączyć."
       },
+      "modelSuperseded": {
+        "title": "{count, plural, one {Zainstalowany model ma nowsze wydanie} few {# zainstalowane modele mają nowsze wydania} many {# zainstalowanych modeli ma nowsze wydania} other {# zainstalowanych modeli ma nowsze wydania}}",
+        "message": "Nowsze wydanie zastępuje: {models}. Otwórz Ustawienia > Analiza > Modele, zainstaluj nowszy model i usuń stary."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
