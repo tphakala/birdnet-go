@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/faux"
 	"github.com/markbates/goth/providers/microsoftonline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -421,6 +422,9 @@ func stubCompleteUserAuth(t *testing.T, user *goth.User) *[]string {
 // Not parallel: it swaps the settings, gothic.Store and gothic.CompleteUserAuth.
 func TestHandleOAuthCallback_MixedCaseProvider(t *testing.T) {
 	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(microsoftonline.New("id", "secret", "http://localhost/auth/microsoftonline/callback"))
 	// Production keeps sessions in a filesystem store: the cookie carries a session
 	// ID, so the writes of one callback accumulate in the session the begin step
 	// created. Prime such a session and send its cookie with the callback.
@@ -464,4 +468,139 @@ func TestHandleOAuthCallback_UnknownProvider(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Empty(t, *seen, "gothic must not be called for an unknown provider")
+}
+
+// namedStubProvider is a goth provider that reports a chosen name and counts
+// FetchUser calls, so a test can tell which provider gothic authenticated with.
+type namedStubProvider struct {
+	*faux.Provider
+	name   string
+	user   goth.User
+	fetchs int
+}
+
+func (p *namedStubProvider) Name() string { return p.name }
+
+func (p *namedStubProvider) FetchUser(_ goth.Session) (goth.User, error) {
+	p.fetchs++
+	return p.user, nil
+}
+
+// TestHandleOAuthCallback_QueryProviderCannotOverridePath pins that the provider
+// in the callback path is the only one gothic authenticates with: a request
+// supplied "provider" query parameter must not select another registered one.
+// Not parallel: it swaps the settings, the goth registry and gothic.Store.
+func TestHandleOAuthCallback_QueryProviderCannotOverridePath(t *testing.T) {
+	const victimEmail = "user@example.com"
+	settings := &conf.Settings{
+		Security: conf.Security{
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{Provider: security.ConfigGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", UserID: victimEmail},
+				{Provider: security.ConfigOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", UserID: victimEmail},
+			},
+		},
+	}
+	prev := conf.GetSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+	s := &Server{settings: settings}
+
+	googleStub := &namedStubProvider{Provider: &faux.Provider{}, name: security.ProviderGoogle, user: goth.User{UserID: "google-1", Email: victimEmail}}
+	oidcStub := &namedStubProvider{Provider: &faux.Provider{}, name: security.ProviderOIDC, user: goth.User{UserID: "oidc-1", Email: victimEmail}}
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(googleStub, oidcStub)
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewFilesystemStore(t.TempDir(), []byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	// begin starts the flow at /auth/google and returns the state and cookies.
+	begin := func() (state string, cookies []*http.Cookie) {
+		rec := beginOAuth(t, s, security.ProviderGoogle)
+		require.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+		location, err := url.Parse(rec.Header().Get("Location"))
+		require.NoError(t, err)
+		return location.Query().Get("state"), rec.Result().Cookies()
+	}
+	// callback runs handleOAuthCallback for pathProvider with the given query.
+	callback := func(pathProvider, query string, cookies []*http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/auth/"+pathProvider+"/callback?"+query, http.NoBody)
+		for _, cookie := range cookies {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(req, rec)
+		c.SetParamNames("provider")
+		c.SetParamValues(pathProvider)
+		require.NoError(t, s.handleOAuthCallback(c))
+		return rec
+	}
+	// authProvider reads the active provider back from the session the callback left.
+	authProvider := func(rec *httptest.ResponseRecorder, cookies []*http.Cookie) (string, error) {
+		readBack := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		for _, cookie := range cookies {
+			readBack.AddCookie(cookie)
+		}
+		for _, cookie := range rec.Result().Cookies() {
+			readBack.AddCookie(cookie)
+		}
+		return gothic.GetFromSession(security.SessionKeyAuthProvider, readBack)
+	}
+
+	state, cookies := begin()
+	rec := callback(security.ProviderOIDC, "provider="+security.ProviderGoogle+"&state="+url.QueryEscape(state), cookies)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Zero(t, googleStub.fetchs, "the query parameter must not select the Google provider")
+	_, err := authProvider(rec, cookies)
+	assert.Error(t, err, "no session may be established")
+
+	// Control: the same flow finished under its own path name succeeds, whatever
+	// the query says.
+	state, cookies = begin()
+	rec = callback(security.ProviderGoogle, "provider="+security.ProviderOIDC+"&state="+url.QueryEscape(state), cookies)
+
+	assert.Equal(t, http.StatusFound, rec.Code)
+	assert.Zero(t, oidcStub.fetchs)
+	got, err := authProvider(rec, cookies)
+	require.NoError(t, err)
+	assert.Equal(t, security.ProviderGoogle, got)
+}
+
+// TestHandleOAuthCallback_ProviderChecks pins that the callback applies the
+// enabled and registered checks the begin step applies, before gothic runs.
+// Not parallel: it swaps the settings, the goth registry and gothic.CompleteUserAuth.
+func TestHandleOAuthCallback_ProviderChecks(t *testing.T) {
+	tests := []struct {
+		name       string
+		enabled    bool
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "disabled provider", enabled: false, wantStatus: http.StatusBadRequest, wantBody: "OAuth provider not available"},
+		{name: "enabled but unregistered provider", enabled: true, wantStatus: http.StatusServiceUnavailable, wantBody: oauthProviderUnavailableMessage},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := &conf.Settings{
+				Security: conf.Security{
+					OAuthProviders: []conf.OAuthProviderConfig{
+						{Provider: security.ConfigMicrosoft, Enabled: tt.enabled, ClientID: "id", ClientSecret: "secret", UserID: "user@example.com"},
+					},
+				},
+			}
+			prev := conf.GetSettings()
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(prev) })
+			goth.ClearProviders()
+			t.Cleanup(goth.ClearProviders)
+			seen := stubCompleteUserAuth(t, &goth.User{UserID: "ms-1", Email: "user@example.com"})
+
+			rec := callbackOAuth(t, &Server{settings: settings}, security.ProviderMicrosoft)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, tt.wantBody, rec.Body.String())
+			assert.Empty(t, *seen, "gothic must not be called")
+		})
+	}
 }
