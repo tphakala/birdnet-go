@@ -56,7 +56,7 @@ describe('SecuritySettingsPage OAuth provider list', () => {
     const POST_LOGOUT_LABEL = 'settings.security.oauth.oidc.postLogoutRedirectLabel';
     const BASE_URL = 'https://birdnet.example.test';
 
-    function seedProvider(provider: 'oidc' | 'google', extra: Record<string, unknown> = {}) {
+    function seedProvider(provider: 'oidc' | 'google') {
       seedSecurity({
         baseUrl: BASE_URL,
         oauthProviders: [
@@ -67,7 +67,6 @@ describe('SecuritySettingsPage OAuth provider list', () => {
             clientSecret: 'secret',
             userId: 'someone',
             ...(provider === 'oidc' && { issuerUrl: 'https://idp.example.test' }),
-            ...extra,
           },
         ],
       });

@@ -387,18 +387,21 @@ func endSessionSchemeAllowed(scheme string, entry *conf.OAuthProviderConfig) boo
 }
 
 // postLogoutReturnURL returns the URL the identity provider should send the
-// browser to after sign-out, or an empty string for none. It is the OAuth origin
-// plus postLogoutReturnPath, so it never comes from a request, and it is sent
-// only with an ID token hint, because the RP-Initiated Logout 1.0 specification
-// lets a provider refuse the redirect without one.
-func postLogoutReturnURL(gothProviderName string, entry *conf.OAuthProviderConfig, origin, idToken string) string {
-	if gothProviderName != security.ProviderOIDC || entry == nil || !entry.PostLogoutRedirect {
+// browser to after sign-out, or an empty string for none: for any provider other
+// than OIDC, when the entry has the option off, when the session holds no ID
+// token, or when sec has no usable OAuth origin. Otherwise it is sec's OAuth
+// origin plus postLogoutReturnPath, so it never comes from a request. It needs
+// the ID token because the RP-Initiated Logout 1.0 specification lets a provider
+// refuse the redirect without a hint.
+func postLogoutReturnURL(gothProviderName string, entry *conf.OAuthProviderConfig, sec *conf.Security, idToken string) string {
+	if gothProviderName != security.ProviderOIDC || entry == nil || sec == nil || !entry.PostLogoutRedirect {
 		return ""
 	}
 	if idToken == "" {
 		security.LogOIDCLogoutEvent(logger.LogLevelInfo, logoutReturnNotSentPrefix+"the session holds no ID token")
 		return ""
 	}
+	origin := sec.OAuthOrigin()
 	if origin == "" {
 		security.LogOIDCLogoutEvent(logger.LogLevelInfo, logoutReturnNotSentPrefix+"no usable base URL or host is configured")
 		return ""
@@ -407,7 +410,9 @@ func postLogoutReturnURL(gothProviderName string, entry *conf.OAuthProviderConfi
 }
 
 // buildProviderLogoutURL builds the end-session URL for a specific goth provider.
-// Returns empty string if the provider doesn't support RP-Initiated Logout or URL validation fails.
+// Returns empty string if the provider doesn't support RP-Initiated Logout or URL validation fails
+// (the scheme must be https, or http when the OIDC issuer URL is http).
+// For OIDC with the post-logout return option on, the URL also carries the return URL.
 // The URL carries the ID token hint, so it is never logged.
 func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderName string, log logger.Logger) string {
 	gothProvider, err := goth.GetProvider(gothProviderName)
@@ -427,13 +432,13 @@ func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderNam
 
 	// Settings are read per sign-out so a change applies without a restart.
 	var entry *conf.OAuthProviderConfig
-	var origin string
+	var sec *conf.Security
 	if settings := a.OAuth2Server.CurrentSettings(); settings != nil {
 		entry = settings.GetOAuthProvider(security.GothToConfigProvider[gothProviderName])
-		origin = settings.Security.OAuthOrigin()
+		sec = &settings.Security
 	}
 
-	logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutReturnURL(gothProviderName, entry, origin, idToken), "")
+	logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutReturnURL(gothProviderName, entry, sec, idToken), "")
 	if err != nil {
 		// A parse error embeds the endpoint URL, query included, so it is
 		// reported by kind only; other errors carry no URL.
