@@ -1,9 +1,14 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -118,4 +123,26 @@ func TestUpdateSectionSettingsKeepsOAuthSecretWhenProviderIDCaseChanges(t *testi
 	require.Len(t, got, 1)
 	assert.Equal(t, "google", got[0].Provider)
 	assert.Equal(t, testOAuthSecret, got[0].ClientSecret)
+}
+
+// TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates verifies the full
+// settings PUT rejects two enabled entries whose IDs differ only in case, which
+// canonicalisation turns into the same provider.
+func TestUpdateSettingsRejectsCaseVariantOAuthProviderDuplicates(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Security.BaseURL = testOAuthBaseURL
+	s.Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{Provider: "google", Enabled: true, ClientID: "id1", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
+		{Provider: "Google", Enabled: true, ClientID: "id2", ClientSecret: testOAuthSecret, UserID: testOAuthUserAllowed},
+	}
+	body, err := json.Marshal(s)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.UpdateSettings(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
