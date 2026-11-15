@@ -2179,12 +2179,12 @@
                   : ''}
             </span>
           </div>
-          <div class="flex gap-2 mt-2">
+          <div class="flex flex-wrap items-center gap-2 mt-2">
             <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
                  natively disabled button would drop focus before the dialog could return it here -->
             <button
               type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
               aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
               aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
               onclick={() => {

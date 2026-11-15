@@ -245,6 +245,20 @@ describe('AnalysisSettingsPage range filter dialog', () => {
       expect(reasonOf(viewSpecies)).toBe(REASON_LOADING_SPECIES);
     });
 
+    it('keeps the focus ring at full strength while the faded button is blocked', async () => {
+      birdnetStore.set({ ...birdnetStore.initial, locationConfigured: false });
+      try {
+        render(AnalysisSettingsPage);
+        const viewSpecies = await screen.findByRole('button', { name: VIEW_SPECIES });
+
+        // The blocked button stays focusable; opacity on the element would fade its ring too.
+        expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
+        expect(viewSpecies).toHaveClass('focus-ring', 'aria-disabled:focus-visible:opacity-100');
+      } finally {
+        birdnetStore.set(birdnetStore.initial);
+      }
+    });
+
     it('names the missing location', async () => {
       birdnetStore.set({ ...birdnetStore.initial, locationConfigured: false });
       try {

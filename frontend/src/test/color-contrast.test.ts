@@ -1388,8 +1388,9 @@ describe('Primary and accent content in every color scheme', () => {
     /** Component markup, the style modules that hold class strings, and the app shell. */
     const focusScanSources = [
       ...sources.filter(({ file }) => isFocusScanned(file)),
+      // .svelte files are already in sources; add the .ts style modules
       ...readdirSync(libDir, { recursive: true, encoding: 'utf8' })
-        .filter(file => isFocusScanned(file))
+        .filter(file => file.endsWith('.ts') && isFocusScanned(file))
         // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the lib directory
         .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') })),
       { file: 'App.svelte', text: readFileSync(join(srcDir, 'App.svelte'), 'utf8') },
