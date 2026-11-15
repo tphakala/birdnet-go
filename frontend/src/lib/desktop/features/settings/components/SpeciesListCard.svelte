@@ -208,6 +208,8 @@
       sortColumn = column;
       sortDirection = 'asc';
     }
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (filteredSpecies.length === 0) return;
     sortStatus = sortAnnouncement(sortHeaderLabels[column](), sortDirection);
   }
 

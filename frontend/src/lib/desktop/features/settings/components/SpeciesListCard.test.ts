@@ -564,4 +564,23 @@ describe('SpeciesListCard sorting', () => {
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
   });
+
+  it('does not announce a sort while a search leaves no rows', async () => {
+    const MANY = 9;
+    renderCard({ species: Array.from({ length: MANY }, (_, i) => `Bird ${i}`) });
+    await fireEvent.input(
+      screen.getByPlaceholderText(t('settings.species.activeSpecies.search.placeholder')),
+      { target: { value: 'zzzz' } }
+    );
+    const header = screen.getByRole('button', {
+      name: t('settings.species.activeSpecies.columns.commonName'),
+    });
+
+    // The first click picks the column, the second only flips the direction, which an empty
+    // sort never reads
+    await fireEvent.click(header);
+    await fireEvent.click(header);
+
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
 });
