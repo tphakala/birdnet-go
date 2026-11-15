@@ -13,19 +13,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-// Provider IDs used in security.oauthProviders, and by the deprecated
-// googleAuth/githubAuth/microsoftAuth blocks that MigrateOAuthConfig converts into
-// it. These must stay equal to the values internal/security dispatches on
-// (ConfigGoogle, ConfigGitHub, ConfigMicrosoft, ConfigOIDC in
-// internal/security/constants.go). They are duplicated rather than shared because
-// security imports conf, so the dependency cannot run the other way.
-const (
-	providerGoogle    = "google"
-	providerGitHub    = "github"
-	providerMicrosoft = "microsoft"
-	providerOIDC      = "oidc"
-)
-
 // validateSecuritySettings validates the security-specific settings.
 //
 // A provider that is enabled but merely unfinished no longer blocks startup:
@@ -305,6 +292,28 @@ func validateOAuthProviderDuplicates(settings *Security) error {
 	return nil
 }
 
+// ValidateOAuthProviderIDs rejects the first security.oauthProviders entry whose
+// provider ID is blank or not a supported provider, enabled or not. The settings
+// API runs it on every save, so a save can neither introduce nor keep such an
+// entry. It is not part of ValidateSettings: config load must keep booting with a
+// stale entry (normalizeOAuthProviders warns about it instead), because refusing to
+// start leaves no UI in which to fix the file.
+func ValidateOAuthProviderIDs(sec *Security) error {
+	for i := range sec.OAuthProviders {
+		id := NormalizeOAuthProviderID(sec.OAuthProviders[i].Provider)
+		if IsKnownOAuthProviderID(id) {
+			continue
+		}
+		return errors.Newf("security.oauthProviders[%d].provider %q is not a supported provider (supported: %s)", i, id, strings.Join(KnownOAuthProviderIDs(), ", ")).
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_oauth_provider_ids").
+			Context("validation_type", "security-oauth-unknown-provider").
+			Build()
+	}
+	return nil
+}
+
 // validateOIDCProviders validates OIDC-specific provider configuration.
 //
 // Duplicate entries are rejected for every provider kind by
@@ -331,11 +340,11 @@ func validateOAuthProviderDuplicates(settings *Security) error {
 func validateOIDCProviders(settings *Security) error {
 	for i := range settings.OAuthProviders {
 		provider := &settings.OAuthProviders[i]
-		if provider.Provider != providerOIDC || !provider.Enabled {
+		if provider.Provider != OAuthProviderOIDC || !provider.Enabled {
 			continue
 		}
 		if provider.IssuerURL == "" {
-			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is %q and enabled", providerOIDC).
+			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is %q and enabled", OAuthProviderOIDC).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-missing").
 				Build()

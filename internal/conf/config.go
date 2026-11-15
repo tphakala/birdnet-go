@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"iter"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -2192,6 +2193,40 @@ func (s *Settings) ResolveEQOverride(displayName string) *EqualizerSettings {
 // AlertSettings configures the alerting rules engine.
 type AlertSettings struct {
 	HistoryRetentionDays int `json:"historyRetentionDays" yaml:"history_retention_days" mapstructure:"history_retention_days"` // Days to retain alert history (0 = unlimited)
+}
+
+// Canonical OAuth provider IDs, as stored in security.oauthProviders[].provider
+// and sent by the settings UI. internal/security dispatches on the same values
+// (its Config* constants derive from these), and it imports conf, so the list
+// lives here.
+const (
+	OAuthProviderGoogle    = "google"
+	OAuthProviderGitHub    = "github"
+	OAuthProviderMicrosoft = "microsoft"
+	OAuthProviderLine      = "line"
+	OAuthProviderKakao     = "kakao"
+	OAuthProviderOIDC      = "oidc"
+)
+
+// knownOAuthProviderIDs is the sorted list of every canonical provider ID.
+var knownOAuthProviderIDs = []string{
+	OAuthProviderGitHub,
+	OAuthProviderGoogle,
+	OAuthProviderKakao,
+	OAuthProviderLine,
+	OAuthProviderMicrosoft,
+	OAuthProviderOIDC,
+}
+
+// IsKnownOAuthProviderID reports whether id is a supported provider ID. It
+// expects the canonical form; run NormalizeOAuthProviderID first.
+func IsKnownOAuthProviderID(id string) bool {
+	return slices.Contains(knownOAuthProviderIDs, id)
+}
+
+// KnownOAuthProviderIDs returns a sorted copy of the supported provider IDs.
+func KnownOAuthProviderIDs() []string {
+	return slices.Clone(knownOAuthProviderIDs)
 }
 
 // NormalizeOAuthProviderID returns the canonical form of an OAuth provider ID:

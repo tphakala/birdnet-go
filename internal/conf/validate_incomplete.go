@@ -288,11 +288,22 @@ func (s *Settings) normalizeProfiling() {
 // A provider that does have credentials is never disabled here, however broken the
 // rest of its configuration: it counts towards IsAuthenticationEnabled, so turning
 // it off would drop authentication from a server the operator meant to protect.
+//
+// That includes an entry whose provider ID is blank or unknown: it is kept as it
+// is and only warned about, because no sign-in can use it yet, with credentials it
+// still makes authentication required. The settings API refuses to save such an
+// entry (ValidateOAuthProviderIDs), so the warning is the way to learn that the
+// file needs fixing.
 func (s *Settings) normalizeOAuthProviders() {
 	sec := &s.Security
 
 	for i := range sec.OAuthProviders {
 		p := &sec.OAuthProviders[i]
+		if !IsKnownOAuthProviderID(NormalizeOAuthProviderID(p.Provider)) {
+			s.recordValidationWarning(warnComponentSecurity,
+				"security.oauthProviders[%d] has provider %q, which is not a supported provider (supported: %s); the entry is kept, and with credentials it still requires sign-in although nobody can sign in with it. Remove it or correct provider",
+				i, p.Provider, strings.Join(KnownOAuthProviderIDs(), ", "))
+		}
 		if !p.Enabled {
 			continue
 		}
@@ -324,9 +335,9 @@ func (s *Settings) normalizeOAuthProviders() {
 		name     string
 		provider SocialProvider
 	}{
-		{"security.googleauth", providerGoogle, sec.GoogleAuth},
-		{"security.githubauth", providerGitHub, sec.GithubAuth},
-		{"security.microsoftauth", providerMicrosoft, sec.MicrosoftAuth},
+		{"security.googleauth", OAuthProviderGoogle, sec.GoogleAuth},
+		{"security.githubauth", OAuthProviderGitHub, sec.GithubAuth},
+		{"security.microsoftauth", OAuthProviderMicrosoft, sec.MicrosoftAuth},
 	}
 	for _, l := range legacy {
 		if !l.provider.Enabled {
