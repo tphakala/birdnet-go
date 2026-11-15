@@ -78,4 +78,52 @@ describe('createFocusReturn', () => {
 
     expect(document.activeElement).toBe(inner);
   });
+
+  describe('fallback after the container is removed', () => {
+    async function removeContainer(
+      action: ReturnType<ReturnType<typeof createFocusReturn>['track']>
+    ) {
+      if (typeof action === 'object') action.destroy?.();
+      container.remove();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('leaves focus alone after a press on plain content inside the container', async () => {
+      setup();
+      const plain = document.createElement('p');
+      container.appendChild(plain);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      plain.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('runs the fallback after a press on a button the browser did not focus', async () => {
+      setup();
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(outside);
+    });
+
+    it('runs the fallback after a press on content inside a control', async () => {
+      setup();
+      const icon = document.createElement('span');
+      inner.appendChild(icon);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      icon.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(outside);
+    });
+  });
 });
