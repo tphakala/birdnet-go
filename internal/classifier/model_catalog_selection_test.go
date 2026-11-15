@@ -1,6 +1,7 @@
 package classifier_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,8 +54,8 @@ func modelRemotePath(t *testing.T, entry *classifier.CatalogEntry, variantID str
 // TestRecommend_RegionalTiles is the golden test for the #1439 deliverable: that
 // the region-sliced variants win recommendation on the hosts they were sliced
 // for, and never hijack the global case. The expectations mirror the manifest
-// selection intent (Perch's "low-ram" template maps to the regional int8-arm
-// slice; a region-resolved CPU host prefers the region's slice over the global
+// selection intent (Perch's "low-ram" template maps to the regional no-dft-fp32
+// slice, the int8-arm builds being withdrawn; a region-resolved CPU host prefers the region's slice over the global
 // model on the +100 region.matched term).
 func TestRecommend_RegionalTiles(t *testing.T) {
 	t.Parallel()
@@ -72,16 +73,15 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			t.Parallel()
 
 			// Perch "low-ram" selection: a low-RAM aarch64 host in a region gets the
-			// region's int8-arm slice. 300 MiB is below every GLOBAL perch floor
-			// (int8-arm 350, fp32 700, no-dft-fp32 750), so all globals are blocked
-			// and a regional tile must win. Among the region's two tiles, int8-arm@slug
-			// outscores no-dft-fp32@slug regardless of their per-region RAM floors:
-			// region +100, backend.recommended +40, and low-ram+int8 ram.constrained_fit
-			// +25 = 165, versus no-dft-fp32's region +100 + backend.supported +10 = 110.
-			lowRAM := 300 * mib
+			// region's no-dft-fp32 slice (the withdrawn int8-arm slice is Legacy and
+			// never recommended). 400 MiB is below every GLOBAL perch floor (fp32 700,
+			// no-dft-fp32 750; the withdrawn int8-arm 350 is Legacy) and above the
+			// highest regional no-dft-fp32 floor (350, amazonia and andes), so a
+			// regional tile must win.
+			lowRAM := 400 * mib
 			gotPerch := recommendedVariantID(&perch, []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}, lowRAM, slug)
-			assert.Equalf(t, "int8-arm@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional int8-arm slice", slug)
-			assert.Equalf(t, "regional/"+slug+"/perch_v2_"+slug+"_int8_arm.onnx", modelRemotePath(t, &perch, gotPerch),
+			assert.Equalf(t, "no-dft-fp32@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional no-dft-fp32 slice", slug)
+			assert.Equalf(t, "regional/"+slug+"/perch_v2_"+slug+"_no_dft_fp32.onnx", modelRemotePath(t, &perch, gotPerch),
 				"recommended perch variant must own the manifest low-ram selection path")
 
 			// BirdNET v3.0: a plain CPU host in a region prefers the region's fp32
@@ -92,6 +92,41 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			assert.Equalf(t, "fp32@"+slug, gotV30, "CPU host in %q must get the regional fp32 slice", slug)
 		})
 	}
+
+	// The withdrawn int8 builds raised the Perch floor: below a tile's no-dft-fp32
+	// floor its own region's slice is blocked (the recommender then falls to
+	// another compatible tile, which is not asserted here), and with no region
+	// every global build (700, 750; int8-arm is Legacy) stays blocked at 512 MiB.
+	t.Run("floors-after-int8-withdrawal", func(t *testing.T) {
+		t.Parallel()
+		caps := []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}
+
+		for _, tc := range []struct {
+			name, region string
+			ramMiB       int64
+			variantID    string // blocked when non-empty
+		}{
+			{"amazonia slice needs 350 MiB", "amazonia", 300, "no-dft-fp32@amazonia"},
+			{"no region, globals blocked", "", 512, ""},
+		} {
+			recs := recommend.Rank(&recommend.Input{
+				Capabilities:   caps,
+				TotalRAMBytes:  tc.ramMiB * mib,
+				ResolvedRegion: tc.region,
+				Entries:        []classifier.CatalogEntry{perch},
+			})
+			for _, rec := range recs {
+				switch {
+				case rec.VariantID == tc.variantID:
+					assert.Falsef(t, rec.Compatible, "%s: %s must be blocked", tc.name, rec.VariantID)
+					assert.Falsef(t, rec.Recommended, "%s: %s must not be recommended", tc.name, rec.VariantID)
+				case tc.variantID == "" && !strings.Contains(rec.VariantID, "@") && rec.VariantID != "int8-arm":
+					assert.Falsef(t, rec.Compatible, "%s: global variant %s must be blocked", tc.name, rec.VariantID)
+				}
+				assert.Falsef(t, rec.VariantID == "int8-arm" && rec.Recommended, "%s: the withdrawn global int8-arm must never be recommended", tc.name)
+			}
+		}
+	})
 
 	// Guard: with no region resolved, a regional tile must never be recommended;
 	// the global variant wins on its fallback bonus.

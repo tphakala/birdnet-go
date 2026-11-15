@@ -131,7 +131,7 @@ type CatalogVariant struct {
 	Backends     map[string]BackendSupport `json:"backends,omitempty"`      // per-backend support, keyed by backend token (e.g. "onnxruntime-cpu")
 	Benchmarks   []Benchmark               `json:"benchmarks,omitempty"`    // measured latency/memory per device
 	Files        []CatalogFile             `json:"files"`                   // files to download for this variant
-	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded build)
+	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded or withdrawn build)
 	SupersededBy string                    `json:"superseded_by,omitempty"` // id of the variant that replaces this one, if any
 	// BuiltIn marks the embedded baseline variant of a permanent model (the
 	// BirdNET v2.4 classifier shipped inside the binary). A BuiltIn variant carries
@@ -393,8 +393,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		// Global builds under full/. fp32 (with in-graph DFT) is the default and is
 		// byte-identical to the previously flat entry, so existing installs stay
 		// detected with no re-download (ScanInstalled keys on LocalName, not repo or
-		// RemotePath). no-dft-fp32 is the OpenVINO/GPU build; int8-arm is the low-RAM
-		// ARM build. Regional tiles under regional/ are appended from the generated
+		// RemotePath). no-dft-fp32 is the build without the in-graph DFT (ONNX Runtime
+		// CPU recommended, OpenVINO CPU supported but not recommended); int8-arm is
+		// withdrawn (Legacy), kept only so an existing install stays recognised.
+		// Regional tiles under regional/ are appended from the generated
 		// perchV2RegionalVariants. Each variant's Files is self-contained (model + labels + geomodel +
 		// taxonomy) because resolveVariantDefaults does not merge companions.
 		Variants: slices.Concat([]CatalogVariant{
@@ -421,10 +423,10 @@ var EmbeddedCatalog = []CatalogEntry{
 				SpeciesCount: 14795,
 				Requirements: VariantRequirements{MinRAMMB: 750},
 				Backends: map[string]BackendSupport{
-					"openvino-cpu":    {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-gpu":    {Supported: true, Recommended: true},
 					"cuda":            {Supported: true, Recommended: true},
-					"onnxruntime-cpu": {Supported: true},
+					"openvino-cpu":    {Supported: true},
 					"tensorrt":        {Supported: true},
 				},
 				Files: slices.Concat([]CatalogFile{
@@ -436,8 +438,13 @@ var EmbeddedCatalog = []CatalogEntry{
 				Precision:    "int8",
 				SpeciesCount: 14795,
 				Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 350},
+				// Withdrawn: MatMul-only INT8 changes the result too often on real
+				// audio. Kept as a Legacy variant so an existing install is still
+				// recognised and keeps working; it is no longer offered to new installs.
+				Legacy:       true,
+				SupersededBy: "no-dft-fp32",
 				Backends: map[string]BackendSupport{
-					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true},
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/perch_v2_int8_arm.onnx", LocalName: "perch_v2_int8_arm.onnx", Role: RoleModel, SHA256: "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5", SizeBytes: 130856164},

@@ -745,7 +745,9 @@ func TestIsPermanentEntry(t *testing.T) {
 // entries (Perch v2, BirdNET v3.0, BirdNET+ V3.0) resolve their default variant into entry.Files
 // with the model and labels LocalName + checksum unchanged from the pre-variant flat
 // entries (so existing installs are undisturbed), carry the shared geomodel + taxonomy
-// companions, and declare exactly one Default variant with no Legacy variant.
+// companions, and declare exactly one Default variant, which is never Legacy (an
+// empty install request resolves to it). The only Legacy global variant is Perch's
+// withdrawn int8-arm build, which names no-dft-fp32 as its successor.
 func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 	t.Parallel()
 
@@ -796,7 +798,17 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 				if entry.Variants[i].Default {
 					defaults++
 				}
-				assert.Falsef(t, entry.Variants[i].Legacy, "%s variant %q must not be Legacy", tc.id, entry.Variants[i].ID)
+				v := &entry.Variants[i]
+				if v.Region != "" {
+					continue // regional Legacy marking is covered by TestEmbeddedCatalog_RegionalVariants
+				}
+				wantLegacy := tc.id == "perch-v2" && v.ID == "int8-arm"
+				assert.Equalf(t, wantLegacy, v.Legacy, "%s global variant %q Legacy flag", tc.id, v.ID)
+				if wantLegacy {
+					assert.Equalf(t, "no-dft-fp32", v.SupersededBy, "%s withdrawn variant %q successor", tc.id, v.ID)
+					assert.Falsef(t, backendRecommended(v), "%s withdrawn variant %q must recommend no backend", tc.id, v.ID)
+				}
+				assert.Falsef(t, v.Default && v.Legacy, "%s default variant %q must not be Legacy", tc.id, v.ID)
 			}
 			// Global variants come first (slices.Concat(globals, regional...)),
 			// followed by the generated regional tiles.
