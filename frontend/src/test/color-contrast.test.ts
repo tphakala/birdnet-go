@@ -1404,6 +1404,13 @@ describe('Primary and accent content in every color scheme', () => {
       expect(offenders).toEqual([]);
     });
 
+    it('the alert rule editor draws no faded focus glow, with or without a focus border', () => {
+      const editor = sources.find(({ file }) => file.endsWith('AlertRuleEditor.svelte'));
+      expect(editor, 'AlertRuleEditor.svelte is among the sources').toBeDefined();
+      const faded = [...(editor?.text ?? '').matchAll(FADED_FOCUS_INDICATOR)].map(m => m[1]);
+      expect(faded).toEqual([]);
+    });
+
     it('the faded focus scan sees an indicator that opens or follows a class value and honours a focus border', () => {
       const faded = 'focus:ring-[var(--color-primary)]/20';
       expect(fadedFocusIndicators(`<input class="${faded} px-2" />`)).toEqual([faded]);

@@ -399,7 +399,7 @@
           type="text"
           bind:value={name}
           placeholder={t('settings.alerts.editor.namePlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
       <div>
@@ -414,7 +414,7 @@
           type="text"
           bind:value={description}
           placeholder={t('settings.alerts.editor.descriptionPlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
     </div>
@@ -790,7 +790,7 @@
           id="rule-cooldown"
           type="number"
           min="0"
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors tabular-nums"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] focus-ring focus:border-[var(--color-primary)] transition-colors tabular-nums"
           value={cooldownSec}
           step="1"
           onchange={e => {
@@ -821,7 +821,7 @@
                 type="text"
                 bind:value={action.template_title}
                 placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
             <div>
@@ -836,7 +836,7 @@
                 type="text"
                 bind:value={action.template_message}
                 placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
           </div>
