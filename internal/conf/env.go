@@ -201,12 +201,13 @@ func bindEnvVars() error {
 
 // Environment variable validation functions
 
-// validateEnvBool validates boolean environment variables
+// validateEnvBool validates boolean environment variables. Its error does not
+// repeat the value; bindEnvVars shows the value, redacted.
 func validateEnvBool(value string) error {
 	value = strings.TrimSpace(value)
 	_, err := strconv.ParseBool(value)
 	if err != nil {
-		return fmt.Errorf("invalid boolean value '%s': must be true/false, 1/0, t/f, TRUE/FALSE, T/F", value)
+		return fmt.Errorf("invalid boolean value: must be true/false, 1/0, t/f, TRUE/FALSE, T/F")
 	}
 	return nil
 }
@@ -217,11 +218,11 @@ var localePattern = regexp.MustCompile(`(?i)^[a-z]{2}(-[a-z]{2})?$`)
 func validateEnvLocale(value string) error {
 	value = strings.TrimSpace(value)
 	if len(value) < 2 || len(value) > 10 {
-		return fmt.Errorf("locale must be 2-10 characters (got %d), expected pattern: 'en' or 'en-us', actual: '%s'", len(value), value)
+		return fmt.Errorf("locale must be 2-10 characters (got %d), expected pattern: 'en' or 'en-us'", len(value))
 	}
 	// Check pattern for valid locale format
 	if !localePattern.MatchString(value) {
-		return fmt.Errorf("locale must match pattern 'xx' or 'xx-xx' (e.g., 'en' or 'en-us'), got: '%s'", value)
+		return fmt.Errorf("locale must match pattern 'xx' or 'xx-xx' (e.g., 'en' or 'en-us')")
 	}
 	return nil
 }
