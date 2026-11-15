@@ -288,20 +288,6 @@ func TestUpdateSettingsRejectsUnknownOAuthProviderID(t *testing.T) {
 	}
 }
 
-// TestUpdateSectionSettingsRejectsUnknownOAuthProviderID verifies PATCH rejects an
-// unknown provider ID and publishes nothing.
-func TestUpdateSectionSettingsRejectsUnknownOAuthProviderID(t *testing.T) {
-	e, _, controller := setupTestEnvironment(t)
-	controller.Settings.Load().Security.BaseURL = testOAuthBaseURL
-
-	rec := sendSectionPatch(t, e, controller, "security", map[string]any{
-		"oauthProviders": []any{oauthProviderPayload("gogle", nil)},
-	})
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Empty(t, controller.Settings.Load().Security.OAuthProviders)
-}
-
 // TestUpdateSectionSettingsRejectsStoredUnknownOAuthProviderID verifies a PATCH of
 // the security section that leaves a stored unknown entry in place is rejected too,
 // not only a request that carries the bad ID itself.

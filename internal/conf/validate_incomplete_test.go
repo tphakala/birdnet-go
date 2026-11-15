@@ -1271,10 +1271,12 @@ func TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed(t *testing.T) 
 	tests := []struct {
 		name     string
 		id       string
+		enabled  bool
 		wantText string
 	}{
-		{name: "misspelled", id: "gogle", wantText: `"gogle"`},
-		{name: "blank", id: "", wantText: `""`},
+		{name: "misspelled", id: "gogle", enabled: true, wantText: `"gogle"`},
+		{name: "blank", id: "", enabled: true, wantText: `""`},
+		{name: "disabled", id: "gogle", enabled: false, wantText: `"gogle"`},
 	}
 
 	for _, tt := range tests {
@@ -1282,14 +1284,14 @@ func TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed(t *testing.T) 
 			t.Parallel()
 			s := &Settings{}
 			s.Security.OAuthProviders = []OAuthProviderConfig{
-				{Provider: tt.id, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+				{Provider: tt.id, Enabled: tt.enabled, ClientID: "id", ClientSecret: "secret"},
 			}
-			require.True(t, s.IsAuthProviderConfigured(), "precondition: the entry counts before load")
+			require.Equal(t, tt.enabled, s.IsAuthProviderConfigured(), "precondition: only an enabled entry counts before load")
 
 			normalizeIncompleteFeatures(s)
 
-			assert.True(t, s.Security.OAuthProviders[0].Enabled, "the entry must not be disabled")
-			assert.True(t, s.IsAuthProviderConfigured(), "the entry must keep requiring sign-in")
+			assert.Equal(t, tt.enabled, s.Security.OAuthProviders[0].Enabled, "the entry must keep its enabled state")
+			assert.Equal(t, tt.enabled, s.IsAuthProviderConfigured(), "the entry must keep requiring sign-in only while enabled")
 			require.Len(t, s.ValidationWarnings, 1)
 			assert.Contains(t, s.ValidationWarnings[0], "security.oauthProviders[0]")
 			assert.Contains(t, s.ValidationWarnings[0], tt.wantText)
@@ -1298,7 +1300,7 @@ func TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed(t *testing.T) 
 			s.Security.OAuthProviders = append(s.Security.OAuthProviders,
 				OAuthProviderConfig{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"})
 			normalizeIncompleteFeatures(s)
-			assert.True(t, s.Security.OAuthProviders[0].Enabled)
+			assert.Equal(t, tt.enabled, s.Security.OAuthProviders[0].Enabled)
 			assert.Len(t, s.ValidationWarnings, 1, "the valid entry adds no warning")
 		})
 	}
