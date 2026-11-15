@@ -1363,25 +1363,42 @@ describe('Primary and accent content in every color scheme', () => {
 
     // A ring or border faded to a percentage of a theme colour can fall below 3:1 against the
     // page. Inputs may add a faint glow when the field also gets a full-strength focus border;
-    // everything else uses .focus-ring. A utility may open a class value, so a quote also bounds it.
-    const FADED_FOCUS_INDICATOR =
-      /(?:^|[\s"'`])(?:focus|focus-visible):(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+/g;
-    const FULL_STRENGTH_FOCUS_BORDER =
-      /(?:^|[\s"'`])focus(?:-visible)?:border-\[var\(--[\w-]+\)\](?![/\w])/;
+    // everything else uses .focus-ring. A utility may open a class value, so a quote also bounds
+    // it, and variants may stack before the focus one (dark:focus:, group-focus:, focus-within:).
+    const FOCUS_VARIANT = String.raw`(?:[\w-]+:)*(?:group-|peer-)?(?:focus|focus-visible|focus-within):`;
+    // eslint-disable-next-line security/detect-non-literal-regexp -- built from the fixed variant pattern above
+    const FADED_FOCUS_INDICATOR = new RegExp(
+      String.raw`(?:^|[\s"'\x60])(${FOCUS_VARIANT}(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+)`,
+      'g'
+    );
+    // eslint-disable-next-line security/detect-non-literal-regexp -- built from the fixed variant pattern above
+    const FULL_STRENGTH_FOCUS_BORDER = new RegExp(
+      String.raw`(?:^|[\s"'\x60])${FOCUS_VARIANT}border-\[var\(--[\w-]+\)\](?![/\w])`
+    );
+
+    /** Component markup, the style modules that hold class strings, and the app shell. */
+    const focusScanSources = [
+      ...sources,
+      ...readdirSync(libDir, { recursive: true, encoding: 'utf8' })
+        .filter(file => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the lib directory
+        .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') })),
+      { file: 'App.svelte', text: readFileSync(join(srcDir, 'App.svelte'), 'utf8') },
+    ];
 
     /** The faded focus indicators in a source text that no full-strength focus border accompanies. */
     function fadedFocusIndicators(text: string): string[] {
       return [...text.matchAll(FADED_FOCUS_INDICATOR)]
         .filter(match => {
-          const isFadedBorder = match[0].includes(':border-');
+          const isFadedBorder = /(?:^|:)border-/.test(match[1]);
           const classes = quotedAround(text, match.index + match[0].length - 1);
           return isFadedBorder || !FULL_STRENGTH_FOCUS_BORDER.test(classes);
         })
-        .map(match => match[0].slice(1));
+        .map(match => match[1]);
     }
 
     it('no focus ring, outline or border is drawn at reduced opacity of a theme color unless a full-strength focus border accompanies it', () => {
-      const offenders = sources.flatMap(({ file, text }) =>
+      const offenders = focusScanSources.flatMap(({ file, text }) =>
         fadedFocusIndicators(text).map(indicator => `${file}: ${indicator}`)
       );
       expect(offenders).toEqual([]);
@@ -1394,6 +1411,26 @@ describe('Primary and accent content in every color scheme', () => {
       expect(
         fadedFocusIndicators(`<input class="focus:border-[var(--color-primary)] ${faded}" />`)
       ).toEqual([]);
+    });
+
+    it('the faded focus scan reads a match at the start of the text whole and sees stacked focus variants', () => {
+      expect(fadedFocusIndicators('focus:ring-[var(--color-primary)]/20')).toEqual([
+        'focus:ring-[var(--color-primary)]/20',
+      ]);
+      for (const variant of [
+        'dark:focus:',
+        'group-focus:',
+        'focus-within:',
+        'hover:focus-visible:',
+      ]) {
+        const faded = `${variant}ring-[var(--color-primary)]/30`;
+        expect(fadedFocusIndicators(`class="px-2 ${faded}"`)).toEqual([faded]);
+      }
+      // A faded border is never excused by another border
+      const border = 'focus:border-[var(--color-primary)]/50';
+      expect(fadedFocusIndicators(`class="focus:border-[var(--color-primary)] ${border}"`)).toEqual(
+        [border]
+      );
     });
 
     it('scheme picker swatches match each scheme primary in the light and dark themes', () => {
