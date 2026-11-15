@@ -101,15 +101,19 @@ function restoreGlobalsAfterEach() {
   });
 }
 
-function enableTerminal() {
+function setTerminalEnabled(enableTerminal: boolean) {
   const state = get(settingsStore);
   settingsStore.set({
     ...state,
     originalData: {
       ...state.originalData,
-      webServer: { ...state.originalData.webServer, enableTerminal: true },
+      webServer: { ...state.originalData.webServer, enableTerminal },
     },
   });
+}
+
+function enableTerminal() {
+  setTerminalEnabled(true);
 }
 
 describe('TerminalPage toolbar', () => {
@@ -407,6 +411,26 @@ describe('TerminalPage detached window', () => {
     await startDetach({ withoutTerminalElement: true });
 
     await waitFor(() => expect(rebuiltInlineFocusCount()).toBe(1));
+  });
+
+  it('does not take focus on a later reconnect when the popup closed while the terminal was disabled', async () => {
+    const doc = await detach();
+    setTerminalEnabled(false);
+    await tick();
+
+    doc.defaultView?.dispatchEvent(new Event('beforeunload'));
+    await tick();
+    setTerminalEnabled(true);
+
+    // The terminal is rebuilt in the background, unprompted by the user
+    await waitFor(() =>
+      expect(
+        created.terminals.some(
+          t => t.textarea?.ownerDocument === document && t !== created.terminals[0]
+        )
+      ).toBe(true)
+    );
+    expect(rebuiltInlineFocusCount()).toBe(0);
   });
 
   it('forgets an armed Escape when the detached terminal input loses focus', async () => {

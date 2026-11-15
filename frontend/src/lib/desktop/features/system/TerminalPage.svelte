@@ -114,8 +114,10 @@
   let isDetached = $state(false);
   // The detached notice, focused when the terminal moves to the popup
   let detachedNotice = $state<HTMLDivElement | null>(null);
-  // Set when the popup closes, so the next connect() hands focus to the rebuilt terminal.
-  // Plain, not $state: it is only read inside connect() and must not retrigger the effect.
+  // Set when the popup closes while the terminal is enabled, so the next connect() hands focus to
+  // the rebuilt terminal. A terminal disabled at that moment reconnects later in the background and
+  // must not take focus. Plain, not $state: it is only read inside connect() and must not retrigger
+  // the effect.
   let focusOnReconnect = false;
   let showThemeMenu = $state(false);
   let activeThemeId = $state<TerminalThemeId>(loadThemeId());
@@ -479,7 +481,7 @@
       ws = detachedWs;
       popoutWindow = null;
       isDetached = false;
-      focusOnReconnect = true;
+      focusOnReconnect = isEnabled;
       connect();
       return;
     }
@@ -491,7 +493,7 @@
       detachedWs.close();
       popoutWindow = null;
       isDetached = false;
-      focusOnReconnect = true;
+      focusOnReconnect = isEnabled;
       setTimeout(() => {
         if (terminalContainer && isEnabled && !term) {
           connect();
@@ -696,7 +698,7 @@
         detachedWs.close();
         popoutWindow = null;
         isDetached = false;
-        focusOnReconnect = true;
+        focusOnReconnect = isEnabled;
 
         // Reconnect in the main window on next tick
         setTimeout(() => {
