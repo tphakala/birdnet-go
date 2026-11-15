@@ -475,19 +475,31 @@
 
 <style>
   .audio-toolbar {
-    /* Hit-area floor for every control, in px rather than rem: WCAG target size is in
-       CSS px, and a rem floor would double each icon button at 200 percent text. */
-    --audio-toolbar-target: 44px;
+    /* Hit-area floor for every control. Mouse and trackpad users get 32 px, which keeps
+       the bar compact on desktop; a coarse pointer (touch) gets 44 px below, the
+       comfortable size for a finger. Both are px rather than rem: WCAG target size is
+       in CSS px, and a rem floor would double each icon button at 200 percent text. */
+    --audio-toolbar-target: 32px;
 
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem 0.75rem;
-    padding: 0.5rem;
+    gap: 0.375rem 0.75rem;
+    padding: 0.375rem;
     background: var(--color-base-200);
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-field);
     font-size: 0.75rem;
+  }
+
+  /* Touch: 44 px targets, with the roomier spacing that goes with them */
+  @media (pointer: coarse) {
+    .audio-toolbar {
+      --audio-toolbar-target: 44px;
+
+      gap: 0.5rem 0.75rem;
+      padding: 0.5rem;
+    }
   }
 
   .toolbar-row {

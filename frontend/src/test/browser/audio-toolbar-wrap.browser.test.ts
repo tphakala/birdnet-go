@@ -2,8 +2,8 @@
  * Browser Mode Test: the audio toolbar wraps inside a narrow host
  *
  * jsdom lays nothing out, so only a real browser shows whether the bar wraps
- * instead of running past its host, whether every control keeps a 44 px hit
- * area, and whether the Export menu is clamped into the viewport. The host is
+ * instead of running past its host, whether every control keeps its hit
+ * area (32 px for a mouse, 44 px for touch), and whether the Export menu is clamped into the viewport. The host is
  * 660 px wide, the bar's width beside an open sidebar on a 1024 px tablet; the
  * 200 percent text case uses a wider host.
  *
@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { page } from 'vitest/browser';
+import { cdp, page } from 'vitest/browser';
 import type { ComponentProps } from 'svelte';
 
 import AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte';
@@ -31,7 +31,9 @@ const SHORT_PAGE_HEIGHT_PX = 400;
 const HOST_WIDTH_PX = 660;
 // Wide enough for the long message keys the labels show here once doubled
 const ZOOMED_HOST_WIDTH_PX = 900;
-const TARGET_PX = 44;
+// Hit-area floor for a fine pointer (mouse, trackpad) and a coarse one (touch)
+const FINE_TARGET_PX = 32;
+const COARSE_TARGET_PX = 44;
 const MIN_FONT_PX = 12;
 // How far the Export button is pushed past the right edge of the viewport
 const PAST_EDGE_PX = 20;
@@ -135,17 +137,31 @@ describe('AudioToolbar wrapping in a real browser', () => {
     expect(bar().scrollWidth).toBeLessThanOrEqual(bar().clientWidth);
   });
 
-  it('gives every control a 44 px hit area', async () => {
-    await renderToolbar();
+  it.each([
+    ['a mouse', false, FINE_TARGET_PX],
+    ['touch', true, COARSE_TARGET_PX],
+  ] as const)('sizes every control for %s', async (_pointer, touch, target) => {
+    // Touch emulation is what makes (pointer: coarse) match in Chromium
+    const session = cdp();
+    await session.send('Emulation.setTouchEmulationEnabled', { enabled: touch });
+    try {
+      expect(window.matchMedia('(pointer: coarse)').matches).toBe(touch);
+      await renderToolbar();
 
-    const tooSmall = Object.entries(hitAreas())
-      .filter(([, control]) => {
-        const rect = control.getBoundingClientRect();
-        return rect.width < TARGET_PX || rect.height < TARGET_PX;
-      })
-      .map(([name]) => name);
+      const tooSmall = Object.entries(hitAreas())
+        .filter(([, control]) => {
+          const rect = control.getBoundingClientRect();
+          return rect.width < target || rect.height < target;
+        })
+        .map(([name]) => name);
 
-    expect(tooSmall).toEqual([]);
+      expect(tooSmall).toEqual([]);
+      // An icon button is exactly the floor, so the mouse size stays compact
+      const play = el('.play-btn').getBoundingClientRect();
+      expect([play.width, play.height]).toEqual([target, target]);
+    } finally {
+      await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+    }
   });
 
   it('uses text of at least 12 px', async () => {

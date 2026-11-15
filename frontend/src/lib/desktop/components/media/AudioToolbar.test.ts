@@ -383,6 +383,14 @@ describe('AudioToolbar layout', () => {
   it('lets the bar wrap instead of overflowing', () => {
     expect(toolbarCss).toMatch(/\.audio-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
   });
+
+  // The real sizes are checked in audio-toolbar-wrap.browser.test.ts with touch emulated
+  it('gives mouse users 32 px controls and touch users 44 px', () => {
+    expect(toolbarCss).toMatch(/\.audio-toolbar\s*\{[^}]*--audio-toolbar-target:\s*32px/);
+    expect(toolbarCss).toMatch(
+      /@media\s*\(pointer:\s*coarse\)\s*\{\s*\.audio-toolbar\s*\{[^}]*--audio-toolbar-target:\s*44px/
+    );
+  });
 });
 
 type Menu = 'export' | 'denoise';
@@ -393,7 +401,7 @@ describe('AudioToolbar menus', () => {
   // Measured menu size the layout stubs report
   const MENU_WIDTH_PX = 150;
   const MENU_HEIGHT_PX = 266;
-  // A 44 px tall trigger, and the wrapper that holds it with the same box
+  // A 44 px tall trigger (the touch size), and the wrapper that holds it with the same box
   const TRIGGER_HEIGHT_PX = 44;
 
   afterEach(() => {
