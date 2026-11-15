@@ -59,6 +59,21 @@ BirdNET-Go checks the certificate of an OIDC identity provider against the syste
 
 These settings apply to every outgoing TLS connection of BirdNET-Go that uses the system certificate store, not only to OIDC. A connection with its own CA setting, such as MQTT with a CA certificate configured, uses that certificate instead.
 
+### OIDC sign-out
+
+Signing out of BirdNET-Go also signs the user out at the identity provider when the provider publishes an end-session endpoint in its discovery document. The end-session URL must use HTTPS, except when the configured issuer URL itself uses `http://`, in which case an HTTP end-session URL is accepted.
+
+By default the user stays on the identity provider's page after that sign-out. To send the browser back to BirdNET-Go, enable the post-logout return option of the OIDC provider (`postLogoutRedirect: true` in its `oauthProviders` entry). The return URL is `<base URL>/ui/`, built from the Base URL or Host setting, and it is sent only when the session holds an ID token. Register that exact URL as a post-logout redirect URI at the identity provider first. A provider that does not know the URL may refuse the redirect or show an error page, which is why the option is off by default.
+
+```yaml
+security:
+  oauthProviders:
+    - provider: oidc
+      enabled: true
+      issuerUrl: "https://auth.example.com/application/o/birdnet-go/"
+      postLogoutRedirect: true
+```
+
 ## Authentication Bypass
 
 On a trusted network you can let clients from a given subnet skip authentication entirely.
