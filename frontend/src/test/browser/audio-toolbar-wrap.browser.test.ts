@@ -284,6 +284,19 @@ describe('AudioToolbar wrapping in a real browser', () => {
     expect(menu.scrollTop).toBe(SCROLLED_PX);
   });
 
+  it('keeps keyboard focus inside an open menu when the window resizes', async () => {
+    await renderToolbar();
+    const menu = await openMenu('export');
+    const option = menu.querySelector('button');
+    if (!option) throw new Error('export menu has no options');
+    option.focus();
+    expect(document.activeElement).toBe(option);
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(document.activeElement).toBe(option);
+  });
+
   it('fills the seek box with the visible track, so a click seeks under the pointer', async () => {
     await renderToolbar();
 

@@ -225,7 +225,8 @@
       const height = menu.offsetHeight;
 
       // Measure the room with the menu out of layout, so its previous position cannot
-      // stick out of a scroll box and give that box a scrollbar meanwhile
+      // stick out of a scroll box and give that box a scrollbar meanwhile. It is shown
+      // again before the next rendering update, so focus inside it is kept.
       menu.style.display = 'none';
       const wrapperRect = wrapper.getBoundingClientRect();
 
