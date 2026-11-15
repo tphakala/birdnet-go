@@ -22,8 +22,10 @@ const (
 )
 
 // ValidateBaseURL checks a base URL as BIRDNET_URL and security.baseUrl accept it:
-// non-empty after trimming, an http or https scheme, a hostname and no userinfo. The error
-// does not repeat the whole value, which may carry credentials, but it can quote short fragments of it (the scheme, a port, an escape sequence), so callers that log it must not pass it on unredacted.
+// non-empty after trimming, an http or https scheme, a hostname and no userinfo.
+// The error does not repeat the whole value, which may carry credentials, but it
+// can quote short fragments of it (the scheme, a port, an escape sequence), so
+// callers that log it must not pass it on unredacted.
 func ValidateBaseURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -207,16 +209,15 @@ func hostnameOf(raw string) string {
 // GetExternalHost returns the external host:port for backward compatibility.
 // This is useful for cases where the full host:port is needed (e.g., HTTP Host header).
 // Priority order:
-//  1. Host:port extracted from BaseURL (if it is a usable URL, as GetBaseURL decides)
+//  1. Host:port extracted from BaseURL (if it is a usable URL)
 //  2. Host field as fallback (host:port when it carries an http(s) scheme, empty
 //     when that has no hostname)
 //  3. Empty string if neither is available
 func (s *Security) GetExternalHost() string {
 	// Priority 1: Extract from BaseURL if usable
-	if baseURL := s.trimmedBaseURL(); baseURL != "" && !s.hasUnusableBaseURL() {
-		if parsed, err := url.Parse(baseURL); err == nil {
-			return parsed.Host
-		}
+	if baseURL := s.trimmedBaseURL(); baseURL != "" && ValidateBaseURL(baseURL) == nil {
+		parsed, _ := url.Parse(baseURL) // cannot fail: ValidateBaseURL parsed it
+		return parsed.Host
 	}
 
 	// Priority 2: Fall back to Host, reduced to host:port when it has a scheme
