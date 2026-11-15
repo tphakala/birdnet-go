@@ -23,7 +23,7 @@ const (
 
 // ValidateBaseURL checks a base URL as BIRDNET_URL and security.baseUrl accept it:
 // non-empty after trimming, an http or https scheme, and a hostname. The error
-// never repeats the value, which may carry credentials.
+// does not repeat the whole value, which may carry credentials, but it can quote short fragments of it (the scheme, a port, an escape sequence), so callers that log it must not pass it on unredacted.
 func ValidateBaseURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
