@@ -14,9 +14,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-// oidcMainLogModule is the logger module that mirrors the three OIDC discovery
-// outcomes (first failure, late registration, retry exhaustion) to the console
-// and the main log. The name must stay out of the per-module output defaults
+// oidcMainLogModule is the logger module that mirrors OIDC events an
+// administrator needs to see (the discovery outcomes and skipped sign-out at
+// the identity provider) to the console and the main log. The name must stay out of the per-module output defaults
 // (defaultModuleOutputs in internal/logger/config.go and the module defaults in
 // internal/conf/defaults.go): a module without its own output entry writes
 // through the base handler. The logger must be taken with
@@ -149,8 +149,8 @@ func ProviderRegistrationError(gothProvider string) error {
 	return errProviderNotRegistered
 }
 
-// logOIDCEvent writes an OIDC discovery event to the security module log and to
-// the base handler (console and main log).
+// logOIDCEvent writes an OIDC event (discovery or sign-out) to the security
+// module log and to the base handler (console and main log).
 func logOIDCEvent(level logger.LogLevel, msg string, fields ...logger.Field) {
 	fields = append(fields, logger.String("provider", ConfigOIDC))
 	GetLogger().Log(level, msg, fields...)
