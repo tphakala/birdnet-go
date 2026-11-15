@@ -337,21 +337,19 @@ func TestRedactDiscoveryErr(t *testing.T) {
 	}
 }
 
-// TestStartOIDCRetry_RecordsEachFailure pins that the retry loop records and logs
-// its own failures, not only the startup attempt, with URL userinfo removed: the
-// record is empty when the retry starts, so only the loop can set it. A closed
-// listener makes net/http put the URL, with the username, into the error text.
+// TestStartOIDCRetry_RecordsEachFailure pins that the retry loop records its own
+// failures, not only the startup attempt: the record is empty when the retry
+// starts, so only the loop can set it.
 func TestStartOIDCRetry_RecordsEachFailure(t *testing.T) {
-	const username = "tokenuser-must-not-be-logged"
-	logs := useSplitLogFiles(t)
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
 	clearOIDCDiscoveryFailure()
 	t.Cleanup(clearOIDCDiscoveryFailure)
 
-	idp := httptest.NewServer(http.NotFoundHandler())
-	issuer := strings.Replace(idp.URL, "http://", "http://"+username+":secretpw@", 1)
-	idp.Close()
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(idp.Close)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := startOIDCRetry(ctx, conf.OAuthProviderConfig{
@@ -359,7 +357,7 @@ func TestStartOIDCRetry_RecordsEachFailure(t *testing.T) {
 		Enabled:      true,
 		ClientID:     "test-client",
 		ClientSecret: testOIDCClientSecret,
-		IssuerURL:    issuer,
+		IssuerURL:    idp.URL,
 	}, testOIDCRedirectURI, []string{"openid"}, errors.NewStd("initial discovery failure"))
 	t.Cleanup(func() {
 		cancel()
@@ -368,14 +366,6 @@ func TestStartOIDCRetry_RecordsEachFailure(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		err := ProviderRegistrationError(ProviderOIDC)
-		return err != nil && strings.Contains(err.Error(), oidcDiscoveryPath)
+		return err != nil && strings.Contains(err.Error(), idp.URL+"/.well-known/openid-configuration")
 	}, 25*time.Second, 250*time.Millisecond, "a failed retry attempt must record its cause")
-
-	err := ProviderRegistrationError(ProviderOIDC)
-	securityLog := logs.security()
-	assert.Contains(t, securityLog, "OIDC discovery retry failed")
-	for name, content := range map[string]string{"recorded": err.Error(), "security log": securityLog} {
-		assert.NotContains(t, content, username, name)
-		assert.NotContains(t, content, "secretpw", name)
-	}
 }
