@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "Udsteder-URL skal være en gyldig HTTP- eller HTTPS-URL",
           "scopesLabel": "Omfang",
           "scopesHelpText": "Kommasepareret liste over OIDC-omfang (standard: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Vend tilbage til BirdNET-Go efter log ud hos identitetsudbyderen",
+          "postLogoutRedirectHelpText": "Efter log ud sendes browseren tilbage til {url}. Registrer først denne URL som post-logout redirect URI hos din identitetsudbyder, ellers kan udbyderen vise en fejl.",
+          "postLogoutRedirectNoBaseUrl": "Angiv først Base URL eller Host. Returadressen opbygges ud fra dem."
         }
       },
       "bypassAuthentication": {

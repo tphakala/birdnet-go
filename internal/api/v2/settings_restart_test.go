@@ -212,6 +212,12 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			changed: true,
 		},
 		{
+			name:    "post-logout return toggle is read live and needs no re-registration",
+			old:     []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", IssuerURL: "https://idp.example.test"}},
+			current: []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", IssuerURL: "https://idp.example.test", PostLogoutRedirect: true}},
+			changed: false,
+		},
+		{
 			name:    "base url change with an enabled provider re-registers",
 			old:     []conf.OAuthProviderConfig{provider("google", "cid", "", true)},
 			current: []conf.OAuthProviderConfig{provider("google", "cid", "", true)},

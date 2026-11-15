@@ -364,6 +364,7 @@
     enabled: boolean;
     issuerUrl: string;
     scopesText: string;
+    postLogoutRedirect: boolean;
   }>({
     clientId: '',
     clientSecret: '',
@@ -371,6 +372,7 @@
     enabled: true,
     issuerUrl: '',
     scopesText: '',
+    postLogoutRedirect: false,
   });
 
   // Available providers (filter out already configured ones)
@@ -405,6 +407,10 @@
   let exceptionsHasChanges = $derived(
     subnetBypassHasChanges || publicAccessHasChanges || privateModeHasChanges
   );
+
+  // Page the identity provider returns to after sign-out. The backend appends the
+  // same path to the OAuth origin (postLogoutReturnPath in internal/api/auth).
+  const POST_LOGOUT_RETURN_PATH = '/ui/';
 
   // Canonical base URL for redirect URIs (uses configured host/baseUrl)
   // This is what gets persisted to config.yaml for OAuth callbacks
@@ -498,6 +504,7 @@
       enabled: true,
       issuerUrl: '',
       scopesText: '',
+      postLogoutRedirect: false,
     };
     showProviderForm = true;
   }
@@ -516,6 +523,7 @@
       enabled: provider.enabled,
       issuerUrl: provider.issuerUrl ?? '',
       scopesText: provider.scopes?.join(', ') ?? '',
+      postLogoutRedirect: provider.postLogoutRedirect ?? false,
     };
     showProviderForm = true;
   }
@@ -561,6 +569,7 @@
       // OIDC-specific fields
       ...(selectedProvider === 'oidc' && {
         issuerUrl: providerFormData.issuerUrl.trim(),
+        postLogoutRedirect: providerFormData.postLogoutRedirect || undefined,
         scopes: (() => {
           const parsed = providerFormData.scopesText.split(',').map(s => s.trim()).filter(Boolean);
           return parsed.length > 0 ? parsed : undefined;
@@ -1297,6 +1306,18 @@
                     helpText={t('settings.security.oauth.oidc.scopesHelpText')}
                     disabled={store.isLoading || store.isSaving}
                     onchange={(value) => (providerFormData.scopesText = value)}
+                  />
+
+                  <Checkbox
+                    checked={providerFormData.postLogoutRedirect}
+                    label={t('settings.security.oauth.oidc.postLogoutRedirectLabel')}
+                    helpText={configuredBaseUrl
+                      ? t('settings.security.oauth.oidc.postLogoutRedirectHelpText', {
+                          url: `${configuredBaseUrl}${POST_LOGOUT_RETURN_PATH}`,
+                        })
+                      : t('settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl')}
+                    disabled={store.isLoading || store.isSaving}
+                    onchange={(enabled) => (providerFormData.postLogoutRedirect = enabled)}
                   />
                 {/if}
 

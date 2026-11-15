@@ -1637,6 +1637,10 @@ type OAuthProviderConfig struct {
 	UserID       string   `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
 	IssuerURL    string   `yaml:"issuerUrl,omitempty" json:"issuerUrl"`     // OIDC issuer/discovery URL (required when provider is "oidc")
 	Scopes       []string `yaml:"scopes,omitempty" json:"scopes,omitempty"` // Custom OAuth scopes (OIDC default: openid, profile, email)
+
+	// PostLogoutRedirect sends the browser back to the instance after sign-out at
+	// the identity provider. OIDC only. The return URL must be registered there.
+	PostLogoutRedirect bool `yaml:"postLogoutRedirect,omitempty" json:"postLogoutRedirect,omitempty"`
 }
 
 // TLSMode represents the TLS certificate management mode.

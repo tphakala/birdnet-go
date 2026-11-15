@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "Myöntäjän URL:n tulee olla kelvollinen HTTP- tai HTTPS-URL",
           "scopesLabel": "Laajuudet",
           "scopesHelpText": "Pilkuilla eroteltu lista OIDC-laajuuksista (oletus: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Palaa BirdNET-Goon tunnistuspalvelun uloskirjautumisen jälkeen",
+          "postLogoutRedirectHelpText": "Uloskirjautumisen jälkeen selain ohjataan osoitteeseen {url}. Rekisteröi tämä osoite ensin tunnistuspalvelussasi uloskirjautumisen jälkeiseksi uudelleenohjaus-URI:ksi, muuten palvelu voi näyttää virheen.",
+          "postLogoutRedirectNoBaseUrl": "Aseta ensin perusosoite (Base URL) tai isäntä (Host). Paluuosoite muodostetaan niistä."
         }
       },
       "bypassAuthentication": {

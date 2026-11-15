@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
           "scopesLabel": "Scopes",
           "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Return to BirdNET-Go after sign-out at the identity provider",
+          "postLogoutRedirectHelpText": "After sign-out the browser is sent back to {url}. Register this URL as a post-logout redirect URI at your identity provider first, or the provider may show an error.",
+          "postLogoutRedirectNoBaseUrl": "Set the Base URL or Host first. The return URL is built from it."
         }
       },
       "bypassAuthentication": {

@@ -138,13 +138,17 @@ function createAuthStore() {
                 typeof (data as Record<string, unknown>).providerLogoutUrl === 'string'
               ) {
                 const candidate = (data as Record<string, unknown>).providerLogoutUrl as string;
-                // Validate URL is HTTPS before redirecting
+                // Only web URLs are followed. The server decides whether plain
+                // HTTP is acceptable (an HTTP issuer); this blocks other schemes.
                 try {
                   const parsed = new URL(candidate);
-                  if (parsed.protocol === 'https:' && parsed.host.length > 0) {
+                  if (
+                    (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+                    parsed.host.length > 0
+                  ) {
                     providerLogoutUrl = candidate;
                   } else {
-                    logger.warn('Ignoring provider logout URL: not HTTPS or has no host');
+                    logger.warn('Ignoring provider logout URL: not a web URL or has no host');
                   }
                 } catch {
                   // Invalid URL, fall through to default redirect
