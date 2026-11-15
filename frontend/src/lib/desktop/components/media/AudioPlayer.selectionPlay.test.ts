@@ -243,7 +243,83 @@ describe('AudioPlayer selection play', () => {
     start();
     await settle();
 
-    expect(ctl.paused).toBe(true);
+    expect(ctl.play).not.toHaveBeenCalled();
+  });
+
+  it('plays once, with the graph, from the selection start when pressed twice while the context starts', async () => {
+    const start = holdContextStart();
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await dragSelection(container);
+    await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+    await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+
+    start();
+    await settle();
+
+    expect(ctl.play).toHaveBeenCalledTimes(1);
+    expect(mockedAttach).toHaveBeenCalledTimes(1);
+    expect(ctl.element.currentTime).toBeCloseTo(
+      (SELECTION_START_PX / WIDE_CONTAINER_PX) * ctl.element.duration
+    );
+  });
+
+  it('does not play after the selection is stopped while the context starts', async () => {
+    const start = holdContextStart();
+    const { container } = mount();
+    ctl.completeLoad();
+    await settle();
+    await dragSelection(container);
+    await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+
+    // Skip to start stops the preview and keeps the selection.
+    await fireEvent.click(screen.getByLabelText(SKIP_TO_START_LABEL));
+    start();
+    await settle();
+
+    expect(ctl.play).not.toHaveBeenCalled();
+  });
+
+  describe('when audible bats swaps the source while the context starts', () => {
+    const BATS_TITLE = 'media.audio.audibleBats.title';
+    const BATS_ENABLE_TEXT = 'media.audio.audibleBats.enable';
+    const originalFetch = globalThis.fetch;
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:audible-bats-clip');
+      URL.revokeObjectURL = vi.fn();
+      globalThis.fetch = vi.fn().mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['bats']),
+        headers: new Headers(),
+      }));
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    });
+
+    it('does not play the replaced source', async () => {
+      const start = holdContextStart();
+      mount({ modelType: 'bat' });
+      ctl.completeLoad();
+      await settle();
+      await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+
+      await fireEvent.click(screen.getByLabelText(BATS_TITLE));
+      await fireEvent.click(screen.getByText(BATS_ENABLE_TEXT));
+      await settle();
+      start();
+      await settle();
+
+      expect(ctl.play).not.toHaveBeenCalled();
+    });
   });
 
   it('follows enableClipExtraction switched on after mount: drag selects, Escape clears', async () => {

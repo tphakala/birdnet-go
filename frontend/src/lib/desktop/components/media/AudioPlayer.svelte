@@ -271,7 +271,15 @@
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
-  let isInitializingContext = $state(false);
+  // The audio context start in flight, shared by every play press that arrives while
+  // it runs.
+  let contextStart: Promise<AudioContext | null> | undefined;
+  // Identifies the latest play request. A request that finds a newer id after its
+  // wait (another press, a stop, a source swap) must not play.
+  let playRequestId = 0;
+  const cancelPendingPlay = () => {
+    playRequestId++;
+  };
   let audioNodes: AudioNodeChain | null = null;
 
   // Cleanup tracking for memory leak prevention
@@ -793,10 +801,10 @@
 
   const playSelection = async () => {
     if (!audioElement || !hasActiveSelection()) return;
-    await prepareToPlay();
-    // The player may have unmounted, or the selection been cleared or moved, while
-    // the audio context started.
-    if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
+    const current = await prepareToPlay();
+    // The request may have been superseded, the player unmounted, or the selection
+    // cleared or moved, while the audio context started.
+    if (!current || !audioElement || selectionStartSec === null || selectionEndSec === null) return;
 
     const start = Math.min(selectionStartSec, selectionEndSec);
     const end = Math.max(selectionStartSec, selectionEndSec);
@@ -838,6 +846,7 @@
   };
 
   const stopSelection = () => {
+    cancelPendingPlay();
     if (!audioElement) return;
     if (selectionPlaybackTimeout) {
       clearTimeout(selectionPlaybackTimeout);
@@ -1361,6 +1370,7 @@
   // Point the element at a new source. The assignment pauses the element without
   // a 'pause' event, so the playing flag is cleared first.
   function replaceSource(url: string) {
+    cancelPendingPlay();
     if (!audioElement) return;
     markPlaybackStopped();
     audioElement.src = url;
@@ -1378,31 +1388,36 @@
   // Get the element ready for a play the user asked for: the playback source, a
   // reload when the element failed, and the Web Audio graph (gain, high-pass,
   // compressor). The play button and selection play both start here, so whichever
-  // comes first builds the graph. The component can unmount while this waits for
-  // the audio context, so callers check audioElement again before they play.
-  const prepareToPlay = async () => {
-    if (!audioElement) return;
+  // comes first builds the graph, and presses that arrive while the audio context
+  // starts wait for the same start. Resolves true only when this is still the latest
+  // play request and the component is mounted: a newer press, a stop or a source
+  // swap during the wait cancels it.
+  const prepareToPlay = async (): Promise<boolean> => {
+    if (!audioElement) return false;
     error = null;
     ensurePlaybackSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
     // reload it now instead of swallowing the click.
     if (audioElement.error) reloadAfterFailure();
+    // Taken after the source work above, which cancels older requests itself.
+    const requestId = ++playRequestId;
 
     // Initialize the audio context on first play, and re-enter whenever the
     // graph is not attached OR the context has fallen back to suspended
     // (e.g. tab backgrounding / audio-session interruption) so
     // getAudioContext() resumes it. Without the state re-check, an
     // already-attached graph on a re-suspended context plays silently.
-    // Guard against rapid clicks that could create multiple AudioContexts.
-    if ((!audioNodes || audioContext?.state !== 'running') && !isInitializingContext) {
-      isInitializingContext = true;
+    if (!audioNodes || audioContext?.state !== 'running') {
+      // Presses during the start share it, so it runs once.
+      contextStart ??= initializeAudioContext();
       try {
-        audioContext = await initializeAudioContext();
-        if (!audioElement) return;
+        audioContext = await contextStart;
+        if (!audioElement) return false;
         // Attach the Web Audio graph only when the context is running;
         // while suspended the element plays through native output and the
         // graph is deferred to a later play (see attachAudioGraphWhenRunning).
-        audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+        // The press that resumes first attaches it; later ones reuse it.
+        audioNodes ??= attachAudioGraphWhenRunning(audioContext, audioElement, null, {
           gainDb: gainValue,
           highPassFreq: filterFreq,
           includeCompressor: true,
@@ -1418,9 +1433,10 @@
         logger.warn('Audio graph setup failed, playing without processing', err);
         audioContextAvailable = false;
       } finally {
-        isInitializingContext = false;
+        contextStart = undefined;
       }
     }
+    return audioElement !== undefined && requestId === playRequestId;
   };
 
   // Audio event handlers
@@ -1432,8 +1448,8 @@
       return;
     }
 
-    await prepareToPlay();
-    if (!audioElement) return;
+    const current = await prepareToPlay();
+    if (!current || !audioElement) return;
     await audioElement.play().catch(handlePlayRejection);
   };
 
@@ -2210,6 +2226,7 @@
       const absoluteUrl = new URL(audioUrl, window.location.origin).href;
       if (audioElement.src !== absoluteUrl) {
         debugLog('audioUrl changed, updating src', { from: audioElement.src, to: audioUrl });
+        cancelPendingPlay();
         audioElement.src = audioUrl;
         // Cancel in-flight processing and clean up state from previous audio
         if (processDebounceTimer) {
