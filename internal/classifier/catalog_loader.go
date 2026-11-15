@@ -223,11 +223,11 @@ func catalogValidationError(format string, args ...any) error {
 		Build()
 }
 
-// validateCatalogDependencies checks DependsOn and Component across entries, using
+// validateCatalogDependencies checks SupersededBy, DependsOn and Component across entries, using
 // only the entries being validated (never the active catalog). Every dependency
 // ID must exist, differ from the entry and appear once; the target must be a flat,
-// shared-only entry that declares no dependencies of its own (depth one). A Component
-// must be Hidden, shared-only, have no registry id, no dependencies and no geomodel
+// shared-only entry that declares no dependencies of its own (depth one). A SupersededBy
+// must name another entry of the catalog. A Component must be Hidden, shared-only, have no registry id, no dependencies and no geomodel
 // file (its autoremove never touches range-filter config, so a geomodel file could be
 // deleted while the config still points at it). Finally, shared-role files must agree
 // across the whole catalog (validateSharedNamesAcrossCatalog), since they all land in
@@ -239,6 +239,9 @@ func validateCatalogDependencies(entries []CatalogEntry) error {
 	}
 	for i := range entries {
 		entry := &entries[i]
+		if err := validateEntrySupersededBy(entry, byID); err != nil {
+			return err
+		}
 		if err := validateEntryDependsOn(entry, byID); err != nil {
 			return err
 		}
@@ -287,6 +290,36 @@ func validateSharedNamesAcrossCatalog(entries []CatalogEntry) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// validateEntrySupersededBy rejects an entry whose SupersededBy names itself, an
+// id that is not in the catalog, or an entry that leads back to it. An entry
+// without the field is always valid.
+func validateEntrySupersededBy(entry *CatalogEntry, byID map[string]*CatalogEntry) error {
+	if entry.SupersededBy == "" {
+		return nil
+	}
+	if entry.SupersededBy == entry.ID {
+		return catalogValidationError("catalog entry %q is superseded by itself", entry.ID)
+	}
+	if _, ok := byID[entry.SupersededBy]; !ok {
+		return catalogValidationError("catalog entry %q is superseded by unknown entry %q", entry.ID, entry.SupersededBy)
+	}
+	// A chain (old, newer, newest) is fine; following it back to the entry is a cycle.
+	// The hop bound stops a chain that loops without returning to the entry, and an
+	// unknown id further along ends the walk (that entry is reported when validated).
+	id := entry.SupersededBy
+	for range len(byID) {
+		next, ok := byID[id]
+		if !ok || next.SupersededBy == "" {
+			break
+		}
+		if next.SupersededBy == entry.ID {
+			return catalogValidationError("catalog entry %q is part of a supersession cycle", entry.ID)
+		}
+		id = next.SupersededBy
 	}
 	return nil
 }

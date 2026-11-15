@@ -4413,6 +4413,8 @@ export type TranslationKey =
   | 'analysis.gallery.experimental.badge'
   | 'analysis.gallery.experimental.cardNotice'
   | 'analysis.gallery.experimental.dialogNotice'
+  | 'analysis.gallery.superseded.cardNotice' // params: name
+  | 'analysis.gallery.superseded.dialogNotice' // params: name
   | 'analysis.gallery.entryIncompatible'
   | 'analysis.gallery.regionGlobal'
   | 'analysis.gallery.hardwareLabel'
@@ -5206,6 +5208,8 @@ export type TranslationParams = {
   'analysis.gallery.errors.actionFailed': { name: string | number };
   'analysis.gallery.preview.buildLabel': { version: string | number; build: string | number };
   'analysis.gallery.preview.dialogNotice': { build: string | number };
+  'analysis.gallery.superseded.cardNotice': { name: string | number };
+  'analysis.gallery.superseded.dialogNotice': { name: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };

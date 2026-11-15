@@ -5996,6 +5996,10 @@
         "cardNotice": "V BirdNET-Go experimentální. Model je zveřejněn, ale jeho výkon v BirdNET-Go zatím není ověřen, takže výsledky mohou být méně spolehlivé.",
         "dialogNotice": "Instalujete model, který je v BirdNET-Go experimentální. Jeho výkon zatím není ověřen, proto jeho detekce zkontrolujte, než se na něj spolehnete."
       },
+      "superseded": {
+        "cardNotice": "Nahrazeno modelem {name}. Používejte místo něj novější model.",
+        "dialogNotice": "Tento model byl nahrazen modelem {name}. Zvažte instalaci modelu {name}."
+      },
       "entryIncompatible": "Tento model není v tomto systému k dispozici.",
       "regionGlobal": "Globální",
       "hardwareLabel": "Hardware",

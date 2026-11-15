@@ -284,6 +284,12 @@
         return null;
     }
   });
+  // The notice the license dialog shows for a model that a newer catalog entry replaces
+  const licenseSupersededNotice = $derived(
+    licenseModel?.supersededBy
+      ? t('analysis.gallery.superseded.dialogNotice', { name: licenseModel.supersededBy.name })
+      : null
+  );
   // Block install when the selected variant cannot run on this host (e.g. every
   // variant is incompatible, so the preselected one is blocked). The default
   // path preselects a compatible variant, so this only fires in the all-blocked case.
@@ -2806,6 +2812,16 @@
   <SettingsTabs tabs={pageTabs} bind:activeTab={pageTab} />
 </main>
 
+{#snippet licenseNote(text: string)}
+  <div
+    class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
+    role="note"
+  >
+    <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]" aria-hidden="true" />
+    <span class="text-[var(--color-base-content)]">{text}</span>
+  </div>
+{/snippet}
+
 <!-- License Acceptance Dialog -->
 <dialog
   bind:this={licenseDialogRef}
@@ -2818,16 +2834,10 @@
         {t('analysis.gallery.license.title')}
       </h3>
       {#if licenseChannelNotice}
-        <div
-          class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
-          role="note"
-        >
-          <TriangleAlert
-            class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
-            aria-hidden="true"
-          />
-          <span class="text-[var(--color-base-content)]">{licenseChannelNotice}</span>
-        </div>
+        {@render licenseNote(licenseChannelNotice)}
+      {/if}
+      {#if licenseSupersededNotice}
+        {@render licenseNote(licenseSupersededNotice)}
       {/if}
       <div class="mt-4 space-y-3">
         <table

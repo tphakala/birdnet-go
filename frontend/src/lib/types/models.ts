@@ -60,6 +60,8 @@ export interface CatalogEntry {
   channel: string;
   /** Human-facing build tag shown next to the version for a non-stable channel (e.g. 'preview3.1'); absent for stable releases. */
   buildLabel?: string;
+  /** The visible catalog entry that replaces this one; absent when nothing does or the successor is hidden. */
+  supersededBy?: { id: string; name: string };
   upstreamUrl?: string;
   installed: boolean;
   compatible: boolean;

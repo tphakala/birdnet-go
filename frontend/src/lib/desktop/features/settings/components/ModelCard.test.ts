@@ -353,6 +353,43 @@ describe('ModelCard', () => {
     });
   });
 
+  describe('superseded', () => {
+    it.each(['available', 'installed'] as const)('shows the note on a %s card', mode => {
+      renderCard({
+        entry: entry({ supersededBy: { id: 'newer', name: 'Newer Model' }, installed: true }),
+        mode,
+      });
+
+      expect(screen.getByRole('note')).toHaveTextContent('analysis.gallery.superseded.cardNotice');
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.superseded.cardNotice', {
+        name: 'Newer Model',
+      });
+    });
+
+    it('keeps the channel and incompatibility notices next to the superseded note', () => {
+      renderCard({
+        entry: entry({
+          supersededBy: { id: 'newer', name: 'Newer Model' },
+          channel: CHANNEL_EXPERIMENTAL,
+          compatible: false,
+          incompatibleReason: 'backend.onnx_unavailable',
+        }),
+        mode: 'available',
+      });
+
+      const notes = screen.getAllByRole('note');
+      expect(notes).toHaveLength(2);
+      expect(notes[0]).toHaveTextContent('analysis.gallery.experimental.cardNotice');
+      expect(notes[1]).toHaveTextContent('analysis.gallery.superseded.cardNotice');
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+
+    it('shows no note when nothing supersedes the entry', () => {
+      renderCard({ entry: entry({ installed: true }), mode: 'installed' });
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    });
+  });
+
   describe('experimental', () => {
     it.each(['available', 'installed'] as const)('shows the pill on a %s card', mode => {
       renderCard({ entry: entry({ channel: CHANNEL_EXPERIMENTAL, installed: true }), mode });

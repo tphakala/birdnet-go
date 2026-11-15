@@ -199,7 +199,18 @@
   // Available cards dim the logo of an entry this host cannot run; the text keeps full contrast
   const unavailable = $derived(mode === 'available' && !entry.compatible);
   const channelNoticeText = $derived(mode === 'available' ? (channelCopy?.notice ?? null) : null);
-  const hasNotices = $derived(channelNoticeText !== null || !entry.compatible || progress !== null);
+  // Unlike the channel notice, the successor note shows in both modes: an installed card is where the user acts on it
+  const supersededNoticeText = $derived(
+    entry.supersededBy
+      ? t('analysis.gallery.superseded.cardNotice', { name: entry.supersededBy.name })
+      : null
+  );
+  const hasNotices = $derived(
+    channelNoticeText !== null ||
+      supersededNoticeText !== null ||
+      !entry.compatible ||
+      progress !== null
+  );
   const showGeomodel = $derived(entry.hasGeomodel && entry.category !== 'geomodel');
   const showOptimize = $derived(mode === 'installed' && optimizeAvailable);
   // The completion line; empty while nothing has completed. The page announces it through its own live region
@@ -401,6 +412,9 @@
     <div class="model-card-notices">
       {#if channelNoticeText}
         {@render notice('warning', channelNoticeText, 'note', undefined)}
+      {/if}
+      {#if supersededNoticeText}
+        {@render notice('warning', supersededNoticeText, 'note', undefined)}
       {/if}
       {#if !entry.compatible}
         {@render notice(

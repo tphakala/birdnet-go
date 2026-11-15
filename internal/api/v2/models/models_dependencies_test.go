@@ -203,3 +203,28 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 	require.NotNil(t, n)
 	assert.False(t, n.HasGeomodel, "an entry with no geomodel file and no dependency has no geomodel")
 }
+
+func TestGetModelCatalog_SupersededBy(t *testing.T) {
+	catalog := apiDependencyCatalog()
+	// A is superseded by N (visible); N is superseded by T (a hidden component).
+	catalog[0].SupersededBy = apiDepN
+	catalog[4].SupersededBy = apiDepT
+	useCatalog(t, catalog)
+	h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+	listed := catalogRequest(t, h)
+
+	a := findEntry(listed, apiDepA)
+	require.NotNil(t, a)
+	require.NotNil(t, a.SupersededBy, "a visible successor is reported")
+	assert.Equal(t, apiDepN, a.SupersededBy.ID)
+	assert.Equal(t, "No geomodel", a.SupersededBy.Name)
+
+	n := findEntry(listed, apiDepN)
+	require.NotNil(t, n)
+	assert.Nil(t, n.SupersededBy, "a hidden successor is not reported, so the gallery never points at a model it does not show")
+
+	p := findEntry(listed, apiDepP)
+	require.NotNil(t, p)
+	assert.Nil(t, p.SupersededBy)
+}
