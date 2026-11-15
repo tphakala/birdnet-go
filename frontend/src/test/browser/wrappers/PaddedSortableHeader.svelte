@@ -7,9 +7,11 @@
 
   interface Props {
     onSort: (_field: string) => void;
+    /** Extra classes on the header cell, as a table passes through className. */
+    extraClass?: string;
   }
 
-  let { onSort }: Props = $props();
+  let { onSort, extraClass = '' }: Props = $props();
 </script>
 
 <table>
@@ -21,7 +23,7 @@
         activeField=""
         direction="asc"
         {onSort}
-        className="padded-header"
+        className="padded-header {extraClass}"
       />
     </tr>
   </thead>
@@ -30,5 +32,11 @@
 <style>
   :global(.padded-header) {
     padding: 16px 24px;
+  }
+
+  /* Stands in for the Tailwind sticky utility, which the browser harness does not load */
+  :global(.sticky) {
+    position: sticky;
+    top: 0;
   }
 </style>

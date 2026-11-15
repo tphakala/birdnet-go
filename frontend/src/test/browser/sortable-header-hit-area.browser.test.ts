@@ -43,6 +43,12 @@ describe('SortableHeader hit area in a real browser', () => {
     expect(onSort).toHaveBeenCalledWith('score');
   });
 
+  it('keeps a caller sticky position on the header cell', async () => {
+    await render(PaddedSortableHeader, { props: { onSort: vi.fn(), extraClass: 'sticky' } });
+
+    expect(getComputedStyle(headerCell()).position).toBe('sticky');
+  });
+
   it('draws the keyboard focus ring on a layer that spans the cell, not on the button', async () => {
     document.documentElement.style.setProperty('--color-primary', PRIMARY_COLOR);
     await render(PaddedSortableHeader, { props: { onSort: vi.fn() } });

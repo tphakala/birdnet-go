@@ -101,8 +101,9 @@
 <style>
   /* The button's hit area and focus ring cover the whole header cell, whatever padding the
      table gives the cell. The ring is inset: scroll containers and sticky headers clip
-     anything drawn outside the cell. */
-  th {
+     anything drawn outside the cell. A cell that a caller already positions (sticky,
+     absolute, fixed) is a containing block itself, so it keeps its own position. */
+  th:not(:global(.sticky, .absolute, .fixed)) {
     position: relative;
   }
 
