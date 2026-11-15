@@ -20,7 +20,8 @@ import type { ComponentProps } from 'svelte';
 
 import AudioToolbar from '$lib/desktop/components/media/AudioToolbar.svelte';
 import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
-import { AUDIO_TOOLBAR_GLOBAL_CSS, audioToolbarProps } from '../audioToolbarProps';
+import { audioToolbarProps } from '../audioToolbarProps';
+import { injectTestStyles } from './injectTestStyles';
 
 const PAGE_WIDTH_PX = 1400;
 const PAGE_HEIGHT_PX = 900;
@@ -54,11 +55,10 @@ function barContentRight(): number {
 }
 
 function hitAreas(): Record<string, Element> {
-  const buttons = Array.from(document.querySelectorAll('.audio-toolbar .toolbar-btn'));
   return {
     play: el('.play-btn'),
-    skip: buttons[1],
-    loop: buttons[2],
+    skip: el('[aria-label="components.audioPlayer.processing.skipToStart"]'),
+    loop: el('[aria-label="media.audio.loop"]'),
     clear: el('.selection-controls .toolbar-btn'),
     denoise: el('.denoise-dropdown > .toolbar-btn'),
     normalize: el('.processing-controls > .toolbar-btn'),
@@ -88,9 +88,7 @@ describe('AudioToolbar wrapping in a real browser', () => {
 
   beforeEach(async () => {
     await page.viewport(PAGE_WIDTH_PX, PAGE_HEIGHT_PX);
-    style = document.createElement('style');
-    style.textContent = `${AUDIO_TOOLBAR_GLOBAL_CSS} * { transition: none !important; }`;
-    document.head.appendChild(style);
+    style = injectTestStyles();
     host = document.createElement('div');
     host.style.width = `${HOST_WIDTH_PX}px`;
     document.body.appendChild(host);

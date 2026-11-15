@@ -11,6 +11,9 @@ import { SEEK_PAGE_STEP_SECONDS, SEEK_STEP_SECONDS } from '$lib/utils/seek';
 import { DENOISE_BUTTON_NAME } from '../../../../test/audioPlayerQueries';
 import { AUDIO_TOOLBAR_CLIP_SECONDS, audioToolbarProps } from '../../../../test/audioToolbarProps';
 
+// The component's source without comments, for the tests that pin a CSS declaration
+const toolbarCss = toolbarSource.replace(/\/\*[\s\S]*?\*\//g, '');
+
 describe('AudioToolbar export menu', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
 
@@ -335,9 +338,7 @@ describe('AudioToolbar Accessibility', () => {
   // audio-toolbar-active-hover.browser.test.ts, which CI does not run. This pins the active
   // hover rule that test relies on, so a revert cannot pass every automated check.
   it('gives active buttons their own hover background instead of the grey one', () => {
-    const css = toolbarSource.replace(/\/\*[\s\S]*?\*\//g, '');
-
-    expect(css).toMatch(
+    expect(toolbarCss).toMatch(
       /\.toolbar-btn\.active:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--color-primary-hover\)/
     );
   });
@@ -380,11 +381,11 @@ describe('AudioToolbar layout', () => {
   // audio-toolbar-wrap.browser.test.ts, which CI does not run. This pins the declaration
   // whose removal lets the controls run past a narrow bar again.
   it('lets the bar wrap instead of overflowing', () => {
-    const css = toolbarSource.replace(/\/\*[\s\S]*?\*\//g, '');
-
-    expect(css).toMatch(/\.audio-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(toolbarCss).toMatch(/\.audio-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
   });
 });
+
+type Menu = 'export' | 'denoise';
 
 describe('AudioToolbar menus', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
@@ -407,21 +408,19 @@ describe('AudioToolbar menus', () => {
     });
   }
 
-  function trigger(menu: 'export' | 'denoise'): HTMLElement {
-    const button =
-      menu === 'export'
-        ? screen.getByRole('button', { name: EXPORT_NAME })
-        : screen.getByRole('button', { name: DENOISE_BUTTON_NAME });
-    return button;
+  function trigger(menu: Menu): HTMLElement {
+    return screen.getByRole('button', {
+      name: menu === 'export' ? EXPORT_NAME : DENOISE_BUTTON_NAME,
+    });
   }
 
-  function wrapper(menu: 'export' | 'denoise'): HTMLElement {
+  function wrapper(menu: Menu): HTMLElement {
     const el = trigger(menu).closest<HTMLElement>(`.${menu}-dropdown`);
     if (!el) throw new Error(`${menu} dropdown wrapper not rendered`);
     return el;
   }
 
-  function openedMenu(menu: 'export' | 'denoise'): HTMLElement {
+  function openedMenu(menu: Menu): HTMLElement {
     const el = document.querySelector<HTMLElement>(`.${menu}-menu`);
     if (!el) throw new Error(`${menu} menu not rendered`);
     return el;
@@ -429,7 +428,7 @@ describe('AudioToolbar menus', () => {
 
   // Places the trigger and its wrapper at the given viewport box and gives every
   // element the measured menu size, since jsdom lays nothing out.
-  function placeTrigger(menu: 'export' | 'denoise', left: number, right: number, top: number) {
+  function placeTrigger(menu: Menu, left: number, right: number, top: number) {
     const rect = new DOMRect(left, top, right - left, TRIGGER_HEIGHT_PX);
     vi.spyOn(trigger(menu), 'getBoundingClientRect').mockReturnValue(rect);
     vi.spyOn(wrapper(menu), 'getBoundingClientRect').mockReturnValue(rect);
@@ -441,11 +440,11 @@ describe('AudioToolbar menus', () => {
   }
 
   /** Left edge of the open menu in viewport coordinates. */
-  function menuLeft(menu: 'export' | 'denoise'): number {
+  function menuLeft(menu: Menu): number {
     return wrapper(menu).getBoundingClientRect().left + parseFloat(openedMenu(menu).style.left);
   }
 
-  function menuSide(menu: 'export' | 'denoise'): 'above' | 'below' {
+  function menuSide(menu: Menu): 'above' | 'below' {
     const style = openedMenu(menu).style;
     if (style.bottom === '100%' && style.top === 'auto') return 'above';
     if (style.top === '100%' && style.bottom === 'auto') return 'below';
@@ -524,5 +523,20 @@ describe('AudioToolbar menus', () => {
     dispatch();
 
     expect(menuLeft('export')).toBe(550);
+  });
+
+  it('leaves an open menu in place while its own options scroll', async () => {
+    const user = userEvent.setup();
+    renderToolbar();
+    placeTrigger('export', 400, 500, 400);
+    stubMenuSize();
+    await user.click(trigger('export'));
+    const placed = openedMenu('export').style.left;
+
+    // A wider menu would be placed further left, if it were placed again
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(MENU_WIDTH_PX * 2);
+    openedMenu('export').dispatchEvent(new Event('scroll'));
+
+    expect(openedMenu('export').style.left).toBe(placed);
   });
 });

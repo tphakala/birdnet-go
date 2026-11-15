@@ -191,7 +191,7 @@
   // Unified playing state
   let isCurrentlyPlaying = $derived(isPlayingSelection || isPlaying);
 
-  // Gap between a menu and its dropdown wrapper
+  // Gap between a menu and its dropdown wrapper; the menus' margin-block in the CSS below
   const MENU_GAP_PX = 4;
   // Distance a menu keeps from the viewport edges
   const MENU_VIEWPORT_MARGIN_PX = 8;
@@ -205,12 +205,16 @@
    * position is recomputed when the window is resized or anything scrolls.
    */
   const anchorMenu: Action<HTMLElement, HorizontalAlign> = (menu, align = 'start') => {
-    function place(): void {
+    function place(event?: Event): void {
+      // Scrolling inside the menu does not move it
+      if (event?.target instanceof Node && menu.contains(event.target)) return;
       const wrapper = menu.parentElement;
       const trigger = wrapper?.querySelector(':scope > button');
       if (!wrapper || !(trigger instanceof HTMLElement)) return;
 
-      // Measure the natural height, not the one capped by the previous pass
+      // Measure the natural height, not the one capped by the previous pass; clearing
+      // the cap resets the menu's own scroll position, so keep it
+      const scrollTop = menu.scrollTop;
       menu.style.maxHeight = '';
       const height = menu.offsetHeight;
       const wrapperRect = wrapper.getBoundingClientRect();
@@ -224,14 +228,16 @@
       menu.style.left = `${left - wrapperRect.left}px`;
       menu.style.right = 'auto';
 
-      // Measured from the wrapper: the menu hangs off its edges, and an export
-      // error message can sit between the trigger and the bottom edge.
+      // Unlike computeAnchorPosition, which prefers below, the menu opens above as it
+      // always has. The room is measured from the wrapper: the menu hangs off its
+      // edges, and an export error message can sit between the trigger and the bottom.
       const roomAbove = wrapperRect.top - MENU_VIEWPORT_MARGIN_PX;
       const roomBelow = window.innerHeight - wrapperRect.bottom - MENU_VIEWPORT_MARGIN_PX;
       const below = roomAbove < height + MENU_GAP_PX && roomBelow > roomAbove;
       menu.style.top = below ? '100%' : 'auto';
       menu.style.bottom = below ? 'auto' : '100%';
       menu.style.maxHeight = `${Math.max(0, (below ? roomBelow : roomAbove) - MENU_GAP_PX)}px`;
+      menu.scrollTop = scrollTop;
     }
 
     place();
@@ -586,7 +592,6 @@
   /* Shrinkable, so the gain group still fits a very narrow bar */
   .gain-slider {
     flex: 1 1 5rem;
-    width: 5rem;
     min-width: 3rem;
     height: var(--audio-toolbar-target);
     margin: 0;
@@ -625,11 +630,10 @@
     content: attr(data-label);
   }
 
-  /* anchorMenu sets left, the side and max-height inline; these are the defaults */
+  /* anchorMenu places the menus inline: left, the side and max-height */
   .denoise-menu,
   .export-menu {
     position: absolute;
-    bottom: 100%;
     width: max-content;
     max-width: calc(100vw - 1rem);
     overflow-y: auto;
@@ -643,12 +647,10 @@
   }
 
   .denoise-menu {
-    left: 0;
     min-width: 80px;
   }
 
   .export-menu {
-    right: 0;
     min-width: 100px;
   }
 
@@ -703,7 +705,6 @@
     font-size: 0.75rem;
     color: var(--text-error);
     max-width: 12rem;
-    white-space: normal;
     overflow-wrap: anywhere;
   }
 </style>
