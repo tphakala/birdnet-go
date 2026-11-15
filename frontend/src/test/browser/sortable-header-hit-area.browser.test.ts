@@ -18,6 +18,8 @@ import PaddedSortableHeader from './wrappers/PaddedSortableHeader.svelte';
 // A click this far from the corner of the cell lands in its padding, outside the label
 const CORNER_OFFSET_PX = 3;
 const RING_WIDTH = '2px';
+// Negative: the ring is drawn inside the cell, where scroll wrappers cannot clip it
+const RING_OFFSET = '-2px';
 // The theme stylesheet is not loaded here; the ring paints in the primary token
 const PRIMARY_COLOR = 'rgb(10, 20, 30)';
 
@@ -63,6 +65,7 @@ describe('SortableHeader hit area in a real browser', () => {
     expect(ring.outlineStyle).toBe('solid');
     expect(ring.outlineWidth).toBe(RING_WIDTH);
     expect(ring.outlineColor).toBe(PRIMARY_COLOR);
+    expect(ring.outlineOffset).toBe(RING_OFFSET);
     const cell = headerCell().getBoundingClientRect();
     expect(Number.parseFloat(ring.width)).toBeCloseTo(cell.width, 0);
     expect(Number.parseFloat(ring.height)).toBeCloseTo(cell.height, 0);
