@@ -122,7 +122,7 @@ func (s *Security) GetBaseURL(port string) string {
 	}
 
 	// Priority 2: Construct from Host + port + TLSMode
-	host := strings.TrimSpace(s.Host)
+	host := s.trimmedHost()
 	if host == "" {
 		return ""
 	}

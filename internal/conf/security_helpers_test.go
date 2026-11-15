@@ -538,6 +538,7 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 		{name: "trailing slash and padding are trimmed", security: Security{BaseURL: " " + testURLTrailingSlash + "\t"}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort},
 		{name: "baseUrl wins over host", security: Security{BaseURL: testURLHTTPS, Host: testHostIgnored}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
 		{name: "scheme-less baseUrl is no origin and host does not rescue it", security: Security{BaseURL: testHostExample, Host: testHostIgnored}, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "host with a trailing slash is trimmed like the OAuth origin", security: Security{Host: testHostExample + "/", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
 		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
 		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},
 		{name: "nothing set", security: Security{}, wantBaseURL: "", wantProblem: "no redirect URL"},
