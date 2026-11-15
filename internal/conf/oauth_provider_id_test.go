@@ -3,6 +3,7 @@ package conf
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -162,6 +163,7 @@ func TestLoad_ReconcilesSameIDOAuthProviders(t *testing.T) {
 		{name: "two enabled oidc", entries: entry("oidc", "first", true, issuer) + entry("OIDC", "second", true, issuer), wantProvider: "oidc", wantClientID: "first", wantEnabled: true},
 		{name: "disabled first, enabled second", entries: entry("google", "leftover", false, "") + entry("google", "live", true, ""), wantProvider: "google", wantClientID: "live", wantEnabled: true},
 		{name: "enabled entry without credentials first", entries: unfinished + entry("Google", "working", true, ""), wantProvider: "google", wantClientID: "working", wantEnabled: true},
+		{name: "disabled complete entry first, enabled unfinished second", entries: entry("google", "complete", false, "") + strings.Replace(unfinished, "google", "Google", 1), wantProvider: "google", wantClientID: "complete", wantEnabled: false},
 		{name: "two disabled", entries: entry("github", "first", false, "") + entry("GitHub", "second", false, ""), wantProvider: "github", wantClientID: "first", wantEnabled: false},
 	}
 

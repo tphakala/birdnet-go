@@ -2211,9 +2211,10 @@ func (s *Settings) NormalizeOAuthProviderIDs() {
 
 // ReconcileOAuthProviderDuplicates collapses entries that share a canonical
 // provider ID into one: the first enabled entry that has credentials, else the
-// first enabled entry, else the first entry. The credential check keeps a working
-// entry from losing to an unfinished one that incomplete-feature normalisation
-// would disable afterwards. The others are dropped and one warning per dropped
+// first entry that has credentials, else the first enabled entry, else the first
+// entry. Preferring credentials keeps a working or disabled-but-complete entry from
+// losing to an unfinished one that incomplete-feature normalisation would disable
+// afterwards. The others are dropped and one warning per dropped
 // entry names its index, provider ID and enabled state (never a secret). It
 // expects IDs already canonical (see NormalizeOAuthProviderIDs), and runs on
 // config load so that a hand-edited file with duplicates still starts. The settings
@@ -2221,8 +2222,11 @@ func (s *Settings) NormalizeOAuthProviderIDs() {
 func (s *Settings) ReconcileOAuthProviderDuplicates() {
 	providers := s.Security.OAuthProviders
 	rank := func(p *OAuthProviderConfig) int {
+		complete := p.ClientID != "" && p.ClientSecret != ""
 		switch {
-		case p.Enabled && p.ClientID != "" && p.ClientSecret != "":
+		case p.Enabled && complete:
+			return 3
+		case complete:
 			return 2
 		case p.Enabled:
 			return 1
