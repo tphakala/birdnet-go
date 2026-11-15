@@ -4,10 +4,12 @@
  * jsdom lays nothing out, so only a real browser shows whether the bar wraps
  * instead of running past its host, whether every control keeps a 44 px hit
  * area, and whether the Export menu is clamped into the viewport. The host is
- * 660 px wide, the bar's width beside an open sidebar on a 1024 px tablet.
+ * 660 px wide, the bar's width beside an open sidebar on a 1024 px tablet; the
+ * 200 percent text case uses a wider host.
  *
  * Global CSS is not loaded here and t() returns the message key, so the labels
- * are long keys; nothing below depends on the label text.
+ * are long keys. No assertion reads label text, but the 200 percent host width
+ * is chosen so the doubled keys fit, so longer keys can make that case fail.
  *
  * Usage:
  *   npm run test:browser
