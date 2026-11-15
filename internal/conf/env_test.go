@@ -874,13 +874,15 @@ func TestValidateEnvBaseURL_Integration(t *testing.T) {
 			if binding.Validate == nil {
 				continue
 			}
-			viper.Reset()
-			t.Setenv(binding.EnvVar, "ftp://user:hunter2@birdnet.example.com")
+			t.Run(binding.EnvVar, func(t *testing.T) {
+				viper.Reset()
+				t.Setenv(binding.EnvVar, "ftp://user:hunter2@birdnet.example.com")
 
-			err := configureEnvironmentVariables()
-			if err != nil {
-				assert.NotContains(t, err.Error(), "hunter2", binding.EnvVar)
-			}
+				err := configureEnvironmentVariables()
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), binding.EnvVar)
+				assert.NotContains(t, err.Error(), "hunter2")
+			})
 		}
 	})
 
