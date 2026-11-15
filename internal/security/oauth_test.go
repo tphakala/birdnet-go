@@ -2420,7 +2420,9 @@ func TestReloadOAuthProviders_OIDCIssuerChange(t *testing.T) {
 	// The provider uses the shared bounded client for token exchange and userinfo.
 	registered, err := goth.GetProvider(ProviderOIDC)
 	require.NoError(t, err)
-	client := registered.(*pkceOIDCProvider).HTTPClient
+	pkce, ok := registered.(*pkceOIDCProvider)
+	require.True(t, ok, "the registered provider must be the PKCE wrapper")
+	client := pkce.HTTPClient
 	require.Same(t, oidcHTTPClient, client)
 	assert.Equal(t, OIDCHTTPTimeout, client.Timeout)
 

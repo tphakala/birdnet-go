@@ -582,8 +582,29 @@ func TestOIDCDiscovery_CancelStopsInFlightRequest(t *testing.T) {
 
 	// A pass that disables OIDC supersedes the generation.
 	registerProviders(t, &conf.Settings{})
-	testutil.WaitForChannel(t, done, 2*time.Second, "cancelling the generation did not stop the request in flight")
+	testutil.WaitForChannel(t, done, OIDCHTTPTimeout/2, "cancelling the generation did not stop the request in flight")
 
+	assert.NotContains(t, logs.main(), "OIDC discovery failed")
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a cancelled attempt must not record a failure")
+}
+
+// TestOIDCDiscovery_CancelledContextIsNotAFailure pins that cancelling the
+// context of a generation that is still current ends the request in flight
+// without recording or logging a failure. Only the context check after the
+// attempt separates this from a superseded generation, which the commit step
+// refuses anyway.
+func TestOIDCDiscovery_CancelledContextIsNotAFailure(t *testing.T) {
+	logs := useSplitLogFiles(t)
+	idp := newGatedIDP(t, false)
+
+	ctx, gen := beginDiscoveryForTest(t)
+	ctx, cancel := context.WithCancel(ctx)
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), testOIDCPolicy)
+	idp.waitEntered(t)
+	cancel()
+
+	testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout, "cancelling the context did not stop the request in flight")
 	assert.NotContains(t, logs.main(), "OIDC discovery failed")
 	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
 		"a cancelled attempt must not record a failure")
@@ -611,15 +632,14 @@ func TestOIDCDiscovery_WindowDeadlineStopsInFlightRequest(t *testing.T) {
 	t.Cleanup(func() { once.Do(func() { close(gate) }) })
 
 	ctx, gen := beginDiscoveryForTest(t)
-	start := time.Now()
 	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(idp.URL), oidcRetryPolicy{
 		initialBackoff: 5 * time.Millisecond,
 		maxBackoff:     10 * time.Millisecond,
-		maxDuration:    300 * time.Millisecond,
+		maxDuration:    time.Second,
 	})
 
-	testutil.WaitForChannel(t, done, 2*time.Second, "the retry window did not stop the request in flight")
-	assert.Less(t, time.Since(start), OIDCHTTPTimeout/2, "the window, not the client timeout, must end the attempt")
+	// The wait is below OIDCHTTPTimeout, so only the window can end the attempt.
+	testutil.WaitForChannel(t, done, OIDCHTTPTimeout/2, "the retry window did not stop the request in flight")
 	assert.Equal(t, 1, strings.Count(logs.main(), "OIDC discovery retries exhausted"))
 	err := ProviderRegistrationError(ProviderOIDC)
 	require.Error(t, err)
@@ -641,7 +661,7 @@ func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
 		maxDuration:    100 * time.Millisecond,
 	})
 
-	testutil.WaitForChannel(t, done, 2*time.Second, "the retry window did not stop the first attempt")
+	testutil.WaitForChannel(t, done, OIDCHTTPTimeout/2, "the retry window did not stop the first attempt")
 	assert.Contains(t, logs.main(), "OIDC discovery retries exhausted")
 	err := ProviderRegistrationError(ProviderOIDC)
 	require.Error(t, err)
@@ -687,7 +707,7 @@ func TestDiscoverOIDC_UsesBoundedClient(t *testing.T) {
 		defer close(finished)
 		_, discoverErr = discoverOIDC(t.Context(), testOIDCRegistration(idp.URL))
 	}()
-	testutil.WaitForChannel(t, finished, 2*time.Second, "discovery was not bounded by the client timeout")
+	testutil.WaitForChannel(t, finished, OIDCHTTPTimeout/2, "discovery was not bounded by the client timeout")
 	require.Error(t, discoverErr)
 }
 
