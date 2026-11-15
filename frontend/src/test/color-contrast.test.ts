@@ -1305,7 +1305,9 @@ describe('Primary and accent content in every color scheme', () => {
     function quotedAround(text: string, index: number): string {
       const start = Math.max(...QUOTES.map(quote => text.lastIndexOf(quote, index)));
       const ends = QUOTES.map(quote => text.indexOf(quote, index)).filter(end => end >= 0);
-      return text.slice(start + 1, Math.min(...ends));
+      // Without a closing quote the class list runs to the end of the text
+      const end = ends.length > 0 ? Math.min(...ends) : text.length;
+      return text.slice(start + 1, end);
     }
 
     it('primary buttons hover with the hover token, not a translucent fill', () => {
@@ -1376,18 +1378,34 @@ describe('Primary and accent content in every color scheme', () => {
       String.raw`(?:^|[\s"'\x60])${FOCUS_VARIANT}border-\[var\(--[\w-]+\)\](?![/\w])`
     );
 
+    /** Shipped component markup and style modules; test fixtures and specs are not part of the app. */
+    function isFocusScanned(file: string): boolean {
+      const isScannable = file.endsWith('.svelte') || file.endsWith('.ts');
+      const isFixture = /\.(?:test|spec)\.(?:svelte|ts)$/.test(file);
+      return isScannable && !isFixture;
+    }
+
+    /** The text without the comments that may quote a class list as an example. */
+    function withoutComments(text: string): string {
+      return text
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|\s)\/\/[^\n]*/g, '$1');
+    }
+
     /** Component markup, the style modules that hold class strings, and the app shell. */
     const focusScanSources = [
-      ...sources,
+      ...sources.filter(({ file }) => isFocusScanned(file)),
       ...readdirSync(libDir, { recursive: true, encoding: 'utf8' })
-        .filter(file => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+        .filter(file => isFocusScanned(file))
         // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the lib directory
         .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') })),
       { file: 'App.svelte', text: readFileSync(join(srcDir, 'App.svelte'), 'utf8') },
     ];
 
     /** The faded focus indicators in a source text that no full-strength focus border accompanies. */
-    function fadedFocusIndicators(text: string): string[] {
+    function fadedFocusIndicators(source: string): string[] {
+      const text = withoutComments(source);
       return [...text.matchAll(FADED_FOCUS_INDICATOR)]
         .filter(match => {
           const isFadedBorder = /(?:^|:)border-/.test(match[1]);
@@ -1402,6 +1420,22 @@ describe('Primary and accent content in every color scheme', () => {
         fadedFocusIndicators(text).map(indicator => `${file}: ${indicator}`)
       );
       expect(offenders).toEqual([]);
+    });
+
+    it('the faded focus scan skips comments and test fixtures', () => {
+      const faded = 'focus:ring-[var(--color-primary)]/20';
+      expect(fadedFocusIndicators(`// class="${faded}"\n<div></div>`)).toEqual([]);
+      expect(fadedFocusIndicators(`/* class="${faded}" */`)).toEqual([]);
+      expect(fadedFocusIndicators(`<!-- <input class="${faded}" /> -->`)).toEqual([]);
+      // A URL in a string is not a line comment
+      expect(fadedFocusIndicators(`const u = 'https://x.test'; const c = "${faded}";`)).toEqual([
+        faded,
+      ]);
+      expect(isFocusScanned('desktop/components/ui/Modal.toggle.test.svelte')).toBe(false);
+      expect(isFocusScanned('desktop/components/ui/Modal.test.ts')).toBe(false);
+      expect(isFocusScanned('tests/e2e/color-scheme.spec.ts')).toBe(false);
+      expect(isFocusScanned('desktop/components/forms/PlaceSearch.styles.ts')).toBe(true);
+      expect(isFocusScanned('desktop/components/ui/Modal.svelte')).toBe(true);
     });
 
     it('the alert rule editor draws no faded focus glow, with or without a focus border', () => {
