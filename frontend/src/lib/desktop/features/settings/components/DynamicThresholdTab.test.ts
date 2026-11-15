@@ -81,4 +81,20 @@ describe('DynamicThresholdTab sorting', () => {
       })
     ).toBeInTheDocument();
   });
+
+  it('drops the sort announcement while the list reloads', async () => {
+    mockApi();
+    renderTyped(DynamicThresholdTab, { props: {} });
+    const thresholdLabel = t('settings.species.dynamicThreshold.header.threshold');
+
+    await fireEvent.click(await screen.findByRole('button', { name: thresholdLabel }));
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: thresholdLabel })
+    );
+
+    await fireEvent.click(screen.getByRole('button', { name: t('common.refresh') }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+    await screen.findByRole('button', { name: thresholdLabel });
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
 });

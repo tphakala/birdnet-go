@@ -163,6 +163,8 @@
   async function loadData() {
     if (loading) return;
     loading = true;
+    // The table is replaced while loading; do not announce the old sort again afterwards
+    sortStatus = '';
     try {
       const [thresholdResponse, statsResponse] = await Promise.all([
         api.get<{ data: DynamicThreshold[]; total: number }>(
