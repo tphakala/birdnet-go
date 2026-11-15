@@ -114,7 +114,7 @@ func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) bool {
 func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
 	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
 	secLog.Info("Starting background OIDC discovery retry",
-		logger.String("issuer_url", providerConfig.IssuerURL),
+		logger.CredentialURL("issuer_url", providerConfig.IssuerURL),
 		logger.Duration("max_duration", OIDCRetryMaxDuration))
 
 	backoff := OIDCRetryInitialBackoff
@@ -152,7 +152,7 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 				}
 
 				secLog.Info("Retrying OIDC discovery",
-					logger.String("issuer_url", providerConfig.IssuerURL),
+					logger.CredentialURL("issuer_url", providerConfig.IssuerURL),
 					logger.Duration("backoff", backoff))
 
 				discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
@@ -164,11 +164,11 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 					scopes...,
 				)
 				if err != nil {
-					lastErr = err
+					lastErr = redactDiscoveryErr(err)
 					recordOIDCDiscoveryFailure(discoveryURL, err)
 					backoff = min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)
 					secLog.Warn("OIDC discovery retry failed",
-						logger.Error(err),
+						logger.Error(lastErr),
 						logger.Duration("next_backoff", backoff))
 					timer.Reset(backoff)
 					continue
@@ -752,7 +752,7 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 		logOIDCEvent(logger.LogLevelError, "OIDC discovery failed, OIDC login is unavailable until a retry succeeds",
 			logger.CredentialURL("issuer_url", providerConfig.IssuerURL),
 			logger.CredentialURL("discovery_url", discoveryURL),
-			logger.Error(err),
+			logger.Error(redactDiscoveryErr(err)),
 			logger.Duration("retry_for", OIDCRetryMaxDuration))
 		// Cancel any previous retry for this issuer and start a new one.
 		// Keying by issuer URL keeps multiple OIDC providers' retries independent;
