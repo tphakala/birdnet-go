@@ -1263,8 +1263,9 @@ func TestNormalizeIncompleteFeatures_ModelConsensusWired(t *testing.T) {
 
 // TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed pins that an entry
 // with a misspelled or blank provider ID is warned about and left exactly as it
-// is. With credentials it still counts as a configured sign-in method: dropping
-// it would turn authentication off on a server the operator meant to protect.
+// is, enabled or not. While enabled with credentials it still counts as a
+// configured sign-in method: dropping it would turn authentication off on a server
+// the operator meant to protect.
 func TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed(t *testing.T) {
 	t.Parallel()
 
