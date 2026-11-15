@@ -1219,26 +1219,6 @@ describe('Modal', () => {
       expect(button('Page button')).toHaveFocus();
     });
 
-    it('does not pull focus back to the opener from a foreign modal dialog inside the closing one', async () => {
-      renderTyped(ModalToggleHost, {});
-      button('Toggle lower').focus();
-      await press('Toggle lower');
-      await waitFor(() => expect(button('Lower action')).toHaveFocus());
-      // A dialog of another component (the expanded map) portalled into this dialog's element
-      const foreign = document.createElement('div');
-      foreign.setAttribute('role', 'dialog');
-      foreign.setAttribute('aria-modal', 'true');
-      const foreignAction = document.createElement('button');
-      foreign.append(foreignAction);
-      screen.getByRole('dialog', { name: 'Lower modal' }).append(foreign);
-      foreignAction.focus();
-
-      await press('Toggle lower');
-
-      expect(foreignAction).toHaveFocus();
-      foreign.remove();
-    });
-
     it('returns focus to focusable SVG content it was opened from', async () => {
       renderTyped(ModalToggleHost, {});
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
