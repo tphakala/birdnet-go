@@ -1,6 +1,7 @@
 import type { Action } from 'svelte/action';
 
 const RADIO_SELECTOR = '[role="radio"]';
+const GROUP_SELECTOR = '[role="radiogroup"]';
 const UNAVAILABLE_SELECTOR = '[aria-disabled="true"], :disabled';
 /** A radio that is, or sits inside, a hidden or inert element cannot take focus. */
 const UNFOCUSABLE_SELECTOR = '[hidden], [inert]';
@@ -17,7 +18,11 @@ const KEY_STEP: ReadonlyMap<string, number> = new Map([
  * Svelte action for a `role="radiogroup"` element whose `role="radio"` buttons
  * do not implement the keyboard pattern themselves.
  *
- * Arrow Right/Down and Left/Up select the next or previous radio (wrapping at
+ * The node must itself be the `role="radiogroup"` element. The action handles only
+ * the radios that group owns: radios of a nested `role="radiogroup"` are skipped,
+ * and a key pressed on one of them is left to that group.
+ *
+ * Arrow Right/Down and Left/Up select the next or previous radio, wrapping at
  * both ends. The action skips radios that are `aria-disabled="true"`, natively
  * `:disabled`, hidden or inert, and any radio that does not take focus. It calls
  * `focus()` on the candidate first and then `click()`, so focus moves before the
@@ -31,7 +36,9 @@ const KEY_STEP: ReadonlyMap<string, number> = new Map([
  * and the others `tabindex="-1"`, so the group is a single Tab stop.
  *
  * `RadioCardGroup` has its own implementation of this pattern; use this action
- * for groups of plain buttons.
+ * for groups of plain buttons. For a new group, prefer native radios unless the
+ * group must stay focusable while it is blocked: a native radio ignores
+ * `aria-disabled` for arrow keys.
  */
 export const radioGroupKeys: Action<HTMLElement> = node => {
   function onKeydown(event: KeyboardEvent): void {
@@ -39,9 +46,11 @@ export const radioGroupKeys: Action<HTMLElement> = node => {
     if (step === undefined || event.altKey || event.ctrlKey || event.metaKey) return;
 
     const current = event.target instanceof Element ? event.target.closest(RADIO_SELECTOR) : null;
-    if (!current || !node.contains(current)) return;
+    if (current?.closest(GROUP_SELECTOR) !== node) return;
 
-    const radios = Array.from(node.querySelectorAll<HTMLElement>(RADIO_SELECTOR));
+    const radios = Array.from(node.querySelectorAll<HTMLElement>(RADIO_SELECTOR)).filter(
+      radio => radio.closest(GROUP_SELECTOR) === node
+    );
     const start = radios.findIndex(radio => radio === current);
     if (start < 0) return;
 

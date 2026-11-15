@@ -189,4 +189,56 @@ describe('radioGroupKeys', () => {
     await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
     expect(checkedLabel(radios)).toBe('a');
   });
+
+  it('leaves an arrow key on a non-radio element inside the group alone', async () => {
+    const { group, radios } = setup(['a', 'b', 'c']);
+    const note = document.createElement('input');
+    group.appendChild(note);
+    note.focus();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      bubbles: true,
+      cancelable: true,
+    });
+    note.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(checkedLabel(radios)).toBe('a');
+    expect(document.activeElement).toBe(note);
+  });
+
+  it('does not step into or answer for a nested radio group', async () => {
+    const { group, radios } = setup(['a', 'b']);
+    const inner = document.createElement('div');
+    inner.setAttribute('role', 'radiogroup');
+    const innerRadios = ['x', 'y'].map(label => {
+      const radio = document.createElement('button');
+      radio.type = 'button';
+      radio.setAttribute('role', 'radio');
+      radio.setAttribute('aria-checked', 'false');
+      radio.textContent = label;
+      inner.appendChild(radio);
+      return radio;
+    });
+    // The nested group sits between the outer radios, so a flat query would step into it.
+    group.insertBefore(inner, radios[1]);
+
+    radios[0].focus();
+    await fireEvent.keyDown(radios[0], { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(radios[1]);
+    expect(checkedLabel(radios)).toBe('b');
+
+    // The outer action must not handle a key pressed on an inner radio.
+    innerRadios[0].focus();
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      bubbles: true,
+      cancelable: true,
+    });
+    innerRadios[0].dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(innerRadios[0]);
+    expect(checkedLabel(radios)).toBe('b');
+  });
 });

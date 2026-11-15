@@ -1154,6 +1154,18 @@ describe('Primary and accent content in every color scheme', () => {
     }
   });
 
+  describe('Accessibility: inset focus ring', () => {
+    it('inset focus ring is drawn inside the element', () => {
+      const bodies = ruleBodies(tailwindCss, '.focus-ring-inset:focus-visible');
+      expect(bodies.length, '.focus-ring-inset:focus-visible rule found').toBeGreaterThan(0);
+      const body = bodies.join('\n');
+      const width = /outline:\s*(\d+)px solid/.exec(body)?.[1];
+      expect(width, 'outline width').toBeDefined();
+      expect(body).toContain(`outline-offset: -${width}px`);
+      expect(body).toMatch(/box-shadow:\s*inset /);
+    });
+  });
+
   describe('Accessibility: sidebar active item text', () => {
     const SURFACES = ['--color-base-100', '--color-base-200', '--color-base-300'];
     const ACTIVE_RULES = ['.menu-item-active', '.menu-subitem-active'];
@@ -1349,15 +1361,21 @@ describe('Primary and accent content in every color scheme', () => {
       expect(offenders).toEqual([]);
     });
 
-    it('scheme picker swatches match each scheme light primary', () => {
+    it('scheme picker swatches match each scheme primary in the light and dark themes', () => {
       const picker = sources.find(({ file }) => file.endsWith('ColorSchemePicker.svelte'));
       expect(picker, 'ColorSchemePicker.svelte is among the sources').toBeDefined();
       for (const scheme of FIXED_SCHEMES) {
         // eslint-disable-next-line security/detect-non-literal-regexp -- scheme is one of the fixed scheme ids above
-        const swatch = new RegExp(`id: '${scheme}',[^}]*color: '(#[0-9a-fA-F]{6})'`).exec(
-          picker?.text ?? ''
-        )?.[1];
-        expect(swatch, `${scheme} swatch`).toBe(colorOf(scheme, 'light', '--color-primary'));
+        const option = new RegExp(
+          `id: '${scheme}',[^}]*color: '(#[0-9a-fA-F]{6})',[^}]*darkColor: '(#[0-9a-fA-F]{6})'`
+        ).exec(picker?.text ?? '');
+        expect(option, `${scheme} swatch fields`).not.toBeNull();
+        expect(option?.[1], `${scheme} light swatch`).toBe(
+          colorOf(scheme, 'light', '--color-primary')
+        );
+        expect(option?.[2], `${scheme} dark swatch`).toBe(
+          colorOf(scheme, 'dark', '--color-primary')
+        );
       }
     });
   });

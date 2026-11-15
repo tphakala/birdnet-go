@@ -63,6 +63,14 @@ describe('ViewToggle', () => {
     );
   });
 
+  it('draws the focus ring inside each view button so the clipped group cannot hide it', () => {
+    renderTyped(ViewToggle, { props: { view: 'table', onViewChange: vi.fn() } });
+
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).toHaveClass('focus-ring-inset');
+    }
+  });
+
   it('has no Accessibility violations', async () => {
     const { container } = renderTyped(ViewToggle, {
       props: { view: 'table', onViewChange: vi.fn() },

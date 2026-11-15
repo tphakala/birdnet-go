@@ -37,6 +37,10 @@
 
   const logger = loggers.ui;
 
+  /** Mode card look; the selected state follows the checked radio inside the label. */
+  const MODE_CARD_CLASS =
+    'flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] cursor-pointer transition-colors hover:border-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_4%,transparent)] has-[:checked]:border-[var(--color-primary)] has-[:checked]:bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)]';
+
   interface Props {
     onClose: () => void;
     /** Fires when the wizard starts a new import job (start or elevate). */
@@ -722,9 +726,7 @@
           </p>
 
           <!-- db-only option -->
-          <label
-            class="flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)]"
-          >
+          <label class={MODE_CARD_CLASS}>
             <input
               type="radio"
               name="import-mode"
@@ -744,9 +746,7 @@
           </label>
 
           <!-- db-audio option -->
-          <label
-            class="flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] cursor-pointer hover:border-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_4%,transparent)] transition-colors"
-          >
+          <label class={MODE_CARD_CLASS}>
             <input
               type="radio"
               name="import-mode"

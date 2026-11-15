@@ -328,6 +328,24 @@ describe('BirdNetPiImportWizard', () => {
     expect(dbAudioRadio).not.toBeDisabled();
   });
 
+  it('mode cards take their selected look from the checked radio', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await navigatePastSource();
+
+    const labelOf = (name: RegExp) => {
+      const card = screen.getByRole('radio', { name }).closest('label');
+      if (!card) throw new Error('mode radio is not inside a label');
+      return card;
+    };
+    const dbOnly = labelOf(/system.importExport.mode.dbOnly.label/);
+    const dbAudio = labelOf(/system.importExport.mode.dbAudio.label/);
+
+    // The selected look is not hard-coded on one card; both cards share the :checked rule.
+    expect(dbOnly.className).toBe(dbAudio.className);
+    expect(dbOnly).toHaveClass('has-[:checked]:border-[var(--color-primary)]');
+    expect(dbOnly).not.toHaveClass('border-[var(--color-primary)]');
+  });
+
   it('db-audio disabled reason is not shown', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
     await navigatePastSource();
