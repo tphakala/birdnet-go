@@ -393,6 +393,27 @@ func TestOIDCDiscoveryFailure_NilCause(t *testing.T) {
 	assert.Contains(t, logs.security(), errOIDCDiscoveryCauseUnknown.Error())
 }
 
+// TestOIDCRetryExhausted_RedactsUserinfoInTheCause pins that the exhaustion log
+// redacts a cause that still carries a username, as net/http leaves it in a
+// transport error, whatever the caller passed.
+func TestOIDCRetryExhausted_RedactsUserinfoInTheCause(t *testing.T) {
+	logs := useSplitLogFiles(t)
+
+	const username = "tokenuser-must-not-be-logged"
+	const issuer = "https://idp.example.com"
+	cause := &url.Error{
+		Op:  "Get",
+		URL: "https://" + username + ":***@idp.example.com/.well-known/openid-configuration",
+		Err: errors.NewStd("dial tcp: connection refused"),
+	}
+	logOIDCRetryExhausted(issuer, oidcDiscoveryURL(issuer), cause)
+
+	for name, content := range map[string]string{"main log": logs.main(), "security log": logs.security()} {
+		assert.Contains(t, content, "connection refused", name)
+		assert.NotContains(t, content, username, name)
+	}
+}
+
 // TestStartOIDCRetry_RedactsItsLogsAndReportsExhaustion runs the retry loop to
 // the end of its window under a fake clock. net/http keeps the username in the
 // text of a transport error, so a loop that stored or logged the raw error would
