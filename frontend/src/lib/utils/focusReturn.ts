@@ -50,14 +50,43 @@ export interface FocusReturn {
  * where it is.
  */
 export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
-  let root: HTMLElement | undefined;
+  // Each tracked element keeps its own state, so an outgoing element whose destroy runs after
+  // a newer one mounted (a branch with an exit transition) cannot clear or inherit the newer
+  // element's hold, return target or listeners. restore acts on the element mounted last.
+  let current: TrackedContainer | undefined;
+
+  const track: Action<HTMLElement> = node => {
+    const tracked = trackContainer(node, fallback);
+    current = tracked;
+    return {
+      destroy() {
+        tracked.destroy();
+        if (current === tracked) current = undefined;
+      },
+    };
+  };
+
+  function restore(event: MouseEvent) {
+    current?.restore(event);
+  }
+
+  return { track, restore };
+}
+
+interface TrackedContainer {
+  restore: (event: MouseEvent) => void;
+  destroy: () => void;
+}
+
+/** Listens on one container element; see createFocusReturn for what counts as holding focus. */
+function trackContainer(root: HTMLElement, fallback: FocusFallback | undefined): TrackedContainer {
   let returnFocusTo: FocusTarget | null = null;
   let holdsFocus = false;
 
   function handleHold(event: PointerEvent) {
     const control =
       event.target instanceof Element ? event.target.closest(PRESSABLE_SELECTOR) : null;
-    if (control && root?.contains(control)) holdsFocus = true;
+    if (control && root.contains(control)) holdsFocus = true;
   }
 
   function handleFocusIn(event: FocusEvent) {
@@ -70,12 +99,12 @@ export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
     // target in place after a later entry from the page body, which is harmless:
     // restore only uses it while it is still connected and outside the container.
     if (!(from instanceof HTMLElement || from instanceof SVGElement)) return;
-    if (root?.contains(from)) return;
+    if (root.contains(from)) return;
     returnFocusTo = from;
   }
 
   function handleFocusOut(event: FocusEvent) {
-    if (event.relatedTarget instanceof Node && !root?.contains(event.relatedTarget)) {
+    if (event.relatedTarget instanceof Node && !root.contains(event.relatedTarget)) {
       holdsFocus = false;
     }
     // Focus left for the page body (a click on non-focusable content): forget the
@@ -93,52 +122,44 @@ export function createFocusReturn(fallback?: FocusFallback): FocusReturn {
   // earlier that the browser did not focus (Safari) is no longer where the user is. Capture, so
   // a handler that stops propagation cannot hide the press.
   function handleOutsidePress(event: PointerEvent) {
-    if (!(event.target instanceof Node) || root?.contains(event.target)) return;
-    if (!root?.contains(document.activeElement)) holdsFocus = false;
+    if (!(event.target instanceof Node) || root.contains(event.target)) return;
+    if (!root.contains(document.activeElement)) holdsFocus = false;
   }
 
-  const track: Action<HTMLElement> = node => {
-    root = node;
-    document.addEventListener('pointerdown', handleOutsidePress, true);
-    node.addEventListener('focusin', handleFocusIn);
-    node.addEventListener('focusout', handleFocusOut);
-    node.addEventListener('pointerdown', handleHold);
-    return {
-      destroy() {
-        node.removeEventListener('focusin', handleFocusIn);
-        node.removeEventListener('focusout', handleFocusOut);
-        node.removeEventListener('pointerdown', handleHold);
-        // A newer element already took over this instance (an outgoing branch whose
-        // transition ends after the new one mounted): leave its state and listener alone.
-        if (root !== node) return;
-        document.removeEventListener('pointerdown', handleOutsidePress, true);
-        root = undefined;
-        returnFocusTo = null;
-        if (fallback && holdsFocus) {
-          holdsFocus = false;
-          // Svelte may run this before the node leaves the document
-          queueMicrotask(() => focusFallback(fallback));
-        }
-      },
-    };
+  document.addEventListener('pointerdown', handleOutsidePress, true);
+  root.addEventListener('focusin', handleFocusIn);
+  root.addEventListener('focusout', handleFocusOut);
+  root.addEventListener('pointerdown', handleHold);
+
+  return {
+    restore(event: MouseEvent) {
+      // Only for keyboard activation (Enter or Space on the button reports a click
+      // with no click count). A mouse click leaves focus alone, so it does not jump
+      // back to a far-away field and scroll the page. Also only when focus is
+      // inside the container; otherwise leave focus where it is.
+      if (
+        event.detail === KEYBOARD_CLICK_DETAIL &&
+        root.contains(document.activeElement) &&
+        returnFocusTo?.isConnected &&
+        !root.contains(returnFocusTo)
+      ) {
+        returnFocusTo.focus();
+      }
+    },
+    destroy() {
+      document.removeEventListener('pointerdown', handleOutsidePress, true);
+      root.removeEventListener('focusin', handleFocusIn);
+      root.removeEventListener('focusout', handleFocusOut);
+      root.removeEventListener('pointerdown', handleHold);
+      returnFocusTo = null;
+      if (fallback && holdsFocus) {
+        holdsFocus = false;
+        // Svelte may run this before the node leaves the document. The fallback leaves
+        // focus alone when it is already on an element (a newer container took it).
+        queueMicrotask(() => focusFallback(fallback));
+      }
+    },
   };
-
-  function restore(event: MouseEvent) {
-    // Only for keyboard activation (Enter or Space on the button reports a click
-    // with no click count). A mouse click leaves focus alone, so it does not jump
-    // back to a far-away field and scroll the page. Also only when focus is
-    // inside the container; otherwise leave focus where it is.
-    if (
-      event.detail === KEYBOARD_CLICK_DETAIL &&
-      root?.contains(document.activeElement) &&
-      returnFocusTo?.isConnected &&
-      !root.contains(returnFocusTo)
-    ) {
-      returnFocusTo.focus();
-    }
-  }
-
-  return { track, restore };
 }
 
 function focusFallback(fallback: FocusFallback): void {
