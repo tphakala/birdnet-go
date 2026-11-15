@@ -864,10 +864,12 @@ func ScrubCredentialURL(rawURL string) string {
 
 // RedactURLUserinfo returns raw with any userinfo replaced by RedactedMarker.
 // It is meant for a value that was supposed to be a URL and may not parse (a
-// rejected endpoint, a malformed issuer), so it does not rely on url.Parse or
-// on a "://" separator: an opaque URL ("https:user:pw@host"), a scheme-less
-// value ("user:pw@host") and a scheme-relative one ("//user:pw@host") are
-// handled too.
+// rejected endpoint, a malformed issuer), so it does not rely on url.Parse.
+//
+// The authority starts after a "://" that follows a scheme name, or after a
+// leading "//". Any other value, such as an opaque URL ("https:user:pw@host")
+// or a scheme-less one ("user:pw@host"), is treated as authority from its first
+// character, so its scheme-like prefix is replaced together with the userinfo.
 //
 // The userinfo runs from the start of the authority to the LAST "@" in the
 // value, so a password containing a raw "/", "?", "#" or "@" is still covered.
@@ -877,19 +879,11 @@ func ScrubCredentialURL(rawURL string) string {
 // unchanged, and the result of a previous call is returned unchanged.
 func RedactURLUserinfo(raw string) string {
 	authorityStart := 0
-	switch {
-	case strings.Contains(raw, "://"):
-		authorityStart = strings.Index(raw, "://") + len("://")
-	case strings.HasPrefix(raw, "//"):
+	if i := strings.Index(raw, "://"); i > 0 && isSchemeName(raw[:i]) {
+		authorityStart = i + len("://")
+	} else if strings.HasPrefix(raw, "//") {
 		// Scheme-relative.
 		authorityStart = len("//")
-	default:
-		// Opaque ("scheme:rest") or scheme-less. url.Parse treats a leading run
-		// of scheme characters followed by ":" as a scheme, so skip it when
-		// present; otherwise the whole string is treated as the authority.
-		if i := strings.Index(raw, ":"); i > 0 && isSchemeName(raw[:i]) {
-			authorityStart = i + 1
-		}
 	}
 
 	at := strings.LastIndex(raw[authorityStart:], "@")

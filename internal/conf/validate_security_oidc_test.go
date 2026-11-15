@@ -186,13 +186,12 @@ func TestValidateSecuritySettings_OIDCIssuerNeverEchoesCredentials(t *testing.T)
 	tests := []struct {
 		name   string
 		issuer string
-		// username is asserted absent too, except for a scheme-less value: its
-		// "user:" prefix is shaped like a scheme, so the redactor keeps it.
+		// username is asserted absent too.
 		username string
 	}{
 		{name: "unparseable with userinfo", issuer: "https://admin:" + password + "@idp.example.com:notaport", username: "admin"},
 		{name: "password with a slash", issuer: "https://admin:s3cr3t/pw@idp.example.com:notaport", username: "admin"},
-		{name: "scheme-less with userinfo", issuer: "admin:" + password + "@idp.example.com"},
+		{name: "scheme-less with userinfo", issuer: "admin:" + password + "@idp.example.com", username: "admin"},
 		{name: "unsupported scheme with userinfo", issuer: "ftp://admin:" + password + "@idp.example.com", username: "admin"},
 	}
 
