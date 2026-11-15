@@ -454,6 +454,8 @@
   // A trigger that was removed while the dialog was open (a delete flow) cannot take focus, and
   // focus the user moved to another control of the page stays there
   function restoreFocus(target: HTMLElement | SVGElement | null) {
+    // Focus inside another modal dialog (the expanded map portalled into this one) belongs to it
+    if (isInForeignModalDialog(document.activeElement)) return;
     if (!canReturnFocus(stackEntry.dialog)) return;
     if (target?.isConnected && 'focus' in target) target.focus();
   }
@@ -483,7 +485,8 @@
       const active = document.activeElement;
       if (
         (active instanceof HTMLElement || active instanceof SVGElement) &&
-        stackEntry.dialog?.contains(active)
+        stackEntry.dialog?.contains(active) &&
+        !isInForeignModalDialog(active)
       )
         active.blur();
       return;
