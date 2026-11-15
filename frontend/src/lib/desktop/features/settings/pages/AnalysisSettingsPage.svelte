@@ -27,8 +27,9 @@
   @component
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
+  import { pickOpener } from '$lib/utils/pressedElement';
   import type {
     CatalogEntry,
     DownloadProgress,
@@ -928,7 +929,7 @@
   });
 
   // Focus management for modal accessibility
-  let previouslyFocusedElement: HTMLElement | null = null;
+  let previouslyFocusedElement: HTMLElement | SVGElement | null = null;
 
   function getFocusableElements(container: HTMLElement): HTMLElement[] {
     const focusableSelectors = [
@@ -978,7 +979,9 @@
     let focusTimer: ReturnType<typeof setTimeout> | undefined;
 
     if (rangeFilterState.showModal) {
-      previouslyFocusedElement = document.activeElement as HTMLElement;
+      // untrack: the dialog element binds after this runs and must not re-run the effect and its cleanup
+      const opener = pickOpener(untrack(() => rangeDialogElement));
+      if (opener !== undefined) previouslyFocusedElement = opener;
 
       focusTimer = setTimeout(() => {
         const modal = rangeDialogElement;

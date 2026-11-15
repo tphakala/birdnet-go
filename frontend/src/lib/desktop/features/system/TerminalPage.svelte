@@ -14,6 +14,7 @@
 <script lang="ts">
   /* global WebSocket, ResizeObserver, Element */
   /* eslint-disable security/detect-object-injection -- theme lookups use controlled TerminalThemeId keys */
+  import { tick } from 'svelte';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { t } from '$lib/i18n';
@@ -111,6 +112,11 @@
   let isFullscreen = $state(false);
   let isExpanded = $state(false);
   let isDetached = $state(false);
+  // The detached notice, focused when the terminal moves to the popup
+  let detachedNotice = $state<HTMLDivElement | null>(null);
+  // Set when the popup closes, so the next connect() hands focus to the rebuilt terminal.
+  // Plain, not $state: it is only read inside connect() and must not retrigger the effect.
+  let focusOnReconnect = false;
   let showThemeMenu = $state(false);
   let activeThemeId = $state<TerminalThemeId>(loadThemeId());
 
@@ -243,6 +249,12 @@
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
     });
+
+    // The terminal comes back after the popup closed: put focus where toolbar actions leave it
+    if (focusOnReconnect) {
+      focusOnReconnect = false;
+      term.focus();
+    }
   }
 
   function cleanup() {
@@ -322,6 +334,8 @@
 
     popoutWindow = popup;
     isDetached = true;
+    // The focused Detach button is about to leave the page: keep focus on the notice that replaces it
+    void tick().then(() => detachedNotice?.focus());
 
     // Tear down the inline terminal (ws is already transferred above)
     resizeObserver?.disconnect();
@@ -465,6 +479,7 @@
       ws = detachedWs;
       popoutWindow = null;
       isDetached = false;
+      focusOnReconnect = true;
       connect();
       return;
     }
@@ -476,6 +491,7 @@
       detachedWs.close();
       popoutWindow = null;
       isDetached = false;
+      focusOnReconnect = true;
       setTimeout(() => {
         if (terminalContainer && isEnabled && !term) {
           connect();
@@ -680,6 +696,7 @@
         detachedWs.close();
         popoutWindow = null;
         isDetached = false;
+        focusOnReconnect = true;
 
         // Reconnect in the main window on next tick
         setTimeout(() => {
@@ -771,7 +788,11 @@
     </div>
   {:else if isDetached}
     <!-- Detached state - terminal is in a separate window -->
-    <div class="flex flex-col items-center justify-center h-full gap-4 text-muted">
+    <div
+      bind:this={detachedNotice}
+      tabindex="-1"
+      class="focus-ring flex flex-col items-center justify-center h-full gap-4 text-muted"
+    >
       <ExternalLink class="size-12" />
       <div class="text-center">
         <p class="text-lg font-medium">{t('terminal.detached')}</p>

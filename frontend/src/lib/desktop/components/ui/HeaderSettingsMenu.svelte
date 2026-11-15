@@ -36,6 +36,10 @@
 
   let { securityEnabled = false, accessAllowed = true, className = '' }: Props = $props();
 
+  // Items touch their neighbours and the panel pads them by 4 px, so the ring is drawn inside the item
+  const MENU_ITEM_CLASS =
+    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary)]';
+
   let isOpen = $state(false);
   let showResetConfirm = $state(false);
   let buttonRef = $state<HTMLButtonElement | null>(null);
@@ -59,6 +63,11 @@
   function toggleMenu() {
     isOpen = !isOpen;
   }
+
+  // The item names its action: "Switch to dark theme", not just "Theme"
+  let themeToggleLabel = $derived(
+    t($theme === 'dark' ? 'navigation.switchToLightTheme' : 'navigation.switchToDarkTheme')
+  );
 
   function handleThemeToggle() {
     theme.toggle();
@@ -172,7 +181,7 @@
   <button
     bind:this={buttonRef}
     onclick={toggleMenu}
-    class="inline-flex items-center justify-center rounded-lg p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+    class="focus-ring inline-flex items-center justify-center rounded-lg p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
     aria-label={t('navigation.settingsMenu')}
     aria-haspopup="true"
     aria-expanded={isOpen}
@@ -193,33 +202,24 @@
     >
       <div class="p-1">
         <!-- Theme toggle -->
-        <button
-          onclick={handleThemeToggle}
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-        >
+        <button onclick={handleThemeToggle} class={MENU_ITEM_CLASS}>
           {#if $theme === 'dark'}
             <Sun class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           {:else}
             <Moon class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           {/if}
-          <span>{t('navigation.theme')}</span>
+          <span>{themeToggleLabel}</span>
         </button>
 
         <!-- Edit Dashboard (authenticated users only; guests view read-only) -->
         {#if isAdmin}
-          <button
-            onclick={handleEditDashboard}
-            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-          >
+          <button onclick={handleEditDashboard} class={MENU_ITEM_CLASS}>
             <Pencil class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
             <span>{t('dashboard.editMode.editDashboard')}</span>
           </button>
 
           <!-- Reset Dashboard -->
-          <button
-            onclick={handleResetDashboard}
-            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-          >
+          <button onclick={handleResetDashboard} class={MENU_ITEM_CLASS}>
             <RotateCcw class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
             <span>{t('dashboard.editMode.resetDashboard')}</span>
           </button>
@@ -234,7 +234,7 @@
             isOpen = false;
             navigation.navigate('/ui/help/report-bug');
           }}
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          class={MENU_ITEM_CLASS}
         >
           <Bug class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           <span>{t('navigation.reportBug')}</span>
@@ -245,7 +245,7 @@
           href={appState.projectLinks.discussionsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          class={MENU_ITEM_CLASS}
           aria-label={t('navigation.askQuestionAriaLabel')}
         >
           <MessageCircleQuestion class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
@@ -258,7 +258,7 @@
           href={appState.projectLinks.repoUrl}
           target="_blank"
           rel="noopener noreferrer"
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          class={MENU_ITEM_CLASS}
         >
           <GithubIcon class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           <span>{t('navigation.github')}</span>

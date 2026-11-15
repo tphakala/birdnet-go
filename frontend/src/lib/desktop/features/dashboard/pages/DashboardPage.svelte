@@ -1396,7 +1396,7 @@ Performance Optimizations:
               value={bannerConfig.imagePath}
               placeholder={t('dashboard.banner.imageUrlPlaceholder')}
               aria-label={t('dashboard.banner.imageUrlPlaceholder')}
-              class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+              class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus-ring"
               oninput={e =>
                 onUpdate({
                   ...element,
@@ -1447,7 +1447,7 @@ Performance Optimizations:
                       });
                     }
                   }}
-                  class="ml-auto w-16 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                  class="ml-auto w-16 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus-ring"
                 />
               </div>
 

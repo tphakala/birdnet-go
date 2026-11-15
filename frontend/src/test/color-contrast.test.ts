@@ -1361,6 +1361,27 @@ describe('Primary and accent content in every color scheme', () => {
       expect(offenders).toEqual([]);
     });
 
+    it('no focus ring, outline or border is drawn at reduced opacity unless a full-strength focus border accompanies it', () => {
+      // A ring or border faded to a percentage of the primary, warning or error colour can fall
+      // below 3:1 against the page. Inputs may add a faint glow when the field also gets a
+      // full-strength focus border; everything else uses .focus-ring.
+      const FADED_FOCUS_INDICATOR =
+        /(?:^|\s)(?:focus|focus-visible):(?:ring|ring-\d+|outline|border)-\[var\(--[\w-]+\)\]\/\d+/g;
+      const FULL_STRENGTH_FOCUS_BORDER =
+        /(?:^|\s)(?:focus|focus-visible):border-\[var\(--[\w-]+\)\](?![/\w])/;
+      const offenders = sources.flatMap(({ file, text }) =>
+        [...text.matchAll(FADED_FOCUS_INDICATOR)]
+          .filter(match => {
+            const isFadedBorder = match[0].includes(':border-');
+            return (
+              isFadedBorder || !FULL_STRENGTH_FOCUS_BORDER.test(quotedAround(text, match.index))
+            );
+          })
+          .map(match => `${file}: ${match[0].trim()}`)
+      );
+      expect(offenders).toEqual([]);
+    });
+
     it('scheme picker swatches match each scheme primary in the light and dark themes', () => {
       const picker = sources.find(({ file }) => file.endsWith('ColorSchemePicker.svelte'));
       expect(picker, 'ColorSchemePicker.svelte is among the sources').toBeDefined();

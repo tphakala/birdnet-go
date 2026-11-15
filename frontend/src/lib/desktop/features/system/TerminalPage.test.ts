@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, fireEvent, waitFor, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { get } from 'svelte/store';
 
@@ -182,6 +182,8 @@ describe('TerminalPage toolbar', () => {
     const { getByRole } = render(TerminalPage);
     await tick();
     const [terminal] = created.terminals;
+    // The first connect on page load leaves focus where it is
+    expect(terminal.focusCount).toBe(0);
 
     await fireEvent.click(getByRole('button', { name: 'terminal.copySelection' }));
     expect(terminal.focusCount).toBe(1);
@@ -349,6 +351,26 @@ describe('TerminalPage detached window', () => {
     expect(focusRule?.cssText).toContain('opacity: 1');
     // A real outline, so forced colors still draws the ring
     expect(focusRule?.cssText).toContain('outline: 2px solid currentColor');
+  });
+
+  it('moves focus to the detached notice', async () => {
+    await detach();
+
+    const notice = screen.getByText('terminal.detached').closest<HTMLElement>('[tabindex="-1"]');
+    expect(notice).not.toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(notice));
+  });
+
+  it('hands focus back to the terminal after the popup closes', async () => {
+    const doc = await detach();
+    const [inlineTerminal] = created.terminals;
+    expect(inlineTerminal.focusCount).toBe(0);
+
+    doc.defaultView?.dispatchEvent(new Event('beforeunload'));
+
+    // The inline terminal is rebuilt in the main window once the popup has gone
+    await waitFor(() => expect(created.terminals.length).toBe(3));
+    await waitFor(() => expect(created.terminals[2].focusCount).toBe(1));
   });
 
   it('forgets an armed Escape when the detached terminal input loses focus', async () => {

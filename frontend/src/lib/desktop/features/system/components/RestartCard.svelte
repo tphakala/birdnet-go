@@ -39,7 +39,7 @@
              border border-[var(--color-warning)]/30
              hover:bg-[var(--color-warning)]/25 active:bg-[var(--color-warning)]/30
              disabled:opacity-50 disabled:cursor-not-allowed
-             focus-visible:ring-2 focus-visible:ring-[var(--color-warning)]/50
+             focus-ring
              transition-colors cursor-pointer"
       disabled={restartInProgress.value}
       onclick={() => (confirmType = 'binary')}
@@ -55,7 +55,7 @@
                border border-[var(--color-error)]/30
                hover:bg-[var(--color-error)]/25 active:bg-[var(--color-error)]/30
                disabled:opacity-50 disabled:cursor-not-allowed
-               focus-visible:ring-2 focus-visible:ring-[var(--color-error)]/50
+               focus-ring
                transition-colors cursor-pointer"
         disabled={restartInProgress.value}
         onclick={() => (confirmType = 'container')}

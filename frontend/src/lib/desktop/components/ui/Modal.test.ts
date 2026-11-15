@@ -1323,6 +1323,47 @@ describe('Modal', () => {
         expect(button('Page button')).toHaveFocus();
       });
 
+      it('returns focus to a custom button pressed through a tabindex=-1 child', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(screen.getByTestId('custom-button-icon'));
+        await press('Toggle lower');
+        await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+        await press('Toggle lower');
+
+        expect(screen.getByText('Custom button')).toHaveFocus();
+      });
+
+      it('does not take a role=button that is itself out of the tab order as the opener', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(screen.getByTestId('skipped-custom-button-icon'));
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
+      it('does not use a press once the user activation behind it has lapsed', async () => {
+        renderTyped(ModalToggleHost, {});
+        Object.defineProperty(navigator, 'userActivation', {
+          value: { isActive: false },
+          configurable: true,
+        });
+        try {
+          await fireEvent.pointerDown(button('Page button'));
+          await openAndCloseLower();
+          expect(document.body).toHaveFocus();
+        } finally {
+          Reflect.deleteProperty(navigator, 'userActivation');
+        }
+      });
+
+      it('forgets the press once a key is pressed', async () => {
+        renderTyped(ModalToggleHost, {});
+        await fireEvent.pointerDown(button('Page button'));
+        await fireEvent.keyDown(document.body, { key: 'Shift' });
+        await openAndCloseLower();
+        expect(document.body).toHaveFocus();
+      });
+
       it('does not take a focusable region around a tabindex=-1 wrapper as the opener', async () => {
         renderTyped(ModalToggleHost, {});
         await fireEvent.pointerDown(button('Toggle lower'));

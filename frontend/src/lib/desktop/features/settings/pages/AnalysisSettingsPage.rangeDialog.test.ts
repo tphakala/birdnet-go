@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, within, cleanup } from '@testing-library/svelte';
+import { render, screen, waitFor, within, cleanup, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 
 // Page-level coverage for the range filter species dialog: it must take focus
@@ -153,6 +153,23 @@ describe('AnalysisSettingsPage range filter dialog', () => {
   it('Escape closes the range filter dialog and returns focus to View Species', async () => {
     const user = userEvent.setup();
     const viewSpecies = await openDialog(user);
+    await screen.findByRole('heading', { name: DIALOG_TITLE });
+    await waitFor(() => expect(rangeDialog().contains(document.activeElement)).toBe(true));
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: DIALOG_TITLE })).toBeNull());
+    expect(viewSpecies).toHaveFocus();
+  });
+
+  it('returns focus to View Species when it was pressed without taking focus', async () => {
+    const user = userEvent.setup();
+    render(AnalysisSettingsPage);
+    const viewSpecies = await screen.findByRole('button', { name: VIEW_SPECIES });
+    await waitFor(() => expect(viewSpecies).toBeEnabled());
+    // Safari and iPadOS do not focus a clicked button
+    await fireEvent.pointerDown(viewSpecies);
+    await fireEvent.click(viewSpecies);
     await screen.findByRole('heading', { name: DIALOG_TITLE });
     await waitFor(() => expect(rangeDialog().contains(document.activeElement)).toBe(true));
 

@@ -671,7 +671,7 @@
               <select
                 bind:value={condition.property}
                 aria-label={t('settings.alerts.editor.property')}
-                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer focus-ring"
               >
                 {#each propertyOptions as prop (prop.value)}
                   <option value={prop.value}>{prop.label}</option>
@@ -681,7 +681,7 @@
               <select
                 bind:value={condition.operator}
                 aria-label={t('settings.alerts.editor.operator')}
-                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer focus-ring"
               >
                 {#each operatorsForProperty(condition.property ?? '') as op (op.value)}
                   <option value={op.value}>{op.label}</option>
@@ -693,7 +693,7 @@
                 bind:value={condition.value}
                 aria-label={t('settings.alerts.editor.value')}
                 placeholder={t('settings.alerts.editor.valuePlaceholder')}
-                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 tabular-nums placeholder:text-[var(--color-base-content)]/40"
+                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] focus-ring tabular-nums placeholder:text-[var(--color-base-content)]/40"
               />
               <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
@@ -706,7 +706,7 @@
                     min="0"
                     step="1"
                     aria-label={t('settings.alerts.editor.duration')}
-                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none tabular-nums focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] focus-ring tabular-nums"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
                       const v = Number(e.currentTarget.value);
