@@ -668,13 +668,17 @@ func TestOIDCDiscovery_WindowEndsDuringFirstAttempt(t *testing.T) {
 	require.NotErrorIs(t, err, errProviderNotRegistered, "the cut first attempt must leave a recorded cause")
 }
 
+// windowOverRounds is how often the window-over test repeats: a wrong pick of
+// the wait select is a coin flip, so 12 rounds miss a regression 1 time in 4096.
+const windowOverRounds = 12
+
 // TestOIDCDiscovery_WindowOverBeforeFirstAttempt pins that the first attempt
 // always runs: a retry window that is already over leaves a recorded cause
 // instead of an empty slot. The wait between attempts races the timer against
 // the window, so the round repeats to make a wrong pick near certain.
 func TestOIDCDiscovery_WindowOverBeforeFirstAttempt(t *testing.T) {
 	idp := newGatedIDP(t, false)
-	for i := range 12 {
+	for i := range windowOverRounds {
 		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
 			logs := useSplitLogFiles(t)
 			ctx, gen := beginDiscoveryForTest(t)
