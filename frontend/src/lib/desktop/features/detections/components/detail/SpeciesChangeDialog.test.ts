@@ -223,6 +223,56 @@ describe('SpeciesChangeDialog saving', () => {
     expect(vi.mocked(toastActions.error)).toHaveBeenCalledOnce();
   });
 
+  // Regression: a save from an earlier opening closed, or wrote its error into, the
+  // dialog opened again on the same detection.
+  describe('a save that answers after the dialog was opened again', () => {
+    async function reopenDuringSave() {
+      vi.mocked(toastActions.error).mockClear();
+      const onClose = vi.fn();
+      const props = {
+        isOpen: true,
+        detection,
+        speciesName: 'Blackbird',
+        alternates,
+        predictionModel: 'BirdNET 2.4',
+        blockedReason: '',
+        onClose,
+        onChanged: vi.fn(),
+      };
+      const { rerender } = render(SpeciesChangeDialog, { props });
+      await fireEvent.click(radio('Song Thrush'));
+      await fireEvent.click(
+        screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+      );
+      await waitFor(() => expect(puts).toHaveLength(1));
+      await rerender({ ...props, isOpen: false });
+      await rerender({ ...props, isOpen: true });
+      return { onClose };
+    }
+
+    it('leaves the new opening open when the save succeeds', async () => {
+      const { onClose } = await reopenDuringSave();
+      answerPut?.(json({}));
+
+      await waitFor(() => {
+        expect(vi.mocked(toastActions.success)).toHaveBeenCalled();
+      });
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('reports a failure as a toast, not in the new opening', async () => {
+      await reopenDuringSave();
+      answerPut?.(json({}, 500));
+
+      await waitFor(() => {
+        expect(vi.mocked(toastActions.error)).toHaveBeenCalledWith(
+          'detections.detail.species.changeFailed'
+        );
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
   it('reports a failed save as a toast when the dialog was closed while it saved', async () => {
     vi.mocked(toastActions.error).mockClear();
     const props = {

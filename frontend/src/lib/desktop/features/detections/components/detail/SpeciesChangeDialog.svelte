@@ -105,9 +105,14 @@
   let scope = $derived<CatalogScope>(allSpecies ? 'all' : 'range');
   let searching = $derived(query.trim().length >= MIN_QUERY_LENGTH);
 
+  // Counts the openings, so a save can tell whether the opening it was started in is the
+  // one on screen when it answers.
+  let opening = 0;
+
   // Each opening starts clean, on the range filter's list as the settings now define it.
   $effect.pre(() => {
     if (!isOpen) return;
+    opening += 1;
     forgetSpeciesCatalogs();
     query = '';
     selected = null;
@@ -225,6 +230,9 @@
     // What the save is made on, read once: the page may show another detection by the time it answers.
     const id = detection.id;
     const previousSpecies = detection.scientificName;
+    const startedIn = opening;
+    // The opening the save was started in is still the one on screen.
+    const stillShown = () => !destroyed && isOpen && opening === startedIn;
     saving = true;
     errorMessage = '';
     try {
@@ -234,9 +242,9 @@
     } catch (error) {
       logger.error('Failed to change species', error, { action: 'changeSpecies' });
       const message = failureMessage(error, chosen);
-      // A dialog already gone or closed has nowhere to show it.
-      if (destroyed || !isOpen) toastActions.error(message);
-      else errorMessage = message;
+      // A dialog gone, closed or opened again since has nowhere to show it.
+      if (stillShown()) errorMessage = message;
+      else toastActions.error(message);
       saving = false;
       return;
     }
@@ -249,7 +257,7 @@
       changedTo: chosen.scientificName,
       speciesStats: true,
     });
-    if (!destroyed) onClose();
+    if (stillShown()) onClose();
     // The dialog is closed by now, so a reload that fails is reported as a toast.
     try {
       if ((await reload) === false) toastActions.error(t('detections.detail.review.reloadFailed'));
