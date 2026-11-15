@@ -191,18 +191,23 @@
   // Unified playing state
   let isCurrentlyPlaying = $derived(isPlayingSelection || isPlaying);
 
-  // Gap between a menu and its dropdown wrapper; the menus' margin-block in the CSS below
+  // Gap between a menu and its dropdown wrapper; equal to the menus' margin-block below
   const MENU_GAP_PX = 4;
   // Distance a menu keeps from the viewport edges
   const MENU_VIEWPORT_MARGIN_PX = 8;
+  // Overflow values that make an element clip its content
+  const CLIPPING_OVERFLOW: ReadonlySet<string> = new Set(['hidden', 'clip', 'auto', 'scroll']);
 
   /**
-   * Keeps a menu inside the viewport. The menu stays absolutely positioned inside
-   * its `position: relative` dropdown wrapper, after its trigger, so Tab order and
-   * the outside click check are unchanged. Its left edge is aligned to the trigger
-   * and clamped into the viewport; it opens above the wrapper unless only the room
-   * below fits it, and its height is capped to the room on the chosen side. The
-   * position is recomputed when the window is resized or anything scrolls.
+   * Keeps a menu visible. The menu stays absolutely positioned inside its
+   * `position: relative` dropdown wrapper, after its trigger, so Tab order and the
+   * outside click check are unchanged. Horizontally it is aligned to the trigger's
+   * start or end edge and clamped into the viewport. It opens above the wrapper
+   * unless the room above is too short for it and the room below is larger; the room
+   * on each side is measured inside the viewport and every scroll box that clips the
+   * wrapper, and the menu's height is capped to the room on the chosen side. The
+   * position is recomputed when the window is resized or anything outside the menu
+   * scrolls.
    */
   const anchorMenu: Action<HTMLElement, HorizontalAlign> = (menu, align = 'start') => {
     function place(event?: Event): void {
@@ -228,11 +233,26 @@
       menu.style.left = `${left - wrapperRect.left}px`;
       menu.style.right = 'auto';
 
+      // The visible band: the viewport, cut by every ancestor that clips its overflow
+      // (on Search, the results table scrolls sideways and so clips vertically too).
+      // Overflow above a fixed ancestor does not clip it, so the walk stops there.
+      let clipTop = 0;
+      let clipBottom = window.innerHeight;
+      for (let el = wrapper.parentElement; el; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (CLIPPING_OVERFLOW.has(style.overflowX) || CLIPPING_OVERFLOW.has(style.overflowY)) {
+          const rect = el.getBoundingClientRect();
+          clipTop = Math.max(clipTop, rect.top);
+          clipBottom = Math.min(clipBottom, rect.bottom);
+        }
+        if (style.position === 'fixed') break;
+      }
+
       // Unlike computeAnchorPosition, which prefers below, the menu opens above as it
       // always has. The room is measured from the wrapper: the menu hangs off its
       // edges, and an export error message can sit between the trigger and the bottom.
-      const roomAbove = wrapperRect.top - MENU_VIEWPORT_MARGIN_PX;
-      const roomBelow = window.innerHeight - wrapperRect.bottom - MENU_VIEWPORT_MARGIN_PX;
+      const roomAbove = wrapperRect.top - clipTop - MENU_VIEWPORT_MARGIN_PX;
+      const roomBelow = clipBottom - wrapperRect.bottom - MENU_VIEWPORT_MARGIN_PX;
       const below = roomAbove < height + MENU_GAP_PX && roomBelow > roomAbove;
       menu.style.top = below ? '100%' : 'auto';
       menu.style.bottom = below ? 'auto' : '100%';
@@ -637,7 +657,7 @@
     width: max-content;
     max-width: calc(100vw - 1rem);
     overflow-y: auto;
-    margin-block: 0.25rem;
+    margin-block: 4px; /* px, not rem, so it always equals MENU_GAP_PX in the script */
     background: var(--color-base-100);
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-field);

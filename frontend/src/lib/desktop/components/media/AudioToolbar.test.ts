@@ -403,7 +403,7 @@ describe('AudioToolbar menus', () => {
   });
 
   function renderToolbar() {
-    toolbarTest.render({
+    return toolbarTest.render({
       props: audioToolbarProps({ selectionStart: 1, selectionEnd: 3, hasSelection: true }),
     });
   }
@@ -488,6 +488,35 @@ describe('AudioToolbar menus', () => {
 
       expect(menuLeft(menu)).toBe(expectedLeft);
       expect(menuSide(menu)).toBe(expectedSide);
+    }
+  );
+
+  it.each([
+    // The viewport alone has 92 px above and would open below; the box ends 56 px under the trigger
+    ['above', 100, { top: 0, bottom: 200 }, '88px'],
+    // The viewport alone has 392 px above and would open above; the box starts 100 px over the trigger
+    ['below', 400, { top: 300, bottom: 768 }, '312px'],
+  ] as const)(
+    'keeps the export menu inside a clipping scroll box (opens %s)',
+    async (expectedSide, triggerTop, box, expectedMaxHeight) => {
+      const user = userEvent.setup();
+      const { container } = renderToolbar();
+      // The Search results table scrolls sideways, which makes it clip vertically too.
+      // The test setup mocks getComputedStyle, so the container's overflow goes through it.
+      const computedStyle = window.getComputedStyle;
+      vi.stubGlobal('getComputedStyle', (el: Element) =>
+        Object.assign(computedStyle(el), el === container ? { overflowY: 'auto' } : {})
+      );
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, box.top, 1024, box.bottom - box.top)
+      );
+      placeTrigger('export', 400, 500, triggerTop);
+      stubMenuSize();
+
+      await user.click(trigger('export'));
+
+      expect(menuSide('export')).toBe(expectedSide);
+      expect(openedMenu('export').style.maxHeight).toBe(expectedMaxHeight);
     }
   );
 
