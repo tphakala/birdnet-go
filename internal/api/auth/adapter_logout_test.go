@@ -3,6 +3,8 @@ package auth
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,6 +29,10 @@ const (
 	logoutSkipMessage  = "OIDC sign-out at the identity provider skipped"
 	logoutOIDCModule   = "security.oidc"
 	logoutTestEndpoint = "idp.example.test/end-session"
+	logoutTestOrigin   = "https://birdnet.example.test"
+	// logoutReturnLogMessage starts the log line that explains why the
+	// post-logout return URL was not sent.
+	logoutReturnLogMessage = "post-logout return URL not sent"
 	// logoutTestEndpointSecret sits in the query of a malformed end-session
 	// endpoint and must never reach a log line.
 	logoutTestEndpointSecret = "endpoint-query-must-not-be-logged"
@@ -46,6 +52,16 @@ type logoutRow struct {
 	wantSkipLogs int
 	wantLevel    string
 	wantSkipHost string
+
+	issuerURL       string // IssuerURL of the OIDC entry; empty means the scheme rule allows https only
+	postLogout      bool   // PostLogoutRedirect of the OIDC entry
+	baseURL         string // Security.BaseURL
+	host            string // Security.Host
+	noIDToken       bool   // leave the ID token out of the session
+	wantReturn      string // expected post_logout_redirect_uri, empty for none
+	wantReturnLog   bool   // the log must explain why the return URL was not sent
+	flipPostLogout  bool   // publish settings with the toggle flipped and call again
+	wantReturnAfter string // expected post_logout_redirect_uri on the second call
 }
 
 // TestGetProviderLogoutURL_ReportsSkippedSignOut pins that every way the OIDC
@@ -59,6 +75,14 @@ func TestGetProviderLogoutURL_ReportsSkippedSignOut(t *testing.T) {
 		{name: "empty end-session endpoint", oidcEnabled: true, registerOIDC: true, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN"},
 		{name: "malformed endpoint is reported without its URL", oidcEnabled: true, registerOIDC: true, endSession: "https://idp.example.test/%zz?token=" + logoutTestEndpointSecret, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN"},
 		{name: "http endpoint rejected", oidcEnabled: true, registerOIDC: true, endSession: "http://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN", wantSkipHost: "idp.example.test"},
+		{name: "http endpoint with http issuer returns URL", oidcEnabled: true, registerOIDC: true, endSession: "http://" + logoutTestEndpoint, issuerURL: "http://idp.example.test", authProvider: security.ProviderOIDC, wantURL: true},
+		{name: "http endpoint with https issuer rejected", oidcEnabled: true, registerOIDC: true, endSession: "http://" + logoutTestEndpoint, issuerURL: "https://idp.example.test", authProvider: security.ProviderOIDC, wantSkipLogs: 1, wantLevel: "WARN", wantSkipHost: "idp.example.test"},
+		{name: "toggle on carries the return URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, postLogout: true, baseURL: logoutTestOrigin, wantReturn: logoutTestOrigin + "/ui/"},
+		{name: "toggle on uses the host when no base URL is set", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, postLogout: true, host: "birdnet.example.test", wantReturn: logoutTestOrigin + "/ui/"},
+		{name: "toggle on without ID token sends no return URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, postLogout: true, baseURL: logoutTestOrigin, noIDToken: true, wantReturnLog: true},
+		{name: "toggle on without base URL or host sends no return URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, postLogout: true, wantReturnLog: true},
+		{name: "toggle off sends no return URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, baseURL: logoutTestOrigin},
+		{name: "toggle is read on every call", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, baseURL: logoutTestOrigin, flipPostLogout: true, wantReturnAfter: logoutTestOrigin + "/ui/"},
 		{name: "no provider in session, OIDC enabled", oidcEnabled: true, wantSkipLogs: 1, wantLevel: "INFO"},
 		{name: "no provider in session, OIDC disabled"},
 		{name: "legacy session returns URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, legacyKey: true, wantURL: true},
@@ -79,8 +103,11 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	if row.oidcEnabled {
 		settings.Security.OAuthProviders = []conf.OAuthProviderConfig{{
 			Provider: security.ConfigOIDC, Enabled: true, ClientID: "client", ClientSecret: "secret",
+			IssuerURL: row.issuerURL, PostLogoutRedirect: row.postLogout,
 		}}
 	}
+	settings.Security.BaseURL = row.baseURL
+	settings.Security.Host = row.host
 	server := securitytest.NewOAuth2ServerForTesting(t, settings)
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
@@ -121,18 +148,32 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	case row.authProvider != "":
 		store(security.SessionKeyAuthProvider, row.authProvider)
 	}
-	store("id_token", logoutTestIDToken)
+	if !row.noIDToken {
+		store("id_token", logoutTestIDToken)
+	}
 	c := e.NewContext(req, httptest.NewRecorder())
 
 	buf := logtest.CaptureBuffer(t)
-	got := NewSecurityAdapter(server).GetProviderLogoutURL(c, "")
-	logs := buf.String()
+	adapter := NewSecurityAdapter(server)
+	got := adapter.GetProviderLogoutURL(c)
 
 	if row.wantURL {
-		assert.Contains(t, got, "id_token_hint="+logoutTestIDToken)
+		if !row.noIDToken {
+			assert.Contains(t, got, "id_token_hint="+logoutTestIDToken)
+		}
+		assert.Equal(t, row.wantReturn, returnURLOf(t, got))
 	} else {
 		assert.Empty(t, got)
 	}
+
+	if row.flipPostLogout {
+		flipped := *conf.GetSettings()
+		flipped.Security.OAuthProviders = slices.Clone(flipped.Security.OAuthProviders)
+		flipped.Security.OAuthProviders[0].PostLogoutRedirect = !flipped.Security.OAuthProviders[0].PostLogoutRedirect
+		conf.StoreSettings(&flipped)
+		assert.Equal(t, row.wantReturnAfter, returnURLOf(t, adapter.GetProviderLogoutURL(c)))
+	}
+	logs := buf.String()
 	assert.NotContains(t, logs, logoutTestIDToken)
 	assert.NotContains(t, logs, logoutTestQuery)
 	assert.NotContains(t, logs, logoutTestEndpointSecret)
@@ -148,6 +189,7 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 		}
 	}
 	require.Len(t, skipLines, row.wantSkipLogs, logs)
+	assert.Equal(t, row.wantReturnLog, strings.Contains(logs, logoutReturnLogMessage), logs)
 	if row.wantSkipLogs > 0 {
 		assert.Contains(t, skipLines[0], row.wantLevel)
 	}
@@ -162,4 +204,13 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	if !row.oidcEnabled {
 		assert.Zero(t, oidcLines, "no console line without an enabled OIDC provider")
 	}
+}
+
+// returnURLOf returns the post_logout_redirect_uri of an end-session URL, or an
+// empty string when the URL has none.
+func returnURLOf(t *testing.T, logoutURL string) string {
+	t.Helper()
+	parsed, err := url.Parse(logoutURL)
+	require.NoError(t, err)
+	return parsed.Query().Get(logoutTestQuery)
 }

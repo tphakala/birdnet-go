@@ -1575,6 +1575,10 @@
           },
           "type": "array",
           "description": "Custom OAuth scopes (OIDC default: openid, profile, email)"
+        },
+        "postLogoutRedirect": {
+          "type": "boolean",
+          "description": "PostLogoutRedirect sends the browser back to the instance after sign-out at\nthe identity provider. OIDC only. The return URL must be registered there."
         }
       },
       "additionalProperties": false,

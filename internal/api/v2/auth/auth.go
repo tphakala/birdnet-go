@@ -401,7 +401,7 @@ func (c *Handler) Logout(ctx echo.Context) error {
 
 	// IMPORTANT: Get provider logout URL BEFORE clearing the session.
 	// Logout() destroys the session data needed to build the end-session URL.
-	providerLogoutURL := authService.GetProviderLogoutURL(ctx, "")
+	providerLogoutURL := authService.GetProviderLogoutURL(ctx)
 
 	// Try to perform logout via auth service
 	if err := authService.Logout(ctx); err != nil {
