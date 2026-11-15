@@ -533,6 +533,33 @@ describe('AudioToolbar menus', () => {
     }
   );
 
+  it.each([
+    // End aligned, the menu would start at 250, left of the box at 300
+    ['export', { left: 310, right: 400 }, 308],
+    // Start aligned, the menu would end at 750, right of the box at 700
+    ['denoise', { left: 600, right: 690 }, 542],
+  ] as const)(
+    'keeps the %s menu inside a sideways scrolling box',
+    async (menu, box, expectedLeft) => {
+      const user = userEvent.setup();
+      const { container } = renderToolbar();
+      // The Search results table scrolls sideways and is narrower than the window
+      const computedStyle = window.getComputedStyle;
+      vi.stubGlobal('getComputedStyle', (el: Element) =>
+        Object.assign(computedStyle(el), el === container ? { overflowX: 'auto' } : {})
+      );
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, 0, 400, 768));
+      vi.spyOn(container, 'clientWidth', 'get').mockReturnValue(400);
+      vi.spyOn(container, 'clientHeight', 'get').mockReturnValue(768);
+      placeTrigger(menu, box.left, box.right, 400);
+      stubMenuSize();
+
+      await user.click(trigger(menu));
+
+      expect(menuLeft(menu)).toBe(expectedLeft);
+    }
+  );
+
   it('ignores clipping boxes outside a fixed ancestor', async () => {
     const user = userEvent.setup();
     const { container } = renderToolbar();

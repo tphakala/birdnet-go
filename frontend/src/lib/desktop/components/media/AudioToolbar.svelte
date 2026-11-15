@@ -202,7 +202,8 @@
    * Keeps a menu visible. The menu stays absolutely positioned inside its
    * `position: relative` dropdown wrapper, after its trigger, so Tab order and the
    * outside click check are unchanged. Horizontally it is aligned to the trigger's
-   * start or end edge and clamped into the viewport. It opens above the wrapper
+   * start or end edge and clamped into the viewport and every scroll box that clips
+   * the wrapper. It opens above the wrapper
    * unless the room above is too short for it and the room below is larger; the room
    * on each side is measured inside the viewport and every scroll box that clips the
    * wrapper, and the menu's height is capped to the room on the chosen side. The
@@ -222,17 +223,24 @@
       const scrollTop = menu.scrollTop;
       menu.style.maxHeight = '';
       const height = menu.offsetHeight;
-      // Clamps the menu into the viewport by its current width. Placed once before
-      // the room is measured, so a stale position cannot stick out of a scroll box
-      // and give it a scrollbar, and again after the cap below.
-      const placeHorizontally = () => {
-        const { left } = computeAnchorPosition({
+      // Clamps the menu by its current width into the viewport and, when given, the
+      // horizontal band left visible by clipping scroll boxes; where the band is
+      // narrower than the menu, its start edge stays visible. Placed once before the
+      // room is measured, so a stale position cannot stick out of a scroll box and
+      // give it a scrollbar, and again after the cap below.
+      const placeHorizontally = (band?: { left: number; right: number }) => {
+        const width = menu.offsetWidth;
+        let { left } = computeAnchorPosition({
           triggerRect: trigger.getBoundingClientRect(),
           floatingHeight: height,
-          floatingWidth: menu.offsetWidth,
+          floatingWidth: width,
           align,
           viewportMargin: MENU_VIEWPORT_MARGIN_PX,
         });
+        if (band) {
+          left = Math.min(left, band.right - MENU_VIEWPORT_MARGIN_PX - width);
+          left = Math.max(left, band.left + MENU_VIEWPORT_MARGIN_PX);
+        }
         menu.style.left = `${left - wrapper.getBoundingClientRect().left}px`;
       };
       placeHorizontally();
@@ -243,13 +251,22 @@
       // Overflow above a fixed ancestor does not clip it, so the walk stops there.
       let clipTop = 0;
       let clipBottom = window.innerHeight;
+      let clipLeft = 0;
+      let clipRight = window.innerWidth;
       for (let el = wrapper.parentElement; el; el = el.parentElement) {
         const style = getComputedStyle(el);
         if (CLIPPING_OVERFLOW.has(style.overflowX) || CLIPPING_OVERFLOW.has(style.overflowY)) {
           // Content is clipped at the scrollport: inside the borders and any scrollbar
-          const top = el.getBoundingClientRect().top + el.clientTop;
+          const rect = el.getBoundingClientRect();
+          const top = rect.top + el.clientTop;
+          const left = rect.left + el.clientLeft;
           clipTop = Math.max(clipTop, top);
           clipBottom = Math.min(clipBottom, top + el.clientHeight);
+          // A box with no width lays nothing out (display: contents), so it bounds nothing
+          if (el.clientWidth > 0) {
+            clipLeft = Math.max(clipLeft, left);
+            clipRight = Math.min(clipRight, left + el.clientWidth);
+          }
         }
         if (style.position === 'fixed') break;
       }
@@ -266,7 +283,7 @@
 
       // A capped menu gains a scrollbar on systems with classic scrollbars, which
       // widens a max-content menu, so clamp it again by its width now
-      placeHorizontally();
+      placeHorizontally({ left: clipLeft, right: clipRight });
       menu.scrollTop = scrollTop;
     }
 
