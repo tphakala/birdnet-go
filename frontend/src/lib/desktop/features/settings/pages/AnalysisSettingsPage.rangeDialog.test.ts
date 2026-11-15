@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, within, cleanup, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -111,6 +112,7 @@ import { api } from '$lib/utils/api';
 const DIALOG_TITLE = 'settings.main.sections.rangeFilter.modal.title';
 const REASON_LOADING_SPECIES = 'settings.main.sections.rangeFilter.modal.loadingSpecies';
 const REASON_COUNT_UNAVAILABLE = 'settings.main.errors.rangeFilterCountFailed';
+const REASON_COUNT_LOADING = 'settings.main.sections.rangeFilter.speciesCount.loading';
 const REASON_NO_SPECIES = 'settings.main.sections.rangeFilter.modal.noSpeciesFound';
 const REASON_SETTINGS_LOADING = 'settings.loading';
 const REASON_NO_LOCATION = 'settings.species.activeSpecies.locationNotConfigured.title';
@@ -313,6 +315,29 @@ describe('AnalysisSettingsPage range filter dialog', () => {
       await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
       expect(viewSpecies).toHaveAttribute('aria-disabled', 'true');
       expect(reasonOf(viewSpecies)).toBe(REASON_COUNT_UNAVAILABLE);
+    });
+
+    it('says the count is loading again once a new count starts after a failure', async () => {
+      vi.mocked(api.get).mockRejectedValueOnce(new Error('count failed'));
+      vi.mocked(api.post).mockRejectedValueOnce(new Error('test failed'));
+      render(AnalysisSettingsPage);
+      const viewSpecies = await screen.findByRole('button', { name: VIEW_SPECIES });
+      await fireEvent.click(
+        await screen.findByRole('button', { name: 'common.aria.dismissAlert' })
+      );
+      await waitFor(() => expect(reasonOf(viewSpecies)).toBe(REASON_COUNT_UNAVAILABLE));
+
+      // Moving the station starts a new range test that has not answered yet
+      vi.mocked(api.post).mockImplementationOnce(() => new Promise(() => {}));
+      try {
+        birdnetStore.set({ ...birdnetStore.initial, latitude: birdnetStore.initial.latitude + 1 });
+        await tick();
+
+        // Checked at once: the range test only shows its own loading state after its delays
+        expect(reasonOf(viewSpecies)).toBe(REASON_COUNT_LOADING);
+      } finally {
+        birdnetStore.set(birdnetStore.initial);
+      }
     });
 
     it('has no reason once the button works', async () => {

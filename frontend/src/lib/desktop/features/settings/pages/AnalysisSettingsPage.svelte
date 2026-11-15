@@ -1025,6 +1025,8 @@
   let rangeFilterAbortController: AbortController | null = null;
 
   function debouncedTestRangeFilter() {
+    // A new count is on its way: until it settles, a missing count reads as loading, not failed
+    rangeFilterState.countSettled = false;
     rangeFilterAbortController?.abort();
     rangeFilterAbortController = null;
     clearTimeout(debounceTimer);
@@ -1034,6 +1036,7 @@
   }
 
   async function loadRangeFilterCount() {
+    rangeFilterState.countSettled = false;
     try {
       interface CountResponse {
         count: number;
