@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // URL scheme constants for URL construction.
@@ -20,8 +22,8 @@ const (
 )
 
 // ValidateBaseURL checks a base URL as BIRDNET_URL and security.baseUrl accept it:
-// non-empty after trimming, an http or https scheme, and a hostname. Parse errors
-// repeat the value, so callers that may hold credentials must not echo the error.
+// non-empty after trimming, an http or https scheme, and a hostname. The error
+// never repeats the value, which may carry credentials.
 func ValidateBaseURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -30,6 +32,10 @@ func ValidateBaseURL(value string) error {
 
 	parsed, err := url.Parse(value)
 	if err != nil {
+		// url.Error repeats the whole value; keep only the reason.
+		if urlErr, ok := errors.AsType[*url.Error](err); ok {
+			err = urlErr.Err
+		}
 		return fmt.Errorf("invalid URL format: %w", err)
 	}
 
@@ -54,14 +60,16 @@ func (s *Security) trimmedBaseURL() string {
 	return strings.TrimSuffix(strings.TrimSpace(s.BaseURL), "/")
 }
 
-// validBaseURL returns trimmedBaseURL, or "" when BaseURL is unset or not a
-// usable URL. An unusable value is never repaired and never replaced by Host.
-func (s *Security) validBaseURL() string {
+// trimmedHost returns Host without surrounding whitespace or a trailing slash.
+func (s *Security) trimmedHost() string {
+	return strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
+}
+
+// hasUnusableBaseURL reports whether BaseURL is set but not a usable URL, the one
+// case where it is ignored without Host taking over.
+func (s *Security) hasUnusableBaseURL() bool {
 	baseURL := s.trimmedBaseURL()
-	if baseURL == "" || ValidateBaseURL(baseURL) != nil {
-		return ""
-	}
-	return baseURL
+	return baseURL != "" && ValidateBaseURL(baseURL) != nil
 }
 
 // oauthOriginCandidate returns the origin OAuth callbacks are built from, before
@@ -76,7 +84,7 @@ func (s *Security) oauthOriginCandidate() (field, origin string) {
 	if baseURL := s.trimmedBaseURL(); baseURL != "" {
 		return "security.baseUrl", baseURL
 	}
-	host := strings.TrimSuffix(strings.TrimSpace(s.Host), "/")
+	host := s.trimmedHost()
 	if host == "" {
 		return "", ""
 	}
@@ -106,8 +114,11 @@ func (s *Security) OAuthOrigin() string {
 // This method does NOT fall back to localhost - callers should handle empty returns.
 func (s *Security) GetBaseURL(port string) string {
 	// Priority 1: BaseURL, which wins even when unusable
-	if s.trimmedBaseURL() != "" {
-		return s.validBaseURL()
+	if baseURL := s.trimmedBaseURL(); baseURL != "" {
+		if s.hasUnusableBaseURL() {
+			return ""
+		}
+		return baseURL
 	}
 
 	// Priority 2: Construct from Host + port + TLSMode

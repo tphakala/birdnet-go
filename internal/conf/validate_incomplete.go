@@ -127,7 +127,7 @@ func normalizeIncompleteFeatures(s *Settings) {
 // one fatal case, a credentialed OAuth provider that depends on it, stays with
 // validateOAuthRedirects.
 func (s *Settings) normalizeBaseURL() {
-	if s.Security.trimmedBaseURL() == "" || s.Security.validBaseURL() != "" {
+	if !s.Security.hasUnusableBaseURL() {
 		return
 	}
 	s.recordValidationWarning(warnComponentSecurity,

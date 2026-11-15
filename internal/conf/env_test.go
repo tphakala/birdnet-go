@@ -752,7 +752,7 @@ const (
 	invalidURLEmpty     = ""
 )
 
-func TestValidateEnvBaseURL(t *testing.T) {
+func TestValidateBaseURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

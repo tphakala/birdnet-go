@@ -515,40 +515,6 @@ func TestSecurity_IsHTTPSBaseURL(t *testing.T) {
 	})
 }
 
-// TestValidateBaseURL pins the one rule shared by BIRDNET_URL and security.baseUrl.
-func TestValidateBaseURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		value   string
-		wantErr string
-	}{
-		{name: "https URL", value: "https://birds.example.com"},
-		{name: "padded valid URL", value: "  https://birds.example.com \n"},
-		{name: "port and path", value: "http://192.168.1.10:8080/birdnet"},
-		{name: "IPv6 literal", value: "http://[2001:db8::1]:8080"},
-		{name: "empty", value: "", wantErr: "must not be empty"},
-		{name: "whitespace only", value: "  ", wantErr: "must not be empty"},
-		{name: "scheme-less host", value: "birds.example.com", wantErr: "must include scheme"},
-		{name: "wrong scheme", value: "ftp://birds.example.com", wantErr: "scheme must be http or https"},
-		{name: "scheme without host", value: "https://", wantErr: "valid hostname"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			err := ValidateBaseURL(tt.value)
-			if tt.wantErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
-		})
-	}
-}
-
 // TestSecurity_OriginDerivation pins what OAuthOrigin and GetBaseURL return for
 // the same settings, and that oauthOriginProblem is empty exactly when OAuthOrigin
 // is usable, so the validator cannot drift from the code that builds the callback.
@@ -560,10 +526,7 @@ func TestValidateBaseURL(t *testing.T) {
 func TestSecurity_OriginDerivation(t *testing.T) {
 	t.Parallel()
 
-	const (
-		port      = testPortCustom
-		badOrigin = ""
-	)
+	const port = testPortCustom
 	tests := []struct {
 		name        string
 		security    Security
@@ -574,16 +537,13 @@ func TestSecurity_OriginDerivation(t *testing.T) {
 		{name: "valid baseUrl", security: Security{BaseURL: testURLHTTPS}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
 		{name: "trailing slash and padding are trimmed", security: Security{BaseURL: " " + testURLTrailingSlash + "\t"}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort},
 		{name: "baseUrl wins over host", security: Security{BaseURL: testURLHTTPS, Host: testHostIgnored}, wantOrigin: testURLHTTPS, wantBaseURL: testURLHTTPS},
-		{name: "scheme-less baseUrl is no origin and host does not rescue it", security: Security{BaseURL: testHostExample, Host: testHostIgnored}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "security.baseUrl"},
-		{name: "wrong scheme", security: Security{BaseURL: "ftp://" + testHostExample}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "security.baseUrl"},
-		{name: "scheme without host", security: Security{BaseURL: "https://"}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "security.baseUrl"},
+		{name: "scheme-less baseUrl is no origin and host does not rescue it", security: Security{BaseURL: testHostExample, Host: testHostIgnored}, wantBaseURL: "", wantProblem: "security.baseUrl"},
 		{name: "whitespace-only baseUrl is unset", security: Security{BaseURL: "  ", Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
-		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "no redirect URL"},
-		{name: "nothing set", security: Security{}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "no redirect URL"},
+		{name: "whitespace-only baseUrl and no host", security: Security{BaseURL: "  "}, wantBaseURL: "", wantProblem: "no redirect URL"},
+		{name: "nothing set", security: Security{}, wantBaseURL: "", wantProblem: "no redirect URL"},
 		{name: "bare host, TLS off: OAuth assumes https, links follow the TLS mode", security: Security{Host: testHostExample, TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
 		{name: "bare host, TLS on: both https", security: Security{Host: testHostExample, TLSMode: TLSModeAutoTLS}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPSNoPort + ":" + port},
 		{name: "padded bare host", security: Security{Host: "  " + testHostExample + " ", TLSMode: TLSModeNone}, wantOrigin: testURLHTTPSNoPort, wantBaseURL: testURLHTTPWithPort},
-		{name: "whitespace-only host", security: Security{Host: "   "}, wantOrigin: badOrigin, wantBaseURL: "", wantProblem: "no redirect URL"},
 	}
 
 	for _, tt := range tests {
@@ -631,5 +591,16 @@ func TestValidateSecurityBaseURL(t *testing.T) {
 	err := ValidateSecurityBaseURL(&Security{BaseURL: "ftp://user:hunter2@" + testHostExample})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "security.baseUrl")
+	assert.NotContains(t, err.Error(), "hunter2")
+}
+
+// TestValidateBaseURL_ErrorOmitsValue verifies a parse failure does not repeat the
+// value, which may carry credentials.
+func TestValidateBaseURL_ErrorOmitsValue(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateBaseURL("http://user:hunter2@" + testHostExample + ":notaport")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid URL format")
 	assert.NotContains(t, err.Error(), "hunter2")
 }

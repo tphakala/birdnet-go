@@ -152,14 +152,14 @@ func oauthRedirectProblem(p *OAuthProviderConfig, originProblem string) string {
 // actually depends on it. One that nothing consumes is warned about on load
 // (normalizeBaseURL) and rejected on save (ValidateSecurityBaseURL).
 func oauthOriginProblem(settings *Security) string {
-	if settings.OAuthOrigin() != "" {
-		return ""
-	}
 	field, origin := settings.oauthOriginCandidate()
 	if origin == "" {
 		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
 	}
-	return fmt.Sprintf("%s does not form an absolute http(s) URL (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, origin)
+	if settings.OAuthOrigin() != "" {
+		return ""
+	}
+	return fmt.Sprintf("%s does not form an absolute http(s) URL (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, privacy.RedactURLUserinfo(origin))
 }
 
 // ValidateSecurityBaseURL rejects a security.baseUrl that is set but is not an
@@ -169,7 +169,7 @@ func oauthOriginProblem(settings *Security) string {
 // warns instead). The error names the field and omits the value, which may carry
 // credentials.
 func ValidateSecurityBaseURL(sec *Security) error {
-	if sec.trimmedBaseURL() == "" || sec.validBaseURL() != "" {
+	if !sec.hasUnusableBaseURL() {
 		return nil
 	}
 	return errors.Newf("security.baseUrl must be an absolute http or https URL with a host, such as https://birds.example.com").
