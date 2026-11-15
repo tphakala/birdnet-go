@@ -64,6 +64,11 @@ func TestInitializeProviders_OIDCIssuerComparison(t *testing.T) {
 			documentIssuer:   func(u string) string { return u },
 			configuredIssuer: func(u string) string { return u + oidcDiscoveryPath },
 		},
+		{
+			name:             "pasted discovery URL with a query matches the base issuer",
+			documentIssuer:   func(u string) string { return u },
+			configuredIssuer: func(u string) string { return u + oidcDiscoveryPath + "/?appid=test-client" },
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
