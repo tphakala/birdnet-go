@@ -10,12 +10,12 @@ import _ "embed"
 //go:embed data/translations.csv.gz
 var translationsGz []byte
 
-//go:embed data/metadata.csv.gz
+//go:embed data/metadata.jsonl.gz
 var metadataGz []byte
 
 // aliasesJSON is the compiled OpenFauna taxonomic alias map (legacy scientific
-// name -> canonical scientific name). It is small, so it is embedded uncompressed
-// to keep the vendored diff reviewable. See CanonicalName for how it is applied.
+// or newer model label name -> canonical scientific name). It is small, so it is
+// embedded uncompressed to keep the vendored diff reviewable. See CanonicalName for how it is applied.
 //
 //go:embed data/aliases.json
 var aliasesJSON []byte

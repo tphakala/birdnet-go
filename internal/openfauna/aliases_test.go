@@ -37,6 +37,17 @@ func TestCanonicalName(t *testing.T) {
 			want: "Turdus merula",
 		},
 		{
+			// Renamed BirdNET+ labels resolve to the name the geomodel uses.
+			name: "renamed model label resolves to geomodel name",
+			in:   "Nannus troglodytes",
+			want: "Troglodytes troglodytes",
+		},
+		{
+			name: "renamed model genus resolves to geomodel name",
+			in:   "Schoeniclus schoeniclus",
+			want: "Emberiza schoeniclus",
+		},
+		{
 			name: "already canonical name unchanged",
 			in:   "Spilopelia senegalensis",
 			want: "Spilopelia senegalensis",
@@ -57,4 +68,17 @@ func TestCanonicalName(t *testing.T) {
 func TestAliasCountNonZero(t *testing.T) {
 	t.Parallel()
 	require.NotZero(t, AliasCount(), "embedded alias map should be populated")
+}
+
+// TestCanonicalName_EmbeddedMapIsSingleHop guards the single-lookup contract: no
+// alias target is itself an alias key, so CanonicalName is idempotent and canonical
+// keys do not depend on how many times a caller resolves a name.
+func TestCanonicalName_EmbeddedMapIsSingleHop(t *testing.T) {
+	t.Parallel()
+
+	aliasOnce.Do(loadAliases)
+	for from, to := range aliasMap {
+		_, chained := aliasMap[normalizeName(to)]
+		require.Falsef(t, chained, "alias %q -> %q chains into another alias", from, to)
+	}
 }

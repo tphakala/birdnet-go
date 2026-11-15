@@ -8,6 +8,7 @@ da
 de
 el
 en
+en_nz
 en_uk
 en_us
 es
@@ -30,6 +31,7 @@ ja
 ko
 lt
 lv_lv
+mi
 ml
 nl
 no
