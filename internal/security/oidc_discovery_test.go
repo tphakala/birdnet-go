@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -314,4 +315,57 @@ func TestOIDCDiscoveryURL(t *testing.T) {
 			assert.Equal(t, tt.want, oidcDiscoveryURL(tt.issuer))
 		})
 	}
+}
+
+func TestRedactDiscoveryErr(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{name: "masked password keeps the username", text: `Get "https://tok:***@idp.example/x": refused`, want: `Get "https://[REDACTED]@idp.example/x": refused`},
+		{name: "raw at sign inside the password", text: `parse "http://tok:pw@Zq7@idp.example:12x/x": invalid port`, want: `parse "http://[REDACTED]@idp.example:12x/x": invalid port`},
+		{name: "no userinfo passes through", text: "Non-success code for Discovery URL: 404", want: "Non-success code for Discovery URL: 404"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cause := errors.NewStd(tt.text)
+			got := redactDiscoveryErr(cause)
+			assert.Equal(t, tt.want, got.Error())
+			require.ErrorIs(t, got, cause)
+		})
+	}
+}
+
+// TestStartOIDCRetry_RecordsEachFailure pins that the retry loop records its own
+// failures, not only the startup attempt: the record is empty when the retry
+// starts, so only the loop can set it.
+func TestStartOIDCRetry_RecordsEachFailure(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	clearOIDCDiscoveryFailure()
+	t.Cleanup(clearOIDCDiscoveryFailure)
+
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(idp.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := startOIDCRetry(ctx, conf.OAuthProviderConfig{
+		Provider:     ConfigOIDC,
+		Enabled:      true,
+		ClientID:     "test-client",
+		ClientSecret: testOIDCClientSecret,
+		IssuerURL:    idp.URL,
+	}, testOIDCRedirectURI, []string{"openid"}, errors.NewStd("initial discovery failure"))
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	require.Eventually(t, func() bool {
+		err := ProviderRegistrationError(ProviderOIDC)
+		return err != nil && strings.Contains(err.Error(), idp.URL+"/.well-known/openid-configuration")
+	}, 25*time.Second, 250*time.Millisecond, "a failed retry attempt must record its cause")
 }
