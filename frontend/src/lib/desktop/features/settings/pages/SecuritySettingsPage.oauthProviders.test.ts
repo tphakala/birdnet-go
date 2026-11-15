@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { get } from 'svelte/store';
 import SecuritySettingsPage from './SecuritySettingsPage.svelte';
 import {
@@ -49,5 +50,64 @@ describe('SecuritySettingsPage OAuth provider list', () => {
       name: 'settings.security.oauth.providers.enableToggle',
     });
     expect(toggles.map(toggle => toggle.checked)).toEqual([false, true]);
+  });
+
+  describe('post-logout redirect toggle', () => {
+    const POST_LOGOUT_LABEL = 'settings.security.oauth.oidc.postLogoutRedirectLabel';
+    const BASE_URL = 'https://birdnet.example.test';
+
+    function seedProvider(provider: 'oidc' | 'google', extra: Record<string, unknown> = {}) {
+      seedSecurity({
+        baseUrl: BASE_URL,
+        oauthProviders: [
+          {
+            provider,
+            enabled: true,
+            clientId: 'client',
+            clientSecret: 'secret',
+            userId: 'someone',
+            ...(provider === 'oidc' && { issuerUrl: 'https://idp.example.test' }),
+            ...extra,
+          },
+        ],
+      });
+    }
+
+    async function openEditForm() {
+      render(SecuritySettingsPage);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'settings.security.oauth.providers.editButton' })
+      );
+    }
+
+    it('round-trips through edit and save for an OIDC provider', async () => {
+      seedProvider('oidc');
+      await openEditForm();
+
+      const toggle = screen.getByRole<HTMLInputElement>('checkbox', { name: POST_LOGOUT_LABEL });
+      expect(toggle.checked).toBe(false);
+      await userEvent.click(toggle);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'settings.security.oauth.form.saveButton' })
+      );
+
+      expect(get(settingsStore).formData.security?.oauthProviders?.[0]?.postLogoutRedirect).toBe(
+        true
+      );
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'settings.security.oauth.providers.editButton' })
+      );
+      expect(
+        screen.getByRole<HTMLInputElement>('checkbox', { name: POST_LOGOUT_LABEL }).checked
+      ).toBe(true);
+    });
+
+    it('is not offered for other providers', async () => {
+      seedProvider('google');
+      await openEditForm();
+
+      expect(screen.queryByRole('checkbox', { name: POST_LOGOUT_LABEL })).toBeNull();
+    });
   });
 });

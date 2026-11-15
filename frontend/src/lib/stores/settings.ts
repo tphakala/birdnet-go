@@ -524,6 +524,7 @@ export interface OAuthProviderConfig {
   userId?: string;
   issuerUrl?: string; // OIDC only: IdP discovery URL
   scopes?: string[]; // OIDC only: custom scopes (defaults: openid, profile, email)
+  postLogoutRedirect?: boolean; // OIDC only: return to the instance after provider sign-out
 }
 
 export interface SecuritySettings {

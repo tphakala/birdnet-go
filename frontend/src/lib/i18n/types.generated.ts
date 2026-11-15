@@ -3162,6 +3162,9 @@ export type TranslationKey =
   | 'settings.security.oauth.oidc.scopesLabel'
   | 'settings.security.oauth.oidc.scopesHelpText'
   | 'settings.security.oauth.oidc.scopesPlaceholder'
+  | 'settings.security.oauth.oidc.postLogoutRedirectLabel'
+  | 'settings.security.oauth.oidc.postLogoutRedirectHelpText' // params: url
+  | 'settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl'
   | 'settings.security.bypassAuthentication.title'
   | 'settings.security.bypassAuthentication.description'
   | 'settings.security.bypassAuthentication.disabled'
@@ -5053,6 +5056,7 @@ export type TranslationParams = {
   'settings.audio.models.defaultBadge': { models: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
+  'settings.security.oauth.oidc.postLogoutRedirectHelpText': { url: string | number };
   'settings.security.tls.autoTLSPrivateTLD': { tld: string | number };
   'settings.security.reverseProxy.check.trust': { peer: string | number };
   'settings.security.reverseProxy.check.trustWarning': { peer: string | number };

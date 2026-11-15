@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "Izdevēja URL jābūt derīgam HTTP vai HTTPS URL",
           "scopesLabel": "Tvērumi",
           "scopesHelpText": "Ar komatiem atdalīts OIDC tvērumu saraksts (noklusējums: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Pēc izrakstīšanās pie identitātes nodrošinātāja atgriezties BirdNET-Go",
+          "postLogoutRedirectHelpText": "Pēc izrakstīšanās pārlūkprogramma tiek novirzīta uz {url}. Vispirms reģistrējiet šo URL pie sava identitātes nodrošinātāja kā post-logout redirect URI, citādi nodrošinātājs var parādīt kļūdu.",
+          "postLogoutRedirectNoBaseUrl": "Vispirms iestatiet bāzes URL vai resursdatoru. Atgriešanās URL tiek veidots no tiem."
         }
       },
       "bypassAuthentication": {

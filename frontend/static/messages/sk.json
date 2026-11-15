@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "URL vydavateľa musí byť platná HTTP alebo HTTPS URL",
           "scopesLabel": "Rozsahy",
           "scopesHelpText": "Zoznam OIDC rozsahov oddelených čiarkou (predvolené: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Po odhlásení u poskytovateľa identity sa vrátiť do BirdNET-Go",
+          "postLogoutRedirectHelpText": "Po odhlásení sa prehliadač vráti na {url}. Najprv túto adresu zaregistrujte u svojho poskytovateľa identity ako post-logout redirect URI, inak môže poskytovateľ zobraziť chybu.",
+          "postLogoutRedirectNoBaseUrl": "Najprv nastavte Base URL alebo Host. Návratová adresa sa z nich zostavuje."
         }
       },
       "bypassAuthentication": {

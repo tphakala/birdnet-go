@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "Aussteller-URL muss eine gültige HTTP- oder HTTPS-URL sein",
           "scopesLabel": "Scopes",
           "scopesHelpText": "Kommagetrennte Liste von OIDC-Scopes (Standard: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Nach der Abmeldung beim Identitätsanbieter zu BirdNET-Go zurückkehren",
+          "postLogoutRedirectHelpText": "Nach der Abmeldung wird der Browser zu {url} zurückgeleitet. Registrieren Sie diese URL zuerst als Post-Logout-Redirect-URI bei Ihrem Identitätsanbieter, sonst zeigt der Anbieter möglicherweise einen Fehler an.",
+          "postLogoutRedirectNoBaseUrl": "Legen Sie zuerst die Basis-URL oder den Host fest. Die Rücksprung-URL wird daraus gebildet."
         }
       },
       "bypassAuthentication": {

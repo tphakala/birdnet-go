@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "O URL do emissor deve ser um URL HTTP ou HTTPS válido",
           "scopesLabel": "Scopes",
           "scopesHelpText": "Lista de scopes OIDC separados por vírgula (padrão: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Voltar ao BirdNET-Go após terminar a sessão no fornecedor de identidade",
+          "postLogoutRedirectHelpText": "Após terminar a sessão, o navegador regressa a {url}. Registe primeiro este URL como URI de redirecionamento pós-logout no seu fornecedor de identidade, caso contrário o fornecedor pode mostrar um erro.",
+          "postLogoutRedirectNoBaseUrl": "Defina primeiro o URL base ou o anfitrião. O URL de retorno é construído a partir deles."
         }
       },
       "bypassAuthentication": {

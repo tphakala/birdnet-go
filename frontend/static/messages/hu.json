@@ -4258,7 +4258,10 @@
           "issuerUrlInvalid": "Az Issuer URL-nek érvényes HTTP vagy HTTPS URL-nek kell lennie",
           "scopesLabel": "Scopok",
           "scopesHelpText": "Vesszővel elválasztott OIDC scope lista (alapértelmezett: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Visszatérés a BirdNET-Gohoz az identitásszolgáltatónál történt kijelentkezés után",
+          "postLogoutRedirectHelpText": "A kijelentkezés után a böngésző a következő címre kerül vissza: {url}. Először regisztrálja ezt az URL-t kijelentkezés utáni átirányítási URI-ként az identitásszolgáltatójánál, különben a szolgáltató hibát jeleníthet meg.",
+          "postLogoutRedirectNoBaseUrl": "Először állítsa be az alap URL-t vagy a gazdagépet. A visszatérési URL ezekből készül."
         }
       },
       "bypassAuthentication": {
