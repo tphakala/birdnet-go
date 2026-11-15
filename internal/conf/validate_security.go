@@ -163,7 +163,7 @@ func oauthOriginProblem(settings *Security) string {
 }
 
 // ValidateSecurityBaseURL rejects a security.baseUrl that is set but is not an
-// absolute http(s) URL with a host. Only the PUT and PATCH settings handlers run
+// absolute http(s) URL with a host and no credentials. Only the PUT and PATCH settings handlers run
 // it, so a save cannot introduce or keep such a value; it is not part of
 // ValidateSettings because config load must keep booting with one (normalizeBaseURL
 // warns instead). The error names the field and omits the value, which may carry

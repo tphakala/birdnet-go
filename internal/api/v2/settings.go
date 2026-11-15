@@ -206,7 +206,7 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 //
 // The save is rejected with 400 while any security.oauthProviders entry has a
 // blank or unknown provider ID, or while security.baseUrl is set but not an
-// absolute http(s) URL, including a value that was already stored.
+// absolute http(s) URL with a host and no credentials, including a value that was already stored.
 //
 // A request that sends If-Match is applied only if it matches the current
 // settings ETag (settingsETag); otherwise it answers 412 with the current ETag
@@ -430,7 +430,7 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 //
 // Like UpdateSettings, it rejects the save with 400 while the merged settings
 // hold a security.oauthProviders entry with a blank or unknown provider ID, or a
-// security.baseUrl that is set but not an absolute http(s) URL, whichever section
+// security.baseUrl that is set but not an absolute http(s) URL with a host and no credentials, whichever section
 // was patched.
 //
 // If-Match and the ETag response header work as on UpdateSettings: the ETag is
