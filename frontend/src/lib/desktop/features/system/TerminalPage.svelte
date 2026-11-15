@@ -793,7 +793,7 @@
     <div
       bind:this={detachedNotice}
       tabindex="-1"
-      class="focus-ring flex flex-col items-center justify-center h-full gap-4 text-muted"
+      class="focus-ring-inset flex flex-col items-center justify-center h-full gap-4 text-muted"
     >
       <ExternalLink class="size-12" />
       <div class="text-center">

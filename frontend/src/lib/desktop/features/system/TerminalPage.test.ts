@@ -433,6 +433,14 @@ describe('TerminalPage detached window', () => {
     expect(rebuiltInlineFocusCount()).toBe(0);
   });
 
+  it('draws the detached notice focus ring inside the notice, which fills a clipping wrapper', async () => {
+    await detach();
+
+    const notice = screen.getByText('terminal.detached').closest<HTMLElement>('[tabindex="-1"]');
+    expect(notice).toHaveClass('focus-ring-inset');
+    expect(notice).not.toHaveClass('focus-ring');
+  });
+
   it('forgets an armed Escape when the detached terminal input loses focus', async () => {
     await detach();
     const popupTerminal = created.terminals[1];
