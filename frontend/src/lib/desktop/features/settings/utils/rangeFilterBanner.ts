@@ -33,7 +33,10 @@ export type RangeFilterBannerKey =
 export interface RangeFilterBanner {
   level: 'error' | 'warning';
   key: RangeFilterBannerKey;
-  /** Names of the loaded models the active backend does not cover, comma separated. */
+  /**
+   * Names of the loaded models the geomodel does not serve, comma separated. Set only for
+   * the geomodel issue banners, whose texts name them; empty for the others.
+   */
   models: string;
   /** Whether the banner links to the Models tab (install or reinstall guidance). */
   showModelsLink: boolean;
@@ -53,19 +56,18 @@ export function rangeFilterBanner(
   // not applicable, as in the health check. A geomodel issue implies a participant.
   if (!status?.participantsLoaded) return null;
 
-  const models = status.classifiers
-    .filter(c => !c.coveredByBackend)
-    .map(c => c.name)
-    .join(', ');
-
   if (status.geomodelIssue !== 'none') {
     return {
       level: status.locationConfigured && !status.active ? 'error' : 'warning',
       key: ISSUE_KEYS[status.geomodelIssue],
-      models,
+      models: status.classifiers
+        .filter(c => !c.coveredByBackend)
+        .map(c => c.name)
+        .join(', '),
       showModelsLink: status.geomodelIssue !== 'not_selected',
     };
   }
+  const models = '';
   if (status.reloadFailed && status.active) {
     return { level: 'warning', key: 'reloadFailed', models, showModelsLink: false };
   }

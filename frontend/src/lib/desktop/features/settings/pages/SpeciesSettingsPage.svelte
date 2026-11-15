@@ -1345,9 +1345,7 @@
       {@render rangeFilterHealthBanner(
         rangeFilterWarning.level === 'error',
         t('settings.species.activeSpecies.rangeFilterHealth.reloadFailed.title'),
-        t('settings.species.activeSpecies.rangeFilterHealth.reloadFailed.description', {
-          models: rangeFilterWarning.models,
-        }),
+        t('settings.species.activeSpecies.rangeFilterHealth.reloadFailed.description'),
         rangeFilterWarning.showModelsLink ? modelsLinkAction : undefined
       )}
     {:else if rangeFilterWarning?.key === 'inactive'}

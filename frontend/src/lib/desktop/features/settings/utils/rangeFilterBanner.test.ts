@@ -52,7 +52,7 @@ describe('rangeFilterBanner', () => {
     expect(rangeFilterBanner({ ...base, reloadFailed: true, locationConfigured: false })).toEqual({
       level: 'warning',
       key: 'reloadFailed',
-      models: 'Google Perch v2',
+      models: '',
       showModelsLink: false,
     });
   });

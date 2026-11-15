@@ -1256,11 +1256,11 @@ func geomodelFilesPresent(modelsDir string) bool {
 
 // geomodelIssueFor diagnoses why the geomodel backend is not serving a participant set
 // that needs it. The rules apply in order: nothing needs the geomodel or the geomodel
-// backend is active (none); the config selects a geomodel (load_failed); the stock files
+// backend serves it (none); the config selects a geomodel (load_failed); the stock files
 // are installed (not_selected); otherwise not_installed. The auto-select terms mirror
 // buildMetaModel Rule 1 (auto-select model, no explicit model path); keep them in step.
-func geomodelIssueFor(rf *conf.RangeFilterSettings, wantsGeomodel bool, kind rangeFilterBackendKind, stockFilesPresent bool) GeomodelIssue {
-	if !wantsGeomodel || kind == rfKindGeomodelV3 {
+func geomodelIssueFor(rf *conf.RangeFilterSettings, wantsGeomodel, geomodelServing, stockFilesPresent bool) GeomodelIssue {
+	if !wantsGeomodel || geomodelServing {
 		return GeomodelIssueNone
 	}
 	selectsGeomodel := resolveRangeFilterBackend(rf) == rangeFilterBackendMappedGeomodel ||

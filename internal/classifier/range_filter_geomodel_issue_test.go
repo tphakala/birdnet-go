@@ -19,23 +19,23 @@ func TestGeomodelIssueFor(t *testing.T) {
 		name       string
 		rf         conf.RangeFilterSettings
 		wants      bool
-		kind       rangeFilterBackendKind
+		serving    bool
 		filesExist bool
 		want       GeomodelIssue
 	}{
-		{"v2.4 only on legacy config needs no geomodel", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, false, rfKindMDataV1, false, GeomodelIssueNone},
-		{"geomodel backend is healthy", conf.RangeFilterSettings{}, true, rfKindGeomodelV3, true, GeomodelIssueNone},
-		{"default config, no files, no backend", conf.RangeFilterSettings{}, true, rfKindNone, false, GeomodelIssueNotInstalled},
-		{"default config, no files, v2.4 MData backend", conf.RangeFilterSettings{}, true, rfKindMDataV2, false, GeomodelIssueNotInstalled},
-		{"legacy config with files", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, true, rfKindMDataV1, true, GeomodelIssueNotSelected},
-		{"strict ONNX path without labels, with files", conf.RangeFilterSettings{ModelPath: "/m/custom.onnx"}, true, rfKindNone, true, GeomodelIssueNotSelected},
-		{"latest with files and no backend", conf.RangeFilterSettings{Model: conf.RangeFilterModelLatest}, true, rfKindNone, true, GeomodelIssueLoadFailed},
-		{"explicit v3 with no files", conf.RangeFilterSettings{Model: conf.RangeFilterModelV3}, true, rfKindNone, false, GeomodelIssueLoadFailed},
-		{"explicit v3 with MData backend", conf.RangeFilterSettings{Model: conf.RangeFilterModelV3}, true, rfKindMDataV2, false, GeomodelIssueLoadFailed},
+		{"v2.4 only on legacy config needs no geomodel", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, false, false, false, GeomodelIssueNone},
+		{"geomodel backend serves the set", conf.RangeFilterSettings{}, true, true, true, GeomodelIssueNone},
+		{"default config, no files, no backend", conf.RangeFilterSettings{}, true, false, false, GeomodelIssueNotInstalled},
+		{"default config, no files, v2.4 MData backend", conf.RangeFilterSettings{}, true, false, false, GeomodelIssueNotInstalled},
+		{"legacy config with files", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, true, false, true, GeomodelIssueNotSelected},
+		{"strict ONNX path without labels, with files", conf.RangeFilterSettings{ModelPath: "/m/custom.onnx"}, true, false, true, GeomodelIssueNotSelected},
+		{"latest with files and no backend", conf.RangeFilterSettings{Model: conf.RangeFilterModelLatest}, true, false, true, GeomodelIssueLoadFailed},
+		{"explicit v3 with no files", conf.RangeFilterSettings{Model: conf.RangeFilterModelV3}, true, false, false, GeomodelIssueLoadFailed},
+		{"explicit v3 with MData backend", conf.RangeFilterSettings{Model: conf.RangeFilterModelV3}, true, false, false, GeomodelIssueLoadFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, geomodelIssueFor(&tt.rf, tt.wants, tt.kind, tt.filesExist))
+			assert.Equal(t, tt.want, geomodelIssueFor(&tt.rf, tt.wants, tt.serving, tt.filesExist))
 		})
 	}
 }
@@ -109,7 +109,11 @@ func TestReload_FailureMarksStateUntilNextPublishedState(t *testing.T) {
 	st := o.rangeFilter.loadState()
 	assert.Same(t, kept, st.backend, "failed reload keeps the previous backend")
 	assert.Equal(t, uint64(5), st.generation, "failed reload does not bump the generation")
-	assert.True(t, o.RangeFilterStatus().ReloadFailed)
+	failed := o.RangeFilterStatus()
+	assert.True(t, failed.ReloadFailed)
+	// The retained geomodel backend was built before Perch loaded, so it does not serve
+	// Perch: that is a geomodel problem with install guidance, not a healthy geomodel.
+	assert.Equal(t, GeomodelIssueLoadFailed, failed.GeomodelIssue, "retained geomodel backend does not serve the new Perch")
 
 	ok := conf.CloneSettings(settings)
 	ok.BirdNET.RangeFilter.Model = ""
@@ -143,4 +147,18 @@ func TestReload_FailureWithoutBackendMarksState(t *testing.T) {
 	status := o.RangeFilterStatus()
 	assert.False(t, status.Active)
 	assert.True(t, status.ReloadFailed)
+}
+
+// TestGeomodelParticipantMissing checks that only a geomodel-needing participant absent
+// from the backend's built-over set counts as missing; v2.4 never needs the geomodel.
+func TestGeomodelParticipantMissing(t *testing.T) {
+	perch := participantLabels{id: RegistryIDPerchV2}
+	v24 := participantLabels{id: RegistryIDBirdNETV24}
+	builtOverPerch := &rangeFilterState{participants: []participantLabels{perch}}
+	builtOverV24 := &rangeFilterState{participants: []participantLabels{v24}}
+
+	assert.False(t, geomodelParticipantMissing([]participantLabels{perch}, builtOverPerch), "Perch is in the built-over set")
+	assert.False(t, geomodelParticipantMissing([]participantLabels{v24}, builtOverPerch), "v2.4 does not need the geomodel")
+	assert.True(t, geomodelParticipantMissing([]participantLabels{v24, perch}, builtOverV24), "Perch loaded after the build")
+	assert.True(t, geomodelParticipantMissing([]participantLabels{perch}, nil), "no state covers nothing")
 }
