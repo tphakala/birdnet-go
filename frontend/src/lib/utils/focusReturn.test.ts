@@ -147,6 +147,23 @@ describe('createFocusReturn', () => {
       expect(document.activeElement).toBe(outside);
     });
 
+    it('keeps tracking the newer element when an older one is destroyed after it mounted', async () => {
+      setup();
+      const older = document.createElement('div');
+      document.body.appendChild(older);
+      const { track } = createFocusReturn(() => [outside]);
+      const olderAction = track(older);
+      const action = track(container);
+
+      // The outgoing branch finishes after the new one mounted.
+      if (typeof olderAction === 'object') olderAction.destroy?.();
+      older.remove();
+      inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(outside);
+    });
+
     it('runs the fallback after a press on content inside a control', async () => {
       setup();
       const icon = document.createElement('span');
