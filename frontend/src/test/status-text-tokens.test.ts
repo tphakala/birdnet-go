@@ -186,19 +186,16 @@ describe('status-text-tokens', () => {
     expect(findStatusFillText(source)).toEqual([]);
   });
 
-  it('matches exclusions one hit at a time', () => {
-    const entry = { file: 'a.css', hit: 'color: var(--color-error)', reason: 'test' };
-    const hit = { file: 'a.css', line: 1, hit: entry.hit };
-    const cases = [
-      { hits: [hit], exclusions: [entry], offenders: 0, stale: 0 },
-      { hits: [hit, { ...hit, line: 9 }], exclusions: [entry], offenders: 1, stale: 0 },
-      { hits: [], exclusions: [entry], offenders: 0, stale: 1 },
-      { hits: [{ ...hit, file: 'b.css' }], exclusions: [entry], offenders: 1, stale: 1 },
-    ];
-    for (const { hits, exclusions, offenders, stale } of cases) {
-      const result = applyExclusions(hits, exclusions);
-      expect([result.offenders.length, result.stale.length]).toEqual([offenders, stale]);
-    }
+  const entry = { file: 'a.css', hit: 'color: var(--color-error)', reason: 'test' };
+  const hit = { file: 'a.css', line: 1, hit: entry.hit };
+  it.each([
+    ['a hit with an entry is allowed', [hit], [entry], 0, 0],
+    ['a second identical hit is an offender', [hit, { ...hit, line: 9 }], [entry], 1, 0],
+    ['an entry without a hit is stale', [], [entry], 0, 1],
+    ['the same text in another file is an offender', [{ ...hit, file: 'b.css' }], [entry], 1, 1],
+  ])('matches exclusions one hit at a time: %s', (_name, hits, exclusions, offenders, stale) => {
+    const result = applyExclusions(hits, exclusions);
+    expect([result.offenders.length, result.stale.length]).toEqual([offenders, stale]);
   });
 
   it('scans the app sources', () => {
