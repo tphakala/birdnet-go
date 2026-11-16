@@ -239,4 +239,33 @@ describe('settings auto save engine', () => {
     expect(store.saveStagedSection).not.toHaveBeenCalled();
     expect(autoSaveStatus('audio:a:models').state).toBe('error');
   });
+
+  it('sends a commit that lands while the finishing flush reads its result', async () => {
+    const result: StagedSaveResult = {
+      saved: [['sources']],
+      dropped: [],
+      failed: [],
+      get remaining() {
+        commitSetting('audio', { sources: [source({ gain: 9 })] }, { field: 'audio:b:gain' });
+        return false;
+      },
+    };
+    store.saveStagedSection.mockResolvedValueOnce(result);
+
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:gain' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveBusy()).toBe(false);
+  });
+
+  it('shows an error instead of staying on Saving when the save promise rejects', async () => {
+    store.saveStagedSection.mockRejectedValueOnce(new Error('network down'));
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(autoSaveStatus('audio:a:models').state).toBe('error');
+    expect(autoSaveBusy()).toBe(false);
+  });
 });

@@ -215,18 +215,36 @@ function clearRerun(state: SectionState): void {
   state.rerun = false;
 }
 
-/** Sends the staged edits of a section, then again while commits keep arriving. */
+/**
+ * Sends the staged edits of a section, then again while commits keep arriving.
+ * The running marker is cleared in the same step as the last check for a rerun,
+ * so a commit either sets the flag before that check or starts its own flush.
+ */
 async function runFlush(section: SettingsSectionName): Promise<void> {
   const state = sectionState(section);
-  for (;;) {
-    clearRerun(state);
-    const fields = [...state.pending];
-    state.pending.clear();
-    const result = await settingsActions.saveStagedSection(section);
-    applyResult(section, fields, result);
-    const progressed = result.saved.length + result.failed.length + result.dropped.length > 0;
-    const again = state.rerun || (result.remaining && progressed);
-    if (!again || state.timer !== null) break;
+  try {
+    for (;;) {
+      clearRerun(state);
+      const fields = [...state.pending];
+      state.pending.clear();
+      let result: StagedSaveResult;
+      try {
+        result = await settingsActions.saveStagedSection(section);
+      } catch (error) {
+        logger.error('Auto save request failed:', error);
+        for (const field of fields) {
+          fieldPaths.delete(field);
+          setStatus(field, { state: 'error', message: failureMessage(error) });
+        }
+        return;
+      }
+      applyResult(section, fields, result);
+      const progressed = result.saved.length + result.failed.length + result.dropped.length > 0;
+      const wantsMore = result.remaining && progressed;
+      if (!(state.rerun || wantsMore) || state.timer !== null) return;
+    }
+  } finally {
+    state.running = null;
   }
 }
 
@@ -241,14 +259,14 @@ function flushSection(section: SettingsSectionName): Promise<void> {
     state.rerun = true;
     return state.running;
   }
-  const running = runFlush(section)
-    .catch(error => {
-      logger.error('Auto save flush failed:', error);
-    })
-    .finally(() => {
-      state.running = null;
-    });
+  const running = runFlush(section).catch(error => {
+    logger.error('Auto save flush failed:', error);
+  });
   state.running = running;
+  // A flush that finished before this assignment (it never awaited) must not stay marked.
+  void running.then(() => {
+    if (state.running === running) state.running = null;
+  });
   return running;
 }
 
