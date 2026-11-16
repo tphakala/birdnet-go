@@ -1505,8 +1505,8 @@ const ignoreOutcome = () => undefined;
 /**
  * Runs task after every earlier queued task has settled, so a refresh or a load
  * applies wholly before or wholly after a full save and a GET issued before a
- * PUT can never land after it. Orders loads, rebases and full saves only;
- * section saves are not queued.
+ * PUT can never land after it. Orders loads, rebases, full saves and staged section saves (saveStagedSection);
+ * saveSection is not queued.
  */
 function runSerialized<T>(task: () => Promise<T>): Promise<T> {
   const result = serverSyncTail.then(task);
@@ -2360,8 +2360,8 @@ export const settingsActions = {
 
   /**
    * Sends the staged edits of one section with PATCH and If-Match, in the queue
-   * loads, refreshes and full saves share, so at most one settings write runs at a
-   * time and a full save waits for it. The patch is read back from formData when
+   * loads, refreshes and full saves share, so it runs after the writes queued before
+   * it and a full save waits for it. saveSection is not queued. The patch is read back from formData when
    * it is sent, so a coerced or newly edited value is what goes out. A failed
    * request, also one before the first send, takes each sent path back to the stored value unless it was edited
    * again; a 412 refetches, rebases (the server wins at staged paths it changed)
