@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvencie nad 48 kHz používajú výhradný prístup k zariadeniu v Linuxe, čím bránia iným aplikáciám zdieľať zvukovú kartu",
         "modelLabel": "Detekčné modely",
         "modelHelp": "Vyberte, ktoré AI modely sa majú spustiť na tomto zvukovom zdroji",
-        "deleteConfirm": "Odstrániť tento zdroj zvukovej karty?",
+        "deleteConfirm": "Odstrániť zdroj zvukovej karty \"{name}\"?",
         "emptyState": {
           "title": "Nie sú nakonfigurované žiadne zdroje zvukovej karty",
           "description": "Pridajte zdroj zvukovej karty pre začatie nahrávania zvuku na detekciu vtákov.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Vyžaduje minimálne {rate}kHz vzorkovaciu frekvenciu",
           "recommendedSampleRate": "{rate}kHz odporúčané pre najlepšie výsledky",
           "atLeastOneModel": "Musí byť vybraný aspoň jeden model"
-        }
+        },
+        "captureTitle": "Záznam",
+        "levelTitle": "Vstupná úroveň",
+        "captureApplyHint": "Záznam sa po použití reštartuje.",
+        "applyCapture": "Použiť a reštartovať záznam",
+        "applying": "Používa sa...",
+        "adding": "Pridáva sa...",
+        "captureApplyFailed": "Záznam sa nezmenil. Použite znova alebo zrušte."
       },
       "audioCapture": {
         "title": "Konfigurácia zvukovej karty",
-        "description": "Vyberte zvukové vstupné zariadenie pre detekciu vtáčieho spevu. Zmeny vyžadujú reštart aplikácie.",
         "soundCardSource": "Zdroj zvukovej karty",
         "audioSourceLabel": "Zdroj zvuku (vyžaduje reštart aplikácie)",
         "audioSourceHelp": "Vyberte zvukové vstupné zariadenie pre detekciu vtáčieho spevu. Zmeny vyžadujú reštart aplikácie.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Zachytávanie sa pozastavuje denne medzi časmi začiatku a konca. Nočné okná (napr. 22:00 do 06:00) sú podporované.",
         "solarHint": "Časy sa vypočítavajú na základe východu/západu slnka vo vašej nakonfigurovanej polohe. Použite záporné posuny pred udalosťou, kladné po nej.",
         "badge": "Ticho",
-        "enabledBadge": "Tiché hodiny povolené pre tento stream"
+        "enabledBadge": "Tiché hodiny povolené pre tento stream",
+        "enableLabel": "Pozastaviť záznam počas tichých hodín"
       },
       "rtspStreams": {
         "title": "Konfigurácia zvukových streamov",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Zobraziť stav Modely AI",
         "state": {
           "pending": "Načítava sa",
-          "failed": "Načítanie zlyhalo"
+          "failed": "Načítanie zlyhalo",
+          "missing": "Nie je nainštalované"
         },
         "notLoadedHelp": "Tento model nie je načítaný, preto ho nemožno vybrať.",
         "defaultBadge": "{models} (predvolené)",
         "defaultPendingBadge": "Predvolené modely",
-        "noneBadge": "Nie je načítaný žiadny model"
+        "noneBadge": "Nie je načítaný žiadny model",
+        "missingHelp": "Tento model už nie je nainštalovaný. Tento zdroj ho ignoruje.",
+        "removeMissing": "Odstrániť",
+        "removeMissingAria": "Odstrániť {model} zo zdroja {source}",
+        "lastSelectedHelp": "Aspoň jeden klasifikátor zostane vybraný.",
+        "followsDefaults": "Tento zdroj používa predvolené modely.",
+        "listFailed": "Zoznam modelov sa nepodarilo načítať.",
+        "warningBadge": "Skontrolujte klasifikátory"
+      },
+      "sources": {
+        "autoSaveHelp": "Zmeny sa ukladajú okamžite. Zmeny zariadenia a vzorkovacej frekvencie reštartujú záznam, preto čakajú, kým nekliknete na Použiť."
       }
     },
     "security": {

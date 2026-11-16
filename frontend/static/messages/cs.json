@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvence nad 48 kHz používají v Linuxu výhradní přístup k zařízení, což brání ostatním aplikacím ve sdílení zvukové karty",
         "modelLabel": "Detekční modely",
         "modelHelp": "Vyberte, které AI modely se mají spustit na tomto zdroji zvuku",
-        "deleteConfirm": "Odstranit tento zdroj zvukové karty?",
+        "deleteConfirm": "Odstranit zdroj zvukové karty \"{name}\"?",
         "emptyState": {
           "title": "Nejsou nakonfigurovány žádné zdroje zvukové karty",
           "description": "Přidejte zdroj zvukové karty a začněte zachytávat zvuk pro detekci ptáků.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Vyžaduje minimálně {rate}kHz vzorkovací frekvenci",
           "recommendedSampleRate": "{rate}kHz doporučeno pro nejlepší výsledky",
           "atLeastOneModel": "Musí být vybrán alespoň jeden model"
-        }
+        },
+        "captureTitle": "Záznam",
+        "levelTitle": "Vstupní úroveň",
+        "captureApplyHint": "Záznam se po použití restartuje.",
+        "applyCapture": "Použít a restartovat záznam",
+        "applying": "Používání...",
+        "adding": "Přidávání...",
+        "captureApplyFailed": "Záznam nebyl změněn. Použijte znovu nebo zrušte."
       },
       "audioCapture": {
         "title": "Konfigurace zvukové karty",
-        "description": "Vyberte zvukové vstupní zařízení pro detekci ptačího zpěvu. Změny vyžadují restart aplikace.",
         "soundCardSource": "Zdroj zvukové karty",
         "audioSourceLabel": "Zdroj zvuku (vyžaduje restart aplikace)",
         "audioSourceHelp": "Vyberte zvukové vstupní zařízení pro detekci ptačího zpěvu. Změny vyžadují restart aplikace.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Záznam se denně pozastavuje mezi časy začátku a konce. Noční okna (např. 22:00 až 06:00) jsou podporována.",
         "solarHint": "Časy se počítají na základě východu/západu slunce ve vaší nakonfigurované poloze. Použijte záporné posuny před událostí, kladné po ní.",
         "badge": "Ticho",
-        "enabledBadge": "Tiché hodiny povoleny pro tento stream"
+        "enabledBadge": "Tiché hodiny povoleny pro tento stream",
+        "enableLabel": "Pozastavit záznam během tichých hodin"
       },
       "rtspStreams": {
         "title": "Konfigurace zvukových streamů",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Zobrazit stav Modely AI",
         "state": {
           "pending": "Načítá se",
-          "failed": "Načtení selhalo"
+          "failed": "Načtení selhalo",
+          "missing": "Není nainstalováno"
         },
         "notLoadedHelp": "Tento model není načten, a proto jej nelze vybrat.",
         "defaultBadge": "{models} (výchozí)",
         "defaultPendingBadge": "Výchozí modely",
-        "noneBadge": "Není načten žádný model"
+        "noneBadge": "Není načten žádný model",
+        "missingHelp": "Tento model již není nainstalován. Tento zdroj jej ignoruje.",
+        "removeMissing": "Odebrat",
+        "removeMissingAria": "Odebrat {model} ze zdroje {source}",
+        "lastSelectedHelp": "Alespoň jeden klasifikátor zůstane vybraný.",
+        "followsDefaults": "Tento zdroj používá výchozí modely.",
+        "listFailed": "Seznam modelů se nepodařilo načíst.",
+        "warningBadge": "Zkontrolujte klasifikátory"
+      },
+      "sources": {
+        "autoSaveHelp": "Změny se ukládají okamžitě. Změny zařízení a vzorkovací frekvence restartují záznam, proto čekají, dokud nekliknete na Použít."
       }
     },
     "security": {

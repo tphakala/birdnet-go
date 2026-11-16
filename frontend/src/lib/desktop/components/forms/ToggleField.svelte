@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { tick, type Component } from 'svelte';
+  import { tick, type Component, type Snippet } from 'svelte';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -26,6 +26,11 @@
     /** Id of an element outside the field that also describes the switch, read after its own description. */
     describedBy?: string;
     error?: string;
+    /**
+     * Default variant only: badges shown on the label line after the label text. They are not
+     * part of the accessible name, so a state they show must also be in the description.
+     */
+    badges?: Snippet;
     onUpdate: (_value: boolean) => void;
     required?: boolean;
     className?: string;
@@ -41,6 +46,7 @@
     disabled = false,
     describedBy: outsideDescriptionId,
     error,
+    badges,
     onUpdate,
     required = false,
     className = '',
@@ -262,17 +268,27 @@
     {/if}
   {:else}
     <div class="flex items-center justify-between">
-      <div class="flex-1">
+      <div class="min-w-0 flex-1">
         <label for={fieldId} class={cn('flex items-start gap-2 p-0', labelCursorClass)}>
           {#if icon}
             {@const Icon = icon}
             <Icon class="size-4 text-[var(--color-base-content)] opacity-60 mt-0.5 shrink-0" />
           {/if}
-          <div>
-            <div id={labelId} class="text-sm font-medium text-[var(--color-base-content)]">
-              {label}
-              {@render requiredMark()}
-            </div>
+          <div class="min-w-0">
+            {#if badges}
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <div id={labelId} class="text-sm font-medium text-[var(--color-base-content)]">
+                  {label}
+                  {@render requiredMark()}
+                </div>
+                {@render badges()}
+              </div>
+            {:else}
+              <div id={labelId} class="text-sm font-medium text-[var(--color-base-content)]">
+                {label}
+                {@render requiredMark()}
+              </div>
+            {/if}
             {#if description}
               <div id={descriptionId} class="help-text mt-1">
                 {description}

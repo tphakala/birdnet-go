@@ -98,6 +98,11 @@ export function modelsLoading(): boolean {
   return fetchState === 'loading';
 }
 
+/** True when the last fetch failed and no list has been loaded; the editors then show the fallback. */
+export function modelsFailed(): boolean {
+  return fetchState === 'error';
+}
+
 function abortActiveFetch(): void {
   if (activeFetch) {
     activeFetch.abort();

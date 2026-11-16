@@ -15,6 +15,7 @@ import {
   fetchModels,
   getAvailableModels,
   invalidateModels,
+  modelsFailed,
   modelsLoaded,
   modelsLoading,
   refreshModels,
@@ -147,6 +148,26 @@ describe('models store', () => {
     expect(getAvailableModels()).toEqual([]);
 
     unsubscribe();
+  });
+
+  it('reports a failed first fetch until a later fetch succeeds, and not before or while loading', async () => {
+    expect(modelsFailed()).toBe(false);
+
+    const failing = deferredGet();
+    const unsubscribe = fetchModels();
+    expect(modelsFailed()).toBe(false);
+    failing.reject(new Error('offline'));
+    await settle();
+    expect(modelsFailed()).toBe(true);
+    unsubscribe();
+
+    const retry = deferredGet();
+    const again = fetchModels();
+    retry.resolve([PERCH]);
+    await settle();
+    expect(modelsFailed()).toBe(false);
+    expect(modelsLoaded()).toBe(true);
+    again();
   });
 
   it('exposes the fetched models including registryId', async () => {

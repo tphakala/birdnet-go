@@ -209,7 +209,6 @@ const translations: Record<string, string> = {
   'dashboard.recentDetections.actions.deleteDetection': 'Delete detection',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
-  'settings.audio.audioCapture.description': 'Configure audio capture settings',
   'settings.audio.audioCapture.rtspSource': 'RTSP Source',
   'settings.audio.audioCapture.rtspUrlsLabel': 'RTSP URLs',
   'settings.audio.audioCapture.rtspUrlsHelp': 'Enter RTSP stream URLs',
@@ -241,6 +240,7 @@ const translations: Record<string, string> = {
   'notifications.timeAgo.daysAgo': '{days}d ago',
   'forms.networkAddressList.remove': 'Remove {address}',
   'media.audio.seekValueText': '{current} of {total}',
+  'settings.audio.soundCards.deleteConfirm': 'Remove sound card source "{name}"?',
 };
 
 vi.mock('$lib/i18n', () => ({

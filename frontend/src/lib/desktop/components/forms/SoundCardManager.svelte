@@ -1,12 +1,18 @@
 <!--
   Sound Card Manager Component
 
-  Purpose: Manage multiple sound card audio sources with add/edit/delete
-  functionality, summary bar, and empty state guidance.
+  Purpose: Manage the sound card audio sources of a tab that saves as it
+  changes: source cards, an add form that saves the new source at once, delete,
+  a summary bar and empty state guidance.
+
+  Every change goes out through onUpdateSources as the whole sources array with
+  the auto-save options of the control that made it. Rows carry a UI-only id
+  (never persisted) that keys the cards, their field keys and their expanded
+  state; a length change the manager did not make gives every row a fresh id.
 
   Features:
-  - Display source cards with device and model info
-  - Add new sources with name, device, gain, model, equalizer, quiet hours
+  - Source cards: one source opens by default, several start closed
+  - Add new sources with name, device, gain, models, equalizer, quiet hours
   - Summary bar showing source count
   - Empty state with guidance
   - Duplicate name/device validation
@@ -16,13 +22,15 @@
 <script lang="ts">
   import { Plus, Mic, RefreshCw, ChevronDown, AlertTriangle, Info } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
+  import { tick, untrack } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
   import {
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
   } from '$lib/utils/audio/sampleRate';
-  import { toastActions } from '$lib/stores/toast';
   import { cn } from '$lib/utils/cn';
   import {
     deviceValue,
@@ -30,7 +38,16 @@
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import { getAvailableModels, watchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    getAvailableModels,
+    watchModels,
+    modelsLoading,
+    modelsFailed,
+    refreshModels,
+  } from '$lib/stores/models.svelte';
+  import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
+  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
+  import { AUDIO_SOURCES_LIST_FIELD, normalizeEqualizer, RowRollback } from './sourceFields';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -41,7 +58,7 @@
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
   import InlineSlider from './InlineSlider.svelte';
-  import ModelCheckboxList from './ModelCheckboxList.svelte';
+  import ModelToggleList from './ModelToggleList.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -70,6 +87,7 @@
   }
 
   const logger = loggers.audio;
+  const ROW_ID_PREFIX = 'source-row';
 
   const availableModels = $derived(getAvailableModels());
   const acousticAvailability = $derived(acousticModelAvailability());
@@ -95,7 +113,7 @@
     audioDevices: AudioDevice[];
     audioDevicesLoading: boolean;
     disabled?: boolean;
-    onUpdateSources: (_sources: AudioSourceConfig[]) => void;
+    onUpdateSources: (_sources: AudioSourceConfig[], _options: CommitOptions) => void;
     onRefreshDevices: () => void;
   }
 
@@ -172,49 +190,91 @@
     showAddForm = true;
   }
 
-  // Add new source
+  // ----- Rows -----
+
+  function newRowIds(count: number): string[] {
+    return Array.from({ length: count }, () => generateId(ROW_ID_PREFIX));
+  }
+
+  let rowIds = $state<string[]>(untrack(() => newRowIds(sources.length)));
+  // One source opens by default, several start closed.
+  const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
+
+  const rollback = new RowRollback();
+
+  // A refused add or delete takes the list back to the rows this manager
+  // remembered, which keeps every card's id, open state and drafts. Any other
+  // length change (a reload, another window) gives every row a fresh id, so no
+  // status or open state lands on the wrong source.
+  $effect.pre(() => {
+    const count = sources.length;
+    untrack(() => {
+      if (rowIds.length === count) return;
+      const previous = rollback.take(count);
+      if (previous) {
+        rowIds = previous.ids;
+        expandedRows.clear();
+        for (const id of previous.expanded) expandedRows.add(id);
+        return;
+      }
+      rollback.clear();
+      rowIds = newRowIds(count);
+      expandedRows.clear();
+      if (count === 1) expandedRows.add(rowIds[0]);
+    });
+  });
+
+  let rows = $derived(
+    sources.map((source, index) => ({ source, index, id: rowIds.at(index) ?? `${index}` }))
+  );
+
+  function toggleRow(id: string) {
+    if (expandedRows.has(id)) expandedRows.delete(id);
+    else expandedRows.add(id);
+  }
+
+  let addButton = $state<HTMLButtonElement>();
+
+  // ----- Add (saved at once) -----
+
+  let listStatus = $derived(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD));
+  let addPending = $state(false);
+  let adding = $derived(addPending && listStatus.state === 'saving');
+
+  // Ends an add: a save closes the form, a failure keeps it open with the reason.
+  $effect(() => {
+    const state = listStatus.state;
+    untrack(() => {
+      if (state === 'saved') rollback.clear();
+      if (!addPending || state === 'saving') return;
+      addPending = false;
+      if (state !== 'error') resetAddForm();
+    });
+  });
+
   function addSource() {
+    if (adding || disabled) return;
     clearErrors();
 
     const trimmedName = newName.trim();
 
-    // Validate name
     if (!trimmedName) {
       nameError = t('settings.audio.soundCards.errors.nameRequired');
       return;
     }
-
     // Check duplicate name (case-insensitive)
     if (sources.some(s => s.name.toLowerCase() === trimmedName.toLowerCase())) {
       nameError = t('settings.audio.soundCards.errors.duplicateName');
       return;
     }
-
-    // Validate device
     if (!newDevice) {
       deviceError = t('settings.audio.soundCards.errors.deviceRequired');
       return;
     }
-
-    // Check duplicate device
     if (sources.some(s => s.device === newDevice)) {
       deviceError = t('settings.audio.soundCards.errors.duplicateDevice');
       return;
     }
-
-    // Ensure at least one model is selected
-    if (newModels.length === 0) {
-      newModels = getDefaultModels();
-    }
-
-    // A disabled equalizer without filters is stored as undefined
-    const transformedEqualizer =
-      newEqualizer.enabled || newEqualizer.filters.length > 0
-        ? {
-            enabled: newEqualizer.enabled,
-            filters: newEqualizer.filters,
-          }
-        : undefined;
 
     const newSource: AudioSourceConfig = {
       name: trimmedName,
@@ -222,53 +282,44 @@
       sampleRate: newSampleRate,
       gain: newGain,
       models: newModels,
-      equalizer: transformedEqualizer,
+      equalizer: normalizeEqualizer(newEqualizer),
       quietHours: newQuietHours,
     };
 
-    onUpdateSources([...sources, newSource]);
-    resetAddForm();
+    logger.debug('Adding sound card source', {
+      component: 'SoundCardManager',
+      action: 'addSource',
+    });
+    const rowId = generateId(ROW_ID_PREFIX);
+    rollback.remember(rowIds, expandedRows);
+    rowIds = [...rowIds, rowId];
+    if (sources.length === 0) expandedRows.add(rowId);
+    addPending = true;
+    onUpdateSources([...sources, newSource], { field: AUDIO_SOURCES_LIST_FIELD });
   }
 
-  // Update source; returns boolean for success
-  function updateSource(index: number, updatedSource: AudioSourceConfig): boolean {
-    const updatedSources = [...sources];
-    if (index >= 0 && index < updatedSources.length) {
-      // Check duplicate name (excluding current, case-insensitive)
-      const nameLower = updatedSource.name.toLowerCase();
-      if (updatedSources.some((s, i) => i !== index && s.name.toLowerCase() === nameLower)) {
-        logger.warn('Duplicate sound card source name', null, {
-          component: 'SoundCardManager',
-          action: 'updateSource',
-        });
-        toastActions.error(t('settings.audio.soundCards.errors.duplicateName'));
-        return false;
-      }
+  // ----- Change and delete -----
 
-      // Check duplicate device (excluding current)
-      if (
-        updatedSource.device !== updatedSources.at(index)?.device &&
-        updatedSources.some((s, i) => i !== index && s.device === updatedSource.device)
-      ) {
-        logger.warn('Duplicate sound card device', null, {
-          component: 'SoundCardManager',
-          action: 'updateSource',
-        });
-        toastActions.error(t('settings.audio.soundCards.errors.duplicateDevice'));
-        return false;
-      }
-
-      updatedSources.splice(index, 1, updatedSource);
-      onUpdateSources(updatedSources);
-      return true;
-    }
-    return false;
+  function commitSource(index: number, updated: AudioSourceConfig, options: CommitOptions) {
+    if (index < 0 || index >= sources.length) return;
+    onUpdateSources(
+      sources.map((source, i) => (i === index ? updated : source)),
+      options
+    );
   }
 
-  // Delete source
-  function deleteSource(index: number) {
-    const updatedSources = sources.filter((_, i) => i !== index);
-    onUpdateSources(updatedSources);
+  async function deleteSource(index: number) {
+    const id = rowIds.at(index);
+    rollback.remember(rowIds, expandedRows);
+    rowIds = rowIds.filter((_, i) => i !== index);
+    if (id !== undefined) expandedRows.delete(id);
+    onUpdateSources(
+      sources.filter((_, i) => i !== index),
+      { field: AUDIO_SOURCES_LIST_FIELD }
+    );
+    // The deleted card took focus with it; land on the add button instead.
+    await tick();
+    addButton?.focus();
   }
 
   function handleNewEqualizerUpdate(updated: LocalEqualizerSettings) {
@@ -366,20 +417,27 @@
     />
   {:else}
     <div class="space-y-3">
-      {#each sources as source, index (`${source.device}_${index}`)}
+      {#each rows as row (row.id)}
         <SoundCardCard
-          {source}
-          {index}
+          source={row.source}
+          index={row.index}
           {sources}
+          rowId={row.id}
           {audioDevices}
           {modelOptions}
           {availableModels}
           {disabled}
-          onUpdate={updatedSource => updateSource(index, updatedSource)}
-          onDelete={() => deleteSource(index)}
+          expanded={expandedRows.has(row.id)}
+          onToggleExpanded={() => toggleRow(row.id)}
+          onCommit={(updated, options) => commitSource(row.index, updated, options)}
+          onDelete={() => void deleteSource(row.index)}
         />
       {/each}
     </div>
+
+    {#if !showAddForm}
+      <AutoSaveStatus field={AUDIO_SOURCES_LIST_FIELD} />
+    {/if}
 
     <!-- Add Source Form -->
     {#if showAddForm}
@@ -400,18 +458,10 @@
                 label={t('settings.audio.soundCards.nameLabel')}
                 placeholder={t('settings.audio.soundCards.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.soundCards.nameHelp')}
+                error={nameError ?? undefined}
                 required
                 {disabled}
               />
-              {#if nameError}
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  class="text-xs text-[var(--text-error)] -mt-2"
-                >
-                  {nameError}
-                </p>
-              {/if}
             </div>
 
             <!-- Device Selection -->
@@ -428,7 +478,7 @@
                 menuSize="sm"
               />
               {#if deviceError}
-                <p role="alert" aria-live="assertive" class="text-xs text-[var(--text-error)] mt-1">
+                <p role="alert" class="text-xs text-[var(--text-error)] mt-1">
                   {deviceError}
                 </p>
               {/if}
@@ -447,18 +497,18 @@
               />
               {#if !newSampleRateVerified && !newSampleRateLoading}
                 <p class="flex items-center gap-1 text-xs text-[var(--text-warning)] mt-1">
-                  <AlertTriangle class="size-3" />
+                  <AlertTriangle class="size-3" aria-hidden="true" />
                   {t('settings.audio.soundCards.sampleRateUnverified')}
                 </p>
               {/if}
               {#if newSampleRateLoading}
-                <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
+                <p class="text-xs text-muted mt-1">
                   {t('settings.audio.soundCards.sampleRateProbing')}
                 </p>
               {/if}
               {#if newSampleRate > 48000}
                 <p class="flex items-center gap-1 text-xs text-[var(--text-info)] mt-1">
-                  <Info class="size-3 shrink-0" />
+                  <Info class="size-3 shrink-0" aria-hidden="true" />
                   {t('settings.audio.soundCards.sampleRateExclusive')}
                 </p>
               {/if}
@@ -477,21 +527,32 @@
             />
 
             <!-- Model Selection -->
-            <ModelCheckboxList
-              models={availableModels}
-              selectedModels={newModels}
-              sourceSampleRate={newSampleRate}
-              loading={modelsLoading()}
-              availability={acousticAvailability}
-              {disabled}
-              onToggle={models => (newModels = models)}
-            />
+            <div class="space-y-2">
+              <h4 id="new-soundcard-models" class="text-sm font-semibold">
+                {t('settings.audio.soundCards.modelLabel')}
+              </h4>
+              <ModelToggleList
+                models={availableModels}
+                selectedModels={newModels}
+                defaultModels={getDefaultModels()}
+                sourceName={newName.trim()}
+                sourceSampleRate={newSampleRate}
+                loading={modelsLoading()}
+                failed={modelsFailed()}
+                availability={acousticAvailability}
+                labelledBy="new-soundcard-models"
+                {disabled}
+                onChange={models => (newModels = models)}
+                onRetry={() => void refreshModels()}
+              />
+            </div>
 
             <!-- Equalizer (expandable) -->
             <div>
               <button
                 type="button"
                 class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--text-primary)] transition-colors"
+                aria-expanded={showNewEqualizer}
                 onclick={() => (showNewEqualizer = !showNewEqualizer)}
               >
                 <ChevronDown
@@ -523,22 +584,28 @@
             />
 
             <!-- Action Buttons -->
-            <div class="flex gap-2 justify-end pt-2">
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <AutoSaveStatus field={AUDIO_SOURCES_LIST_FIELD} class="mr-auto" />
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-transparent text-[var(--color-base-content)] hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={resetAddForm}
+                class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                aria-disabled={adding ? 'true' : undefined}
+                onclick={() => {
+                  if (!adding) resetAddForm();
+                }}
               >
                 {t('common.cancel')}
               </button>
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                class="btn btn-primary btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                aria-disabled={adding || disabled ? 'true' : undefined}
                 onclick={addSource}
-                disabled={!newName.trim() || !newDevice || disabled}
               >
-                <Plus class="size-4" />
-                {t('settings.audio.soundCards.addSource')}
+                <Plus class="size-4" aria-hidden="true" />
+                {adding
+                  ? t('settings.audio.soundCards.adding')
+                  : t('settings.audio.soundCards.addSource')}
               </button>
             </div>
           </div>
@@ -547,6 +614,7 @@
     {:else}
       <!-- Add Source Button -->
       <button
+        bind:this={addButton}
         type="button"
         class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={openAddForm}

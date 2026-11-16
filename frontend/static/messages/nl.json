@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Samplerates boven 48 kHz gebruiken exclusieve apparaattoegang op Linux, waardoor andere applicaties de geluidskaart niet kunnen delen",
         "modelLabel": "Detectiemodellen",
         "modelHelp": "Selecteer AI-modellen voor deze audiobron",
-        "deleteConfirm": "Deze geluidskaartbron verwijderen?",
+        "deleteConfirm": "De geluidskaartbron \"{name}\" verwijderen?",
         "emptyState": {
           "title": "Geen Geluidskaartbronnen Geconfigureerd",
           "description": "Voeg een geluidskaartbron toe om te beginnen met het opnemen van audio voor vogeldetectie.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Vereist minimaal {rate}kHz samplefrequentie",
           "recommendedSampleRate": "{rate}kHz aanbevolen voor beste resultaten",
           "atLeastOneModel": "Minimaal één model moet geselecteerd zijn"
-        }
+        },
+        "captureTitle": "Opname",
+        "levelTitle": "Ingangsniveau",
+        "captureApplyHint": "De opname wordt herstart wanneer u toepast.",
+        "applyCapture": "Toepassen en opname herstarten",
+        "applying": "Bezig met toepassen...",
+        "adding": "Bezig met toevoegen...",
+        "captureApplyFailed": "De opname is niet gewijzigd. Pas opnieuw toe of annuleer."
       },
       "audioCapture": {
         "title": "Audio Opname",
-        "description": "Stel audio opname bron in, geluidskaart of RTSP stream",
         "soundCardSource": "Geluidskaart Bron",
         "audioSourceLabel": "Audio Bron (vereist applicatie herstart om effect te hebben)",
         "audioSourceHelp": "Selecteer het audio invoer apparaat voor vogelgeluid detectie. Wijzigingen vereisen applicatie herstart om effect te hebben.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Opname wordt dagelijks gepauzeerd tussen start- en eindtijden. Nachtelijke vensters (bijv. 22:00 tot 06:00) worden ondersteund.",
         "solarHint": "Tijden worden berekend op basis van zonsopgang/-ondergang op uw geconfigureerde locatie. Gebruik negatieve offsets voor vóór het evenement, positieve voor erna.",
         "badge": "Stil",
-        "enabledBadge": "Stille uren ingeschakeld voor deze stream"
+        "enabledBadge": "Stille uren ingeschakeld voor deze stream",
+        "enableLabel": "Opname pauzeren tijdens stille uren"
       },
       "rtspStreams": {
         "title": "Audio Stream Configuratie",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Bekijk de status van AI-modellen",
         "state": {
           "pending": "Laden",
-          "failed": "Laden mislukt"
+          "failed": "Laden mislukt",
+          "missing": "Niet geïnstalleerd"
         },
         "notLoadedHelp": "Dit model is niet geladen en kan daarom niet worden geselecteerd.",
         "defaultBadge": "{models} (standaard)",
         "defaultPendingBadge": "Standaardmodellen",
-        "noneBadge": "Geen model geladen"
+        "noneBadge": "Geen model geladen",
+        "missingHelp": "Dit model is niet meer geïnstalleerd. Deze bron negeert het.",
+        "removeMissing": "Verwijderen",
+        "removeMissingAria": "{model} verwijderen uit {source}",
+        "lastSelectedHelp": "Er blijft minstens één classificatiemodel geselecteerd.",
+        "followsDefaults": "Deze bron volgt de standaardmodellen.",
+        "listFailed": "De modellijst kon niet worden geladen.",
+        "warningBadge": "Classificatiemodellen controleren"
+      },
+      "sources": {
+        "autoSaveHelp": "Wijzigingen worden direct opgeslagen. Wijzigingen van apparaat en samplefrequentie herstarten de opname en wachten daarom tot u op Toepassen klikt."
       }
     },
     "security": {

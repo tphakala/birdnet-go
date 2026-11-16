@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Raten über 48 kHz verwenden exklusiven Gerätezugriff unter Linux, wodurch andere Anwendungen die Soundkarte nicht gemeinsam nutzen können",
         "modelLabel": "Erkennungsmodelle",
         "modelHelp": "KI-Modelle für diese Audioquelle auswählen",
-        "deleteConfirm": "Diese Soundkartenquelle entfernen?",
+        "deleteConfirm": "Soundkartenquelle \"{name}\" entfernen?",
         "emptyState": {
           "title": "Keine Soundkartenquellen konfiguriert",
           "description": "Fügen Sie eine Soundkartenquelle hinzu, um mit der Audioaufnahme zur Vogelerkennung zu beginnen.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Erfordert mindestens {rate}kHz Abtastrate",
           "recommendedSampleRate": "{rate}kHz empfohlen für beste Ergebnisse",
           "atLeastOneModel": "Mindestens ein Modell muss ausgewählt sein"
-        }
+        },
+        "captureTitle": "Aufnahme",
+        "levelTitle": "Eingangspegel",
+        "captureApplyHint": "Die Aufnahme wird beim Übernehmen neu gestartet.",
+        "applyCapture": "Übernehmen und Aufnahme neu starten",
+        "applying": "Wird übernommen...",
+        "adding": "Wird hinzugefügt...",
+        "captureApplyFailed": "Die Aufnahme wurde nicht geändert. Erneut übernehmen oder abbrechen."
       },
       "audioCapture": {
         "title": "Audioaufnahme",
-        "description": "Audioaufnahmequelle festlegen, Soundkarte oder RTSP-Stream",
         "soundCardSource": "Soundkartenquelle",
         "audioSourceLabel": "Audioquelle (erfordert Anwendungsneustart)",
         "audioSourceHelp": "Wählen Sie das Audio-Eingabegerät für die Vogelklangerkennung. Änderungen erfordern einen Anwendungsneustart.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Die Aufnahme wird täglich zwischen Start- und Endzeit pausiert. Über-Nacht-Fenster (z.B. 22:00 bis 06:00) werden unterstützt.",
         "solarHint": "Zeiten werden aus Sonnenauf-/untergang an Ihrem konfigurierten Standort berechnet. Negative Versatzwerte für vor dem Ereignis, positive für danach.",
         "badge": "Ruhe",
-        "enabledBadge": "Ruhezeiten für diesen Stream aktiviert"
+        "enabledBadge": "Ruhezeiten für diesen Stream aktiviert",
+        "enableLabel": "Aufnahme während der Ruhezeiten pausieren"
       },
       "rtspStreams": {
         "title": "Audio-Stream-Konfiguration",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Status der KI-Modelle anzeigen",
         "state": {
           "pending": "Wird geladen",
-          "failed": "Laden fehlgeschlagen"
+          "failed": "Laden fehlgeschlagen",
+          "missing": "Nicht installiert"
         },
         "notLoadedHelp": "Dieses Modell ist nicht geladen und kann daher nicht ausgewählt werden.",
         "defaultBadge": "{models} (Standard)",
         "defaultPendingBadge": "Standardmodelle",
-        "noneBadge": "Kein Modell geladen"
+        "noneBadge": "Kein Modell geladen",
+        "missingHelp": "Dieses Modell ist nicht mehr installiert. Diese Quelle ignoriert es.",
+        "removeMissing": "Entfernen",
+        "removeMissingAria": "{model} aus {source} entfernen",
+        "lastSelectedHelp": "Mindestens ein Klassifikator bleibt ausgewählt.",
+        "followsDefaults": "Diese Quelle verwendet die Standardmodelle.",
+        "listFailed": "Die Modellliste konnte nicht geladen werden.",
+        "warningBadge": "Klassifikatoren prüfen"
+      },
+      "sources": {
+        "autoSaveHelp": "Änderungen werden sofort gespeichert. Änderungen an Gerät und Abtastrate starten die Aufnahme neu und warten daher, bis Sie auf Übernehmen klicken."
       }
     },
     "security": {

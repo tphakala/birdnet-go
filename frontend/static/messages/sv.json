@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvenser över 48 kHz använder exklusiv enhetsåtkomst på Linux, vilket förhindrar andra program från att dela ljudkortet",
         "modelLabel": "Detektionsmodeller",
         "modelHelp": "Välj vilka AI-modeller som ska köras på denna ljudkälla",
-        "deleteConfirm": "Ta bort denna ljudkortskälla?",
+        "deleteConfirm": "Ta bort ljudkortskällan \"{name}\"?",
         "emptyState": {
           "title": "Inga ljudkortskällor konfigurerade",
           "description": "Lägg till en ljudkortskälla för att börja spela in ljud för fågeldetektering.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Kräver minst {rate}kHz inspelningsfrekvens",
           "recommendedSampleRate": "{rate}kHz rekommenderat för bästa resultat",
           "atLeastOneModel": "Minst en modell måste väljas"
-        }
+        },
+        "captureTitle": "Inspelning",
+        "levelTitle": "Ingångsnivå",
+        "captureApplyHint": "Inspelningen startas om när du verkställer.",
+        "applyCapture": "Verkställ och starta om inspelningen",
+        "applying": "Verkställer...",
+        "adding": "Lägger till...",
+        "captureApplyFailed": "Inspelningen ändrades inte. Verkställ igen eller avbryt."
       },
       "audioCapture": {
         "title": "Ljudkortskonfiguration",
-        "description": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen.",
         "soundCardSource": "Ljudkortskälla",
         "audioSourceLabel": "Ljudkälla (kräver omstart av applikationen för att träda i kraft)",
         "audioSourceHelp": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen för att träda i kraft.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Inspelningen pausas mellan start- och sluttider dagligen. Nattliga fönster (t.ex. 22:00 till 06:00) stöds.",
         "solarHint": "Tider beräknas utifrån soluppgång/solnedgång vid din konfigurerade plats. Använd negativa förskjutningar för före händelsen, positiva för efter.",
         "badge": "Tyst",
-        "enabledBadge": "Tysta timmar aktiverade för denna ström"
+        "enabledBadge": "Tysta timmar aktiverade för denna ström",
+        "enableLabel": "Pausa inspelningen under tysta timmar"
       },
       "rtspStreams": {
         "title": "Konfiguration av ljudströmmar",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Visa status för AI-modeller",
         "state": {
           "pending": "Läser in",
-          "failed": "Det gick inte att läsa in"
+          "failed": "Det gick inte att läsa in",
+          "missing": "Inte installerad"
         },
         "notLoadedHelp": "Den här modellen är inte inläst och kan därför inte väljas.",
         "defaultBadge": "{models} (standard)",
         "defaultPendingBadge": "Standardmodeller",
-        "noneBadge": "Ingen modell inläst"
+        "noneBadge": "Ingen modell inläst",
+        "missingHelp": "Den här modellen är inte längre installerad. Den här källan ignorerar den.",
+        "removeMissing": "Ta bort",
+        "removeMissingAria": "Ta bort {model} från {source}",
+        "lastSelectedHelp": "Minst en klassificerare förblir vald.",
+        "followsDefaults": "Den här källan använder standardmodellerna.",
+        "listFailed": "Modellistan kunde inte läsas in.",
+        "warningBadge": "Kontrollera klassificerare"
+      },
+      "sources": {
+        "autoSaveHelp": "Ändringar sparas direkt. Ändringar av enhet och samplingsfrekvens startar om inspelningen och väntar därför tills du klickar på Verkställ."
       }
     },
     "security": {

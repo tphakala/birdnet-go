@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Les taux supérieurs à 48 kHz utilisent un accès exclusif au périphérique sous Linux, empêchant les autres applications de partager la carte son",
         "modelLabel": "Modèles de détection",
         "modelHelp": "Sélectionner les modèles d'IA pour cette source audio",
-        "deleteConfirm": "Supprimer cette source de carte son ?",
+        "deleteConfirm": "Supprimer la source de carte son \"{name}\" ?",
         "emptyState": {
           "title": "Aucune Source de Carte Son Configurée",
           "description": "Ajoutez une source de carte son pour commencer la capture audio pour la détection d'oiseaux.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Nécessite au moins {rate}kHz de taux d'échantillonnage",
           "recommendedSampleRate": "{rate}kHz recommandé pour de meilleurs résultats",
           "atLeastOneModel": "Au moins un modèle doit être sélectionné"
-        }
+        },
+        "captureTitle": "Capture audio",
+        "levelTitle": "Niveau d'entrée",
+        "captureApplyHint": "La capture redémarre lorsque vous appliquez.",
+        "applyCapture": "Appliquer et redémarrer la capture",
+        "applying": "Application...",
+        "adding": "Ajout...",
+        "captureApplyFailed": "La capture n'a pas été modifiée. Appliquez à nouveau ou annulez."
       },
       "audioCapture": {
         "title": "Capture audio",
-        "description": "Définir la source de capture audio, carte son ou flux RTSP",
         "soundCardSource": "Source audio",
         "audioSourceLabel": "Source audio (nécessite un redémarrage de l'application)",
         "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des sons d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "La capture est suspendue quotidiennement entre les heures de début et de fin. Les fenêtres nocturnes (par ex. 22h00 à 06h00) sont prises en charge.",
         "solarHint": "Les horaires sont calculés à partir du lever/coucher du soleil à votre emplacement configuré. Utilisez des décalages négatifs avant l'événement, positifs après.",
         "badge": "Calme",
-        "enabledBadge": "Heures calmes activées pour ce flux"
+        "enabledBadge": "Heures calmes activées pour ce flux",
+        "enableLabel": "Suspendre la capture pendant les heures calmes"
       },
       "rtspStreams": {
         "title": "Configuration des Flux Audio",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Voir l'état des Modèles IA",
         "state": {
           "pending": "Chargement",
-          "failed": "Échec du chargement"
+          "failed": "Échec du chargement",
+          "missing": "Non installé"
         },
         "notLoadedHelp": "Ce modèle n'est pas chargé, il ne peut donc pas être sélectionné.",
         "defaultBadge": "{models} (par défaut)",
         "defaultPendingBadge": "Modèles par défaut",
-        "noneBadge": "Aucun modèle chargé"
+        "noneBadge": "Aucun modèle chargé",
+        "missingHelp": "Ce modèle n'est plus installé. Cette source l'ignore.",
+        "removeMissing": "Retirer",
+        "removeMissingAria": "Retirer {model} de {source}",
+        "lastSelectedHelp": "Au moins un classificateur reste sélectionné.",
+        "followsDefaults": "Cette source utilise les modèles par défaut.",
+        "listFailed": "La liste des modèles n'a pas pu être chargée.",
+        "warningBadge": "Vérifier les classificateurs"
+      },
+      "sources": {
+        "autoSaveHelp": "Les modifications sont enregistrées immédiatement. Les modifications du périphérique et de la fréquence d'échantillonnage redémarrent la capture : elles attendent donc que vous cliquiez sur Appliquer."
       }
     },
     "security": {

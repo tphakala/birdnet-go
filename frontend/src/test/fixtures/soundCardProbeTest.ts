@@ -11,7 +11,6 @@ const SELECT_TESTID_PREFIX = 'select-';
 const DEVICE_LABEL_KEY = 'settings.audio.soundCards.deviceLabel';
 const SAMPLE_RATE_LABEL_KEY = 'settings.audio.soundCards.sampleRateLabel';
 export const ADD_SOURCE_KEY = 'settings.audio.soundCards.addSource';
-export const EDIT_BUTTON_NAME = 'common.edit';
 
 // MockSelectDropdown derives its testid from `SELECT_TESTID_PREFIX + label`.
 export const DEVICE_SELECT_TESTID = `${SELECT_TESTID_PREFIX}${DEVICE_LABEL_KEY}`;

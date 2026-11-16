@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "A 48 kHz feletti frekvenciák kizárólagos eszközhozzáférést használnak Linuxon, megakadályozva más alkalmazásokat a hangkártya megosztásában",
         "modelLabel": "Észlelési modellek",
         "modelHelp": "Válassza ki, mely AI-modellek fussanak ezen a hangforráson",
-        "deleteConfirm": "Eltávolítja ezt a hangkártya forrást?",
+        "deleteConfirm": "Eltávolítja a(z) \"{name}\" hangkártya forrást?",
         "emptyState": {
           "title": "Nincsenek hangkártya források konfigurálva",
           "description": "Adjon hozzá egy hangkártya forrást a madárészleléshez szükséges hangfelvétel elindításához.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Legalább {rate}kHz mintavételezési frekvencia szükséges",
           "recommendedSampleRate": "{rate}kHz ajánlott a legjobb eredményekhez",
           "atLeastOneModel": "Legalább egy modellt ki kell választani"
-        }
+        },
+        "captureTitle": "Rögzítés",
+        "levelTitle": "Bemeneti szint",
+        "captureApplyHint": "A rögzítés az alkalmazáskor újraindul.",
+        "applyCapture": "Alkalmazás és a rögzítés újraindítása",
+        "applying": "Alkalmazás...",
+        "adding": "Hozzáadás...",
+        "captureApplyFailed": "A rögzítés nem változott. Alkalmazza újra, vagy szakítsa meg."
       },
       "audioCapture": {
         "title": "Hangkártya konfiguráció",
-        "description": "Válassza ki a madárhang észleléshez használandó hang bemeneti eszközt. A változtatásokhoz alkalmazás újraindítás szükséges.",
         "soundCardSource": "Hangkártya forrás",
         "audioSourceLabel": "Hang forrás (alkalmazás újraindítást igényel az érvénybe lépéshez)",
         "audioSourceHelp": "Válassza ki a madárhang észleléshez használandó hang bemeneti eszközt. A változtatásokhoz alkalmazás újraindítás szükséges.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "A rögzítés szünetel a kezdés és befejezés idők között naponta. Az éjszakai ablakok (pl. 22:00 - 06:00) támogatottak.",
         "solarHint": "Az idők a konfigurált helyszín napkeléje/napnyugtája alapján számítódnak. Használjon negatív eltolásokat az esemény előtt, pozitívat az után.",
         "badge": "Csendes",
-        "enabledBadge": "Csendes órák engedélyezve ehhez a streamhez"
+        "enabledBadge": "Csendes órák engedélyezve ehhez a streamhez",
+        "enableLabel": "Rögzítés szüneteltetése a csendes órákban"
       },
       "rtspStreams": {
         "title": "Hang stream konfiguráció",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "AI Modellek állapotának megtekintése",
         "state": {
           "pending": "Betöltés",
-          "failed": "A betöltés sikertelen"
+          "failed": "A betöltés sikertelen",
+          "missing": "Nincs telepítve"
         },
         "notLoadedHelp": "Ez a modell nincs betöltve, ezért nem választható ki.",
         "defaultBadge": "{models} (alapértelmezett)",
         "defaultPendingBadge": "Alapértelmezett modellek",
-        "noneBadge": "Nincs betöltve modell"
+        "noneBadge": "Nincs betöltve modell",
+        "missingHelp": "Ez a modell már nincs telepítve. Ez a forrás figyelmen kívül hagyja.",
+        "removeMissing": "Eltávolítás",
+        "removeMissingAria": "{model} eltávolítása innen: {source}",
+        "lastSelectedHelp": "Legalább egy osztályozó kiválasztva marad.",
+        "followsDefaults": "Ez a forrás az alapértelmezett modelleket használja.",
+        "listFailed": "A modellek listáját nem sikerült betölteni.",
+        "warningBadge": "Osztályozók ellenőrzése"
+      },
+      "sources": {
+        "autoSaveHelp": "A módosítások azonnal mentésre kerülnek. Az eszköz és a mintavételi frekvencia módosítása újraindítja a rögzítést, ezért ezek az Alkalmaz gombra kattintásig várnak."
       }
     },
     "security": {

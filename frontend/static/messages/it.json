@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Le frequenze superiori a 48 kHz utilizzano l'accesso esclusivo al dispositivo su Linux, impedendo ad altre applicazioni di condividere la scheda audio",
         "modelLabel": "Modelli di rilevamento",
         "modelHelp": "Seleziona quali modelli AI eseguire su questa sorgente audio",
-        "deleteConfirm": "Rimuovere questa sorgente scheda audio?",
+        "deleteConfirm": "Rimuovere la sorgente scheda audio \"{name}\"?",
         "emptyState": {
           "title": "Nessuna sorgente scheda audio configurata",
           "description": "Aggiungi una sorgente scheda audio per iniziare a catturare l'audio per il rilevamento degli uccelli.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Richiede almeno {rate}kHz di frequenza di campionamento",
           "recommendedSampleRate": "{rate}kHz consigliato per i migliori risultati",
           "atLeastOneModel": "È necessario selezionare almeno un modello"
-        }
+        },
+        "captureTitle": "Acquisizione",
+        "levelTitle": "Livello di ingresso",
+        "captureApplyHint": "L'acquisizione si riavvia quando applichi.",
+        "applyCapture": "Applica e riavvia l'acquisizione",
+        "applying": "Applicazione...",
+        "adding": "Aggiunta...",
+        "captureApplyFailed": "L'acquisizione non è stata modificata. Applica di nuovo o annulla."
       },
       "audioCapture": {
         "title": "Configurazione Scheda Audio",
-        "description": "Seleziona il dispositivo input audio per rilevamento suoni uccelli. Le modifiche richiedono riavvio applicazione.",
         "soundCardSource": "Sorgente Scheda Audio",
         "audioSourceLabel": "Sorgente Audio (richiede riavvio applicazione per avere effetto)",
         "audioSourceHelp": "Seleziona il dispositivo input audio per rilevamento suoni uccelli. Le modifiche richiedono riavvio applicazione per avere effetto.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "La cattura viene sospesa quotidianamente tra gli orari di inizio e fine. Sono supportate le finestre notturne (ad es. 22:00 - 06:00).",
         "solarHint": "Gli orari vengono calcolati in base all'alba/tramonto nella posizione configurata. Usa offset negativi prima dell'evento, positivi dopo.",
         "badge": "Silenzio",
-        "enabledBadge": "Ore silenziose abilitate per questo flusso"
+        "enabledBadge": "Ore silenziose abilitate per questo flusso",
+        "enableLabel": "Sospendi l'acquisizione nelle ore di silenzio"
       },
       "rtspStreams": {
         "title": "Configurazione Flusso Audio",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Visualizza stato Modelli IA",
         "state": {
           "pending": "Caricamento",
-          "failed": "Caricamento non riuscito"
+          "failed": "Caricamento non riuscito",
+          "missing": "Non installato"
         },
         "notLoadedHelp": "Questo modello non è caricato, quindi non può essere selezionato.",
         "defaultBadge": "{models} (predefinito)",
         "defaultPendingBadge": "Modelli predefiniti",
-        "noneBadge": "Nessun modello caricato"
+        "noneBadge": "Nessun modello caricato",
+        "missingHelp": "Questo modello non è più installato. Questa sorgente lo ignora.",
+        "removeMissing": "Rimuovi",
+        "removeMissingAria": "Rimuovi {model} da {source}",
+        "lastSelectedHelp": "Almeno un classificatore resta selezionato.",
+        "followsDefaults": "Questa sorgente usa i modelli predefiniti.",
+        "listFailed": "Impossibile caricare l'elenco dei modelli.",
+        "warningBadge": "Controlla i classificatori"
+      },
+      "sources": {
+        "autoSaveHelp": "Le modifiche vengono salvate subito. Le modifiche a dispositivo e frequenza di campionamento riavviano l'acquisizione, quindi attendono che si faccia clic su Applica."
       }
     },
     "security": {

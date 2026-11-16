@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Yli 48 kHz näytteenottotaajuudet käyttävät yksinoikeudellista laitepääsyä Linuxissa, estäen muita sovelluksia jakamasta äänikorttia",
         "modelLabel": "Tunnistusmallit",
         "modelHelp": "Valitse tässä äänilähteessä käytettävät tekoälymallit",
-        "deleteConfirm": "Poistetaanko tämä äänikorttilähtö?",
+        "deleteConfirm": "Poistetaanko äänikorttilähtö \"{name}\"?",
         "emptyState": {
           "title": "Äänikorttilähteitä ei ole määritetty",
           "description": "Lisää äänikorttilähtö aloittaaksesi äänen tallennuksen lintujen tunnistamista varten.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Vaatii vähintään {rate}kHz näytteenottotaajuuden",
           "recommendedSampleRate": "{rate}kHz suositellaan parhaisiin tuloksiin",
           "atLeastOneModel": "Vähintään yksi malli on valittava"
-        }
+        },
+        "captureTitle": "Tallennus",
+        "levelTitle": "Tulotaso",
+        "captureApplyHint": "Tallennus käynnistyy uudelleen, kun otat muutokset käyttöön.",
+        "applyCapture": "Ota käyttöön ja käynnistä tallennus uudelleen",
+        "applying": "Otetaan käyttöön...",
+        "adding": "Lisätään...",
+        "captureApplyFailed": "Tallennusta ei muutettu. Ota käyttöön uudelleen tai peruuta."
       },
       "audioCapture": {
         "title": "Äänen tallennus",
-        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-striimi",
         "soundCardSource": "Äänikorttilähde",
         "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
         "audioSourceHelp": "Valitse äänen syöttölaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Tallennus keskeytyy päivittäin alku- ja loppuaikojen välillä. Yön yli -ikkunat (esim. 22:00-06:00) ovat tuettuja.",
         "solarHint": "Ajat lasketaan auringonnousun/-laskun perusteella määritetyssä sijainnissasi. Käytä negatiivisia poikkeamia ennen tapahtumaa, positiivisia sen jälkeen.",
         "badge": "Hiljainen",
-        "enabledBadge": "Hiljaiset tunnit käytössä tälle striimille"
+        "enabledBadge": "Hiljaiset tunnit käytössä tälle striimille",
+        "enableLabel": "Keskeytä tallennus hiljaisina tunteina"
       },
       "rtspStreams": {
         "title": "Äänistriimien määritys",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Näytä Tekoälymallit-tila",
         "state": {
           "pending": "Ladataan",
-          "failed": "Lataus epäonnistui"
+          "failed": "Lataus epäonnistui",
+          "missing": "Ei asennettu"
         },
         "notLoadedHelp": "Tätä mallia ei ole ladattu, joten sitä ei voi valita.",
         "defaultBadge": "{models} (oletus)",
         "defaultPendingBadge": "Oletusmallit",
-        "noneBadge": "Ei ladattua mallia"
+        "noneBadge": "Ei ladattua mallia",
+        "missingHelp": "Tätä mallia ei ole enää asennettu. Tämä lähde ohittaa sen.",
+        "removeMissing": "Poista",
+        "removeMissingAria": "Poista {model} lähteestä {source}",
+        "lastSelectedHelp": "Vähintään yksi luokitin pysyy valittuna.",
+        "followsDefaults": "Tämä lähde käyttää oletusmalleja.",
+        "listFailed": "Malliluetteloa ei voitu ladata.",
+        "warningBadge": "Tarkista luokittimet"
+      },
+      "sources": {
+        "autoSaveHelp": "Muutokset tallennetaan heti. Laitteen ja näytteenottotaajuuden muutokset käynnistävät tallennuksen uudelleen, joten ne odottavat, kunnes valitset Ota käyttöön."
       }
     },
     "security": {

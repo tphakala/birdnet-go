@@ -46,7 +46,7 @@ const SAVED: AutoSaveFieldStatus = { state: 'saved' };
 
 /** Options of commitSetting. */
 export interface CommitOptions {
-  /** Key of the visible control, such as `audio:<rowId>:gain`. */
+  /** Key of the visible control, such as `audio:sources:<rowId>:gain`. */
   field: string;
   /** Save after this much quiet instead of at once (sliders, steppers, time inputs). */
   debounceMs?: number;

@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvenser over 48 kHz bruger eksklusiv enhedsadgang på Linux, hvilket forhindrer andre programmer i at dele lydkortet",
         "modelLabel": "Detektionsmodeller",
         "modelHelp": "Vælg hvilke AI-modeller der skal køres på denne lydkilde",
-        "deleteConfirm": "Fjern denne lydkortkilde?",
+        "deleteConfirm": "Fjern lydkortkilden \"{name}\"?",
         "emptyState": {
           "title": "Ingen lydkortkilder konfigureret",
           "description": "Tilføj en lydkortkilde for at begynde at optage lyd til fugledetektering.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Kræver mindst {rate}kHz optagelsesfrekvens",
           "recommendedSampleRate": "{rate}kHz anbefalet for bedste resultater",
           "atLeastOneModel": "Mindst én model skal vælges"
-        }
+        },
+        "captureTitle": "Optagelse",
+        "levelTitle": "Indgangsniveau",
+        "captureApplyHint": "Optagelsen genstartes, når du anvender.",
+        "applyCapture": "Anvend og genstart optagelsen",
+        "applying": "Anvender...",
+        "adding": "Tilføjer...",
+        "captureApplyFailed": "Optagelsen blev ikke ændret. Anvend igen, eller annullér."
       },
       "audioCapture": {
         "title": "Lydkortkonfiguration",
-        "description": "Vælg lydindgangsenheden til fuglelydsregistrering. Ændringer kræver genstart af applikationen.",
         "soundCardSource": "Lydkortkilde",
         "audioSourceLabel": "Lydkilde (kræver genstart af applikationen for at træde i kraft)",
         "audioSourceHelp": "Vælg lydindgangsenheden til fuglelydsregistrering. Ændringer kræver genstart af applikationen for at træde i kraft.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Optagelse pauses mellem start- og sluttidspunkter dagligt. Perioder henover natten (f.eks. 22:00 til 06:00) understøttes.",
         "solarHint": "Tidspunkter beregnes ud fra solopgang/solnedgang ved din konfigurerede placering. Brug negative forskydninger for før begivenheden, positive for efter.",
         "badge": "Stille",
-        "enabledBadge": "Stille timer aktiveret for denne strøm"
+        "enabledBadge": "Stille timer aktiveret for denne strøm",
+        "enableLabel": "Sæt optagelsen på pause i stille timer"
       },
       "rtspStreams": {
         "title": "Konfiguration af lydstrøm",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Vis status for AI-modeller",
         "state": {
           "pending": "Indlæser",
-          "failed": "Kunne ikke indlæses"
+          "failed": "Kunne ikke indlæses",
+          "missing": "Ikke installeret"
         },
         "notLoadedHelp": "Denne model er ikke indlæst og kan derfor ikke vælges.",
         "defaultBadge": "{models} (standard)",
         "defaultPendingBadge": "Standardmodeller",
-        "noneBadge": "Ingen model indlæst"
+        "noneBadge": "Ingen model indlæst",
+        "missingHelp": "Denne model er ikke længere installeret. Denne kilde ignorerer den.",
+        "removeMissing": "Fjern",
+        "removeMissingAria": "Fjern {model} fra {source}",
+        "lastSelectedHelp": "Mindst én klassifikator forbliver valgt.",
+        "followsDefaults": "Denne kilde bruger standardmodellerne.",
+        "listFailed": "Modellisten kunne ikke indlæses.",
+        "warningBadge": "Kontrollér klassifikatorer"
+      },
+      "sources": {
+        "autoSaveHelp": "Ændringer gemmes med det samme. Ændringer af enhed og samplingsfrekvens genstarter optagelsen og venter derfor, til du klikker på Anvend."
       }
     },
     "security": {

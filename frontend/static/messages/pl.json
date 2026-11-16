@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Częstotliwości powyżej 48 kHz używają wyłącznego dostępu do urządzenia w systemie Linux, uniemożliwiając innym aplikacjom współdzielenie karty dźwiękowej",
         "modelLabel": "Modele detekcji",
         "modelHelp": "Wybierz modele AI dla tego źródła audio",
-        "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",
+        "deleteConfirm": "Usunąć źródło karty dźwiękowej \"{name}\"?",
         "emptyState": {
           "title": "Brak Skonfigurowanych Źródeł Kart Dźwiękowych",
           "description": "Dodaj źródło karty dźwiękowej, aby rozpocząć przechwytywanie audio do wykrywania ptaków.",
@@ -3736,11 +3736,17 @@
           "minSampleRate": "Wymaga co najmniej {rate}kHz częstotliwości próbkowania",
           "recommendedSampleRate": "{rate}kHz zalecane dla najlepszych wyników",
           "atLeastOneModel": "Należy wybrać co najmniej jeden model"
-        }
+        },
+        "captureTitle": "Przechwytywanie",
+        "levelTitle": "Poziom wejściowy",
+        "captureApplyHint": "Przechwytywanie uruchomi się ponownie po zastosowaniu.",
+        "applyCapture": "Zastosuj i uruchom ponownie przechwytywanie",
+        "applying": "Stosowanie...",
+        "adding": "Dodawanie...",
+        "captureApplyFailed": "Przechwytywanie nie zostało zmienione. Zastosuj ponownie lub anuluj."
       },
       "audioCapture": {
         "title": "Przechwytywanie Audio",
-        "description": "Ustaw źródło przechwytywania audio, kartę dźwiękową lub strumień RTSP",
         "soundCardSource": "Źródło Karty Dźwiękowej",
         "audioSourceLabel": "Źródło Audio (wymaga restartu aplikacji do zastosowania)",
         "audioSourceHelp": "Wybierz urządzenie wejściowe audio do detekcji dźwięków ptaków. Zmiany wymagają restartu aplikacji, aby zostały zastosowane.",
@@ -3774,7 +3780,8 @@
         "fixedHint": "Przechwytywanie jest wstrzymywane codziennie między godziną rozpoczęcia a zakończenia. Obsługiwane są okna nocne (np. 22:00 do 06:00).",
         "solarHint": "Godziny są obliczane na podstawie wschodu/zachodu słońca w skonfigurowanej lokalizacji. Użyj ujemnych przesunięć dla czasu przed zdarzeniem, dodatnich po nim.",
         "badge": "Cisza",
-        "enabledBadge": "Godziny ciszy włączone dla tego strumienia"
+        "enabledBadge": "Godziny ciszy włączone dla tego strumienia",
+        "enableLabel": "Wstrzymaj przechwytywanie w godzinach ciszy"
       },
       "rtspStreams": {
         "title": "Konfiguracja Strumieni Audio",
@@ -4121,12 +4128,23 @@
         "loadFailedLink": "Wyświetl status modeli AI",
         "state": {
           "pending": "Ładowanie",
-          "failed": "Nie udało się załadować"
+          "failed": "Nie udało się załadować",
+          "missing": "Nie zainstalowano"
         },
         "notLoadedHelp": "Ten model nie jest załadowany, więc nie można go wybrać.",
         "defaultBadge": "{models} (domyślne)",
         "defaultPendingBadge": "Domyślne modele",
-        "noneBadge": "Nie załadowano modelu"
+        "noneBadge": "Nie załadowano modelu",
+        "missingHelp": "Ten model nie jest już zainstalowany. To źródło go pomija.",
+        "removeMissing": "Usuń",
+        "removeMissingAria": "Usuń {model} ze źródła {source}",
+        "lastSelectedHelp": "Co najmniej jeden klasyfikator pozostaje wybrany.",
+        "followsDefaults": "To źródło korzysta z modeli domyślnych.",
+        "listFailed": "Nie udało się wczytać listy modeli.",
+        "warningBadge": "Sprawdź klasyfikatory"
+      },
+      "sources": {
+        "autoSaveHelp": "Zmiany są zapisywane od razu. Zmiany urządzenia i częstotliwości próbkowania ponownie uruchamiają przechwytywanie, więc czekają, aż klikniesz Zastosuj."
       }
     },
     "security": {
