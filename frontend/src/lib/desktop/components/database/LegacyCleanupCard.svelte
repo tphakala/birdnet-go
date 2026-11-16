@@ -152,7 +152,7 @@
           </svg>
           <div>
             <p class="font-medium text-sm">{t('system.database.legacy.cleanup.warning')}</p>
-            <p class="text-sm opacity-80">{t('system.database.legacy.cleanup.backupReminder')}</p>
+            <p class="text-sm">{t('system.database.legacy.cleanup.backupReminder')}</p>
           </div>
         </div>
       </div>
@@ -176,7 +176,7 @@
         </svg>
         <div>
           <p class="font-medium text-sm">{t('system.database.legacy.cleanup.notAvailable')}</p>
-          <p class="text-sm opacity-80">{status.reason}</p>
+          <p class="text-sm">{status.reason}</p>
         </div>
       </div>
     {/if}

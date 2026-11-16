@@ -102,7 +102,7 @@
 
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-[var(--text-error)]">{error}</span>
+      <span class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
     </div>
   {/if}
 </div>
