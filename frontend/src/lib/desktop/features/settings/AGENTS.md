@@ -118,10 +118,12 @@ Controls call `commitSetting(section, partial, { field, debounceMs? })` from
   without a delay saves at once and carries any debounced value with it.
 - A migrated tab passes neither `hasChanges` nor `originalData` and
   `currentData` to its `SettingsSection`: it has no unsaved state to show.
-- Give the tab definition an `autoSaveScope`: a field key prefix every key of
-  its controls starts with (`audio:sources:`), so the tab's save state counts
-  only its own fields. The tab names other tabs of the page with unsaved
-  changes; they are saved on their own tab.
+- Give the tab definition an `autoSaveScope`: a field key prefix that every key
+  of its controls starts with and no other tab's key does (`audio:` for keys such
+  as `audio:<rowId>:gain`), so the tab's save state counts only its own fields.
+  End the prefix with the separator, since a prefix of `audio:1` also matches
+  `audio:10:gain`. The tab names other tabs of the page with unsaved changes;
+  they are saved on their own tab.
 - `AutoSaveStatus` clears its field's error when it unmounts (a row deleted, a
   tab switched), so a stale error never stays in the tab's count.
 - A refused value goes back to the stored one and the field shows why; a value
