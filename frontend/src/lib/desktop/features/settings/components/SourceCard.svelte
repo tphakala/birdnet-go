@@ -79,7 +79,7 @@
 
   function executeDelete() {
     showDeleteConfirm = false;
-    onDelete();
+    if (!disabled) onDelete();
   }
 
   function handleDeleteKeydown(event: KeyboardEvent) {
