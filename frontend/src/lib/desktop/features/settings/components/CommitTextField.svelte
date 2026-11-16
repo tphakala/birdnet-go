@@ -80,7 +80,13 @@
     if (focused) commit();
   });
 
+  /** keyCode that browsers report for a key handled by an IME. */
+  const IME_KEY_CODE = 229;
+
   function handleKeydown(event: KeyboardEvent) {
+    // The Enter that confirms an IME composition belongs to the IME (keyCode 229
+    // is what browsers that report no isComposing send for it).
+    if (event.isComposing || event.keyCode === IME_KEY_CODE) return;
     if (event.key === 'Enter') {
       event.preventDefault();
       commit();

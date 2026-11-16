@@ -35,6 +35,19 @@ describe('CommitTextField', () => {
     expect(onCommit).toHaveBeenCalledOnce();
   });
 
+  it('ignores the Enter that confirms an IME composition', async () => {
+    const { onCommit, input } = renderField();
+    await fireEvent.input(input, { target: { value: 'Porch' } });
+
+    // fireEvent returns false when the handler called preventDefault.
+    expect(await fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(true);
+    expect(await fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(true);
+    expect(onCommit).not.toHaveBeenCalled();
+
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith('Porch');
+  });
+
   it('follows a changed saved value while not focused and keeps the typed text while focused', async () => {
     const { view, input } = renderField();
 
