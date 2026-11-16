@@ -167,6 +167,27 @@ describe('pickPreselectedVariant', () => {
     e.installedVariantId = 'fp32@africa';
     expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
   });
+
+  it('falls back to the first variant of an entry made only of other regions slices', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa', compatible: false }),
+        variant({ id: 'fp32@iberia', region: 'iberia' }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('prefers the first global or active region variant over an earlier slice of another region when none of them runs', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'int8', compatible: false }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('int8');
+  });
 });
 
 describe('reasonKey', () => {

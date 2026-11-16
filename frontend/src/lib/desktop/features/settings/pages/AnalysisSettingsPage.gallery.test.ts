@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import type { CatalogEntry } from '$lib/types/models';
 import { catalogEntry as birdEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
 
@@ -38,6 +39,16 @@ vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
 
 // The Settings tab (not exercised here) reads these stores; provide minimal shapes
 // so the page's derived state initializes without touching a real settings load.
+// The live BirdNET form section, kept reachable so a test can set an unsaved value
+const { BIRDNET_FORM_DEFAULTS, settingsStores } = vi.hoisted(() => {
+  const settingsStores: { birdnetSettings?: { set: (value: Record<string, unknown>) => void } } =
+    {};
+  return {
+    BIRDNET_FORM_DEFAULTS: { huggingFaceEndpoint: '', threshold: 0.03, sensitivity: 1, overlap: 0 },
+    settingsStores,
+  };
+});
+
 vi.mock('$lib/stores/settings', async () => {
   const { writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
   const settingsStore = writable({
@@ -54,12 +65,8 @@ vi.mock('$lib/stores/settings', async () => {
       refreshKeepingEdits: vi.fn().mockResolvedValue(undefined),
     },
     hasUnsavedChanges: writable(false),
-    birdnetSettings: writable({
-      huggingFaceEndpoint: '',
-      threshold: 0.03,
-      sensitivity: 1,
-      overlap: 0,
-    }),
+    birdnetSettings: (settingsStores.birdnetSettings =
+      writable<Record<string, unknown>>(BIRDNET_FORM_DEFAULTS)),
     dynamicThresholdSettings: writable({ enabled: false }),
     realtimeSettings: writable({}),
     batSettings: writable({}),
@@ -955,5 +962,95 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     for (const category of ['wildlife', 'bird', 'bat', 'geomodel']) {
       expect(cardNamed(`Available ${category}`)).toHaveTextContent('Europe');
     }
+  });
+});
+
+describe('AnalysisSettingsPage model gallery variant preselection', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(() => () => {});
+  });
+
+  afterEach(() => {
+    for (const mock of [modelsApi.installModel, modelsApi.subscribeInstallProgress]) {
+      vi.mocked(mock).mockReset();
+    }
+    settingsStores.birdnetSettings?.set(BIRDNET_FORM_DEFAULTS);
+  });
+
+  const slice = (id: string, region: string) => ({
+    id,
+    region,
+    speciesCount: 10,
+    default: false,
+    installed: false,
+    sizeBytes: 1,
+    compatible: true,
+    recommended: false,
+  });
+  const regionOption = (slug: string) => ({
+    slug,
+    name: slug,
+    group: 'europe',
+    groupDisplay: 'Europe',
+    tier: 1,
+    countries: { core: [], partial: [] },
+  });
+
+  // No recommended or installed id: the blocked global default comes first, then a
+  // compatible africa slice, then a compatible nordic slice. Opens the install dialog
+  // once the regions have loaded and accepts the license.
+  async function installWithRegions(resolvedSlug: string): Promise<void> {
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+      modelRegion: 'auto',
+      locationConfigured: true,
+      resolved: { slug: resolvedSlug, source: 'auto', ambiguous: false },
+      regions: [regionOption('africa'), regionOption('nordic')],
+      families: [],
+    });
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({
+          variants: [
+            { ...slice('fp32', ''), default: true, compatible: false },
+            slice('fp32@africa', 'africa'),
+            slice('fp32@nordic', 'nordic'),
+          ],
+        }),
+      ],
+    });
+
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    // The dialog reads the active region when it opens, so let the regions load first.
+    await waitFor(() => expect(modelsApi.fetchModelRegions).toHaveBeenCalled());
+    await vi.mocked(modelsApi.fetchModelRegions).mock.results[0]?.value;
+    await tick();
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+  }
+
+  it("installs the auto-resolved region's slice when nothing is recommended and the global build is blocked", async () => {
+    await installWithRegions('nordic');
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@nordic')
+    );
+  });
+
+  it('installs the slice of the unsaved region picked in the form, not the auto-resolved one', async () => {
+    settingsStores.birdnetSettings?.set({ ...BIRDNET_FORM_DEFAULTS, modelRegion: 'nordic' });
+
+    await installWithRegions('africa');
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@nordic')
+    );
   });
 });
