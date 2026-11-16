@@ -264,7 +264,10 @@ custom scheme maps it to `--color-base-content`. `.text-primary`,
 `.menu-item-active` and `.menu-subitem-active` use it. All four status text
 tokens reach 4.5:1 on base-100, base-200, base-300 and on a 15% tint of their
 fill over each, and `--text-primary` does the same for every fixed scheme in
-both themes; keep a primary tint behind primary-hue text at 15% or less.
+both themes; keep a primary tint behind primary-hue text at 15% or less. Only an
+icon-only chip, which needs 3:1 (the token reaches 4.31:1 on a 20% tint in every
+scheme), and the detection limit menu, which sits on base-100 (4.88:1 at 25% in
+dark), go higher.
 `.badge-status-*`, `.alert-*`, `.text-error/success/warning/info` and
 `StatusPill` already use them. Use the `--color-*` fills for backgrounds,
 borders and dots, not for new text.
