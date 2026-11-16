@@ -33,6 +33,8 @@ function selectors(source: string): string[] {
 describe('species-display.css', () => {
   it('colours the species name hover with the text token and keeps the focus ring on the fill', () => {
     expect(css).toMatch(/--sp-hover-color:\s*var\(--text-primary\);/);
+    // A second declaration, such as a dark override, could put the fill back on the hover colour.
+    expect(css.match(/--sp-hover-color:/g)).toHaveLength(1);
     expect(css).toMatch(/outline:\s*2px solid var\(--color-primary\);/);
   });
 
