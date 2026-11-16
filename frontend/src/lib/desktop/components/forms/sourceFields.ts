@@ -24,3 +24,10 @@ export function sourceListField(prefix: string): string {
 
 /** Field key of adding and deleting sound card sources. */
 export const AUDIO_SOURCES_LIST_FIELD = sourceListField(AUDIO_SOURCES_FIELD_PREFIX);
+
+/** A disabled equalizer without filters is stored as undefined. */
+export function normalizeEqualizer<F>(equalizer: { enabled: boolean; filters: F[] }) {
+  return equalizer.enabled || equalizer.filters.length > 0
+    ? { enabled: equalizer.enabled, filters: equalizer.filters }
+    : undefined;
+}

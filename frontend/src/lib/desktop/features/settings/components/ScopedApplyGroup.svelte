@@ -15,6 +15,8 @@
   - applyLabel: Apply button text, named for its effect
   - applyingLabel: Apply button text while the apply is saved
   - disabled: Blocks the apply
+  - statusId: Id of the element that shows the failure; the Apply button points
+    aria-describedby at it after a failed apply
   - children: The controls
 
   @component

@@ -47,7 +47,7 @@
   } from '$lib/stores/models.svelte';
   import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
-  import { AUDIO_SOURCES_LIST_FIELD } from './sourceFields';
+  import { AUDIO_SOURCES_LIST_FIELD, normalizeEqualizer } from './sourceFields';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -264,19 +264,13 @@
       return;
     }
 
-    // A disabled equalizer without filters is stored as undefined
-    const transformedEqualizer =
-      newEqualizer.enabled || newEqualizer.filters.length > 0
-        ? { enabled: newEqualizer.enabled, filters: newEqualizer.filters }
-        : undefined;
-
     const newSource: AudioSourceConfig = {
       name: trimmedName,
       device: newDevice,
       sampleRate: newSampleRate,
       gain: newGain,
       models: newModels,
-      equalizer: transformedEqualizer,
+      equalizer: normalizeEqualizer(newEqualizer),
       quietHours: newQuietHours,
     };
 

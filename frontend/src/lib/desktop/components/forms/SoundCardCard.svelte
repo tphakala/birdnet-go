@@ -71,7 +71,12 @@
   import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
   import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
   import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
-  import { AUDIO_SOURCES_FIELD_PREFIX, sourceField, type SourceFieldPart } from './sourceFields';
+  import {
+    AUDIO_SOURCES_FIELD_PREFIX,
+    normalizeEqualizer,
+    sourceField,
+    type SourceFieldPart,
+  } from './sourceFields';
   import type {
     AudioSourceConfig,
     EqualizerSettings,
@@ -295,11 +300,7 @@
   let equalizer = $derived<EqualizerSettings>(source.equalizer ?? { enabled: false, filters: [] });
 
   function commitEqualizer(updated: EqualizerSettings) {
-    // A disabled equalizer without filters is stored as undefined
-    const next =
-      updated.enabled || updated.filters.length > 0
-        ? { enabled: updated.enabled, filters: updated.filters }
-        : undefined;
+    const next = normalizeEqualizer(updated);
     // Switching it or adding and removing filters is discrete; a filter value is continuous.
     const continuous =
       updated.enabled === equalizer.enabled && updated.filters.length === equalizer.filters.length;

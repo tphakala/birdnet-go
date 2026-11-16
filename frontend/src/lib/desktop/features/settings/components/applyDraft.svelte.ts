@@ -64,11 +64,6 @@ export class ApplyDraft<T extends object> {
     return autoSaveStatus(this.#field);
   }
 
-  /** The field key the apply commits under. */
-  get field(): string {
-    return this.#field;
-  }
-
   /** True while the draft differs from the saved values. */
   get dirty(): boolean {
     return !sameDraft(this.draft, this.#saved());
