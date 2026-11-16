@@ -2480,6 +2480,14 @@
       "validationBlocked": "Alguns campos precisam de atenção antes de você poder salvar.",
       "noChangesToSave": "Não há alterações para salvar."
     },
+    "autoSave": {
+      "saved": "Guardado",
+      "failed": "Não guardado. O valor anterior foi restaurado.",
+      "changedElsewhere": "Esta definição foi alterada noutro local. O valor atual é mostrado; faça a alteração novamente.",
+      "tabNote": "As alterações neste separador são guardadas à medida que as faz.",
+      "failuresSummary": "{count, plural, one {# alteração não foi guardada} other {# alterações não foram guardadas}}",
+      "dismiss": "Dispensar"
+    },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
       "saveFailed": "Falha ao salvar as configurações",

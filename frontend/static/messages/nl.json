@@ -2480,6 +2480,14 @@
       "validationBlocked": "Sommige velden vragen aandacht voordat u kunt opslaan.",
       "noChangesToSave": "Geen wijzigingen om op te slaan."
     },
+    "autoSave": {
+      "saved": "Opgeslagen",
+      "failed": "Niet opgeslagen. De vorige waarde is hersteld.",
+      "changedElsewhere": "Deze instelling is elders gewijzigd. De huidige waarde wordt getoond; maak je wijziging opnieuw.",
+      "tabNote": "Wijzigingen op dit tabblad worden opgeslagen terwijl je ze maakt.",
+      "failuresSummary": "{count, plural, one {# wijziging is niet opgeslagen} other {# wijzigingen zijn niet opgeslagen}}",
+      "dismiss": "Sluiten"
+    },
     "errors": {
       "loadFailed": "Instellingen konden niet worden geladen",
       "saveFailed": "Instellingen konden niet worden opgeslagen",

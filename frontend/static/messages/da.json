@@ -2480,6 +2480,14 @@
       "validationBlocked": "Nogle felter kræver opmærksomhed, før du kan gemme.",
       "noChangesToSave": "Ingen ændringer at gemme."
     },
+    "autoSave": {
+      "saved": "Gemt",
+      "failed": "Ikke gemt. Den forrige værdi er gendannet.",
+      "changedElsewhere": "Denne indstilling er ændret et andet sted. Den aktuelle værdi vises; foretag din ændring igen.",
+      "tabNote": "Ændringer på denne fane gemmes, mens du foretager dem.",
+      "failuresSummary": "{count, plural, one {# ændring blev ikke gemt} other {# ændringer blev ikke gemt}}",
+      "dismiss": "Luk"
+    },
     "errors": {
       "loadFailed": "Kunne ikke indlæse indstillinger",
       "saveFailed": "Kunne ikke gemme indstillinger",

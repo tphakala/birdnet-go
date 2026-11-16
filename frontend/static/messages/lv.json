@@ -2480,6 +2480,14 @@
       "validationBlocked": "Dažiem laukiem nepieciešama uzmanība, pirms varat saglabāt.",
       "noChangesToSave": "Nav izmaiņu, ko saglabāt."
     },
+    "autoSave": {
+      "saved": "Saglabāts",
+      "failed": "Nav saglabāts. Atjaunota iepriekšējā vērtība.",
+      "changedElsewhere": "Šis iestatījums tika mainīts citur. Tiek rādīta pašreizējā vērtība; veiciet izmaiņu vēlreiz.",
+      "tabNote": "Izmaiņas šajā cilnē tiek saglabātas, kamēr tās veicat.",
+      "failuresSummary": "{count, plural, zero {# izmaiņas nav saglabātas} one {# izmaiņa nav saglabāta} other {# izmaiņas nav saglabātas}}",
+      "dismiss": "Aizvērt"
+    },
     "errors": {
       "loadFailed": "Neizdevās ielādēt iestatījumus",
       "saveFailed": "Neizdevās saglabāt iestatījumus",

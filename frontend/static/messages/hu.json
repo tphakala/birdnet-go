@@ -2480,6 +2480,14 @@
       "validationBlocked": "Néhány mezőt ellenőrizni kell, mielőtt menthet.",
       "noChangesToSave": "Nincs mentendő változtatás."
     },
+    "autoSave": {
+      "saved": "Mentve",
+      "failed": "Nincs mentve. Az előző érték vissza lett állítva.",
+      "changedElsewhere": "Ezt a beállítást máshol módosították. A jelenlegi érték látható; végezze el újra a módosítást.",
+      "tabNote": "Az ezen a lapon végzett módosítások mentése azonnal megtörténik.",
+      "failuresSummary": "{count, plural, one {# módosítás nem lett mentve} other {# módosítás nem lett mentve}}",
+      "dismiss": "Elvetés"
+    },
     "errors": {
       "loadFailed": "A beállítások betöltése sikertelen",
       "saveFailed": "A beállítások mentése sikertelen",

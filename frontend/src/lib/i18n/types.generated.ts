@@ -1940,6 +1940,12 @@ export type TranslationKey =
   | 'settings.actions.toolbar'
   | 'settings.actions.validationBlocked'
   | 'settings.actions.noChangesToSave'
+  | 'settings.autoSave.saved'
+  | 'settings.autoSave.failed'
+  | 'settings.autoSave.changedElsewhere'
+  | 'settings.autoSave.tabNote'
+  | 'settings.autoSave.failuresSummary' // params: count
+  | 'settings.autoSave.dismiss'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
   | 'settings.errors.changedElsewhere'
@@ -4958,6 +4964,7 @@ export type TranslationParams = {
     time: string | number;
   };
   'settings.notFound.message': { section: string | number };
+  'settings.autoSave.failuresSummary': { count: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {
     count: string | number;
     description: string | number;

@@ -11,7 +11,8 @@
   - Full keyboard navigation (Arrow keys, Home, End)
   - ARIA compliance for screen readers
   - Lazy content rendering (only active tab content is mounted)
-  - Integrated save/reset actions bar
+  - Integrated save/reset actions bar, replaced on a tab with saveMode 'immediate' by a
+    note and the aggregate auto-save state
 
   Props:
   - tabs: Array of tab definitions
@@ -34,12 +35,18 @@
   import type { LucideProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
+  import { autoSaveBusy, autoSaveFailures } from '$lib/stores/settingsAutoSave.svelte';
 
   export interface TabDefinition {
     id: string;
     label: string;
     icon?: Component<LucideProps>;
     hasChanges?: boolean;
+    /**
+     * How the tab saves: 'manual' (default) uses the page save bar, 'immediate' saves
+     * each change as it is made and replaces the bar with a note.
+     */
+    saveMode?: 'manual' | 'immediate';
     content: Snippet;
   }
 
@@ -79,6 +86,11 @@
       ''
     );
   });
+
+  const immediateSave = $derived(
+    tabs.find(tab => tab.id === selectedTab)?.saveMode === 'immediate'
+  );
+  const failedSaves = $derived(autoSaveFailures());
 
   // Parents use the binding for tab-specific work (e.g. mounting the location map).
   $effect(() => {
@@ -216,7 +228,22 @@
 
   <!-- Integrated Save/Reset Actions -->
   {#if showActions}
-    <SettingsPageActions {onReset} />
+    {#if immediateSave}
+      <div
+        class="mt-6 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--color-base-content)]/70"
+      >
+        <p>{t('settings.autoSave.tabNote')}</p>
+        <p role="status" class={failedSaves > 0 ? 'text-[var(--text-error)]' : undefined}>
+          {#if failedSaves > 0}
+            {t('settings.autoSave.failuresSummary', { count: failedSaves })}
+          {:else if autoSaveBusy()}
+            {t('settings.actions.saving')}
+          {/if}
+        </p>
+      </div>
+    {:else}
+      <SettingsPageActions {onReset} />
+    {/if}
   {/if}
 </div>
 

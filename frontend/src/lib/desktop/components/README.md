@@ -183,6 +183,7 @@ The following components are located in their feature directories:
 
 ### Settings (`features/settings/components/`)
 
+- `AutoSaveStatus.svelte` - Inline feedback of one immediately saved setting, driven by the field key given to `commitSetting` (`$lib/stores/settingsAutoSave.svelte`): nothing while idle, "Saving..." and "Saved" in a `role="status"` region, the reason with a dismiss button in a `role="alert"` region on failure. Props: `field`, optional `id`, `class`
 - `ModelCard.svelte` - Model gallery card (installed or available) whose regions line up across a row through subgrid
 - `ModelCardGrid.svelte` - Model gallery grid with columns sized by its own width
 - `SettingsCard.svelte` - Settings display card

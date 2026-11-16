@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
+import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
 import SettingsTabs, { type TabDefinition } from './SettingsTabs.svelte';
 
 const HAS_CHANGES_TEXT = 'settings.tabs.hasChanges';
@@ -85,5 +86,67 @@ describe('SettingsTabs tab styling', () => {
     expect(screen.getByRole('tab', { name: 'Label one' })).toHaveClass('tab-active');
     expect(screen.getByRole('tab', { name: 'Label two' })).not.toHaveClass('tab-active');
     expect(screen.getByRole('tab', { name: 'Label three' })).not.toHaveClass('tab-active');
+  });
+});
+
+describe('SettingsTabs save mode', () => {
+  const SAVE_NAME = 'settings.actions.saveAriaLabel';
+  const NOTE_TEXT = 'settings.autoSave.tabNote';
+
+  function modeTab(id: string, saveMode: 'manual' | 'immediate'): TabDefinition {
+    return { ...tab(id, false), saveMode };
+  }
+
+  function renderWithBar(tabs: TabDefinition[], activeTab: string, showActions = true) {
+    window.history.replaceState(null, '', `/ui/settings/audio?tab=${activeTab}`);
+    return render(SettingsTabs, { props: { tabs, activeTab, showActions } });
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('shows the note and no Save button on an immediate tab', () => {
+    renderWithBar([modeTab('live', 'immediate'), modeTab('bar', 'manual')], 'live');
+
+    expect(screen.getByText(NOTE_TEXT)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: SAVE_NAME })).toBeNull();
+  });
+
+  it('brings the save bar back on a manual tab and leaves out the note', () => {
+    renderWithBar([modeTab('live', 'immediate'), modeTab('bar', 'manual')], 'bar');
+
+    expect(screen.getByRole('button', { name: SAVE_NAME })).toBeInTheDocument();
+    expect(screen.queryByText(NOTE_TEXT)).toBeNull();
+  });
+
+  it('summarises fields that were not saved in a status line on an immediate tab', async () => {
+    renderWithBar([modeTab('live', 'immediate')], 'live');
+
+    // Settings have not loaded, so staging is refused and the field ends in error.
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'settings.autoSave.failuresSummary'
+    );
+    resetAutoSaveForTest();
+  });
+
+  it('treats a tab without a save mode as manual', () => {
+    renderWithBar([tab('plain', false)], 'plain');
+
+    expect(screen.getByRole('button', { name: SAVE_NAME })).toBeInTheDocument();
+  });
+
+  it('shows neither the note nor the bar when actions are hidden', () => {
+    renderWithBar([modeTab('live', 'immediate')], 'live', false);
+
+    expect(screen.queryByText(NOTE_TEXT)).toBeNull();
+    expect(screen.queryByRole('button', { name: SAVE_NAME })).toBeNull();
   });
 });
