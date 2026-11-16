@@ -286,6 +286,9 @@ export function commitSetting<S extends SettingsSectionName>(
     settingsActions.stageSectionEdit(section, partial);
   } catch (error) {
     logger.warn('Refused to stage a settings edit:', error);
+    // The field has no sendable edit now; an earlier pending commit must not turn it into Saved.
+    sectionState(section).pending.delete(field);
+    fieldPaths.delete(field);
     setStatus(field, { state: 'error', message: failureMessage(error) });
     return;
   }

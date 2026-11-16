@@ -268,4 +268,29 @@ describe('settings auto save engine', () => {
     expect(autoSaveStatus('audio:a:models').state).toBe('error');
     expect(autoSaveBusy()).toBe(false);
   });
+
+  it('keeps the error of a refused commit when an earlier commit of the field is still pending', async () => {
+    commitSetting(
+      'audio',
+      { sources: [source({ gain: 1 })] },
+      {
+        field: 'audio:a:gain',
+        debounceMs: AUTOSAVE_DEBOUNCE_MS,
+      }
+    );
+    store.stageSectionEdit.mockImplementationOnce(() => {
+      throw new Error('settings.errors.loadFailed');
+    });
+    commitSetting(
+      'audio',
+      { sources: [source({ gain: 2 })] },
+      {
+        field: 'audio:a:gain',
+        debounceMs: AUTOSAVE_DEBOUNCE_MS,
+      }
+    );
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS * 2);
+
+    expect(autoSaveStatus('audio:a:gain').state).toBe('error');
+  });
 });
