@@ -58,6 +58,9 @@ let activeFetch: AbortController | null = null;
 let subscribers = 0;
 let activeRefresh: AbortController | null = null;
 let refreshQueued = false;
+// Set while the settings form still has to drop aliases of removed models, and
+// kept when that refresh fails so the next refresh retries it.
+let settingsRefreshPending = false;
 let watchers = 0;
 let unlistenTopology: (() => void) | null = null;
 
@@ -148,6 +151,10 @@ async function loadModels(controller: AbortController): Promise<void> {
   } finally {
     if (activeFetch === controller) {
       activeFetch = null;
+      // A topology event that arrived during this fetch may postdate its response.
+      const rerun = refreshQueued && fetchState === 'loaded';
+      refreshQueued = false;
+      if (rerun) void refreshModels();
     }
   }
 }
@@ -185,14 +192,19 @@ function idSet(models: readonly BackendModel[]): string {
 /**
  * Refetches the list in place: the shown list stays until the new one arrives, so
  * a refresh never flashes the loading state, and a failed refresh keeps the last
- * list. A refresh that arrives while one runs queues one more behind it. When the
- * set of listed ids changed, the settings form is refreshed once, keeping unsaved
- * edits, because the server strips aliases of removed models from the sources.
- * Before the first successful fetch it is the plain fetch.
+ * list. A refresh that arrives while one runs, or while the first fetch runs,
+ * queues one more behind it. When the set of listed ids changed, the settings form
+ * is refreshed once, keeping unsaved edits, because the server strips aliases of
+ * removed models from the sources; a failed form refresh is retried by the next
+ * refresh. Before the first successful fetch it is the plain fetch.
  */
 export async function refreshModels(): Promise<void> {
   if (fetchState !== 'loaded') {
-    untrack(startFetchIfNeeded);
+    if (activeFetch) {
+      refreshQueued = true;
+    } else {
+      untrack(startFetchIfNeeded);
+    }
     return;
   }
   if (activeRefresh) {
@@ -204,10 +216,11 @@ export async function refreshModels(): Promise<void> {
   try {
     const data = await api.get<BackendModel[]>('/api/v2/models', { signal: controller.signal });
     if (controller.signal.aborted || !Array.isArray(data)) return;
-    const changed = idSet(data) !== idSet(fetchedModels);
+    if (idSet(data) !== idSet(fetchedModels)) settingsRefreshPending = true;
     fetchedModels = data;
-    if (changed) {
+    if (settingsRefreshPending) {
       await settingsActions.refreshKeepingEdits();
+      settingsRefreshPending = false;
     }
   } catch (err: unknown) {
     if (!controller.signal.aborted) {
@@ -239,6 +252,11 @@ export function watchModels(): () => void {
   watchers++;
   if (watchers === 1) {
     unlistenTopology = onTopologyChanged(() => void refreshModels());
+    // The list may have changed while nothing watched it, so a loaded list is
+    // refetched when the first watcher arrives.
+    untrack(() => {
+      if (fetchState === 'loaded') void refreshModels();
+    });
   }
   return () => {
     watchers--;
@@ -260,6 +278,7 @@ export function resetModelsForTest(): void {
   activeRefresh?.abort();
   activeRefresh = null;
   refreshQueued = false;
+  settingsRefreshPending = false;
   fetchedModels = [];
   fetchState = 'idle';
   subscribers = 0;

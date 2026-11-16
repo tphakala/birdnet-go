@@ -461,6 +461,77 @@ describe('models store live refresh', () => {
     unwatch();
   });
 
+  it('refetches once more when a topology event arrives during the first fetch', async () => {
+    const first = deferredGet();
+    const unwatch = watchModels();
+    topology.listener?.();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    apiGet.mockResolvedValueOnce([BIRDNET, PERCH]);
+    first.resolve([BIRDNET]);
+    await settle();
+    await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(2);
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet', 'perch_v2']);
+    unwatch();
+  });
+
+  it('does a plain fetch, not an in-place refresh, before the first list has loaded', async () => {
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+    await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(1);
+    expect(modelsLoaded()).toBe(true);
+    expect(refreshKeepingEdits).not.toHaveBeenCalled();
+  });
+
+  it('drops a refresh response that lands after the store was invalidated', async () => {
+    const unwatch = await loadWith([BIRDNET, PERCH]);
+
+    const pending = deferredGet();
+    const refresh = refreshModels();
+    invalidateModels();
+    pending.resolve([BIRDNET]);
+    await refresh;
+
+    expect(modelsLoaded()).toBe(false);
+    expect(refreshKeepingEdits).not.toHaveBeenCalled();
+    unwatch();
+  });
+
+  it('retries the settings refresh on the next refresh when it failed', async () => {
+    const unwatch = await loadWith([BIRDNET, PERCH]);
+
+    refreshKeepingEdits.mockRejectedValueOnce(new Error('settings offline'));
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(1);
+
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(2);
+
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(2);
+    unwatch();
+  });
+
+  it('refetches a loaded list when a watcher arrives after nobody watched it', async () => {
+    const first = await loadWith([BIRDNET, PERCH]);
+    first();
+
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    const second = watchModels();
+    await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(2);
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet']);
+    second();
+  });
+
   it('registers one topology listener for any number of watchers', async () => {
     const first = await loadWith([BIRDNET]);
     const listener = topology.listener;
