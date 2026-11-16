@@ -351,6 +351,7 @@ describe('settings auto save engine', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+    expect(autoSaveBusy()).toBe(false);
   });
 
   it('shows Saved when the section had nothing to send', async () => {
@@ -390,5 +391,20 @@ describe('settings auto save engine', () => {
       state: 'error',
       message: 'settings.errors.changedElsewhere',
     });
+  });
+
+  it('sends a commit made during a request that then rejects, and keeps its field Saving until then', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise);
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:models' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { sources: [source({ gain: 3 })] }, { field: 'audio:b:gain' });
+
+    first.reject(new Error('network down'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(autoSaveStatus('audio:a:models').state).toBe('error');
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:b:gain').state).toBe('saved');
   });
 });

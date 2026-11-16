@@ -233,9 +233,12 @@ async function runFlush(section: SettingsSectionName): Promise<void> {
       } catch (error) {
         logger.error('Auto save request failed:', error);
         for (const field of fields) {
+          // A field committed again during the request waits for the next one.
+          if (state.pending.has(field)) continue;
           fieldPaths.delete(field);
           setStatus(field, { state: 'error', message: failureMessage(error) });
         }
+        if (state.rerun && state.timer === null) continue;
         return;
       }
       applyResult(section, fields, result);
