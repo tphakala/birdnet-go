@@ -205,6 +205,25 @@ describe('StreamManager', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('gives fresh ids again when an outside list swaps the streams and swaps them back', async () => {
+    const { rerender } = renderRows([streamA, streamB]);
+
+    await rerender({ streams: [streamB, streamA] });
+    await fireEvent.click(header('B'));
+    await fireEvent.input(screen.getByTestId(/-url$/), { target: { value: 'rtsp://b/draft' } });
+    expect(
+      screen.getByRole('button', { name: 'settings.audio.streams.applyConnection' })
+    ).toBeInTheDocument();
+
+    await rerender({ streams: [streamA, streamB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('button', { name: 'settings.audio.streams.applyConnection' })
+    ).toBeNull();
+  });
+
   it('saves a change of one stream as the whole array under that row field', async () => {
     const { onUpdateStreams } = renderRows([streamA, streamB]);
 

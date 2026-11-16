@@ -467,7 +467,8 @@
   // Identities of the lists this manager has held or sent: the one it started
   // with, each list it sent (add, delete, a card's commit) and the list that
   // was current when it sent, which a refused save takes the list back to. A
-  // list outside this history came from elsewhere (a reload, another window).
+  // list outside this history came from elsewhere (a reload, another window)
+  // and replaces the history.
   const knownLists: string[] = untrack(() => [listIdentity(streams)]);
 
   function remember(identity: string) {
@@ -494,7 +495,9 @@
     const identity = listIdentity(streams);
     untrack(() => {
       const own = knownLists.includes(identity);
-      remember(identity);
+      // A foreign list starts a new history, so a later list that happens to
+      // match an older one (a swap and its swap back) is foreign too.
+      if (!own) knownLists.length = 0;
       if (own && rowIds.length === count) return;
       const previous = own ? rollback.take(count) : null;
       if (previous) {
