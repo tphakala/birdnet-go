@@ -117,5 +117,5 @@
   onkeydown={handleKeydown}
 />
 {#if error}
-  <p id={errorId} class="text-xs text-[var(--text-error)]">{error}</p>
+  <p id={errorId} role="alert" class="text-xs text-[var(--text-error)]">{error}</p>
 {/if}

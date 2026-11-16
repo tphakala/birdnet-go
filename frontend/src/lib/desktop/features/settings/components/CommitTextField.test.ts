@@ -5,13 +5,12 @@
  * is committed, since the browser fires no blur then.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/svelte';
-import { renderTyped } from '../../../../../test/render-helpers';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import CommitTextField from './CommitTextField.svelte';
 
 function renderField(validate?: (value: string) => string | null) {
   const onCommit = vi.fn();
-  const view = renderTyped(CommitTextField, {
+  const view = render(CommitTextField, {
     props: { id: 'name', value: 'Garden', validate, onCommit },
   });
   return { onCommit, view, input: screen.getByRole<HTMLInputElement>('textbox') };
@@ -36,6 +35,18 @@ describe('CommitTextField', () => {
     expect(onCommit).toHaveBeenCalledOnce();
   });
 
+  it('follows a changed saved value while not focused and keeps the typed text while focused', async () => {
+    const { view, input } = renderField();
+
+    await view.rerender({ value: 'Orchard' });
+    expect(input.value).toBe('Orchard');
+
+    await fireEvent.focus(input);
+    await fireEvent.input(input, { target: { value: 'Typing' } });
+    await view.rerender({ value: 'Greenhouse' });
+    expect(input.value).toBe('Typing');
+  });
+
   it('restores the saved value on Escape', async () => {
     const { onCommit, input } = renderField();
 
@@ -54,6 +65,7 @@ describe('CommitTextField', () => {
     expect(onCommit).not.toHaveBeenCalled();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAccessibleDescription('Name taken');
+    expect(screen.getByRole('alert')).toHaveTextContent('Name taken');
 
     await fireEvent.input(input, { target: { value: 'Free' } });
     expect(input).not.toHaveAttribute('aria-invalid');
