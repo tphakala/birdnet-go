@@ -5,7 +5,8 @@
   connection), saved together with a scoped Apply. Renders the controls, and
   below them, while the draft differs or an apply runs, a row with the hint,
   Cancel and the Apply button named for its effect. A failed apply keeps the
-  draft and says so in the row.
+  draft and says so in the row, unless the apply is blocked and the hint then
+  takes the row.
 
   Props:
   - draft: The ApplyDraft holding the controls' values
