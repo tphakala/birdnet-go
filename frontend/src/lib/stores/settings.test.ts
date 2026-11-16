@@ -19,6 +19,7 @@ import type {
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import type { SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+import { mergeSettingsPatch } from '$lib/utils/settingsMerge';
 import { deferred } from '../../test/async-helpers';
 import { lookup, serverSettings } from '../../test/settings-helpers';
 import { serveConfirmedSettings } from '../../test/settings-store-helpers';
@@ -2211,28 +2212,11 @@ describe('Settings Store - staged section saves', () => {
   const conflict412 = () => Object.assign(new Error('Precondition Failed'), { status: 412 });
   const badRequest = () => Object.assign(new Error('Bad Request'), { status: 400 });
 
-  const sectionOf = (root: Rec, section: keyof typeof SECTION_STORE_PATHS): Rec => {
-    let node: unknown = root;
-    for (const key of SECTION_STORE_PATHS[section]) node = (node as Rec)[key];
-    return node as Rec;
-  };
-  /** Objects merge key by key, arrays and scalars replace: the server's PATCH merge. */
+  const sectionOf = (root: Rec, section: keyof typeof SECTION_STORE_PATHS): Rec =>
+    lookup(root, [...SECTION_STORE_PATHS[section]]) as Rec;
+  /** Merges patch into target in place with the server's PATCH merge. */
   const mergeInto = (target: Rec, patch: Rec): void => {
-    for (const [key, value] of Object.entries(patch)) {
-      const existing = target[key];
-      if (
-        value !== null &&
-        typeof value === 'object' &&
-        !Array.isArray(value) &&
-        existing !== null &&
-        typeof existing === 'object' &&
-        !Array.isArray(existing)
-      ) {
-        mergeInto(existing as Rec, value as Rec);
-      } else {
-        target[key] = JSON.parse(JSON.stringify(value));
-      }
-    }
+    Object.assign(target, mergeSettingsPatch(target, patch));
   };
   /** The server always emits quietHours on a source; a client never sends it. */
   const inServerShape = (sources: Rec[]): Rec[] =>

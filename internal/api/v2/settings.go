@@ -570,10 +570,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// Return the stored section, redacted like GET /settings/:section, so a client
 	// can record what the server holds instead of its own request. The section
 	// resolver is the one the write used, so every writable section resolves.
-	var storedSection any
-	if resolved, resolveErr := getSettingsSectionValue(sanitizeSettingsForAPI(updated), section); resolveErr == nil {
-		storedSection = resolved
-	}
+	storedSection, _ := getSettingsSectionValue(sanitizeSettingsForAPI(updated), section)
 
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          fmt.Sprintf("%s settings updated successfully", section),

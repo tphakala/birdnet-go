@@ -362,19 +362,7 @@ func TestPatchWebServerLiveStreamValidation(t *testing.T) {
 // decoded JSON response.
 func patchSectionResponse(t *testing.T, controller *Controller, e *echo.Echo, section string, body map[string]any) map[string]any {
 	t.Helper()
-	raw, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+section, bytes.NewReader(raw))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues(section)
-
-	require.NoError(t, controller.UpdateSectionSettings(ctx))
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-
+	rec := patchSection(t, e, controller, section, body)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	return resp

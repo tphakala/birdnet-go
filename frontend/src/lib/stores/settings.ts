@@ -2144,14 +2144,12 @@ async function runStagedSave(
       const body = built.patch as SettingsSectionPayloads[SettingsSectionName];
       const seen: { etag: string | null } = { etag: null };
       try {
-        const response = await (ifMatch
-          ? settingsAPI.patchSection(section, body, {
-              ifMatch,
-              onETag: value => {
-                seen.etag = value;
-              },
-            })
-          : settingsAPI.patchSection(section, body));
+        const response = await settingsAPI.patchSection(section, body, {
+          ifMatch,
+          onETag: value => {
+            seen.etag = value;
+          },
+        });
         lastETag = ifMatch ? seen.etag : null;
         const skipped = response?.skippedFields;
         if (skipped && skipped.length > 0) {
