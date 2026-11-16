@@ -3813,7 +3813,7 @@
         "refresh": "Atsvaidzināt",
         "addStream": "Pievienot straumi",
         "testRequired": "Pirms saglabāšanas veiciet veiksmīgu straumes testu",
-        "deleteConfirm": "Noņemt šo straumi?",
+        "deleteConfirm": "Noņemt straumi \"{name}\"?",
         "restartCount": "Pārstartēta {count} reizi(-es)",
         "healthLoadError": "Neizdevās ielādēt straumes veselības statusu",
         "status": {

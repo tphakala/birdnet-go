@@ -66,6 +66,7 @@ interface RenderOptions {
   models?: BackendModel[];
   streams?: StreamConfig[];
   expanded?: boolean;
+  disabled?: boolean;
 }
 
 function renderCard(options: RenderOptions = {}) {
@@ -86,6 +87,7 @@ function renderCard(options: RenderOptions = {}) {
       onToggleExpanded: vi.fn(),
       onCommit,
       onDelete,
+      disabled: options.disabled ?? false,
     },
   });
   return { ...result, onCommit, onDelete };
@@ -248,5 +250,32 @@ describe('StreamCard immediate save', () => {
     );
 
     expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('none');
+  });
+});
+
+describe('StreamCard delete and groups', () => {
+  it('names the stream in the delete confirmation', async () => {
+    renderCard({ expanded: false });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    expect(screen.getByRole('alertdialog')).toHaveAccessibleDescription(
+      'Remove stream "Front Yard"?'
+    );
+  });
+
+  it('says why Delete is blocked while the settings load', () => {
+    renderCard({ expanded: false, disabled: true });
+
+    const trigger = screen.getByRole('button', { name: 'common.delete' });
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    expect(trigger).toHaveAccessibleDescription('common.loading');
+  });
+
+  it('names the audio filters region after its disclosure button', () => {
+    renderCard();
+
+    expect(
+      screen.getByRole('region', { name: 'settings.audio.audioFilters.title' })
+    ).toBeInTheDocument();
   });
 });

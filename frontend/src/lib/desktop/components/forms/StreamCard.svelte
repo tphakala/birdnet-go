@@ -159,6 +159,7 @@
   const nameTextId = `${cardId}-stream-name`;
   const urlInputId = `${cardId}-url`;
   const modelsHeadingId = `${cardId}-models`;
+  const equalizerHeadingId = `${cardId}-equalizer`;
   const diagnosticsId = `${cardId}-diagnostics`;
 
   function field(part: SourceFieldPart): string {
@@ -512,9 +513,10 @@
   iconClass={ICON_CLASSES.get(status)}
   {expanded}
   {onToggleExpanded}
-  deleteConfirm={t('settings.audio.streams.deleteConfirm')}
+  deleteConfirm={t('settings.audio.streams.deleteConfirm', { name: stream.name })}
   {onDelete}
   {disabled}
+  disabledReason={t('common.loading')}
 >
   {#snippet nameAddon()}
     <StatusPill
@@ -765,9 +767,10 @@
   </SettingsGroup>
 
   <!-- Audio filters (collapsed by default) -->
-  <SettingsGroup class="space-y-0 py-4">
+  <SettingsGroup headingId={equalizerHeadingId} class="space-y-0 py-4">
     {#snippet heading()}
       <button
+        id={equalizerHeadingId}
         type="button"
         class="flex items-center gap-2 rounded text-sm font-semibold text-[var(--color-base-content)] transition-colors hover:text-[var(--text-primary)]"
         aria-expanded={showEqualizer}

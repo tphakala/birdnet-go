@@ -2799,7 +2799,7 @@ export type TranslationKey =
   | 'settings.audio.streams.refresh'
   | 'settings.audio.streams.addStream'
   | 'settings.audio.streams.testRequired'
-  | 'settings.audio.streams.deleteConfirm'
+  | 'settings.audio.streams.deleteConfirm' // params: name
   | 'settings.audio.streams.restartCount' // params: count
   | 'settings.audio.streams.healthLoadError'
   | 'settings.audio.streams.status.connected'
@@ -5050,6 +5050,7 @@ export type TranslationParams = {
   'settings.audio.soundCards.compatibility.recommendedSampleRate': { rate: string | number };
   'settings.audio.audioCapture.streamsConfigured': { count: string | number };
   'settings.audio.streams.summary': { count: string | number };
+  'settings.audio.streams.deleteConfirm': { name: string | number };
   'settings.audio.streams.restartCount': { count: string | number };
   'settings.audio.streams.timeline.eventAt': { time: string | number };
   'settings.audio.streams.test.minRateWarning': { rate: string | number };

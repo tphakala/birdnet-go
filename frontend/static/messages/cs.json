@@ -3813,7 +3813,7 @@
         "refresh": "Obnovit",
         "addStream": "Přidat stream",
         "testRequired": "Před uložením proveďte úspěšný test streamu",
-        "deleteConfirm": "Odstranit tento stream?",
+        "deleteConfirm": "Odstranit stream \"{name}\"?",
         "restartCount": "Restartováno {count}krát",
         "healthLoadError": "Nepodařilo se načíst stav streamu",
         "status": {

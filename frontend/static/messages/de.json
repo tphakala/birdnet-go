@@ -3813,7 +3813,7 @@
         "refresh": "Aktualisieren",
         "addStream": "Stream hinzufügen",
         "testRequired": "Führen Sie einen erfolgreichen Streamtest durch, bevor Sie speichern",
-        "deleteConfirm": "Diesen Stream entfernen?",
+        "deleteConfirm": "Stream \"{name}\" entfernen?",
         "restartCount": "{count} Mal neu gestartet",
         "healthLoadError": "Laden des Stream-Status fehlgeschlagen",
         "status": {

@@ -3813,7 +3813,7 @@
         "refresh": "Päivitä",
         "addStream": "Lisää striimi",
         "testRequired": "Suorita onnistunut striimitesti ennen tallentamista",
-        "deleteConfirm": "Poista tämä striimi?",
+        "deleteConfirm": "Poistetaanko striimi \"{name}\"?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
         "healthLoadError": "Striimin tilan lataus epäonnistui",
         "status": {

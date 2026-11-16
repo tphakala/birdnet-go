@@ -3813,7 +3813,7 @@
         "refresh": "Vernieuwen",
         "addStream": "Stream toevoegen",
         "testRequired": "Voer een succesvolle streamtest uit voordat u opslaat",
-        "deleteConfirm": "Deze stream verwijderen?",
+        "deleteConfirm": "De stream \"{name}\" verwijderen?",
         "restartCount": "{count} keer herstart",
         "healthLoadError": "Laden van streamstatus mislukt",
         "status": {

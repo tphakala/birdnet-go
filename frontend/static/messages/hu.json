@@ -3813,7 +3813,7 @@
         "refresh": "Frissítés",
         "addStream": "Stream hozzáadása",
         "testRequired": "Futtasson sikeres streamtesztet a mentés előtt",
-        "deleteConfirm": "Eltávolítja ezt a streamet?",
+        "deleteConfirm": "Eltávolítja a(z) \"{name}\" streamet?",
         "restartCount": "{count} alkalommal újraindítva",
         "healthLoadError": "A stream egészségi állapot betöltése sikertelen",
         "status": {

@@ -3813,7 +3813,7 @@
         "refresh": "Refresh",
         "addStream": "Add Stream",
         "testRequired": "Run a successful stream test before saving",
-        "deleteConfirm": "Remove this stream?",
+        "deleteConfirm": "Remove stream \"{name}\"?",
         "restartCount": "Restarted {count} time(s)",
         "healthLoadError": "Failed to load stream health status",
         "status": {

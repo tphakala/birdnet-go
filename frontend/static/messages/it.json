@@ -3813,7 +3813,7 @@
         "refresh": "Aggiorna",
         "addStream": "Aggiungi Flusso",
         "testRequired": "Esegui un test dello stream riuscito prima di salvare",
-        "deleteConfirm": "Rimuovere questo flusso?",
+        "deleteConfirm": "Rimuovere il flusso \"{name}\"?",
         "restartCount": "Riavviato {count} volta/e",
         "healthLoadError": "Impossibile caricare stato salute flusso",
         "status": {

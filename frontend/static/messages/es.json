@@ -3813,7 +3813,7 @@
         "refresh": "Actualizar",
         "addStream": "Agregar Stream",
         "testRequired": "Ejecute una prueba de stream exitosa antes de guardar",
-        "deleteConfirm": "¿Eliminar este stream?",
+        "deleteConfirm": "¿Eliminar el stream \"{name}\"?",
         "restartCount": "Reiniciado {count} vez/veces",
         "healthLoadError": "Error al cargar el estado del stream",
         "status": {

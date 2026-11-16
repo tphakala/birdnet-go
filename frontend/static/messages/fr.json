@@ -3813,7 +3813,7 @@
         "refresh": "Actualiser",
         "addStream": "Ajouter un Flux",
         "testRequired": "Effectuez un test de flux réussi avant d'enregistrer",
-        "deleteConfirm": "Supprimer ce flux ?",
+        "deleteConfirm": "Supprimer le flux \"{name}\" ?",
         "restartCount": "Redémarré {count} fois",
         "healthLoadError": "Échec du chargement de l'état du flux",
         "status": {

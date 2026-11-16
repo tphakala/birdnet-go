@@ -3813,7 +3813,7 @@
         "refresh": "Oppdater",
         "addStream": "Legg til strøm",
         "testRequired": "Kjør en vellykket strømtest før lagring",
-        "deleteConfirm": "Fjerne denne strømmen?",
+        "deleteConfirm": "Fjerne strømmen «{name}»?",
         "restartCount": "Startet på nytt {count} gang(er)",
         "healthLoadError": "Innlasting av strømhelsesstatus mislyktes",
         "status": {

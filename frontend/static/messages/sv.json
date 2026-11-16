@@ -3813,7 +3813,7 @@
         "refresh": "Uppdatera",
         "addStream": "Lägg till ström",
         "testRequired": "Kör ett lyckat strömtest innan du sparar",
-        "deleteConfirm": "Ta bort denna ström?",
+        "deleteConfirm": "Ta bort strömmen \"{name}\"?",
         "restartCount": "Omstartad {count} gång(er)",
         "healthLoadError": "Kunde inte ladda strömmens hälsostatus",
         "status": {
