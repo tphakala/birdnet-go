@@ -108,6 +108,15 @@ func TestListModels_LabelsFromLiveRuntime(t *testing.T) {
 			},
 		},
 		{
+			name:          "authenticated request on an auth-enabled instance gets the runtime fields",
+			withAuth:      true,
+			authenticated: true,
+			want: map[string]listedModelRuntime{
+				conf.ModelIDBirdNET: {backend: "ONNX", precision: "INT8"},
+				conf.ModelIDPerchV2: {},
+			},
+		},
+		{
 			name:     "anonymous request on an auth-enabled instance gets no runtime fields",
 			withAuth: true,
 			want: map[string]listedModelRuntime{
