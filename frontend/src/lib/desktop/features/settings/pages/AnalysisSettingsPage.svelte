@@ -295,9 +295,10 @@
       ? t('analysis.gallery.superseded.dialogNotice', { name: licenseModel.supersededBy.name })
       : null
   );
-  // Block install when the selected variant cannot run on this host (e.g. every
-  // variant is incompatible, so the preselected one is blocked). The default
-  // path preselects a compatible variant, so this only fires in the all-blocked case.
+  // Block install when the selected variant cannot run on this host. The
+  // preselection can be blocked while another variant would run: it skips other
+  // regions' slices, so a host whose global build and own slice do not fit gets
+  // the blocked default.
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );

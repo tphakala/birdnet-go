@@ -18,8 +18,10 @@ import { t } from '$lib/i18n';
  * `activeRegionSlug` is the region the picker is scoped to ('' when none). The
  * fallback ignores slices of other regions, since they cover only that region's
  * species; an entry made only of such slices falls back to its first variant.
- * This mirrors the server's foreign-region rule (recommend.go rankEntry), which
- * never recommends such a slice.
+ * This mirrors the server's foreign-region rule (recommend.go rankEntry). The
+ * recommended id is taken as is: the server resolves it from the saved region,
+ * even when the regions request failed here, so after an unsaved region change
+ * it can be a slice of a region other than this one.
  */
 export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = ''): string {
   const variants = entry.variants ?? [];
@@ -31,10 +33,11 @@ export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = '
   if (has(entry.recommendedVariantId)) return entry.recommendedVariantId;
   if (has(entry.installedVariantId)) return entry.installedVariantId;
 
-  // Prefer a compatible variant so the dialog never opens with a blocked one
-  // preselected while a runnable variant exists: compatible default, else any
-  // compatible, else the default, else the first. When none of them runs, a
-  // blocked one is returned and the dialog disables install and shows why.
+  // Among the global variants and the active region's slices, prefer a
+  // compatible one: compatible default, else any compatible, else the default,
+  // else the first. When none of them runs, a blocked one is returned (even if
+  // another region's slice would run) and the dialog disables install and shows
+  // why. An entry with neither falls back to its first variant.
   const local = variants.filter(v => !v.region || v.region === activeRegionSlug);
   const preferred =
     local.find(v => v.default && v.compatible) ??
