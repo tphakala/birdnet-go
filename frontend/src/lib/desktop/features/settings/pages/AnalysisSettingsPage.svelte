@@ -265,9 +265,18 @@
   const HUGGINGFACE_ENDPOINT_ID = 'huggingface-endpoint';
 
   let licenseModel = $state<CatalogEntry | null>(null);
-  // The variant preselected in the license/install dialog: the server-recommended
-  // one by default, overridable by the user. Empty for flat (variant-less) entries.
-  let selectedVariantId = $state('');
+  // The variant the user picked in the license/install dialog, null until they pick
+  // one. Reset each time the dialog opens.
+  let chosenVariantId = $state<string | null>(null);
+  // The variant the dialog installs: the user's pick, else the smart default (the
+  // server-recommended one, falling back sensibly and skipping other regions'
+  // slices). The default follows activeRegionSlug, so it is recomputed when the
+  // regions load after the dialog opened. Empty for flat (variant-less) entries.
+  const selectedVariantId = $derived.by(
+    () =>
+      chosenVariantId ??
+      (licenseModel ? pickPreselectedVariant(licenseModel, activeRegionSlug) : '')
+  );
   // The download-size row and the install target follow the selected variant when
   // the entry has variants; otherwise they fall back to the whole-entry size.
   const licenseSelectedVariant = $derived(
@@ -295,9 +304,10 @@
       ? t('analysis.gallery.superseded.dialogNotice', { name: licenseModel.supersededBy.name })
       : null
   );
-  // Block install when the selected variant cannot run on this host (e.g. every
-  // variant is incompatible, so the preselected one is blocked). The default
-  // path preselects a compatible variant, so this only fires in the all-blocked case.
+  // Block install when the selected variant cannot run on this host. The
+  // preselection can be blocked while another variant would run, for example when
+  // the global build and the host's own slice do not fit but another region's
+  // slice does (pickPreselectedVariant skips other regions' slices).
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );
@@ -1560,9 +1570,7 @@
 
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
-    // Smart default: preselect the recommended variant (falls back sensibly when
-    // there is no recommendation). Empty string for flat entries.
-    selectedVariantId = pickPreselectedVariant(entry);
+    chosenVariantId = null;
     licenseDialogRef?.showModal();
   }
 
@@ -2956,7 +2964,7 @@
             {selectedVariantId}
             {activeRegionSlug}
             regionNames={regionNameMap}
-            onSelect={id => (selectedVariantId = id)}
+            onSelect={id => (chosenVariantId = id)}
             idPrefix="license-variant"
           />
           <!-- Plain-language help for the precision jargon (FP32/FP16/INT8) and the

@@ -131,6 +131,63 @@ describe('pickPreselectedVariant', () => {
     });
     expect(pickPreselectedVariant(e)).toBe('fp32');
   });
+
+  // A low-RAM host where the global build does not fit: the server recommends
+  // nothing, and only regional slices (smaller) are compatible.
+  const lowRamRegional = () =>
+    entry({
+      variants: [
+        variant({ id: 'fp32', default: true, compatible: false }),
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'fp32@nordic', region: 'nordic' }),
+      ],
+    });
+
+  it('never preselects a slice of another region when nothing is recommended', () => {
+    expect(pickPreselectedVariant(lowRamRegional(), 'nordic')).toBe('fp32@nordic');
+  });
+
+  it('preselects the blocked default rather than a slice when no region is active', () => {
+    expect(pickPreselectedVariant(lowRamRegional(), '')).toBe('fp32');
+  });
+
+  it('preselects the blocked default when the active region slice does not fit either', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32', default: true, compatible: false }),
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32');
+  });
+
+  it('keeps an installed slice of another region preselected', () => {
+    const e = lowRamRegional();
+    e.installedVariantId = 'fp32@africa';
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('falls back to the first variant of an entry made only of other regions slices', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa', compatible: false }),
+        variant({ id: 'fp32@iberia', region: 'iberia' }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('prefers the first global or active region variant over an earlier slice of another region when none of them runs', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'int8', compatible: false }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('int8');
+  });
 });
 
 describe('reasonKey', () => {
