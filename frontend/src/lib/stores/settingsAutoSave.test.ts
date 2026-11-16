@@ -393,18 +393,19 @@ describe('settings auto save engine', () => {
     });
   });
 
-  it('sends a commit made during a request that then rejects, and keeps its field Saving until then', async () => {
+  it('sends a commit made during a request that then rejects, and a field committed again keeps Saving', async () => {
     const first = deferred<StagedSaveResult>();
     store.saveStagedSection.mockReturnValueOnce(first.promise);
     commitSetting('audio', { sources: [source()] }, { field: 'audio:a:models' });
     await vi.advanceTimersByTimeAsync(0);
     commitSetting('audio', { sources: [source({ gain: 3 })] }, { field: 'audio:b:gain' });
+    commitSetting('audio', { sources: [source({ gain: 4 })] }, { field: 'audio:a:models' });
 
     first.reject(new Error('network down'));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(autoSaveStatus('audio:a:models').state).toBe('error');
     expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:models').state).toBe('saved');
     expect(autoSaveStatus('audio:b:gain').state).toBe('saved');
   });
 });
