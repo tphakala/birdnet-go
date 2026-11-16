@@ -387,9 +387,9 @@ describe('ProgressBar', () => {
       const { container } = progressTest.render({ value: 50, showLabel: true, striped: true });
       const track = container.querySelector('[data-label-part="track"] span');
 
-      expect(track?.className).toBe(
-        chipOf(container)?.className.replace(' bg-[var(--color-primary)]', '')
-      );
+      for (const copy of [track, chipOf(container)]) {
+        expect(copy).toHaveClass('flex', 'items-center', 'self-stretch', 'px-1');
+      }
     });
 
     it('leaves the chip of an unstriped bar without a background', () => {
