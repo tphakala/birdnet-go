@@ -838,7 +838,7 @@
           aria-busy="true"
         >
           <span
-            class="loading loading-spinner loading-lg text-[var(--color-primary)]"
+            class="loading loading-spinner loading-lg text-[var(--text-primary)]"
             aria-hidden="true"
           ></span>
           <p class="text-[var(--color-base-content)] opacity-50 text-center mt-4">

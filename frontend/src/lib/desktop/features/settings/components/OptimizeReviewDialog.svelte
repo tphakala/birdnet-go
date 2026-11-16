@@ -83,7 +83,7 @@
         id={TITLE_ID}
         class="flex items-center gap-2 text-lg font-semibold text-[var(--color-base-content)]"
       >
-        <Sparkles class="size-5 text-[var(--color-primary)]" aria-hidden="true" />
+        <Sparkles class="size-5 text-[var(--text-primary)]" aria-hidden="true" />
         {t('analysis.gallery.optimize.dialogTitle')}
       </h3>
       <button
@@ -158,7 +158,7 @@
                   <ArrowRight class="size-3.5 shrink-0" aria-hidden="true" />
                   <span class="font-medium text-[var(--color-base-content)]">{toLabel}</span>
                   <span
-                    class="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-primary)]/15 px-1.5 py-0.5 text-[var(--color-primary)]"
+                    class="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-primary)]/15 px-1.5 py-0.5 text-[var(--text-primary)]"
                   >
                     {variantHardwareLabel(offer.to)}
                   </span>

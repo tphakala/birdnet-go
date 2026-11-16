@@ -468,7 +468,7 @@
         <div>
           <button
             type="button"
-            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
+            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--text-primary)] transition-colors"
             onclick={() => (showEqualizer = !showEqualizer)}
           >
             <ChevronDown
@@ -477,7 +477,7 @@
             {t('settings.audio.audioFilters.title')}
             {#if editEqualizer.enabled}
               <span
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--text-primary)]"
               >
                 {t('common.enabled')}
               </span>
@@ -529,7 +529,7 @@
       <div class="flex items-center gap-3">
         <!-- Sound Card Icon -->
         <div
-          class="flex-shrink-0 size-10 rounded-lg flex items-center justify-center border bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--color-primary)] border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)]"
+          class="flex-shrink-0 size-10 rounded-lg flex items-center justify-center border bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--text-primary)] border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)]"
         >
           <Mic class="size-5" />
         </div>

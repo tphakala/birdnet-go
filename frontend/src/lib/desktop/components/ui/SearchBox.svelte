@@ -528,7 +528,7 @@
                   <!-- Icon - Filter or History -->
                   {#if showSyntaxHelp}
                     <!-- Filter icon for syntax suggestions -->
-                    <Filter class="size-4 text-[var(--color-primary)]/80 shrink-0" />
+                    <Filter class="size-4 text-[var(--text-primary)]/80 shrink-0" />
                   {:else}
                     <!-- History icon for search history -->
                     <Clock class="size-4 text-[var(--color-base-content)]/60 shrink-0" />

@@ -2227,7 +2227,7 @@
           </div>
           <div class="flex items-center gap-3">
             <div
-              class="text-2xl font-bold text-[var(--color-primary)] tabular-nums"
+              class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
               class:opacity-60={rangeFilterState.testing}
             >
               {rangeFilterState.speciesCount !== null
@@ -2635,7 +2635,7 @@
           class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-4 py-3 text-sm"
           role="status"
         >
-          <Sparkles class="size-5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+          <Sparkles class="size-5 shrink-0 text-[var(--text-primary)]" aria-hidden="true" />
           <p class="min-w-0 flex-1 font-medium text-[var(--color-base-content)]">
             {t('analysis.gallery.optimize.bannerTitle', { count: offers.length })}
           </p>
@@ -2758,7 +2758,7 @@
   <div class="space-y-4">
     {#if loading}
       <div class="flex items-center justify-center py-12">
-        <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
+        <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
         <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
           >{t('analysis.gallery.loading')}</span
         >
@@ -2785,7 +2785,7 @@
   <div class="space-y-6">
     {#if loading}
       <div class="flex items-center justify-center py-12">
-        <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
+        <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
         <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
           >{t('analysis.gallery.loading')}</span
         >

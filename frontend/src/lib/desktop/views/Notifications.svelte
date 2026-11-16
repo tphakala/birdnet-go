@@ -381,7 +381,7 @@
       warning: 'bg-[var(--color-warning)]/20 text-[var(--text-warning)]',
       info: 'bg-[var(--color-info)]/20 text-[var(--text-info)]',
       detection: 'bg-[var(--color-success)]/20 text-[var(--text-success)]',
-      system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
+      system: 'bg-[var(--color-primary)]/20 text-[var(--text-primary)]',
     };
     return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-[var(--color-base-300)]')}`;
   }

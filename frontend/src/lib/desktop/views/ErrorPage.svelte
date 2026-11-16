@@ -408,7 +408,7 @@
 
     .timer {
       font-size: 0.875rem;
-      color: var(--color-primary);
+      color: var(--text-primary);
     }
 
     /* Spotting effect */

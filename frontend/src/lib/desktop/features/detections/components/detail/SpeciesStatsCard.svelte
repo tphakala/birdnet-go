@@ -498,10 +498,11 @@
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-primary);
+    text-decoration: underline;
   }
 
   .dd-stats-link:hover {
-    text-decoration: underline;
+    text-decoration-thickness: 2px;
   }
 
   /* Windows contrast themes drop background colours: the fills and bars keep a system

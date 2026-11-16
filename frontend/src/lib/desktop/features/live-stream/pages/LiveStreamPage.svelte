@@ -773,7 +773,7 @@
       class="flex flex-none items-center gap-4 border-b border-[var(--color-base-200)] px-4 py-3"
     >
       <div class="flex items-center gap-2">
-        <Radio class="size-5 text-[var(--color-primary)]" />
+        <Radio class="size-5 text-[var(--text-primary)]" />
         <h1 class="text-lg font-semibold">{t('spectrogram.page.title')}</h1>
       </div>
 

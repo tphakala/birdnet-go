@@ -663,7 +663,7 @@
         <div>
           <button
             type="button"
-            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
+            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--text-primary)] transition-colors"
             onclick={() => (showEqualizer = !showEqualizer)}
             aria-expanded={showEqualizer}
             aria-controls="stream-eq-{index}"
@@ -674,7 +674,7 @@
             {t('settings.audio.audioFilters.title')}
             {#if editEqualizer.enabled}
               <span
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--text-primary)]"
               >
                 {t('common.enabled')}
               </span>
@@ -756,7 +756,7 @@
             />
             {#if stream.equalizer?.enabled}
               <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--text-primary)]"
               >
                 {t('settings.audio.audioFilters.title')}
               </span>

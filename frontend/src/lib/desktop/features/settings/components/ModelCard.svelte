@@ -343,7 +343,7 @@
     {:else}
       <div
         class={cn(
-          'shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2 text-[var(--color-primary)]',
+          'shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2 text-[var(--text-primary)]',
           unavailable && 'opacity-60'
         )}
         aria-hidden="true"

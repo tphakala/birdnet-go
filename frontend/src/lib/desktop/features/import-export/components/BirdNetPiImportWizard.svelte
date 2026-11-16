@@ -651,7 +651,7 @@
             {/each}
             <button
               type="button"
-              class="text-sm text-[var(--color-primary)] hover:underline"
+              class="text-sm text-[var(--text-primary)] underline hover:decoration-2"
               onclick={() => (showManualEntry = !showManualEntry)}
             >
               {t('system.importExport.source.manualEntryLink')}
@@ -700,7 +700,7 @@
             </Button>
             <button
               type="button"
-              class="text-sm text-[var(--color-primary)] hover:underline"
+              class="text-sm text-[var(--text-primary)] underline hover:decoration-2"
               onclick={() => (showManualEntry = !showManualEntry)}
             >
               {t('system.importExport.source.manualEntryLink')}
@@ -884,7 +884,7 @@
                 <!-- C19: showCommandsLabel as a <details> collapsible around fallback commands -->
                 <details class="space-y-2">
                   <summary
-                    class="cursor-pointer text-sm font-medium text-[var(--color-primary)] hover:underline"
+                    class="cursor-pointer text-sm font-medium text-[var(--text-primary)] underline hover:decoration-2"
                   >
                     {t('system.importExport.source.showCommandsLabel')}
                   </summary>
@@ -1021,7 +1021,7 @@
                 <a
                   href={buildDetectionsFilterUrl()}
                   onclick={() => onClose()}
-                  class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
+                  class="inline-flex items-center gap-1.5 text-sm text-[var(--text-primary)] underline hover:decoration-2"
                 >
                   {t('system.importExport.done.viewDetectionsLink')}
                 </a>
@@ -1066,7 +1066,7 @@
               <a
                 href={buildDetectionsFilterUrl()}
                 onclick={() => onClose()}
-                class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
+                class="inline-flex items-center gap-1.5 text-sm text-[var(--text-primary)] underline hover:decoration-2"
               >
                 {t('system.importExport.done.viewDetectionsLink')}
               </a>

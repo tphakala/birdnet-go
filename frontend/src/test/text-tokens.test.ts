@@ -1,17 +1,21 @@
 /**
- * Status fills never colour text. App-wide, in every non-test .svelte, .ts and .css file under src/.
+ * Status and primary fills never colour text. App-wide, in every non-test .svelte, .ts and .css
+ * file under src/.
  *
- * --color-success|warning|error|info are fills for backgrounds, borders and dots; on the base
- * surfaces in the light theme they fail AA as text. Text and icons use --text-success and its
- * siblings (text-[var(--text-error)]), or the plain utilities text-error and so on, which map to
- * the same tokens. Flagged, over the whole comment-free text so a wrapped CSS value is seen:
- * 1. a fill or its hover fill as an arbitrary text colour, in brackets or in the parenthesis
- *    shorthand (text-(--color-error), text-(color:--color-error)), behind any variant, with any
+ * --color-success|warning|error|info|primary are fills for backgrounds, borders and dots; on the
+ * base surfaces they fail AA as text in several schemes. Text and icons use --text-success and its
+ * siblings, or --text-primary (text-[var(--text-error)], text-[var(--text-primary)]), or the plain
+ * utilities text-error, text-primary and so on, which map to the same tokens. The -hover, -active
+ * and -focus fills count as the fill. Flagged, over the whole comment-free text so a wrapped CSS
+ * value is seen:
+ * 1. a fill or its state fill as an arbitrary text colour, in brackets or in the parenthesis
+ *    shorthand (text-(--color-error), text-(color:--color-primary)), behind any variant, with any
  *    opacity;
- * 2. a bare theme utility behind a variant (hover:text-error): Tailwind generates the fill for it;
+ * 2. a bare theme utility behind a variant (hover:text-error, hover:text-primary): Tailwind
+ *    generates the fill for it;
  * 3. a bare theme utility with an opacity suffix or the important modifier (text-error/80,
- *    text-error/(--alpha),
- *    !text-error), which Tailwind also resolves to the fill;
+ *    text-primary/90, text-primary/(--x), !text-error), or a bare state utility (text-primary-hover),
+ *    which Tailwind also resolves to the fill;
  * 4. a `color` declaration whose value holds a fill, plain, with a fallback or in color-mix();
  * 5. `style:color` with a quoted value holding a fill;
  * 6. `style:color` with an expression that is not textColorFor(...) or
@@ -19,9 +23,10 @@
  *
  * Deliberate fill uses the rules do not reach, so no exclusion is needed for them:
  * StatusPill.svelte (fill variables for tint, border and dot; its text is --text-${variant}),
- * d3/utils/theme.ts (chart series), StorageCard.svelte (bar colour through style:background),
- * SystemHealth.svelte (fills routed through textColorFor), noveltyCategoryColorVar on
- * style:border-left-color, and the -content tokens.
+ * d3/utils/theme.ts and Sparkline.svelte (chart series colours), PlayOverlay.svelte (progress
+ * ring stroke), focus rings and outlines, borders, StorageCard.svelte (bar colour through
+ * style:background), SystemHealth.svelte (fills routed through textColorFor),
+ * noveltyCategoryColorVar on style:border-left-color, and the -content tokens.
  *
  * EXCLUSIONS lists the only exceptions. An entry is a file plus the hit text and consumes one hit,
  * so a second identical use in the same file fails; an entry whose hit is gone fails as stale and
@@ -35,31 +40,34 @@ import { stripComments } from './source-comments';
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const STATUS = '(?:success|warning|error|info)';
+const FILL = '(?:success|warning|error|info|primary)';
+
+/** State fills that count as the fill itself. */
+const FILL_STATE = '(?:-hover|-active|-focus)?';
 
 /** Fewer scanned files than this means the directory walk broke, not that the app shrank. */
 const MIN_SCANNED_FILES = 400;
 
 const RULES: RegExp[] = [
   new RegExp(
-    String.raw`(?<![\w-])text-\[(?!color:)[^\]]*?var\(--color-${STATUS}(?:-hover)?\s*[,)][^\]]*\]`,
+    String.raw`(?<![\w-])text-\[(?!color:)[^\]]*?var\(--color-${FILL}${FILL_STATE}\s*[,)][^\]]*\]`,
     'g'
   ),
-  new RegExp(String.raw`(?<![\w-])text-\((?:color:)?--color-${STATUS}(?:-hover)?\)`, 'g'),
+  new RegExp(String.raw`(?<![\w-])text-\((?:color:)?--color-${FILL}${FILL_STATE}\)`, 'g'),
   new RegExp(
-    String.raw`(?<![\w:-])(?!class:!?text-${STATUS}(?![\w/!-]))(?:[^\s:"'\`{}]+:)+!?text-${STATUS}(?![\w-])`,
-    'g'
-  ),
-  new RegExp(
-    String.raw`(?<![\w:-])!text-${STATUS}(?![\w-])|(?<![\w:!-])text-${STATUS}(?:\/(?:\d+|\[|\()|!)|(?<=class:)!text-${STATUS}(?![\w/!-])`,
+    String.raw`(?<![\w:-])(?!class:!?text-${FILL}(?![\w/!-]))(?:[^\s:"'\`{}]+:)+!?text-${FILL}${FILL_STATE}(?![\w-])`,
     'g'
   ),
   new RegExp(
-    String.raw`(?<![\w-])color:\s*[^;{}"'\`]*?var\(--color-${STATUS}(?:-hover)?\s*[,)][^;{}"'\`]*`,
+    String.raw`(?<![\w:-])!text-${FILL}${FILL_STATE}(?![\w-])|(?<![\w:!-])text-${FILL}${FILL_STATE}(?:\/(?:\d+|\[|\()|!)|(?<![\w:!-])text-${FILL}(?:-hover|-active|-focus)(?![\w/!-])|(?<=class:)!text-${FILL}${FILL_STATE}(?![\w/!-])`,
     'g'
   ),
   new RegExp(
-    String.raw`style:color=(["'])(?:(?!\1).)*?var\(--color-${STATUS}(?:-hover)?\s*[,)](?:(?!\1).)*\1`,
+    String.raw`(?<![\w-])color:\s*[^;{}"'\`]*?var\(--color-${FILL}${FILL_STATE}\s*[,)][^;{}"'\`]*`,
+    'g'
+  ),
+  new RegExp(
+    String.raw`style:color=(["'])(?:(?!\1).)*?var\(--color-${FILL}${FILL_STATE}\s*[,)](?:(?!\1).)*\1`,
     'g'
   ),
   /style:color=\{(?!(?:textColorFor|noveltyCategoryTextColor)\()[^}]*\}?/g,
@@ -86,8 +94,8 @@ const EXCLUSIONS: Exclusion[] = [
   },
 ];
 
-/** Status fills used as text in one source, with whitespace in each hit collapsed. */
-function findStatusFillText(source: string): { line: number; hit: string }[] {
+/** Status and primary fills used as text in one source, with whitespace in each hit collapsed. */
+function findFillText(source: string): { line: number; hit: string }[] {
   const text = stripComments(source);
   return RULES.flatMap(rule =>
     [...text.matchAll(rule)].map(match => ({
@@ -127,7 +135,7 @@ function scannedFiles(): string[] {
     .filter(isScanned);
 }
 
-describe('status-text-tokens', () => {
+describe('text-tokens', () => {
   it.each([
     ['the fill class', 'class="text-[var(--color-success)]"'],
     ['the fill behind hover:', 'class="hover:text-[var(--color-error)]"'],
@@ -168,8 +176,14 @@ describe('status-text-tokens', () => {
       'style:color="color-mix(in srgb, var(--color-info) 80%, white)"',
     ],
     ['a style:color expression', 'style:color={levelColor(x)}'],
+    ['the primary fill class', 'class="text-[var(--color-primary)]"'],
+    ['the primary active fill', 'class="text-[var(--color-primary-active)]"'],
+    ['the primary focus fill behind hover:', 'class="hover:text-[var(--color-primary-focus)]"'],
+    ['a bare primary state utility', 'class="text-primary-hover"'],
+    ['a bare primary state utility behind a variant', 'class="hover:text-primary-active"'],
+    ['a bare primary state utility with an opacity', 'class="text-primary-hover/80"'],
   ])('flags %s', (_name, source) => {
-    expect(findStatusFillText(source)).toHaveLength(1);
+    expect(findFillText(source)).toHaveLength(1);
   });
 
   it.each([
@@ -213,9 +227,13 @@ describe('status-text-tokens', () => {
       'a token rule followed by a fill background',
       'color: var(--text-error);\n  background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100));',
     ],
+    [
+      'plain text-primary and the primary -content forms',
+      'class="text-primary text-primary-content hover:text-primary-content text-primary-content/80 text-[var(--color-primary-content)]"',
+    ],
     ['a string literal returning a fill', "return 'var(--color-success)';"],
   ])('passes %s', (_name, source) => {
-    expect(findStatusFillText(source)).toEqual([]);
+    expect(findFillText(source)).toEqual([]);
   });
 
   const entry = { file: 'a.css', hit: 'color: var(--color-error)', reason: 'test' };
@@ -234,10 +252,10 @@ describe('status-text-tokens', () => {
     expect(scannedFiles().length).toBeGreaterThan(MIN_SCANNED_FILES);
   });
 
-  it('colours no text with a status fill outside the listed exceptions', () => {
+  it('colours no text with a status or primary fill outside the listed exceptions', () => {
     const hits = scannedFiles().flatMap(file =>
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing src/
-      findStatusFillText(readFileSync(join(srcDir, file), 'utf8')).map(found => ({
+      findFillText(readFileSync(join(srcDir, file), 'utf8')).map(found => ({
         file,
         ...found,
       }))

@@ -129,7 +129,7 @@
       'border-t border-[var(--border-100)]',
       'text-[var(--color-base-content)]/30 hover:text-[var(--color-base-content)]/60',
       'hover:bg-[var(--color-base-200)]/50 transition-colors',
-      isDragging && 'text-[var(--color-primary)] bg-[var(--color-base-200)]/50'
+      isDragging && 'text-[var(--text-primary)] bg-[var(--color-base-200)]/50'
     )}
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}

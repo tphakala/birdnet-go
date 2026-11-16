@@ -176,7 +176,7 @@
   let cardIconClasses = $derived(
     cn(
       'mt-0.5 size-5 shrink-0',
-      value ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)] opacity-70'
+      value ? 'text-[var(--text-primary)]' : 'text-[var(--color-base-content)] opacity-70'
     )
   );
 

@@ -1248,7 +1248,7 @@
                       href={getCredentialsUrl(selectedProvider)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="text-sm text-[var(--color-primary)] hover:opacity-80 inline-flex items-center gap-1 mt-2"
+                      class="text-sm text-[var(--text-primary)] underline hover:decoration-2 inline-flex items-center gap-1 mt-2"
                     >
                       {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
                       <ExternalLink class="size-4" />
@@ -1502,7 +1502,7 @@
             <a
               href={buildAppUrl(SETTINGS_ROUTES.securityReverseProxy)}
               onclick={handleAppLinkClick}
-              class="text-[var(--color-primary)] underline"
+              class="text-[var(--text-primary)] underline"
             >
               {t('settings.security.bypassProxyLink')}
             </a>

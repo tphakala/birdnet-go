@@ -717,12 +717,12 @@ describe('ToggleField card variant', () => {
 
     expect(card).toHaveClass('border-[var(--border-200)]');
     expect(card).not.toHaveClass('border-[var(--color-primary)]');
-    expect(icon()).not.toHaveClass('text-[var(--color-primary)]');
+    expect(icon()).not.toHaveClass('text-[var(--text-primary)]');
 
     await rerender({ ...baseProps, value: true, onUpdate });
 
     expect(card).toHaveClass('border-[var(--color-primary)]', 'bg-[var(--color-primary)]/5');
-    expect(icon()).toHaveClass('text-[var(--color-primary)]');
+    expect(icon()).toHaveClass('text-[var(--text-primary)]');
   });
 
   it('draws the focus ring on the card, not on the switch', () => {

@@ -136,7 +136,7 @@
   --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
   --text-warning: #92400e; /* amber-800 - warning text, same rule */
   --text-info: #075985; /* sky-800 - info text, same rule */
-  --text-primary: #1e40af; /* blue-800 - primary-hue text (active sidebar item), same rule; schemes.css overrides it per scheme */
+  --text-primary: #1e40af; /* blue-800 - primary-hue text and icons, same rule; schemes.css overrides it per scheme */
 
   /* Data visualization: chart series and meter fills (Meter.svelte, sparklines, legends).
      Theme tokens, not scheme tokens: schemes.css changes only primary, accent and --text-primary, so these
@@ -424,7 +424,7 @@
   .btn-outline-primary {
     background-color: transparent;
     border-color: var(--color-primary);
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .btn-outline-primary:hover:not(:disabled) {
@@ -448,13 +448,9 @@
   .btn-link {
     background-color: transparent;
     border-color: transparent;
-    color: var(--color-primary);
+    color: var(--text-primary);
     text-decoration: underline;
     padding: 0;
-  }
-
-  .btn-link:hover:not(:disabled) {
-    color: var(--color-primary-hover);
   }
 
   /* Link styles */
@@ -464,11 +460,11 @@
   }
 
   .link:hover {
-    opacity: 0.8;
+    text-decoration-thickness: 2px;
   }
 
   .link-primary {
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .link-secondary {
@@ -1721,7 +1717,7 @@
   .tab-active {
     opacity: 1;
     border-bottom-color: var(--color-primary);
-    color: var(--color-primary);
+    color: var(--text-primary);
     background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
   }
 
@@ -2543,7 +2539,7 @@
   }
 
   .text-primary {
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .text-primary-content {

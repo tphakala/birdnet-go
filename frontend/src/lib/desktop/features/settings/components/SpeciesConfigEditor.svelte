@@ -227,7 +227,7 @@
   <div class="border-t border-[var(--color-base-300)] pt-3">
     <button
       type="button"
-      class="flex items-center gap-2 text-xs font-medium text-[var(--color-base-content)]/60 hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+      class="flex items-center gap-2 text-xs font-medium text-[var(--color-base-content)]/60 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
       onclick={() => (showActions = !showActions)}
       aria-expanded={showActions}
     >

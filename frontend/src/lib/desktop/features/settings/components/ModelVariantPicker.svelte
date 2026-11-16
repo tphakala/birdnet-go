@@ -317,7 +317,7 @@
         <!-- Render every surfaced reason as a list item under a labeled heading: a
              list announces "N items" to a screen reader, so the second reason is
              unambiguously a second reason rather than an unrelated line. -->
-        <div class="text-xs text-primary/90">
+        <div class="text-xs text-[var(--text-primary)]">
           <p class="font-medium">
             {t('analysis.gallery.variants.recommendedForHardware')}:
           </p>

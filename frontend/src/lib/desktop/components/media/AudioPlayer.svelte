@@ -2607,7 +2607,7 @@
         class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md border border-[var(--color-base-300)]"
       >
         <div
-          class="loading loading-spinner loading-sm md:loading-md text-[var(--color-primary)]"
+          class="loading loading-spinner loading-sm md:loading-md text-[var(--text-primary)]"
           aria-hidden="true"
         ></div>
       </div>

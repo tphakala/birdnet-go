@@ -22,8 +22,8 @@
  * 6. a status fill reaching the text through a style: `style:color` that is not a text token, base
  *    content or textColorFor(...), and `color: var(--color-success|warning|error|info)`.
  *
- * Status fills used as text are also enforced app-wide, in every source file, by
- * status-text-tokens.test.ts.
+ * Status and primary fills used as text are also enforced app-wide, in every source file, by
+ * text-tokens.test.ts.
  *
  * Comments are removed before scanning, so prose may name a hex or a utility: HTML comments, and
  * block and line comments that start a line or follow whitespace (a line comment may also follow

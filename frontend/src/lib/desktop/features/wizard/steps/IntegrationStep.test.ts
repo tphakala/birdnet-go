@@ -419,7 +419,7 @@ describe('IntegrationStep - BirdWeather token', () => {
     await flushAsync();
     const icon = (name: RegExp) =>
       screen.getByRole('switch', { name }).closest('label')?.querySelector('svg');
-    const primary = 'text-[var(--color-primary)]';
+    const primary = 'text-[var(--text-primary)]';
 
     expect(icon(PRIVACY)).toHaveClass(primary);
     expect(icon(BIRDWEATHER)).not.toHaveClass(primary);

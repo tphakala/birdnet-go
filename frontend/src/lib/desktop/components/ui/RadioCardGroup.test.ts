@@ -446,10 +446,10 @@ describe('RadioCardGroup', () => {
 
     const checkedIcon = radios()[0].querySelector('svg');
     const otherIcon = radios()[1].querySelector('svg');
-    expect(checkedIcon).toHaveClass('text-[var(--color-primary)]');
+    expect(checkedIcon).toHaveClass('text-[var(--text-primary)]');
     expect(checkedIcon).not.toHaveClass('text-[var(--color-base-content)]');
     expect(otherIcon).toHaveClass('text-[var(--color-base-content)]');
-    expect(otherIcon).not.toHaveClass('text-[var(--color-primary)]');
+    expect(otherIcon).not.toHaveClass('text-[var(--text-primary)]');
   });
 
   it('renders the badge with base content text, not the primary colour', () => {
@@ -461,7 +461,7 @@ describe('RadioCardGroup', () => {
 
     const badge = screen.getByText('Recommended');
     expect(badge).toHaveClass('text-[var(--color-base-content)]');
-    expect(badge).not.toHaveClass('text-[var(--color-primary)]');
+    expect(badge).not.toHaveClass('text-[var(--text-primary)]');
     expect(radios()[0]).toHaveAccessibleName(/Option a\s*Recommended/);
   });
 

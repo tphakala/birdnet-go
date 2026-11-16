@@ -416,7 +416,7 @@
 
   .limit-dropdown-option-selected {
     background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .limit-dropdown-option-selected:hover {
@@ -438,7 +438,7 @@
   .limit-dropdown-check {
     width: 1rem;
     height: 1rem;
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   /* ========================================================================

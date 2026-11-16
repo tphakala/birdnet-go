@@ -43,7 +43,7 @@
   // Variant classes using CSS custom properties for theme support
   const variantClasses = $derived<Record<BadgeVariant, string>>({
     primary: outline
-      ? 'bg-transparent border border-[var(--color-primary)] text-[var(--color-primary)]'
+      ? 'bg-transparent border border-[var(--color-primary)] text-[var(--text-primary)]'
       : 'bg-[var(--color-primary)] text-[var(--color-primary-content)]',
     secondary: outline
       ? 'bg-transparent border border-[var(--color-secondary)] text-[var(--color-secondary)]'

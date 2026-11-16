@@ -493,7 +493,7 @@
                   </div>
                 </div>
                 {#if objectType === ot.name}
-                  <Check class="w-3.5 h-3.5 text-[var(--color-primary)] flex-shrink-0" />
+                  <Check class="w-3.5 h-3.5 text-[var(--text-primary)] flex-shrink-0" />
                 {/if}
               </button>
             {/each}
@@ -625,7 +625,7 @@
                 </div>
               </div>
               {#if isSelected}
-                <Check class="w-3.5 h-3.5 text-[var(--color-primary)] flex-shrink-0" />
+                <Check class="w-3.5 h-3.5 text-[var(--text-primary)] flex-shrink-0" />
               {/if}
             </button>
           {/each}
@@ -645,7 +645,7 @@
         {#if availableProperties.length > 0}
           <button
             type="button"
-            class="flex items-center gap-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
+            class="flex items-center gap-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--color-primary)]/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
             onclick={addCondition}
           >
             <Plus class="w-3 h-3" />
@@ -755,7 +755,7 @@
               >{t('settings.alerts.editor.actionBell')}</span
             >
             {#if isActionSelected('bell')}
-              <Check class="w-3 h-3 text-[var(--color-primary)] ml-auto" />
+              <Check class="w-3 h-3 text-[var(--text-primary)] ml-auto" />
             {/if}
           </button>
           <button
@@ -772,7 +772,7 @@
               >{t('settings.alerts.editor.actionPush')}</span
             >
             {#if isActionSelected('push')}
-              <Check class="w-3 h-3 text-[var(--color-primary)] ml-auto" />
+              <Check class="w-3 h-3 text-[var(--text-primary)] ml-auto" />
             {/if}
           </button>
         </div>

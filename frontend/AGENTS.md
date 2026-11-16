@@ -256,21 +256,32 @@ Theme colours are written as CSS variables in arbitrary values
 (`text-[var(--color-base-content)]`), not bare theme class names. Error text
 uses `text-[var(--text-error)]`; `--color-error` is for fills and borders.
 Success, warning and info text use `--text-success`, `--text-warning` and
-`--text-info`; text in the primary hue uses
-`--text-primary` (`schemes.css` sets it per colour scheme, and the custom
-scheme maps it to `--color-base-content`). Its consumers are
-`.menu-item-active` and `.menu-subitem-active`; the `.text-primary` utility
-still maps to `var(--color-primary)`, so write `text-[var(--text-primary)]` for
-AA primary-hue text. All four status text tokens reach
-4.5:1 on base-100, base-200, base-300 and on a 15% tint of their fill over each,
-and `--text-primary` does the same for every fixed scheme in both themes;
+`--text-info`. Text and icons in the primary hue use `--text-primary`
+(`text-[var(--text-primary)]`); `--color-primary` is for fills, borders, focus
+rings and chart series. `schemes.css` sets the token per colour scheme, and the
+custom scheme maps it to `--color-base-content`. `.text-primary`,
+`.link-primary`, `.btn-outline-primary`, `.btn-link`, `.tab-active`,
+`.menu-item-active` and `.menu-subitem-active` use it. All four status text
+tokens reach 4.5:1 on base-100, base-200, base-300 and on a 15% tint of their
+fill over each, and `--text-primary` does the same for every fixed scheme in
+both themes; keep a primary tint behind primary-hue text at 15% or less. Only an
+icon-only chip, which needs 3:1 (the token reaches 4.31:1 on a 20% tint in every
+scheme), and the detection limit menu, which sits on base-100 (4.88:1 at 25% in
+dark), go higher.
 `.badge-status-*`, `.alert-*`, `.text-error/success/warning/info` and
-`StatusPill` already use them. Use the
-`--color-*` fills for backgrounds, borders and dots, not for new text.
-The bare `text-error|success|warning|info` utility maps to the text token only in
-its plain form; behind a variant, with an opacity suffix or with `!`, Tailwind's
-generated utility wins and gives the fill. `src/test/status-text-tokens.test.ts`
-scans every source file for a status fill used as text and lists its exceptions.
+`StatusPill` already use them. Use the `--color-*` fills for backgrounds,
+borders and dots, not for new text.
+
+The token is close to body text in every scheme and equal to it in the custom
+scheme, so colour alone never marks a link: a link or link-like text control is
+underlined at rest (`underline hover:decoration-2`, or `.link`). Show hover
+with a thicker underline, not opacity, which pulls the token under 4.5:1.
+
+The bare `text-error|success|warning|info|primary` utility maps to the text
+token only in its plain form; behind a variant, with an opacity suffix or with
+`!`, Tailwind's generated utility wins and gives the fill.
+`src/test/text-tokens.test.ts` scans every source file for a status or primary
+fill used as text and lists its exceptions.
 
 ### General Rules
 

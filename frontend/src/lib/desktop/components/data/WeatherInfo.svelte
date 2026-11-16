@@ -149,7 +149,7 @@
   {#if loading}
     <!-- Loading state -->
     <div class="py-4 flex justify-center" role="status" aria-live="polite">
-      <span class="loading loading-spinner loading-md text-[var(--color-primary)]"></span>
+      <span class="loading loading-spinner loading-md text-[var(--text-primary)]"></span>
       <span class="sr-only">{t('detections.weather.loading')}</span>
     </div>
   {:else if error}

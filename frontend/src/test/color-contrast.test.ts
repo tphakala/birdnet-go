@@ -1166,7 +1166,7 @@ describe('Primary and accent content in every color scheme', () => {
     });
   });
 
-  describe('Accessibility: sidebar active item text', () => {
+  describe('Accessibility: primary text token', () => {
     const SURFACES = ['--color-base-100', '--color-base-200', '--color-base-300'];
     const ACTIVE_RULES = ['.menu-item-active', '.menu-subitem-active'];
     const TEXT_TOKEN = '--text-primary';
@@ -1190,6 +1190,10 @@ describe('Primary and accent content in every color scheme', () => {
     }
 
     const TINT = tintFraction(ACTIVE_RULES[0]);
+
+    it('.text-primary colours its text with --text-primary', () => {
+      expect(colorValues(activeBodies('.text-primary'))).toEqual(['var(--text-primary)']);
+    });
 
     const surfacesOf = (theme: Theme) => SURFACES.map(name => colorOf(SURFACE_SCHEME, theme, name));
 

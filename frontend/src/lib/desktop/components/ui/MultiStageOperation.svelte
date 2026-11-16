@@ -127,7 +127,7 @@
               <h3
                 class={cn(
                   'font-medium',
-                  stage.status === 'in_progress' ? 'text-[var(--color-primary)]' : ''
+                  stage.status === 'in_progress' ? 'text-[var(--text-primary)]' : ''
                 )}
               >
                 {stage.title}

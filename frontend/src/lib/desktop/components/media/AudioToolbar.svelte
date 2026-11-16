@@ -731,7 +731,7 @@
   }
 
   .denoise-option.selected {
-    color: var(--color-primary);
+    color: var(--text-primary);
     font-weight: 600;
   }
 
