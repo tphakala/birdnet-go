@@ -31,6 +31,7 @@
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import {
@@ -1464,9 +1465,9 @@
           class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
         >
           <p class="text-sm text-[var(--text-error)]">{activeSpeciesState.error}</p>
-          <button
-            type="button"
-            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_30%,transparent)] text-[var(--text-error)] transition-colors"
+          <Button
+            size="md"
+            className="mt-2"
             onclick={() => {
               const birdnetData = store.formData?.birdnet;
               if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
@@ -1475,7 +1476,7 @@
             }}
           >
             {t('settings.species.activeSpecies.retry') || 'Retry'}
-          </button>
+          </Button>
         </div>
       </div>
     {:else if activeSpeciesState.locationNotConfigured}

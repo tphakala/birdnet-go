@@ -17,6 +17,7 @@ import {
   TOAST_TYPE_CLASSES,
 } from '../lib/desktop/components/ui/NotificationToast.styles';
 import { indexHtmlScriptBlock } from './index-html';
+import { stripComments } from './source-comments';
 import { confidenceColorClasses } from '../lib/desktop/features/dashboard/utils/confidenceColors';
 import {
   PLACE_DISCLOSURE_CLASS,
@@ -1589,5 +1590,145 @@ describe('Custom scheme hover and pressed fills', () => {
     expect(style.getPropertyValue('--custom-primary-shade')).toBe('white');
     expect(style.getPropertyValue('--custom-accent-content')).toBe('#ffffff');
     expect(style.getPropertyValue('--custom-accent-shade')).toBe('black');
+  });
+});
+
+describe('Text dimmed through its colour', () => {
+  const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const css = stripComments(readFileSync(join(srcDir, 'styles', 'tailwind.css'), 'utf8'));
+  const toolbar = stripComments(
+    readFileSync(join(srcDir, 'lib/desktop/components/media/AudioToolbar.svelte'), 'utf8')
+  );
+  const lightBlock = blockBody(css, '@theme');
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+
+  /** Percentage NN of `color-mix(in srgb, var(--color-base-content) NN%, transparent)`. */
+  function baseContentShare(value: string): number {
+    const match = /^color-mix\(in srgb, var\(--color-base-content\) (\d+)%, transparent\)$/.exec(
+      value
+    );
+    expect(match, `"${value}" is a base-content share`).not.toBeNull();
+    return Number(match?.[1]) / 100;
+  }
+
+  function tokenIn(theme: 'light' | 'dark', name: string): string {
+    return (theme === 'dark' ? findVar(darkBlock, name) : null) ?? readVar(lightBlock, name);
+  }
+
+  /** Contrast of base-content at `share` over the surface `token` in both themes. */
+  function expectShareReadable(share: number, token: string) {
+    for (const theme of ['light', 'dark'] as const) {
+      const surface = tokenIn(theme, token);
+      const text = applyOpacity(tokenIn(theme, '--color-base-content'), surface, share);
+      expect(
+        getContrastRatio(text, surface),
+        `${theme} ${token} at ${share * 100}%`
+      ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+    }
+  }
+
+  it('.tab dims its label by colour, with no element opacity, on every base surface', () => {
+    const bodies = ruleBodies(css, '.tab');
+    for (const body of bodies) {
+      expect(body).not.toMatch(/(?:^|[\s;{])opacity:/);
+    }
+    const colors = colorValues(bodies);
+    expect(colors).toHaveLength(1);
+    const share = baseContentShare(colors[0]);
+    for (const token of ['--color-base-100', '--color-base-200', '--color-base-300']) {
+      expectShareReadable(share, token);
+    }
+  });
+
+  it('.time-range.dimmed dims the placeholder by colour on the toolbar surface', () => {
+    const bodies = ruleBodies(toolbar, '.time-range.dimmed');
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toMatch(/opacity:/);
+    expectShareReadable(baseContentShare(colorValues(bodies)[0]), '--color-base-200');
+    expect(ruleBodies(toolbar, '.audio-toolbar')[0]).toContain('background: var(--color-base-200)');
+  });
+
+  it('the tab rules keep their forced-colours indicators', () => {
+    expect(ruleBodies(css, '.tab')[0]).toContain('border-bottom-color: Canvas');
+    expect(ruleBodies(css, '.tab-active')[0]).toContain('border-bottom-color: CanvasText');
+    expect(ruleBodies(css, '.tabs-boxed .tab-active')[0]).toContain('background-color: Highlight');
+  });
+});
+
+describe('Detection card media surface', () => {
+  const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const read = (path: string) => readFileSync(join(srcDir, path), 'utf8');
+  const css = read('styles/tailwind.css');
+  const rootBlock = blockBody(css, ":root,\n[data-theme='light']");
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+  const schemesCss = read('styles/schemes.css');
+  const cardFiles = [
+    'lib/desktop/features/dashboard/components/DetectionCard.svelte',
+    'lib/desktop/features/detections/components/DetectionCardMobile.svelte',
+  ];
+  const infoBar = stripComments(
+    read('lib/desktop/features/dashboard/components/SpeciesInfoBar.svelte')
+  );
+  const TOKENS = ['--media-surface-from', '--media-surface-to'];
+
+  /** Alpha of an `rgb(255 255 255 / A)` colour declared by the rule `selector`. */
+  function whiteAlpha(source: string, selector: string): number {
+    const value = colorValues(ruleBodies(source, selector))[0];
+    const match = /^rgb\(255 255 255 \/ ([\d.]+)\)$/.exec(value);
+    expect(match, `${selector} is white with an alpha`).not.toBeNull();
+    return Number(match?.[1]);
+  }
+
+  it('is a hex pair in the root block only, so no theme or scheme turns it light', () => {
+    for (const token of TOKENS) {
+      readVar(rootBlock, token);
+      expect(darkBlock).not.toContain(token);
+      expect(schemesCss).not.toContain(token);
+    }
+  });
+
+  it('is drawn from the two tokens by both card variants, with no dark-theme override', () => {
+    for (const file of cardFiles) {
+      const source = stripComments(read(file));
+      const surface = ruleBodies(source, '.spectrogram-error')[0];
+      expect(surface, `${file}`).toContain('var(--media-surface-from)');
+      expect(surface, `${file}`).toContain('var(--media-surface-to)');
+      expect(source, `${file}`).not.toContain("[data-theme='dark']");
+      expect(source, `${file}`).not.toMatch(/text-\[var\(--color-base-content\)\]/);
+    }
+  });
+
+  it('keeps every overlay text at 4.5:1 on both stops', () => {
+    const stops = TOKENS.map(token => readVar(rootBlock, token));
+    for (const theme of ['light', 'dark'] as const) {
+      const tokenIn = (name: string) =>
+        (theme === 'dark' ? findVar(darkBlock, name) : null) ??
+        readVar(blockBody(css, '@theme'), name);
+      for (const stop of stops) {
+        const texts = {
+          name: '#ffffff',
+          subLabel: applyOpacity('#ffffff', stop, whiteAlpha(infoBar, '.scientific-name')),
+          relativeTime: applyOpacity('#ffffff', stop, whiteAlpha(infoBar, '.relative-time')),
+        };
+        for (const [what, text] of Object.entries(texts)) {
+          expect(getContrastRatio(text, stop), `${what} on ${stop}`).toBeGreaterThanOrEqual(
+            WCAG_AA_NORMAL
+          );
+        }
+        // Unverified badge: warning-content on warning at 90% over the surface
+        const badge = applyOpacity(tokenIn('--color-warning'), stop, 0.9);
+        expect(
+          getContrastRatio(tokenIn('--color-warning-content'), badge),
+          `${theme} unverified badge on ${stop}`
+        ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        for (const file of cardFiles) {
+          const alpha = whiteAlpha(stripComments(read(file)), '.spectrogram-placeholder');
+          expect(
+            getContrastRatio(applyOpacity('#ffffff', stop, alpha), stop),
+            `${file} status text on ${stop}`
+          ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        }
+      }
+    }
   });
 });

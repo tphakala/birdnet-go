@@ -115,6 +115,17 @@
   const labelBaseClasses =
     'absolute inset-0 flex items-center justify-center text-xs font-medium transition-[clip-path] duration-300 ease-out';
 
+  // On a striped fill the label sits on a chip in the fill colour, so it is never drawn on a
+  // stripe. Both copies use the same box so they stay aligned at the fill edge.
+  const labelTextClasses = 'flex items-center self-stretch px-1';
+
+  let fillChipClasses = $derived(
+    cn(
+      labelTextClasses,
+      striped && safeGet(variantClasses, currentVariant, 'bg-[var(--color-primary)]')
+    )
+  );
+
   let fillLabelClasses = $derived(
     cn(
       labelBaseClasses,
@@ -139,7 +150,7 @@
       data-label-part="track"
       style:clip-path="inset(0 0 0 {percentage}%)"
     >
-      {labelFormat(value, max)}
+      <span class={labelTextClasses}>{labelFormat(value, max)}</span>
     </div>
     <div
       class={fillLabelClasses}
@@ -147,7 +158,7 @@
       aria-hidden="true"
       style:clip-path="inset(0 {100 - percentage}% 0 0)"
     >
-      {labelFormat(value, max)}
+      <span class={fillChipClasses} data-label-chip>{labelFormat(value, max)}</span>
     </div>
   {/if}
 </div>
@@ -177,7 +188,10 @@
     }
   }
 
+  /* The stripes move only for users who have not asked for reduced motion. */
   .animate-stripes {
-    animation: stripes 1s linear infinite;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: stripes 1s linear infinite;
+    }
   }
 </style>

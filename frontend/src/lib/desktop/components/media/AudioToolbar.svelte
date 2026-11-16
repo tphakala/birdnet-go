@@ -741,8 +741,10 @@
     text-align: center;
   }
 
+  /* No selection: the placeholder readout is dimmed through its colour and still reaches 4.5:1
+     on the toolbar surface (color-contrast.test.ts). */
   .time-range.dimmed {
-    opacity: 0.35;
+    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
   }
 
   .export-option {
