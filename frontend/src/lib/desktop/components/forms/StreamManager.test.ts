@@ -237,6 +237,36 @@ describe('StreamManager', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('restores the rows from before a refused delete that follows an outside length change', async () => {
+    const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
+    const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
+    const streamR = { ...streamA, name: 'R', url: 'rtsp://r/live' };
+    async function deleteFirstCard() {
+      await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
+      const confirm = Array.from(screen.getByRole('alertdialog').querySelectorAll('button')).find(
+        button => button.textContent.trim() === 'common.delete'
+      );
+      expect(confirm).toBeDefined();
+      if (confirm) await fireEvent.click(confirm);
+    }
+    const { rerender } = renderRows([streamA, streamB]);
+
+    // A delete that is never answered leaves its baseline behind.
+    await deleteFirstCard();
+    await rerender({ streams: [streamB] });
+
+    // Another window replaces the list: every row gets a fresh id and the old
+    // baseline must not survive to be restored onto these streams.
+    await rerender({ streams: [streamP, streamQ, streamR] });
+    await fireEvent.click(header('Q'));
+
+    await deleteFirstCard();
+    await rerender({ streams: [streamQ, streamR] });
+    await rerender({ streams: [streamP, streamQ, streamR] });
+
+    expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('deletes a stream after confirmation with one list save', async () => {
     const { onUpdateStreams } = renderRows([streamA, streamB]);
 
