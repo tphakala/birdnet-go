@@ -192,6 +192,7 @@
   {#if expanded}
     <div
       id={bodyId}
+      inert={showDeleteConfirm}
       class="divide-y divide-[var(--border-100)] border-t border-[var(--border-100)] px-4"
       transition:slide={{ duration: 150 }}
     >

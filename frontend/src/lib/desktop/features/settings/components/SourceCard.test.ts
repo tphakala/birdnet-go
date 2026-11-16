@@ -31,11 +31,18 @@ function renderCard(extra: Partial<{ expanded: boolean; disabled: boolean }> = {
       onToggleExpanded,
       deleteConfirm: 'Delete source',
       onDelete,
-      children: createRawSnippet(() => ({ render: () => '<p>body</p>' })),
+      children: createRawSnippet(() => ({
+        render: () => '<div><p>body</p><button>Body action</button></div>',
+      })),
       ...extra,
     },
   });
   return { view, onToggleExpanded, onDelete };
+}
+
+/** Id of the body container, from the disclosure button that controls it. */
+function bodyId(): string {
+  return screen.getByRole('button', { name: /Garden/ }).getAttribute('aria-controls') ?? '';
 }
 
 describe('SourceCard', () => {
@@ -105,5 +112,19 @@ describe('SourceCard', () => {
     expect(onDelete).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     await vi.waitFor(() => expect(screen.getByRole('button', { name: DELETE })).toHaveFocus());
+  });
+
+  it('makes the open body inert while the delete confirmation shows, and not after Cancel', async () => {
+    renderCard({ expanded: true });
+    // Svelte sets inert as a property, which jsdom does not reflect to the attribute.
+    const isBodyInert = () => document.getElementById(bodyId())?.inert === true;
+    expect(isBodyInert()).toBe(false);
+
+    await fireEvent.click(screen.getByRole('button', { name: DELETE }));
+    await screen.findByRole('alertdialog');
+    expect(isBodyInert()).toBe(true);
+
+    await fireEvent.click(screen.getByRole('button', { name: CANCEL }));
+    expect(isBodyInert()).toBe(false);
   });
 });
