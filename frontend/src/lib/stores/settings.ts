@@ -48,10 +48,17 @@ import { getLogger } from '$lib/utils/logger';
 import { pruneRemovedModelAliases } from '$lib/utils/modelAliases';
 import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
-import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
+import type {
+  SettingsSectionName,
+  SettingsSectionPatchResponse,
+  SettingsSectionPayloads,
+} from '$lib/utils/settingsApi.js';
 import { withoutServerOwnedKeys } from '$lib/utils/settingsSections';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
 import {
+  leafPaths,
+  valueAt,
+  withValueAt,
   mergeSettingsPatch,
   mergeSettingsPatchKeepingEdits,
   rebaseSettingsKeepingEdits,
@@ -1443,6 +1450,48 @@ export const SECTION_STORE_PATHS = {
  */
 const inFlightSectionSaves = new Set<Promise<void>>();
 
+/** A key path inside a backend section, as handed to stageSectionEdit. */
+export type StagedPath = string[];
+
+/** A staged edit that was given up because the server changed the same path. */
+export interface DroppedStagedEdit {
+  section: SettingsSectionName;
+  path: StagedPath;
+}
+
+/** What saveStagedSection did with the staged paths of one section. Never thrown. */
+export interface StagedSaveResult {
+  /** Paths the server accepted, plus paths found equal to the stored value. */
+  saved: StagedPath[];
+  /** Paths given up because the server changed them since the client last saw them. */
+  dropped: StagedPath[];
+  /** Paths whose request failed and whose form value was taken back to the stored one. */
+  failed: StagedPath[];
+  /** The error of the failed request, when there was one. */
+  error?: unknown;
+  /** True when a staged path is still waiting, because it was edited again during the request. */
+  remaining: boolean;
+}
+
+/** Staged leaf paths per section, keyed by JSON.stringify(path): map keys can hold any character. */
+const stagedPaths = new Map<SettingsSectionName, Map<string, StagedPath>>();
+
+/** Listeners told about staged edits the store gave up because the server changed them. */
+const droppedListeners = new Set<(edits: DroppedStagedEdit[]) => void>();
+
+/**
+ * The ETag of the settings as the client last saw them, from a load, a snapshot
+ * or a successful conditional write. Null when unknown, absent or stale.
+ */
+let lastETag: string | null = null;
+
+/** Test-only: forget staged edits, their listeners and the remembered ETag. */
+export function resetStagedEditsForTest(): void {
+  stagedPaths.clear();
+  droppedListeners.clear();
+  lastETag = null;
+}
+
 /**
  * The full save that is waiting for section saves to finish, if any. A saveSettings
  * call made in that window joins it. It is cleared right before the snapshot is taken,
@@ -1553,7 +1602,8 @@ function usableIfMatch(etag: string | null): string | undefined {
 
 /**
  * Fetches the current server settings, normalized like a load, with the ETag
- * the response carried (null when absent). Throws on a malformed response.
+ * the response carried (null when absent). Remembers that ETag as the revision
+ * the client last saw. Throws on a malformed response.
  */
 async function fetchServerSnapshot(): Promise<{
   snapshot: SettingsFormData;
@@ -1568,35 +1618,169 @@ async function fetchServerSnapshot(): Promise<{
   if (!isPlainObject(data)) {
     throw new Error(t('settings.errors.loadFailed'));
   }
+  lastETag = etag;
   return { snapshot: normalizeLoadedSettings(data), etag };
+}
+
+/** True when two settings values are equal under the comparison the unsaved-changes check uses. */
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** The store path of a key path inside a backend section. */
+function storePathOf(section: SettingsSectionName, path: StagedPath): string[] {
+  // eslint-disable-next-line security/detect-object-injection -- section is a key of SECTION_STORE_PATHS by type
+  return [...SECTION_STORE_PATHS[section], ...path];
+}
+
+/** Returns data with value written at a store path; undefined removes the key. */
+function withStoreValue(
+  data: SettingsFormData,
+  storePath: string[],
+  value: unknown
+): SettingsFormData {
+  return withValueAt(
+    data as unknown as Record<string, unknown>,
+    storePath,
+    value
+  ) as unknown as SettingsFormData;
+}
+
+function stagedPathsOf(section: SettingsSectionName): StagedPath[] {
+  return [...(stagedPaths.get(section)?.values() ?? [])];
+}
+
+function stagePath(section: SettingsSectionName, path: StagedPath): void {
+  const paths = stagedPaths.get(section) ?? new Map<string, StagedPath>();
+  paths.set(JSON.stringify(path), path);
+  stagedPaths.set(section, paths);
+}
+
+function unstagePath(section: SettingsSectionName, path: StagedPath): void {
+  const paths = stagedPaths.get(section);
+  paths?.delete(JSON.stringify(path));
+  if (paths?.size === 0) stagedPaths.delete(section);
+}
+
+/** What the staged rule decided during one rebase or load, applied after the store update. */
+interface StagedOutcome {
+  /** Edits given up because the server changed the path and the user had a pending edit there. */
+  dropped: DroppedStagedEdit[];
+  /** Paths no longer staged: the dropped ones, and those where the server value now stands. */
+  released: DroppedStagedEdit[];
+}
+
+function newStagedOutcome(): StagedOutcome {
+  return { dropped: [], released: [] };
+}
+
+/**
+ * The staged rule, applied to the form a rebase or a load produced. For each
+ * staged path: when the server value differs from what the client last saw
+ * (prev.originalData), the form takes the server value and the path is released,
+ * and it is reported as dropped when the user had a pending edit there that
+ * differs from the server value. Otherwise the staged form value stands; with
+ * reapply it is written back into form, for a load that replaced the whole form.
+ * No staged paths means nothing changes.
+ */
+function applyStagedRule(
+  prev: GlobalSettingsState,
+  fresh: SettingsFormData,
+  form: SettingsFormData,
+  outcome: StagedOutcome,
+  reapply: boolean
+): SettingsFormData {
+  let result = form;
+  for (const [section, paths] of stagedPaths) {
+    for (const path of paths.values()) {
+      const storePath = storePathOf(section, path);
+      const lastSeen = valueAt(prev.originalData, storePath);
+      const serverValue = valueAt(fresh, storePath);
+      const pending = valueAt(prev.formData, storePath);
+      if (sameValue(serverValue, lastSeen)) {
+        if (reapply) result = withStoreValue(result, storePath, pending);
+        continue;
+      }
+      result = withStoreValue(result, storePath, serverValue);
+      const ref = { section, path };
+      outcome.released.push(ref);
+      if (!sameValue(pending, lastSeen) && !sameValue(pending, serverValue)) {
+        outcome.dropped.push(ref);
+      }
+    }
+  }
+  return result;
+}
+
+/** Unstages what the rule released and tells the listeners what it dropped. */
+function settleStaged(outcome: StagedOutcome): void {
+  for (const { section, path } of outcome.released) unstagePath(section, path);
+  if (outcome.dropped.length === 0) return;
+  for (const listener of [...droppedListeners]) {
+    try {
+      listener(outcome.dropped);
+    } catch (error) {
+      logger.error('A dropped staged edit listener threw:', error);
+    }
+  }
+}
+
+/** Unstages the paths whose form value now equals the stored one: nothing is left to send there. */
+function releaseConfirmedStaged(): void {
+  const { formData, originalData } = get(settingsStore);
+  for (const [section, paths] of [...stagedPaths]) {
+    for (const path of [...paths.values()]) {
+      const storePath = storePathOf(section, path);
+      if (sameValue(valueAt(formData, storePath), valueAt(originalData, storePath))) {
+        unstagePath(section, path);
+      }
+    }
+  }
 }
 
 /**
  * Rebases the state on a fresh server snapshot: pending edits are kept, every
  * other path takes the server value, and originalData becomes the snapshot. An
  * edit wins over a server change to the same path (last writer wins, see
- * rebaseSettingsKeepingEdits).
+ * rebaseSettingsKeepingEdits), except at staged paths, where the server wins
+ * (see applyStagedRule); the outcome collects what that rule decided.
  */
-function rebaseState(state: GlobalSettingsState, fresh: SettingsFormData): GlobalSettingsState {
+function rebaseState(
+  state: GlobalSettingsState,
+  fresh: SettingsFormData,
+  outcome: StagedOutcome
+): GlobalSettingsState {
   const merged = rebaseSettingsKeepingEdits(
     { ...state.formData },
     { ...state.originalData },
     { ...fresh }
   );
-  const formData = pruneRemovedModelAliases({ ...fresh, ...merged }, state.originalData, fresh);
+  const pruned = pruneRemovedModelAliases({ ...fresh, ...merged }, state.originalData, fresh);
+  const formData = applyStagedRule(state, fresh, pruned, outcome, false);
   return { ...state, formData, originalData: JSON.parse(JSON.stringify(fresh)) };
+}
+
+/** Rebases the store on a fresh snapshot and settles the staged edits; returns the dropped ones. */
+function rebaseStoreOn(fresh: SettingsFormData): DroppedStagedEdit[] {
+  const outcome = newStagedOutcome();
+  settingsStore.update(state => rebaseState(state, fresh, outcome));
+  settleStaged(outcome);
+  return outcome.dropped;
 }
 
 /**
  * Sends the whole form with PUT, with If-Match when ifMatch is set. Resolves
- * { conflict: false } when the server accepted it and, on a 412, { conflict: true }
- * with the current ETag the rejection named (null when it named none, or when no
- * If-Match was sent). Rethrows every other failure.
+ * { conflict: false, etag } when the server accepted it, with the ETag of the
+ * response (null when none was sent, or when no If-Match was sent), and, on a 412,
+ * { conflict: true } with the current ETag the rejection named (null when it named
+ * none, or when no If-Match was sent). Rethrows every other failure.
  */
 async function sendSettings(
   data: SettingsFormData,
   ifMatch: string | undefined
-): Promise<{ conflict: false } | { conflict: true; currentETag: string | null }> {
+): Promise<
+  { conflict: false; etag: string | null } | { conflict: true; currentETag: string | null }
+> {
   let currentETag: string | null = null;
   try {
     // Only pass options when there is an If-Match, so a bare save() call stays as before.
@@ -1608,7 +1792,9 @@ async function sendSettings(
           },
         })
       : settingsAPI.save(data));
-    return { conflict: false };
+    // The response ETag is only reported for a conditional request; without one the
+    // revision is unknown, so the next staged save fetches a snapshot first.
+    return { conflict: false, etag: currentETag };
   } catch (error) {
     if (!isPreconditionFailed(error)) throw error;
     return { conflict: true, currentETag };
@@ -1624,6 +1810,9 @@ async function sendSettings(
  * Unless both 412s named the same non-empty current ETag: then nothing changed on the
  * server and the ETag is rewritten on the way, so one more send without If-Match
  * follows and later saves in this page load send none.
+ * The rebase applies the staged rule (the server wins at staged paths it changed),
+ * and an accepted save releases staged paths that now equal the stored value; the
+ * response ETag becomes the remembered one, or none when the PUT was not conditional.
  * Resets isSaving and rethrows on every failure path, including the refusal
  * before a load. A failed fetch of the server state fails the save before any
  * request is sent.
@@ -1643,7 +1832,7 @@ async function persistFormData(notify: boolean): Promise<void> {
         // Rebase first so a change made on the server since the load (a model
         // gallery action) is not overwritten by load-time values.
         const { snapshot, etag } = await fetchServerSnapshot();
-        settingsStore.update(state => rebaseState(state, snapshot));
+        rebaseStoreOn(snapshot);
         const rebased = get(settingsStore);
         const sent: SettingsFormData = JSON.parse(JSON.stringify(rebased.formData));
         const loadedLocale = rebased.originalData.realtime?.dashboard?.locale;
@@ -1693,6 +1882,8 @@ async function persistFormData(notify: boolean): Promise<void> {
         // owned by the backend (refreshed in afterSettingsPersisted) and surfaced
         // by the global RestartBanner, so it is not tracked client-side.
         settingsStore.update(state => ({ ...state, originalData: sent, isSaving: false }));
+        lastETag = outcome.etag;
+        releaseConfirmedStaged();
         return;
       }
     });
@@ -1810,6 +2001,188 @@ async function afterSettingsPersisted(
   }
 }
 
+/** One staged path with the value that was sent for it. */
+interface SentPath {
+  path: StagedPath;
+  value: unknown;
+}
+
+function pushUnique(list: StagedPath[], path: StagedPath): void {
+  if (!list.some(entry => sameValue(entry, path))) list.push(path);
+}
+
+/**
+ * Builds the patch for a section from formData as it is now, at the staged
+ * paths only. A path whose form value equals the stored one has nothing to send:
+ * it is unstaged and reported as saved.
+ */
+function buildStagedPatch(
+  section: SettingsSectionName,
+  result: StagedSaveResult
+): { patch: Record<string, unknown>; sent: SentPath[] } {
+  const { formData, originalData } = get(settingsStore);
+  let patch: Record<string, unknown> = {};
+  const sent: SentPath[] = [];
+  for (const path of stagedPathsOf(section)) {
+    const storePath = storePathOf(section, path);
+    const value = valueAt(formData, storePath);
+    if (sameValue(value, valueAt(originalData, storePath))) {
+      unstagePath(section, path);
+      pushUnique(result.saved, path);
+      continue;
+    }
+    sent.push({ path, value });
+    patch = withValueAt(patch, path, value);
+  }
+  return { patch, sent };
+}
+
+/** Fetches a snapshot and rebases on it, so the patch is rebuilt from a current baseline. */
+async function rebaseForStagedSave(result: StagedSaveResult): Promise<void> {
+  const { snapshot } = await fetchServerSnapshot();
+  for (const dropped of rebaseStoreOn(snapshot)) {
+    pushUnique(result.dropped, dropped.path);
+  }
+}
+
+/**
+ * Records an accepted staged save. originalData takes the section the server
+ * returned (the patch when it returned none). formData takes it too wherever it
+ * still equals what was sent or was never edited; a path edited during the request
+ * keeps the edit and stays staged. Sent values that still match the form are first
+ * written into the baseline, so the three-way merge sees them as unedited.
+ */
+async function recordStagedSave<S extends SettingsSectionName>(
+  section: S,
+  patch: Record<string, unknown>,
+  sent: SentPath[],
+  response: SettingsSectionPatchResponse | null,
+  result: StagedSaveResult
+): Promise<void> {
+  const origLocale = get(settingsStore).originalData.realtime?.dashboard?.locale;
+  const echo = asRecord(response?.settings);
+  const incoming = withoutServerOwnedKeys(section, echo ?? patch);
+  const confirmed: StagedPath[] = [];
+  settingsStore.update(state => {
+    let baseline = state.originalData;
+    for (const { path, value } of sent) {
+      const storePath = storePathOf(section, path);
+      if (sameValue(valueAt(state.formData, storePath), value)) {
+        baseline = withStoreValue(baseline, storePath, value);
+        confirmed.push(path);
+      }
+    }
+    return {
+      ...state,
+      ...applySectionPatch({ ...state, originalData: baseline }, section, incoming),
+    };
+  });
+  for (const path of confirmed) {
+    unstagePath(section, path);
+    pushUnique(result.saved, path);
+  }
+
+  const newLocale = section === 'dashboard' ? valueAt(patch, ['locale']) : undefined;
+  const sentryEnabled = section === 'sentry' ? valueAt(patch, ['enabled']) : undefined;
+  await afterSettingsPersisted(
+    typeof newLocale === 'string' ? newLocale : undefined,
+    origLocale,
+    typeof sentryEnabled === 'boolean' ? sentryEnabled : undefined
+  );
+}
+
+/**
+ * Takes the form back to the stored value at every sent path whose form value is
+ * still what was sent, and unstages it. A path edited again keeps the newer edit,
+ * which stays staged for the next send.
+ */
+function revertStagedPaths(
+  section: SettingsSectionName,
+  sent: SentPath[],
+  result: StagedSaveResult
+): void {
+  const reverted: StagedPath[] = [];
+  settingsStore.update(state => {
+    let formData = state.formData;
+    for (const { path, value } of sent) {
+      const storePath = storePathOf(section, path);
+      if (!sameValue(valueAt(formData, storePath), value)) continue;
+      formData = withStoreValue(formData, storePath, valueAt(state.originalData, storePath));
+      reverted.push(path);
+    }
+    return { ...state, formData };
+  });
+  for (const path of reverted) {
+    unstagePath(section, path);
+    pushUnique(result.failed, path);
+  }
+}
+
+/**
+ * The body of saveStagedSection, run inside the shared queue. Sends the staged
+ * paths of a section with If-Match; on a 412 it fetches, rebases with the staged
+ * rule and rebuilds the patch from formData, up to MAX_SETTINGS_SAVE_ATTEMPTS
+ * sends, plus one without If-Match when the validator is rewritten in transit.
+ * Fills result; never throws.
+ */
+async function runStagedSave(
+  section: SettingsSectionName,
+  result: StagedSaveResult
+): Promise<void> {
+  let sent: SentPath[] = [];
+  try {
+    let previousConflictETag: string | null = null;
+    for (let attempt = 1; ; attempt++) {
+      if (stagedPathsOf(section).length === 0) break;
+      // Without a usable ETag the revision is unknown, so the baseline is refreshed first.
+      if (!usableIfMatch(lastETag)) await rebaseForStagedSave(result);
+      const built = buildStagedPatch(section, result);
+      sent = built.sent;
+      if (sent.length === 0) break;
+
+      const ifMatch = usableIfMatch(lastETag);
+      const body = built.patch as SettingsSectionPayloads[SettingsSectionName];
+      const seen: { etag: string | null } = { etag: null };
+      try {
+        const response = await (ifMatch
+          ? settingsAPI.patchSection(section, body, {
+              ifMatch,
+              onETag: value => {
+                seen.etag = value;
+              },
+            })
+          : settingsAPI.patchSection(section, body));
+        lastETag = ifMatch ? seen.etag : null;
+        const skipped = response?.skippedFields;
+        if (skipped && skipped.length > 0) {
+          logger.warn('Settings section save skipped fields:', section, skipped.join(', '));
+        }
+        await recordStagedSave(section, built.patch, sent, response, result);
+        sent = [];
+        break;
+      } catch (error) {
+        if (!isPreconditionFailed(error)) throw error;
+        const rewritten = seen.etag !== null && seen.etag === previousConflictETag;
+        previousConflictETag = seen.etag;
+        if (attempt >= MAX_SETTINGS_SAVE_ATTEMPTS && !rewritten) {
+          throw new SettingsChangedElsewhereError();
+        }
+        if (rewritten) {
+          ifMatchUnusable = true;
+          logger.warn(
+            'Settings If-Match is rewritten between the browser and the server; saving without it for this page load'
+          );
+        }
+        await rebaseForStagedSave(result);
+      }
+    }
+  } catch (error) {
+    result.error = error;
+    revertStagedPaths(section, sent, result);
+  }
+  result.remaining = stagedPathsOf(section).length > 0;
+}
+
 // Settings actions
 export const settingsActions = {
   async loadSettings() {
@@ -1818,16 +2191,25 @@ export const settingsActions = {
       // Queued with full saves and refreshes, so a load never lands between a
       // save's rebase and the originalData write that ends it.
       await runSerialized(async () => {
-        const data = await settingsAPI.load();
+        let etag: string | null = null;
+        const data = await settingsAPI.load({
+          onETag: value => {
+            etag = value;
+          },
+        });
         const coercedData = normalizeLoadedSettings(data);
+        lastETag = etag;
 
+        // A staged edit survives the load unless the server changed its path.
+        const outcome = newStagedOutcome();
         settingsStore.update(state => ({
           ...state,
-          formData: coercedData,
+          formData: applyStagedRule(state, coercedData, coercedData, outcome, true),
           originalData: JSON.parse(JSON.stringify(coercedData)),
           isLoading: false,
           dataLoaded: true,
         }));
+        settleStaged(outcome);
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.loadFailed');
@@ -1853,7 +2235,7 @@ export const settingsActions = {
     if (!get(settingsStore).dataLoaded) return;
     await runSerialized(async () => {
       const { snapshot } = await fetchServerSnapshot();
-      settingsStore.update(state => rebaseState(state, snapshot));
+      rebaseStoreOn(snapshot);
     });
   },
 
@@ -1914,6 +2296,8 @@ export const settingsActions = {
       const newLocale = section === 'dashboard' ? patch.locale : undefined;
       const savedSentryEnabled =
         section === 'sentry' && typeof patch.enabled === 'boolean' ? patch.enabled : undefined;
+      // This write changed the revision without reporting it.
+      lastETag = null;
       await afterSettingsPersisted(
         typeof newLocale === 'string' ? newLocale : undefined,
         origLocale,
@@ -1927,6 +2311,69 @@ export const settingsActions = {
     } finally {
       inFlightSectionSaves.delete(op);
     }
+  },
+
+  /**
+   * Stages an edit for immediate save: writes the partial into formData at the
+   * section's store path (the same merge and coercion as a section save, the
+   * edit winning over a pending one) and records its leaf paths as staged.
+   * Nothing is sent; saveStagedSection sends what is staged. Send whole arrays
+   * and complete nested objects, since arrays are whole values on the server.
+   * Refuses before settings have loaded, like saveSection.
+   */
+  stageSectionEdit<S extends SettingsSectionName>(
+    section: S,
+    partial: SettingsSectionPayloads[S]
+  ): void {
+    if (!get(settingsStore).dataLoaded) {
+      logger.warn('Refusing to stage a settings edit before settings have been loaded');
+      throw new Error(t('settings.errors.loadFailed'));
+    }
+    const patch = withoutServerOwnedKeys(section, partial);
+    settingsStore.update(state => {
+      // eslint-disable-next-line security/detect-object-injection -- section is a key of SECTION_STORE_PATHS by type
+      const path: SectionStorePath = SECTION_STORE_PATHS[section];
+      const topKey = path[0];
+      const wrapped: Record<string, unknown> = path.length === 2 ? { [path[1]]: patch } : patch;
+      const formSection = asRecord(safeGet(state.formData, topKey));
+      const merged = coerceSettings(topKey, mergeSettingsPatch(formSection, wrapped));
+      return { ...state, formData: { ...state.formData, [topKey]: merged } };
+    });
+    for (const path of leafPaths(patch)) stagePath(section, path);
+  },
+
+  /**
+   * Sends the staged edits of one section with PATCH and If-Match, in the queue
+   * loads, refreshes and full saves share, so at most one settings write runs at a
+   * time and a full save waits for it. The patch is read back from formData when
+   * it is sent, so a coerced or newly edited value is what goes out. A failed
+   * request takes each sent path back to the stored value unless it was edited
+   * again; a 412 refetches, rebases (the server wins at staged paths it changed)
+   * and resends. Resolves with what happened to each path; never rejects.
+   */
+  async saveStagedSection(section: SettingsSectionName): Promise<StagedSaveResult> {
+    const result: StagedSaveResult = { saved: [], dropped: [], failed: [], remaining: false };
+    const op = runSerialized(() => runStagedSave(section, result));
+    const tracked = op.then(ignoreOutcome);
+    inFlightSectionSaves.add(tracked);
+    try {
+      await op;
+    } finally {
+      inFlightSectionSaves.delete(tracked);
+    }
+    return result;
+  },
+
+  /**
+   * Registers a listener for staged edits the store gave up because the server
+   * changed the same path, found by a refresh, a load or a save's rebase. The form
+   * then shows the server value. Returns the function that removes the listener.
+   */
+  onStagedEditsDropped(listener: (edits: DroppedStagedEdit[]) => void): () => void {
+    droppedListeners.add(listener);
+    return () => {
+      droppedListeners.delete(listener);
+    };
   },
 
   /**

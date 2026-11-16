@@ -16,6 +16,9 @@ import { isPlainObject } from './security';
 
 type PlainRecord = Record<string, unknown>;
 
+/** A key path into a nested settings object. */
+export type SettingsPath = readonly string[];
+
 /** Keys that must never be copied, to rule out prototype pollution. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -137,5 +140,62 @@ export function rebaseSettingsKeepingEdits(
       result[key] = cloneValue(formValue);
     }
   }
+  return result;
+}
+
+/**
+ * The key paths of a partial settings object. Plain objects recurse; arrays,
+ * scalars, null and empty objects are leaves, matching how the server merge
+ * replaces them. Unsafe keys and undefined values are skipped.
+ */
+export function leafPaths(patch: PlainRecord): string[][] {
+  const out: string[][] = [];
+  const walk = (node: PlainRecord, prefix: string[]): void => {
+    for (const key of Object.keys(node)) {
+      if (UNSAFE_KEYS.has(key)) continue;
+      // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys of the node
+      const value = node[key];
+      if (value === undefined) continue;
+      if (isPlainObject(value) && Object.keys(value).length > 0) {
+        walk(value, [...prefix, key]);
+      } else {
+        out.push([...prefix, key]);
+      }
+    }
+  };
+  walk(patch, []);
+  return out;
+}
+
+/** Reads the own value at path, or undefined when any segment is missing. */
+export function valueAt(obj: unknown, path: SettingsPath): unknown {
+  let node = obj;
+  for (const key of path) {
+    if (!isPlainObject(node) || UNSAFE_KEYS.has(key)) return undefined;
+    node = ownValue(node, key);
+  }
+  return node;
+}
+
+/**
+ * Returns a copy of obj with value written at path, creating missing objects on
+ * the way. Writing undefined removes the key. A path with an unsafe segment
+ * changes nothing. Neither input is mutated.
+ */
+export function withValueAt(obj: PlainRecord, path: SettingsPath, value: unknown): PlainRecord {
+  if (path.length === 0 || path.some(key => UNSAFE_KEYS.has(key))) return cloneRecord(obj);
+  const [head, ...rest] = path;
+  const result = cloneRecord(obj);
+  if (rest.length === 0) {
+    if (value === undefined) {
+      return Object.fromEntries(Object.entries(result).filter(([key]) => key !== head));
+    }
+    // eslint-disable-next-line security/detect-object-injection -- head is checked against UNSAFE_KEYS
+    result[head] = cloneValue(value);
+    return result;
+  }
+  const child = ownValue(obj, head);
+  // eslint-disable-next-line security/detect-object-injection -- head is checked against UNSAFE_KEYS
+  result[head] = withValueAt(isPlainObject(child) ? child : {}, rest, value);
   return result;
 }

@@ -435,6 +435,9 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 //
 // If-Match and the ETag response header work as on UpdateSettings: the ETag is
 // the one for the whole settings, not for the section.
+//
+// The response carries the section as it is now stored under "settings", in
+// the shape GET /settings/:section serves (secrets redacted).
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
@@ -564,9 +567,18 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
 	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(updated))
+	// Return the stored section, redacted like GET /settings/:section, so a client
+	// can record what the server holds instead of its own request. The section
+	// resolver is the one the write used, so every writable section resolves.
+	var storedSection any
+	if resolved, resolveErr := getSettingsSectionValue(sanitizeSettingsForAPI(updated), section); resolveErr == nil {
+		storedSection = resolved
+	}
+
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          fmt.Sprintf("%s settings updated successfully", section),
 		"skippedFields":    skippedFields,
+		"settings":         storedSection,
 		"restart_required": restart.IsRestartRequired(),
 		"restart_reasons":  restart.GetRestartReasons(),
 	})

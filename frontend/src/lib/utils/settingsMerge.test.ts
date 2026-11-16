@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  leafPaths,
+  valueAt,
+  withValueAt,
   mergeSettingsPatch,
   mergeSettingsPatchKeepingEdits,
   rebaseSettingsKeepingEdits,
@@ -177,5 +180,52 @@ describe('rebaseSettingsKeepingEdits', () => {
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     expect((result as Record<string, unknown>).polluted).toBeUndefined();
     expect((result.a as { list: number[] }).list).not.toBe(fresh.a.list);
+  });
+});
+
+describe('leafPaths', () => {
+  it('recurses into plain objects and treats arrays and scalars as leaves', () => {
+    expect(leafPaths({ sources: [{ name: 'a' }], eq: { enabled: true, deep: { q: 1 } } })).toEqual([
+      ['sources'],
+      ['eq', 'enabled'],
+      ['eq', 'deep', 'q'],
+    ]);
+  });
+
+  it('returns nothing for an empty object and skips unsafe keys', () => {
+    expect(leafPaths({})).toEqual([]);
+    expect(leafPaths(JSON.parse('{"__proto__":{"x":1},"ok":1}'))).toEqual([['ok']]);
+  });
+
+  it('keeps an empty nested object as a leaf so clearing it is not lost', () => {
+    expect(leafPaths({ a: {} })).toEqual([['a']]);
+  });
+});
+
+describe('valueAt and withValueAt', () => {
+  it('reads nested values and returns undefined for a missing segment', () => {
+    const obj = { a: { b: [1, 2] } };
+    expect(valueAt(obj, ['a', 'b'])).toEqual([1, 2]);
+    expect(valueAt(obj, ['a', 'x', 'y'])).toBeUndefined();
+  });
+
+  it('writes without mutating the input, creating missing objects', () => {
+    const obj = { a: { keep: 1 } };
+    const out = withValueAt(obj, ['a', 'b', 'c'], 5);
+    expect(out).toEqual({ a: { keep: 1, b: { c: 5 } } });
+    expect(obj).toEqual({ a: { keep: 1 } });
+  });
+
+  it('removes the key when the value is undefined', () => {
+    const out = withValueAt({ a: { b: 1, c: 2 } }, ['a', 'b'], undefined);
+    expect(out).toEqual({ a: { c: 2 } });
+    expect(Object.hasOwn(out.a as object, 'b')).toBe(false);
+  });
+
+  it('refuses unsafe path segments', () => {
+    const out = withValueAt({}, ['__proto__', 'polluted'], true);
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
+    expect(out).toEqual({});
   });
 });
