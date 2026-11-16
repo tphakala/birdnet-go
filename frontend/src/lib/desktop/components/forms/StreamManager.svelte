@@ -43,7 +43,7 @@
   import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
   import { modelLabel } from '$lib/utils/modelLabel';
-  import { STREAMS_LIST_FIELD } from './sourceFields';
+  import { STREAMS_LIST_FIELD, RowRollback } from './sourceFields';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -450,13 +450,23 @@
   // One stream opens by default, several start closed.
   const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
 
-  // A length change this manager did not make (a reload, another window, a
-  // refused add or delete taking the list back) gives every row a fresh id, so
-  // no status or open state lands on the wrong stream.
+  const rollback = new RowRollback();
+
+  // A refused add or delete takes the list back to the rows this manager
+  // remembered, which keeps every card's id, open state and drafts. Any other
+  // length change (a reload, another window) gives every row a fresh id, so no
+  // status or open state lands on the wrong stream.
   $effect.pre(() => {
     const count = streams.length;
     untrack(() => {
       if (rowIds.length === count) return;
+      const previous = rollback.take(count);
+      if (previous) {
+        rowIds = previous.ids;
+        expandedRows.clear();
+        for (const id of previous.expanded) expandedRows.add(id);
+        return;
+      }
       rowIds = newRowIds(count);
       expandedRows.clear();
       if (count === 1) expandedRows.add(rowIds[0]);
@@ -486,6 +496,7 @@
   $effect(() => {
     const state = listStatus.state;
     untrack(() => {
+      if (state === 'saved') rollback.clear();
       if (!addPending || state === 'saving') return;
       addPending = false;
       if (state === 'error') return;
@@ -542,6 +553,7 @@
     };
 
     const rowId = generateId(ROW_ID_PREFIX);
+    rollback.remember(rowIds, expandedRows);
     rowIds = [...rowIds, rowId];
     if (streams.length === 0) expandedRows.add(rowId);
     addPending = true;
@@ -564,6 +576,7 @@
   async function deleteStream(index: number) {
     const streamToDelete = streams.at(index);
     const id = rowIds.at(index);
+    rollback.remember(rowIds, expandedRows);
     rowIds = rowIds.filter((_, i) => i !== index);
     if (id !== undefined) expandedRows.delete(id);
     onUpdateStreams(

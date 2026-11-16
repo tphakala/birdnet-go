@@ -196,6 +196,47 @@ describe('StreamManager', () => {
     expect(saved[0]).toMatchObject({ name: 'Gate', url: 'rtsp://gate/live', enabled: true });
   });
 
+  it('keeps the open state of every card when a refused add takes the list back', async () => {
+    const { rerender } = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await fireEvent.input(screen.getByTestId('new-stream-name'), { target: { value: 'C' } });
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://c/stream' },
+    });
+    // The open card has a test button of its own; the add form comes last.
+    const testButton = screen.getAllByTestId('stream-test-button').at(-1);
+    if (testButton) await fireEvent.click(testButton);
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    // The list grows at once, then the refusal takes it back.
+    await rerender({ streams: [streamA, streamB, streamC] });
+    await rerender({ streams: [streamA, streamB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('brings a refused delete back with its open state', async () => {
+    const { rerender } = renderRows([streamA, streamB]);
+    await fireEvent.click(header('A'));
+    await fireEvent.click(header('B'));
+
+    await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
+    const dialog = screen.getByRole('alertdialog');
+    const confirm = Array.from(dialog.querySelectorAll('button')).find(
+      button => button.textContent.trim() === 'common.delete'
+    );
+    if (confirm) await fireEvent.click(confirm);
+
+    await rerender({ streams: [streamB] });
+    await rerender({ streams: [streamA, streamB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('deletes a stream after confirmation with one list save', async () => {
     const { onUpdateStreams } = renderRows([streamA, streamB]);
 
