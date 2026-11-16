@@ -178,28 +178,43 @@ describe('StreamCard immediate save', () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  it('applies a type change without a test, drops the RTSP-only fields, and Cancel restores', async () => {
-    const { onCommit } = renderCard();
+  it('applies a type change that fits the URL without a test, drops the RTSP-only fields, and Cancel restores', async () => {
+    const httpStream: StreamConfig = {
+      ...baseStream,
+      type: 'http',
+      url: 'http://host/stream.m3u8',
+    };
+    const { onCommit } = renderCard({ stream: httpStream });
 
-    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'http' } });
+    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'hls' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByTestId<HTMLSelectElement>(TYPE_SELECT_TESTID).value).toBe('rtsp');
+    expect(screen.getByTestId<HTMLSelectElement>(TYPE_SELECT_TESTID).value).toBe('http');
     expect(screen.queryByRole('button', { name: APPLY_KEY })).toBeNull();
 
-    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'http' } });
+    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'hls' } });
     await fireEvent.click(applyButton());
     expect(onCommit).toHaveBeenCalledOnce();
     const [committed, options] = onCommit.mock.calls[0];
     expect(options).toEqual({ field: `${FIELD_PREFIX}connection` });
     expect(committed).toEqual({
       name: 'Front Yard',
-      url: 'rtsp://host/stream',
+      url: 'http://host/stream.m3u8',
       enabled: true,
-      type: 'http',
+      type: 'hls',
       channelMode: 'downmix',
       gain: 0,
       models: ['birdnet'],
     });
+  });
+
+  it('blocks Apply when only the type changes to one the saved URL does not fit', async () => {
+    const { onCommit } = renderCard();
+
+    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'http' } });
+    expect(applyButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(applyButton()).toHaveAccessibleDescription('settings.audio.streams.errors.invalidUrl');
+    await fireEvent.click(applyButton());
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it('commits gain once on release with the debounce', async () => {

@@ -380,13 +380,17 @@
   let testedUrl = $state<string | null>(null);
   let needsTest = $derived(urlChanged && testedUrl !== draftUrl);
 
+  let typeChanged = $derived(connection.draft.type !== stream.type);
+
+  // The URL must fit the type whenever either differs from the saved stream, so
+  // a type switch alone cannot apply a URL of another scheme.
   let urlProblem = $derived.by(() => {
-    if (!urlChanged) return null;
+    if (!urlChanged && !typeChanged) return null;
     if (!draftUrl) return t('settings.audio.streams.errors.urlRequired');
     if (!isValidStreamUrl(draftUrl, connection.draft.type)) {
       return t('settings.audio.streams.errors.invalidUrl');
     }
-    if (streams.some((s, i) => i !== index && s.url === draftUrl)) {
+    if (urlChanged && streams.some((s, i) => i !== index && s.url === draftUrl)) {
       return t('settings.audio.streams.errors.duplicate');
     }
     return null;
