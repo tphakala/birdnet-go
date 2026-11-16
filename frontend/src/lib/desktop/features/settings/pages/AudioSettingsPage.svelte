@@ -353,6 +353,8 @@
     error: null,
     data: [],
   });
+  // Set once the first device load has finished, so a refresh keeps the view it has.
+  let devicesLoadedOnce = $state(false);
 
   // PERFORMANCE OPTIMIZATION: Load audio devices with proper state management
   $effect(() => {
@@ -372,6 +374,7 @@
       audioDevices.data = [];
     } finally {
       audioDevices.loading = false;
+      devicesLoadedOnce = true;
     }
   }
 
@@ -723,7 +726,7 @@
           onclick: loadAudioDevices,
         }}
       />
-    {:else if audioDevices.loading && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
+    {:else if !devicesLoadedOnce && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
       <!-- First load: a skeleton of the section with its summary bar and two source cards -->
       <div class="card bg-[var(--color-base-100)] shadow-2xs">
         <div class="space-y-2 px-6 py-4">
@@ -746,7 +749,7 @@
           {/each}
         </div>
       </div>
-    {:else if !audioDevices.loading && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
+    {:else if devicesLoadedOnce && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
       <!-- Empty State: No Sound Cards Found -->
       <EmptyState
         icon={Volume2}

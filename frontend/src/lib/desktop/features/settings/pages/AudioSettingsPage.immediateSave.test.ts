@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import type { Writable } from 'svelte/store';
+import { api } from '$lib/utils/api';
 import AudioSettingsPage from './AudioSettingsPage.svelte';
 
 const TAB_STORAGE_KEY = 'birdnet-audio-settings-active-tab';
@@ -66,13 +67,13 @@ vi.mock('$lib/stores/settings', async () => {
 
 const SOURCE = { name: 'Garden', device: 'hw:1,0', gain: 0, models: ['birdnet'] };
 
-async function renderTab(tab: string) {
+async function renderTab(tab: string, sources: unknown[] = [SOURCE]) {
   // The module is mocked above with writable stores; the real types are readable.
   const { audioSettings } = (await import('$lib/stores/settings')) as unknown as {
     audioSettings: Writable<unknown>;
   };
   audioSettings.set({
-    sources: [SOURCE],
+    sources,
     source: '',
     soundLevel: { enabled: false, interval: 60 },
     equalizer: { enabled: false, filters: [] },
@@ -122,5 +123,26 @@ describe('AudioSettingsPage sound card tab saves immediately', () => {
 
     expect(screen.getByText(SAVE_KEY)).toBeInTheDocument();
     expect(screen.queryByText(TAB_NOTE_KEY)).toBeNull();
+  });
+
+  it('keeps the empty state on screen while Refresh reloads the devices after an empty first load', async () => {
+    await renderTab('soundcard', []);
+    await screen.findByText('settings.audio.emptyStates.soundCard.title');
+
+    // The reload stays pending, so the page is mid-refresh when it is read.
+    vi.mocked(api.get).mockReturnValueOnce(new Promise(() => {}));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'settings.audio.emptyStates.soundCard.refresh' })
+    );
+
+    expect(screen.getByText('settings.audio.emptyStates.soundCard.title')).toBeInTheDocument();
+    expect(screen.queryByText('settings.audio.loading')).toBeNull();
+  });
+
+  it('shows the loading skeleton before the first device load completes', async () => {
+    vi.mocked(api.get).mockReturnValueOnce(new Promise(() => {}));
+    await renderTab('soundcard', []);
+
+    expect(await screen.findByText('settings.audio.loading')).toBeInTheDocument();
   });
 });
