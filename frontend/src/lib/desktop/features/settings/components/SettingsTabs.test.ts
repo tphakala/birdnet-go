@@ -166,6 +166,19 @@ describe('SettingsTabs save mode', () => {
     );
   });
 
+  it('says Saving only for fields of its own scope', async () => {
+    vi.spyOn(settingsActions, 'stageSectionEdit').mockImplementation(() => undefined);
+    vi.spyOn(settingsActions, 'saveStagedSection').mockReturnValue(new Promise(() => undefined));
+    renderWithBar([{ ...modeTab('live', 'immediate'), autoSaveScope: 'audio:sources:' }], 'live');
+
+    commitSetting('rtsp', { streams: [] }, { field: 'rtsp:s:name' });
+    await Promise.resolve();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:sources:a:models' });
+    expect(await screen.findByRole('status')).toHaveTextContent('settings.actions.saving');
+  });
+
   it('names the other tabs with unsaved changes and opens one on request', async () => {
     renderWithBar(
       [modeTab('live', 'immediate'), { ...modeTab('rec', 'manual'), hasChanges: true }],
