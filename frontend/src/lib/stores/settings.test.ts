@@ -2510,6 +2510,18 @@ describe('Settings Store - staged section saves', () => {
     expect(formAudio().sources).toEqual(sources('B'));
   });
 
+  it('does not report a staged value equal to the stored one as failed when the baseline fetch fails', async () => {
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    stage({ sources: savedAudio().sources });
+    vi.mocked(settingsAPI.load).mockRejectedValueOnce(new Error('network down'));
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.failed).toEqual([]);
+  });
+
   it('refetches and resends once after a 412 when the server changed another path', async () => {
     stage({ sources: sources('A') });
     changeServerElsewhere('audio', { export: { type: 'flac' } });
