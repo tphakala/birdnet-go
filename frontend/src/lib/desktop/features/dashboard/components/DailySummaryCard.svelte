@@ -1009,7 +1009,7 @@ Responsive Breakpoints:
               {#each Array(24) as _, hour (hour)}
                 <a
                   href={urlBuilders.hourly(hour, 1)}
-                  class="text-center hover:text-[var(--color-primary)] cursor-pointer"
+                  class="text-center hover:text-[var(--text-primary)] cursor-pointer"
                   style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
                   title={t('dashboard.dailySummary.tooltips.viewHourly', {
                     hour: hour.toString().padStart(2, '0'),
@@ -1025,7 +1025,7 @@ Responsive Breakpoints:
                 {@const hour = i * 2}
                 <a
                   href={urlBuilders.hourly(hour, 2)}
-                  class="text-center hover:text-[var(--color-primary)] cursor-pointer"
+                  class="text-center hover:text-[var(--text-primary)] cursor-pointer"
                   style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
                   title={t('dashboard.dailySummary.tooltips.viewBiHourly', {
                     startHour: hour.toString().padStart(2, '0'),
@@ -1042,7 +1042,7 @@ Responsive Breakpoints:
                 {@const hour = i * 6}
                 <a
                   href={urlBuilders.hourly(hour, 6)}
-                  class="text-center hover:text-[var(--color-primary)] cursor-pointer"
+                  class="text-center hover:text-[var(--text-primary)] cursor-pointer"
                   style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
                   title={t('dashboard.dailySummary.tooltips.viewSixHourly', {
                     startHour: hour.toString().padStart(2, '0'),
@@ -1092,7 +1092,7 @@ Responsive Breakpoints:
                   {/if}
                   <a
                     href={urlBuilders.species(item)}
-                    class="text-sm hover:text-[var(--color-primary)] cursor-pointer font-medium leading-tight flex items-center gap-1 overflow-hidden"
+                    class="text-sm hover:text-[var(--text-primary)] cursor-pointer font-medium leading-tight flex items-center gap-1 overflow-hidden"
                     title={displayName}
                   >
                     <span class="truncate flex-1">{displayName}</span>

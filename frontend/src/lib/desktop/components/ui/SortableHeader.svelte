@@ -68,7 +68,7 @@
 >
   <button
     type="button"
-    class="inline-flex items-center gap-1 [text-align:inherit] hover:text-[var(--color-primary)] transition-colors"
+    class="inline-flex items-center gap-1 [text-align:inherit] hover:text-[var(--text-primary)] transition-colors"
     onclick={() => onSort(field)}
     data-testid={`sort-${field}`}
   >

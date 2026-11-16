@@ -983,13 +983,13 @@ describe('AudioSourceStep Accessibility', () => {
     const soundcard = /wizard\.steps\.audioSource\.soundcard/;
     const stream = /wizard\.steps\.audioSource\.rtspStream/;
 
-    expect(icon(soundcard)).toHaveClass('text-[var(--color-primary)]');
-    expect(icon(stream)).not.toHaveClass('text-[var(--color-primary)]');
+    expect(icon(soundcard)).toHaveClass('text-[var(--text-primary)]');
+    expect(icon(stream)).not.toHaveClass('text-[var(--text-primary)]');
 
     await fireEvent.click(radio(stream));
 
-    expect(icon(stream)).toHaveClass('text-[var(--color-primary)]');
-    expect(icon(soundcard)).not.toHaveClass('text-[var(--color-primary)]');
+    expect(icon(stream)).toHaveClass('text-[var(--text-primary)]');
+    expect(icon(soundcard)).not.toHaveClass('text-[var(--text-primary)]');
   });
 
   it.each([

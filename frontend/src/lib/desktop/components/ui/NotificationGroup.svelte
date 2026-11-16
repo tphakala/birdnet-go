@@ -113,7 +113,7 @@
       warning: 'bg-[var(--color-warning)]/20 text-[var(--text-warning)]',
       info: 'bg-[var(--color-info)]/20 text-[var(--text-info)]',
       detection: 'bg-[var(--color-success)]/20 text-[var(--text-success)]',
-      system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
+      system: 'bg-[var(--color-primary)]/20 text-[var(--text-primary)]',
     };
     return safeGet(classes, type, 'bg-[var(--color-base-300)]');
   }
@@ -190,7 +190,7 @@
           </span>
           <time datetime={group.latestTimestamp}>{timeRange}</time>
           {#if group.unreadCount > 0}
-            <span class="text-[var(--color-primary)] font-medium"
+            <span class="text-[var(--text-primary)] font-medium"
               >{t('notifications.groups.unread', { count: group.unreadCount })}</span
             >
           {/if}

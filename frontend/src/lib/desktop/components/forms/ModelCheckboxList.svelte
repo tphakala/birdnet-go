@@ -164,7 +164,7 @@
         <a
           href={buildAppUrl(SETTINGS_ROUTES.analysisModels)}
           onclick={handleAppLinkClick}
-          class="underline text-[var(--color-primary)]"
+          class="underline text-[var(--text-primary)]"
         >
           {t('settings.audio.models.noneEnabledLink')}
         </a>
@@ -184,7 +184,7 @@
         <a
           href={buildAppUrl(SYSTEM_ROUTES.inference)}
           onclick={handleAppLinkClick}
-          class="underline text-[var(--color-primary)]"
+          class="underline text-[var(--text-primary)]"
         >
           {t('settings.audio.models.loadFailedLink')}
         </a>
@@ -201,7 +201,7 @@
         <a
           href={buildAppUrl(SETTINGS_ROUTES.analysisModels)}
           onclick={handleAppLinkClick}
-          class="underline text-[var(--color-primary)]"
+          class="underline text-[var(--text-primary)]"
         >
           {t('settings.audio.models.noneEnabledLink')}
         </a>

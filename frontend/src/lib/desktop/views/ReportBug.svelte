@@ -96,7 +96,7 @@
       <div
         class="w-20 h-20 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center border border-[var(--border-100)]"
       >
-        <Bug class="size-10 text-[var(--color-primary)]" />
+        <Bug class="size-10 text-[var(--text-primary)]" />
       </div>
       <div class="mt-3">
         <h1 class="text-3xl font-bold">{t('reportBug.title')}</h1>

@@ -190,7 +190,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
             <div class="flex items-center justify-between gap-1.5">
               <span class="flex min-w-0 items-center gap-1">
                 <span
-                  class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
+                  class="truncate text-sm font-medium leading-tight group-hover:text-[var(--text-primary)]"
                 >
                   {displayName}
                 </span>

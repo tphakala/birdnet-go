@@ -777,13 +777,13 @@
                           isInactive(source)
                             ? 'text-[var(--color-base-content)]/60'
                             : 'text-[var(--color-base-content)]',
-                          selectedSource === source && 'text-[var(--color-primary)]'
+                          selectedSource === source && 'text-[var(--text-primary)]'
                         )}
                       >
                         {getSourceDisplayName(source)}
                       </span>
                       {#if selectedSource === source}
-                        <Check class="size-4 text-[var(--color-primary)] shrink-0" />
+                        <Check class="size-4 text-[var(--text-primary)] shrink-0" />
                       {/if}
                     </div>
                     {#if isInactive(source)}

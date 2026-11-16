@@ -65,11 +65,11 @@
   // State badge styling
   const stateStyles: Record<string, string> = {
     idle: 'bg-[var(--color-base-200)] text-[var(--color-base-content)]',
-    initializing: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
+    initializing: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
     dual_write: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
-    migrating: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
+    migrating: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
     paused: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
-    validating: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
+    validating: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
     cutover: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
     completed: 'bg-[var(--color-success)]/10 text-[var(--text-success)]',
     failed: 'bg-[var(--color-error)]/10 text-[var(--text-error)]',
@@ -153,7 +153,7 @@
       {#if isStarting}
         <!-- Starting indicator -->
         <div class="flex flex-col items-center justify-center py-6 gap-3">
-          <Loader2 class="size-8 animate-spin text-[var(--color-primary)]" />
+          <Loader2 class="size-8 animate-spin text-[var(--text-primary)]" />
           <span class="text-sm text-[var(--color-base-content)]/70">
             {t('system.database.migration.starting')}
           </span>
@@ -298,7 +298,7 @@
       <div class="space-y-4">
         <!-- Info note -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.in_progress')}
           </p>
@@ -308,7 +308,7 @@
         <div
           class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
         >
-          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <Loader2 class="size-4 animate-spin" />
             <span>{t('system.database.migration.status.validating')}</span>
           </div>
@@ -346,7 +346,7 @@
       <div class="space-y-4">
         <!-- Info note at top -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.in_progress')}
           </p>
@@ -357,7 +357,7 @@
           <div
             class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
           >
-            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
               <Loader2 class="size-4 animate-spin" />
               <span>
                 {t('system.database.migration.phase.indicator', {

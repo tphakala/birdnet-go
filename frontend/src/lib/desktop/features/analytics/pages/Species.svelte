@@ -526,7 +526,7 @@
             {#snippet icon()}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 text-[var(--color-primary)]"
+                class="h-6 w-6 text-[var(--text-primary)]"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -624,7 +624,7 @@
       <!-- Loading State -->
       {#if isLoading}
         <div class="flex justify-center items-center p-8">
-          <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
+          <span class="loading loading-spinner loading-lg text-[var(--text-primary)]"></span>
         </div>
       {/if}
 

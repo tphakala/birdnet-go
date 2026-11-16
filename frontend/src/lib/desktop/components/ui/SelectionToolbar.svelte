@@ -84,7 +84,7 @@
     <div class="text-sm text-[var(--color-base-content)]/70">
       <button
         type="button"
-        class="underline hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+        class="underline hover:text-[var(--text-primary)] transition-colors cursor-pointer"
         onclick={onSelectAll}
         aria-label={t('detections.selection.selectAllMatching', { count: totalCount })}
       >

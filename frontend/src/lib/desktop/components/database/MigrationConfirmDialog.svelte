@@ -80,8 +80,7 @@
       <input
         type="checkbox"
         bind:checked={confirmed}
-        class="mt-1 size-5 rounded border-[var(--color-base-300)]
-               text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+        class="mt-1 size-5 rounded border-[var(--color-base-300)] focus:ring-[var(--color-primary)]"
       />
       <span class="text-base text-[var(--color-base-content)]">
         {t('system.database.migration.confirmDialog.checkbox')}

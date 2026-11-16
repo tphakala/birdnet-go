@@ -22,7 +22,7 @@ describe('LoadingSpinner', () => {
     // Default size is lg (w-10 h-10 border-2)
     expect(spinnerElement).toHaveClass('w-10', 'h-10', 'border-2');
     // Default color uses CSS variable
-    expect(spinnerElement?.className).toContain('text-[var(--color-primary)]');
+    expect(spinnerElement?.className).toContain('text-[var(--text-primary)]');
   });
 
   it('renders with custom size', () => {

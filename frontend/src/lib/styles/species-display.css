@@ -34,7 +34,7 @@
   --sp-scientific-style: italic;
 
   /* Species colors */
-  --sp-hover-color: var(--color-primary);
+  --sp-hover-color: var(--text-primary);
   --sp-scientific-color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
 
   /* Species layout */
@@ -173,7 +173,7 @@
 
 /* Focus states for interactive elements */
 .sp-species-common-name:focus-visible {
-  outline: 2px solid var(--sp-hover-color);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
@@ -240,10 +240,6 @@
 [data-theme='dark'] {
   /* Override scientific name color for better contrast in dark mode */
   --sp-scientific-color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
-}
-
-[data-theme='dark'] .sp-species-common-name:hover {
-  color: color-mix(in srgb, var(--color-primary) 90%, transparent);
 }
 
 /* ========================================================================

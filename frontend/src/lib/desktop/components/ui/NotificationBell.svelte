@@ -111,7 +111,7 @@
       case 'detection':
         return 'bg-[var(--color-success)]/20 text-[var(--text-success)]';
       case 'system':
-        return 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]';
+        return 'bg-[var(--color-primary)]/20 text-[var(--text-primary)]';
       case 'info':
         return 'bg-[var(--color-info)]/20 text-[var(--text-info)]';
       default:
@@ -508,7 +508,7 @@
         {#if formattedNotifications.length > 0}
           <button
             onclick={markAllAsRead}
-            class="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-focus)] hover:underline transition-colors duration-150"
+            class="text-sm text-[var(--text-primary)] underline hover:opacity-80 transition-opacity duration-150"
             aria-label={t('notifications.actions.markAllRead')}
           >
             {t('notifications.actions.markAllRead')}

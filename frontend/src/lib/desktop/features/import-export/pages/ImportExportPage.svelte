@@ -48,7 +48,7 @@
       <ul class="divide-y divide-[var(--color-base-200)]">
         <!-- BirdNET-Pi import -->
         <li class="px-6 py-4 flex items-start gap-4">
-          <Import class="size-5 text-[var(--color-primary)] mt-0.5 shrink-0" aria-hidden="true" />
+          <Import class="size-5 text-[var(--text-primary)] mt-0.5 shrink-0" aria-hidden="true" />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
               <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
@@ -66,7 +66,7 @@
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={t('navigation.reportBugAriaLabel')}
-                class="inline-flex items-center gap-1 font-medium underline text-[var(--color-primary)] hover:opacity-80"
+                class="inline-flex items-center gap-1 font-medium underline text-[var(--text-primary)] hover:opacity-80"
               >
                 {t('system.importExport.birdnetPi.reportBug')}
                 <ExternalLink class="size-3" aria-hidden="true" />

@@ -356,7 +356,7 @@
                 pattern="#?[0-9]+"
                 disabled={generating}
               />
-              <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block">
+              <span class="text-xs text-[var(--color-base-content)]/60 mt-1 block">
                 {@html t('settings.support.supportReport.githubIssue.helper', {
                   viewIssuesLink,
                   createIssueLink: createNewIssueLink,

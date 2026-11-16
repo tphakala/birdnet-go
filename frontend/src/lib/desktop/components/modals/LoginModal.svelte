@@ -364,7 +364,7 @@
         <div class="text-center space-y-2">
           <div class="flex justify-center mb-4">
             <div class="p-3 bg-[var(--color-primary)]/10 rounded-full">
-              <ShieldCheck class="size-8 text-[var(--color-primary)]" />
+              <ShieldCheck class="size-8 text-[var(--text-primary)]" />
             </div>
           </div>
           <h3 id="modal-title" class="text-2xl font-semibold">

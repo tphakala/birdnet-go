@@ -2014,7 +2014,7 @@
                           href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="inline-flex items-center gap-1 mt-2 text-[var(--color-primary)] hover:underline"
+                          class="inline-flex items-center gap-1 mt-2 text-[var(--text-primary)] underline hover:opacity-80"
                         >
                           {t('settings.notifications.push.form.urlFormats.moreServices')}
                           <ExternalLink class="size-3" />
@@ -2374,7 +2374,7 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
                 {#each templateFields as field (field.name)}
                   <div class="flex items-baseline gap-2">
-                    <code class="font-mono text-[var(--color-primary)] shrink-0"
+                    <code class="font-mono text-[var(--text-primary)] shrink-0"
                       >&#123;&#123;.{field.name}&#125;&#125;</code
                     >
                     <span class="text-[var(--color-base-content)]/70">{field.description}</span>
@@ -2415,7 +2415,7 @@
     stats={[
       {
         icon: Zap,
-        iconClass: 'text-[var(--color-primary)]',
+        iconClass: 'text-[var(--text-primary)]',
         count: activeCount,
         label: t('settings.notifications.rules.summary.active'),
       },

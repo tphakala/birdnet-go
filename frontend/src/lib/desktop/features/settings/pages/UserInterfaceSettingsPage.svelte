@@ -703,7 +703,7 @@
                   />
                   <span
                     class="mt-2 text-xs leading-tight text-center {isSelected
-                      ? 'text-[var(--color-primary)] font-medium'
+                      ? 'text-[var(--text-primary)] font-medium'
                       : 'text-[var(--color-base-content)]/70'}"
                   >
                     {style.label}
