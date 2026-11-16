@@ -128,14 +128,14 @@
           <span class="text-sm text-[var(--color-base-content)]">{modelLabel(model)}</span>
           {#if model.state === 'pending'}
             <span
-              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-info)]/15 text-[var(--color-info)]"
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-info)]/15 text-[var(--text-info)]"
             >
               <Loader2 class="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               {t('settings.audio.models.state.pending')}
             </span>
           {:else if model.state === 'failed'}
             <span
-              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--text-warning)]"
             >
               <AlertTriangle class="size-3" aria-hidden="true" />
               {t('settings.audio.models.state.failed')}
