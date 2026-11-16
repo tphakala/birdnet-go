@@ -1487,6 +1487,13 @@ const stagedPaths = new Map<SettingsSectionName, Map<string, StagedPath>>();
 const pathGenerations = new Map<string, number>();
 let lastGeneration = 0;
 
+/**
+ * Generation keys of paths a reset unstaged. A reset discards unsaved edits, so
+ * when a request that was already sending such a path succeeds, the form follows
+ * the newly stored value. A new edit of the path clears its mark.
+ */
+const resetPaths = new Set<string>();
+
 /** Listeners told about staged edits the store gave up because the server changed them. */
 const droppedListeners = new Set<(edits: DroppedStagedEdit[]) => void>();
 
@@ -1500,6 +1507,7 @@ let lastETag: string | null = null;
 export function resetStagedEditsForTest(): void {
   stagedPaths.clear();
   pathGenerations.clear();
+  resetPaths.clear();
   droppedListeners.clear();
   lastETag = null;
 }
@@ -1676,6 +1684,7 @@ function bumpGeneration(section: SettingsSectionName, path: StagedPath): void {
 
 function stagePath(section: SettingsSectionName, path: StagedPath): void {
   bumpGeneration(section, path);
+  resetPaths.delete(generationKey(section, path));
   const paths = stagedPaths.get(section) ?? new Map<string, StagedPath>();
   paths.set(JSON.stringify(path), path);
   stagedPaths.set(section, paths);
@@ -1690,7 +1699,9 @@ function unstagePath(section: SettingsSectionName, path: StagedPath): void {
 /**
  * Unstages every path of the sections stored under topKey (every section when
  * topKey is omitted), and moves their generations on so a request in flight
- * neither reverts nor confirms them. For a reset, which takes the form back to the stored values.
+ * neither reverts nor confirms them. For a reset, which takes the form back to the stored values;
+ * the paths are marked so a request already sending them, when it succeeds, brings the form to
+ * the value it stored.
  */
 function invalidateStaged(topKey?: string): void {
   for (const [section, paths] of [...stagedPaths]) {
@@ -1698,6 +1709,7 @@ function invalidateStaged(topKey?: string): void {
     if (topKey !== undefined && SECTION_STORE_PATHS[section][0] !== topKey) continue;
     for (const path of [...paths.values()]) {
       bumpGeneration(section, path);
+      resetPaths.add(generationKey(section, path));
       unstagePath(section, path);
     }
   }
@@ -2105,9 +2117,9 @@ async function rebaseForStagedSave(
 /**
  * Records an accepted staged save. originalData takes the section the server
  * returned (the patch when it returned none). formData takes it too wherever it
- * still equals what was sent or was never edited; a path edited during the request
- * (its generation moved on, even back to the sent value)
- * keeps the edit and stays staged. Every sent value is first
+ * still equals what was sent or was never edited, and at a path a reset unstaged
+ * during the request; a path edited during the request (its generation moved on,
+ * even back to the sent value) keeps the edit and stays staged. Every sent value is first
  * written into the baseline, so the merge sees a form equal to it as unedited and any other as edited.
  * The confirmed paths are unstaged and reported saved even when a store subscriber throws during
  * the update, unless a subscriber edited the same path again meanwhile (its generation moved
@@ -2127,11 +2139,17 @@ async function recordStagedSave<S extends SettingsSectionName>(
   try {
     settingsStore.update(state => {
       let baseline = state.originalData;
+      let formData = state.formData;
       for (const { path, value, generation } of sent) {
         const storePath = storePathOf(section, path);
         // The server holds the sent value now, so it is the baseline even where the
         // form moved on: an edit back to the old value then still counts as an edit.
         baseline = withStoreValue(baseline, storePath, value);
+        // A reset during the request discarded the unsaved edits, not this stored
+        // value, so the form follows it instead of keeping the pre-edit value.
+        if (resetPaths.delete(generationKey(section, path))) {
+          formData = withStoreValue(formData, storePath, value);
+        }
         if (
           generationOf(section, path) === generation &&
           sameValue(valueAt(state.formData, storePath), value)
@@ -2141,7 +2159,7 @@ async function recordStagedSave<S extends SettingsSectionName>(
       }
       return {
         ...state,
-        ...applySectionPatch({ ...state, originalData: baseline }, section, incoming),
+        ...applySectionPatch({ ...state, originalData: baseline, formData }, section, incoming),
       };
     });
   } finally {

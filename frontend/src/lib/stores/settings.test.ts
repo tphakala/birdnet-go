@@ -2492,7 +2492,6 @@ describe('Settings Store - staged section saves', () => {
     ['resetAllSettings', () => settingsActions.resetAllSettings()],
     ['resetSection', () => settingsActions.resetSection('realtime')],
   ])('%s drops staged paths so a request in flight does not resend them', async (_name, reset) => {
-    const stored = savedAudio().sources;
     stage({ sources: sources('A') });
     const gate = deferred();
     hold = gate;
@@ -2503,12 +2502,34 @@ describe('Settings Store - staged section saves', () => {
     gate.resolve();
     const result = await first;
 
+    // The reset discarded unsaved edits; the value already on its way is stored now,
+    // so the form follows it and nothing is left unsaved.
     expect(result.remaining).toBe(false);
     expect(result.failed).toEqual([]);
-    expect(formAudio().sources).toEqual(stored);
+    expect(formAudio().sources).toEqual(inServerShape(sources('A')));
+    expect(savedAudio().sources).toEqual(inServerShape(sources('A')));
+    expect(get(hasUnsavedChanges)).toBe(false);
     const next = await settingsActions.saveStagedSection('audio');
     expect(patchCalls()).toHaveLength(1);
     expect(next.saved).toEqual([]);
+  });
+
+  it('keeps an edit made after a reset while the reset path is still being sent', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    settingsActions.resetSection('realtime');
+    stage({ sources: sources('B') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('B'));
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('B') });
   });
 
   it('does not stage an empty object, which the server merge would not clear', () => {
