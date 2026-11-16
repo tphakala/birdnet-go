@@ -109,7 +109,7 @@ Controls call `commitSetting(section, partial, { field, debounceMs? })` from
   and the section must be listed in `SECTION_STORE_PATHS`.
 - Send whole arrays and complete nested objects: arrays are whole values on the
   server, and a partial array would replace the stored one.
-- Use one `field` key per visible control (`audio:<rowId>:gain`). Put an
+- Use one `field` key per visible control (`audio:sources:<rowId>:gain`). Put an
   `AutoSaveStatus` with the same key next to it and point the control's
   `aria-describedby` at its `id` while an error shows.
 - List rows need a UI row id that is never persisted (`generateId()`), not the
@@ -119,10 +119,10 @@ Controls call `commitSetting(section, partial, { field, debounceMs? })` from
 - A migrated tab passes neither `hasChanges` nor `originalData` and
   `currentData` to its `SettingsSection`: it has no unsaved state to show.
 - Give the tab definition an `autoSaveScope`: a field key prefix that every key
-  of its controls starts with and no other tab's key does (`audio:` for keys such
-  as `audio:<rowId>:gain`), so the tab's save state counts only its own fields.
-  End the prefix with the separator, since a prefix of `audio:1` also matches
-  `audio:10:gain`. The tab names other tabs of the page with unsaved changes;
+  of its controls starts with and no other tab's key does (`audio:sources:` for keys
+  such as `audio:sources:<rowId>:gain`), so the tab's save state counts only its own fields.
+  End the prefix with the separator, since a prefix of `audio:sources:1`
+  also matches `audio:sources:10:gain`. The tab names other tabs of the page with unsaved changes;
   they are saved on their own tab.
 - `AutoSaveStatus` clears its field's error when it unmounts (a row deleted, a
   tab switched), so a stale error never stays in the tab's count.
