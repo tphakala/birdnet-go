@@ -4,7 +4,8 @@
  * the model list stays live while mounted.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { deferred } from '../../../../test/async-helpers';
 import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
 import {
   restoreElementAnimate,
@@ -12,6 +13,12 @@ import {
 } from '../../../../test/fixtures/elementAnimate';
 import type { StreamConfig } from '$lib/stores/settings';
 import { STREAMS_LIST_FIELD } from './sourceFields';
+import {
+  autoSaveStatus,
+  commitSetting,
+  resetAutoSaveForTest,
+  type CommitOptions,
+} from '$lib/stores/settingsAutoSave.svelte';
 
 vi.mock('./SelectDropdown.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockSelectDropdown.svelte')).default,
@@ -53,9 +60,22 @@ vi.mock('$lib/stores/quietHours.svelte', () => ({
   quietHoursStore: { startPolling: vi.fn(), stopPolling: vi.fn(), status: null },
 }));
 
-vi.mock('$lib/utils/api', () => ({
+vi.mock('$lib/utils/api', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/api')>()),
   api: { get: vi.fn(() => Promise.resolve([])) },
 }));
+
+const store = vi.hoisted(() => ({
+  stageSectionEdit: vi.fn(),
+  saveStagedSection: vi.fn(),
+  onStagedEditsDropped: vi.fn(() => () => undefined),
+}));
+
+// The add outcome tests run the real auto-save engine over a mocked store.
+vi.mock('$lib/stores/settings', async importOriginal => {
+  const actual = await importOriginal<typeof import('$lib/stores/settings')>();
+  return { ...actual, settingsActions: { ...actual.settingsActions, ...store } };
+});
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class ReconnectingEventSource {
@@ -189,5 +209,81 @@ describe('StreamManager', () => {
     expect(onUpdateStreams).toHaveBeenCalledExactlyOnceWith([streamB], {
       field: STREAMS_LIST_FIELD,
     });
+  });
+});
+
+describe('StreamManager add outcome', () => {
+  const NAME_TESTID = 'new-stream-name';
+  const SAVED = { saved: [['streams']], dropped: [], failed: [], remaining: false };
+  const REFUSED = {
+    saved: [],
+    dropped: [],
+    failed: [['streams']],
+    remaining: false,
+    error: new Error('no'),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetAutoSaveForTest();
+    store.stageSectionEdit.mockReset();
+    store.saveStagedSection.mockReset();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetAutoSaveForTest();
+    restoreElementAnimate();
+  });
+
+  async function addGate() {
+    renderTyped(StreamManager, {
+      props: {
+        streams: [],
+        disabled: false,
+        onUpdateStreams: (streams: StreamConfig[], options: CommitOptions) =>
+          commitSetting('rtsp', { streams }, options),
+      },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Gate' } });
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://gate/live' },
+    });
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+  }
+
+  it('closes the add form once the new stream is saved', async () => {
+    store.saveStagedSection.mockResolvedValue(SAVED);
+
+    await addGate();
+
+    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
+  });
+
+  it('keeps the add form open with what was typed when the save is refused', async () => {
+    store.saveStagedSection.mockResolvedValue(REFUSED);
+
+    await addGate();
+
+    await waitFor(() => expect(autoSaveStatus(STREAMS_LIST_FIELD).state).toBe('error'));
+    expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Gate');
+  });
+
+  it('shows the busy label and blocks a second add while the new stream is saved', async () => {
+    const pending = deferred<typeof SAVED>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+
+    await addGate();
+
+    const busy = await screen.findByRole('button', { name: 'settings.audio.soundCards.adding' });
+    expect(busy).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(busy);
+    expect(store.stageSectionEdit).toHaveBeenCalledOnce();
+
+    pending.resolve(SAVED);
+    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
   });
 });
