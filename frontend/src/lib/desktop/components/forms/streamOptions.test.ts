@@ -5,7 +5,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  MAX_STREAM_NAME_LENGTH,
   detectStreamType,
+  isStreamNameTooLong,
   isValidStreamUrl,
   streamHasTransport,
   toStreamType,
@@ -45,5 +47,15 @@ describe('streamHasTransport and toStreamType', () => {
     expect(toStreamType('hls')).toBe('hls');
     expect(toStreamType('ftp')).toBeUndefined();
     expect(toStreamType(['hls'])).toBeUndefined();
+  });
+});
+
+describe('isStreamNameTooLong', () => {
+  it('counts UTF-8 bytes, as the server does, not characters', () => {
+    expect(isStreamNameTooLong('a'.repeat(MAX_STREAM_NAME_LENGTH))).toBe(false);
+    expect(isStreamNameTooLong('a'.repeat(MAX_STREAM_NAME_LENGTH + 1))).toBe(true);
+    // 22 euro signs are 22 characters but 66 bytes.
+    expect(isStreamNameTooLong('\u20ac'.repeat(22))).toBe(true);
+    expect(isStreamNameTooLong('\u20ac'.repeat(21))).toBe(false);
   });
 });

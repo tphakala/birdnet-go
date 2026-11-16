@@ -335,6 +335,26 @@ describe('StreamManager add outcome', () => {
     expect(screen.getByTestId(NAME_TESTID)).toHaveAttribute('maxlength', '64');
   });
 
+  it('refuses a new name longer than the server limit in bytes and says why', async () => {
+    const onUpdateStreams = vi.fn();
+    renderTyped(StreamManager, { props: { streams: [], disabled: false, onUpdateStreams } });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    // 22 euro signs are 22 characters, within maxlength, but 66 bytes.
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), {
+      target: { value: '\u20ac'.repeat(22) },
+    });
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://gate/live' },
+    });
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(onUpdateStreams).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'settings.audio.streams.errors.nameTooLong'
+    );
+  });
+
   it('closes the add form once the new stream is saved', async () => {
     store.saveStagedSection.mockResolvedValue(SAVED);
 

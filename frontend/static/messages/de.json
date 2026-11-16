@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Stream-Name ist erforderlich",
           "duplicateName": "Ein Stream mit diesem Namen existiert bereits",
+          "nameTooLong": "Der Streamname ist zu lang (höchstens {max} Byte)",
           "urlRequired": "Stream-URL ist erforderlich",
           "invalidUrl": "Ungültiges Stream-URL-Format",
           "duplicate": "Diese Stream-URL existiert bereits"

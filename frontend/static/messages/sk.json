@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Názov streamu je povinný",
           "duplicateName": "Stream s týmto názvom už existuje",
+          "nameTooLong": "Názov streamu je príliš dlhý (najviac {max} bajtov)",
           "urlRequired": "URL streamu je povinná",
           "invalidUrl": "Neplatný formát URL streamu",
           "duplicate": "Táto URL streamu už existuje"

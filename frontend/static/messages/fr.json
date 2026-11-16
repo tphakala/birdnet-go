@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Le nom du flux est requis",
           "duplicateName": "Un flux avec ce nom existe déjà",
+          "nameTooLong": "Le nom du flux est trop long ({max} octets au maximum)",
           "urlRequired": "L'URL du flux est requise",
           "invalidUrl": "Format d'URL de flux invalide",
           "duplicate": "Cette URL de flux existe déjà"

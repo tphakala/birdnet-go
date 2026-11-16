@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Nome flusso richiesto",
           "duplicateName": "Un flusso con questo nome esiste già",
+          "nameTooLong": "Il nome dello stream è troppo lungo (al massimo {max} byte)",
           "urlRequired": "URL flusso richiesto",
           "invalidUrl": "Formato URL flusso non valido",
           "duplicate": "Questo URL flusso esiste già"

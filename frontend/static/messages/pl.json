@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Nazwa strumienia jest wymagana",
           "duplicateName": "Strumień o tej nazwie już istnieje",
+          "nameTooLong": "Nazwa strumienia jest za długa (najwyżej {max} bajtów)",
           "urlRequired": "URL strumienia jest wymagany",
           "invalidUrl": "Nieprawidłowy format URL strumienia",
           "duplicate": "Ten URL strumienia już istnieje"

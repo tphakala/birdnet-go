@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Straumes nosaukums ir obligāts",
           "duplicateName": "Straume ar šādu nosaukumu jau pastāv",
+          "nameTooLong": "Straumes nosaukums ir pārāk garš (ne vairāk kā {max} baiti)",
           "urlRequired": "Straumes URL ir obligāts",
           "invalidUrl": "Nederīgs straumes URL formāts",
           "duplicate": "Šāds straumes URL jau pastāv"

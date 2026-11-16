@@ -78,8 +78,10 @@
     transportOptions,
     analyzeStreamChannels,
     detectStreamType,
+    isStreamNameTooLong,
     isValidStreamUrl,
     streamHasTransport,
+    streamNameTooLongMessage,
     toStreamType,
   } from './streamOptions';
 
@@ -516,6 +518,10 @@
 
     if (!trimmedName) {
       nameError = t('settings.audio.streams.errors.nameRequired');
+      return;
+    }
+    if (isStreamNameTooLong(trimmedName)) {
+      nameError = streamNameTooLongMessage();
       return;
     }
     // Check for duplicate name (case-insensitive)

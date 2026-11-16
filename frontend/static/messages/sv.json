@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Strömmens namn krävs",
           "duplicateName": "En ström med detta namn finns redan",
+          "nameTooLong": "Namnet på strömmen är för långt (högst {max} byte)",
           "urlRequired": "Strömmens URL krävs",
           "invalidUrl": "Ogiltigt format på strömmens URL",
           "duplicate": "Denna ström-URL finns redan"

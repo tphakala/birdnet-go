@@ -2816,6 +2816,7 @@ export type TranslationKey =
   | 'settings.audio.streams.emptyState.hints.protocol'
   | 'settings.audio.streams.errors.nameRequired'
   | 'settings.audio.streams.errors.duplicateName'
+  | 'settings.audio.streams.errors.nameTooLong' // params: max
   | 'settings.audio.streams.errors.urlRequired'
   | 'settings.audio.streams.errors.invalidUrl'
   | 'settings.audio.streams.errors.duplicate'
@@ -5052,6 +5053,7 @@ export type TranslationParams = {
   'settings.audio.streams.summary': { count: string | number };
   'settings.audio.streams.deleteConfirm': { name: string | number };
   'settings.audio.streams.restartCount': { count: string | number };
+  'settings.audio.streams.errors.nameTooLong': { max: string | number };
   'settings.audio.streams.timeline.eventAt': { time: string | number };
   'settings.audio.streams.test.minRateWarning': { rate: string | number };
   'settings.audio.streams.channelMode.recommended': { channel: string | number };

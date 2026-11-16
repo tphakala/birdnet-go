@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Striimin nimi on pakollinen",
           "duplicateName": "Tämän niminen striimi on jo olemassa",
+          "nameTooLong": "Streamin nimi on liian pitkä (enintään {max} tavua)",
           "urlRequired": "Striimin URL on pakollinen",
           "invalidUrl": "Virheellinen striimin URL-muoto",
           "duplicate": "Tämä striimin URL on jo olemassa"

@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "A stream neve kötelező",
           "duplicateName": "Ezzel a névvel már létezik stream",
+          "nameTooLong": "A stream neve túl hosszú (legfeljebb {max} bájt)",
           "urlRequired": "A stream URL kötelező",
           "invalidUrl": "Érvénytelen stream URL formátum",
           "duplicate": "Ez a stream URL már létezik"

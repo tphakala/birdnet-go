@@ -237,6 +237,18 @@ describe('StreamCard immediate save', () => {
     expect(input).toHaveAttribute('maxlength', '64');
   });
 
+  it('refuses a name longer than the server limit in bytes, with the reason at the field', async () => {
+    const { onCommit } = renderCard();
+    const input = screen.getByLabelText<HTMLInputElement>(new RegExp(NAME_LABEL_KEY));
+
+    // 22 euro signs are 22 characters, within maxlength, but 66 bytes.
+    await fireEvent.input(input, { target: { value: '\u20ac'.repeat(22) } });
+    await fireEvent.blur(input);
+
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input).toHaveAccessibleDescription('settings.audio.streams.errors.nameTooLong');
+  });
+
   it('warns about a bat model on a stream', () => {
     const bat: BackendModel = { id: 'bat', registryId: 'Bat', name: 'Bat model', category: 'bat' };
     renderCard({ models: [...availableModels, bat], stream: { ...baseStream, models: ['bat'] } });

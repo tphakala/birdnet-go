@@ -7,12 +7,22 @@ import { StreamTypes, type ChannelAnalysis, type StreamType } from '$lib/stores/
 export const MAX_STREAM_URL_LENGTH = 2048;
 
 /**
- * Longest stream name the fields accept. The server limits the name to this many
- * bytes (MaxStreamNameLength, internal/conf/validate_audio.go:168, compared with
- * len at :252), and the fields count characters, so a name with multibyte
- * characters can still be refused.
+ * Longest stream name the server accepts, in UTF-8 bytes (MaxStreamNameLength,
+ * internal/conf/validate_audio.go:168, compared with len at :252). The fields
+ * keep maxlength as a soft cap in characters and check the bytes with
+ * isStreamNameTooLong.
  */
 export const MAX_STREAM_NAME_LENGTH = 64;
+
+/** True when the name is longer than the server accepts, counted in UTF-8 bytes. */
+export function isStreamNameTooLong(name: string): boolean {
+  return new TextEncoder().encode(name).length > MAX_STREAM_NAME_LENGTH;
+}
+
+/** The reason a name is too long, for the add form and the card. */
+export function streamNameTooLongMessage(): string {
+  return t('settings.audio.streams.errors.nameTooLong', { max: MAX_STREAM_NAME_LENGTH });
+}
 
 /** Rate a stream is assumed to deliver until a test reports its own. */
 export const DEFAULT_SAMPLE_RATE = 48000;

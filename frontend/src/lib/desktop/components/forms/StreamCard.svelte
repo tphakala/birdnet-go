@@ -107,8 +107,10 @@
     getMediaModeOptions,
     analyzeStreamChannels,
     detectStreamType,
+    isStreamNameTooLong,
     isValidStreamUrl,
     streamHasTransport,
+    streamNameTooLongMessage,
     toStreamType,
   } from './streamOptions';
   import { normalizeChannelMode } from './streamChannel';
@@ -328,6 +330,7 @@
 
   function validateName(name: string): string | null {
     if (!name) return t('settings.audio.streams.errors.nameRequired');
+    if (isStreamNameTooLong(name)) return streamNameTooLongMessage();
     const lower = name.toLowerCase();
     if (streams.some((s, i) => i !== index && s.name.toLowerCase() === lower)) {
       return t('settings.audio.streams.errors.duplicateName');

@@ -3837,6 +3837,7 @@
         "errors": {
           "nameRequired": "Streamnaam is verplicht",
           "duplicateName": "Er bestaat al een stream met deze naam",
+          "nameTooLong": "De naam van de stream is te lang (maximaal {max} bytes)",
           "urlRequired": "Stream-URL is verplicht",
           "invalidUrl": "Ongeldig stream-URL-formaat",
           "duplicate": "Deze stream-URL bestaat al"
