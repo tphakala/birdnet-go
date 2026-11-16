@@ -1422,7 +1422,7 @@
         {t('settings.alerts.v2Required')}
         <a
           href={buildAppUrl('/ui/system/database')}
-          class="underline font-medium ml-1 hover:opacity-80"
+          class="underline font-medium ml-1 hover:decoration-2"
           onclick={handleAppLinkClick}
         >
           {t('settings.alerts.v2RequiredLink')}
@@ -1492,7 +1492,7 @@
                   <a
                     href={buildAppUrl(SETTINGS_ROUTES.notificationsRules)}
                     onclick={openRulesTab}
-                    class="inline-block font-medium underline hover:opacity-80"
+                    class="inline-block font-medium underline hover:decoration-2"
                   >
                     {t('settings.notifications.push.rulesNotice.openRules')}
                   </a>
@@ -2014,7 +2014,7 @@
                           href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="inline-flex items-center gap-1 mt-2 text-[var(--text-primary)] underline hover:opacity-80"
+                          class="inline-flex items-center gap-1 mt-2 text-[var(--text-primary)] underline hover:decoration-2"
                         >
                           {t('settings.notifications.push.form.urlFormats.moreServices')}
                           <ExternalLink class="size-3" />

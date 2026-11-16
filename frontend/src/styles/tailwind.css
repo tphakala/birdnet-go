@@ -460,7 +460,7 @@
   }
 
   .link:hover {
-    opacity: 0.8;
+    text-decoration-thickness: 2px;
   }
 
   .link-primary {

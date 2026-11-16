@@ -38,7 +38,7 @@
       href="https://github.com/birdnet-team/BirdNET-Analyzer"
       target="_blank"
       rel="noopener noreferrer"
-      class="inline-flex items-center gap-1 text-sm text-[var(--text-primary)] underline hover:opacity-80"
+      class="inline-flex items-center gap-1 text-sm text-[var(--text-primary)] underline hover:decoration-2"
     >
       {t('wizard.steps.welcome.learnMore')}
       <span aria-hidden="true">&rarr;</span>

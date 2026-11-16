@@ -508,7 +508,7 @@
         {#if formattedNotifications.length > 0}
           <button
             onclick={markAllAsRead}
-            class="text-sm text-[var(--text-primary)] underline hover:opacity-80 transition-opacity duration-150"
+            class="text-sm text-[var(--text-primary)] underline hover:decoration-2"
             aria-label={t('notifications.actions.markAllRead')}
           >
             {t('notifications.actions.markAllRead')}

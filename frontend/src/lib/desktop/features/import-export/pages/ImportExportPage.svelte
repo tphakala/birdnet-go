@@ -66,7 +66,7 @@
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={t('navigation.reportBugAriaLabel')}
-                class="inline-flex items-center gap-1 font-medium underline text-[var(--text-primary)] hover:opacity-80"
+                class="inline-flex items-center gap-1 font-medium underline text-[var(--text-primary)] hover:decoration-2"
               >
                 {t('system.importExport.birdnetPi.reportBug')}
                 <ExternalLink class="size-3" aria-hidden="true" />

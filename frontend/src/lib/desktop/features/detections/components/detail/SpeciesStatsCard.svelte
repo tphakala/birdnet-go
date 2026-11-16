@@ -502,7 +502,7 @@
   }
 
   .dd-stats-link:hover {
-    opacity: 0.8;
+    text-decoration-thickness: 2px;
   }
 
   /* Windows contrast themes drop background colours: the fills and bars keep a system

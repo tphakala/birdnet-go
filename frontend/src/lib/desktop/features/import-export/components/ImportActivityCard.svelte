@@ -318,7 +318,7 @@
       {#if (finalKind === 'success' && (progress?.inserted ?? 0) > 0) || finalKind === 'interrupted'}
         <a
           href={buildDetectionsFilterUrl()}
-          class="inline-flex items-center gap-1 text-sm font-medium underline text-[var(--text-primary)] hover:opacity-80"
+          class="inline-flex items-center gap-1 text-sm font-medium underline text-[var(--text-primary)] hover:decoration-2"
         >
           {t('system.importExport.done.viewDetectionsLink')}
         </a>

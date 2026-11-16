@@ -274,7 +274,8 @@ borders and dots, not for new text.
 
 The token is close to body text in every scheme and equal to it in the custom
 scheme, so colour alone never marks a link: a link or link-like text control is
-underlined at rest (`underline hover:opacity-80`, or `.link`).
+underlined at rest (`underline hover:decoration-2`, or `.link`). Show hover
+with a thicker underline, not opacity, which pulls the token under 4.5:1.
 
 The bare `text-error|success|warning|info|primary` utility maps to the text
 token only in its plain form; behind a variant, with an opacity suffix or with
