@@ -224,6 +224,28 @@ describe('StreamManager', () => {
     ).toBeNull();
   });
 
+  it('keeps the rows when the same outside list arrives again', async () => {
+    const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
+    const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
+    const { rerender } = renderRows([streamA, streamB]);
+
+    await rerender({ streams: [streamP, streamQ] });
+    await fireEvent.click(header('Q'));
+    await rerender({ streams: [{ ...streamP }, { ...streamQ }] });
+
+    expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the rows when an identical echo follows the first load replacing the initial list', async () => {
+    const { rerender } = renderRows([]);
+
+    await rerender({ streams: [streamA, streamB] });
+    await fireEvent.click(header('B'));
+    await rerender({ streams: [{ ...streamA }, { ...streamB }] });
+
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('gives fresh ids to an outside list at the length of a pending add baseline', async () => {
     const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
     const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };

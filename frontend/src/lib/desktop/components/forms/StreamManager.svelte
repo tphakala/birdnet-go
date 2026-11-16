@@ -495,9 +495,13 @@
     const identity = listIdentity(streams);
     untrack(() => {
       const own = knownLists.includes(identity);
-      // A foreign list starts a new history, so a later list that happens to
-      // match an older one (a swap and its swap back) is foreign too.
-      if (!own) knownLists.length = 0;
+      // A foreign list starts a new history that holds only itself: it arriving
+      // again keeps the rows, while an older list (a swap and its swap back) is
+      // foreign again.
+      if (!own) {
+        knownLists.length = 0;
+        knownLists.push(identity);
+      }
       if (own && rowIds.length === count) return;
       const previous = own ? rollback.take(count) : null;
       if (previous) {
