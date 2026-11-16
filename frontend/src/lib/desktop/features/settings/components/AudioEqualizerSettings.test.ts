@@ -1107,7 +1107,11 @@ describe('AudioEqualizerSettings', () => {
         expect(labelled).toHaveLength(9);
 
         const labels = Array.from(document.querySelectorAll('label[for]')).filter(
-          l => l.textContent.includes(KEY) && !l.textContent.includes(`${KEY}newFilterType`)
+          l =>
+            l.textContent.includes(KEY) &&
+            !l.textContent.includes(`${KEY}newFilterType`) &&
+            // The enable switch is not a parameter control
+            !l.textContent.includes(`${KEY}enableEqualizer`)
         );
         expect(labels).toHaveLength(9);
         for (const label of labels) {

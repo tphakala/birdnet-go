@@ -20,7 +20,7 @@
   @component
 -->
 <script lang="ts">
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import LowPassIcon from '$lib/desktop/components/ui/LowPassIcon.svelte';
   import HighPassIcon from '$lib/desktop/components/ui/HighPassIcon.svelte';
@@ -575,12 +575,12 @@
 </script>
 
 <div class="space-y-4">
-  <Checkbox
-    checked={equalizerSettings.enabled}
+  <ToggleField
+    value={equalizerSettings.enabled}
     label={t('settings.audio.audioFilters.enableEqualizer')}
-    helpText={t('settings.audio.audioFilters.enableEqualizerHelp')}
+    description={t('settings.audio.audioFilters.enableEqualizerHelp')}
     {disabled}
-    onchange={handleEqualizerToggle}
+    onUpdate={handleEqualizerToggle}
   />
 
   {#if equalizerSettings.enabled && !loadingConfig}
