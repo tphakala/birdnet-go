@@ -1699,6 +1699,10 @@ describe('Detection card media surface', () => {
   });
 
   it('keeps every overlay text at 4.5:1 on both stops', () => {
+    const statusAlphas = cardFiles.map((file): [string, number] => [
+      file,
+      whiteAlpha(stripComments(read(file)), '.spectrogram-placeholder'),
+    ]);
     const stops = TOKENS.map(token => readVar(rootBlock, token));
     for (const theme of ['light', 'dark'] as const) {
       const tokenIn = (name: string) =>
@@ -1721,8 +1725,7 @@ describe('Detection card media surface', () => {
           getContrastRatio(tokenIn('--color-warning-content'), badge),
           `${theme} unverified badge on ${stop}`
         ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-        for (const file of cardFiles) {
-          const alpha = whiteAlpha(stripComments(read(file)), '.spectrogram-placeholder');
+        for (const [file, alpha] of statusAlphas) {
           expect(
             getContrastRatio(applyOpacity('#ffffff', stop, alpha), stop),
             `${file} status text on ${stop}`

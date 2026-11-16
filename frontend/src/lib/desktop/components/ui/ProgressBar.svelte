@@ -100,10 +100,14 @@
     )
   );
 
+  const fillColorClass = $derived(
+    safeGet(variantClasses, currentVariant, 'bg-[var(--color-primary)]')
+  );
+
   let progressBarClasses = $derived(
     cn(
       'h-full transition-all duration-300 ease-out',
-      safeGet(variantClasses, currentVariant, 'bg-[var(--color-primary)]'),
+      fillColorClass,
       {
         'bg-stripes': striped,
         'animate-stripes': striped && animated,
@@ -119,12 +123,7 @@
   // stripe. Both copies use the same box so they stay aligned at the fill edge.
   const labelTextClasses = 'flex items-center self-stretch px-1';
 
-  let fillChipClasses = $derived(
-    cn(
-      labelTextClasses,
-      striped && safeGet(variantClasses, currentVariant, 'bg-[var(--color-primary)]')
-    )
-  );
+  let fillChipClasses = $derived(cn(labelTextClasses, striped && fillColorClass));
 
   let fillLabelClasses = $derived(
     cn(

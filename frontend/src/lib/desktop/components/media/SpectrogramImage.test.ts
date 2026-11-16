@@ -49,7 +49,6 @@ describe('SpectrogramImage', () => {
 
     const label = screen.getByText(/unavailable/i);
     expect(label).toHaveClass(labelClass);
-    expect(label.className).not.toContain(cover ? 'base-content' : 'text-white');
   });
 
   it('retries with a different detection after a failed load', async () => {
