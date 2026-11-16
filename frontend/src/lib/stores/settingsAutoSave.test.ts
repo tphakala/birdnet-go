@@ -410,6 +410,84 @@ describe('settings auto save engine', () => {
     expect(autoSaveStatus('audio:b:gain').state).toBe('saved');
   });
 
+  it('sends a toggle committed during a request without waiting for a later slider commit', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise);
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:name' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { sources: [source({ models: ['x'] })] }, { field: 'audio:a:models' });
+    commitSetting(
+      'audio',
+      { sources: [source({ models: ['x'], gain: 4 })] },
+      { field: 'audio:a:gain', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+
+    first.resolve(saved(['sources']));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:models').state).toBe('saved');
+    expect(autoSaveStatus('audio:a:gain').state).toBe('saved');
+  });
+
+  it('keeps a slider commit waiting when the timer of an earlier one fired during a request', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise);
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:name' });
+    await vi.advanceTimersByTimeAsync(0);
+    const slide = (gain: number) =>
+      commitSetting(
+        'audio',
+        { sources: [source({ gain })] },
+        { field: 'audio:a:gain', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+      );
+    slide(1);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    slide(2);
+
+    first.resolve(saved(['sources']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+  });
+
+  it('flushes a pending debounced value when the page is hidden', async () => {
+    commitSetting(
+      'audio',
+      { sources: [source({ gain: 7 })] },
+      { field: 'audio:a:gain', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+    expect(store.saveStagedSection).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the error of a field with two indicators until the last one unmounts', async () => {
+    store.saveStagedSection.mockResolvedValue({
+      ...OK,
+      failed: [['sources']],
+      error: new Error('boom'),
+    });
+    const releaseFirst = registerAutoSaveField('audio:a:models');
+    const releaseSecond = registerAutoSaveField('audio:a:models');
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:models' });
+    await flushAutoSaves();
+    expect(autoSaveFailures()).toBe(1);
+
+    releaseFirst();
+    expect(autoSaveFailures()).toBe(1);
+    expect(autoSaveStatus('audio:a:models').state).toBe('error');
+
+    releaseSecond();
+    expect(autoSaveStatus('audio:a:models').state).toBe('idle');
+    expect(autoSaveFailures()).toBe(0);
+  });
+
   it('scopes busy and failure counts to a field key prefix', async () => {
     store.saveStagedSection.mockResolvedValue({
       ...OK,

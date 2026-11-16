@@ -59,6 +59,8 @@ interface SectionState {
   running: Promise<void> | null;
   /** A commit arrived while a request was running. */
   rerun: boolean;
+  /** A commit without a delay arrived since the last request started. */
+  urgent: boolean;
 }
 
 const statuses = new SvelteMap<string, AutoSaveFieldStatus>();
@@ -78,7 +80,7 @@ let unsubscribeDrops: (() => void) | null = null;
 function sectionState(section: SettingsSectionName): SectionState {
   let state = sections.get(section);
   if (!state) {
-    state = { pending: new Set(), timer: null, running: null, rerun: false };
+    state = { pending: new Set(), timer: null, running: null, rerun: false, urgent: false };
     sections.set(section, state);
   }
   return state;
@@ -258,9 +260,18 @@ function applyResult(
   }
 }
 
-/** Clears the rerun flag; a function so the flag is read afresh after the request. */
+/** Clears the rerun flags; a function so they are read afresh after the request. */
 function clearRerun(state: SectionState): void {
   state.rerun = false;
+  state.urgent = false;
+}
+
+/** Stops a section's debounce timer; its pending edits go out with the flush that does. */
+function cancelDebounce(state: SectionState): void {
+  if (state.timer !== null) {
+    clearTimeout(state.timer);
+    state.timer = null;
+  }
 }
 
 /**
@@ -285,13 +296,23 @@ async function runFlush(section: SettingsSectionName): Promise<void> {
           if (state.pending.has(field)) continue;
           failField(field, failureMessage(error));
         }
+        if (state.urgent) {
+          cancelDebounce(state);
+          continue;
+        }
         if (state.rerun && state.timer === null) continue;
         return;
       }
       applyResult(section, fields, result);
       const progressed = result.saved.length + result.failed.length + result.dropped.length > 0;
       const wantsMore = result.remaining && progressed;
-      if (!(state.rerun || wantsMore) || state.timer !== null) return;
+      // A commit without a delay goes out now, carrying a debounced value that
+      // arrived after it; a debounced commit alone keeps waiting for its quiet time.
+      if (state.urgent) {
+        cancelDebounce(state);
+      } else if (!(state.rerun || wantsMore) || state.timer !== null) {
+        return;
+      }
     }
   } finally {
     state.running = null;
@@ -301,10 +322,7 @@ async function runFlush(section: SettingsSectionName): Promise<void> {
 /** Flushes a section at once; a flush already running picks the commit up in its rerun. */
 function flushSection(section: SettingsSectionName): Promise<void> {
   const state = sectionState(section);
-  if (state.timer !== null) {
-    clearTimeout(state.timer);
-    state.timer = null;
-  }
+  cancelDebounce(state);
   if (state.running) {
     state.rerun = true;
     return state.running;
@@ -352,6 +370,7 @@ export function commitSetting<S extends SettingsSectionName>(
   setStatus(field, SAVING);
 
   if (debounceMs === undefined) {
+    state.urgent = true;
     void flushSection(section);
     return;
   }
