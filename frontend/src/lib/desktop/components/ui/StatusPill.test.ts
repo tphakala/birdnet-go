@@ -35,24 +35,19 @@ describe('StatusPill', () => {
     }
   );
 
-  it('colours the neutral pill and dot from base-content, without a status badge class', () => {
-    renderTyped(StatusPill, { props: { label: 'pill-neutral' } });
+  it.each([
+    ['neutral', undefined],
+    ['an unknown variant', 'bogus' as StatusVariant],
+  ])(
+    'colours the pill and dot from base-content for %s, without a status badge class',
+    (_, variant) => {
+      renderTyped(StatusPill, { props: { variant, label: 'pill-neutral' } });
 
-    const pill = pillOf('pill-neutral');
-    expect(pill.className).not.toContain('badge-status');
-    expect(pill.className).not.toContain('--status-fill');
-    expect(pill.className).toContain('var(--color-base-content)');
-    expect(dotOf(pill).className).toContain('var(--color-base-content)');
-  });
-
-  it('falls back to the neutral look for an unknown variant', () => {
-    renderTyped(StatusPill, {
-      props: { variant: 'bogus' as StatusVariant, label: 'pill-unknown' },
-    });
-
-    const pill = pillOf('pill-unknown');
-    expect(pill.className).not.toContain('badge-status');
-    expect(pill.className).toContain('var(--color-base-content)');
-    expect(dotOf(pill).className).toContain('var(--color-base-content)');
-  });
+      const pill = pillOf('pill-neutral');
+      expect(pill.className).not.toContain('badge-status');
+      expect(pill.className).not.toContain('--status-fill');
+      expect(pill.className).toContain('var(--color-base-content)');
+      expect(dotOf(pill).className).toContain('var(--color-base-content)');
+    }
+  );
 });
