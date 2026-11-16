@@ -2426,6 +2426,23 @@ describe('Settings Store - staged section saves', () => {
     expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(stored as Rec[]));
   });
 
+  it('takes staged edits back when the baseline fetch fails before the first send', async () => {
+    const stored = savedAudio().sources;
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    stage({ sources: sources('A') });
+    vi.mocked(settingsAPI.load).mockRejectedValueOnce(new Error('network down'));
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(0);
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.failed).toEqual([['sources']]);
+    expect(result.remaining).toBe(false);
+    expect(formAudio().sources).toEqual(stored);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
   it('refetches and resends once after a 412 when the server changed another path', async () => {
     stage({ sources: sources('A') });
     changeServerElsewhere('audio', { export: { type: 'flac' } });

@@ -1465,7 +1465,7 @@ export interface StagedSaveResult {
   saved: StagedPath[];
   /** Paths given up because the server changed them since the client last saw them. */
   dropped: StagedPath[];
-  /** Paths whose request failed and whose form value was taken back to the stored one. */
+  /** Paths whose save failed, or failed before a request was sent, and whose form value was taken back to the stored one unless edited again. */
   failed: StagedPath[];
   /** The error of the failed request, when there was one. */
   error?: unknown;
@@ -2091,6 +2091,16 @@ async function recordStagedSave<S extends SettingsSectionName>(
   );
 }
 
+/** The staged paths of a section that differ from the stored value, with the form value each has now. */
+function pendingStagedValues(section: SettingsSectionName): SentPath[] {
+  const { formData, originalData } = get(settingsStore);
+  return stagedPathsOf(section)
+    .map(path => ({ path, value: valueAt(formData, storePathOf(section, path)) }))
+    .filter(
+      ({ path, value }) => !sameValue(value, valueAt(originalData, storePathOf(section, path)))
+    );
+}
+
 /**
  * Takes the form back to the stored value at every sent path whose form value is
  * still what was sent, and unstages it. A path edited again keeps the newer edit,
@@ -2123,19 +2133,25 @@ function revertStagedPaths(
  * paths of a section with If-Match; on a 412 it fetches, rebases with the staged
  * rule and rebuilds the patch from formData, up to MAX_SETTINGS_SAVE_ATTEMPTS
  * sends, plus one without If-Match when the validator is rewritten in transit.
- * Fills result; never throws.
+ * A failure before the first send (the baseline fetch) takes the edits captured before
+ * it back to the stored value. Fills result; never throws.
  */
 async function runStagedSave(
   section: SettingsSectionName,
   result: StagedSaveResult
 ): Promise<void> {
   let sent: SentPath[] = [];
+  // The unsent edits as they were before the baseline fetch, which a failed fetch takes back.
+  let pending: SentPath[] = [];
   try {
     let previousConflictETag: string | null = null;
     for (let attempt = 1; ; attempt++) {
       if (stagedPathsOf(section).length === 0) break;
       // Without a usable ETag the revision is unknown, so the baseline is refreshed first.
-      if (!usableIfMatch(lastETag)) await rebaseForStagedSave(result);
+      if (!usableIfMatch(lastETag)) {
+        pending = pendingStagedValues(section);
+        await rebaseForStagedSave(result);
+      }
       const built = buildStagedPatch(section, result);
       sent = built.sent;
       if (sent.length === 0) break;
@@ -2176,7 +2192,9 @@ async function runStagedSave(
     }
   } catch (error) {
     result.error = error;
-    revertStagedPaths(section, sent, result);
+    // A failure before anything was sent (the baseline fetch) leaves no sent list; the
+    // edits captured before that fetch go back to the stored value unless edited again.
+    revertStagedPaths(section, sent.length > 0 ? sent : pending, result);
   }
   result.remaining = stagedPathsOf(section).length > 0;
 }
@@ -2345,7 +2363,7 @@ export const settingsActions = {
    * loads, refreshes and full saves share, so at most one settings write runs at a
    * time and a full save waits for it. The patch is read back from formData when
    * it is sent, so a coerced or newly edited value is what goes out. A failed
-   * request takes each sent path back to the stored value unless it was edited
+   * request, also one before the first send, takes each sent path back to the stored value unless it was edited
    * again; a 412 refetches, rebases (the server wins at staged paths it changed)
    * and resends. Resolves with what happened to each path; never rejects.
    */
