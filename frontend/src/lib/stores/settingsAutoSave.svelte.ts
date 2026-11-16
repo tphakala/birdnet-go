@@ -9,7 +9,7 @@
  * If-Match, taking back a refused value, the server winning a conflict) live in
  * the store. A field owns the paths it committed until a request that carried
  * those commits reports on them; overlapping requests each judge only their own
- * commits.
+ * commits. Pending edits are also sent when the page is hidden or unloaded.
  */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { t } from '$lib/i18n';
@@ -249,8 +249,14 @@ function flushOnPagehide(): void {
   void flushAutoSaves();
 }
 
+/** Backgrounding a tab fires visibilitychange, not pagehide. */
+function flushOnHidden(): void {
+  if (document.hidden) void flushAutoSaves();
+}
+
 function ensureHideFlush(): void {
   if (typeof window !== 'undefined') window.addEventListener('pagehide', flushOnPagehide);
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', flushOnHidden);
 }
 
 /** What a finished request reported, as path keys. */
@@ -504,4 +510,7 @@ export function resetAutoSaveForTest(): void {
   unsubscribeDrops?.();
   unsubscribeDrops = null;
   if (typeof window !== 'undefined') window.removeEventListener('pagehide', flushOnPagehide);
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', flushOnHidden);
+  }
 }

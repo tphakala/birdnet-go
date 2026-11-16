@@ -569,6 +569,27 @@ describe('settings auto save engine', () => {
     expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
   });
 
+  it('flushes a pending debounced value when the page becomes hidden', async () => {
+    commitSetting(
+      'audio',
+      { sources: [source({ gain: 7 })] },
+      { field: 'audio:a:gain', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.saveStagedSection).not.toHaveBeenCalled();
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    try {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      hidden.mockRestore();
+    }
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the error of a field with two indicators until the last one unmounts', async () => {
     store.saveStagedSection.mockResolvedValue({
       ...OK,
