@@ -74,7 +74,6 @@ const mountedFields = new Map<string, number>();
  */
 const detachedFields = new Set<string>();
 let unsubscribeDrops: (() => void) | null = null;
-let pagehideListening = false;
 
 function sectionState(section: SettingsSectionName): SectionState {
   let state = sections.get(section);
@@ -201,10 +200,15 @@ function fieldsOwning(section: SettingsSectionName, paths: readonly (readonly st
   return owners;
 }
 
+/** Gives a field an error and forgets its staged paths, so a later result cannot overwrite it. */
+function failField(field: string, message: string): void {
+  fieldPaths.delete(field);
+  setStatus(field, { state: 'error', message });
+}
+
 function markChangedElsewhere(fields: Iterable<string>): void {
   for (const field of fields) {
-    fieldPaths.delete(field);
-    setStatus(field, { state: 'error', message: t('settings.autoSave.changedElsewhere') });
+    failField(field, t('settings.autoSave.changedElsewhere'));
   }
 }
 
@@ -223,9 +227,7 @@ function flushOnPagehide(): void {
 }
 
 function ensurePagehideFlush(): void {
-  if (pagehideListening || typeof window === 'undefined') return;
-  pagehideListening = true;
-  window.addEventListener('pagehide', flushOnPagehide);
+  if (typeof window !== 'undefined') window.addEventListener('pagehide', flushOnPagehide);
 }
 
 /** Gives each field of a finished request its final status. */
@@ -281,8 +283,7 @@ async function runFlush(section: SettingsSectionName): Promise<void> {
         for (const field of fields) {
           // A field committed again during the request waits for the next one.
           if (state.pending.has(field)) continue;
-          fieldPaths.delete(field);
-          setStatus(field, { state: 'error', message: failureMessage(error) });
+          failField(field, failureMessage(error));
         }
         if (state.rerun && state.timer === null) continue;
         return;
@@ -334,8 +335,7 @@ export function commitSetting<S extends SettingsSectionName>(
     logger.warn('Refused to stage a settings edit:', error);
     // The field has no sendable edit now; an earlier pending commit must not turn it into Saved.
     sectionState(section).pending.delete(field);
-    fieldPaths.delete(field);
-    setStatus(field, { state: 'error', message: failureMessage(error) });
+    failField(field, failureMessage(error));
     return;
   }
   ensureDropSubscription();
@@ -391,5 +391,4 @@ export function resetAutoSaveForTest(): void {
   unsubscribeDrops?.();
   unsubscribeDrops = null;
   if (typeof window !== 'undefined') window.removeEventListener('pagehide', flushOnPagehide);
-  pagehideListening = false;
 }

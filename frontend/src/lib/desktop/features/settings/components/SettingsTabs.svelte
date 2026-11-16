@@ -33,11 +33,10 @@
   import type { Snippet, Component } from 'svelte';
   import { untrack } from 'svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import type { LucideProps } from '@lucide/svelte';
+  import { CircleAlert, type LucideProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
   import { autoSaveBusy, autoSaveFailures } from '$lib/stores/settingsAutoSave.svelte';
-  import { CircleAlert } from '@lucide/svelte';
 
   export interface TabDefinition {
     id: string;
