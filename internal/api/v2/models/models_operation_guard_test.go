@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -187,6 +188,33 @@ func TestUninstallModel_AnnouncesListChange(t *testing.T) {
 	rec = guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, 1, announced, "a successful uninstall announces the change once")
+}
+
+// TestUninstallModel_AnnouncesListChangeWhenFileCleanupFails verifies that an
+// uninstall whose file cleanup fails still announces the list change, since the
+// model already left the installed set before the files were removed.
+func TestUninstallModel_AnnouncesListChangeWhenFileCleanupFails(t *testing.T) {
+	useCatalog(t, guardCatalog())
+	mm, modelsDir := guardInstalledManager(t)
+	h := dependencyHandler(t, mm)
+	var announced int
+	h.announceListChange = func() { announced++ }
+
+	// A non-empty directory in place of the model file makes its removal fail
+	// for any user, root included.
+	modelFile := filepath.Join(modelsDir, apiDepA, "a.onnx")
+	require.NoError(t, os.Remove(modelFile))
+	writeFile(t, filepath.Join(modelFile, "keep"))
+
+	rec := guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
+	require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+	require.False(t, mm.IsInstalled(apiDepA), "the model left the installed set before cleanup failed")
+	assert.Equal(t, 1, announced, "a removed model is announced even when its file cleanup fails")
+
+	// A refusal changes nothing and announces nothing, though the model is not installed.
+	rec = guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
+	require.NotEqual(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, 1, announced, "an uninstall of a model that is not installed announces nothing")
 }
 
 // catalogFileHub serves each synthetic catalog file at its catalog size, or

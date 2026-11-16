@@ -121,6 +121,29 @@ describe('ModelCheckboxList', () => {
     expect(onToggle).toHaveBeenCalledWith(['birdnet']);
   });
 
+  it('can remove a model that is not loaded even when it is the only one selected', async () => {
+    const onToggle = vi.fn();
+    renderList({
+      models: [BIRDNET, { ...PERCH, state: 'failed' }],
+      selectedModels: ['perch_v2'],
+      onToggle,
+    });
+
+    const perch = screen.getByRole('checkbox', { name: /Perch v2/ });
+    expect(perch).toBeEnabled();
+    await fireEvent.click(perch);
+    expect(onToggle).toHaveBeenCalledWith([]);
+  });
+
+  it('keeps the last loaded model selected, also when a failed one is selected beside it', () => {
+    renderList({
+      models: [BIRDNET, { ...PERCH, state: 'failed' }],
+      selectedModels: ['birdnet', 'perch_v2'],
+    });
+    expect(screen.getByRole('checkbox', { name: /BirdNET/ })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /Perch v2/ })).toBeEnabled();
+  });
+
   it('shows a loaded model with no state badge', () => {
     renderList({ models: [{ ...BIRDNET, state: 'loaded' }, PERCH], selectedModels: [] });
 

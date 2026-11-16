@@ -93,6 +93,14 @@
   // status fetch failed): still say why the list is empty.
   let showNoneAvailable = $derived(noModelReason === null && !loading && models.length === 0);
 
+  // Selected models that can run; the last of them stays selected.
+  let selectedLoadedCount = $derived(
+    models.filter(
+      model =>
+        selectedModels.includes(model.id) && model.state !== 'failed' && model.state !== 'pending'
+    ).length
+  );
+
   function handleToggle(modelId: string, checked: boolean) {
     if (checked) {
       onToggle([...selectedModels, modelId]);
@@ -114,11 +122,15 @@
       !belowMin &&
       (model.recommendedSampleRate ?? 0) > 0 &&
       sourceSampleRate < (model.recommendedSampleRate ?? 0)}
-    {@const blockedNotLoaded =
-      (model.state === 'failed' || model.state === 'pending') && !isChecked}
+    {@const notLoaded = model.state === 'failed' || model.state === 'pending'}
+    {@const blockedNotLoaded = notLoaded && !isChecked}
+    <!-- The last-selection guard keeps one working model; a model that is not
+         loaded can always be removed, even when it is the only one. -->
     <Checkbox
       checked={isChecked}
-      disabled={disabled || blockedNotLoaded || (isChecked && selectedModels.length === 1)}
+      disabled={disabled ||
+        blockedNotLoaded ||
+        (isChecked && !notLoaded && selectedLoadedCount === 1)}
       helpText={blockedNotLoaded ? t('settings.audio.models.notLoadedHelp') : undefined}
       size="sm"
       onchange={checked => handleToggle(model.id, checked)}

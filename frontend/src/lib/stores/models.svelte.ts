@@ -1,9 +1,10 @@
 import { untrack } from 'svelte';
+import { get } from 'svelte/store';
 import { api } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
 import { isGuestMode } from '$lib/stores/appState.svelte';
 import { watchAcousticModels, onTopologyChanged } from '$lib/stores/acousticModels.svelte';
-import { settingsActions } from '$lib/stores/settings';
+import { settingsActions, settingsDataLoaded } from '$lib/stores/settings';
 
 const logger = loggers.audio;
 
@@ -61,6 +62,8 @@ let refreshQueued = false;
 // Set while the settings form still has to drop aliases of removed models, and
 // kept when that refresh fails so the next refresh retries it.
 let settingsRefreshPending = false;
+// Set while a pending form refresh waits for the initial settings load.
+let stopWaitingForSettings: (() => void) | null = null;
 let watchers = 0;
 let unlistenTopology: (() => void) | null = null;
 
@@ -219,10 +222,7 @@ export async function refreshModels(): Promise<void> {
     if (controller.signal.aborted || !Array.isArray(data)) return;
     if (idSet(data) !== idSet(fetchedModels)) settingsRefreshPending = true;
     fetchedModels = data;
-    if (settingsRefreshPending) {
-      await settingsActions.refreshKeepingEdits();
-      settingsRefreshPending = false;
-    }
+    if (settingsRefreshPending) await syncSettingsForm();
   } catch (err: unknown) {
     if (!controller.signal.aborted) {
       logger.warn('Failed to refresh models', {
@@ -270,6 +270,38 @@ export function watchModels(): () => void {
   };
 }
 
+/**
+ * Drops aliases of removed models from the settings form. No rebase can run
+ * before the settings have loaded, and a load already in flight may carry the
+ * old list, so it waits for the load and runs then. The pending flag clears
+ * only after a rebase succeeded.
+ */
+async function syncSettingsForm(): Promise<void> {
+  if (!get(settingsDataLoaded)) {
+    waitForSettingsLoad();
+    return;
+  }
+  await settingsActions.refreshKeepingEdits();
+  settingsRefreshPending = false;
+}
+
+function waitForSettingsLoad(): void {
+  if (stopWaitingForSettings) return;
+  stopWaitingForSettings = settingsDataLoaded.subscribe(loaded => {
+    // The first call runs inside subscribe, before the unsubscriber is stored.
+    if (!loaded || !stopWaitingForSettings) return;
+    stopWaitingForSettings();
+    stopWaitingForSettings = null;
+    if (!settingsRefreshPending) return;
+    syncSettingsForm().catch((err: unknown) => {
+      logger.warn('Failed to refresh settings after a model list change', {
+        component: 'modelsStore',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  });
+}
+
 /** Test-only: drop all cached state so each test starts from a cold store. */
 export function resetModelsForTest(): void {
   unlistenTopology?.();
@@ -280,6 +312,8 @@ export function resetModelsForTest(): void {
   activeRefresh = null;
   refreshQueued = false;
   settingsRefreshPending = false;
+  stopWaitingForSettings?.();
+  stopWaitingForSettings = null;
   fetchedModels = [];
   fetchState = 'idle';
   subscribers = 0;

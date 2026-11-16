@@ -27,13 +27,31 @@ const { apiGet } = vi.hoisted(() => ({
   apiGet: vi.fn<(url: string, options?: { signal?: AbortSignal }) => Promise<unknown>>(),
 }));
 
-const { refreshKeepingEdits, watchAcoustic, unwatchAcoustic, topology, guest } = vi.hoisted(() => ({
-  refreshKeepingEdits: vi.fn<() => Promise<void>>(),
-  watchAcoustic: vi.fn(),
-  unwatchAcoustic: vi.fn(),
-  topology: { listener: null as (() => void) | null, unlisten: vi.fn() },
-  guest: { value: false },
-}));
+const { refreshKeepingEdits, settingsLoaded, watchAcoustic, unwatchAcoustic, topology, guest } =
+  vi.hoisted(() => {
+    // A minimal readable store standing in for settingsDataLoaded.
+    const listeners = new Set<(value: boolean) => void>();
+    const settingsLoaded = {
+      value: true,
+      subscribe(listener: (value: boolean) => void) {
+        listener(settingsLoaded.value);
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      set(value: boolean) {
+        settingsLoaded.value = value;
+        for (const listener of [...listeners]) listener(value);
+      },
+    };
+    return {
+      refreshKeepingEdits: vi.fn<() => Promise<void>>(),
+      settingsLoaded,
+      watchAcoustic: vi.fn(),
+      unwatchAcoustic: vi.fn(),
+      topology: { listener: null as (() => void) | null, unlisten: vi.fn() },
+      guest: { value: false },
+    };
+  });
 
 vi.mock('$lib/utils/api', () => ({
   api: { get: apiGet },
@@ -41,6 +59,7 @@ vi.mock('$lib/utils/api', () => ({
 
 vi.mock('$lib/stores/settings', () => ({
   settingsActions: { refreshKeepingEdits },
+  settingsDataLoaded: settingsLoaded,
 }));
 
 vi.mock('$lib/stores/appState.svelte', () => ({
@@ -404,6 +423,7 @@ describe('models store live refresh', () => {
     resetModelsForTest();
     apiGet.mockReset();
     refreshKeepingEdits.mockReset().mockResolvedValue();
+    settingsLoaded.value = true;
     watchAcoustic.mockReset();
     unwatchAcoustic.mockReset();
     topology.listener = null;
@@ -498,6 +518,25 @@ describe('models store live refresh', () => {
 
     expect(modelsLoaded()).toBe(false);
     expect(refreshKeepingEdits).not.toHaveBeenCalled();
+    unwatch();
+  });
+
+  it('waits for the initial settings load before refreshing the form after a list change', async () => {
+    const unwatch = await loadWith([BIRDNET, PERCH]);
+    settingsLoaded.set(false);
+
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+    expect(refreshKeepingEdits).not.toHaveBeenCalled();
+
+    settingsLoaded.set(true);
+    await settle();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(1);
+
+    // Done: a later refresh with the same ids leaves the form alone.
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(1);
     unwatch();
   });
 

@@ -22,6 +22,17 @@ function ready(defaultTargets: string[]): AcousticModelAvailability {
 }
 
 describe('defaultModelSelection', () => {
+  describe('models that are not loaded', () => {
+    it('never pre-selects a failed or pending model', () => {
+      const failedBirdnet = { ...BIRDNET, state: 'failed' as const };
+      const pendingPerch = { ...PERCH, state: 'pending' as const };
+      const options = [pendingPerch, failedBirdnet, BAT];
+      expect(defaultModelSelection(ready(['BirdNET_V2.4', 'Perch_V2']), options)).toEqual(['bat']);
+      expect(defaultModelSelection(UNKNOWN, options)).toEqual(['bat']);
+      expect(defaultModelSelection(UNKNOWN, [failedBirdnet])).toEqual([]);
+    });
+  });
+
   describe('none (N=0 or load failure)', () => {
     it('selects nothing even when models are offered', () => {
       expect(defaultModelSelection(NONE, OPTIONS)).toEqual([]);

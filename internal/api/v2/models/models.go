@@ -1241,6 +1241,7 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
+	wasInstalled := c.ModelManager.IsInstalled(catalogID)
 	if err := c.ModelManager.Uninstall(catalogID); err != nil {
 		if busy, ok := errors.AsType[*classifier.OperationInProgressError](err); ok {
 			return c.operationInProgressResponse(ctx, err, busy)
@@ -1252,6 +1253,13 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 					"models":     de.DependentNames(),
 					"dependents": de.Dependents,
 				})
+		}
+		// A failed file cleanup comes after the model left the installed set and
+		// the config, so the list changed anyway: announce it before the error.
+		// A refusal leaves the installed set as it was and announces nothing.
+		if wasInstalled && !c.ModelManager.IsInstalled(catalogID) {
+			c.ScheduleOptimizeNoticeSync()
+			c.announceModelListChange()
 		}
 		return c.HandleError(ctx, err, "failed to uninstall model", http.StatusInternalServerError)
 	}
