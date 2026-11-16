@@ -2514,6 +2514,24 @@ describe('Settings Store - staged section saves', () => {
     expect(next.saved).toEqual([]);
   });
 
+  it('keeps a form edit made through updateSection after a reset while the path is being sent', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    settingsActions.resetSection('realtime');
+    settingsActions.updateSection('realtime', {
+      audio: { ...formAudio(), sources: sources('B') },
+    } as unknown as Parameters<typeof settingsActions.updateSection>[1]);
+    gate.resolve();
+    await first;
+
+    expect(formAudio().sources).toEqual(sources('B'));
+    expect(get(hasUnsavedChanges)).toBe(true);
+  });
+
   it('keeps an edit made after a reset while the reset path is still being sent', async () => {
     stage({ sources: sources('A') });
     const gate = deferred();
