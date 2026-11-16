@@ -35,42 +35,47 @@ describe('AutoSaveStatus', () => {
     resetAutoSaveForTest();
   });
 
-  it('renders nothing while the field is idle', () => {
+  it('keeps an empty live region while the field is idle', () => {
     const { container } = render(AutoSaveStatus, { props: { field: FIELD } });
 
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(container.textContent.trim()).toBe('');
   });
 
-  it('announces Saving while the request runs and Saved after it', async () => {
+  it('announces Saving through the same region that later announces Saved', async () => {
     const pending = deferred<StagedSaveResult>();
     store.saveStagedSection.mockReturnValueOnce(pending.promise);
-    render(AutoSaveStatus, { props: { field: FIELD, id: 'status-1' } });
+    render(AutoSaveStatus, { props: { field: FIELD } });
+    const region = screen.getByRole('status');
 
     commit();
-    const saving = await screen.findByRole('status');
-    expect(saving).toHaveTextContent('settings.actions.saving');
-    expect(saving).toHaveAttribute('id', 'status-1');
+    await vi.waitFor(() => expect(region).toHaveTextContent('settings.actions.saving'));
 
     pending.resolve({ ...OK, saved: [['sources']] });
-    const done = await screen.findByText('settings.autoSave.saved');
-    expect(done.closest('[role="status"]')).not.toBeNull();
+    await vi.waitFor(() => expect(region).toHaveTextContent('settings.autoSave.saved'));
+    expect(screen.getByRole('status')).toBe(region);
   });
 
-  it('shows the reason in an alert with a dismiss button that clears it', async () => {
+  it('shows the reason with the id, announces it, and keeps focus nearby after dismissal', async () => {
     store.saveStagedSection.mockResolvedValueOnce({
       ...OK,
       failed: [['sources']],
       error: new Error('boom'),
     });
-    render(AutoSaveStatus, { props: { field: FIELD } });
+    const { container } = render(AutoSaveStatus, { props: { field: FIELD, id: 'status-1' } });
 
     commit();
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('settings.autoSave.failed');
+    const dismiss = await screen.findByRole('button', { name: 'settings.autoSave.dismiss' });
+    expect(screen.getByRole('status')).toHaveTextContent('settings.autoSave.failed');
+    const message = document.getElementById('status-1');
+    expect(message).toHaveTextContent('settings.autoSave.failed');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'settings.autoSave.dismiss' }));
-    expect(screen.queryByRole('alert')).toBeNull();
+    dismiss.focus();
+    await fireEvent.click(dismiss);
+
+    expect(document.getElementById('status-1')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(document.activeElement).toBe(container.firstElementChild);
   });
 });

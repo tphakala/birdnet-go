@@ -4,12 +4,14 @@
   Purpose: The inline feedback of one immediately saved setting. Shows nothing
   while idle, "Saving..." while its edit is waiting for or in a request, "Saved"
   for a moment after, and the reason with a dismiss button when the save failed
-  or the setting was changed elsewhere.
+  or the setting was changed elsewhere. A persistent visually hidden status
+  region announces each state, because a region mounted together with its text
+  is often not announced; the visible parts are not live regions themselves.
 
   Props:
   - field: The field key the control passed to commitSetting
-  - id: Optional id of the region; the control points aria-describedby at it
-    while an error shows
+  - id: Optional id of the visible error message; the control points
+    aria-describedby at it while an error shows
   - class: Additional CSS classes
 
   @component
@@ -30,29 +32,53 @@
   let { field, id, class: className }: Props = $props();
 
   let status = $derived(autoSaveStatus(field));
+  let announcement = $derived.by(() => {
+    switch (status.state) {
+      case 'saving':
+        return t('settings.actions.saving');
+      case 'saved':
+        return t('settings.autoSave.saved');
+      case 'error':
+        return status.message;
+      case 'idle':
+        return '';
+    }
+  });
+
+  let root = $state<HTMLDivElement>();
+
+  // Dismissing removes the focused button, so focus moves to this wrapper first and
+  // keeps the user's place beside the control instead of dropping to the page start.
+  function dismiss() {
+    root?.focus();
+    dismissAutoSaveError(field);
+  }
 </script>
 
-{#if status.state === 'saving'}
-  <div {id} role="status" class={cn('flex items-center gap-1.5 text-sm', className)}>
-    <LoadingSpinner size="xs" aria-hidden="true" />
-    <span class="text-[var(--color-base-content)]/70">{t('settings.actions.saving')}</span>
-  </div>
-{:else if status.state === 'saved'}
-  <div {id} role="status" class={cn('flex items-center gap-1.5 text-sm', className)}>
-    <Check class="size-4 text-[var(--text-success)]" aria-hidden="true" />
-    <span class="text-[var(--text-success)]">{t('settings.autoSave.saved')}</span>
-  </div>
-{:else if status.state === 'error'}
-  <div {id} role="alert" class={cn('flex items-start gap-1.5 text-sm', className)}>
-    <CircleAlert class="mt-0.5 size-4 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
-    <span class="min-w-0 text-[var(--text-error)]">{status.message}</span>
-    <button
-      type="button"
-      class="btn btn-ghost btn-xs shrink-0"
-      aria-label={t('settings.autoSave.dismiss')}
-      onclick={() => dismissAutoSaveError(field)}
-    >
-      <X class="size-3.5" aria-hidden="true" />
-    </button>
-  </div>
-{/if}
+<div bind:this={root} tabindex="-1" class={cn('outline-none', className)}>
+  <span role="status" class="sr-only">{announcement}</span>
+  {#if status.state === 'saving'}
+    <div class="flex items-center gap-1.5 text-sm" aria-hidden="true">
+      <LoadingSpinner size="xs" aria-hidden="true" />
+      <span class="text-[var(--color-base-content)]/70">{announcement}</span>
+    </div>
+  {:else if status.state === 'saved'}
+    <div class="flex items-center gap-1.5 text-sm" aria-hidden="true">
+      <Check class="size-4 text-[var(--text-success)]" aria-hidden="true" />
+      <span class="text-[var(--text-success)]">{announcement}</span>
+    </div>
+  {:else if status.state === 'error'}
+    <div {id} class="flex items-start gap-1.5 text-sm">
+      <CircleAlert class="mt-0.5 size-4 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
+      <span class="min-w-0 text-[var(--text-error)]">{announcement}</span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs shrink-0"
+        aria-label={t('settings.autoSave.dismiss')}
+        onclick={dismiss}
+      >
+        <X class="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  {/if}
+</div>
