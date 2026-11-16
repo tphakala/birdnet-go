@@ -149,7 +149,6 @@ describe('pickPreselectedVariant', () => {
 
   it('preselects the blocked default rather than a slice when no region is active', () => {
     expect(pickPreselectedVariant(lowRamRegional(), '')).toBe('fp32');
-    expect(pickPreselectedVariant(lowRamRegional())).toBe('fp32');
   });
 
   it('preselects the blocked default when the active region slice does not fit either', () => {

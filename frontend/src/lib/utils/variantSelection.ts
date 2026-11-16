@@ -15,11 +15,11 @@ import { t } from '$lib/i18n';
  * installed id (e.g. a variant hidden because it is Legacy) falls through to the
  * next rule instead of selecting nothing.
  *
- * `activeRegionSlug` is the region the picker is scoped to ('' when none). A
- * slice of any other region covers only that region's species, so the fallback
- * considers just the global variants and the active region's slices (an entry
- * made only of other regions' slices falls back to its first variant). The
- * user can still pick any slice by hand.
+ * `activeRegionSlug` is the region the picker is scoped to ('' when none). The
+ * fallback ignores slices of other regions, since they cover only that region's
+ * species; an entry made only of such slices falls back to its first variant.
+ * This mirrors the server's foreign-region rule (recommend.go rankEntry), which
+ * never recommends such a slice.
  */
 export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = ''): string {
   const variants = entry.variants ?? [];
