@@ -340,10 +340,13 @@ func modelState(loaded bool, loadErrors map[string]string, registryID string) st
 	return ModelStatePending
 }
 
-// announceModelListChange tells connected clients that the model list changed,
-// for a change the model manager does not announce itself: an uninstall of a
-// model that was not loaded, and an install whose hot load failed. It only
-// broadcasts; it does not schedule an audio reconfigure.
+// announceModelListChange tells connected clients that the model list changed.
+// It covers the changes the model manager does not announce itself: an uninstall
+// of a model that was not loaded, and an install whose hot load failed. It is
+// also called after a successful install, reinstall or uninstall, where a model
+// that loaded or unloaded is announced by the manager as well, so a client can
+// receive two events and refetches once after its debounce. It only broadcasts;
+// it does not schedule an audio reconfigure.
 func (c *Handler) announceModelListChange() {
 	if c.announceListChange != nil {
 		c.announceListChange()

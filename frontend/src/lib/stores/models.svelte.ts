@@ -192,8 +192,9 @@ function idSet(models: readonly BackendModel[]): string {
 /**
  * Refetches the list in place: the shown list stays until the new one arrives, so
  * a refresh never flashes the loading state, and a failed refresh keeps the last
- * list. A refresh that arrives while one runs, or while the first fetch runs,
- * queues one more behind it. When the set of listed ids changed, the settings form
+ * list. A refresh that arrives while one runs queues one more behind it, and one
+ * that arrives while the first fetch runs queues one that starts only if that
+ * fetch succeeds. When the set of listed ids changed, the settings form
  * is refreshed once, keeping unsaved edits, because the server strips aliases of
  * removed models from the sources; a failed form refresh is retried by the next
  * refresh. Before the first successful fetch it is the plain fetch.

@@ -6,8 +6,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // TestHandleReconcileModels_NoOrchestrator pins the nil-orchestrator guard: the handler logs
@@ -78,4 +81,33 @@ func TestHandleReloadBirdnet_ReplansCadence(t *testing.T) {
 	cm.handleReloadBirdnet()
 	assert.Equal(t, 1, replans, "the reload must re-plan the cadence once")
 	assert.Zero(t, reconfigures, "the reload must not reconfigure (and probe) the sources")
+}
+
+// TestHandleReconcileModels_AllLoadsFailed_BroadcastsListChange pins that a reconcile in
+// which every change failed still sends the topology SSE event, so an open model list moves
+// the model from pending to failed instead of showing it as loading until a reload.
+func TestHandleReconcileModels_AllLoadsFailed_BroadcastsListChange(t *testing.T) {
+	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{classifier.RegistryIDPerchV2} // no model files in tests
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	orch, err := classifier.NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(orch.Delete)
+	require.False(t, orch.IsModelLoaded(classifier.RegistryIDPerchV2), "Perch must fail to load without files")
+
+	store := observability.NewMemoryStore(1)
+	topoCh, cancel := store.SubscribeTopology()
+	t.Cleanup(cancel)
+
+	cm := &ControlMonitor{bn: orch, apiController: &apiv2.Controller{Core: &apicore.Core{MetricsStore: store}}}
+	cm.handleReconcileModels()
+
+	select {
+	case <-topoCh:
+	default:
+		t.Fatal("a reconcile whose loads all failed must broadcast the topology change")
+	}
 }
