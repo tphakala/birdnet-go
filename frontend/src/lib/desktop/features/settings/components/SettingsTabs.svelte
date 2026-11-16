@@ -31,7 +31,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet, Component } from 'svelte';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { CircleAlert, type LucideProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
@@ -114,6 +114,14 @@
     url.searchParams.set(queryParam, tabId);
     navigation.navigate(url.pathname + url.search + url.hash);
     onTabChange?.(tabId);
+  }
+
+  // Opening a tab from the unsaved-changes note removes the focused link with the
+  // note, so focus moves to the opened tab instead of falling back to the page.
+  async function openTabFromNote(tabId: string) {
+    selectTab(tabId);
+    await tick();
+    document.getElementById(`settings-tab-${tabId}`)?.focus();
   }
 
   // Safe array access using Array.prototype.at() to avoid object injection warnings
@@ -251,7 +259,7 @@
                 <button
                   type="button"
                   class="font-medium text-[var(--text-primary)] underline underline-offset-2 hover:no-underline"
-                  onclick={() => selectTab(tab.id)}
+                  onclick={() => openTabFromNote(tab.id)}
                 >
                   {tab.label}
                 </button>

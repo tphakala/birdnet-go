@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import { settingsActions } from '$lib/stores/settings';
 import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
@@ -190,7 +190,10 @@ describe('SettingsTabs save mode', () => {
     expect(screen.queryByRole('button', { name: SAVE_NAME })).toBeNull();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Label rec' }));
-    expect(screen.getByRole('tab', { name: 'Label rec' })).toHaveAttribute('aria-selected', 'true');
+    const opened = screen.getByRole('tab', { name: 'Label rec' });
+    expect(opened).toHaveAttribute('aria-selected', 'true');
+    // The note with the focused link is gone; focus lands on the opened tab.
+    await waitFor(() => expect(opened).toHaveFocus());
   });
 
   it('says nothing about other tabs when none has unsaved changes', () => {
