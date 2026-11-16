@@ -9,7 +9,7 @@
  * If-Match, taking back a refused value, the server winning a conflict) live in
  * the store.
  */
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { t } from '$lib/i18n';
 import {
   SettingsChangedElsewhereError,
@@ -74,7 +74,7 @@ const mountedFields = new Map<string, number>();
  * Fields whose indicators all unmounted. Their status stays for a remount but is
  * not counted, since nothing on screen could show or dismiss it.
  */
-const detachedFields = new Set<string>();
+const detachedFields = new SvelteSet<string>();
 let unsubscribeDrops: (() => void) | null = null;
 
 function sectionState(section: SettingsSectionName): SectionState {
