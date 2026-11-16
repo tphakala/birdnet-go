@@ -64,7 +64,7 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
-import { getAvailableModels } from '$lib/stores/models.svelte';
+import { getAvailableModels, watchModels } from '$lib/stores/models.svelte';
 import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
 
 const USB_MIC = 'usb-mic';
@@ -322,6 +322,21 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
     await renderAndOpen();
 
     expect(screen.getByTestId(MODEL_LIST_TESTID)).toHaveTextContent('birdnet,perch_v2');
+  });
+
+  it('keeps the model list live while mounted, through watchModels', () => {
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [],
+        audioDevices: [],
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources: vi.fn(),
+        onRefreshDevices: vi.fn(),
+      },
+    });
+
+    expect(watchModels).toHaveBeenCalledTimes(1);
   });
 
   it('labels the classifier summary of a source with the live backend', () => {
