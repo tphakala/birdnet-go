@@ -475,4 +475,36 @@ describe('StreamManager add outcome', () => {
     await tick();
     expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
   });
+
+  it('points the blocked Cancel at the saving explanation, and only while it is blocked', async () => {
+    const pending = deferred<typeof SAVED>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+    renderTyped(StreamManager, {
+      props: {
+        streams: [],
+        disabled: false,
+        onUpdateStreams: (streams: StreamConfig[], options: CommitOptions) =>
+          commitSetting('rtsp', { streams }, options),
+      },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveAttribute('aria-describedby');
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Gate' } });
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://gate/live' },
+    });
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    const cancel = await screen.findByRole('button', { name: 'Cancel' });
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+    const explanationId = cancel.getAttribute('aria-describedby');
+    expect(explanationId).toBeTruthy();
+    expect(document.getElementById(explanationId ?? '')).toHaveTextContent(
+      'settings.actions.saving'
+    );
+
+    pending.resolve(SAVED);
+    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
+  });
 });

@@ -105,6 +105,8 @@
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
 
   const ROW_ID_PREFIX = 'stream-row';
+  /** Id of the add form's save status, which explains why Cancel is blocked while saving. */
+  const ADD_SAVING_STATUS_ID = 'new-stream-saving-status';
   /** How many lists the manager remembers sending or holding, to tell its own from foreign ones. */
   const MAX_KNOWN_LISTS = 16;
   /** Delay before the health of a newly added stream is fetched, so it has started. */
@@ -911,7 +913,9 @@
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
               <div class="mr-auto flex min-w-0 flex-col gap-1">
-                <AutoSaveStatus field={STREAMS_LIST_FIELD} />
+                <div id={ADD_SAVING_STATUS_ID}>
+                  <AutoSaveStatus field={STREAMS_LIST_FIELD} />
+                </div>
                 {#if newNeedsTest}
                   <p id="new-stream-test-required" class="text-xs text-muted">
                     {t('settings.audio.streams.testRequired')}
@@ -922,6 +926,7 @@
                 type="button"
                 class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                 aria-disabled={adding ? 'true' : undefined}
+                aria-describedby={adding ? ADD_SAVING_STATUS_ID : undefined}
                 onclick={() => {
                   if (!adding) resetAddForm();
                 }}
