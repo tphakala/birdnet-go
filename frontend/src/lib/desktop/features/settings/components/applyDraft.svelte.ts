@@ -2,10 +2,12 @@
  * Local draft of a group of settings that is saved with a scoped Apply (device
  * and sample rate, a stream's connection), because a change restarts something.
  *
- * The draft follows the saved values until the user edits it. Apply commits it
- * through the caller's commit function under one auto-save field; a save hands
- * the draft back to the saved values, a failure keeps it so the user can apply
- * again or cancel. The commit function passed to apply must commit under the
+ * The draft follows the saved values until the user edits it to something
+ * else; an edit that sets it back to the saved values makes it follow again.
+ * Apply commits it through the caller's commit function under one auto-save
+ * field; a save hands the draft back to the saved values unless the user edited
+ * it while the apply ran, and a failure keeps it so the user can apply again or
+ * cancel. The commit function passed to apply must commit under the
  * field given to the constructor: the draft waits for that field's status.
  * Construct it during component initialisation: it registers two effects that
  * live as long as the component.
@@ -29,7 +31,7 @@ export function sameDraft<T extends object>(a: T, b: T): boolean {
 export class ApplyDraft<T extends object> {
   /** The values shown in the controls. */
   draft: T;
-  /** Set by an edit; the draft then no longer follows the saved values. */
+  /** Set by an edit that differs from the saved values; the draft then stops following them. */
   edited = $state(false);
   #pending = $state(false);
   /** The values the running apply sent, to tell an edit made meanwhile. */
@@ -54,7 +56,8 @@ export class ApplyDraft<T extends object> {
       });
     });
 
-    // Ends an apply: a save hands the draft back to the saved values, a failure keeps it.
+    // Ends an apply: a save hands the draft back to the saved values unless it was
+    // edited meanwhile, a failure keeps it.
     $effect(() => {
       const state = this.status.state;
       if (!this.#pending || state === 'saving') return;
@@ -99,7 +102,7 @@ export class ApplyDraft<T extends object> {
     return this.dirty || this.applying;
   }
 
-  /** Changes the draft and stops it following the saved values. */
+  /** Changes the draft; it stops following the saved values unless it now equals them. */
   set(patch: Partial<T>): void {
     this.draft = { ...this.draft, ...patch };
     // A draft set back to the saved values follows them again, except while an
