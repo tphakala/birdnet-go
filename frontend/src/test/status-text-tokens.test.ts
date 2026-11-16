@@ -5,13 +5,17 @@
  * surfaces in the light theme they fail AA as text. Text and icons use --text-success and its
  * siblings (text-[var(--text-error)]), or the plain utilities text-error and so on, which map to
  * the same tokens. Flagged, over the whole comment-free text so a wrapped CSS value is seen:
- * 1. a fill or its hover fill as an arbitrary text colour, behind any variant, with any opacity;
+ * 1. a fill or its hover fill as an arbitrary text colour, in brackets or in the parenthesis
+ *    shorthand (text-(--color-error), text-(color:--color-error)), behind any variant, with any
+ *    opacity;
  * 2. a bare theme utility behind a variant (hover:text-error): Tailwind generates the fill for it;
  * 3. a bare theme utility with an opacity suffix or the important modifier (text-error/80,
+ *    text-error/(--alpha),
  *    !text-error), which Tailwind also resolves to the fill;
  * 4. a `color` declaration whose value holds a fill, plain, with a fallback or in color-mix();
  * 5. `style:color` with a quoted value holding a fill;
- * 6. `style:color` with an expression that is not textColorFor(...).
+ * 6. `style:color` with an expression that is not textColorFor(...) or
+ *    noveltyCategoryTextColor(...), which routes status fills through textColorFor.
  *
  * Deliberate fill uses the rules do not reach, so no exclusion is needed for them:
  * StatusPill.svelte (fill variables for tint, border and dot; its text is --text-${variant}),
@@ -41,12 +45,13 @@ const RULES: RegExp[] = [
     String.raw`(?<![\w-])text-\[(?!color:)[^\]]*?var\(--color-${STATUS}(?:-hover)?\s*[,)][^\]]*\]`,
     'g'
   ),
+  new RegExp(String.raw`(?<![\w-])text-\((?:color:)?--color-${STATUS}(?:-hover)?\)`, 'g'),
   new RegExp(
     String.raw`(?<![\w:-])(?!class:!?text-${STATUS}(?![\w/!-]))(?:[^\s:"'\`{}]+:)+!?text-${STATUS}(?![\w-])`,
     'g'
   ),
   new RegExp(
-    String.raw`(?<![\w:-])!text-${STATUS}(?![\w-])|(?<![\w:!-])text-${STATUS}(?:\/(?:\d+|\[)|!)|(?<=class:)!text-${STATUS}(?![\w/!-])`,
+    String.raw`(?<![\w:-])!text-${STATUS}(?![\w-])|(?<![\w:!-])text-${STATUS}(?:\/(?:\d+|\[|\()|!)|(?<=class:)!text-${STATUS}(?![\w/!-])`,
     'g'
   ),
   new RegExp(
@@ -57,7 +62,7 @@ const RULES: RegExp[] = [
     String.raw`style:color=(["'])(?:(?!\1).)*?var\(--color-${STATUS}(?:-hover)?\s*[,)](?:(?!\1).)*\1`,
     'g'
   ),
-  /style:color=\{(?!textColorFor\()[^}]*\}?/g,
+  /style:color=\{(?!(?:textColorFor|noveltyCategoryTextColor)\()[^}]*\}?/g,
 ];
 
 interface Hit {
@@ -153,6 +158,10 @@ describe('status-text-tokens', () => {
     ['an inline style', 'style="color: var(--color-warning)"'],
     ['an arbitrary property', 'class="[color:var(--color-error)]"'],
     ['text-[color:var(...)]', 'class="text-[color:var(--color-info)]"'],
+    ['the parenthesis shorthand', 'class="text-(--color-error)"'],
+    ['the parenthesis shorthand with a type hint', 'class="text-(color:--color-warning)"'],
+    ['the parenthesis shorthand behind a variant', 'class="hover:text-(--color-success-hover)/80"'],
+    ['a variable opacity', 'class="text-error/(--alpha)"'],
     ['a quoted style:color', 'style:color="var(--color-success)"'],
     [
       'a quoted style:color with color-mix',
@@ -185,6 +194,12 @@ describe('status-text-tokens', () => {
       'class="text-[var(--color-error-content)] hover:text-info-content text-error-content/80"',
     ],
     ['textColorFor', 'style:color={textColorFor(fill)}'],
+    ['noveltyCategoryTextColor', 'style:color={noveltyCategoryTextColor(c)}'],
+    [
+      'the token in the parenthesis shorthand',
+      'class="text-(--text-error) text-(color:--text-info)"',
+    ],
+    ['a -content token in the parenthesis shorthand', 'class="text-(--color-error-content)"'],
     ['base content', 'style:color="var(--color-base-content)"'],
     [
       'base content in color-mix',
