@@ -267,6 +267,10 @@ and `--text-primary` does the same for every fixed scheme in both themes;
 `.badge-status-*`, `.alert-*`, `.text-error/success/warning/info` and
 `StatusPill` already use them. Use the
 `--color-*` fills for backgrounds, borders and dots, not for new text.
+The bare `text-error|success|warning|info` utility maps to the text token only in
+its plain form; behind a variant, with an opacity suffix or with `!`, Tailwind's
+generated utility wins and gives the fill. `src/test/status-text-tokens.test.ts`
+scans every source file for a status fill used as text and lists its exceptions.
 
 ### General Rules
 

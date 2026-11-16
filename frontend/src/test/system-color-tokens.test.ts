@@ -22,6 +22,9 @@
  * 6. a status fill reaching the text through a style: `style:color` that is not a text token, base
  *    content or textColorFor(...), and `color: var(--color-success|warning|error|info)`.
  *
+ * Status fills used as text are also enforced app-wide, in every source file, by
+ * status-text-tokens.test.ts.
+ *
  * Comments are removed before scanning, so prose may name a hex or a utility: HTML comments, and
  * block and line comments that start a line or follow whitespace (a line comment may also follow
  * a semicolon). A block comment glued to code, as in a Svelte {} expression, is scanned like code.
@@ -33,6 +36,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { stripComments } from './source-comments';
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -140,17 +144,6 @@ function percentOf(value: string, unit = '', bareValueIsPercent: boolean): numbe
 /** True when a fade at this percent is visible text that drops below the contrast minimum. */
 function isTooFaded(percent: number): boolean {
   return percent > 0 && percent < FADED_TEXT_MIN_PERCENT;
-}
-
-// One alternation so the leftmost comment wins: a /* inside a line comment, or a // inside a block
-// comment, stays part of that comment. Block and line comments must start a line or follow
-// whitespace (a line comment may also follow ;), so a URL, a protocol relative href or a glob in
-// a string is not taken for one.
-const COMMENT = /<!--[\s\S]*?-->|(?<=^|\s)\/\*[\s\S]*?\*\/|(?<=^|[\s;])\/\/.*$/gm;
-
-/** Removes HTML, block and line comments, keeping every newline so line numbers stay true. */
-function stripComments(source: string): string {
-  return source.replace(COMMENT, comment => comment.replace(/[^\n]/g, ''));
 }
 
 /** Colors written outside the tokens, with their line numbers. */
