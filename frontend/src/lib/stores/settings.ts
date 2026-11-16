@@ -2335,6 +2335,8 @@ export const settingsActions = {
    * edit winning over a pending one) and records its leaf paths as staged.
    * Nothing is sent; saveStagedSection sends what is staged. Send whole arrays
    * and complete nested objects, since arrays are whole values on the server.
+   * An empty object stages nothing: the server merges objects key by key, so
+   * clearing one needs its keys named.
    * Refuses before settings have loaded, like saveSection.
    */
   stageSectionEdit<S extends SettingsSectionName>(

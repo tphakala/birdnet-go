@@ -197,8 +197,8 @@ describe('leafPaths', () => {
     expect(leafPaths(JSON.parse('{"__proto__":{"x":1},"ok":1}'))).toEqual([['ok']]);
   });
 
-  it('keeps an empty nested object as a leaf so clearing it is not lost', () => {
-    expect(leafPaths({ a: {} })).toEqual([['a']]);
+  it('skips an empty object: the server merge keeps the stored object, so there is nothing to send', () => {
+    expect(leafPaths({ a: {}, b: { c: {} }, d: 1 })).toEqual([['d']]);
   });
 });
 

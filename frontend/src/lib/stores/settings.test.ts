@@ -2428,6 +2428,16 @@ describe('Settings Store - staged section saves', () => {
     expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(stored as Rec[]));
   });
 
+  it('does not stage an empty object, which the server merge would not clear', () => {
+    const before = formAudio().export;
+    stage({ export: {} });
+    expect(formAudio().export).toEqual(before);
+    return settingsActions.saveStagedSection('audio').then(result => {
+      expect(patchCalls()).toHaveLength(0);
+      expect(result).toMatchObject({ saved: [], failed: [], remaining: false });
+    });
+  });
+
   it('takes staged edits back when the baseline fetch fails before the first send', async () => {
     const stored = savedAudio().sources;
     etagMode = 'none';

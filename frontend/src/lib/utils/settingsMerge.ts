@@ -145,8 +145,10 @@ export function rebaseSettingsKeepingEdits(
 
 /**
  * The key paths of a partial settings object. Plain objects recurse; arrays,
- * scalars, null and empty objects are leaves, matching how the server merge
- * replaces them. Unsafe keys and undefined values are skipped.
+ * scalars and null are leaves, matching how the server merge replaces them.
+ * An empty object is not a leaf: the server merges objects key by key, so
+ * sending {} leaves the stored object as it is. Clearing an object needs its
+ * keys named explicitly. Unsafe keys and undefined values are skipped.
  */
 export function leafPaths(patch: PlainRecord): string[][] {
   const out: string[][] = [];
@@ -156,7 +158,7 @@ export function leafPaths(patch: PlainRecord): string[][] {
       // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys of the node
       const value = node[key];
       if (value === undefined) continue;
-      if (isPlainObject(value) && Object.keys(value).length > 0) {
+      if (isPlainObject(value)) {
         walk(value, [...prefix, key]);
       } else {
         out.push([...prefix, key]);
