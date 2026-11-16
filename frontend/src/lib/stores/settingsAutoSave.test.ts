@@ -430,6 +430,24 @@ describe('settings auto save engine', () => {
     expect(autoSaveStatus('audio:a:gain').state).toBe('saved');
   });
 
+  it('sends a toggle committed during a rejected request without waiting for a later slider commit', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise);
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:name' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { sources: [source({ models: ['x'] })] }, { field: 'audio:a:models' });
+    commitSetting(
+      'audio',
+      { sources: [source({ models: ['x'], gain: 4 })] },
+      { field: 'audio:a:gain', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+
+    first.reject(new Error('network down'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps a slider commit waiting when the timer of an earlier one fired during a request', async () => {
     const first = deferred<StagedSaveResult>();
     store.saveStagedSection.mockReturnValueOnce(first.promise);
