@@ -224,6 +224,12 @@ describe('ModelToggleList', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
+  it('lists a saved alias once in the read-only list of a failed fetch', () => {
+    renderList({ models: [], failed: true, selectedModels: ['birdnet', 'birdnet'] });
+
+    expect(screen.getAllByText('birdnet')).toHaveLength(1);
+  });
+
   it('explains an empty list with the gallery link when no model is installed', () => {
     renderList({ models: [], selectedModels: [], availability: NONE_INSTALLED });
 
