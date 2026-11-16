@@ -4110,6 +4110,11 @@
         "noneAvailable": "Na tomto serveri nie sú povolené žiadne detekčné modely.",
         "loadFailedWarning": "Detekčný model sa nepodarilo načítať, takže sa tento zdroj nebude analyzovať, kým sa neobnoví.",
         "loadFailedLink": "Zobraziť stav Modely AI",
+        "state": {
+          "pending": "Načítava sa",
+          "failed": "Načítanie zlyhalo"
+        },
+        "notLoadedHelp": "Tento model nie je načítaný, preto ho nemožno vybrať.",
         "defaultBadge": "{models} (predvolené)",
         "defaultPendingBadge": "Predvolené modely",
         "noneBadge": "Nie je načítaný žiadny model"

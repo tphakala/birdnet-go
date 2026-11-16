@@ -43,7 +43,7 @@
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
   } from '$lib/utils/audio/sampleRate';
-  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { modelsLoading, type ModelLoadState } from '$lib/stores/models.svelte';
   import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -99,6 +99,8 @@
       recommendedSampleRate?: number;
       /** Live execution backend of the loaded model; absent when not loaded. */
       backend?: string;
+      /** Load state; absent counts as loaded. */
+      state?: ModelLoadState;
     }>;
     disabled?: boolean;
     onUpdate: (_source: AudioSourceConfig) => boolean;

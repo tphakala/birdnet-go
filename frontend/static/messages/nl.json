@@ -4110,6 +4110,11 @@
         "noneAvailable": "Er zijn geen detectiemodellen ingeschakeld op deze server.",
         "loadFailedWarning": "Een detectiemodel kon niet worden geladen, dus deze bron wordt pas geanalyseerd als het is hersteld.",
         "loadFailedLink": "Bekijk de status van AI-modellen",
+        "state": {
+          "pending": "Laden",
+          "failed": "Laden mislukt"
+        },
+        "notLoadedHelp": "Dit model is niet geladen en kan daarom niet worden geselecteerd.",
         "defaultBadge": "{models} (standaard)",
         "defaultPendingBadge": "Standaardmodellen",
         "noneBadge": "Geen model geladen"

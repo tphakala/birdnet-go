@@ -4110,6 +4110,11 @@
         "noneAvailable": "Não há modelos de deteção ativados neste servidor.",
         "loadFailedWarning": "Não foi possível carregar um modelo de deteção, portanto esta fonte não será analisada até que se recupere.",
         "loadFailedLink": "Ver status de Modelos de IA",
+        "state": {
+          "pending": "A carregar",
+          "failed": "Falha ao carregar"
+        },
+        "notLoadedHelp": "Este modelo não está carregado, por isso não pode ser selecionado.",
         "defaultBadge": "{models} (padrão)",
         "defaultPendingBadge": "Modelos padrão",
         "noneBadge": "Nenhum modelo carregado"

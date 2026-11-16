@@ -4110,6 +4110,11 @@
         "noneAvailable": "Šajā serverī nav iespējoti noteikšanas modeļi.",
         "loadFailedWarning": "Neizdevās ielādēt noteikšanas modeli, tāpēc šis avots netiks analizēts, kamēr tas neatkopsies.",
         "loadFailedLink": "Skatīt MI Modeļi statusu",
+        "state": {
+          "pending": "Ielādē",
+          "failed": "Neizdevās ielādēt"
+        },
+        "notLoadedHelp": "Šis modelis nav ielādēts, tāpēc to nevar izvēlēties.",
         "defaultBadge": "{models} (noklusējums)",
         "defaultPendingBadge": "Noklusējuma modeļi",
         "noneBadge": "Nav ielādēts modelis"

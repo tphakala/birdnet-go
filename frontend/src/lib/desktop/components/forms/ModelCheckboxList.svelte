@@ -19,6 +19,7 @@
   import { SETTINGS_ROUTES, SYSTEM_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import type { AcousticModelAvailability } from '$lib/types/models';
+  import type { ModelLoadState } from '$lib/stores/models.svelte';
   import Checkbox from './Checkbox.svelte';
 
   interface ModelOption {
@@ -31,6 +32,8 @@
     recommendedSampleRate?: number;
     /** Live execution backend of the loaded model; absent when not loaded. */
     backend?: string;
+    /** Load state; absent counts as loaded. */
+    state?: ModelLoadState;
   }
 
   interface Props {
@@ -90,6 +93,14 @@
   // status fetch failed): still say why the list is empty.
   let showNoneAvailable = $derived(noModelReason === null && !loading && models.length === 0);
 
+  // Selected models that can run; the last of them stays selected.
+  let selectedLoadedCount = $derived(
+    models.filter(
+      model =>
+        selectedModels.includes(model.id) && model.state !== 'failed' && model.state !== 'pending'
+    ).length
+  );
+
   function handleToggle(modelId: string, checked: boolean) {
     if (checked) {
       onToggle([...selectedModels, modelId]);
@@ -111,15 +122,37 @@
       !belowMin &&
       (model.recommendedSampleRate ?? 0) > 0 &&
       sourceSampleRate < (model.recommendedSampleRate ?? 0)}
+    {@const notLoaded = model.state === 'failed' || model.state === 'pending'}
+    {@const blockedNotLoaded = notLoaded && !isChecked}
+    <!-- The last-selection guard keeps one working model; a model that is not
+         loaded can always be removed, even when it is the only one. -->
     <Checkbox
       checked={isChecked}
-      disabled={disabled || (isChecked && selectedModels.length === 1)}
+      disabled={disabled ||
+        blockedNotLoaded ||
+        (isChecked && !notLoaded && selectedLoadedCount === 1)}
+      helpText={blockedNotLoaded ? t('settings.audio.models.notLoadedHelp') : undefined}
       size="sm"
       onchange={checked => handleToggle(model.id, checked)}
     >
       {#snippet children()}
         <span class="flex items-center gap-2 min-w-0">
           <span class="text-sm text-[var(--color-base-content)]">{modelLabel(model)}</span>
+          {#if model.state === 'pending'}
+            <span
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-info)]/15 text-[var(--text-info)]"
+            >
+              <Loader2 class="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              {t('settings.audio.models.state.pending')}
+            </span>
+          {:else if model.state === 'failed'}
+            <span
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--text-warning)]"
+            >
+              <AlertTriangle class="size-3" aria-hidden="true" />
+              {t('settings.audio.models.state.failed')}
+            </span>
+          {/if}
           {#if belowMin}
             <span
               class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--text-error)]"
