@@ -14,7 +14,8 @@
  * 2. a bare theme utility behind a variant (hover:text-error, hover:text-primary): Tailwind
  *    generates the fill for it;
  * 3. a bare theme utility with an opacity suffix or the important modifier (text-error/80,
- *    text-primary/90, text-primary/(--x), !text-error), which Tailwind also resolves to the fill;
+ *    text-primary/90, text-primary/(--x), !text-error), or a bare state utility (text-primary-hover),
+ *    which Tailwind also resolves to the fill;
  * 4. a `color` declaration whose value holds a fill, plain, with a fallback or in color-mix();
  * 5. `style:color` with a quoted value holding a fill;
  * 6. `style:color` with an expression that is not textColorFor(...) or
@@ -54,11 +55,11 @@ const RULES: RegExp[] = [
   ),
   new RegExp(String.raw`(?<![\w-])text-\((?:color:)?--color-${FILL}${FILL_STATE}\)`, 'g'),
   new RegExp(
-    String.raw`(?<![\w:-])(?!class:!?text-${FILL}(?![\w/!-]))(?:[^\s:"'\`{}]+:)+!?text-${FILL}(?![\w-])`,
+    String.raw`(?<![\w:-])(?!class:!?text-${FILL}(?![\w/!-]))(?:[^\s:"'\`{}]+:)+!?text-${FILL}${FILL_STATE}(?![\w-])`,
     'g'
   ),
   new RegExp(
-    String.raw`(?<![\w:-])!text-${FILL}(?![\w-])|(?<![\w:!-])text-${FILL}(?:\/(?:\d+|\[|\()|!)|(?<=class:)!text-${FILL}(?![\w/!-])`,
+    String.raw`(?<![\w:-])!text-${FILL}${FILL_STATE}(?![\w-])|(?<![\w:!-])text-${FILL}${FILL_STATE}(?:\/(?:\d+|\[|\()|!)|(?<![\w:!-])text-${FILL}(?:-hover|-active|-focus)(?![\w/!-])|(?<=class:)!text-${FILL}${FILL_STATE}(?![\w/!-])`,
     'g'
   ),
   new RegExp(
@@ -178,6 +179,9 @@ describe('text-tokens', () => {
     ['the primary fill class', 'class="text-[var(--color-primary)]"'],
     ['the primary active fill', 'class="text-[var(--color-primary-active)]"'],
     ['the primary focus fill behind hover:', 'class="hover:text-[var(--color-primary-focus)]"'],
+    ['a bare primary state utility', 'class="text-primary-hover"'],
+    ['a bare primary state utility behind a variant', 'class="hover:text-primary-active"'],
+    ['a bare primary state utility with an opacity', 'class="text-primary-hover/80"'],
   ])('flags %s', (_name, source) => {
     expect(findFillText(source)).toHaveLength(1);
   });
