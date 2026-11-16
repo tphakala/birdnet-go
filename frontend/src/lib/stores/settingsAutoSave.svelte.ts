@@ -79,6 +79,8 @@ const fieldPaths = new Map<
     keys: Map<string, number>;
     /** Paths whose edit was dropped while the field still owned others; a commit of the path clears it. */
     lost: Set<string>;
+    /** Paths whose save was refused while the field still owned others, with the reason shown; a commit of the path clears it. */
+    refused: Map<string, string>;
   }
 >();
 let commitSeq = 0;
@@ -222,20 +224,23 @@ function fieldsOwning(section: SettingsSectionName, paths: readonly (readonly st
  * Forgets some owned paths of a field; lostKeys are the ones whose edit was
  * dropped. Returns null while the field still owns paths (a newer commit or a
  * stalled path). Once it owns none its entry is removed and the result says
- * whether any of its edits was lost, which then shows the conflict, not Saved.
+ * whether any of its edits was lost or refused, which then shows that error, not Saved.
  */
 function releasePaths(
   field: string,
   keys: Iterable<string>,
-  lostKeys: Iterable<string> = []
-): { lost: boolean } | null {
+  lostKeys: Iterable<string> = [],
+  refusedKeys: Iterable<string> = [],
+  refusedMessage = ''
+): { lost: boolean; refused: string | undefined } | null {
   const owned = fieldPaths.get(field);
-  if (!owned) return { lost: true };
+  if (!owned) return { lost: true, refused: undefined };
   for (const key of lostKeys) owned.lost.add(key);
+  for (const key of refusedKeys) owned.refused.set(key, refusedMessage);
   for (const key of keys) owned.keys.delete(key);
   if (owned.keys.size > 0) return null;
   fieldPaths.delete(field);
-  return { lost: owned.lost.size > 0 };
+  return { lost: owned.lost.size > 0, refused: owned.refused.values().next().value };
 }
 
 /** Gives a field an error and forgets its staged paths, so a later result cannot overwrite it. */
@@ -335,14 +340,18 @@ function judgePaths(
       stalled.push(field);
       continue;
     }
-    const settled = releasePaths(field, judged, droppedKeys);
+    const refusedKeys = judged.filter(
+      key => outcome.failed.has(key) || (outcome.hasError && !outcome.saved.has(key))
+    );
+    const message = failureMessage(outcome.error);
+    const settled = releasePaths(field, judged, droppedKeys, refusedKeys, message);
     if (!settled) continue; // a newer commit decides the status
     if (dropped || settled.lost) {
       setStatus(field, { state: 'error', message: t('settings.autoSave.changedElsewhere') });
     } else {
       setStatus(
         field,
-        refused ? { state: 'error', message: failureMessage(outcome.error) } : SAVED
+        settled.refused === undefined ? SAVED : { state: 'error', message: settled.refused }
       );
     }
   }
@@ -474,6 +483,9 @@ export function commitSetting<S extends SettingsSectionName>(
     failField(field, failureMessage(error));
     return;
   }
+  // The store stages the same filtered paths; with none there is nothing to send or judge.
+  const paths = leafPaths(withoutServerOwnedKeys(section, partial));
+  if (paths.length === 0) return;
   ensureDropSubscription();
   ensureHideFlush();
 
@@ -481,10 +493,12 @@ export function commitSetting<S extends SettingsSectionName>(
     section,
     keys: new Map<string, number>(),
     lost: new Set<string>(),
+    refused: new Map<string, string>(),
   };
-  for (const path of leafPaths(withoutServerOwnedKeys(section, partial))) {
+  for (const path of paths) {
     owned.keys.set(pathKey(path), ++commitSeq);
     owned.lost.delete(pathKey(path));
+    owned.refused.delete(pathKey(path));
   }
   fieldPaths.set(field, owned);
 

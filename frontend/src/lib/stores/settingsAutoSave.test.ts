@@ -455,6 +455,74 @@ describe('settings auto save engine', () => {
     expect(autoSaveStatus('audio:a:equalizer').state).toBe('saved');
   });
 
+  it('keeps the refusal of an older path when a newer path of the field saves', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(saved(...EQ_PATHS));
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:all' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { equalizer: { enabled: true, filters: [] } }, { field: 'audio:a:all' });
+
+    first.resolve({ ...OK, failed: [['sources']], error: new Error('boom'), remaining: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:all')).toEqual({
+      state: 'error',
+      message: 'settings.autoSave.failed',
+    });
+  });
+
+  it('keeps the refusal of a rejected request when a newer path of the field saves', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(saved(...EQ_PATHS));
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:all' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { equalizer: { enabled: true, filters: [] } }, { field: 'audio:a:all' });
+
+    first.reject(new Error('network down'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:all').state).toBe('error');
+  });
+
+  it('clears the refusal of a path the field commits again', async () => {
+    const first = deferred<StagedSaveResult>();
+    const second = deferred<StagedSaveResult>();
+    store.saveStagedSection
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockResolvedValueOnce(saved(['sources']));
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:all' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { equalizer: { enabled: true, filters: [] } }, { field: 'audio:a:all' });
+    first.resolve({ ...OK, failed: [['sources']], error: new Error('boom'), remaining: true });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { sources: [source({ gain: 2 })] }, { field: 'audio:a:all' });
+    second.resolve(saved(...EQ_PATHS));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(3);
+    expect(autoSaveStatus('audio:a:all').state).toBe('saved');
+  });
+
+  it('ignores a commit that has no leaf paths to send', async () => {
+    commitSetting('audio', {}, { field: 'audio:a:empty' });
+    // A variable typed as a wider object still carries the server-owned key through the types.
+    const serverOwnedOnly = { ffmpegPath: '/usr/bin/ffmpeg', sources: undefined };
+    commitSetting('audio', serverOwnedOnly, { field: 'audio:a:ffmpeg' });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+
+    expect(store.saveStagedSection).not.toHaveBeenCalled();
+    expect(autoSaveStatus('audio:a:empty').state).toBe('idle');
+    expect(autoSaveStatus('audio:a:ffmpeg').state).toBe('idle');
+    expect(autoSaveBusy()).toBe(false);
+  });
+
   it('does not judge a path an earlier result already saved when a later result lists only the newer one', async () => {
     const first = deferred<StagedSaveResult>();
     store.saveStagedSection.mockReturnValueOnce(first.promise).mockResolvedValueOnce({
