@@ -3,6 +3,7 @@
  * cards and their open state, add and delete save the whole array at once, and
  * the model list stays live while mounted.
  */
+import { tick } from 'svelte';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { deferred } from '../../../../test/async-helpers';
@@ -11,7 +12,7 @@ import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
-import type { StreamConfig } from '$lib/stores/settings';
+import type { ChannelAnalysis, StreamConfig } from '$lib/stores/settings';
 import { STREAMS_LIST_FIELD } from './sourceFields';
 import {
   autoSaveStatus,
@@ -36,7 +37,11 @@ vi.mock('./QuietHoursEditor.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
 vi.mock('./StreamChannelControls.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockStreamChannelControls.svelte')).default,
+}));
+vi.mock('./streamOptions', async importOriginal => ({
+  ...(await importOriginal<typeof import('./streamOptions')>()),
+  analyzeStreamChannels: vi.fn(),
 }));
 vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockAudioEqualizerSettings.svelte')).default,
@@ -86,8 +91,10 @@ vi.mock('$lib/utils/ReconnectingEventSource', () => ({
 
 import { watchModels } from '$lib/stores/models.svelte';
 import StreamManager from './StreamManager.svelte';
+import { analyzeStreamChannels } from './streamOptions';
 
 const ADD_KEY = 'settings.audio.streams.addStream';
+const LEFT_ANALYSIS: ChannelAnalysis = { channels: 2, energy: [], recommended: 'left' };
 
 const streamA: StreamConfig = {
   name: 'A',
@@ -424,5 +431,48 @@ describe('StreamManager add outcome', () => {
 
     pending.resolve(SAVED);
     await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
+  });
+
+  it('ignores a channel analysis that finishes after a URL change cleared the test', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderTyped(StreamManager, {
+      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://gate/live' },
+    });
+
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'true');
+    await fireEvent.click(screen.getByTestId('stream-test-clear'));
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'false');
+
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
+  });
+
+  it('ignores a channel analysis of a URL the add form no longer holds', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderTyped(StreamManager, {
+      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://gate/live' },
+    });
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://other/live' },
+    });
+
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
   });
 });

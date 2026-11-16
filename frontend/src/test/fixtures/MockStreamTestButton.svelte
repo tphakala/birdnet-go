@@ -1,7 +1,8 @@
 <!--
   Test fixture: stand-in for StreamTestButton. Its button reports a finished
   connection test of the URL it was given, with a probed sample rate, so a test
-  decides when a stream counts as tested.
+  decides when a stream counts as tested. A second button reports the cleared
+  result the real button sends when its URL changes.
 
   @component
 -->
@@ -24,4 +25,7 @@
   onclick={() => onResult?.({ sampleRate: PROBED_SAMPLE_RATE, channels: 1 })}
 >
   run-stream-test
+</button>
+<button type="button" data-testid="stream-test-clear" onclick={() => onResult?.(null)}>
+  clear-stream-test
 </button>

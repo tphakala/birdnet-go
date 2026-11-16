@@ -1,11 +1,14 @@
+import { tick } from 'svelte';
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import { screen, cleanup, fireEvent, render } from '@testing-library/svelte';
 import StreamCard from './StreamCard.svelte';
+import { analyzeStreamChannels } from './streamOptions';
+import { deferred } from '../../../../test/async-helpers';
 import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
-import type { StreamConfig } from '$lib/stores/settings';
+import type { ChannelAnalysis, StreamConfig } from '$lib/stores/settings';
 import type { BackendModel } from '$lib/stores/models.svelte';
 import { AUTOSAVE_DEBOUNCE_MS } from '$lib/stores/settingsAutoSave.svelte';
 
@@ -24,7 +27,11 @@ vi.mock('./StreamTimeline.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
 vi.mock('./StreamChannelControls.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockStreamChannelControls.svelte')).default,
+}));
+vi.mock('./streamOptions', async importOriginal => ({
+  ...(await importOriginal<typeof import('./streamOptions')>()),
+  analyzeStreamChannels: vi.fn(),
 }));
 vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockAudioEqualizerSettings.svelte')).default,
@@ -36,6 +43,7 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
+const LEFT_ANALYSIS: ChannelAnalysis = { channels: 2, energy: [], recommended: 'left' };
 const ROW_ID = 'row-1';
 const FIELD_PREFIX = `rtsp:streams:${ROW_ID}:`;
 const URL_LABEL_KEY = 'settings.audio.streams.urlLabel';
@@ -247,6 +255,41 @@ describe('StreamCard immediate save', () => {
 
     expect(onCommit).not.toHaveBeenCalled();
     expect(input).toHaveAccessibleDescription('settings.audio.streams.errors.nameTooLong');
+  });
+
+  it('ignores a channel analysis that finishes after a URL change cleared the test', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderCard();
+
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://other/stream' } });
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'true');
+
+    // The test button reports a cleared result when its URL changes.
+    await fireEvent.click(screen.getByTestId('stream-test-clear'));
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'false');
+
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'false');
+  });
+
+  it('ignores a channel analysis of a URL the draft no longer holds', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderCard();
+
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://other/stream' } });
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://third/stream' } });
+
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
   });
 
   it('warns about a bat model on a stream', () => {

@@ -440,6 +440,9 @@
     testResult = result;
     testedUrl = result ? draftUrl : null;
     if (!result) {
+      // A pending analysis belongs to the URL the test was cleared for.
+      analysisSeq++;
+      isAnalyzing = false;
       analysisResult = null;
       analysisError = null;
     }
@@ -458,7 +461,7 @@
     analysisError = null;
     try {
       const result = await analyzeStreamChannels(url);
-      if (seq !== analysisSeq) return;
+      if (seq !== analysisSeq || url.trim() !== (draftUrl || stream.url).trim()) return;
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
         connection.set({ channelMode: result.recommended });
