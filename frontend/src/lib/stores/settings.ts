@@ -2058,6 +2058,8 @@ async function rebaseForStagedSave(
  * still equals what was sent or was never edited; a path edited during the request
  * keeps the edit and stays staged. Every sent value is first
  * written into the baseline, so the merge sees a form equal to it as unedited and any other as edited.
+ * The confirmed paths are unstaged and reported saved even when a store subscriber throws during
+ * the update; the error then propagates to the caller.
  */
 async function recordStagedSave<S extends SettingsSectionName>(
   section: S,
@@ -2070,23 +2072,27 @@ async function recordStagedSave<S extends SettingsSectionName>(
   const echo = asRecord(response?.settings);
   const incoming = withoutServerOwnedKeys(section, echo ?? patch);
   const confirmed: StagedPath[] = [];
-  settingsStore.update(state => {
-    let baseline = state.originalData;
-    for (const { path, value } of sent) {
-      const storePath = storePathOf(section, path);
-      // The server holds the sent value now, so it is the baseline even where the
-      // form moved on: an edit back to the old value then still counts as an edit.
-      baseline = withStoreValue(baseline, storePath, value);
-      if (sameValue(valueAt(state.formData, storePath), value)) confirmed.push(path);
+  try {
+    settingsStore.update(state => {
+      let baseline = state.originalData;
+      for (const { path, value } of sent) {
+        const storePath = storePathOf(section, path);
+        // The server holds the sent value now, so it is the baseline even where the
+        // form moved on: an edit back to the old value then still counts as an edit.
+        baseline = withStoreValue(baseline, storePath, value);
+        if (sameValue(valueAt(state.formData, storePath), value)) confirmed.push(path);
+      }
+      return {
+        ...state,
+        ...applySectionPatch({ ...state, originalData: baseline }, section, incoming),
+      };
+    });
+  } finally {
+    // The update has run once the store holds the value; a throwing subscriber must not leave the paths staged.
+    for (const path of confirmed) {
+      unstagePath(section, path);
+      pushUnique(result.saved, path);
     }
-    return {
-      ...state,
-      ...applySectionPatch({ ...state, originalData: baseline }, section, incoming),
-    };
-  });
-  for (const path of confirmed) {
-    unstagePath(section, path);
-    pushUnique(result.saved, path);
   }
 
   const newLocale = section === 'dashboard' ? valueAt(patch, ['locale']) : undefined;
@@ -2141,13 +2147,17 @@ function revertStagedPaths(
  * rule and rebuilds the patch from formData, up to MAX_SETTINGS_SAVE_ATTEMPTS
  * sends, plus one without If-Match when the validator is rewritten in transit.
  * A failure before the first send (the baseline fetch) takes the edits captured before
- * it back to the stored value. Fills result; never throws.
+ * it back to the stored value. An error after the server accepted the patch (while
+ * recording it) is returned in result.error but reverts nothing and fails no path.
+ * Fills result; never throws.
  */
 async function runStagedSave(
   section: SettingsSectionName,
   result: StagedSaveResult
 ): Promise<void> {
   let sent: SentPath[] = [];
+  // Set once the server accepted the patch: from then on an error is a side effect failing, not a failed save.
+  let accepted = false;
   // The unsent edits as they were before the baseline fetch, which a failed fetch takes back.
   let pending: SentPath[] = [];
   try {
@@ -2173,13 +2183,15 @@ async function runStagedSave(
             seen.etag = value;
           },
         });
+        // Saved from here on: a later error must neither revert nor fail these paths.
+        accepted = true;
+        sent = [];
         lastETag = ifMatch ? seen.etag : null;
         const skipped = response?.skippedFields;
         if (skipped && skipped.length > 0) {
           logger.warn('Settings section save skipped fields:', section, skipped.join(', '));
         }
-        await recordStagedSave(section, built.patch, sent, response, result);
-        sent = [];
+        await recordStagedSave(section, built.patch, built.sent, response, result);
         break;
       } catch (error) {
         if (!isPreconditionFailed(error)) throw error;
@@ -2201,7 +2213,7 @@ async function runStagedSave(
     result.error = error;
     // A failure before anything was sent (the baseline fetch) leaves no sent list; the
     // edits captured before that fetch go back to the stored value unless edited again.
-    revertStagedPaths(section, sent.length > 0 ? sent : pending, result);
+    if (!accepted) revertStagedPaths(section, sent.length > 0 ? sent : pending, result);
   }
   result.remaining = stagedPathsOf(section).length > 0;
 }

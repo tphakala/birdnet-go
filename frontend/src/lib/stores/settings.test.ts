@@ -2438,6 +2438,28 @@ describe('Settings Store - staged section saves', () => {
     });
   });
 
+  it('keeps a saved path saved when a store listener throws after the request succeeded', async () => {
+    stage({ sources: sources('A') });
+    let armed = true;
+    const unsubscribe = settingsStore.subscribe(state => {
+      const saved = state.originalData.realtime?.audio?.sources;
+      if (armed && JSON.stringify(saved) === JSON.stringify(inServerShape(sources('A')))) {
+        armed = false;
+        throw new Error('listener failed');
+      }
+    });
+
+    const result = await settingsActions.saveStagedSection('audio');
+    unsubscribe();
+
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.failed).toEqual([]);
+    expect(result.saved).toEqual([['sources']]);
+    expect(result.remaining).toBe(false);
+    expect(formAudio().sources).toEqual(inServerShape(sources('A')));
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
   it('takes staged edits back when the baseline fetch fails before the first send', async () => {
     const stored = savedAudio().sources;
     etagMode = 'none';
