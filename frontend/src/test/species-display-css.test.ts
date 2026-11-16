@@ -2,7 +2,8 @@
  * species-display.css is imported app-wide and is unlayered, so any bare table element
  * selector in it restyles every table in the app and beats Tailwind utilities. Its table
  * rules must be scoped to the detections list table. jsdom has no layout, so this test
- * reads the stylesheet and the component source.
+ * reads the stylesheet and the component source. The species name hover colour reaches the text
+ * ratchet only through a custom property, so it is pinned here.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -30,6 +31,11 @@ function selectors(source: string): string[] {
 }
 
 describe('species-display.css', () => {
+  it('colours the species name hover with the text token and keeps the focus ring on the fill', () => {
+    expect(css).toMatch(/--sp-hover-color:\s*var\(--text-primary\);/);
+    expect(css).toMatch(/outline:\s*2px solid var\(--color-primary\);/);
+  });
+
   it('has no unscoped table element selectors', () => {
     const unscoped = selectors(css).filter(
       selector => TABLE_ELEMENT.test(selector) && !SCOPES.some(scope => selector.includes(scope))
