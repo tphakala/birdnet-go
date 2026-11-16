@@ -73,6 +73,7 @@
     padding: 0.25rem 0.5rem;
     border-radius: 9999px;
     background-color: rgb(0 0 0 / 0.5);
+    color: white;
     backdrop-filter: blur(4px);
     box-shadow: 0 2px 4px rgb(0 0 0 / 0.2);
   }
