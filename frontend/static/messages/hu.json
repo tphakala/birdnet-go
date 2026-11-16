@@ -3742,7 +3742,8 @@
         "captureApplyHint": "A rögzítés az alkalmazáskor újraindul.",
         "applyCapture": "Alkalmazás és a rögzítés újraindítása",
         "applying": "Alkalmazás...",
-        "adding": "Hozzáadás..."
+        "adding": "Hozzáadás...",
+        "captureApplyFailed": "A rögzítés nem változott. Alkalmazza újra, vagy szakítsa meg."
       },
       "audioCapture": {
         "title": "Hangkártya konfiguráció",

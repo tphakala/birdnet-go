@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Opptaket startes på nytt når du bruker endringene.",
         "applyCapture": "Bruk og start opptaket på nytt",
         "applying": "Bruker...",
-        "adding": "Legger til..."
+        "adding": "Legger til...",
+        "captureApplyFailed": "Opptaket ble ikke endret. Bruk på nytt eller avbryt."
       },
       "audioCapture": {
         "title": "Lydkortkonfigurasjon",

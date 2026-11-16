@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Záznam se po použití restartuje.",
         "applyCapture": "Použít a restartovat záznam",
         "applying": "Používání...",
-        "adding": "Přidávání..."
+        "adding": "Přidávání...",
+        "captureApplyFailed": "Záznam nebyl změněn. Použijte znovu nebo zrušte."
       },
       "audioCapture": {
         "title": "Konfigurace zvukové karty",

@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Tallennus käynnistyy uudelleen, kun otat muutokset käyttöön.",
         "applyCapture": "Ota käyttöön ja käynnistä tallennus uudelleen",
         "applying": "Otetaan käyttöön...",
-        "adding": "Lisätään..."
+        "adding": "Lisätään...",
+        "captureApplyFailed": "Tallennusta ei muutettu. Ota käyttöön uudelleen tai peruuta."
       },
       "audioCapture": {
         "title": "Äänen tallennus",

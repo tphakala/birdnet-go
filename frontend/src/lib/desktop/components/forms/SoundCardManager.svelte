@@ -47,7 +47,7 @@
   } from '$lib/stores/models.svelte';
   import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
-  import { AUDIO_SOURCES_LIST_FIELD } from './audioSourceFields';
+  import { AUDIO_SOURCES_LIST_FIELD } from './sourceFields';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,

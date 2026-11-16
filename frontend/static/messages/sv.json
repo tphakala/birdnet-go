@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Inspelningen startas om när du verkställer.",
         "applyCapture": "Verkställ och starta om inspelningen",
         "applying": "Verkställer...",
-        "adding": "Lägger till..."
+        "adding": "Lägger till...",
+        "captureApplyFailed": "Inspelningen ändrades inte. Verkställ igen eller avbryt."
       },
       "audioCapture": {
         "title": "Ljudkortskonfiguration",

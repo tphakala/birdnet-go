@@ -3742,7 +3742,8 @@
         "captureApplyHint": "La capture redémarre lorsque vous appliquez.",
         "applyCapture": "Appliquer et redémarrer la capture",
         "applying": "Application...",
-        "adding": "Ajout..."
+        "adding": "Ajout...",
+        "captureApplyFailed": "La capture n'a pas été modifiée. Appliquez à nouveau ou annulez."
       },
       "audioCapture": {
         "title": "Capture audio",

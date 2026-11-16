@@ -3742,7 +3742,8 @@
         "captureApplyHint": "De opname wordt herstart wanneer u toepast.",
         "applyCapture": "Toepassen en opname herstarten",
         "applying": "Bezig met toepassen...",
-        "adding": "Bezig met toevoegen..."
+        "adding": "Bezig met toevoegen...",
+        "captureApplyFailed": "De opname is niet gewijzigd. Pas opnieuw toe of annuleer."
       },
       "audioCapture": {
         "title": "Audio Opname",

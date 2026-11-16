@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Záznam sa po použití reštartuje.",
         "applyCapture": "Použiť a reštartovať záznam",
         "applying": "Používa sa...",
-        "adding": "Pridáva sa..."
+        "adding": "Pridáva sa...",
+        "captureApplyFailed": "Záznam sa nezmenil. Použite znova alebo zrušte."
       },
       "audioCapture": {
         "title": "Konfigurácia zvukovej karty",

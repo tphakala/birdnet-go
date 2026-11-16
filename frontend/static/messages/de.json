@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Die Aufnahme wird beim Übernehmen neu gestartet.",
         "applyCapture": "Übernehmen und Aufnahme neu starten",
         "applying": "Wird übernommen...",
-        "adding": "Wird hinzugefügt..."
+        "adding": "Wird hinzugefügt...",
+        "captureApplyFailed": "Die Aufnahme wurde nicht geändert. Erneut übernehmen oder abbrechen."
       },
       "audioCapture": {
         "title": "Audioaufnahme",

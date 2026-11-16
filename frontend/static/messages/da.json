@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Optagelsen genstartes, når du anvender.",
         "applyCapture": "Anvend og genstart optagelsen",
         "applying": "Anvender...",
-        "adding": "Tilføjer..."
+        "adding": "Tilføjer...",
+        "captureApplyFailed": "Optagelsen blev ikke ændret. Anvend igen, eller annullér."
       },
       "audioCapture": {
         "title": "Lydkortkonfiguration",

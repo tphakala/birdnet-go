@@ -2739,6 +2739,7 @@ export type TranslationKey =
   | 'settings.audio.soundCards.applyCapture'
   | 'settings.audio.soundCards.applying'
   | 'settings.audio.soundCards.adding'
+  | 'settings.audio.soundCards.captureApplyFailed'
   | 'settings.audio.audioCapture.title'
   | 'settings.audio.audioCapture.soundCardSource'
   | 'settings.audio.audioCapture.audioSourceLabel'

@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Ierakstīšana tiks restartēta, kad lietosiet izmaiņas.",
         "applyCapture": "Lietot un restartēt ierakstīšanu",
         "applying": "Lieto...",
-        "adding": "Pievieno..."
+        "adding": "Pievieno...",
+        "captureApplyFailed": "Ierakstīšana netika mainīta. Lietojiet vēlreiz vai atceliet."
       },
       "audioCapture": {
         "title": "Skaņas kartes konfigurācija",

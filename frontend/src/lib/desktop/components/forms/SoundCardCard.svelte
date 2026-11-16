@@ -31,24 +31,14 @@
   @component
 -->
 <script lang="ts">
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import {
     deviceValue,
     deviceMatches,
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import {
-    Trash2,
-    AlertCircle,
-    AlertTriangle,
-    Info,
-    Mic,
-    Moon,
-    ChevronDown,
-    ChevronRight,
-    RotateCcw,
-  } from '@lucide/svelte';
+  import { AlertTriangle, Info, Mic, Moon, ChevronDown } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -76,7 +66,12 @@
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
-  import { audioSourceField, type AudioSourceFieldPart } from './audioSourceFields';
+  import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
+  import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
+  import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
+  import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
+  import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
+  import { AUDIO_SOURCES_FIELD_PREFIX, sourceField, type SourceFieldPart } from './sourceFields';
   import type {
     AudioSourceConfig,
     EqualizerSettings,
@@ -127,27 +122,19 @@
   const DEFAULT_RATE_OPTIONS = [{ value: '48000', label: '48 kHz' }];
 
   const cardId = generateId('soundcard');
-  const bodyId = `${cardId}-body`;
   const nameInputId = `${cardId}-name`;
-  const nameErrorId = `${cardId}-name-error`;
   const captureHeadingId = `${cardId}-capture`;
   const modelsHeadingId = `${cardId}-models`;
-  const deleteTitleId = `${cardId}-delete-title`;
-  const deleteDescId = `${cardId}-delete-desc`;
 
-  function field(part: AudioSourceFieldPart): string {
-    return audioSourceField(rowId, part);
+  function field(part: SourceFieldPart): string {
+    return sourceField(AUDIO_SOURCES_FIELD_PREFIX, rowId, part);
   }
 
-  function statusId(part: AudioSourceFieldPart): string {
+  function statusId(part: SourceFieldPart): string {
     return `${cardId}-${part}-status`;
   }
 
-  function commit(
-    change: Partial<AudioSourceConfig>,
-    part: AudioSourceFieldPart,
-    debounce = false
-  ) {
+  function commit(change: Partial<AudioSourceConfig>, part: SourceFieldPart, debounce = false) {
     onCommit(
       { ...source, ...change },
       debounce ? { field: field(part), debounceMs: AUTOSAVE_DEBOUNCE_MS } : { field: field(part) }
@@ -155,7 +142,7 @@
   }
 
   /** aria-describedby for a control: its status message while that shows an error. */
-  function errorDescription(part: AudioSourceFieldPart): string | undefined {
+  function errorDescription(part: SourceFieldPart): string | undefined {
     return autoSaveStatus(field(part)).state === 'error' ? statusId(part) : undefined;
   }
 
@@ -212,18 +199,6 @@
 
   // ----- Name -----
 
-  let nameDraft = $state(untrack(() => source.name));
-  let nameFocused = $state(false);
-  let nameError = $state<string | null>(null);
-
-  // Follows the saved name while the field is not being edited.
-  $effect(() => {
-    const saved = source.name;
-    untrack(() => {
-      if (!nameFocused) nameDraft = saved;
-    });
-  });
-
   function validateName(name: string): string | null {
     if (!name) return t('settings.audio.soundCards.errors.nameRequired');
     const lower = name.toLowerCase();
@@ -233,44 +208,15 @@
     return null;
   }
 
-  function commitName() {
-    const trimmed = nameDraft.trim();
-    if (trimmed === source.name) {
-      nameDraft = source.name;
-      nameError = null;
-      return;
-    }
-    const error = validateName(trimmed);
-    nameError = error;
-    if (error) return;
-    nameDraft = trimmed;
-    commit({ name: trimmed }, 'name');
-  }
-
-  function handleNameKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      commitName();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      nameDraft = source.name;
-      nameError = null;
-    }
-  }
-
-  let nameDescribedBy = $derived(
-    [nameError ? nameErrorId : undefined, errorDescription('name')].filter(Boolean).join(' ') ||
-      undefined
-  );
-
   // ----- Capture (device and sample rate, applied together) -----
 
-  let savedRate = $derived(source.sampleRate || DEFAULT_SAMPLE_RATE);
-  let draftDevice = $state(untrack(() => source.device));
-  let draftRate = $state(untrack(() => source.sampleRate || DEFAULT_SAMPLE_RATE));
-  // Set by a change to the draft; the draft then no longer follows the saved values.
-  let captureEdited = $state(false);
-  let applyPending = $state(false);
+  // Device and sample rate restart capture, so they are a draft with a scoped Apply.
+  const capture = new ApplyDraft(
+    () => ({ device: source.device, sampleRate: source.sampleRate || DEFAULT_SAMPLE_RATE }),
+    untrack(() => field('capture'))
+  );
+  // The device alone, so the probe below reruns only when it changes, not on every draft edit.
+  let draftDevice = $derived(capture.draft.device);
   let sampleRateOptions = $state<Array<{ value: string; label: string }>>(DEFAULT_RATE_OPTIONS);
   let sampleRateVerified = $state(true);
   let sampleRateLoading = $state(false);
@@ -278,34 +224,6 @@
   // controller in its synchronous prefix. As $state that would make the effect
   // depend on it and rerun at once, aborting the new probe (issue #3593).
   let fetchController: AbortController | null = null;
-
-  let captureDirty = $derived(draftDevice !== source.device || draftRate !== savedRate);
-  let captureStatus = $derived(autoSaveStatus(field('capture')));
-  let applying = $derived(applyPending && captureStatus.state === 'saving');
-
-  $effect(() => {
-    const device = source.device;
-    const rate = source.sampleRate || DEFAULT_SAMPLE_RATE;
-    untrack(() => {
-      if (!captureEdited) {
-        draftDevice = device;
-        draftRate = rate;
-      }
-    });
-  });
-
-  // Ends an apply: a save hands the draft back to the saved values, a failure keeps it.
-  $effect(() => {
-    const state = captureStatus.state;
-    untrack(() => {
-      if (!applyPending || state === 'saving') return;
-      applyPending = false;
-      if (state === 'error') return;
-      captureEdited = false;
-      draftDevice = source.device;
-      draftRate = source.sampleRate || DEFAULT_SAMPLE_RATE;
-    });
-  });
 
   // The current source's device keeps its saved value (which may be a legacy ALSA
   // id) so the dropdown preselects it; other devices use the reboot-stable token
@@ -322,27 +240,11 @@
   );
 
   function setDraftDevice(value: string | string[]) {
-    if (typeof value !== 'string') return;
-    draftDevice = value;
-    captureEdited = true;
+    if (typeof value === 'string') capture.set({ device: value });
   }
 
   function setDraftRate(value: string | string[]) {
-    if (typeof value !== 'string') return;
-    draftRate = Number(value);
-    captureEdited = true;
-  }
-
-  function cancelCapture() {
-    captureEdited = false;
-    draftDevice = source.device;
-    draftRate = savedRate;
-  }
-
-  function applyCapture() {
-    if (applying || disabled) return;
-    applyPending = true;
-    commit({ device: draftDevice, sampleRate: draftRate }, 'capture');
+    if (typeof value === 'string') capture.set({ sampleRate: Number(value) });
   }
 
   async function fetchDeviceCapabilities(deviceId: string) {
@@ -362,8 +264,9 @@
       sampleRateVerified = result.verified;
       // A newly picked device gets a rate it supports. The saved device keeps its
       // saved rate, so opening a card never creates a change to apply.
-      if (draftDevice !== source.device) {
-        draftRate = coerceSupportedRate(result.options, draftRate);
+      if (capture.draft.device !== source.device) {
+        const sampleRate = coerceSupportedRate(result.options, capture.draft.sampleRate);
+        if (sampleRate !== capture.draft.sampleRate) capture.set({ sampleRate });
       }
     } catch {
       // Only AbortError reaches here (the utility handles all other failures)
@@ -416,390 +319,240 @@
     );
     commit({ quietHours: updated }, 'quietHours', continuous);
   }
-
-  // ----- Delete -----
-
-  let showDeleteConfirm = $state(false);
-  let deleteButton = $state<HTMLButtonElement>();
-  let cancelDeleteButton = $state<HTMLButtonElement>();
-
-  async function confirmDelete() {
-    if (disabled) return;
-    showDeleteConfirm = true;
-    await tick();
-    cancelDeleteButton?.focus();
-  }
-
-  async function cancelDelete() {
-    showDeleteConfirm = false;
-    await tick();
-    deleteButton?.focus();
-  }
-
-  function executeDelete() {
-    showDeleteConfirm = false;
-    onDelete();
-  }
-
-  function handleDeleteKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      void cancelDelete();
-    }
-  }
 </script>
 
-{#snippet groupHeading(part: AudioSourceFieldPart, title: string, headingId: string)}
-  <div class="flex min-h-6 items-center justify-between gap-3">
-    <h4 id={headingId} class="text-sm font-semibold text-[var(--color-base-content)]">{title}</h4>
-    <AutoSaveStatus field={field(part)} id={statusId(part)} />
-  </div>
-{/snippet}
-
-<div
-  class={cn(
-    'relative rounded-lg border transition-colors duration-200',
-    expanded
-      ? 'border-[var(--border-200)] bg-[var(--color-base-100)] shadow-sm'
-      : 'border-[var(--border-200)] bg-[var(--color-base-200)]'
-  )}
+<SourceCard
+  name={source.name}
+  subtitle={deviceDisplayName}
+  icon={Mic}
+  {expanded}
+  {onToggleExpanded}
+  deleteConfirm={t('settings.audio.soundCards.deleteConfirm')}
+  {onDelete}
+  {disabled}
 >
-  {#if showDeleteConfirm}
-    <div
-      role="alertdialog"
-      aria-labelledby={deleteTitleId}
-      aria-describedby={deleteDescId}
-      tabindex="-1"
-      onkeydown={handleDeleteKeydown}
-      class="absolute inset-x-0 top-0 z-10 flex min-h-16 items-center rounded-lg bg-[var(--color-base-300)] px-4 py-3"
-    >
-      <div class="flex w-full items-center gap-3">
-        <AlertCircle class="size-6 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
-        <span id={deleteTitleId} class="sr-only">{t('common.delete')}</span>
-        <p id={deleteDescId} class="flex-1 text-sm font-medium text-[var(--color-base-content)]">
-          {t('settings.audio.soundCards.deleteConfirm')}
-          <span class="font-semibold">{source.name}</span>
-        </p>
-        <div class="flex shrink-0 gap-2">
-          <button
-            bind:this={cancelDeleteButton}
-            type="button"
-            class="inline-flex h-8 items-center justify-center rounded-lg px-3 text-sm font-medium transition-colors hover:bg-[var(--color-base-content)]/10"
-            onclick={cancelDelete}
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            class="inline-flex h-8 items-center justify-center rounded-lg bg-[var(--color-error)] px-3 text-sm font-medium text-[var(--color-error-content)] transition-colors hover:bg-[var(--color-error-hover)]"
-            onclick={executeDelete}
-          >
-            {t('common.delete')}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Header: the button toggles the body; delete sits beside it -->
-  <div class="flex items-center gap-2 p-3">
-    <button
-      type="button"
-      class="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
-      aria-expanded={expanded}
-      aria-controls={bodyId}
-      onclick={onToggleExpanded}
-    >
-      <ChevronRight
-        class={cn(
-          'size-4 shrink-0 text-muted transition-transform duration-200 motion-reduce:transition-none',
-          expanded && 'rotate-90'
-        )}
-        aria-hidden="true"
-      />
-      <span
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--color-primary)]"
-      >
-        <Mic class="size-5" aria-hidden="true" />
-      </span>
-      <span class="min-w-0 flex-1">
-        <span class="block truncate text-sm font-semibold text-[var(--color-base-content)]">
-          {source.name}
-        </span>
-        <span class="mt-0.5 block truncate text-xs text-muted">{deviceDisplayName}</span>
-      </span>
-    </button>
-
-    <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-      {#if source.quietHours?.enabled}
-        <span
-          class={cn(
-            BADGE_CLASS,
-            'inline-flex items-center gap-1 bg-[var(--color-base-300)] text-[var(--color-base-content)]'
-          )}
-          title={t('settings.audio.quietHours.enabledBadge')}
-        >
-          <Moon class="size-3" aria-hidden="true" />
-          {t('settings.audio.quietHours.badge')}
-        </span>
-      {/if}
-      {#if source.gain !== 0}
-        <span class={cn(BADGE_CLASS, 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]')}>
-          {source.gain > 0 ? '+' : ''}{source.gain} dB
-        </span>
-      {/if}
-      {#if needsModelAttention}
-        <span
-          class={cn(
-            BADGE_CLASS,
-            'inline-flex items-center gap-1 bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-          )}
-        >
-          <AlertTriangle class="size-3" aria-hidden="true" />
-          {t('settings.audio.models.warningBadge')}
-        </span>
-      {/if}
+  {#snippet badges()}
+    {#if source.quietHours?.enabled}
       <span
         class={cn(
           BADGE_CLASS,
-          'max-w-64 truncate',
-          modelBadgeIsWarning
-            ? 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-            : 'bg-[var(--color-info)]/15 text-[var(--text-info)]'
+          'inline-flex items-center gap-1 bg-[var(--color-base-300)] text-[var(--color-base-content)]'
         )}
-        title={modelBadgeTitle ?? modelDisplayName}
+        title={t('settings.audio.quietHours.enabledBadge')}
       >
-        {modelDisplayName}
+        <Moon class="size-3" aria-hidden="true" />
+        {t('settings.audio.quietHours.badge')}
       </span>
-    </div>
-
-    <button
-      bind:this={deleteButton}
-      type="button"
-      class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-base-content)]/10 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-      onclick={confirmDelete}
-      aria-disabled={disabled ? 'true' : undefined}
-      aria-label={t('common.delete')}
+    {/if}
+    {#if source.gain !== 0}
+      <span class={cn(BADGE_CLASS, 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]')}>
+        {source.gain > 0 ? '+' : ''}{source.gain} dB
+      </span>
+    {/if}
+    {#if needsModelAttention}
+      <span
+        class={cn(
+          BADGE_CLASS,
+          'inline-flex items-center gap-1 bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
+        )}
+      >
+        <AlertTriangle class="size-3" aria-hidden="true" />
+        {t('settings.audio.models.warningBadge')}
+      </span>
+    {/if}
+    <span
+      class={cn(
+        BADGE_CLASS,
+        'max-w-64 truncate',
+        modelBadgeIsWarning
+          ? 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
+          : 'bg-[var(--color-info)]/15 text-[var(--text-info)]'
+      )}
+      title={modelBadgeTitle ?? modelDisplayName}
     >
-      <Trash2 class="size-4" aria-hidden="true" />
-    </button>
+      {modelDisplayName}
+    </span>
+  {/snippet}
+
+  <!-- Name and level -->
+  <div class="grid grid-cols-1 gap-x-8 gap-y-4 py-4 md:grid-cols-2">
+    <SettingsGroup
+      title={t('settings.audio.soundCards.nameLabel')}
+      labelFor={nameInputId}
+      required
+      field={field('name')}
+      statusId={statusId('name')}
+      class="space-y-1.5"
+    >
+      <CommitTextField
+        id={nameInputId}
+        value={source.name}
+        validate={validateName}
+        onCommit={name => commit({ name }, 'name')}
+        maxlength={NAME_MAX_LENGTH}
+        required
+        {disabled}
+        describedBy={errorDescription('name')}
+      />
+    </SettingsGroup>
+
+    <SettingsGroup
+      title={t('settings.audio.soundCards.levelTitle')}
+      headingId="{cardId}-level"
+      field={field('gain')}
+      statusId={statusId('gain')}
+      class="space-y-1.5"
+    >
+      <InlineSlider
+        label={t('settings.audio.soundCards.gainLabel')}
+        value={source.gain}
+        onUpdate={value => commit({ gain: value }, 'gain', true)}
+        min={AUDIO_GAIN_MIN_DB}
+        max={AUDIO_GAIN_MAX_DB}
+        step={1}
+        unit=" dB"
+        {disabled}
+      />
+    </SettingsGroup>
   </div>
 
-  {#if expanded}
-    <div
-      id={bodyId}
-      class="divide-y divide-[var(--border-100)] border-t border-[var(--border-100)] px-4"
-      transition:slide={{ duration: 150 }}
+  <!-- Capture: drafts with a scoped apply -->
+  <SettingsGroup
+    title={t('settings.audio.soundCards.captureTitle')}
+    headingId={captureHeadingId}
+    field={field('capture')}
+    statusId={statusId('capture')}
+    class="py-4"
+  >
+    <ScopedApplyGroup
+      draft={capture}
+      onApply={value => commit(value, 'capture')}
+      hint={t('settings.audio.soundCards.captureApplyHint')}
+      failedHint={t('settings.audio.soundCards.captureApplyFailed')}
+      applyLabel={t('settings.audio.soundCards.applyCapture')}
+      applyingLabel={t('settings.audio.soundCards.applying')}
+      statusId={statusId('capture')}
+      {disabled}
     >
-      <!-- Name and level -->
-      <div class="grid grid-cols-1 gap-x-8 gap-y-4 py-4 md:grid-cols-2">
-        <div class="min-w-0 space-y-1.5">
-          <div class="flex min-h-6 items-center justify-between gap-3">
-            <label for={nameInputId} class="text-sm font-semibold text-[var(--color-base-content)]">
-              {t('settings.audio.soundCards.nameLabel')}
-              <span class="ml-0.5 text-[var(--text-error)]" aria-hidden="true">*</span>
-            </label>
-            <AutoSaveStatus field={field('name')} id={statusId('name')} />
-          </div>
-          <input
-            id={nameInputId}
-            type="text"
-            class={cn('input input-sm w-full', nameError && 'input-error')}
-            bind:value={nameDraft}
-            maxlength={NAME_MAX_LENGTH}
-            required
-            aria-required="true"
-            aria-invalid={nameError ? 'true' : undefined}
-            aria-describedby={nameDescribedBy}
-            readonly={disabled}
-            onfocus={() => (nameFocused = true)}
-            onblur={() => {
-              nameFocused = false;
-              commitName();
-            }}
-            oninput={() => (nameError = null)}
-            onkeydown={handleNameKeydown}
-          />
-          {#if nameError}
-            <p id={nameErrorId} class="text-xs text-[var(--text-error)]">{nameError}</p>
-          {/if}
-        </div>
-
-        <div class="min-w-0 space-y-1.5">
-          {@render groupHeading(
-            'gain',
-            t('settings.audio.soundCards.levelTitle'),
-            `${cardId}-level`
-          )}
-          <InlineSlider
-            label={t('settings.audio.soundCards.gainLabel')}
-            value={source.gain}
-            onUpdate={value => commit({ gain: value }, 'gain', true)}
-            min={AUDIO_GAIN_MIN_DB}
-            max={AUDIO_GAIN_MAX_DB}
-            step={1}
-            unit=" dB"
-            {disabled}
-          />
-        </div>
-      </div>
-
-      <!-- Capture: drafts with a scoped apply -->
-      <section class="space-y-3 py-4" aria-labelledby={captureHeadingId}>
-        {@render groupHeading(
-          'capture',
-          t('settings.audio.soundCards.captureTitle'),
-          captureHeadingId
-        )}
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <SelectDropdown
+          value={capture.draft.device}
+          label={t('settings.audio.soundCards.deviceLabel')}
+          options={deviceOptions}
+          required
+          {disabled}
+          onChange={setDraftDevice}
+          groupBy={false}
+          menuSize="sm"
+        />
+        <div>
           <SelectDropdown
-            value={draftDevice}
-            label={t('settings.audio.soundCards.deviceLabel')}
-            options={deviceOptions}
-            required
+            value={String(capture.draft.sampleRate)}
+            label={t('settings.audio.soundCards.sampleRateLabel')}
+            options={sampleRateOptions}
             {disabled}
-            onChange={setDraftDevice}
+            onChange={setDraftRate}
             groupBy={false}
             menuSize="sm"
           />
-          <div>
-            <SelectDropdown
-              value={String(draftRate)}
-              label={t('settings.audio.soundCards.sampleRateLabel')}
-              options={sampleRateOptions}
-              {disabled}
-              onChange={setDraftRate}
-              groupBy={false}
-              menuSize="sm"
-            />
-            {#if sampleRateLoading}
-              <p class="mt-1 text-xs text-muted">
-                {t('settings.audio.soundCards.sampleRateProbing')}
-              </p>
-            {:else if !sampleRateVerified}
-              <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-warning)]">
-                <AlertTriangle class="size-3 shrink-0" aria-hidden="true" />
-                {t('settings.audio.soundCards.sampleRateUnverified')}
-              </p>
-            {/if}
-            {#if draftRate > SHARED_ACCESS_MAX_RATE}
-              <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-info)]">
-                <Info class="size-3 shrink-0" aria-hidden="true" />
-                {t('settings.audio.soundCards.sampleRateExclusive')}
-              </p>
-            {/if}
-          </div>
-        </div>
-        {#if captureDirty}
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] px-3 py-2"
-          >
-            <p class="flex items-center gap-2 text-sm text-[var(--color-base-content)]">
-              <RotateCcw class="size-4 shrink-0 text-muted" aria-hidden="true" />
-              {t('settings.audio.soundCards.captureApplyHint')}
+          {#if sampleRateLoading}
+            <p class="mt-1 text-xs text-muted">
+              {t('settings.audio.soundCards.sampleRateProbing')}
             </p>
-            <div class="flex gap-2">
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                aria-disabled={applying ? 'true' : undefined}
-                onclick={() => {
-                  if (!applying) cancelCapture();
-                }}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                class="btn btn-primary btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
-                aria-disabled={applying || disabled ? 'true' : undefined}
-                aria-describedby={errorDescription('capture')}
-                onclick={applyCapture}
-              >
-                {applying
-                  ? t('settings.audio.soundCards.applying')
-                  : t('settings.audio.soundCards.applyCapture')}
-              </button>
-            </div>
-          </div>
-        {/if}
-      </section>
-
-      <!-- Classifiers -->
-      <section class="space-y-3 py-4" aria-labelledby={modelsHeadingId}>
-        {@render groupHeading('models', t('settings.audio.soundCards.modelLabel'), modelsHeadingId)}
-        <ModelToggleList
-          models={availableModels}
-          {selectedModels}
-          {defaultModels}
-          sourceName={source.name}
-          sourceSampleRate={draftRate}
-          loading={listLoading}
-          failed={listFailed}
-          availability={acousticAvailability}
-          labelledBy={modelsHeadingId}
-          {disabled}
-          onChange={models => commit({ models }, 'models')}
-          onRetry={() => void refreshModels()}
-        />
-      </section>
-
-      <!-- Audio filters (collapsed by default) -->
-      <section class="py-4">
-        <div class="flex min-h-6 items-center justify-between gap-3">
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded text-sm font-semibold text-[var(--color-base-content)] transition-colors hover:text-[var(--text-primary)]"
-            aria-expanded={showEqualizer}
-            onclick={() => (showEqualizer = !showEqualizer)}
-          >
-            <ChevronDown
-              class={cn(
-                'size-4 transition-transform duration-200 motion-reduce:transition-none',
-                showEqualizer && 'rotate-180'
-              )}
-              aria-hidden="true"
-            />
-            {t('settings.audio.audioFilters.title')}
-          </button>
-          <div class="flex items-center gap-3">
-            <AutoSaveStatus field={field('equalizer')} id={statusId('equalizer')} />
-            {#if equalizer.enabled}
-              <span
-                class={cn(BADGE_CLASS, 'bg-[var(--color-primary)]/15 text-[var(--text-primary)]')}
-              >
-                {t('common.enabled')}
-              </span>
-            {/if}
-          </div>
+          {:else if !sampleRateVerified}
+            <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-warning)]">
+              <AlertTriangle class="size-3 shrink-0" aria-hidden="true" />
+              {t('settings.audio.soundCards.sampleRateUnverified')}
+            </p>
+          {/if}
+          {#if capture.draft.sampleRate > SHARED_ACCESS_MAX_RATE}
+            <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-info)]">
+              <Info class="size-3 shrink-0" aria-hidden="true" />
+              {t('settings.audio.soundCards.sampleRateExclusive')}
+            </p>
+          {/if}
         </div>
-        {#if showEqualizer}
-          <div class="mt-3" transition:slide={{ duration: 150 }}>
-            <AudioEqualizerSettings
-              equalizerSettings={equalizer}
-              {disabled}
-              onUpdate={commitEqualizer}
-              sampleRate={draftRate}
-            />
-          </div>
-        {/if}
-      </section>
+      </div>
+    </ScopedApplyGroup>
+  </SettingsGroup>
 
-      <!-- Quiet hours -->
-      <section class="space-y-3 py-4" aria-labelledby="{cardId}-quiet">
-        {@render groupHeading(
-          'quietHours',
-          t('settings.audio.quietHours.title'),
-          `${cardId}-quiet`
-        )}
-        <QuietHoursEditor
-          config={quietHours}
-          onChange={commitQuietHours}
-          {disabled}
-          idPrefix="{cardId}-qh"
-          enableLabel={t('settings.audio.quietHours.enableLabel')}
+  <!-- Classifiers -->
+  <SettingsGroup
+    title={t('settings.audio.soundCards.modelLabel')}
+    headingId={modelsHeadingId}
+    field={field('models')}
+    statusId={statusId('models')}
+    class="py-4"
+  >
+    <ModelToggleList
+      models={availableModels}
+      {selectedModels}
+      {defaultModels}
+      sourceName={source.name}
+      sourceSampleRate={capture.draft.sampleRate}
+      loading={listLoading}
+      failed={listFailed}
+      availability={acousticAvailability}
+      labelledBy={modelsHeadingId}
+      {disabled}
+      onChange={models => commit({ models }, 'models')}
+      onRetry={() => void refreshModels()}
+    />
+  </SettingsGroup>
+
+  <!-- Audio filters (collapsed by default) -->
+  <SettingsGroup class="space-y-0 py-4">
+    {#snippet heading()}
+      <button
+        type="button"
+        class="flex items-center gap-2 rounded text-sm font-semibold text-[var(--color-base-content)] transition-colors hover:text-[var(--text-primary)]"
+        aria-expanded={showEqualizer}
+        onclick={() => (showEqualizer = !showEqualizer)}
+      >
+        <ChevronDown
+          class={cn(
+            'size-4 transition-transform duration-200 motion-reduce:transition-none',
+            showEqualizer && 'rotate-180'
+          )}
+          aria-hidden="true"
         />
-      </section>
-    </div>
-  {/if}
-</div>
+        {t('settings.audio.audioFilters.title')}
+      </button>
+      <div class="flex items-center gap-3">
+        <AutoSaveStatus field={field('equalizer')} id={statusId('equalizer')} />
+        {#if equalizer.enabled}
+          <span class={cn(BADGE_CLASS, 'bg-[var(--color-primary)]/15 text-[var(--text-primary)]')}>
+            {t('common.enabled')}
+          </span>
+        {/if}
+      </div>
+    {/snippet}
+    {#if showEqualizer}
+      <div class="mt-3" transition:slide={{ duration: 150 }}>
+        <AudioEqualizerSettings
+          equalizerSettings={equalizer}
+          {disabled}
+          onUpdate={commitEqualizer}
+          sampleRate={capture.draft.sampleRate}
+        />
+      </div>
+    {/if}
+  </SettingsGroup>
+
+  <!-- Quiet hours -->
+  <SettingsGroup
+    title={t('settings.audio.quietHours.title')}
+    headingId="{cardId}-quiet"
+    field={field('quietHours')}
+    statusId={statusId('quietHours')}
+    class="py-4"
+  >
+    <QuietHoursEditor
+      config={quietHours}
+      onChange={commitQuietHours}
+      {disabled}
+      idPrefix="{cardId}-qh"
+      enableLabel={t('settings.audio.quietHours.enableLabel')}
+    />
+  </SettingsGroup>
+</SourceCard>

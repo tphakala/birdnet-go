@@ -3742,7 +3742,8 @@
         "captureApplyHint": "L'acquisizione si riavvia quando applichi.",
         "applyCapture": "Applica e riavvia l'acquisizione",
         "applying": "Applicazione...",
-        "adding": "Aggiunta..."
+        "adding": "Aggiunta...",
+        "captureApplyFailed": "L'acquisizione non è stata modificata. Applica di nuovo o annulla."
       },
       "audioCapture": {
         "title": "Configurazione Scheda Audio",

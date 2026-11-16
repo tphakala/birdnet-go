@@ -6,7 +6,7 @@ import {
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
 import SoundCardManager from './SoundCardManager.svelte';
-import { AUDIO_SOURCES_LIST_FIELD } from './audioSourceFields';
+import { AUDIO_SOURCES_LIST_FIELD } from './sourceFields';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import {
   ADD_SOURCE_KEY,

@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Przechwytywanie uruchomi się ponownie po zastosowaniu.",
         "applyCapture": "Zastosuj i uruchom ponownie przechwytywanie",
         "applying": "Stosowanie...",
-        "adding": "Dodawanie..."
+        "adding": "Dodawanie...",
+        "captureApplyFailed": "Przechwytywanie nie zostało zmienione. Zastosuj ponownie lub anuluj."
       },
       "audioCapture": {
         "title": "Przechwytywanie Audio",

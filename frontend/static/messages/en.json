@@ -3742,7 +3742,8 @@
         "captureApplyHint": "Capture restarts when you apply.",
         "applyCapture": "Apply and restart capture",
         "applying": "Applying...",
-        "adding": "Adding..."
+        "adding": "Adding...",
+        "captureApplyFailed": "Capture was not changed. Apply again or cancel."
       },
       "audioCapture": {
         "title": "Sound Card Configuration",

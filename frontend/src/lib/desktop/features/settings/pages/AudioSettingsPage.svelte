@@ -29,6 +29,7 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
   import SoundCardManager from '$lib/desktop/components/forms/SoundCardManager.svelte';
+  import { AUDIO_SOURCES_FIELD_PREFIX } from '$lib/desktop/components/forms/sourceFields';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -673,6 +674,7 @@
       label: t('settings.audio.tabs.soundCard'),
       icon: Volume2,
       saveMode: 'immediate',
+      autoSaveScope: AUDIO_SOURCES_FIELD_PREFIX,
       content: soundCardTabContent,
     },
     {
