@@ -544,7 +544,7 @@
                   {t('system.importExport.source.manualValidating')}
                 </p>
               {:else if validateStatus === 'invalid'}
-                <p id="manual-path-error" role="alert" class="text-sm text-[var(--color-error)]">
+                <p id="manual-path-error" role="alert" class="text-sm text-[var(--text-error)]">
                   {validateResp?.reason === 'not_found'
                     ? t('system.importExport.source.manualNotFound')
                     : validateResp?.reason === 'permission_denied'
@@ -614,7 +614,7 @@
                       </p>
                     {/if}
                     {#if isUnreadable(cand)}
-                      <p class="text-xs font-medium text-[var(--color-warning)] mt-1">
+                      <p class="text-xs font-medium text-[var(--text-warning)] mt-1">
                         {t('system.importExport.source.unreadableTitle')}
                       </p>
                       <p class="text-xs text-[var(--color-base-content)]/60 mt-0.5">
@@ -987,7 +987,7 @@
         <!-- Done step -->
         <div class="space-y-4 text-center">
           {#if importComplete && !importError && !importCancelled}
-            <CheckCircle2 class="size-12 mx-auto text-[var(--color-success)]" aria-hidden="true" />
+            <CheckCircle2 class="size-12 mx-auto text-[var(--text-success)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.successTitle')}
@@ -1028,7 +1028,7 @@
               </div>
             {/if}
           {:else if importCancelled}
-            <XCircle class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
+            <XCircle class="size-12 mx-auto text-[var(--text-warning)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.cancelledTitle')}
@@ -1045,7 +1045,7 @@
               </p>
             {/if}
           {:else if importError}
-            <XCircle class="size-12 mx-auto text-[var(--color-error)]" aria-hidden="true" />
+            <XCircle class="size-12 mx-auto text-[var(--text-error)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.errorTitle')}
@@ -1053,7 +1053,7 @@
               <p class="text-sm text-[var(--color-base-content)]/70 mt-1">{importError}</p>
             </div>
           {:else if importInterrupted}
-            <Unplug class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
+            <Unplug class="size-12 mx-auto text-[var(--text-warning)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.interruptedTitle')}

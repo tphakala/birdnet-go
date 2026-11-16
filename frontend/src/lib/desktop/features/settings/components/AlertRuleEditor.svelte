@@ -202,20 +202,20 @@
     const colors: Record<string, { bg: string; text: string }> = {
       detection: {
         bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
-        text: 'text-[var(--color-success)]',
+        text: 'text-[var(--text-success)]',
       },
       stream: {
         bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
-        text: 'text-[var(--color-info)]',
+        text: 'text-[var(--text-info)]',
       },
       device: { bg: 'bg-violet-500/10', text: 'text-violet-500' },
       system: {
         bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
-        text: 'text-[var(--color-error)]',
+        text: 'text-[var(--text-error)]',
       },
       integration: {
         bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
-        text: 'text-[var(--color-warning)]',
+        text: 'text-[var(--text-warning)]',
       },
       application: { bg: 'bg-sky-500/10', text: 'text-sky-500' },
     };
@@ -725,7 +725,7 @@
                 aria-label={t('settings.alerts.editor.removeCondition')}
                 onclick={() => removeCondition(index)}
               >
-                <X class="w-3.5 h-3.5 text-[var(--color-error)]" />
+                <X class="w-3.5 h-3.5 text-[var(--text-error)]" />
               </button>
             </div>
           {/each}
@@ -850,7 +850,7 @@
         {#if rule && !rule.built_in && onDelete}
           <button
             type="button"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
             onclick={() => onDelete?.(rule)}
           >
             <Trash2 class="w-3.5 h-3.5" />

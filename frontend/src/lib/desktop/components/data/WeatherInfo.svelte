@@ -155,7 +155,7 @@
   {:else if error}
     <!-- Error state -->
     <div class="py-4" role="alert">
-      <div class="text-[var(--color-error)] flex items-center">
+      <div class="text-[var(--text-error)] flex items-center">
         <XCircle class="size-5 mr-2" />
         <span>{error}</span>
       </div>

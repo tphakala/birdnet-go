@@ -110,7 +110,7 @@
     class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
     role="status"
   >
-    <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+    <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--text-warning)]" />
     <span class="text-[var(--color-base-content)]">{message}</span>
   </div>
 {/snippet}
@@ -140,14 +140,14 @@
         {#if hasBatModel}
           {#if isBatCompatible}
             <span
-              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-success)]/15 text-[var(--text-success)]"
             >
               <CircleCheck class="size-3" />
               {t('settings.audio.streams.test.batCompatible')}
             </span>
           {:else}
             <span
-              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-error)]/15 text-[var(--text-error)]"
             >
               <CircleX class="size-3" />
               {t('settings.audio.streams.test.batIncompatible')}
@@ -171,7 +171,7 @@
   {/if}
 
   {#if testError !== null}
-    <p class="text-xs text-[var(--color-error)]">
+    <p class="text-xs text-[var(--text-error)]">
       {t('settings.audio.streams.test.error')}{testError ? `: ${testError}` : ''}
     </p>
   {/if}

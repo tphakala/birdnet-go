@@ -172,7 +172,7 @@
               <div class="shrink-0">
                 {#if applied}
                   <span
-                    class="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-success)]"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-success)]"
                   >
                     <Check class="size-3.5" />
                     {t('analysis.gallery.optimize.applied')}
@@ -188,7 +188,7 @@
                   <div class="flex flex-col items-end gap-1">
                     {#if failed}
                       <span
-                        class="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-error)]"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-error)]"
                       >
                         <TriangleAlert class="size-3.5" />
                         {t('analysis.gallery.optimize.applyFailed')}

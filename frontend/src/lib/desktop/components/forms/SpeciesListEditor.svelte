@@ -220,7 +220,7 @@
 
   <!-- Unsaved Changes Indicator -->
   {#if hasChanges}
-    <div role="status" class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
+    <div role="status" class="mt-2 text-xs text-[var(--text-info)] flex items-center gap-1">
       <Info class="size-4" />
       <span>{t('settings.actions.unsavedChanges')}</span>
     </div>

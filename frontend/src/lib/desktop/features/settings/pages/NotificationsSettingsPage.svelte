@@ -1356,20 +1356,20 @@
     const colors: Record<string, { bg: string; text: string }> = {
       detection: {
         bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
-        text: 'text-[var(--color-success)]',
+        text: 'text-[var(--text-success)]',
       },
       stream: {
         bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
-        text: 'text-[var(--color-info)]',
+        text: 'text-[var(--text-info)]',
       },
       device: { bg: 'bg-violet-500/10', text: 'text-violet-500' },
       system: {
         bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
-        text: 'text-[var(--color-error)]',
+        text: 'text-[var(--text-error)]',
       },
       integration: {
         bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
-        text: 'text-[var(--color-warning)]',
+        text: 'text-[var(--text-warning)]',
       },
     };
     return (
@@ -1705,23 +1705,23 @@
                           {t('settings.notifications.push.services.ntfy.testConnection')}
                         </button>
                         {#if serviceFormData.ntfyCheckStatus === 'https'}
-                          <span class="text-xs text-[var(--color-success)]"
+                          <span class="text-xs text-[var(--text-success)]"
                             >{t(
                               'settings.notifications.push.services.ntfy.connectionOk.https'
                             )}</span
                           >
                         {:else if serviceFormData.ntfyCheckStatus === 'http'}
-                          <span class="text-xs text-[var(--color-warning)]"
+                          <span class="text-xs text-[var(--text-warning)]"
                             >{t(
                               'settings.notifications.push.services.ntfy.connectionOk.http'
                             )}</span
                           >
                         {:else if serviceFormData.ntfyCheckStatus === 'unreachable'}
-                          <span class="text-xs text-[var(--color-error)]"
+                          <span class="text-xs text-[var(--text-error)]"
                             >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
                           >
                         {:else if serviceFormData.ntfyCheckStatus === 'checkError'}
-                          <span class="text-xs text-[var(--color-warning)]"
+                          <span class="text-xs text-[var(--text-warning)]"
                             >{t('settings.notifications.push.services.ntfy.checkError')}</span
                           >
                         {/if}
@@ -2025,7 +2025,7 @@
 
                   <!-- Service Validation Error -->
                   {#if serviceValidationError}
-                    <p class="text-xs text-[var(--color-error)]">{serviceValidationError}</p>
+                    <p class="text-xs text-[var(--text-error)]">{serviceValidationError}</p>
                   {/if}
 
                   <!-- Provider Name -->
@@ -2183,7 +2183,7 @@
                           <button
                             type="button"
                             onclick={() => deleteProvider(index)}
-                            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={t('settings.notifications.push.providers.deleteButton')}
                             aria-label={t('settings.notifications.push.providers.deleteButton')}
                             disabled={showProviderForm}
@@ -2570,7 +2570,7 @@
                   <span
                     class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {action.target ===
                     'bell'
-                      ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'
+                      ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--text-info)]'
                       : 'bg-violet-500/10 text-violet-500'}"
                   >
                     {#if action.target === 'bell'}

@@ -61,7 +61,7 @@
   {#snippet header({ titleId })}
     <div class="flex items-center gap-4 mb-6">
       <div class="p-3 rounded-full bg-[var(--color-warning)]/10">
-        <AlertTriangle class="size-7 text-[var(--color-warning)]" />
+        <AlertTriangle class="size-7 text-[var(--text-warning)]" />
       </div>
       <h3 id={titleId} class="text-xl font-semibold text-[var(--color-base-content)]">
         {t('system.database.migration.confirmDialog.title')}

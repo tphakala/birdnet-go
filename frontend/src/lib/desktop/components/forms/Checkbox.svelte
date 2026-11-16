@@ -156,7 +156,7 @@
     {#if tooltip}
       <button
         type="button"
-        class="ml-1 text-[var(--color-info)] hover:opacity-80 transition-opacity"
+        class="ml-1 text-[var(--text-info)] hover:opacity-80 transition-opacity"
         onmouseenter={() => (showTooltip = true)}
         onmouseleave={() => (showTooltip = false)}
         onfocus={() => (showTooltip = true)}

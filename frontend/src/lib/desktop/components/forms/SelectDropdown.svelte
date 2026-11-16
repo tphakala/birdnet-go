@@ -571,7 +571,7 @@
       <span class="text-sm font-medium text-[var(--color-base-content)]">
         {label}
         {#if required}
-          <span class="text-[var(--color-error)]">*</span>
+          <span class="text-[var(--text-error)]">*</span>
         {/if}
       </span>
     </label>

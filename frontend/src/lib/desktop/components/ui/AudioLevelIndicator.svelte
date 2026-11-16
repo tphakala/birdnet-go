@@ -753,7 +753,7 @@
                         'w-8 h-8 rounded-full flex items-center justify-center',
                         isInactive(source)
                           ? 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/60'
-                          : 'bg-[var(--color-success)]/20 text-[var(--color-success)]'
+                          : 'bg-[var(--color-success)]/20 text-[var(--text-success)]'
                       )}
                     >
                       <Mic class="size-4" />
@@ -802,8 +802,8 @@
                     class={cn(
                       'inline-flex items-center justify-center size-8 rounded-full shrink-0 transition-colors hover:bg-[var(--color-base-content)]/10',
                       playingSource === source
-                        ? 'text-[var(--color-error)]'
-                        : 'text-[var(--color-success)]'
+                        ? 'text-[var(--text-error)]'
+                        : 'text-[var(--text-success)]'
                     )}
                     aria-label={playingSource === source
                       ? t('media.audio.stopPlayback')

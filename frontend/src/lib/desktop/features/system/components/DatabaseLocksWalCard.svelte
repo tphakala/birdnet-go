@@ -25,7 +25,7 @@
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.busy_timeouts > 0
-            ? 'text-[var(--color-warning)]'
+            ? 'text-[var(--text-warning)]'
             : ''}">{details.busy_timeouts}</span
         >
       </div>

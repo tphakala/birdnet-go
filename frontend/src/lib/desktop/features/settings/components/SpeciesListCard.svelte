@@ -96,19 +96,19 @@
   const colorMap: Record<string, { bg: string; text: string }> = {
     emerald: {
       bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
-      text: 'text-[var(--color-success)]',
+      text: 'text-[var(--text-success)]',
     },
     red: {
       bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
-      text: 'text-[var(--color-error)]',
+      text: 'text-[var(--text-error)]',
     },
     orange: {
       bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
-      text: 'text-[var(--color-warning)]',
+      text: 'text-[var(--text-warning)]',
     },
     blue: {
       bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
-      text: 'text-[var(--color-info)]',
+      text: 'text-[var(--text-info)]',
     },
     teal: { bg: 'bg-teal-500/10', text: 'text-teal-500' },
   };
@@ -416,7 +416,7 @@
               <td class="py-2 px-3 w-12 text-right">
                 <button
                   type="button"
-                  class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--text-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                   onclick={() => onRemove(item)}
                   {disabled}
                   aria-label={t('settings.species.remove') || `Remove ${item}`}

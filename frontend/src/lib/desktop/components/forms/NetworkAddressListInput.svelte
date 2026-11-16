@@ -350,7 +350,7 @@
           {:else if row.duplicate}
             <span class="inline-flex items-center gap-1 text-xs text-muted">
               <TriangleAlert
-                class="size-3.5 shrink-0 text-[var(--color-warning)]"
+                class="size-3.5 shrink-0 text-[var(--text-warning)]"
                 aria-hidden="true"
               />
               {t('forms.networkAddressList.rowDuplicate')}

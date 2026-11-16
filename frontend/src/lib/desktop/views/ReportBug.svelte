@@ -162,7 +162,7 @@
         class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
       >
         {#if copied}
-          <CheckCircle class="size-4 text-[var(--color-success)]" />
+          <CheckCircle class="size-4 text-[var(--text-success)]" />
           {t('reportBug.systemInfo.copied')}
         {:else}
           <ClipboardCopy class="size-4" />
@@ -261,7 +261,7 @@
     <div
       class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] mb-4"
     >
-      <Info class="size-5 shrink-0 text-[var(--color-info)]" />
+      <Info class="size-5 shrink-0 text-[var(--text-info)]" />
       <p class="text-sm text-[var(--color-base-content)] opacity-80">
         {t('reportBug.supportDump.description')}
       </p>

@@ -807,7 +807,7 @@
           <span>{t('common.loading')}</span>
         </div>
       {:else if isStreaming}
-        <div class="flex items-center gap-1 text-sm text-[var(--color-success)]">
+        <div class="flex items-center gap-1 text-sm text-[var(--text-success)]">
           <span class="inline-block size-2 rounded-full bg-[var(--color-success)]"></span>
           <span>{t('spectrogram.page.connected')}</span>
         </div>
@@ -839,7 +839,7 @@
     {#if connectionError}
       <div
         role="alert"
-        class="m-4 flex items-center gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm text-[var(--color-error)]"
+        class="m-4 flex items-center gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm text-[var(--text-error)]"
       >
         <AlertCircle class="size-4 shrink-0" />
         <span>{connectionError}</span>
@@ -905,7 +905,7 @@
   <div
     class="col-span-12 flex flex-col items-center justify-center gap-4 rounded-2xl border border-border-100 bg-[var(--color-base-100)] p-12 shadow-sm"
   >
-    <AlertCircle class="size-8 text-[var(--color-warning)]" />
+    <AlertCircle class="size-8 text-[var(--text-warning)]" />
     <p class="text-center text-[var(--color-base-content)]/70">
       {t('spectrogram.error.accessDenied')}
     </p>

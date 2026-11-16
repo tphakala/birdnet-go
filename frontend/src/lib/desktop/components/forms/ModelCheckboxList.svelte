@@ -119,7 +119,7 @@
           <span class="text-sm text-[var(--color-base-content)]">{model.name}</span>
           {#if belowMin}
             <span
-              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--color-error)]"
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--text-error)]"
             >
               <AlertTriangle class="size-3" />
               {t('settings.audio.soundCards.compatibility.minSampleRate', {
@@ -128,7 +128,7 @@
             </span>
           {:else if belowRecommended}
             <span
-              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--text-warning)]"
             >
               <AlertTriangle class="size-3" />
               {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
@@ -154,7 +154,7 @@
       class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]"
       role="status"
     >
-      <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--color-info)]" aria-hidden="true" />
+      <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--text-info)]" aria-hidden="true" />
       <span class="text-[var(--color-base-content)]">
         <span class="font-medium">{t('settings.audio.models.noneEnabledTitle')}</span>
         {t('settings.audio.models.noneEnabledHelp')}
@@ -173,7 +173,7 @@
       role="status"
     >
       <AlertTriangle
-        class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]"
+        class="size-3.5 shrink-0 mt-0.5 text-[var(--text-warning)]"
         aria-hidden="true"
       />
       <span class="text-[var(--color-base-content)]">
@@ -192,7 +192,7 @@
       class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]"
       role="status"
     >
-      <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--color-info)]" aria-hidden="true" />
+      <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--text-info)]" aria-hidden="true" />
       <span class="text-[var(--color-base-content)]">
         {t('settings.audio.models.noneAvailable')}
         <a
@@ -211,7 +211,7 @@
       class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
       role="status"
     >
-      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--text-warning)]" />
       <span class="text-[var(--color-base-content)]">
         {t('settings.audio.models.perchOnlyWarning')}
       </span>
@@ -221,7 +221,7 @@
       class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]"
       role="status"
     >
-      <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--color-info)]" />
+      <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--text-info)]" />
       <span class="text-[var(--color-base-content)]">
         {t('settings.audio.models.recommendBoth')}
       </span>
@@ -233,7 +233,7 @@
       class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
       role="status"
     >
-      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--text-warning)]" />
       <span class="text-[var(--color-base-content)]">
         {t('settings.audio.streams.batWarning')}
       </span>

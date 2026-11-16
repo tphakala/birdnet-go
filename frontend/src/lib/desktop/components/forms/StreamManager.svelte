@@ -700,7 +700,7 @@
                 <p
                   role="alert"
                   aria-live="assertive"
-                  class="text-xs text-[var(--color-error)] -mt-2"
+                  class="text-xs text-[var(--text-error)] -mt-2"
                 >
                   {nameError}
                 </p>
@@ -723,7 +723,7 @@
                 <p
                   role="alert"
                   aria-live="assertive"
-                  class="text-xs text-[var(--color-error)] -mt-2"
+                  class="text-xs text-[var(--text-error)] -mt-2"
                 >
                   {urlError}
                 </p>

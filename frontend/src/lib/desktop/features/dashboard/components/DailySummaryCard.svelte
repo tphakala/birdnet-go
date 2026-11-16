@@ -58,6 +58,7 @@ Responsive Breakpoints:
     buildSpeciesHourUrl,
   } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { textColorFor } from '$lib/utils/statusTextColor';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { loggers } from '$lib/utils/logger';
   import { LRUCache } from '$lib/utils/LRUCache';
@@ -1099,7 +1100,7 @@ Responsive Breakpoints:
                     {#if noveltyCat === 'lifetime'}
                       <span
                         class="inline-block shrink-0"
-                        style:color={noveltyCategoryColorVar('lifetime')}
+                        style:color={textColorFor(noveltyCategoryColorVar('lifetime'))}
                         title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         <Star class="size-3 fill-current" />
@@ -1107,7 +1108,7 @@ Responsive Breakpoints:
                     {:else if noveltyCat === 'year'}
                       <span
                         class="shrink-0"
-                        style:color={noveltyCategoryColorVar('year')}
+                        style:color={textColorFor(noveltyCategoryColorVar('year'))}
                         title={`First time this year (${item.days_this_year ?? 0} day${(item.days_this_year ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         📅
@@ -1115,7 +1116,7 @@ Responsive Breakpoints:
                     {:else if noveltyCat === 'season'}
                       <span
                         class="shrink-0"
-                        style:color={noveltyCategoryColorVar('season')}
+                        style:color={textColorFor(noveltyCategoryColorVar('season'))}
                         title={`First time this ${item.current_season || 'season'} (${item.days_this_season ?? 0} day${(item.days_this_season ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         🌿
@@ -1123,7 +1124,7 @@ Responsive Breakpoints:
                     {:else if noveltyCat === 'infrequent'}
                       <span
                         class="inline-block shrink-0"
-                        style:color={noveltyCategoryColorVar('infrequent')}
+                        style:color={textColorFor(noveltyCategoryColorVar('infrequent'))}
                         title={t('dashboard.dailySummary.tooltips.infrequent', {
                           days: item.days_since_last_seen ?? 0,
                         })}

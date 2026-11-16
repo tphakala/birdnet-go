@@ -51,7 +51,7 @@
   <div class={cn('relative', className)}>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-lg p-1 relative text-[var(--color-warning)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+      class="inline-flex items-center justify-center rounded-lg p-1 relative text-[var(--text-warning)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
       aria-label={tooltipText}
       title={tooltipText}
     >

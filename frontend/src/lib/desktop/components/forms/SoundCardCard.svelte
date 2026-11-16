@@ -346,7 +346,7 @@
       class="absolute inset-0 z-10 flex items-center rounded-lg bg-[var(--color-base-300)]/95 backdrop-blur-sm px-4"
     >
       <div class="flex items-center gap-3 w-full">
-        <AlertCircle class="size-6 text-[var(--color-error)] flex-shrink-0" />
+        <AlertCircle class="size-6 text-[var(--text-error)] flex-shrink-0" />
         <span id="soundcard-delete-title-{index}" class="sr-only">{t('common.delete')}</span>
         <p
           id="soundcard-delete-desc-{index}"
@@ -383,7 +383,7 @@
           <label class="block py-1" for="soundcard-name-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.soundCards.nameLabel')}
-              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
+              <span class="text-[var(--text-error)] ml-1" aria-hidden="true">*</span>
             </span>
           </label>
           <input
@@ -420,7 +420,7 @@
             menuSize="sm"
           />
           {#if !sampleRateVerified && !sampleRateLoading}
-            <p class="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1">
+            <p class="flex items-center gap-1 text-xs text-[var(--text-warning)] mt-1">
               <AlertTriangle class="size-3" />
               {t('settings.audio.soundCards.sampleRateUnverified')}
             </p>
@@ -431,7 +431,7 @@
             </p>
           {/if}
           {#if editSampleRate > 48000}
-            <p class="flex items-center gap-1 text-xs text-[var(--color-info)] mt-1">
+            <p class="flex items-center gap-1 text-xs text-[var(--text-info)] mt-1">
               <Info class="size-3 shrink-0" />
               {t('settings.audio.soundCards.sampleRateExclusive')}
             </p>
@@ -560,7 +560,7 @@
           <div class="hidden sm:flex items-center gap-1.5">
             {#if source.gain !== 0}
               <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--text-warning)]"
               >
                 {source.gain > 0 ? '+' : ''}{source.gain} dB
               </span>
@@ -569,8 +569,8 @@
               class={cn(
                 'px-2 py-0.5 rounded text-xs font-semibold',
                 modelBadgeIsWarning
-                  ? 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]'
-                  : 'bg-[var(--color-info)]/15 text-[var(--color-info)]'
+                  ? 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
+                  : 'bg-[var(--color-info)]/15 text-[var(--text-info)]'
               )}
               title={modelBadgeTitle}
             >

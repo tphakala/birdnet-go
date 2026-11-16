@@ -456,7 +456,7 @@
             id="playback-denoise-export-precedence"
             class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-base-content)]"
           >
-            <Info class="size-6 shrink-0 text-[var(--color-info)]" aria-hidden="true" />
+            <Info class="size-6 shrink-0 text-[var(--text-info)]" aria-hidden="true" />
             <span>{t('settings.userInterface.audioPlayback.denoiseExportPrecedence')}</span>
           </div>
         {/if}

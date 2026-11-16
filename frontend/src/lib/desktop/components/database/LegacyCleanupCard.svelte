@@ -49,7 +49,7 @@
     {:else if isCompleted}
       <!-- Success state -->
       <div
-        class="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--color-success)] flex items-start gap-3"
+        class="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--text-success)] flex items-start gap-3"
         role="status"
         aria-live="polite"
       >
@@ -135,7 +135,7 @@
 
         <!-- Warning -->
         <div
-          class="p-3 rounded-lg bg-[var(--color-warning)]/10 text-[var(--color-warning)] flex items-start gap-3"
+          class="p-3 rounded-lg bg-[var(--color-warning)]/10 text-[var(--text-warning)] flex items-start gap-3"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -159,7 +159,7 @@
     {:else if status?.exists && !status?.can_cleanup}
       <!-- Cannot cleanup - show reason -->
       <div
-        class="p-3 rounded-lg bg-[var(--color-info)]/10 text-[var(--color-info)] flex items-start gap-3"
+        class="p-3 rounded-lg bg-[var(--color-info)]/10 text-[var(--text-info)] flex items-start gap-3"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

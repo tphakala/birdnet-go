@@ -55,16 +55,16 @@
       ? 'bg-transparent border border-current'
       : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]',
     info: outline
-      ? 'bg-transparent border border-[var(--color-info)] text-[var(--color-info)]'
+      ? 'bg-transparent border border-[var(--color-info)] text-[var(--text-info)]'
       : 'bg-[var(--color-info)] text-[var(--color-info-content)]',
     success: outline
-      ? 'bg-transparent border border-[var(--color-success)] text-[var(--color-success)]'
+      ? 'bg-transparent border border-[var(--color-success)] text-[var(--text-success)]'
       : 'bg-[var(--color-success)] text-[var(--color-success-content)]',
     warning: outline
-      ? 'bg-transparent border border-[var(--color-warning)] text-[var(--color-warning)]'
+      ? 'bg-transparent border border-[var(--color-warning)] text-[var(--text-warning)]'
       : 'bg-[var(--color-warning)] text-[var(--color-warning-content)]',
     error: outline
-      ? 'bg-transparent border border-[var(--color-error)] text-[var(--color-error)]'
+      ? 'bg-transparent border border-[var(--color-error)] text-[var(--text-error)]'
       : 'bg-[var(--color-error)] text-[var(--color-error-content)]',
     ghost: 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]',
   });

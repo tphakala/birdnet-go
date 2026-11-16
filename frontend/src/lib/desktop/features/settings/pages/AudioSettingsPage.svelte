@@ -816,7 +816,7 @@
           id="denoise-requires-recording"
           class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-base-content)] mb-4"
         >
-          <Info class="size-6 shrink-0 text-[var(--color-info)]" aria-hidden="true" />
+          <Info class="size-6 shrink-0 text-[var(--text-info)]" aria-hidden="true" />
           <span>{t('settings.audio.exportDenoise.requiresRecording')}</span>
         </div>
       {/if}
@@ -904,7 +904,7 @@
       {#if !settings.audio.export.enabled}
         <!-- Dependency notice when recording is disabled -->
         <div
-          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)] mb-4"
+          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--text-info)] mb-4"
         >
           <Info class="size-6 shrink-0" />
           <span>{t('settings.audio.audioNormalization.requiresRecording')}</span>

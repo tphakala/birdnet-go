@@ -230,25 +230,25 @@
       </p>
       <ul class="mt-2 list-none pl-0 space-y-1">
         <li class="flex items-center gap-2">
-          <div class="w-5 h-5 text-[var(--color-success)]">
+          <div class="w-5 h-5 text-[var(--text-success)]">
             <CircleCheck class="size-5" />
           </div>
           {t('about.bugReports')}
         </li>
         <li class="flex items-center gap-2">
-          <div class="w-5 h-5 text-[var(--color-success)]">
+          <div class="w-5 h-5 text-[var(--text-success)]">
             <CircleCheck class="size-5" />
           </div>
           {t('about.featureSuggestions')}
         </li>
         <li class="flex items-center gap-2">
-          <div class="w-5 h-5 text-[var(--color-success)]">
+          <div class="w-5 h-5 text-[var(--text-success)]">
             <CircleCheck class="size-5" />
           </div>
           {t('about.testing')}
         </li>
         <li class="flex items-center gap-2">
-          <div class="w-5 h-5 text-[var(--color-success)]">
+          <div class="w-5 h-5 text-[var(--text-success)]">
             <CircleCheck class="size-5" />
           </div>
           {t('about.documentation')}

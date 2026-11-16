@@ -825,7 +825,7 @@
             <div
               class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
             >
-              <TerminalSquare class="w-4 h-4 text-[var(--color-success)]" />
+              <TerminalSquare class="w-4 h-4 text-[var(--text-success)]" />
             </div>
             <span
               class="text-xs font-semibold uppercase tracking-wider"
@@ -904,7 +904,7 @@
                   ></span>
                   {t('terminal.themeDark')}
                   {#if activeThemeId === 'dark'}
-                    <Check class="w-3 h-3 ml-auto text-[var(--color-success)]" />
+                    <Check class="w-3 h-3 ml-auto text-[var(--text-success)]" />
                   {/if}
                 </button>
                 <button
@@ -920,7 +920,7 @@
                   ></span>
                   {t('terminal.themeLight')}
                   {#if activeThemeId === 'light'}
-                    <Check class="w-3 h-3 ml-auto text-[var(--color-success)]" />
+                    <Check class="w-3 h-3 ml-auto text-[var(--text-success)]" />
                   {/if}
                 </button>
                 <button
@@ -936,7 +936,7 @@
                   ></span>
                   {t('terminal.themeHighContrast')}
                   {#if activeThemeId === 'highContrast'}
-                    <Check class="w-3 h-3 ml-auto text-[var(--color-success)]" />
+                    <Check class="w-3 h-3 ml-auto text-[var(--text-success)]" />
                   {/if}
                 </button>
               </div>
@@ -952,7 +952,7 @@
             aria-label={t('terminal.copySelection')}
           >
             {#if isCopied}
-              <Check class="w-3.5 h-3.5 text-[var(--color-success)]" />
+              <Check class="w-3.5 h-3.5 text-[var(--text-success)]" />
             {:else}
               <Copy class="w-3.5 h-3.5" />
             {/if}

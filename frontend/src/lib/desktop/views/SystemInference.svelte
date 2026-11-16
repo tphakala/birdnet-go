@@ -544,10 +544,7 @@
   {#if loading}
     <InferenceSkeleton />
   {:else if error && !snapshot}
-    <div
-      role="alert"
-      class="p-4 rounded-lg bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-    >
+    <div role="alert" class="p-4 rounded-lg bg-red-100 dark:bg-red-900/30 text-[var(--text-error)]">
       {error}
     </div>
   {:else if snapshot}
@@ -869,13 +866,16 @@
                 <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
                 <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
               {:else if !vad.available}
-                <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                <TriangleAlert
+                  class="w-3 h-3 shrink-0 text-[var(--text-warning)]"
+                  aria-hidden="true"
+                />
                 <span class="text-xs text-[var(--text-warning)]"
                   >{t('system.inference.vad.unavailable')}</span
                 >
               {:else if vad.loaded}
                 <Activity
-                  class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
+                  class="w-3 h-3 shrink-0 text-[var(--text-success)] animate-pulse motion-reduce:animate-none"
                   aria-hidden="true"
                 />
                 <span class="text-xs text-[var(--text-success)]"
@@ -1059,7 +1059,10 @@
                     role="status"
                     title={t('system.inference.sourcesDegradedTooltip')}
                   >
-                    <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                    <TriangleAlert
+                      class="w-3 h-3 shrink-0 text-[var(--text-warning)]"
+                      aria-hidden="true"
+                    />
                     <span class="text-xs font-medium text-[var(--text-warning)]">
                       {t('system.inference.sourcesDegraded', {
                         count: downCount,
@@ -1080,8 +1083,8 @@
                     title={failingHelp}
                     aria-describedby={`model-failing-help-${model.id}`}
                   >
-                    <CircleX class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
-                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                    <CircleX class="w-3 h-3 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
+                    <span class="text-xs font-medium text-[var(--text-error)]"
                       >{t('system.inference.modelFailing')}</span
                     >
                   </span>
@@ -1094,7 +1097,7 @@
                     aria-label={t('system.inference.activityPaused')}
                     title={t('system.inference.pausedScheduleHelp')}
                   >
-                    <Pause class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                    <Pause class="w-3 h-3 shrink-0 text-[var(--text-warning)]" aria-hidden="true" />
                     <span class="text-xs text-[var(--text-warning)]">
                       {t('system.inference.paused')}{#if model.scheduleLabel}<span
                           class="text-muted">&nbsp;({model.scheduleLabel})</span
@@ -1116,8 +1119,11 @@
                     aria-label={t('system.inference.modelNotAnalyzingTooltip')}
                     title={t('system.inference.modelNotAnalyzingTooltip')}
                   >
-                    <TriangleAlert class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
-                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                    <TriangleAlert
+                      class="w-3 h-3 shrink-0 text-[var(--text-error)]"
+                      aria-hidden="true"
+                    />
+                    <span class="text-xs font-medium text-[var(--text-error)]"
                       >{t('system.inference.sourceNotRunning')}</span
                     >
                   </span>
@@ -1134,7 +1140,7 @@
                   >
                     {#if isActive}
                       <Activity
-                        class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
+                        class="w-3 h-3 shrink-0 text-[var(--text-success)] animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
                       <span class="text-xs text-[var(--text-success)]"
@@ -1153,7 +1159,7 @@
                      a touch device, so the reason and the next step are spelled out. -->
                 <p
                   id={`model-failing-help-${model.id}`}
-                  class="text-xs text-red-600 dark:text-red-400"
+                  class="text-xs text-[var(--text-error)]"
                   data-testid="model-failing-help"
                 >
                   {failingHelp}
@@ -1459,7 +1465,7 @@
                   {#if anySourceDown}
                     <p
                       id={notAnalyzingHelpId}
-                      class="text-xs text-red-600 dark:text-red-400 mt-1.5 leading-snug"
+                      class="text-xs text-[var(--text-error)] mt-1.5 leading-snug"
                     >
                       {t('system.inference.sourceNotRunningTooltip')}
                     </p>

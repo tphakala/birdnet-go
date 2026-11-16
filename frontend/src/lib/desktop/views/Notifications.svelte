@@ -377,10 +377,10 @@
   function getNotificationIconClass(notification) {
     const baseClass = 'w-8 h-8 rounded-full flex items-center justify-center';
     const typeClasses = {
-      error: 'bg-[var(--color-error)]/20 text-[var(--color-error)]',
-      warning: 'bg-[var(--color-warning)]/20 text-[var(--color-warning)]',
-      info: 'bg-[var(--color-info)]/20 text-[var(--color-info)]',
-      detection: 'bg-[var(--color-success)]/20 text-[var(--color-success)]',
+      error: 'bg-[var(--color-error)]/20 text-[var(--text-error)]',
+      warning: 'bg-[var(--color-warning)]/20 text-[var(--text-warning)]',
+      info: 'bg-[var(--color-info)]/20 text-[var(--text-info)]',
+      detection: 'bg-[var(--color-success)]/20 text-[var(--text-success)]',
       system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
     };
     return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-[var(--color-base-300)]')}`;
@@ -698,7 +698,7 @@
                     {/if}
                     <button
                       onclick={e => deleteNotification(notification.id, e)}
-                      class="p-1 text-[var(--color-error)] hover:text-[var(--color-error-hover)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
+                      class="p-1 text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
                       aria-label={t('notifications.actions.delete')}
                     >
                       <Trash2 class="size-3" />

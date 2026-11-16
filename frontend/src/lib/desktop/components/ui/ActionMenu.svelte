@@ -249,11 +249,11 @@
                 role="menuitem"
               >
                 <div class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-[var(--color-success)]" />
+                  <CircleCheck class="size-4 text-[var(--text-success)]" />
                   <span>{t('dashboard.recentDetections.actions.markCorrect')}</span>
                   {#if detection.verified === 'correct'}
                     <span
-                      class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                      class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--text-success)]"
                       >✓</span
                     >
                   {/if}
@@ -272,11 +272,11 @@
                 role="menuitem"
               >
                 <div class="flex items-center gap-2">
-                  <CircleX class="size-4 text-[var(--color-error)]" />
+                  <CircleX class="size-4 text-[var(--text-error)]" />
                   <span>{t('dashboard.recentDetections.actions.markFalsePositive')}</span>
                   {#if detection.verified === 'false_positive'}
                     <span
-                      class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                      class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--text-error)]"
                       >✗</span
                     >
                   {/if}
@@ -302,12 +302,12 @@
                 <span>{t('dashboard.recentDetections.actions.review')}</span>
                 {#if detection.verified === 'correct'}
                   <span
-                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--text-success)]"
                     >✓</span
                   >
                 {:else if detection.verified === 'false_positive'}
                   <span
-                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--text-error)]"
                     >✗</span
                   >
                 {/if}
@@ -392,7 +392,7 @@
             <button
               onclick={() => handleAction(onDelete)}
               class={cn(
-                'text-sm w-full text-left px-3 py-2 rounded-md text-[var(--color-error)] transition-colors',
+                'text-sm w-full text-left px-3 py-2 rounded-md text-[var(--text-error)] transition-colors',
                 variant === 'overlay'
                   ? 'hover:bg-[var(--color-error)]/20'
                   : 'hover:bg-[var(--color-error)]/10'

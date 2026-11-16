@@ -115,7 +115,7 @@
 >
   {#snippet icon()}
     <div class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]">
-      <Bird class="w-4 h-4 text-[var(--color-success)]" />
+      <Bird class="w-4 h-4 text-[var(--text-success)]" />
     </div>
   {/snippet}
 

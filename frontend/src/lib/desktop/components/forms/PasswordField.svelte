@@ -132,16 +132,16 @@
 
     if (score <= 1) {
       level = 'weak';
-      color = 'text-[var(--color-error)]';
+      color = 'text-[var(--text-error)]';
     } else if (score === 2) {
       level = 'fair';
-      color = 'text-[var(--color-warning)]';
+      color = 'text-[var(--text-warning)]';
     } else if (score === 3) {
       level = 'good';
-      color = 'text-[var(--color-info)]';
+      color = 'text-[var(--text-info)]';
     } else {
       level = 'strong';
-      color = 'text-[var(--color-success)]';
+      color = 'text-[var(--text-success)]';
     }
 
     return { score, level, color, feedback };
@@ -165,7 +165,7 @@
       <span class="label-text">
         {label}
         {#if required}
-          <span class="text-[var(--color-error)]">*</span>
+          <span class="text-[var(--text-error)]">*</span>
         {/if}
       </span>
     </label>
@@ -187,7 +187,7 @@
           >{'●'.repeat(8)}</span
         >
         <span
-          class="ml-auto text-xs font-medium text-[var(--color-success)] whitespace-nowrap select-none"
+          class="ml-auto text-xs font-medium text-[var(--text-success)] whitespace-nowrap select-none"
           >{t('forms.labels.secretSet')}</span
         >
       </div>

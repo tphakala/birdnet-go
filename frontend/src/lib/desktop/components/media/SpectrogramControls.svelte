@@ -217,7 +217,7 @@
       onclick={onAudioOutputToggle}
       class="rounded p-1.5 transition-colors {audioOutput
         ? 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
-        : 'bg-[var(--color-error)]/20 text-[var(--color-error)]'}"
+        : 'bg-[var(--color-error)]/20 text-[var(--text-error)]'}"
       aria-label={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
       title={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
     >

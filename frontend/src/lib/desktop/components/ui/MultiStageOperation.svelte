@@ -29,11 +29,11 @@
   function getStatusColor(status: Stage['status']): string {
     switch (status) {
       case 'completed':
-        return 'text-[var(--color-success)]';
+        return 'text-[var(--text-success)]';
       case 'error':
-        return 'text-[var(--color-error)]';
+        return 'text-[var(--text-error)]';
       case 'in_progress':
-        return 'text-[var(--color-info)]';
+        return 'text-[var(--text-info)]';
       case 'skipped':
         return 'text-[var(--color-base-content)]/60';
       default:
@@ -142,7 +142,7 @@
                   class={cn(
                     'text-sm mt-2',
                     stage.status === 'error'
-                      ? 'text-[var(--color-error)]'
+                      ? 'text-[var(--text-error)]'
                       : 'text-[var(--color-base-content)]/60'
                   )}
                 >
@@ -150,7 +150,7 @@
                 </p>
               {/if}
               {#if stage.error && stage.error !== stage.message}
-                <p class="text-sm mt-1 text-[var(--color-error)]">
+                <p class="text-sm mt-1 text-[var(--text-error)]">
                   <strong>Error:</strong>
                   {stage.error}
                 </p>
@@ -203,7 +203,7 @@
                 class={cn(
                   'text-xs mt-0.5',
                   stage.status === 'error'
-                    ? 'text-[var(--color-error)]'
+                    ? 'text-[var(--text-error)]'
                     : 'text-[var(--color-base-content)]/60'
                 )}
               >
@@ -211,7 +211,7 @@
               </div>
             {/if}
             {#if stage.error && stage.error !== stage.message}
-              <div class="text-xs mt-0.5 text-[var(--color-error)]">
+              <div class="text-xs mt-0.5 text-[var(--text-error)]">
                 {stage.error}
               </div>
             {/if}

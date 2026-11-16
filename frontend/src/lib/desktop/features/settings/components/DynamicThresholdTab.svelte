@@ -301,7 +301,7 @@
       >
         <div class="flex items-center gap-2 mb-1.5">
           <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]">
-            <TrendingDown class="w-3.5 h-3.5 text-[var(--color-warning)]" />
+            <TrendingDown class="w-3.5 h-3.5 text-[var(--text-warning)]" />
           </div>
           <span class="text-xs font-medium text-muted"
             >{t('settings.species.dynamicThreshold.stats.atMinimum')}</span
@@ -317,7 +317,7 @@
       >
         <div class="flex items-center gap-2 mb-1.5">
           <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]">
-            <Gauge class="w-3.5 h-3.5 text-[var(--color-success)]" />
+            <Gauge class="w-3.5 h-3.5 text-[var(--text-success)]" />
           </div>
           <span class="text-xs font-medium text-muted"
             >{t('settings.species.dynamicThreshold.stats.minThreshold')}</span
@@ -333,7 +333,7 @@
       >
         <div class="flex items-center gap-2 mb-1.5">
           <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
-            <Clock class="w-3.5 h-3.5 text-[var(--color-info)]" />
+            <Clock class="w-3.5 h-3.5 text-[var(--text-info)]" />
           </div>
           <span class="text-xs font-medium text-muted"
             >{t('settings.species.dynamicThreshold.stats.validityPeriod')}</span
@@ -533,7 +533,7 @@
                   {#if threshold.isActive}
                     <span class="text-xs font-medium">{getTimeRemaining(threshold.expiresAt)}</span>
                   {:else}
-                    <span class="text-xs font-medium text-[var(--color-warning)]"
+                    <span class="text-xs font-medium text-[var(--text-warning)]"
                       >{t('settings.species.dynamicThreshold.expired')}</span
                     >
                   {/if}
@@ -560,7 +560,7 @@
                   {:else}
                     <button
                       type="button"
-                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)]"
+                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--text-error)]"
                       onclick={() => (resetConfirmSpecies = threshold.speciesName)}
                       title={t('settings.species.dynamicThreshold.resetSpecies')}
                       aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
@@ -662,7 +662,7 @@
       class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-lg p-6 max-w-md mx-4"
     >
       <h3 id="reset-modal-title" class="font-bold text-lg flex items-center gap-2">
-        <AlertTriangle class="size-5 text-[var(--color-warning)]" />
+        <AlertTriangle class="size-5 text-[var(--text-warning)]" />
         {t('settings.species.dynamicThreshold.resetAllConfirm.title')}
       </h3>
       <p class="text-sm text-muted mt-3">

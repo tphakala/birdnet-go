@@ -85,11 +85,11 @@
 
   // Status color classes
   const statusColors: Record<string, string> = {
-    passed: 'text-[var(--color-success)]',
-    failed: 'text-[var(--color-error)]',
-    warning: 'text-[var(--color-warning)]',
+    passed: 'text-[var(--text-success)]',
+    failed: 'text-[var(--text-error)]',
+    warning: 'text-[var(--text-warning)]',
     skipped: 'text-[var(--color-base-content)]/50',
-    error: 'text-[var(--color-error)]',
+    error: 'text-[var(--text-error)]',
   };
 
   // Background colors for status badges
@@ -192,7 +192,7 @@
     <div class="pt-2 border-t border-[var(--color-base-200)]">
       {#if prerequisites.can_start_migration}
         <div
-          class="flex items-center gap-2 text-sm text-[var(--color-success)]"
+          class="flex items-center gap-2 text-sm text-[var(--text-success)]"
           role="status"
           aria-live="polite"
         >
@@ -201,7 +201,7 @@
         </div>
       {:else}
         <div
-          class="flex items-center gap-2 text-sm text-[var(--color-error)]"
+          class="flex items-center gap-2 text-sm text-[var(--text-error)]"
           role="alert"
           aria-live="assertive"
         >
@@ -215,7 +215,7 @@
       {/if}
       {#if prerequisites.warnings > 0}
         <div
-          class="flex items-center gap-2 text-sm text-[var(--color-warning)] mt-1"
+          class="flex items-center gap-2 text-sm text-[var(--text-warning)] mt-1"
           role="status"
           aria-live="polite"
         >
