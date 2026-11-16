@@ -7,7 +7,9 @@
  * keeps one status per field for the AutoSaveStatus indicator (saving, saved or
  * an error with its reason). Timing lives here, the data safety rules (queue,
  * If-Match, taking back a refused value, the server winning a conflict) live in
- * the store.
+ * the store. A field owns the paths it committed until a request that carried
+ * those commits reports on them; overlapping requests each judge only their own
+ * commits.
  */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { t } from '$lib/i18n';
@@ -64,8 +66,14 @@ interface SectionState {
 }
 
 const statuses = new SvelteMap<string, AutoSaveFieldStatus>();
-/** Leaf path keys (JSON.stringify of the path) each field has staged. */
-const fieldPaths = new Map<string, { section: SettingsSectionName; keys: Set<string> }>();
+/**
+ * Leaf path keys (JSON.stringify of the path) each field owns, each with the
+ * sequence number of the field's latest commit of it. A path is owned from its
+ * commit until a result that carried that commit accounts for it; a result is
+ * judged only on the paths whose sequence number it saw (see judgePaths).
+ */
+const fieldPaths = new Map<string, { section: SettingsSectionName; keys: Map<string, number> }>();
+let commitSeq = 0;
 const sections = new Map<SettingsSectionName, SectionState>();
 const savedTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** Mounted indicators per field (registerAutoSaveField). */
@@ -195,11 +203,24 @@ function fieldsOwning(section: SettingsSectionName, paths: readonly (readonly st
   const keys = new Set(paths.map(pathKey));
   const owners: string[] = [];
   for (const [field, owned] of fieldPaths) {
-    if (owned.section === section && [...owned.keys].some(key => keys.has(key))) {
+    if (owned.section === section && [...owned.keys.keys()].some(key => keys.has(key))) {
       owners.push(field);
     }
   }
   return owners;
+}
+
+/**
+ * Forgets some owned paths of a field. Returns true when the field owns none
+ * afterwards (its entry is removed); false while a newer commit still owns paths.
+ */
+function releasePaths(field: string, keys: Iterable<string>): boolean {
+  const owned = fieldPaths.get(field);
+  if (!owned) return true;
+  for (const key of keys) owned.keys.delete(key);
+  if (owned.keys.size > 0) return false;
+  fieldPaths.delete(field);
+  return true;
 }
 
 /** Gives a field an error and forgets its staged paths, so a later result cannot overwrite it. */
@@ -208,17 +229,17 @@ function failField(field: string, message: string): void {
   setStatus(field, { state: 'error', message });
 }
 
-function markChangedElsewhere(fields: Iterable<string>): void {
-  for (const field of fields) {
-    failField(field, t('settings.autoSave.changedElsewhere'));
-  }
-}
-
 function ensureDropSubscription(): void {
   if (unsubscribeDrops) return;
   unsubscribeDrops = settingsActions.onStagedEditsDropped(edits => {
     for (const { section, path } of edits) {
-      markChangedElsewhere(fieldsOwning(section, [path]));
+      // Only the dropped path leaves the field; a field with a newer path still staged
+      // keeps it, and that path's own result decides the status.
+      for (const field of fieldsOwning(section, [path])) {
+        if (releasePaths(field, [pathKey(path)])) {
+          setStatus(field, { state: 'error', message: t('settings.autoSave.changedElsewhere') });
+        }
+      }
     }
   });
 }
@@ -228,37 +249,94 @@ function flushOnPagehide(): void {
   void flushAutoSaves();
 }
 
-function ensurePagehideFlush(): void {
+function ensureHideFlush(): void {
   if (typeof window !== 'undefined') window.addEventListener('pagehide', flushOnPagehide);
 }
 
-/** Gives each field of a finished request its final status. */
-function applyResult(
-  section: SettingsSectionName,
-  fields: readonly string[],
-  result: StagedSaveResult
-): void {
-  const state = sectionState(section);
-  const saved = new Set(result.saved.map(pathKey));
-  const failed = new Set(result.failed.map(pathKey));
-  const dropped = new Set(result.dropped.map(pathKey));
-  for (const field of fields) {
+/** What a finished request reported, as path keys. */
+interface RequestOutcome {
+  saved: Set<string>;
+  failed: Set<string>;
+  dropped: Set<string>;
+  /** The save ran into an error: paths it did not save are refused. */
+  error?: unknown;
+  hasError: boolean;
+  /** A staged path is still waiting. */
+  remaining: boolean;
+}
+
+function outcomeOf(result: StagedSaveResult): RequestOutcome {
+  return {
+    saved: new Set(result.saved.map(pathKey)),
+    failed: new Set(result.failed.map(pathKey)),
+    dropped: new Set(result.dropped.map(pathKey)),
+    error: result.error,
+    hasError: result.error !== undefined,
+    remaining: result.remaining,
+  };
+}
+
+/**
+ * Gives each field of a finished request its final status, judging only the
+ * paths whose commit the request carried: a path committed again since the
+ * request started (a newer sequence number) is left to the request that carries
+ * the newer value, with its ownership and the field's status untouched. Judged
+ * paths leave the field's ownership, so a later result never judges them again.
+ * A field whose judged paths a not-done result left staged is returned as stalled
+ * and keeps those paths.
+ */
+function judgePaths(
+  sent: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  outcome: RequestOutcome
+): string[] {
+  const stalled: string[] = [];
+  for (const [field, sentKeys] of sent) {
     const owned = fieldPaths.get(field);
     if (!owned) continue; // already marked by the dropped-edit listener
-    const keys = [...owned.keys];
-    if (keys.some(key => dropped.has(key))) {
-      markChangedElsewhere([field]);
+    const judged = [...sentKeys]
+      .filter(([key, seq]) => owned.keys.get(key) === seq)
+      .map(([key]) => key);
+    if (judged.length === 0) continue;
+    const dropped = judged.some(key => outcome.dropped.has(key));
+    const refused =
+      judged.some(key => outcome.failed.has(key)) ||
+      (outcome.hasError && !judged.every(key => outcome.saved.has(key)));
+    const unsent = judged.filter(
+      key => !outcome.saved.has(key) && !outcome.failed.has(key) && !outcome.dropped.has(key)
+    );
+    if (!dropped && !refused && outcome.remaining && unsent.length > 0) {
+      releasePaths(
+        field,
+        judged.filter(key => !unsent.includes(key))
+      );
+      stalled.push(field);
       continue;
     }
-    // A field committed again while this request ran waits for the next one.
-    if (state.pending.has(field)) continue;
-    fieldPaths.delete(field);
-    const refused =
-      keys.some(key => failed.has(key)) ||
-      (result.error !== undefined && !keys.every(key => saved.has(key)));
-    setStatus(field, refused ? { state: 'error', message: failureMessage(result.error) } : SAVED);
+    if (!releasePaths(field, judged)) continue; // a newer commit decides the status
+    if (dropped) {
+      setStatus(field, { state: 'error', message: t('settings.autoSave.changedElsewhere') });
+    } else {
+      setStatus(
+        field,
+        refused ? { state: 'error', message: failureMessage(outcome.error) } : SAVED
+      );
+    }
   }
+  return stalled;
 }
+
+/** The paths each field of a request owns, with their commit sequence numbers. */
+function snapshotOwned(fields: readonly string[]): Map<string, Map<string, number>> {
+  const sent = new Map<string, Map<string, number>>();
+  for (const field of fields) {
+    const owned = fieldPaths.get(field);
+    if (owned) sent.set(field, new Map(owned.keys));
+  }
+  return sent;
+}
+
+/** One more request for a stalled path before it counts as not saved. */
+const MAX_STALLED_RETRIES = 1;
 
 /** Clears the rerun flags; a function so they are read afresh after the request. */
 function clearRerun(state: SectionState): void {
@@ -281,21 +359,25 @@ function cancelDebounce(state: SectionState): void {
  */
 async function runFlush(section: SettingsSectionName): Promise<void> {
   const state = sectionState(section);
+  let stalledRetries = 0;
   try {
     for (;;) {
       clearRerun(state);
-      const fields = [...state.pending];
+      const sent = snapshotOwned([...state.pending]);
       state.pending.clear();
       let result: StagedSaveResult;
       try {
         result = await settingsActions.saveStagedSection(section);
       } catch (error) {
         logger.error('Auto save request failed:', error);
-        for (const field of fields) {
-          // A field committed again during the request waits for the next one.
-          if (state.pending.has(field)) continue;
-          failField(field, failureMessage(error));
-        }
+        judgePaths(sent, {
+          saved: new Set(),
+          failed: new Set([...sent.values()].flatMap(keys => [...keys.keys()])),
+          dropped: new Set(),
+          error,
+          hasError: true,
+          remaining: false,
+        });
         if (state.urgent) {
           cancelDebounce(state);
           continue;
@@ -303,9 +385,21 @@ async function runFlush(section: SettingsSectionName): Promise<void> {
         if (state.rerun && state.timer === null) continue;
         return;
       }
-      applyResult(section, fields, result);
+      const stalled = judgePaths(sent, outcomeOf(result));
+      if (stalled.length === 0) {
+        stalledRetries = 0;
+      } else if (stalledRetries < MAX_STALLED_RETRIES) {
+        stalledRetries++;
+        for (const field of stalled) state.pending.add(field);
+      } else {
+        for (const field of stalled) {
+          // A field committed again meanwhile is judged by the next request.
+          if (!state.pending.has(field)) failField(field, failureMessage(undefined));
+        }
+        stalledRetries = 0;
+      }
       const progressed = result.saved.length + result.failed.length + result.dropped.length > 0;
-      const wantsMore = result.remaining && progressed;
+      const wantsMore = state.pending.size > 0 || (result.remaining && progressed);
       // A commit without a delay goes out now, carrying a debounced value that
       // arrived after it; a debounced commit alone keeps waiting for its quiet time.
       if (state.urgent) {
@@ -357,11 +451,11 @@ export function commitSetting<S extends SettingsSectionName>(
     return;
   }
   ensureDropSubscription();
-  ensurePagehideFlush();
+  ensureHideFlush();
 
-  const owned = fieldPaths.get(field) ?? { section, keys: new Set<string>() };
+  const owned = fieldPaths.get(field) ?? { section, keys: new Map<string, number>() };
   for (const path of leafPaths(withoutServerOwnedKeys(section, partial))) {
-    owned.keys.add(pathKey(path));
+    owned.keys.set(pathKey(path), ++commitSeq);
   }
   fieldPaths.set(field, owned);
 

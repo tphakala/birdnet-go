@@ -41,6 +41,12 @@ const source = (extra: Partial<AudioSourceConfig> = {}): AudioSourceConfig => ({
   ...extra,
 });
 
+/** The leaf paths of an equalizer committed as { enabled, filters }. */
+const EQ_PATHS = [
+  ['equalizer', 'enabled'],
+  ['equalizer', 'filters'],
+];
+
 /** A successful save of the given paths of the audio section. */
 const saved = (...paths: string[][]): StagedSaveResult => ({ ...OK, saved: paths });
 
@@ -345,14 +351,92 @@ describe('settings auto save engine', () => {
     expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
   });
 
-  it('does not loop on a result that is not done but made no progress', async () => {
+  it('retries once and then shows an error for a staged path a not-done result did not carry', async () => {
     store.saveStagedSection.mockResolvedValue({ ...OK, remaining: true });
 
     commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:models')).toEqual({
+      state: 'error',
+      message: 'settings.autoSave.failed',
+    });
     expect(autoSaveBusy()).toBe(false);
+  });
+
+  it('shows Saved when the retry of a stalled path carries it', async () => {
+    store.saveStagedSection
+      .mockResolvedValueOnce({ ...OK, remaining: true })
+      .mockResolvedValueOnce(saved(['sources']));
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:models').state).toBe('saved');
+  });
+
+  it('keeps ownership of a newer path when the listener drops an older path of the same field', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(saved(...EQ_PATHS));
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:all' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { equalizer: { enabled: true, filters: [] } }, { field: 'audio:a:all' });
+
+    dropListener?.([{ section: 'audio', path: ['sources'] }]);
+    first.resolve({ ...OK, dropped: [['sources']], remaining: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:all').state).toBe('saved');
+  });
+
+  it('does not judge a path an earlier result already saved when a later result lists only the newer one', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise).mockResolvedValueOnce({
+      ...saved(...EQ_PATHS),
+      error: new Error('late step failed'),
+    });
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:all' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { equalizer: { enabled: true, filters: [] } }, { field: 'audio:a:all' });
+
+    first.resolve({ ...saved(['sources']), remaining: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+    expect(autoSaveStatus('audio:a:all').state).toBe('saved');
+  });
+
+  it('ignores an older dropped outcome of a path the field committed again during the request', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(saved(['sources']));
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:models' });
+    commitSetting(
+      'audio',
+      { equalizer: { enabled: true, filters: [] } },
+      { field: 'audio:a:equalizer' }
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    dropListener?.([{ section: 'audio', path: ['sources'] }]);
+    commitSetting('audio', { sources: [source({ models: ['x'] })] }, { field: 'audio:a:models' });
+    first.resolve({
+      ...OK,
+      saved: EQ_PATHS,
+      dropped: [['sources']],
+      remaining: true,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(autoSaveStatus('audio:a:models').state).toBe('saved');
+    expect(autoSaveStatus('audio:a:equalizer').state).toBe('saved');
+    expect(autoSaveFailures()).toBe(0);
   });
 
   it('shows Saved when the section had nothing to send', async () => {
