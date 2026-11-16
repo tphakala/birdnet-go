@@ -33,6 +33,9 @@ const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const STATUS = '(?:success|warning|error|info)';
 
+/** Fewer scanned files than this means the directory walk broke, not that the app shrank. */
+const MIN_SCANNED_FILES = 400;
+
 const RULES: RegExp[] = [
   new RegExp(
     String.raw`(?<![\w-])text-\[(?!color:)[^\]]*?var\(--color-${STATUS}(?:-hover)?\s*[,)][^\]]*\]`,
@@ -213,7 +216,7 @@ describe('status-text-tokens', () => {
   });
 
   it('scans the app sources', () => {
-    expect(scannedFiles().length).toBeGreaterThan(400);
+    expect(scannedFiles().length).toBeGreaterThan(MIN_SCANNED_FILES);
   });
 
   it('colours no text with a status fill outside the listed exceptions', () => {
