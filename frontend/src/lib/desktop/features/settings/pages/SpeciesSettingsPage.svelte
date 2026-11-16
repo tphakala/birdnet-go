@@ -1462,12 +1462,11 @@
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm p-4"
       >
         <div
-          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
+          class="flex items-center gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
         >
           <p class="text-sm text-[var(--text-error)]">{activeSpeciesState.error}</p>
           <Button
             size="md"
-            className="mt-2"
             onclick={() => {
               const birdnetData = store.formData?.birdnet;
               if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
