@@ -4,8 +4,9 @@
  * the group by the error message.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, screen } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
+import { renderTyped } from '../../../../../test/render-helpers';
 
 const store = vi.hoisted(() => ({
   stageSectionEdit: vi.fn(),
@@ -25,7 +26,7 @@ const FIELD = 'audio:sources:r:gain';
 const STATUS_ID = 'gain-status';
 
 function renderGroup() {
-  return render(SettingsGroup, {
+  return renderTyped(SettingsGroup, {
     props: {
       title: 'Level',
       field: FIELD,
