@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
-import { createRawSnippet } from 'svelte';
+import { createRawSnippet, type Snippet } from 'svelte';
 import { Mic } from '@lucide/svelte';
 import SourceCard from './SourceCard.svelte';
 
@@ -19,9 +19,22 @@ function confirmButton(dialog: HTMLElement): HTMLElement {
   return button;
 }
 
-function renderCard(
-  extra: Partial<{ expanded: boolean; disabled: boolean; disabledReason: string }> = {}
-) {
+function textSnippet(text: string) {
+  return createRawSnippet(() => ({ render: () => `<span>${text}</span>` }));
+}
+
+interface CardExtras {
+  expanded: boolean;
+  disabled: boolean;
+  disabledReason: string;
+  iconClass: string;
+  nameAddon: Snippet;
+  badges: Snippet;
+  actions: Snippet;
+  details: Snippet;
+}
+
+function renderCard(extra: Partial<CardExtras> = {}) {
   const onToggleExpanded = vi.fn();
   const onDelete = vi.fn();
   const view = render(SourceCard, {
@@ -140,5 +153,27 @@ describe('SourceCard', () => {
     await view.rerender({ disabled: false });
     expect(screen.queryByText('Loading settings')).toBeNull();
     expect(screen.getByRole('button', { name: DELETE })).not.toHaveAccessibleDescription();
+  });
+
+  it('renders the optional slots: name addon, badges, details and an actions control beside the toggle', async () => {
+    const { onToggleExpanded } = renderCard({
+      nameAddon: textSnippet('Connected'),
+      badges: textSnippet('Badge text'),
+      details: textSnippet('Stats line'),
+      actions: createRawSnippet(() => ({ render: () => '<button type="button">Enabled</button>' })),
+      iconClass: 'custom-icon-tile',
+    });
+
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getByText('Badge text')).toBeInTheDocument();
+    expect(screen.getByText('Stats line')).toBeInTheDocument();
+    expect(document.querySelector('.custom-icon-tile')).not.toBeNull();
+
+    // The actions control is not inside the disclosure button, so it never toggles the body.
+    const toggle = screen.getByRole('button', { name: /Garden/ });
+    const action = screen.getByRole('button', { name: 'Enabled' });
+    expect(toggle.contains(action)).toBe(false);
+    await fireEvent.click(action);
+    expect(onToggleExpanded).not.toHaveBeenCalled();
   });
 });

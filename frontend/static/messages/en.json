@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Audio Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols.",
         "noStreamsConfigured": "No streams configured"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Refresh",
         "addStream": "Add Stream",
         "testRequired": "Run a successful stream test before saving",
-        "deleteConfirm": "Remove this stream?",
+        "deleteConfirm": "Remove stream \"{name}\"?",
         "restartCount": "Restarted {count} time(s)",
         "healthLoadError": "Failed to load stream health status",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Stream name is required",
           "duplicateName": "A stream with this name already exists",
+          "nameTooLong": "Stream name is too long (at most {max} bytes)",
           "urlRequired": "Stream URL is required",
           "invalidUrl": "Invalid stream URL format",
           "duplicate": "This stream URL already exists"
@@ -3854,12 +3854,12 @@
           "eventAt": "Event at {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Toggle diagnostics",
           "processState": "Process State",
           "lastData": "Last Data",
           "restartCount": "Restart Count",
           "connection": "Connection",
-          "stateErrorHistory": "State & Error History"
+          "stateErrorHistory": "State & Error History",
+          "title": "Diagnostics"
         },
         "connectionStatus": {
           "stable": "Stable",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereo stream detected. Downmixing multiple channels can reduce detection accuracy due to phase differences between channels. Select a specific channel (left/right) or use the channel detector for best results.",
-          "short": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel.",
-          "tooltip": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel."
+          "short": "Stereo downmix active. Detection accuracy may be reduced. Select a specific channel under Connection."
+        },
+        "autoSaveHelp": "Changes are saved as you make them. Connection changes reconnect the stream, so they wait until you press Apply.",
+        "connectionTitle": "Connection",
+        "connectionApplyHint": "The stream reconnects when you apply.",
+        "connectionApplyFailed": "The connection was not changed. Apply again or cancel.",
+        "applyConnection": "Apply and reconnect",
+        "testBeforeApply": "Test the new URL before you apply it.",
+        "statsLine": "Total: {total} · Rate: {rate} · Last: {last}",
+        "ago": {
+          "seconds": "{count}s ago",
+          "minutes": "{count}m ago",
+          "hours": "{count}h ago"
         }
       },
       "audioFilters": {

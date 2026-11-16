@@ -1,25 +1,31 @@
 <!--
-  Test fixture: stand-in for StreamTestButton that reports a finished
-  connection test with a probed sample rate as soon as it mounts, so a stream
-  card can be checked in the state where a probed rate exists.
+  Test fixture: stand-in for StreamTestButton. Its button reports a finished
+  connection test of the URL it was given, with a probed sample rate, so a test
+  decides when a stream counts as tested. A second button reports the cleared
+  result the real button sends when its URL changes.
 
   @component
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   /** Probed rate the fixture reports; differs from the server's default rate. */
   const PROBED_SAMPLE_RATE = 44100;
 
   interface Props {
+    url?: string;
     onResult?: (_result: { sampleRate: number; channels: number } | null) => void;
   }
 
-  let { onResult }: Props = $props();
-
-  onMount(() => {
-    onResult?.({ sampleRate: PROBED_SAMPLE_RATE, channels: 1 });
-  });
+  let { url = '', onResult }: Props = $props();
 </script>
 
-<div data-testid="stream-test-button"></div>
+<button
+  type="button"
+  data-testid="stream-test-button"
+  data-url={url}
+  onclick={() => onResult?.({ sampleRate: PROBED_SAMPLE_RATE, channels: 1 })}
+>
+  run-stream-test
+</button>
+<button type="button" data-testid="stream-test-clear" onclick={() => onResult?.(null)}>
+  clear-stream-test
+</button>

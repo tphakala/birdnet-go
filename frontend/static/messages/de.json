@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Audio-Stream-Konfiguration",
-        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme konfigurieren. Unterstützt RTSP-, HTTP-, HLS-, RTMP- und UDP-Protokolle.",
         "noStreamsConfigured": "Keine Streams konfiguriert"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Aktualisieren",
         "addStream": "Stream hinzufügen",
         "testRequired": "Führen Sie einen erfolgreichen Streamtest durch, bevor Sie speichern",
-        "deleteConfirm": "Diesen Stream entfernen?",
+        "deleteConfirm": "Stream \"{name}\" entfernen?",
         "restartCount": "{count} Mal neu gestartet",
         "healthLoadError": "Laden des Stream-Status fehlgeschlagen",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Stream-Name ist erforderlich",
           "duplicateName": "Ein Stream mit diesem Namen existiert bereits",
+          "nameTooLong": "Der Streamname ist zu lang (höchstens {max} Byte)",
           "urlRequired": "Stream-URL ist erforderlich",
           "invalidUrl": "Ungültiges Stream-URL-Format",
           "duplicate": "Diese Stream-URL existiert bereits"
@@ -3854,12 +3854,12 @@
           "eventAt": "Ereignis um {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Diagnose umschalten",
           "processState": "Prozessstatus",
           "lastData": "Letzte Daten",
           "restartCount": "Neustarts",
           "connection": "Verbindung",
-          "stateErrorHistory": "Status- & Fehlerhistorie"
+          "stateErrorHistory": "Status- & Fehlerhistorie",
+          "title": "Diagnose"
         },
         "connectionStatus": {
           "stable": "Stabil",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereo-Stream erkannt. Das Abmischen mehrerer Kanäle kann die Erkennungsgenauigkeit aufgrund von Phasenunterschieden zwischen den Kanälen verringern. Wählen Sie einen bestimmten Kanal (links/rechts) oder verwenden Sie den Kanaldetektor für beste Ergebnisse.",
-          "short": "Stereo-Downmix aktiv. Erkennungsgenauigkeit kann beeinträchtigt sein. Bearbeiten, um einen bestimmten Kanal auszuwählen.",
-          "tooltip": "Stereo-Downmix aktiv. Erkennungsgenauigkeit kann beeinträchtigt sein. Bearbeiten, um einen bestimmten Kanal auszuwählen."
+          "short": "Stereo-Downmix aktiv. Erkennungsgenauigkeit kann beeinträchtigt sein. Wählen Sie unter Verbindung einen bestimmten Kanal."
+        },
+        "autoSaveHelp": "Änderungen werden sofort gespeichert. Änderungen an der Verbindung verbinden den Stream neu und warten daher, bis Sie auf Übernehmen klicken.",
+        "connectionTitle": "Verbindung",
+        "connectionApplyHint": "Der Stream wird beim Übernehmen neu verbunden.",
+        "connectionApplyFailed": "Die Verbindung wurde nicht geändert. Erneut übernehmen oder abbrechen.",
+        "applyConnection": "Übernehmen und neu verbinden",
+        "testBeforeApply": "Testen Sie die neue URL, bevor Sie sie übernehmen.",
+        "statsLine": "Gesamt: {total} · Rate: {rate} · Zuletzt: {last}",
+        "ago": {
+          "seconds": "vor {count} s",
+          "minutes": "vor {count} min",
+          "hours": "vor {count} h"
         }
       },
       "audioFilters": {

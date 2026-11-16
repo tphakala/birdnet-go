@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Audio Stream Configuratie",
-        "description": "Configureer netwerk audio streams voor audio opname op afstand. Ondersteunt RTSP, HTTP, HLS, RTMP en UDP protocollen.",
         "noStreamsConfigured": "Geen streams geconfigureerd"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Vernieuwen",
         "addStream": "Stream toevoegen",
         "testRequired": "Voer een succesvolle streamtest uit voordat u opslaat",
-        "deleteConfirm": "Deze stream verwijderen?",
+        "deleteConfirm": "De stream \"{name}\" verwijderen?",
         "restartCount": "{count} keer herstart",
         "healthLoadError": "Laden van streamstatus mislukt",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Streamnaam is verplicht",
           "duplicateName": "Er bestaat al een stream met deze naam",
+          "nameTooLong": "De naam van de stream is te lang (maximaal {max} bytes)",
           "urlRequired": "Stream-URL is verplicht",
           "invalidUrl": "Ongeldig stream-URL-formaat",
           "duplicate": "Deze stream-URL bestaat al"
@@ -3854,12 +3854,12 @@
           "eventAt": "Gebeurtenis om {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Diagnose tonen/verbergen",
           "processState": "Processtatus",
           "lastData": "Laatste data",
           "restartCount": "Herstarts",
           "connection": "Verbinding",
-          "stateErrorHistory": "Status- en foutgeschiedenis"
+          "stateErrorHistory": "Status- en foutgeschiedenis",
+          "title": "Diagnostiek"
         },
         "connectionStatus": {
           "stable": "Stabiel",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereostream gedetecteerd. Het downmixen van meerdere kanalen kan de detectienauwkeurigheid verminderen door faseverschillen tussen kanalen. Selecteer een specifiek kanaal (links/rechts) of gebruik de kanaaldetector voor de beste resultaten.",
-          "short": "Stereo downmix actief. Detectienauwkeurigheid kan verminderd zijn. Bewerk om een specifiek kanaal te selecteren.",
-          "tooltip": "Stereo downmix actief. Detectienauwkeurigheid kan verminderd zijn. Bewerk om een specifiek kanaal te selecteren."
+          "short": "Stereo downmix actief. Detectienauwkeurigheid kan verminderd zijn. Selecteer een specifiek kanaal onder Verbinding."
+        },
+        "autoSaveHelp": "Wijzigingen worden direct opgeslagen. Wijzigingen van de verbinding verbinden de stream opnieuw en wachten daarom tot u op Toepassen klikt.",
+        "connectionTitle": "Verbinding",
+        "connectionApplyHint": "De stream wordt opnieuw verbonden wanneer u toepast.",
+        "connectionApplyFailed": "De verbinding is niet gewijzigd. Pas opnieuw toe of annuleer.",
+        "applyConnection": "Toepassen en opnieuw verbinden",
+        "testBeforeApply": "Test de nieuwe URL voordat u deze toepast.",
+        "statsLine": "Totaal: {total} · Snelheid: {rate} · Laatst: {last}",
+        "ago": {
+          "seconds": "{count} s geleden",
+          "minutes": "{count} min geleden",
+          "hours": "{count} u geleden"
         }
       },
       "audioFilters": {

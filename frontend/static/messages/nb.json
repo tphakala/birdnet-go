@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Lydstrøm-konfigurasjon",
-        "description": "Konfigurer nettverkslydstrømmer for ekstern lydopptak. Støtter RTSP, HTTP, HLS, RTMP og UDP-protokoller.",
         "noStreamsConfigured": "Ingen strømmer konfigurert"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Oppdater",
         "addStream": "Legg til strøm",
         "testRequired": "Kjør en vellykket strømtest før lagring",
-        "deleteConfirm": "Fjerne denne strømmen?",
+        "deleteConfirm": "Fjerne strømmen «{name}»?",
         "restartCount": "Startet på nytt {count} gang(er)",
         "healthLoadError": "Innlasting av strømhelsesstatus mislyktes",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Strømnavn er obligatorisk",
           "duplicateName": "En strøm med dette navnet finnes allerede",
+          "nameTooLong": "Strømnavnet er for langt (høyst {max} byte)",
           "urlRequired": "Strøm-URL er obligatorisk",
           "invalidUrl": "Ugyldig strøm-URL-format",
           "duplicate": "Denne strøm-URL-en finnes allerede"
@@ -3854,12 +3854,12 @@
           "eventAt": "Hendelse kl. {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Veksle diagnostikk",
           "processState": "Prosesstilstand",
           "lastData": "Siste data",
           "restartCount": "Omstartsantall",
           "connection": "Tilkobling",
-          "stateErrorHistory": "Tilstands- og feilhistorikk"
+          "stateErrorHistory": "Tilstands- og feilhistorikk",
+          "title": "Diagnostikk"
         },
         "connectionStatus": {
           "stable": "Stabil",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereostrøm registrert. Nedmiks av flere kanaler kan redusere deteksjonsnøyaktigheten på grunn av faseforskjeller mellom kanaler. Velg en spesifikk kanal (venstre/høyre) eller bruk kanaldetektoren for best resultat.",
-          "short": "Stereo-nedmiks aktiv. Deteksjonsnøyaktigheten kan være redusert. Rediger for å velge en spesifikk kanal.",
-          "tooltip": "Stereo-nedmiks aktiv. Deteksjonsnøyaktigheten kan være redusert. Rediger for å velge en spesifikk kanal."
+          "short": "Stereo-nedmiks aktiv. Deteksjonsnøyaktigheten kan være redusert. Velg en spesifikk kanal under Tilkobling."
+        },
+        "autoSaveHelp": "Endringer lagres umiddelbart. Endringer av tilkoblingen kobler strømmen til på nytt og venter derfor til du klikker Bruk.",
+        "connectionTitle": "Tilkobling",
+        "connectionApplyHint": "Strømmen kobles til på nytt når du bruker endringene.",
+        "connectionApplyFailed": "Tilkoblingen ble ikke endret. Bruk på nytt eller avbryt.",
+        "applyConnection": "Bruk og koble til på nytt",
+        "testBeforeApply": "Test den nye URL-en før du bruker den.",
+        "statsLine": "Totalt: {total} · Hastighet: {rate} · Sist: {last}",
+        "ago": {
+          "seconds": "{count} s siden",
+          "minutes": "{count} min siden",
+          "hours": "{count} t siden"
         }
       },
       "audioFilters": {

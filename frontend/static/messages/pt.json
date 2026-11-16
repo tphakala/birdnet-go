@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Configuração de Fluxos de Áudio",
-        "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP.",
         "noStreamsConfigured": "Nenhum fluxo configurado"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Atualizar",
         "addStream": "Adicionar Stream",
         "testRequired": "Execute um teste de stream bem-sucedido antes de guardar",
-        "deleteConfirm": "Remover este stream?",
+        "deleteConfirm": "Remover o stream \"{name}\"?",
         "restartCount": "Reiniciado {count} vez(es)",
         "healthLoadError": "Falha ao carregar status do stream",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Nome do stream é obrigatório",
           "duplicateName": "Já existe um stream com este nome",
+          "nameTooLong": "O nome do stream é muito longo (no máximo {max} bytes)",
           "urlRequired": "URL do stream é obrigatória",
           "invalidUrl": "Formato de URL de stream inválido",
           "duplicate": "Esta URL de stream já existe"
@@ -3854,12 +3854,12 @@
           "eventAt": "Evento em {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Alternar diagnósticos",
           "processState": "Estado do processo",
           "lastData": "Últimos dados",
           "restartCount": "Reinícios",
           "connection": "Conexão",
-          "stateErrorHistory": "Histórico de estados e erros"
+          "stateErrorHistory": "Histórico de estados e erros",
+          "title": "Diagnóstico"
         },
         "connectionStatus": {
           "stable": "Estável",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stream estéreo detectado. A mistura de múltiplos canais pode reduzir a precisão de detecção devido a diferenças de fase entre canais. Selecione um canal específico (esquerdo/direito) ou use o detector de canais para melhores resultados.",
-          "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico.",
-          "tooltip": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico."
+          "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Selecione um canal específico em Ligação."
+        },
+        "autoSaveHelp": "As alterações são guardadas de imediato. As alterações da ligação voltam a ligar o stream, por isso aguardam até clicar em Aplicar.",
+        "connectionTitle": "Ligação",
+        "connectionApplyHint": "O stream volta a ligar-se ao aplicar.",
+        "connectionApplyFailed": "A ligação não foi alterada. Aplique novamente ou cancele.",
+        "applyConnection": "Aplicar e voltar a ligar",
+        "testBeforeApply": "Teste o novo URL antes de o aplicar.",
+        "statsLine": "Total: {total} · Taxa: {rate} · Último: {last}",
+        "ago": {
+          "seconds": "há {count} s",
+          "minutes": "há {count} min",
+          "hours": "há {count} h"
         }
       },
       "audioFilters": {

@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Configurazione Flusso Audio",
-        "description": "Configura flussi audio di rete per cattura audio remota. Supporta protocolli RTSP, HTTP, HLS, RTMP e UDP.",
         "noStreamsConfigured": "Nessun flusso configurato"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Aggiorna",
         "addStream": "Aggiungi Flusso",
         "testRequired": "Esegui un test dello stream riuscito prima di salvare",
-        "deleteConfirm": "Rimuovere questo flusso?",
+        "deleteConfirm": "Rimuovere il flusso \"{name}\"?",
         "restartCount": "Riavviato {count} volta/e",
         "healthLoadError": "Impossibile caricare stato salute flusso",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Nome flusso richiesto",
           "duplicateName": "Un flusso con questo nome esiste già",
+          "nameTooLong": "Il nome dello stream è troppo lungo (al massimo {max} byte)",
           "urlRequired": "URL flusso richiesto",
           "invalidUrl": "Formato URL flusso non valido",
           "duplicate": "Questo URL flusso esiste già"
@@ -3854,12 +3854,12 @@
           "eventAt": "Evento alle {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Attiva/disattiva diagnostica",
           "processState": "Stato Processo",
           "lastData": "Ultimi Dati",
           "restartCount": "Conteggio Riavvio",
           "connection": "Connessione",
-          "stateErrorHistory": "Cronologia Stato & Errori"
+          "stateErrorHistory": "Cronologia Stato & Errori",
+          "title": "Diagnostica"
         },
         "connectionStatus": {
           "stable": "Stabile",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stream stereo rilevato. Il downmix di più canali può ridurre la precisione del rilevamento a causa delle differenze di fase tra i canali. Seleziona un canale specifico (sinistro/destro) o usa il rilevatore di canali per i migliori risultati.",
-          "short": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Modifica per selezionare un canale specifico.",
-          "tooltip": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Modifica per selezionare un canale specifico."
+          "short": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Seleziona un canale specifico in Connessione."
+        },
+        "autoSaveHelp": "Le modifiche vengono salvate subito. Le modifiche alla connessione riconnettono lo stream, quindi attendono che si faccia clic su Applica.",
+        "connectionTitle": "Connessione",
+        "connectionApplyHint": "Lo stream si riconnette quando applichi.",
+        "connectionApplyFailed": "La connessione non è stata modificata. Applica di nuovo o annulla.",
+        "applyConnection": "Applica e riconnetti",
+        "testBeforeApply": "Testa il nuovo URL prima di applicarlo.",
+        "statsLine": "Totale: {total} · Velocità: {rate} · Ultimo: {last}",
+        "ago": {
+          "seconds": "{count} s fa",
+          "minutes": "{count} min fa",
+          "hours": "{count} h fa"
         }
       },
       "audioFilters": {

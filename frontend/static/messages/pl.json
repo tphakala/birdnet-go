@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Konfiguracja Strumieni Audio",
-        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP.",
         "noStreamsConfigured": "Brak skonfigurowanych strumieni"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Odśwież",
         "addStream": "Dodaj Strumień",
         "testRequired": "Przeprowadź udany test strumienia przed zapisaniem",
-        "deleteConfirm": "Usunąć ten strumień?",
+        "deleteConfirm": "Usunąć strumień \"{name}\"?",
         "restartCount": "Zrestartowano {count} raz(y)",
         "healthLoadError": "Nie udało się załadować statusu strumienia",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Nazwa strumienia jest wymagana",
           "duplicateName": "Strumień o tej nazwie już istnieje",
+          "nameTooLong": "Nazwa strumienia jest za długa (najwyżej {max} bajtów)",
           "urlRequired": "URL strumienia jest wymagany",
           "invalidUrl": "Nieprawidłowy format URL strumienia",
           "duplicate": "Ten URL strumienia już istnieje"
@@ -3854,12 +3854,12 @@
           "eventAt": "Zdarzenie o {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Przełącz diagnostykę",
           "processState": "Stan procesu",
           "lastData": "Ostatnie dane",
           "restartCount": "Restarty",
           "connection": "Połączenie",
-          "stateErrorHistory": "Historia stanów i błędów"
+          "stateErrorHistory": "Historia stanów i błędów",
+          "title": "Diagnostyka"
         },
         "connectionStatus": {
           "stable": "Stabilne",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Wykryto strumień stereo. Miksowanie wielu kanałów może zmniejszyć dokładność detekcji z powodu różnic fazowych między kanałami. Wybierz konkretny kanał (lewy/prawy) lub użyj detektora kanałów, aby uzyskać najlepsze wyniki.",
-          "short": "Downmix stereo aktywny. Dokładność detekcji może być zmniejszona. Edytuj, aby wybrać konkretny kanał.",
-          "tooltip": "Downmix stereo aktywny. Dokładność detekcji może być zmniejszona. Edytuj, aby wybrać konkretny kanał."
+          "short": "Downmix stereo aktywny. Dokładność detekcji może być zmniejszona. Wybierz konkretny kanał w sekcji Połączenie."
+        },
+        "autoSaveHelp": "Zmiany są zapisywane od razu. Zmiany połączenia ponownie łączą strumień, więc czekają, aż klikniesz Zastosuj.",
+        "connectionTitle": "Połączenie",
+        "connectionApplyHint": "Strumień połączy się ponownie po zastosowaniu.",
+        "connectionApplyFailed": "Połączenie nie zostało zmienione. Zastosuj ponownie lub anuluj.",
+        "applyConnection": "Zastosuj i połącz ponownie",
+        "testBeforeApply": "Przetestuj nowy URL przed zastosowaniem.",
+        "statsLine": "Łącznie: {total} · Szybkość: {rate} · Ostatnio: {last}",
+        "ago": {
+          "seconds": "{count} s temu",
+          "minutes": "{count} min temu",
+          "hours": "{count} godz. temu"
         }
       },
       "audioFilters": {

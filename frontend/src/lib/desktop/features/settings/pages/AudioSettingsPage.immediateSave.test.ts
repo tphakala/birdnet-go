@@ -1,7 +1,8 @@
 /**
- * The sound card tab saves each change as it is made: it has no save bar, and a
- * change goes to the auto-save engine as the audio section's sources array only.
- * The other tabs keep the save bar.
+ * The sound card and streams tabs save each change as it is made: they have no
+ * save bar, and a change goes to the auto-save engine as the audio section's
+ * sources array or the rtsp section's streams array only. The other tabs keep
+ * the save bar.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
@@ -13,7 +14,9 @@ const TAB_STORAGE_KEY = 'birdnet-audio-settings-active-tab';
 const SAVE_KEY = 'settings.actions.save';
 const TAB_NOTE_KEY = 'settings.autoSave.tabNote';
 
-vi.mock('$lib/desktop/components/forms/StreamManager.svelte');
+vi.mock('$lib/desktop/components/forms/StreamManager.svelte', async () => ({
+  default: (await import('../../../../../test/fixtures/MockStreamManager.svelte')).default,
+}));
 vi.mock('$lib/desktop/components/forms/SoundCardManager.svelte', async () => ({
   default: (await import('../../../../../test/fixtures/MockSoundCardManager.svelte')).default,
 }));
@@ -66,6 +69,7 @@ vi.mock('$lib/stores/settings', async () => {
 });
 
 const SOURCE = { name: 'Garden', device: 'hw:1,0', gain: 0, models: ['birdnet'] };
+const STREAM = { name: 'Gate', url: 'rtsp://gate/live', enabled: true, type: 'rtsp', gain: 0 };
 
 async function renderTab(tab: string, sources: unknown[] = [SOURCE]) {
   // The module is mocked above with writable stores; the real types are readable.
@@ -91,11 +95,15 @@ async function renderTab(tab: string, sources: unknown[] = [SOURCE]) {
       denoise: { enabled: false, strength: 'light-medium' },
     },
   });
+  const { rtspSettings } = (await import('$lib/stores/settings')) as unknown as {
+    rtspSettings: Writable<unknown>;
+  };
+  rtspSettings.set({ streams: [STREAM] });
   localStorage.setItem(TAB_STORAGE_KEY, tab);
   render(AudioSettingsPage);
 }
 
-describe('AudioSettingsPage sound card tab saves immediately', () => {
+describe('AudioSettingsPage source tabs save immediately', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -115,6 +123,20 @@ describe('AudioSettingsPage sound card tab saves immediately', () => {
       'audio',
       { sources: [{ ...SOURCE, gain: 1 }] },
       { field: 'audio:sources:row:gain', debounceMs: 400 }
+    );
+  });
+
+  it('has no save bar on the streams tab and commits the streams array of the rtsp section', async () => {
+    await renderTab('streams');
+
+    expect(screen.getByText(TAB_NOTE_KEY)).toBeInTheDocument();
+    expect(screen.queryByText(SAVE_KEY)).toBeNull();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+    expect(commitSetting).toHaveBeenCalledExactlyOnceWith(
+      'rtsp',
+      { streams: [{ ...STREAM, gain: 1 }] },
+      { field: 'rtsp:streams:row:gain', debounceMs: 400 }
     );
   });
 

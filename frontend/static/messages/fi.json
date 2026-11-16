@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Äänistriimien määritys",
-        "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
         "noStreamsConfigured": "Striimejä ei ole määritetty"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Päivitä",
         "addStream": "Lisää striimi",
         "testRequired": "Suorita onnistunut striimitesti ennen tallentamista",
-        "deleteConfirm": "Poista tämä striimi?",
+        "deleteConfirm": "Poistetaanko striimi \"{name}\"?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
         "healthLoadError": "Striimin tilan lataus epäonnistui",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Striimin nimi on pakollinen",
           "duplicateName": "Tämän niminen striimi on jo olemassa",
+          "nameTooLong": "Streamin nimi on liian pitkä (enintään {max} tavua)",
           "urlRequired": "Striimin URL on pakollinen",
           "invalidUrl": "Virheellinen striimin URL-muoto",
           "duplicate": "Tämä striimin URL on jo olemassa"
@@ -3854,12 +3854,12 @@
           "eventAt": "Tapahtuma {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Näytä/piilota diagnostiikka",
           "processState": "Prosessin tila",
           "lastData": "Viimeisin data",
           "restartCount": "Uudelleenkäynnistykset",
           "connection": "Yhteys",
-          "stateErrorHistory": "Tila- ja virhehistoria"
+          "stateErrorHistory": "Tila- ja virhehistoria",
+          "title": "Diagnostiikka"
         },
         "connectionStatus": {
           "stable": "Vakaa",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereovirta havaittu. Useiden kanavien sekoittaminen voi heikentää tunnistustarkkuutta kanavien välisten vaihe-erojen vuoksi. Valitse tietty kanava (vasen/oikea) tai käytä kanavatunnistinta parhaiden tulosten saavuttamiseksi.",
-          "short": "Stereon downmix käytössä. Tunnistustarkkuus voi olla heikentynyt. Muokkaa valitaksesi tietyn kanavan.",
-          "tooltip": "Stereon downmix käytössä. Tunnistustarkkuus voi olla heikentynyt. Muokkaa valitaksesi tietyn kanavan."
+          "short": "Stereon downmix käytössä. Tunnistustarkkuus voi olla heikentynyt. Valitse tietty kanava Yhteys-kohdasta."
+        },
+        "autoSaveHelp": "Muutokset tallennetaan heti. Yhteyden muutokset yhdistävät striimin uudelleen, joten ne odottavat, kunnes valitset Ota käyttöön.",
+        "connectionTitle": "Yhteys",
+        "connectionApplyHint": "Striimi yhdistetään uudelleen, kun otat muutokset käyttöön.",
+        "connectionApplyFailed": "Yhteyttä ei muutettu. Ota käyttöön uudelleen tai peruuta.",
+        "applyConnection": "Ota käyttöön ja yhdistä uudelleen",
+        "testBeforeApply": "Testaa uusi URL ennen kuin otat sen käyttöön.",
+        "statsLine": "Yhteensä: {total} · Nopeus: {rate} · Viimeksi: {last}",
+        "ago": {
+          "seconds": "{count} s sitten",
+          "minutes": "{count} min sitten",
+          "hours": "{count} h sitten"
         }
       },
       "audioFilters": {

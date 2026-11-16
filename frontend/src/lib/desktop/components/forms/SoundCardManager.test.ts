@@ -39,9 +39,9 @@ vi.mock('./InlineSlider.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
 // The model list renders the current selection as text so the default model
-// pre-selection of the add form can be asserted without the real checkbox UI.
+// pre-selection of the add form can be asserted without the real switches.
 vi.mock('./ModelToggleList.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockModelCheckboxList.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockModelToggleList.svelte')).default,
 }));
 vi.mock('./QuietHoursEditor.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
@@ -304,7 +304,7 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
 });
 
 describe('SoundCardManager default model pre-selection (model de-privilege, N=0)', () => {
-  const MODEL_LIST_TESTID = 'model-checkbox-list';
+  const MODEL_LIST_TESTID = 'model-toggle-list';
 
   // Listed Perch-first so registry-ID order (v2.4 first) is distinguishable
   // from option order in the mapped selection.

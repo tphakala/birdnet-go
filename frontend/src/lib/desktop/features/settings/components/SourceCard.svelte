@@ -15,9 +15,13 @@
   - onToggleExpanded: Called by the disclosure button
   - deleteConfirm: Question shown in the delete overlay; it names the source itself
   - onDelete: Called after the delete was confirmed
+  - iconClass: Colours of the icon tile (background, text, border); primary by default
   - disabled: Blocks delete
   - disabledReason: Shown beside the delete button while disabled, and its description
+  - nameAddon: Shown after the name inside the disclosure button (a status pill)
   - badges: Header badges after the disclosure button
+  - actions: Header controls before delete (an enable switch)
+  - details: Always visible lines under the header (stats, warnings)
   - children: The body
 
   @component
@@ -38,9 +42,13 @@
     onToggleExpanded: () => void;
     deleteConfirm: string;
     onDelete: () => void;
+    iconClass?: string;
     disabled?: boolean;
     disabledReason?: string;
+    nameAddon?: Snippet;
     badges?: Snippet;
+    actions?: Snippet;
+    details?: Snippet;
     children?: Snippet;
   }
 
@@ -52,11 +60,18 @@
     onToggleExpanded,
     deleteConfirm,
     onDelete,
+    iconClass,
     disabled = false,
     disabledReason,
+    nameAddon,
     badges,
+    actions,
+    details,
     children,
   }: Props = $props();
+
+  const DEFAULT_ICON_CLASS =
+    'border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--text-primary)]';
 
   const cardId = generateId('source-card');
   const bodyId = `${cardId}-body`;
@@ -157,17 +172,32 @@
         aria-hidden="true"
       />
       <span
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--text-primary)]"
+        class={cn(
+          'flex size-10 shrink-0 items-center justify-center rounded-lg border',
+          iconClass ?? DEFAULT_ICON_CLASS
+        )}
       >
         <Icon class="size-5" aria-hidden="true" />
       </span>
       <span class="min-w-0 flex-1">
-        <span
-          class="block truncate text-sm font-semibold text-[var(--color-base-content)]"
-          title={name}
-        >
-          {name}
-        </span>
+        {#if nameAddon}
+          <span class="flex min-w-0 items-center gap-2">
+            <span
+              class="truncate text-sm font-semibold text-[var(--color-base-content)]"
+              title={name}
+            >
+              {name}
+            </span>
+            {@render nameAddon()}
+          </span>
+        {:else}
+          <span
+            class="block truncate text-sm font-semibold text-[var(--color-base-content)]"
+            title={name}
+          >
+            {name}
+          </span>
+        {/if}
         {#if subtitle}
           <span class="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
         {/if}
@@ -175,8 +205,14 @@
     </button>
 
     {#if badges}
-      <div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      <div class="flex min-w-0 max-w-1/2 flex-wrap items-center justify-end gap-1.5">
         {@render badges()}
+      </div>
+    {/if}
+
+    {#if actions}
+      <div class="flex shrink-0 items-center">
+        {@render actions()}
       </div>
     {/if}
 
@@ -195,6 +231,12 @@
       <Trash2 class="size-4" aria-hidden="true" />
     </button>
   </div>
+
+  {#if details}
+    <div class="-mt-1 space-y-1.5 px-3 pb-3 pl-23">
+      {@render details()}
+    </div>
+  {/if}
 
   {#if expanded}
     <div

@@ -241,6 +241,7 @@ const translations: Record<string, string> = {
   'forms.networkAddressList.remove': 'Remove {address}',
   'media.audio.seekValueText': '{current} of {total}',
   'settings.audio.soundCards.deleteConfirm': 'Remove sound card source "{name}"?',
+  'settings.audio.streams.deleteConfirm': 'Remove stream "{name}"?',
 };
 
 vi.mock('$lib/i18n', () => ({

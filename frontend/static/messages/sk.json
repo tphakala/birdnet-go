@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Konfigurácia zvukových streamov",
-        "description": "Nakonfigurujte sieťové zvukové streamy pre vzdialené zachytávanie zvuku. Podporuje protokoly RTSP, HTTP, HLS, RTMP a UDP.",
         "noStreamsConfigured": "Žiadne nakonfigurované streamy"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Obnoviť",
         "addStream": "Pridať stream",
         "testRequired": "Pred uložením vykonajte úspešný test streamu",
-        "deleteConfirm": "Odstrániť tento stream?",
+        "deleteConfirm": "Odstrániť stream \"{name}\"?",
         "restartCount": "Reštartované {count}-krát",
         "healthLoadError": "Nepodarilo sa načítať stav zdravia streamu",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Názov streamu je povinný",
           "duplicateName": "Stream s týmto názvom už existuje",
+          "nameTooLong": "Názov streamu je príliš dlhý (najviac {max} bajtov)",
           "urlRequired": "URL streamu je povinná",
           "invalidUrl": "Neplatný formát URL streamu",
           "duplicate": "Táto URL streamu už existuje"
@@ -3854,12 +3854,12 @@
           "eventAt": "Udalosť o {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Prepnúť diagnostiku",
           "processState": "Stav procesu",
           "lastData": "Posledné dáta",
           "restartCount": "Počet reštartov",
           "connection": "Pripojenie",
-          "stateErrorHistory": "História stavov a chýb"
+          "stateErrorHistory": "História stavov a chýb",
+          "title": "Diagnostika"
         },
         "connectionStatus": {
           "stable": "Stabilné",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Detekovaný stereo stream. Zmiešanie viacerých kanálov môže znížiť presnosť detekcie kvôli fázovým rozdielom medzi kanálmi. Pre najlepšie výsledky vyberte konkrétny kanál (ľavý/pravý) alebo použite detektor kanálov.",
-          "short": "Stereo downmix aktívny. Presnosť detekcie môže byť znížená. Upravte pre výber konkrétneho kanálu.",
-          "tooltip": "Stereo downmix aktívny. Presnosť detekcie môže byť znížená. Upravte pre výber konkrétneho kanálu."
+          "short": "Stereo downmix aktívny. Presnosť detekcie môže byť znížená. Vyberte konkrétny kanál v časti Pripojenie."
+        },
+        "autoSaveHelp": "Zmeny sa ukladajú okamžite. Zmeny pripojenia znova pripoja stream, preto čakajú, kým nekliknete na Použiť.",
+        "connectionTitle": "Pripojenie",
+        "connectionApplyHint": "Stream sa po použití znova pripojí.",
+        "connectionApplyFailed": "Pripojenie sa nezmenilo. Použite znova alebo zrušte.",
+        "applyConnection": "Použiť a znova pripojiť",
+        "testBeforeApply": "Pred použitím novú URL otestujte.",
+        "statsLine": "Celkom: {total} · Rýchlosť: {rate} · Naposledy: {last}",
+        "ago": {
+          "seconds": "pred {count} s",
+          "minutes": "pred {count} min",
+          "hours": "pred {count} h"
         }
       },
       "audioFilters": {

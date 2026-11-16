@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Konfiguration af lydstrøm",
-        "description": "Konfigurer netværkslydstrømme til fjernoptagelse af lyd. Understøtter RTSP, HTTP, HLS, RTMP og UDP-protokoller.",
         "noStreamsConfigured": "Ingen strømme konfigureret"
       },
       "streams": {
@@ -3814,7 +3813,7 @@
         "refresh": "Opdater",
         "addStream": "Tilføj strøm",
         "testRequired": "Kør en vellykket streamtest før du gemmer",
-        "deleteConfirm": "Fjern denne strøm?",
+        "deleteConfirm": "Fjern strømmen \"{name}\"?",
         "restartCount": "Genstartet {count} gang(e)",
         "healthLoadError": "Kunne ikke indlæse strømmens sundhedsstatus",
         "status": {
@@ -3838,6 +3837,7 @@
         "errors": {
           "nameRequired": "Strømnavn er påkrævet",
           "duplicateName": "En strøm med dette navn findes allerede",
+          "nameTooLong": "Streamnavnet er for langt (højst {max} bytes)",
           "urlRequired": "Strøm-URL er påkrævet",
           "invalidUrl": "Ugyldigt strøm-URL-format",
           "duplicate": "Denne strøm-URL findes allerede"
@@ -3854,12 +3854,12 @@
           "eventAt": "Hændelse kl. {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Skift diagnostik",
           "processState": "Procestilstand",
           "lastData": "Seneste data",
           "restartCount": "Antal genstarter",
           "connection": "Forbindelse",
-          "stateErrorHistory": "Tilstands- og fejlhistorik"
+          "stateErrorHistory": "Tilstands- og fejlhistorik",
+          "title": "Diagnostik"
         },
         "connectionStatus": {
           "stable": "Stabil",
@@ -3906,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereostream detekteret. Downmixing af flere kanaler kan reducere detektionsnøjagtigheden på grund af faseforskelle mellem kanaler. Vælg en specifik kanal (venstre/højre) eller brug kanaldetektoren for bedste resultater.",
-          "short": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Rediger for at vælge en specifik kanal.",
-          "tooltip": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Rediger for at vælge en specifik kanal."
+          "short": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Vælg en specifik kanal under Forbindelse."
+        },
+        "autoSaveHelp": "Ændringer gemmes med det samme. Ændringer af forbindelsen genforbinder streamen og venter derfor, til du klikker på Anvend.",
+        "connectionTitle": "Forbindelse",
+        "connectionApplyHint": "Streamen genforbindes, når du anvender.",
+        "connectionApplyFailed": "Forbindelsen blev ikke ændret. Anvend igen, eller annullér.",
+        "applyConnection": "Anvend og genforbind",
+        "testBeforeApply": "Test den nye URL, før du anvender den.",
+        "statsLine": "I alt: {total} · Hastighed: {rate} · Seneste: {last}",
+        "ago": {
+          "seconds": "{count} s siden",
+          "minutes": "{count} min. siden",
+          "hours": "{count} t. siden"
         }
       },
       "audioFilters": {
