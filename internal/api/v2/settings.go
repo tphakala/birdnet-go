@@ -436,8 +436,9 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 // If-Match and the ETag response header work as on UpdateSettings: the ETag is
 // the one for the whole settings, not for the section.
 //
-// The response carries the section as it is now stored under "settings", in
-// the shape GET /settings/:section serves (secrets redacted).
+// The response carries the section as it is now stored under "settings",
+// sanitized like the GET responses (secrets redacted). Some patchable sections
+// have no GET /settings/:section endpoint.
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()

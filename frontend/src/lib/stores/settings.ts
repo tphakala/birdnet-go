@@ -1467,7 +1467,10 @@ export interface StagedSaveResult {
   dropped: StagedPath[];
   /** Paths whose save failed, or failed before a request was sent, and whose form value was taken back to the stored one unless edited again. */
   failed: StagedPath[];
-  /** The error of the failed request, when there was one. */
+  /**
+   * The error the save ran into. With paths in failed it is the failed request's
+   * error; with failed empty the request succeeded and a step after it threw.
+   */
   error?: unknown;
   /** True when a staged path is still waiting, because it was edited again during the request. */
   remaining: boolean;

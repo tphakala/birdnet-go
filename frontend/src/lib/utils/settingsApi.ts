@@ -119,8 +119,9 @@ export interface SettingsSectionPatchResponse {
   /** Fields in the request that the backend refused to change. */
   skippedFields?: string[] | null;
   /**
-   * The section as the server now stores it, in the shape GET /settings/:section
-   * serves (secrets redacted). Absent from an older backend.
+   * The section as the server now stores it, sanitized (secrets redacted). Some
+   * patchable sections have no GET /settings/:section endpoint. Absent from an
+   * older backend.
    */
   settings?: unknown;
 }
