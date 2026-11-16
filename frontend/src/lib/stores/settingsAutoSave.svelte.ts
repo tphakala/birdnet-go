@@ -72,7 +72,15 @@ const statuses = new SvelteMap<string, AutoSaveFieldStatus>();
  * commit until a result that carried that commit accounts for it; a result is
  * judged only on the paths whose sequence number it saw (see judgePaths).
  */
-const fieldPaths = new Map<string, { section: SettingsSectionName; keys: Map<string, number> }>();
+const fieldPaths = new Map<
+  string,
+  {
+    section: SettingsSectionName;
+    keys: Map<string, number>;
+    /** Paths whose edit was dropped while the field still owned others; a commit of the path clears it. */
+    lost: Set<string>;
+  }
+>();
 let commitSeq = 0;
 const sections = new Map<SettingsSectionName, SectionState>();
 const savedTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -211,16 +219,23 @@ function fieldsOwning(section: SettingsSectionName, paths: readonly (readonly st
 }
 
 /**
- * Forgets some owned paths of a field. Returns true when the field owns none
- * afterwards (its entry is removed); false while a newer commit still owns paths.
+ * Forgets some owned paths of a field; lostKeys are the ones whose edit was
+ * dropped. Returns null while the field still owns paths (a newer commit or a
+ * stalled path). Once it owns none its entry is removed and the result says
+ * whether any of its edits was lost, which then shows the conflict, not Saved.
  */
-function releasePaths(field: string, keys: Iterable<string>): boolean {
+function releasePaths(
+  field: string,
+  keys: Iterable<string>,
+  lostKeys: Iterable<string> = []
+): { lost: boolean } | null {
   const owned = fieldPaths.get(field);
-  if (!owned) return true;
+  if (!owned) return { lost: true };
+  for (const key of lostKeys) owned.lost.add(key);
   for (const key of keys) owned.keys.delete(key);
-  if (owned.keys.size > 0) return false;
+  if (owned.keys.size > 0) return null;
   fieldPaths.delete(field);
-  return true;
+  return { lost: owned.lost.size > 0 };
 }
 
 /** Gives a field an error and forgets its staged paths, so a later result cannot overwrite it. */
@@ -233,10 +248,11 @@ function ensureDropSubscription(): void {
   if (unsubscribeDrops) return;
   unsubscribeDrops = settingsActions.onStagedEditsDropped(edits => {
     for (const { section, path } of edits) {
-      // Only the dropped path leaves the field; a field with a newer path still staged
-      // keeps it, and that path's own result decides the status.
+      // Only the dropped path leaves the field. A field that owns other paths keeps
+      // them and a lost mark, so it shows the conflict once the last one settles.
+      const key = pathKey(path);
       for (const field of fieldsOwning(section, [path])) {
-        if (releasePaths(field, [pathKey(path)])) {
+        if (releasePaths(field, [key], [key])) {
           setStatus(field, { state: 'error', message: t('settings.autoSave.changedElsewhere') });
         }
       }
@@ -310,6 +326,7 @@ function judgePaths(
     const unsent = judged.filter(
       key => !outcome.saved.has(key) && !outcome.failed.has(key) && !outcome.dropped.has(key)
     );
+    const droppedKeys = judged.filter(key => outcome.dropped.has(key));
     if (!dropped && !refused && outcome.remaining && unsent.length > 0) {
       releasePaths(
         field,
@@ -318,8 +335,9 @@ function judgePaths(
       stalled.push(field);
       continue;
     }
-    if (!releasePaths(field, judged)) continue; // a newer commit decides the status
-    if (dropped) {
+    const settled = releasePaths(field, judged, droppedKeys);
+    if (!settled) continue; // a newer commit decides the status
+    if (dropped || settled.lost) {
       setStatus(field, { state: 'error', message: t('settings.autoSave.changedElsewhere') });
     } else {
       setStatus(
@@ -459,9 +477,14 @@ export function commitSetting<S extends SettingsSectionName>(
   ensureDropSubscription();
   ensureHideFlush();
 
-  const owned = fieldPaths.get(field) ?? { section, keys: new Map<string, number>() };
+  const owned = fieldPaths.get(field) ?? {
+    section,
+    keys: new Map<string, number>(),
+    lost: new Set<string>(),
+  };
   for (const path of leafPaths(withoutServerOwnedKeys(section, partial))) {
     owned.keys.set(pathKey(path), ++commitSeq);
+    owned.lost.delete(pathKey(path));
   }
   fieldPaths.set(field, owned);
 

@@ -377,7 +377,7 @@ describe('settings auto save engine', () => {
     expect(autoSaveStatus('audio:a:models').state).toBe('saved');
   });
 
-  it('keeps ownership of a newer path when the listener drops an older path of the same field', async () => {
+  it('sends the newer path but still reports the dropped older path of the same field', async () => {
     const first = deferred<StagedSaveResult>();
     store.saveStagedSection
       .mockReturnValueOnce(first.promise)
@@ -391,7 +391,68 @@ describe('settings auto save engine', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
-    expect(autoSaveStatus('audio:a:all').state).toBe('saved');
+    expect(autoSaveStatus('audio:a:all')).toEqual({
+      state: 'error',
+      message: 'settings.autoSave.changedElsewhere',
+    });
+  });
+
+  it('shows the conflict error when a rebase drops one path of a multi-path commit during the request', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise);
+    commitSetting(
+      'audio',
+      { equalizer: { enabled: true, filters: [] } },
+      { field: 'audio:a:equalizer' }
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    dropListener?.([{ section: 'audio', path: ['equalizer', 'enabled'] }]);
+    first.resolve({
+      ...OK,
+      saved: [['equalizer', 'filters']],
+      dropped: [['equalizer', 'enabled']],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(autoSaveStatus('audio:a:equalizer')).toEqual({
+      state: 'error',
+      message: 'settings.autoSave.changedElsewhere',
+    });
+  });
+
+  it('shows the conflict error when a refresh drops one of two pending paths outside a request', async () => {
+    store.saveStagedSection.mockResolvedValue(saved(['equalizer', 'filters']));
+    commitSetting(
+      'audio',
+      { equalizer: { enabled: true, filters: [] } },
+      { field: 'audio:a:equalizer', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+
+    dropListener?.([{ section: 'audio', path: ['equalizer', 'enabled'] }]);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+
+    expect(autoSaveStatus('audio:a:equalizer').state).toBe('error');
+  });
+
+  it('clears the lost mark of a path the field commits again', async () => {
+    store.saveStagedSection.mockResolvedValue(
+      saved(['equalizer', 'enabled'], ['equalizer', 'filters'])
+    );
+    commitSetting(
+      'audio',
+      { equalizer: { enabled: true, filters: [] } },
+      { field: 'audio:a:equalizer', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+    dropListener?.([{ section: 'audio', path: ['equalizer', 'enabled'] }]);
+    commitSetting(
+      'audio',
+      { equalizer: { enabled: false, filters: [] } },
+      { field: 'audio:a:equalizer', debounceMs: AUTOSAVE_DEBOUNCE_MS }
+    );
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+
+    expect(autoSaveStatus('audio:a:equalizer').state).toBe('saved');
   });
 
   it('does not judge a path an earlier result already saved when a later result lists only the newer one', async () => {
