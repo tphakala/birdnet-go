@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import { screen, cleanup, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
+import { deferred } from '../../../../test/async-helpers';
 import {
   restoreElementAnimate,
   stubElementAnimate,
@@ -583,6 +584,21 @@ describe('SoundCardManager add outcome', () => {
     await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Mic 1' } });
     await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
   }
+
+  it('shows the busy label and blocks a second add while the new source is saved', async () => {
+    const pending = deferred<typeof SAVED>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+
+    await addMic();
+
+    const busy = await screen.findByRole('button', { name: 'settings.audio.soundCards.adding' });
+    expect(busy).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(busy);
+    expect(store.stageSectionEdit).toHaveBeenCalledOnce();
+
+    pending.resolve(SAVED);
+    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
+  });
 
   it('closes the add form once the new source is saved', async () => {
     store.saveStagedSection.mockResolvedValue(SAVED);
