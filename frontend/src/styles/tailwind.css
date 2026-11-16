@@ -526,24 +526,35 @@
 
   /* ----------------------------------------
      STATUS BADGES
+     One recipe for the .badge-status-* classes and StatusPill: each status names its fill once
+     in --status-fill, the tint is drawn from it, and StatusPill draws its border and dot from
+     the same property.
      ---------------------------------------- */
   .badge-status-success {
-    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    --status-fill: var(--color-success);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
     color: var(--text-success);
   }
 
   .badge-status-warning {
-    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    --status-fill: var(--color-warning);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
     color: var(--text-warning);
   }
 
   .badge-status-error {
-    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    --status-fill: var(--color-error);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
     color: var(--text-error);
   }
 
   .badge-status-info {
-    background: color-mix(in srgb, var(--color-info) 15%, transparent);
+    --status-fill: var(--color-info);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
     color: var(--text-info);
   }
 

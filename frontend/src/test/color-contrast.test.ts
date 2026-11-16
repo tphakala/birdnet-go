@@ -550,17 +550,77 @@ describe('Status text rules', () => {
     }
 
     // The tint under the alert and the badge stays the fill token, at the share the contrast
-    // tests below assume.
-    for (const selector of tintedSelectors) {
-      it(`${selector} keeps its 15% ${fill} tint`, () => {
-        const bodies = ruleBodies(css, selector);
-        expect(bodies.length).toBeGreaterThan(0);
-        for (const body of bodies) {
-          expect(body).toContain(`color-mix(in srgb, var(${fill}) 15%, transparent)`);
-        }
-      });
-    }
+    // tests below assume. The badge names the fill once in --status-fill and draws the tint from it.
+    it(`.alert-${status} keeps its 15% ${fill} tint`, () => {
+      const bodies = ruleBodies(css, `.alert-${status}`);
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        expect(body).toContain(`color-mix(in srgb, var(${fill}) 15%, transparent)`);
+      }
+    });
+
+    it(`.badge-status-${status} names ${fill} once as --status-fill and tints from it at 15%`, () => {
+      const bodies = ruleBodies(css, `.badge-status-${status}`);
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        expect(body).toContain(`--status-fill: var(${fill});`);
+        expect(body).toContain('color-mix(in srgb, var(--status-fill) 15%, transparent)');
+        expect(body).not.toContain(`var(${fill}) 15%`);
+      }
+    });
   }
+
+  describe('StatusPill', () => {
+    const pillSource = stripComments(
+      readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          '..',
+          'lib',
+          'desktop',
+          'components',
+          'ui',
+          'StatusPill.svelte'
+        ),
+        'utf8'
+      )
+    );
+
+    it('holds no per-status colour token and draws its border and dot from --status-fill', () => {
+      expect(pillSource).not.toMatch(/--(?:color|text)-(?:success|warning|error|info)\b/);
+      for (const selector of ['.status-pill', '.status-pill-dot']) {
+        const bodies = ruleBodies(pillSource, selector);
+        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+        expect(bodies.some(body => body.includes('var(--status-fill)'))).toBe(true);
+      }
+    });
+
+    const neutralBodies = ruleBodies(pillSource, '.status-pill:global(.badge-status-neutral)');
+    const share = (body: string, property: string): number => {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- property is a fixed literal from the callers below
+      const match = new RegExp(
+        `${property}:\\s*color-mix\\(in srgb, var\\(--color-base-content\\) (\\d+)%, transparent\\)`
+      ).exec(body);
+      expect(match, `${property} is a base-content mix`).not.toBeNull();
+      return Number(match?.[1]) / 100;
+    };
+
+    for (const [name, block] of [
+      ['light', blockBody(css, '@theme')],
+      ['dark', blockBody(css, "[data-theme='dark']")],
+    ] as const) {
+      for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
+        it(`neutral pill text passes AA on its tint over ${surface} in the ${name} theme`, () => {
+          expect(neutralBodies).toHaveLength(1);
+          const content = readVar(block, '--color-base-content');
+          const base = readVar(block, surface);
+          const tint = applyOpacity(content, base, share(neutralBodies[0], 'background'));
+          const text = applyOpacity(content, tint, share(neutralBodies[0], 'color'));
+          expect(getContrastRatio(text, tint)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
+    }
+  });
 
   const desktopDir = join(stylesDir, '..', 'lib', 'desktop');
   // Component styles with error text. `fills` names the selectors whose border or tint keeps the

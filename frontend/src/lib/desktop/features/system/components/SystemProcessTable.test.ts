@@ -111,7 +111,7 @@ describe('SystemProcessTable', () => {
     const pill = within(screen.getByRole('table'))
       .getByText('zombie')
       .closest<HTMLElement>('span.rounded-full.border');
-    expect(pill?.getAttribute('style')).toContain('color: var(--text-error)');
+    expect(pill).toHaveClass('badge-status-error');
   });
 
   it('shows CPU clamped to 0-100 and memory and uptime in compact units', () => {

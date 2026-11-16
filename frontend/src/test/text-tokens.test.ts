@@ -22,7 +22,8 @@
  *    noveltyCategoryTextColor(...), which routes status fills through textColorFor.
  *
  * Deliberate fill uses the rules do not reach, so no exclusion is needed for them:
- * StatusPill.svelte (fill variables for tint, border and dot; its text is --text-${variant}),
+ * StatusPill.svelte (holds no fill variables: .badge-status-* sets --status-fill and the text
+ * token, the pill draws its border and dot from --status-fill),
  * d3/utils/theme.ts and Sparkline.svelte (chart series colours), PlayOverlay.svelte (progress
  * ring stroke), focus rings and outlines, borders, StorageCard.svelte (bar colour through
  * style:background), SystemHealth.svelte (fills routed through textColorFor),

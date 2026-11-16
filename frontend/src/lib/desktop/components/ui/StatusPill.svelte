@@ -9,8 +9,9 @@
   - Optional leading dot indicator
   - Size variants (xs, sm, md)
   - Supports custom labels or i18n keys
-  - Text uses the --text-<variant> tokens; the tint, border and dot use the --color-<variant>
-    fills. success, warning, info and error text is 4.5:1 or more on its tint over
+  - The tint, the text token and --status-fill come from the .badge-status-<variant> classes
+    (tailwind.css); the border and dot are drawn from --status-fill below. The neutral pill
+    overrides them with a quieter recipe. Text is 4.5:1 or more on its tint over
     base-100/200/300 (see color-contrast.test.ts)
 
   @component
@@ -53,33 +54,14 @@
     className = '',
   }: Props = $props();
 
-  // Fill variable for each variant: tint, border and dot
-  const cssVarNames: Record<StatusVariant, string> = {
-    success: '--color-success',
-    warning: '--color-warning',
-    error: '--color-error',
-    info: '--color-info',
-    neutral: '--color-base-content',
-  };
-
-  // Get inline styles for the pill: tinted fill, text from the --text-<variant> token
-  const getPillStyles = (variant: StatusVariant) => {
-    const varName = safeGet(cssVarNames, variant, '--color-base-content');
-    return variant === 'neutral'
-      ? `background-color: color-mix(in srgb, var(${varName}) 8%, transparent); ` +
-          `color: color-mix(in srgb, var(${varName}) 70%, transparent); ` +
-          `border-color: color-mix(in srgb, var(${varName}) 15%, transparent);`
-      : `background-color: color-mix(in srgb, var(${varName}) 15%, transparent); ` +
-          `color: var(--text-${variant}); ` +
-          `border-color: color-mix(in srgb, var(${varName}) 30%, transparent);`;
-  };
-
-  // Dot color styles using CSS variables
-  const getDotStyles = (variant: StatusVariant) => {
-    const varName = safeGet(cssVarNames, variant, '--color-base-content');
-    return variant === 'neutral'
-      ? `background-color: color-mix(in srgb, var(${varName}) 40%, transparent);`
-      : `background-color: var(${varName});`;
+  // Shared status recipe from tailwind.css, as literal classes so they stay greppable.
+  // Unknown input gets the neutral look.
+  const variantClasses: Record<StatusVariant, string> = {
+    success: 'badge-status-success',
+    warning: 'badge-status-warning',
+    error: 'badge-status-error',
+    info: 'badge-status-info',
+    neutral: 'badge-status-neutral',
   };
 
   // Size styles for the pill
@@ -99,11 +81,11 @@
 
 <span
   class={cn(
-    'inline-flex items-center font-medium rounded-full border',
+    'status-pill inline-flex items-center font-medium rounded-full border',
+    safeGet(variantClasses, variant, variantClasses.neutral),
     safeGet(sizeStyles, size, sizeStyles.sm),
     className
   )}
-  style={getPillStyles(variant)}
 >
   {#if leadingIcon}
     <span class="flex-shrink-0 flex items-center" aria-hidden="true">
@@ -112,13 +94,37 @@
   {:else if showDot}
     <span
       class={cn(
-        'rounded-full flex-shrink-0',
+        'status-pill-dot rounded-full flex-shrink-0',
         safeGet(dotSizeStyles, size, dotSizeStyles.sm),
         pulse && 'animate-pulse'
       )}
-      style={getDotStyles(variant)}
       aria-hidden="true"
     ></span>
   {/if}
   <span class="leading-none">{label}</span>
 </span>
+
+<style>
+  /* .badge-status-<variant> (tailwind.css) gives the tint, the text colour and --status-fill.
+     The pill adds a border and a dot drawn from the same fill. */
+  .status-pill {
+    border-color: color-mix(in srgb, var(--status-fill) 30%, transparent);
+  }
+
+  .status-pill-dot {
+    background-color: var(--status-fill);
+  }
+
+  /* The neutral pill is quieter than .badge-status-neutral: a lighter tint and border, text at
+     70% of base-content and a faded dot. 70% keeps the text at 4.5:1 or more on the tint over
+     base-100, base-200 and base-300 (color-contrast.test.ts). */
+  .status-pill:global(.badge-status-neutral) {
+    background: color-mix(in srgb, var(--color-base-content) 8%, transparent);
+    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    border-color: color-mix(in srgb, var(--color-base-content) 15%, transparent);
+  }
+
+  .status-pill:global(.badge-status-neutral) .status-pill-dot {
+    background-color: color-mix(in srgb, var(--color-base-content) 40%, transparent);
+  }
+</style>
