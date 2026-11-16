@@ -6,6 +6,7 @@ import {
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
 import SoundCardCard from './SoundCardCard.svelte';
+import { fetchDeviceCapabilities } from '$lib/utils/audio/sampleRate';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import {
   DEFAULT_MODEL,
@@ -191,5 +192,21 @@ describe('SoundCardCard device capability probe (issue #3593, open card)', () =>
     await fireEvent.change(deviceSelect, { target: { value: DEV1 } });
     await waitFor(() => expect(hasRate(RATE_96K.value)).toBe(true));
     expect(rateSelect().value).toBe(RATE_96K.value);
+  });
+
+  it('coerces a rate picked on the saved device while its probe was still running', async () => {
+    // The saved device turns out to offer neither 48 kHz nor the 96 kHz it was saved at.
+    vi.mocked(fetchDeviceCapabilities).mockImplementationOnce((_id, signal) =>
+      makeAbortableProbe(signal, [RATE_192K, RATE_384K])
+    );
+    await openCard(renderCard(Number(RATE_96K.value)));
+
+    // Only the placeholder 48 kHz is on offer until the probe lands.
+    await fireEvent.change(screen.getByTestId(SAMPLE_RATE_SELECT_TESTID), {
+      target: { value: RATE_48K.value },
+    });
+
+    // The draft differs from the saved values by rate alone, so it is not left unsupported.
+    await waitFor(() => expect(rateSelect().value).toBe(RATE_192K.value));
   });
 });
