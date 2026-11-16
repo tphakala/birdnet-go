@@ -93,7 +93,7 @@ const EXCLUSIONS: Exclusion[] = [
   },
 ];
 
-/** Status fills used as text in one source, with whitespace in each hit collapsed. */
+/** Status and primary fills used as text in one source, with whitespace in each hit collapsed. */
 function findFillText(source: string): { line: number; hit: string }[] {
   const text = stripComments(source);
   return RULES.flatMap(rule =>
