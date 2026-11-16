@@ -4110,6 +4110,11 @@
         "noneAvailable": "Auf diesem Server sind keine Erkennungsmodelle aktiviert.",
         "loadFailedWarning": "Ein Erkennungsmodell konnte nicht geladen werden, daher wird diese Quelle nicht analysiert, bis es wiederhergestellt ist.",
         "loadFailedLink": "Status der KI-Modelle anzeigen",
+        "state": {
+          "pending": "Wird geladen",
+          "failed": "Laden fehlgeschlagen"
+        },
+        "notLoadedHelp": "Dieses Modell ist nicht geladen und kann daher nicht ausgewählt werden.",
         "defaultBadge": "{models} (Standard)",
         "defaultPendingBadge": "Standardmodelle",
         "noneBadge": "Kein Modell geladen"

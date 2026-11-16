@@ -4110,6 +4110,11 @@
         "noneAvailable": "Inga detektionsmodeller är aktiverade på den här servern.",
         "loadFailedWarning": "En detektionsmodell kunde inte läsas in, så den här källan analyseras inte förrän den återställs.",
         "loadFailedLink": "Visa status för AI-modeller",
+        "state": {
+          "pending": "Läser in",
+          "failed": "Det gick inte att läsa in"
+        },
+        "notLoadedHelp": "Den här modellen är inte inläst och kan därför inte väljas.",
         "defaultBadge": "{models} (standard)",
         "defaultPendingBadge": "Standardmodeller",
         "noneBadge": "Ingen modell inläst"

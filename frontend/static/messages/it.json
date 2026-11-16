@@ -4110,6 +4110,11 @@
         "noneAvailable": "Nessun modello di rilevamento è abilitato su questo server.",
         "loadFailedWarning": "Impossibile caricare un modello di rilevamento, quindi questa fonte non verrà analizzata finché il modello non sarà ripristinato.",
         "loadFailedLink": "Visualizza stato Modelli IA",
+        "state": {
+          "pending": "Caricamento",
+          "failed": "Caricamento non riuscito"
+        },
+        "notLoadedHelp": "Questo modello non è caricato, quindi non può essere selezionato.",
         "defaultBadge": "{models} (predefinito)",
         "defaultPendingBadge": "Modelli predefiniti",
         "noneBadge": "Nessun modello caricato"

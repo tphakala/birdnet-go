@@ -907,7 +907,7 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
 
 **One model operation at a time** - The model manager runs a single operation at once: install, variant swap, reinstall and uninstall all share one slot. The install and reinstall endpoints reserve it before answering 202, so a request made while another operation runs is refused synchronously with `409 Conflict` and nothing is changed. The body carries `error_key` `analysis.gallery.errors.operationInProgress` and `error_params` `{name, operation, running}`, where `name` is the display name of the model whose operation is running, `operation` is `install`, `reinstall` or `uninstall`, and `running` is `{id, name}`. A failed operation frees the slot at once. `GET /api/v2/models/install/:id/progress` reports `complete` only after the entry's operation has released the slot (an install holds it through the hot-load that follows the download), so a client can start the next operation as soon as it sees `complete`. This includes requests made during an uninstall.
 
-**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (`id`, used in audio source configuration), a human-readable display name, and the classifier `registryId` (e.g. `BirdNET_V2.4`) that joins against the registry-ID `defaultTargets` list served by `GET /api/v2/system/inference`. The `name` is the neutral model name with no backend suffix (for example `BirdNET v2.4`, not `BirdNET v2.4 (TFLite)`). A model that is loaded also carries `backend` (the live execution backend, for example `TFLite`, `ONNX` or `OpenVINO`) and `precision` (the live runtime precision, for example `FP32` or `INT8`); both are omitted for a model that is not loaded. They describe the host, so like the catalog's recommendation fields they are omitted for an anonymous request on an instance that requires authentication.
+**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (`id`, used in audio source configuration), a human-readable display name, and the classifier `registryId` (e.g. `BirdNET_V2.4`) that joins against the registry-ID `defaultTargets` list served by `GET /api/v2/system/inference`. The `name` is the neutral model name with no backend suffix (for example `BirdNET v2.4`, not `BirdNET v2.4 (TFLite)`). A model that is loaded also carries `backend` (the live execution backend, for example `TFLite`, `ONNX` or `OpenVINO`) and `precision` (the live runtime precision, for example `FP32` or `INT8`); both are omitted for a model that is not loaded. Every entry carries `state`: `loaded` (the model is loaded and can run), `failed` (enabled, not loaded, and its last load failed) or `pending` (enabled, not loaded, no load error on record). The state is not host data, so it is reported to every caller. A successful install, reinstall or uninstall also sends a topology change event on the SSE stream, so clients refetch the list. They describe the host, so like the catalog's recommendation fields they are omitted for an anonymous request on an instance that requires authentication.
 
 **Response:**
 
@@ -919,13 +919,15 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
     "registryId": "BirdNET_V2.4",
     "category": "bird",
     "backend": "ONNX",
-    "precision": "INT8"
+    "precision": "INT8",
+    "state": "loaded"
   },
   {
     "id": "perch_v2",
     "name": "Google Perch v2",
     "registryId": "Perch_V2",
-    "category": "bird"
+    "category": "bird",
+    "state": "pending"
   }
 ]
 ```

@@ -30,7 +30,7 @@
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import { getAvailableModels, fetchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import { getAvailableModels, watchModels, modelsLoading } from '$lib/stores/models.svelte';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -81,7 +81,7 @@
   }
 
   $effect(() => {
-    return fetchModels();
+    return watchModels();
   });
 
   $effect(() => {

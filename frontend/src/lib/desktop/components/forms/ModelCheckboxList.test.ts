@@ -28,10 +28,19 @@ const NONE_LINK_KEY = 'settings.audio.models.noneEnabledLink';
 const NONE_AVAILABLE_KEY = 'settings.audio.models.noneAvailable';
 const LOAD_FAILED_KEY = 'settings.audio.models.loadFailedWarning';
 const LOAD_FAILED_LINK_KEY = 'settings.audio.models.loadFailedLink';
+const FAILED_STATE_KEY = 'settings.audio.models.state.failed';
+const PENDING_STATE_KEY = 'settings.audio.models.state.pending';
+const NOT_LOADED_HELP_KEY = 'settings.audio.models.notLoadedHelp';
 
 function renderList(
   props: Partial<{
-    models: Array<{ id: string; name: string; category: string; backend?: string }>;
+    models: Array<{
+      id: string;
+      name: string;
+      category: string;
+      backend?: string;
+      state?: 'loaded' | 'failed' | 'pending';
+    }>;
     selectedModels: string[];
     loading: boolean;
     availability: AcousticModelAvailability;
@@ -74,6 +83,50 @@ describe('ModelCheckboxList', () => {
 
     expect(screen.getByText('BirdNET v2.4 (ONNX)')).toBeInTheDocument();
     expect(screen.getByText('Perch v2')).toBeInTheDocument();
+  });
+
+  it('cannot newly check a model that failed to load and names the reason', () => {
+    renderList({
+      models: [BIRDNET, { ...PERCH, state: 'failed' }],
+      selectedModels: ['birdnet'],
+    });
+
+    const perch = screen.getByRole('checkbox', { name: /Perch v2/ });
+    expect(perch).toBeDisabled();
+    expect(perch).toHaveAccessibleDescription(NOT_LOADED_HELP_KEY);
+    expect(screen.getByText(FAILED_STATE_KEY)).toBeInTheDocument();
+  });
+
+  it('shows a pending model with its reason and cannot check it', () => {
+    renderList({
+      models: [BIRDNET, { ...PERCH, state: 'pending' }],
+      selectedModels: ['birdnet'],
+    });
+
+    expect(screen.getByRole('checkbox', { name: /Perch v2/ })).toBeDisabled();
+    expect(screen.getByText(PENDING_STATE_KEY)).toBeInTheDocument();
+  });
+
+  it('can still uncheck a model that is checked but not loaded', async () => {
+    const onToggle = vi.fn();
+    renderList({
+      models: [BIRDNET, { ...PERCH, state: 'failed' }],
+      selectedModels: ['birdnet', 'perch_v2'],
+      onToggle,
+    });
+
+    const perch = screen.getByRole('checkbox', { name: /Perch v2/ });
+    expect(perch).toBeEnabled();
+    await fireEvent.click(perch);
+    expect(onToggle).toHaveBeenCalledWith(['birdnet']);
+  });
+
+  it('shows a loaded model with no state badge', () => {
+    renderList({ models: [{ ...BIRDNET, state: 'loaded' }, PERCH], selectedModels: [] });
+
+    expect(screen.queryByText(FAILED_STATE_KEY)).toBeNull();
+    expect(screen.queryByText(PENDING_STATE_KEY)).toBeNull();
+    expect(screen.getByRole('checkbox', { name: /BirdNET v2.4/ })).toBeEnabled();
   });
 
   it('shows a labelled loading line while the list is empty and loading', () => {

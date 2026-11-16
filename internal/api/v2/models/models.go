@@ -74,7 +74,26 @@ type Handler struct {
 	// (liveModelRuntime, read from the model manager and the orchestrator), and
 	// tests inject a fixed map. A per-Handler field so tests stay parallel-safe.
 	modelRuntime func() map[string]listedModelRuntime
+	// loadErrors reports the last load error text per registry ID for enabled
+	// models that failed to load. Injectable like modelRuntime: nil means the live
+	// orchestrator's LoadErrors, and tests inject a fixed map.
+	loadErrors func() map[string]string
+	// announceListChange tells connected clients that the model list changed. nil
+	// means a topology broadcast on the metrics store, and tests inject a counter.
+	announceListChange func()
 }
+
+// Model load states reported in ModelListItem.State.
+const (
+	// ModelStateLoaded means the model is loaded and can run.
+	ModelStateLoaded = "loaded"
+	// ModelStateFailed means the model is enabled, not loaded, and its last load
+	// attempt failed.
+	ModelStateFailed = "failed"
+	// ModelStatePending means the model is enabled, not loaded, and no load error
+	// is on record, so a load is still expected.
+	ModelStatePending = "pending"
+)
 
 // listedModelRuntime is the live execution backend and runtime precision of one
 // loaded model, as the list endpoint reports them.
@@ -127,6 +146,10 @@ type ModelListItem struct {
 	// Precision is the live runtime precision of the loaded model (for example
 	// "FP32" or "INT8"). Omitted under the same conditions as Backend.
 	Precision string `json:"precision,omitempty"`
+	// State is the model's load state: ModelStateLoaded, ModelStateFailed or
+	// ModelStatePending. Unlike Backend and Precision it is not host-derived, so it
+	// is reported to every caller.
+	State string `json:"state"`
 }
 
 // CatalogEntryResponse represents a model in the catalog API response.
@@ -292,6 +315,45 @@ func mergeModelRuntime(infos []classifier.ModelInfo, instanceRuntime func(id str
 	return runtime
 }
 
+// liveLoadErrors reads the orchestrator's current load errors, keyed by registry
+// ID. Without a processor or orchestrator there are none.
+func (c *Handler) liveLoadErrors() map[string]string {
+	if c.Processor == nil {
+		return nil
+	}
+	orch := c.Processor.GetBirdNET()
+	if orch == nil {
+		return nil
+	}
+	return orch.LoadErrors()
+}
+
+// modelState classifies an enabled model: loaded when the runtime reported it,
+// failed when its load error is on record, else pending.
+func modelState(loaded bool, loadErrors map[string]string, registryID string) string {
+	if loaded {
+		return ModelStateLoaded
+	}
+	if _, failed := loadErrors[registryID]; failed {
+		return ModelStateFailed
+	}
+	return ModelStatePending
+}
+
+// announceModelListChange tells connected clients that the model list changed,
+// for a change the model manager does not announce itself: an uninstall of a
+// model that was not loaded, and an install whose hot load failed. It only
+// broadcasts; it does not schedule an audio reconfigure.
+func (c *Handler) announceModelListChange() {
+	if c.announceListChange != nil {
+		c.announceListChange()
+		return
+	}
+	if c.MetricsStore != nil {
+		c.MetricsStore.BroadcastTopologyChanged()
+	}
+}
+
 // catalogCategory returns the category of the catalog entry for a registry ID,
 // defaulting to "bird" when the catalog has no entry for it.
 func catalogCategory(catalog []classifier.CatalogEntry, registryID string) string {
@@ -303,9 +365,10 @@ func catalogCategory(catalog []classifier.CatalogEntry, registryID string) strin
 	return "bird"
 }
 
-// ListModels returns classifier models that are enabled in the configuration.
-// Loaded models also carry their live backend and precision, for requests that
-// may receive host-derived data (see recommendationsAllowed).
+// ListModels returns classifier models that are enabled in the configuration,
+// each with its load state (loaded, failed or pending). Loaded models also carry
+// their live backend and precision, for requests that may receive host-derived
+// data (see recommendationsAllowed).
 func (c *Handler) ListModels(ctx echo.Context) error {
 	// Read from the live settings (atomic pointer) so that models added
 	// at runtime (via gallery install) are immediately visible.
@@ -319,16 +382,20 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 
 	models := make([]ModelListItem, 0, len(enabled))
 
-	// Live backend and precision are host-derived and this route is public, so
-	// they follow the same gate as the catalog's host data.
-	var runtime map[string]listedModelRuntime
-	if c.recommendationsAllowed(ctx) {
-		read := c.modelRuntime
-		if read == nil {
-			read = c.liveModelRuntime
-		}
-		runtime = read()
+	// The loaded set decides each model's state for every caller. Backend and
+	// precision are host-derived and this route is public, so they follow the same
+	// gate as the catalog's host data.
+	readRuntime := c.modelRuntime
+	if readRuntime == nil {
+		readRuntime = c.liveModelRuntime
 	}
+	runtime := readRuntime()
+	readErrors := c.loadErrors
+	if readErrors == nil {
+		readErrors = c.liveLoadErrors
+	}
+	loadErrors := readErrors()
+	withRuntime := c.recommendationsAllowed(ctx)
 
 	// Snapshot the active catalog once (honors a user-edited model-catalog.json).
 	catalog := classifier.ActiveCatalog()
@@ -336,7 +403,10 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 		info := classifier.ModelRegistry[id]
 		for _, alias := range info.ConfigAliases {
 			if enabled[strings.ToLower(alias)] {
-				live := runtime[id]
+				live, loaded := runtime[id]
+				if !withRuntime {
+					live = listedModelRuntime{}
+				}
 				models = append(models, ModelListItem{
 					ID:                    alias,
 					Name:                  info.Name,
@@ -346,6 +416,7 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 					RecommendedSampleRate: info.Spec.RecommendedSampleRate,
 					Backend:               live.backend,
 					Precision:             live.precision,
+					State:                 modelState(loaded, loadErrors, id),
 				})
 				break // one entry per model
 			}
@@ -916,7 +987,9 @@ func (c *Handler) GetInstalledModels(ctx echo.Context) error {
 // It returns 202 Accepted immediately while the download runs in the background.
 // It reserves the manager's operation slot before answering, so a request made
 // while another model operation runs gets a synchronous 409 with
-// operationInProgressKey instead of a 202 for work that never starts.
+// operationInProgressKey instead of a 202 for work that never starts. When the
+// background install succeeds it announces the list change, whether or not the
+// hot load of the model succeeded.
 func (c *Handler) InstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1031,6 +1104,8 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 				logger.String("variant_id", req.VariantID),
 				logger.Error(err),
 			)
+		} else {
+			c.announceModelListChange()
 		}
 		close(progressChan)
 
@@ -1049,7 +1124,7 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 // Files that pass SHA256 validation are skipped. It returns 202 Accepted
 // immediately while the re-download runs in the background. Like InstallModel it
 // answers a synchronous 409 with operationInProgressKey while another model
-// operation runs.
+// operation runs, and announces the list change when the reinstall succeeds.
 func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1125,6 +1200,8 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),
 			)
+		} else {
+			c.announceModelListChange()
 		}
 		close(progressChan)
 
@@ -1149,7 +1226,8 @@ func sumFileSizes(files []classifier.CatalogFile) int64 {
 
 // UninstallModel removes a downloaded model from disk. It answers 409 with the
 // removeHasDependentsKey i18n key when other installed models still need it, and
-// with operationInProgressKey while another model operation runs.
+// with operationInProgressKey while another model operation runs. A successful
+// uninstall announces the list change.
 func (c *Handler) UninstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1177,6 +1255,7 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 	// Uninstalling a model that was not loaded fires no topology event, but it
 	// can remove an optimize offer, so re-evaluate the notice here.
 	c.ScheduleOptimizeNoticeSync()
+	c.announceModelListChange()
 
 	return ctx.JSON(http.StatusOK, map[string]string{
 		"catalogId": catalogID,

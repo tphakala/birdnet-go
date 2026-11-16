@@ -4110,6 +4110,11 @@
         "noneAvailable": "Na tym serwerze nie włączono żadnych modeli detekcji.",
         "loadFailedWarning": "Nie udało się załadować modelu detekcji, więc to źródło nie będzie analizowane do czasu jego przywrócenia.",
         "loadFailedLink": "Wyświetl status modeli AI",
+        "state": {
+          "pending": "Ładowanie",
+          "failed": "Nie udało się załadować"
+        },
+        "notLoadedHelp": "Ten model nie jest załadowany, więc nie można go wybrać.",
         "defaultBadge": "{models} (domyślne)",
         "defaultPendingBadge": "Domyślne modele",
         "noneBadge": "Nie załadowano modelu"

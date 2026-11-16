@@ -4110,6 +4110,11 @@
         "noneAvailable": "Ezen a szerveren nincsenek engedélyezve detekciós modellek.",
         "loadFailedWarning": "Egy detekciós modellt nem sikerült betölteni, ezért ez a forrás nem lesz elemezve, amíg helyre nem áll.",
         "loadFailedLink": "AI Modellek állapotának megtekintése",
+        "state": {
+          "pending": "Betöltés",
+          "failed": "A betöltés sikertelen"
+        },
+        "notLoadedHelp": "Ez a modell nincs betöltve, ezért nem választható ki.",
         "defaultBadge": "{models} (alapértelmezett)",
         "defaultPendingBadge": "Alapértelmezett modellek",
         "noneBadge": "Nincs betöltve modell"

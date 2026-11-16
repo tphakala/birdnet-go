@@ -3038,6 +3038,9 @@ export type TranslationKey =
   | 'settings.audio.models.noneAvailable'
   | 'settings.audio.models.loadFailedWarning'
   | 'settings.audio.models.loadFailedLink'
+  | 'settings.audio.models.state.pending'
+  | 'settings.audio.models.state.failed'
+  | 'settings.audio.models.notLoadedHelp'
   | 'settings.audio.models.defaultBadge' // params: models
   | 'settings.audio.models.defaultPendingBadge'
   | 'settings.audio.models.noneBadge'

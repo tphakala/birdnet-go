@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // TestModelsRouteRegistration verifies the models handler registers exactly the
@@ -158,6 +159,100 @@ func TestListModels_LabelsFromLiveRuntime(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestListModels_ReportsLoadState verifies the three load states: a model in the
+// runtime seam is loaded, an enabled model with a recorded load error is failed,
+// and an enabled model with neither is pending. The state is not host-derived, so
+// an anonymous caller on an auth-enabled instance still receives it.
+func TestListModels_ReportsLoadState(t *testing.T) {
+	// Mutates the process-global settings snapshot: not parallel.
+	runtime := map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX"}}
+	loadErrors := map[string]string{classifier.RegistryIDPerchV2: "load failed"}
+	tests := []struct {
+		name     string
+		enabled  []string
+		withAuth bool
+		want     map[string]string // state by config alias
+	}{
+		{
+			name:    "loaded, failed and pending",
+			enabled: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat},
+			want: map[string]string{
+				conf.ModelIDBirdNET: ModelStateLoaded,
+				conf.ModelIDPerchV2: ModelStateFailed,
+				conf.ModelIDBat:     ModelStatePending,
+			},
+		},
+		{
+			name:     "an anonymous caller on an auth-enabled instance still gets the state",
+			enabled:  []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2},
+			withAuth: true,
+			want: map[string]string{
+				conf.ModelIDBirdNET: ModelStateLoaded,
+				conf.ModelIDPerchV2: ModelStateFailed,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core := apitest.NewCore(t)
+			var authSvc auth.Service
+			if tt.withAuth {
+				authSvc = &stubAuth{}
+			}
+			h := New(core, authSvc)
+			h.modelRuntime = func() map[string]listedModelRuntime { return runtime }
+			h.loadErrors = func() map[string]string { return loadErrors }
+
+			settings := &conf.Settings{}
+			settings.Models.Enabled = tt.enabled
+			apitest.PublishTestSettings(t, settings)
+
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/models", http.NoBody)
+			require.NoError(t, h.ListModels(e.NewContext(req, rec)))
+
+			var items []ModelListItem
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
+			got := make(map[string]string, len(items))
+			for i := range items {
+				got[items[i].ID] = items[i].State
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestAnnounceModelListChange verifies that, without an injected seam, the
+// announcement is a topology broadcast on the metrics store that subscribers
+// receive, and that a missing metrics store is not an error.
+func TestAnnounceModelListChange(t *testing.T) {
+	core := apitest.NewCore(t)
+	h := New(core, nil)
+
+	core.MetricsStore = nil
+	assert.NotPanics(t, h.announceModelListChange)
+
+	store := observability.NewMemoryStore(1)
+	core.MetricsStore = store
+	signal, cancel := store.SubscribeTopology()
+	t.Cleanup(cancel)
+	h.announceModelListChange()
+	select {
+	case <-signal:
+	default:
+		t.Fatal("the announcement must reach a topology subscriber")
+	}
+}
+
+// TestLiveLoadErrors_NoProcessor verifies that without a processor there are no
+// load errors, so an enabled model that is not loaded reads as pending.
+func TestLiveLoadErrors_NoProcessor(t *testing.T) {
+	core := apitest.NewCore(t)
+	core.Processor = nil
+	assert.Empty(t, New(core, nil).liveLoadErrors())
 }
 
 // TestMergeModelRuntime verifies that the live instance's backend and precision

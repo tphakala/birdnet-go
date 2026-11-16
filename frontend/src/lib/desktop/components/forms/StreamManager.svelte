@@ -26,7 +26,7 @@
   import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
   import { toastActions } from '$lib/stores/toast';
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
-  import { getAvailableModels, fetchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import { getAvailableModels, watchModels, modelsLoading } from '$lib/stores/models.svelte';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -62,7 +62,7 @@
   const acousticAvailability = $derived(acousticModelAvailability());
 
   $effect(() => {
-    return fetchModels();
+    return watchModels();
   });
 
   $effect(() => {

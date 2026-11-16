@@ -1,6 +1,9 @@
 import { untrack } from 'svelte';
 import { api } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
+import { isGuestMode } from '$lib/stores/appState.svelte';
+import { watchAcousticModels, onTopologyChanged } from '$lib/stores/acousticModels.svelte';
+import { settingsActions } from '$lib/stores/settings';
 
 const logger = loggers.audio;
 
@@ -25,6 +28,11 @@ export interface BackendModel {
   backend?: string;
   /** Live runtime precision of the loaded model (e.g. "INT8"). Absent like `backend`. */
   precision?: string;
+  /**
+   * Load state of the model: loaded, failed to load, or waiting to load. Absent
+   * on a server that predates the field, which counts as loaded.
+   */
+  state?: 'loaded' | 'failed' | 'pending';
 }
 
 export const DEFAULT_MODEL_ID = 'birdnet';
@@ -45,6 +53,8 @@ let fetchedModels = $state<BackendModel[]>([]);
 let fetchState = $state<ModelsFetchState>('idle');
 let activeFetch: AbortController | null = null;
 let subscribers = 0;
+let activeRefresh: AbortController | null = null;
+let refreshQueued = false;
 
 /**
  * Enabled models for the source editors. Empty while a fetch is in flight (the
@@ -86,6 +96,9 @@ function abortActiveFetch(): void {
 
 export function invalidateModels(): void {
   abortActiveFetch();
+  activeRefresh?.abort();
+  activeRefresh = null;
+  refreshQueued = false;
   fetchedModels = [];
   fetchState = 'idle';
 }
@@ -157,9 +170,80 @@ export function fetchModels(): () => void {
   };
 }
 
+function idSet(models: readonly BackendModel[]): string {
+  return models
+    .map(m => m.id)
+    .sort()
+    .join('\n');
+}
+
+/**
+ * Refetches the list in place: the shown list stays until the new one arrives, so
+ * a refresh never flashes the loading state, and a failed refresh keeps the last
+ * list. A refresh that arrives while one runs queues one more behind it. When the
+ * set of listed ids changed, the settings form is refreshed once, keeping unsaved
+ * edits, because the server strips aliases of removed models from the sources.
+ * Before the first successful fetch it is the plain fetch.
+ */
+export async function refreshModels(): Promise<void> {
+  if (fetchState !== 'loaded') {
+    untrack(startFetchIfNeeded);
+    return;
+  }
+  if (activeRefresh) {
+    refreshQueued = true;
+    return;
+  }
+  const controller = new AbortController();
+  activeRefresh = controller;
+  try {
+    const data = await api.get<BackendModel[]>('/api/v2/models', { signal: controller.signal });
+    if (controller.signal.aborted || !Array.isArray(data)) return;
+    const changed = idSet(data) !== idSet(fetchedModels);
+    fetchedModels = data;
+    if (changed) {
+      await settingsActions.refreshKeepingEdits();
+    }
+  } catch (err: unknown) {
+    if (!controller.signal.aborted) {
+      logger.warn('Failed to refresh models', {
+        component: 'modelsStore',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } finally {
+    if (activeRefresh === controller) activeRefresh = null;
+    if (refreshQueued) {
+      refreshQueued = false;
+      void refreshModels();
+    }
+  }
+}
+
+/**
+ * Subscribes to the model list and keeps it live: the list is fetched, and a
+ * server topology change (a model installed, removed, loaded or unloaded)
+ * refetches it over the shared topology stream. Guests get the plain fetch, since
+ * the stream is for signed-in users only. Returns the unwatch.
+ */
+export function watchModels(): () => void {
+  const unsubscribe = fetchModels();
+  if (isGuestMode()) return unsubscribe;
+  const unwatchAcoustic = watchAcousticModels();
+  const unlisten = onTopologyChanged(() => void refreshModels());
+  return () => {
+    unlisten();
+    unwatchAcoustic();
+    unsubscribe();
+  };
+}
+
 /** Test-only: drop all cached state so each test starts from a cold store. */
 export function resetModelsForTest(): void {
   abortActiveFetch();
+  activeRefresh?.abort();
+  activeRefresh = null;
+  refreshQueued = false;
   fetchedModels = [];
   fetchState = 'idle';
   subscribers = 0;

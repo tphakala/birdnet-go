@@ -4110,6 +4110,11 @@
         "noneAvailable": "Tällä palvelimella ei ole käytössä tunnistusmalleja.",
         "loadFailedWarning": "Tunnistusmallin lataus epäonnistui, joten tätä lähdettä ei analysoida ennen kuin se palautuu.",
         "loadFailedLink": "Näytä Tekoälymallit-tila",
+        "state": {
+          "pending": "Ladataan",
+          "failed": "Lataus epäonnistui"
+        },
+        "notLoadedHelp": "Tätä mallia ei ole ladattu, joten sitä ei voi valita.",
         "defaultBadge": "{models} (oletus)",
         "defaultPendingBadge": "Oletusmallit",
         "noneBadge": "Ei ladattua mallia"

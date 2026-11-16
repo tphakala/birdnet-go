@@ -31,6 +31,8 @@
     recommendedSampleRate?: number;
     /** Live execution backend of the loaded model; absent when not loaded. */
     backend?: string;
+    /** Load state; absent counts as loaded. */
+    state?: 'loaded' | 'failed' | 'pending';
   }
 
   interface Props {
@@ -111,15 +113,33 @@
       !belowMin &&
       (model.recommendedSampleRate ?? 0) > 0 &&
       sourceSampleRate < (model.recommendedSampleRate ?? 0)}
+    {@const blockedNotLoaded =
+      (model.state === 'failed' || model.state === 'pending') && !isChecked}
     <Checkbox
       checked={isChecked}
-      disabled={disabled || (isChecked && selectedModels.length === 1)}
+      disabled={disabled || blockedNotLoaded || (isChecked && selectedModels.length === 1)}
+      helpText={blockedNotLoaded ? t('settings.audio.models.notLoadedHelp') : undefined}
       size="sm"
       onchange={checked => handleToggle(model.id, checked)}
     >
       {#snippet children()}
         <span class="flex items-center gap-2 min-w-0">
           <span class="text-sm text-[var(--color-base-content)]">{modelLabel(model)}</span>
+          {#if model.state === 'pending'}
+            <span
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-info)]/15 text-[var(--color-info)]"
+            >
+              <Loader2 class="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              {t('settings.audio.models.state.pending')}
+            </span>
+          {:else if model.state === 'failed'}
+            <span
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+            >
+              <AlertTriangle class="size-3" aria-hidden="true" />
+              {t('settings.audio.models.state.failed')}
+            </span>
+          {/if}
           {#if belowMin}
             <span
               class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--text-error)]"

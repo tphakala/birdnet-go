@@ -4110,6 +4110,11 @@
         "noneAvailable": "No detection models are enabled on this server.",
         "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
         "loadFailedLink": "View AI Models status",
+        "state": {
+          "pending": "Loading",
+          "failed": "Failed to load"
+        },
+        "notLoadedHelp": "This model is not loaded, so it cannot be selected.",
         "defaultBadge": "{models} (default)",
         "defaultPendingBadge": "Default models",
         "noneBadge": "No model loaded"

@@ -17,7 +17,9 @@ import {
   invalidateModels,
   modelsLoaded,
   modelsLoading,
+  refreshModels,
   resetModelsForTest,
+  watchModels,
   type BackendModel,
 } from './models.svelte';
 
@@ -25,8 +27,35 @@ const { apiGet } = vi.hoisted(() => ({
   apiGet: vi.fn<(url: string, options?: { signal?: AbortSignal }) => Promise<unknown>>(),
 }));
 
+const { refreshKeepingEdits, watchAcoustic, unwatchAcoustic, topology, guest } = vi.hoisted(() => ({
+  refreshKeepingEdits: vi.fn<() => Promise<void>>(),
+  watchAcoustic: vi.fn(),
+  unwatchAcoustic: vi.fn(),
+  topology: { listener: null as (() => void) | null, unlisten: vi.fn() },
+  guest: { value: false },
+}));
+
 vi.mock('$lib/utils/api', () => ({
   api: { get: apiGet },
+}));
+
+vi.mock('$lib/stores/settings', () => ({
+  settingsActions: { refreshKeepingEdits },
+}));
+
+vi.mock('$lib/stores/appState.svelte', () => ({
+  isGuestMode: () => guest.value,
+}));
+
+vi.mock('$lib/stores/acousticModels.svelte', () => ({
+  watchAcousticModels: () => {
+    watchAcoustic();
+    return unwatchAcoustic;
+  },
+  onTopologyChanged: (listener: () => void) => {
+    topology.listener = listener;
+    return topology.unlisten;
+  },
 }));
 
 const PERCH: BackendModel = {
@@ -365,5 +394,106 @@ describe('models store subscribed from an effect', () => {
     expect(onEffectRun).toHaveBeenCalledTimes(mounts);
     expect(apiGet).toHaveBeenCalledTimes(requests);
     expect(apiGet.mock.calls[0]?.[1]?.signal?.aborted).toBe(firstAborted);
+  });
+});
+
+describe('models store live refresh', () => {
+  const BIRDNET: BackendModel = { id: 'birdnet', name: 'BirdNET v2.4', category: 'bird' };
+
+  beforeEach(() => {
+    resetModelsForTest();
+    apiGet.mockReset();
+    refreshKeepingEdits.mockReset().mockResolvedValue();
+    watchAcoustic.mockReset();
+    unwatchAcoustic.mockReset();
+    topology.listener = null;
+    topology.unlisten.mockReset();
+    guest.value = false;
+  });
+
+  /** Load the store with an initial list through the public fetch path. */
+  async function loadWith(models: BackendModel[]): Promise<() => void> {
+    apiGet.mockResolvedValueOnce(models);
+    const unwatch = watchModels();
+    await settle();
+    return unwatch;
+  }
+
+  it('keeps the shown list while a refresh is in flight and keeps it when the refresh fails', async () => {
+    const unwatch = await loadWith([BIRDNET, PERCH]);
+
+    const pending = deferredGet();
+    const refresh = refreshModels();
+    expect(modelsLoading()).toBe(false);
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet', 'perch_v2']);
+
+    pending.reject(new Error('offline'));
+    await refresh;
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet', 'perch_v2']);
+    expect(modelsLoaded()).toBe(true);
+    unwatch();
+  });
+
+  it('refetches on a topology event and refreshes the settings form once per changed id set', async () => {
+    const unwatch = await loadWith([BIRDNET, PERCH]);
+    expect(topology.listener).not.toBeNull();
+
+    // A minus one: the id set changed.
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    topology.listener?.();
+    await settle();
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet']);
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(1);
+
+    // Same set again (a backend change only): list updates, form is left alone.
+    apiGet.mockResolvedValueOnce([{ ...BIRDNET, backend: 'ONNX' }]);
+    topology.listener?.();
+    await settle();
+    expect(getAvailableModels()[0]?.backend).toBe('ONNX');
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(1);
+
+    // A again: the id set changed back.
+    apiGet.mockResolvedValueOnce([BIRDNET, PERCH]);
+    topology.listener?.();
+    await settle();
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet', 'perch_v2']);
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(2);
+    unwatch();
+  });
+
+  it('queues one more refetch behind a refresh that is running', async () => {
+    const unwatch = await loadWith([BIRDNET]);
+
+    const first = deferredGet();
+    topology.listener?.();
+    topology.listener?.();
+    topology.listener?.();
+    first.resolve([BIRDNET]);
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await settle();
+    await settle();
+
+    // One initial load, one running refresh, one queued rerun for the burst.
+    expect(apiGet).toHaveBeenCalledTimes(3);
+    unwatch();
+  });
+
+  it('watches the topology stream and releases everything on unwatch', async () => {
+    const unwatch = await loadWith([BIRDNET]);
+    expect(watchAcoustic).toHaveBeenCalledTimes(1);
+
+    unwatch();
+    expect(topology.unlisten).toHaveBeenCalledTimes(1);
+    expect(unwatchAcoustic).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a guest the plain fetch without the topology stream', async () => {
+    guest.value = true;
+    const unwatch = await loadWith([BIRDNET]);
+
+    expect(getAvailableModels().map(m => m.id)).toEqual(['birdnet']);
+    expect(watchAcoustic).not.toHaveBeenCalled();
+    expect(topology.listener).toBeNull();
+    unwatch();
   });
 });

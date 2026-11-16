@@ -101,6 +101,8 @@
       recommendedSampleRate?: number;
       /** Live execution backend of the loaded model; absent when not loaded. */
       backend?: string;
+      /** Load state; absent counts as loaded. */
+      state?: 'loaded' | 'failed' | 'pending';
     }>;
     disabled?: boolean;
     onUpdate: (_stream: StreamConfig) => boolean;

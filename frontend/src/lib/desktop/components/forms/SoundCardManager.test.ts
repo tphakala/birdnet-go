@@ -52,7 +52,7 @@ vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte
 vi.mock('$lib/stores/models.svelte', () => ({
   getAvailableModels: vi.fn(() => []),
   DEFAULT_MODEL_ID: 'birdnet',
-  fetchModels: vi.fn(() => () => {}),
+  watchModels: vi.fn(() => () => {}),
   modelsLoaded: vi.fn(() => true),
   modelsLoading: vi.fn(() => false),
 }));

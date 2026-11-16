@@ -19,6 +19,7 @@ import {
   acousticModelsState,
   analysisCadence,
   invalidateAcousticModels,
+  onTopologyChanged,
   refreshAcousticModels,
   resetAcousticModelsForTest,
   subscribeAcousticModels,
@@ -559,19 +560,31 @@ describe('acousticModels store', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(acousticModelAvailability()).toEqual({ kind: 'none', reason: 'none_installed' });
 
+        const listener = vi.fn();
+        const unlisten = onTopologyChanged(listener);
+
         apiGet.mockResolvedValueOnce(snapshot('ok', ['BirdNET_V2.4']));
         fire(0, TOPOLOGY_EVENT);
         await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS - 1);
         fire(0, TOPOLOGY_EVENT);
         await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS - 1);
         expect(apiGet).toHaveBeenCalledTimes(1);
+        expect(listener).not.toHaveBeenCalled();
 
         await vi.advanceTimersByTimeAsync(1);
         expect(apiGet).toHaveBeenCalledTimes(2);
+        expect(listener).toHaveBeenCalledTimes(1);
+
         expect(acousticModelAvailability()).toEqual({
           kind: 'ready',
           defaultTargets: ['BirdNET_V2.4'],
         });
+
+        apiGet.mockResolvedValueOnce(snapshot('ok', ['BirdNET_V2.4']));
+        unlisten();
+        fire(0, TOPOLOGY_EVENT);
+        await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS);
+        expect(listener).toHaveBeenCalledTimes(1);
         unwatch();
       } finally {
         vi.useRealTimers();
@@ -631,13 +644,18 @@ describe('acousticModels store', () => {
       await flush();
       expect(apiGet).toHaveBeenCalledTimes(1);
 
+      const listener = vi.fn();
+      onTopologyChanged(listener);
+
       fire(0, 'connected');
       await flush();
       expect(apiGet).toHaveBeenCalledTimes(1);
+      expect(listener).not.toHaveBeenCalled();
 
       fire(0, 'connected');
       await flush();
       expect(apiGet).toHaveBeenCalledTimes(2);
+      expect(listener).toHaveBeenCalledTimes(1);
       unwatch();
     });
 
