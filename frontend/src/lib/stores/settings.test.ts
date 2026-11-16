@@ -7,6 +7,7 @@ import {
   resetIfMatchFallbackForTest,
   resetStagedEditsForTest,
   SECTION_STORE_PATHS,
+  SettingsChangedElsewhereError,
 } from './settings';
 import type {
   AudioSettings,
@@ -2330,10 +2331,11 @@ describe('Settings Store - staged section saves', () => {
     stage({ sources: sources('A') });
     stage({ sources: sources('B') });
 
-    await settingsActions.saveStagedSection('audio');
+    const result = await settingsActions.saveStagedSection('audio');
 
     expect(patchCalls()).toHaveLength(1);
     expect(patchBody(0)).toEqual({ sources: sources('B') });
+    expect(result.saved).toEqual([['sources']]);
   });
 
   it('takes the staged value back to the stored one when the save fails', async () => {
@@ -2441,6 +2443,71 @@ describe('Settings Store - staged section saves', () => {
     expect(result.remaining).toBe(false);
     expect(formAudio().sources).toEqual(stored);
     expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('confirms a staged value equal to the stored one without sending a request', async () => {
+    stage({ sources: savedAudio().sources });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(0);
+    expect(result).toMatchObject({ saved: [['sources']], failed: [], remaining: false });
+  });
+
+  it('gives up after the attempt cap when every send is refused, and takes the edit back', async () => {
+    const stored = savedAudio().sources;
+    let refusals = 0;
+    vi.mocked(settingsAPI.patchSection).mockImplementation(async (_section, _body, options) => {
+      refusals++;
+      options?.onETag?.(`"other-${refusals}"`);
+      throw conflict412();
+    });
+    stage({ sources: sources('A') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(2);
+    expect(result.error).toBeInstanceOf(SettingsChangedElsewhereError);
+    expect(result.failed).toEqual([['sources']]);
+    expect(formAudio().sources).toEqual(stored);
+  });
+
+  it('sends once without If-Match when two refusals name the same ETag', async () => {
+    const accepting = vi.mocked(settingsAPI.patchSection).getMockImplementation();
+    vi.mocked(settingsAPI.patchSection).mockImplementation((async (
+      ...args: Parameters<typeof settingsAPI.patchSection>
+    ) => {
+      const options = args[2];
+      if (options?.ifMatch) {
+        options.onETag?.('"rewritten"');
+        throw conflict412();
+      }
+      return accepting?.(...args);
+    }) as typeof settingsAPI.patchSection);
+    stage({ sources: sources('A') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(3);
+    expect(patchOptions(2)?.ifMatch).toBeUndefined();
+    expect(result).toMatchObject({ saved: [['sources']], failed: [] });
+    expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(sources('A')));
+  });
+
+  it('keeps an edit made while the baseline fetch is failing, and reports only the unsent paths it took back', async () => {
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    stage({ sources: sources('A') });
+    vi.mocked(settingsAPI.load).mockImplementationOnce(async () => {
+      stage({ sources: sources('B') });
+      throw new Error('network down');
+    });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(result.failed).toEqual([]);
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('B'));
   });
 
   it('refetches and resends once after a 412 when the server changed another path', async () => {
