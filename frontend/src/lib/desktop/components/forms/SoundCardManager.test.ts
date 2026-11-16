@@ -689,4 +689,81 @@ describe('SoundCardManager add outcome', () => {
     await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('error'));
     expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Mic 1');
   });
+
+  describe('rows after a list save outcome', () => {
+    const ids = ['A', 'B', 'C', 'P', 'Q', 'R', 'S'];
+    const source = (name: string): AudioSourceConfig => ({
+      name,
+      device: `dev-${name}`,
+      gain: 0,
+      models: [],
+    });
+    const list = (...names: string[]) => names.map(source);
+
+    function renderList(sources: AudioSourceConfig[]) {
+      stubElementAnimate();
+      onTestFinished(restoreElementAnimate);
+      return createComponentTestFactory(SoundCardManager, {
+        sources,
+        audioDevices: ids.map((id, index) => ({ index, name: `Mic ${id}`, id: `dev-${id}` })),
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources: (next: AudioSourceConfig[], options: CommitOptions) =>
+          commitSetting('audio', { sources: next }, options),
+        onRefreshDevices: vi.fn(),
+      }).render();
+    }
+
+    function header(name: string): HTMLElement {
+      return screen.getByRole('button', { name: accessible => accessible.startsWith(`${name} `) });
+    }
+
+    async function deleteFirstCard() {
+      await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
+      const dialog = screen.getByRole('alertdialog');
+      const confirm = Array.from(dialog.querySelectorAll('button')).find(
+        button => button.textContent.trim() === 'common.delete'
+      );
+      if (confirm) await fireEvent.click(confirm);
+    }
+
+    it('restores the right rows for a refused edit that follows a confirmed one', async () => {
+      store.saveStagedSection.mockResolvedValueOnce(SAVED).mockResolvedValueOnce(REFUSED);
+      const { rerender } = renderList(list('A', 'B', 'C'));
+      await fireEvent.click(header('A'));
+      await fireEvent.click(header('B'));
+
+      await deleteFirstCard();
+      await rerender({ sources: list('B', 'C') });
+      await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('saved'));
+
+      await deleteFirstCard();
+      await rerender({ sources: list('C') });
+      await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('error'));
+      await rerender({ sources: list('B', 'C') });
+
+      expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+      expect(header('C')).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('restores the rows from before a refused edit that follows an outside length change', async () => {
+      store.saveStagedSection.mockResolvedValue(REFUSED);
+      const { rerender } = renderList(list('A', 'B', 'C'));
+
+      await deleteFirstCard();
+      await rerender({ sources: list('B', 'C') });
+      await waitFor(() => expect(store.saveStagedSection).toHaveBeenCalledOnce());
+
+      // Another window grows the list: every row gets a fresh id.
+      await rerender({ sources: list('P', 'Q', 'R', 'S') });
+      await fireEvent.click(header('Q'));
+
+      await deleteFirstCard();
+      await rerender({ sources: list('Q', 'R', 'S') });
+      await waitFor(() => expect(store.saveStagedSection).toHaveBeenCalledTimes(2));
+      await rerender({ sources: list('P', 'Q', 'R', 'S') });
+
+      expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
 });
