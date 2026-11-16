@@ -576,6 +576,7 @@ describe('SoundCardManager rows', () => {
       const confirm = Array.from(dialog.querySelectorAll('button')).find(
         button => button.textContent.trim() === 'common.delete'
       );
+      expect(confirm).toBeDefined();
       if (confirm) await fireEvent.click(confirm);
     }
 
@@ -724,6 +725,7 @@ describe('SoundCardManager add outcome', () => {
       const confirm = Array.from(dialog.querySelectorAll('button')).find(
         button => button.textContent.trim() === 'common.delete'
       );
+      expect(confirm).toBeDefined();
       if (confirm) await fireEvent.click(confirm);
     }
 
