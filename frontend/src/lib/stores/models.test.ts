@@ -461,6 +461,18 @@ describe('models store live refresh', () => {
     unwatch();
   });
 
+  it('registers one topology listener for any number of watchers', async () => {
+    const first = await loadWith([BIRDNET]);
+    const listener = topology.listener;
+    const second = watchModels();
+    expect(topology.listener).toBe(listener);
+
+    first();
+    expect(topology.unlisten).not.toHaveBeenCalled();
+    second();
+    expect(topology.unlisten).toHaveBeenCalledTimes(1);
+  });
+
   it('queues one more refetch behind a refresh that is running', async () => {
     const unwatch = await loadWith([BIRDNET]);
 

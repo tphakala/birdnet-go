@@ -7,6 +7,9 @@ import { settingsActions } from '$lib/stores/settings';
 
 const logger = loggers.audio;
 
+/** Load state of a listed model. */
+export type ModelLoadState = 'loaded' | 'failed' | 'pending';
+
 /** One enabled classifier model as listed by GET /api/v2/models. */
 export interface BackendModel {
   /** Config alias persisted in source model lists (e.g. "birdnet", "perch_v2"). */
@@ -32,7 +35,7 @@ export interface BackendModel {
    * Load state of the model: loaded, failed to load, or waiting to load. Absent
    * on a server that predates the field, which counts as loaded.
    */
-  state?: 'loaded' | 'failed' | 'pending';
+  state?: ModelLoadState;
 }
 
 export const DEFAULT_MODEL_ID = 'birdnet';
@@ -55,6 +58,8 @@ let activeFetch: AbortController | null = null;
 let subscribers = 0;
 let activeRefresh: AbortController | null = null;
 let refreshQueued = false;
+let watchers = 0;
+let unlistenTopology: (() => void) | null = null;
 
 /**
  * Enabled models for the source editors. Empty while a fetch is in flight (the
@@ -230,9 +235,17 @@ export function watchModels(): () => void {
   const unsubscribe = fetchModels();
   if (isGuestMode()) return unsubscribe;
   const unwatchAcoustic = watchAcousticModels();
-  const unlisten = onTopologyChanged(() => void refreshModels());
+  // One shared listener for all watchers, so one event refetches once.
+  watchers++;
+  if (watchers === 1) {
+    unlistenTopology = onTopologyChanged(() => void refreshModels());
+  }
   return () => {
-    unlisten();
+    watchers--;
+    if (watchers === 0) {
+      unlistenTopology?.();
+      unlistenTopology = null;
+    }
     unwatchAcoustic();
     unsubscribe();
   };
@@ -240,6 +253,9 @@ export function watchModels(): () => void {
 
 /** Test-only: drop all cached state so each test starts from a cold store. */
 export function resetModelsForTest(): void {
+  unlistenTopology?.();
+  unlistenTopology = null;
+  watchers = 0;
   abortActiveFetch();
   activeRefresh?.abort();
   activeRefresh = null;

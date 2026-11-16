@@ -34,7 +34,7 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { modelsLoading, type ModelLoadState } from '$lib/stores/models.svelte';
   import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import { maskUrlCredentials } from '$lib/utils/security';
@@ -102,7 +102,7 @@
       /** Live execution backend of the loaded model; absent when not loaded. */
       backend?: string;
       /** Load state; absent counts as loaded. */
-      state?: 'loaded' | 'failed' | 'pending';
+      state?: ModelLoadState;
     }>;
     disabled?: boolean;
     onUpdate: (_stream: StreamConfig) => boolean;

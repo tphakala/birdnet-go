@@ -19,6 +19,7 @@
   import { SETTINGS_ROUTES, SYSTEM_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import type { AcousticModelAvailability } from '$lib/types/models';
+  import type { ModelLoadState } from '$lib/stores/models.svelte';
   import Checkbox from './Checkbox.svelte';
 
   interface ModelOption {
@@ -32,7 +33,7 @@
     /** Live execution backend of the loaded model; absent when not loaded. */
     backend?: string;
     /** Load state; absent counts as loaded. */
-    state?: 'loaded' | 'failed' | 'pending';
+    state?: ModelLoadState;
   }
 
   interface Props {

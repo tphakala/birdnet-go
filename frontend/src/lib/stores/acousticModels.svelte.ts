@@ -326,6 +326,12 @@ function notifyTopologyListeners(): void {
   }
 }
 
+/** Queues the availability refresh for a topology change, then tells the listeners. */
+function refreshAndNotify(): void {
+  void invalidateAcousticModels();
+  notifyTopologyListeners();
+}
+
 function openTopologyStream(): void {
   if (topologySource || isGuestMode()) return;
   const url = buildAppUrl(
@@ -359,8 +365,7 @@ function openTopologyStream(): void {
       void refreshAcousticModels();
       return;
     }
-    void invalidateAcousticModels();
-    notifyTopologyListeners();
+    refreshAndNotify();
   });
 }
 
@@ -373,8 +378,7 @@ function scheduleTopologyRefresh(): void {
   cancelTopologyRefresh();
   topologyRefreshTimer = setTimeout(() => {
     topologyRefreshTimer = null;
-    void invalidateAcousticModels();
-    notifyTopologyListeners();
+    refreshAndNotify();
   }, TOPOLOGY_REFRESH_DEBOUNCE_MS);
 }
 
