@@ -67,7 +67,25 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
+const store = vi.hoisted(() => ({
+  stageSectionEdit: vi.fn(),
+  saveStagedSection: vi.fn(),
+  onStagedEditsDropped: vi.fn(() => () => undefined),
+}));
+
+// The add outcome tests run the real auto-save engine over a mocked store.
+vi.mock('$lib/stores/settings', async importOriginal => {
+  const actual = await importOriginal<typeof import('$lib/stores/settings')>();
+  return { ...actual, settingsActions: { ...actual.settingsActions, ...store } };
+});
+
 import { getAvailableModels, watchModels } from '$lib/stores/models.svelte';
+import {
+  autoSaveStatus,
+  commitSetting,
+  resetAutoSaveForTest,
+  type CommitOptions,
+} from '$lib/stores/settingsAutoSave.svelte';
 import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
 
 const USB_MIC = 'usb-mic';
@@ -515,5 +533,71 @@ describe('SoundCardManager rows', () => {
     expect(onUpdateSources).toHaveBeenCalledExactlyOnceWith([sourceB], {
       field: AUDIO_SOURCES_LIST_FIELD,
     });
+  });
+});
+
+describe('SoundCardManager add outcome', () => {
+  const NAME_TESTID = 'new-soundcard-name';
+  const SAVED = { saved: [['sources']], dropped: [], failed: [], remaining: false };
+  const REFUSED = {
+    saved: [],
+    dropped: [],
+    failed: [['sources']],
+    remaining: false,
+    error: new Error('no'),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetAutoSaveForTest();
+    store.stageSectionEdit.mockReset();
+    store.saveStagedSection.mockReset();
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(acousticModelAvailability).mockReturnValue({
+      kind: 'none',
+      reason: 'none_installed',
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetAutoSaveForTest();
+  });
+
+  async function addMic() {
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [],
+        audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources: (sources: AudioSourceConfig[], options: CommitOptions) =>
+          commitSetting('audio', { sources }, options),
+        onRefreshDevices: vi.fn(),
+      },
+    });
+    await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
+    await fireEvent.change(await screen.findByTestId(DEVICE_SELECT_TESTID), {
+      target: { value: USB_MIC },
+    });
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Mic 1' } });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
+  }
+
+  it('closes the add form once the new source is saved', async () => {
+    store.saveStagedSection.mockResolvedValue(SAVED);
+
+    await addMic();
+
+    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
+  });
+
+  it('keeps the add form open with what was typed when the save is refused', async () => {
+    store.saveStagedSection.mockResolvedValue(REFUSED);
+
+    await addMic();
+
+    await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('error'));
+    expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Mic 1');
   });
 });

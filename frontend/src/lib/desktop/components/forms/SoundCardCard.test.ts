@@ -278,7 +278,7 @@ describe('SoundCardCard immediate save', () => {
     );
   });
 
-  it('commits gain once on release, not while dragging, with the debounce for key steps', async () => {
+  it('commits gain once on release, not while dragging, with the debounce option', async () => {
     const { onCommit } = renderCard();
     const slider = screen.getByRole('slider');
 
