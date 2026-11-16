@@ -38,6 +38,9 @@ export type AutoSaveFieldStatus =
   | { state: 'error'; message: string };
 
 const IDLE: AutoSaveFieldStatus = { state: 'idle' };
+/** Shared, so setting the same state again is not a change for the readers. */
+const SAVING: AutoSaveFieldStatus = { state: 'saving' };
+const SAVED: AutoSaveFieldStatus = { state: 'saved' };
 
 /** Options of commitSetting. */
 export interface CommitOptions {
@@ -81,13 +84,17 @@ function setStatus(field: string, status: AutoSaveFieldStatus): void {
     clearTimeout(timer);
     savedTimers.delete(field);
   }
-  statuses.set(field, status);
+  if (status.state === 'idle') {
+    statuses.delete(field);
+  } else {
+    statuses.set(field, status);
+  }
   if (status.state === 'saved') {
     savedTimers.set(
       field,
       setTimeout(() => {
         savedTimers.delete(field);
-        if (statuses.get(field)?.state === 'saved') statuses.set(field, IDLE);
+        if (statuses.get(field)?.state === 'saved') statuses.delete(field);
       }, AUTOSAVE_SAVED_VISIBLE_MS)
     );
   }
@@ -98,21 +105,22 @@ export function autoSaveStatus(field: string): AutoSaveFieldStatus {
   return statuses.get(field) ?? IDLE;
 }
 
+function countStatuses(state: AutoSaveFieldStatus['state']): number {
+  let count = 0;
+  for (const status of statuses.values()) {
+    if (status.state === state) count++;
+  }
+  return count;
+}
+
 /** True while any field is waiting for a save or being saved. */
 export function autoSaveBusy(): boolean {
-  for (const status of statuses.values()) {
-    if (status.state === 'saving') return true;
-  }
-  return false;
+  return countStatuses('saving') > 0;
 }
 
 /** The number of fields whose last save failed and was not dismissed. */
 export function autoSaveFailures(): number {
-  let count = 0;
-  for (const status of statuses.values()) {
-    if (status.state === 'error') count++;
-  }
-  return count;
+  return countStatuses('error');
 }
 
 /** Clears the error of a field, for the dismiss button of its indicator. */
@@ -163,12 +171,15 @@ function ensureDropSubscription(): void {
   });
 }
 
+/** One shared function, so adding it again is a no-op. */
+function flushOnPagehide(): void {
+  void flushAutoSaves();
+}
+
 function ensurePagehideFlush(): void {
   if (pagehideListening || typeof window === 'undefined') return;
   pagehideListening = true;
-  window.addEventListener('pagehide', () => {
-    void flushAutoSaves();
-  });
+  window.addEventListener('pagehide', flushOnPagehide);
 }
 
 /** Gives each field of a finished request its final status. */
@@ -191,16 +202,11 @@ function applyResult(
     }
     // A field committed again while this request ran waits for the next one.
     if (state.pending.has(field)) continue;
-    if (
-      keys.some(key => failed.has(key)) ||
-      (result.error !== undefined && !keys.every(key => saved.has(key)))
-    ) {
-      fieldPaths.delete(field);
-      setStatus(field, { state: 'error', message: failureMessage(result.error) });
-      continue;
-    }
     fieldPaths.delete(field);
-    setStatus(field, { state: 'saved' });
+    const refused =
+      keys.some(key => failed.has(key)) ||
+      (result.error !== undefined && !keys.every(key => saved.has(key)));
+    setStatus(field, refused ? { state: 'error', message: failureMessage(result.error) } : SAVED);
   }
 }
 
@@ -276,7 +282,7 @@ export function commitSetting<S extends SettingsSectionName>(
 
   const state = sectionState(section);
   state.pending.add(field);
-  setStatus(field, { state: 'saving' });
+  setStatus(field, SAVING);
 
   if (debounceMs === undefined) {
     void flushSection(section);
@@ -315,4 +321,6 @@ export function resetAutoSaveForTest(): void {
   statuses.clear();
   unsubscribeDrops?.();
   unsubscribeDrops = null;
+  if (typeof window !== 'undefined') window.removeEventListener('pagehide', flushOnPagehide);
+  pagehideListening = false;
 }

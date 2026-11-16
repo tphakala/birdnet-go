@@ -90,7 +90,7 @@
   const immediateSave = $derived(
     tabs.find(tab => tab.id === selectedTab)?.saveMode === 'immediate'
   );
-  const failedSaves = $derived(autoSaveFailures());
+  const failedSaves = $derived(immediateSave ? autoSaveFailures() : 0);
 
   // Parents use the binding for tab-specific work (e.g. mounting the location map).
   $effect(() => {
