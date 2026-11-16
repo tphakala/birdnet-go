@@ -37,7 +37,8 @@ describe('StatusPill', () => {
 
   it.each([
     ['neutral', undefined],
-    ['an unknown variant', 'bogus' as StatusVariant],
+    // Deliberately outside the StatusVariant union: untyped callers can still pass any string.
+    ['an unknown variant', 'bogus' as unknown as StatusVariant],
   ])(
     'colours the pill and dot from base-content for %s, without a status badge class',
     (_, variant) => {
