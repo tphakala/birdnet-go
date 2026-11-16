@@ -19,7 +19,9 @@ function confirmButton(dialog: HTMLElement): HTMLElement {
   return button;
 }
 
-function renderCard(extra: Partial<{ expanded: boolean; disabled: boolean }> = {}) {
+function renderCard(
+  extra: Partial<{ expanded: boolean; disabled: boolean; disabledReason: string }> = {}
+) {
   const onToggleExpanded = vi.fn();
   const onDelete = vi.fn();
   const view = render(SourceCard, {
@@ -125,5 +127,18 @@ describe('SourceCard', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: CANCEL }));
     expect(isBodyInert()).toBe(false);
+  });
+
+  it('says why Delete is blocked while disabled, and only then', async () => {
+    const { view } = renderCard({ disabled: true, disabledReason: 'Loading settings' });
+
+    const trigger = screen.getByRole('button', { name: DELETE });
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    expect(trigger).toHaveAccessibleDescription('Loading settings');
+    expect(screen.getByText('Loading settings')).toBeVisible();
+
+    await view.rerender({ disabled: false });
+    expect(screen.queryByText('Loading settings')).toBeNull();
+    expect(screen.getByRole('button', { name: DELETE })).not.toHaveAccessibleDescription();
   });
 });

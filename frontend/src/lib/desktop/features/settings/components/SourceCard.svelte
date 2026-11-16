@@ -16,6 +16,7 @@
   - deleteConfirm: Question shown in the delete overlay; it names the source itself
   - onDelete: Called after the delete was confirmed
   - disabled: Blocks delete
+  - disabledReason: Shown beside the delete button while disabled, and its description
   - badges: Header badges after the disclosure button
   - children: The body
 
@@ -38,6 +39,7 @@
     deleteConfirm: string;
     onDelete: () => void;
     disabled?: boolean;
+    disabledReason?: string;
     badges?: Snippet;
     children?: Snippet;
   }
@@ -51,6 +53,7 @@
     deleteConfirm,
     onDelete,
     disabled = false,
+    disabledReason,
     badges,
     children,
   }: Props = $props();
@@ -59,6 +62,7 @@
   const bodyId = `${cardId}-body`;
   const deleteTitleId = `${cardId}-delete-title`;
   const deleteDescId = `${cardId}-delete-desc`;
+  const disabledReasonId = `${cardId}-disabled-reason`;
 
   let showDeleteConfirm = $state(false);
   let deleteButton = $state<HTMLButtonElement>();
@@ -176,12 +180,16 @@
       </div>
     {/if}
 
+    {#if disabled && disabledReason}
+      <span id={disabledReasonId} class="shrink-0 text-xs text-muted">{disabledReason}</span>
+    {/if}
     <button
       bind:this={deleteButton}
       type="button"
       class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-base-content)]/10 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
       onclick={confirmDelete}
       aria-disabled={disabled ? 'true' : undefined}
+      aria-describedby={disabled && disabledReason ? disabledReasonId : undefined}
       aria-label={t('common.delete')}
     >
       <Trash2 class="size-4" aria-hidden="true" />

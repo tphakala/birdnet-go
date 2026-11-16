@@ -341,6 +341,7 @@
   deleteConfirm={t('settings.audio.soundCards.deleteConfirm', { name: source.name })}
   {onDelete}
   {disabled}
+  disabledReason={t('common.loading')}
 >
   {#snippet badges()}
     {#if source.quietHours?.enabled}
