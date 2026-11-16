@@ -406,6 +406,7 @@
       <InlineSlider
         label={t('settings.audio.soundCards.gainLabel')}
         value={source.gain}
+        updateOn="change"
         onUpdate={value => commit({ gain: value }, 'gain', true)}
         min={AUDIO_GAIN_MIN_DB}
         max={AUDIO_GAIN_MAX_DB}

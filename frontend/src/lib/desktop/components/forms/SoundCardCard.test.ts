@@ -278,11 +278,16 @@ describe('SoundCardCard immediate save', () => {
     );
   });
 
-  it('commits gain with the debounce of a continuous control', async () => {
+  it('commits gain once on release, not while dragging, with the debounce for key steps', async () => {
     const { onCommit } = renderCard();
     const slider = screen.getByRole('slider');
 
+    await fireEvent.input(slider, { target: { value: '3' } });
     await fireEvent.input(slider, { target: { value: '6' } });
+    expect(onCommit).not.toHaveBeenCalled();
+
+    await fireEvent.change(slider, { target: { value: '6' } });
+    expect(onCommit).toHaveBeenCalledOnce();
     expect(onCommit).toHaveBeenLastCalledWith(
       { ...baseSource, gain: 6 },
       { field: `audio:sources:${ROW_ID}:gain`, debounceMs: AUTOSAVE_DEBOUNCE_MS }

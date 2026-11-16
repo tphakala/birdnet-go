@@ -1,7 +1,8 @@
 /**
  * CommitTextField commits a trimmed, valid, changed value on blur or Enter,
  * restores the saved value on Escape, and shows the validator's reason at the
- * field instead of committing.
+ * field instead of committing. A draft pending when the focused field is removed
+ * is committed, since the browser fires no blur then.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/svelte';
@@ -10,10 +11,10 @@ import CommitTextField from './CommitTextField.svelte';
 
 function renderField(validate?: (value: string) => string | null) {
   const onCommit = vi.fn();
-  renderTyped(CommitTextField, {
+  const view = renderTyped(CommitTextField, {
     props: { id: 'name', value: 'Garden', validate, onCommit },
   });
-  return { onCommit, input: screen.getByRole<HTMLInputElement>('textbox') };
+  return { onCommit, view, input: screen.getByRole<HTMLInputElement>('textbox') };
 }
 
 describe('CommitTextField', () => {
@@ -56,5 +57,27 @@ describe('CommitTextField', () => {
 
     await fireEvent.input(input, { target: { value: 'Free' } });
     expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('commits a pending draft when the focused field is removed without a blur', async () => {
+    const { onCommit, view, input } = renderField();
+
+    await fireEvent.focus(input);
+    await fireEvent.input(input, { target: { value: 'Porch' } });
+    view.unmount();
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith('Porch');
+  });
+
+  it('commits nothing on removal when the field is not focused or the draft is invalid', async () => {
+    const first = renderField();
+    await fireEvent.input(first.input, { target: { value: 'Porch' } });
+    first.view.unmount();
+    expect(first.onCommit).not.toHaveBeenCalled();
+
+    const second = renderField(value => (value === 'Taken' ? 'Name taken' : null));
+    await fireEvent.focus(second.input);
+    await fireEvent.input(second.input, { target: { value: 'Taken' } });
+    second.view.unmount();
+    expect(second.onCommit).not.toHaveBeenCalled();
   });
 });

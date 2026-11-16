@@ -3,7 +3,9 @@
 
   Purpose: A text setting on an immediately saved tab. Typing edits a local
   draft; the draft is committed on blur or Enter, Escape restores the saved
-  value. A value the validator refuses is not committed and the reason shows
+  value. A draft still pending when the field is removed while focused (the
+  card collapses, the tab changes) is committed then too, since no blur event
+  fires. A value the validator refuses is not committed and the reason shows
   at the field (aria-invalid, aria-describedby); editing clears it. The draft
   follows the saved value while the field is not focused.
 
@@ -18,7 +20,7 @@
   @component
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
 
   interface Props {
@@ -71,6 +73,12 @@
     draft = trimmed;
     onCommit(trimmed);
   }
+
+  // A focused input removed from the page (card collapsed, tab switched) gets no
+  // blur event, so commit the pending draft here instead of dropping it.
+  onDestroy(() => {
+    if (focused) commit();
+  });
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
