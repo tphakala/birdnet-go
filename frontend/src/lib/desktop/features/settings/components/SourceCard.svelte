@@ -154,7 +154,7 @@
         aria-hidden="true"
       />
       <span
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--color-primary)]"
+        class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--text-primary)]"
       >
         <Icon class="size-5" aria-hidden="true" />
       </span>

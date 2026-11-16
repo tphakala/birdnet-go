@@ -550,7 +550,7 @@
             <div>
               <button
                 type="button"
-                class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
+                class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--text-primary)] transition-colors"
                 aria-expanded={showNewEqualizer}
                 onclick={() => (showNewEqualizer = !showNewEqualizer)}
               >
