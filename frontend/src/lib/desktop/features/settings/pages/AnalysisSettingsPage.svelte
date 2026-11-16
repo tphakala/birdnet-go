@@ -1561,8 +1561,9 @@
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
     // Smart default: preselect the recommended variant (falls back sensibly when
-    // there is no recommendation). Empty string for flat entries.
-    selectedVariantId = pickPreselectedVariant(entry);
+    // there is no recommendation, skipping other regions' slices). Empty string
+    // for flat entries.
+    selectedVariantId = pickPreselectedVariant(entry, activeRegionSlug);
     licenseDialogRef?.showModal();
   }
 

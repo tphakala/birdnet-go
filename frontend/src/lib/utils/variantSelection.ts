@@ -8,14 +8,20 @@ import { t } from '$lib/i18n';
 /**
  * Choose the variant the gallery preselects for an entry. This is the "smart by
  * default" decision: the server-recommended variant when present, else the
- * installed one, else the catalog default, else the first compatible one, else
- * the first variant. Returns '' when the entry has no variants.
+ * installed one, else a fallback that skips regional slices of other regions.
+ * Returns '' when the entry has no variants.
  *
  * Each id is checked against the actual variant list so a stale recommended or
  * installed id (e.g. a variant hidden because it is Legacy) falls through to the
  * next rule instead of selecting nothing.
+ *
+ * `activeRegionSlug` is the region the picker is scoped to ('' when none). A
+ * slice of any other region covers only that region's species, so the fallback
+ * considers just the global variants and the active region's slices (an entry
+ * made only of other regions' slices falls back to its first variant). The
+ * user can still pick any slice by hand.
  */
-export function pickPreselectedVariant(entry: CatalogEntry): string {
+export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = ''): string {
   const variants = entry.variants ?? [];
   if (variants.length === 0) return '';
 
@@ -27,12 +33,14 @@ export function pickPreselectedVariant(entry: CatalogEntry): string {
 
   // Prefer a compatible variant so the dialog never opens with a blocked one
   // preselected while a runnable variant exists: compatible default, else any
-  // compatible, else the default, else the first. When every variant is blocked
-  // the first is returned and the install control is disabled by the dialog.
+  // compatible, else the default, else the first. When none of them runs, a
+  // blocked one is returned and the dialog disables install and shows why.
+  const local = variants.filter(v => !v.region || v.region === activeRegionSlug);
   const preferred =
-    variants.find(v => v.default && v.compatible) ??
-    variants.find(v => v.compatible) ??
-    variants.find(v => v.default) ??
+    local.find(v => v.default && v.compatible) ??
+    local.find(v => v.compatible) ??
+    local.find(v => v.default) ??
+    local.at(0) ??
     variants[0];
   return preferred.id;
 }
