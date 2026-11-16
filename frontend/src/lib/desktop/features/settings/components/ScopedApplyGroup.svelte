@@ -10,11 +10,13 @@
   Props:
   - draft: The ApplyDraft holding the controls' values
   - onApply: Commits the draft (called through draft.apply)
-  - hint: What applying does ("Capture restarts when you apply.")
-  - failedHint: Shown in the row after a failed apply
+  - hint: What applying does ("Capture restarts when you apply."); while the apply
+    is blocked it should name the reason, since it describes the Apply button then
+  - failedHint: Shown in the row after a failed apply, unless the apply is blocked
   - applyLabel: Apply button text, named for its effect
   - applyingLabel: Apply button text while the apply is saved
-  - disabled: Blocks the apply; the hint then names the reason and describes the button
+  - disabled: Blocks the apply; the row then shows the hint, and the Apply button
+    is described by it
   - statusId: Id of the element that shows the failure; the Apply button points
     aria-describedby at it after a failed apply
   - children: The controls
