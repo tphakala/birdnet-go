@@ -585,6 +585,40 @@ describe('Status text rules', () => {
       )
     );
 
+    const neutralBodies = ruleBodies(pillSource, '.status-pill:global(.badge-status-neutral)');
+    const share = (body: string, property: string): number => {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- property is a fixed literal from the callers below
+      const match = new RegExp(
+        `(?<![\\w-])${property}:\\s*color-mix\\(in srgb, var\\(--color-base-content\\) (\\d+)%, transparent\\)`
+      ).exec(body);
+      expect(match, `${property} is a base-content mix`).not.toBeNull();
+      return Number(match?.[1]) / 100;
+    };
+
+    const neutralDotBodies = ruleBodies(
+      pillSource,
+      '.status-pill:global(.badge-status-neutral) .status-pill-dot'
+    );
+
+    it('keeps the status border share, solid dot and the neutral recipe at their old values', () => {
+      expect(ruleBodies(pillSource, '.status-pill')).toHaveLength(1);
+      expect(ruleBodies(pillSource, '.status-pill')[0]).toContain(
+        'border-color: color-mix(in srgb, var(--status-fill) 30%, transparent)'
+      );
+      expect(
+        ruleBodies(pillSource, '.status-pill-dot').filter(body =>
+          body.includes('background-color: var(--status-fill);')
+        )
+      ).toHaveLength(1);
+
+      expect(neutralBodies).toHaveLength(1);
+      expect(share(neutralBodies[0], 'background')).toBe(0.08);
+      expect(share(neutralBodies[0], 'color')).toBe(0.7);
+      expect(share(neutralBodies[0], 'border-color')).toBe(0.15);
+      expect(neutralDotBodies).toHaveLength(1);
+      expect(share(neutralDotBodies[0], 'background-color')).toBe(0.4);
+    });
+
     it('holds no per-status colour token and draws its border and dot from --status-fill', () => {
       expect(pillSource).not.toMatch(/--(?:color|text)-(?:success|warning|error|info)\b/);
       for (const selector of ['.status-pill', '.status-pill-dot']) {
@@ -593,16 +627,6 @@ describe('Status text rules', () => {
         expect(bodies.some(body => body.includes('var(--status-fill)'))).toBe(true);
       }
     });
-
-    const neutralBodies = ruleBodies(pillSource, '.status-pill:global(.badge-status-neutral)');
-    const share = (body: string, property: string): number => {
-      // eslint-disable-next-line security/detect-non-literal-regexp -- property is a fixed literal from the callers below
-      const match = new RegExp(
-        `${property}:\\s*color-mix\\(in srgb, var\\(--color-base-content\\) (\\d+)%, transparent\\)`
-      ).exec(body);
-      expect(match, `${property} is a base-content mix`).not.toBeNull();
-      return Number(match?.[1]) / 100;
-    };
 
     for (const [name, block] of [
       ['light', blockBody(css, '@theme')],
