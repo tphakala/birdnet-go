@@ -112,4 +112,64 @@ describe('ApplyDraft', () => {
     expect(draft.draft.device).toBe('hw:2');
     expect(draft.visible).toBe(true);
   });
+
+  it('follows the saved values again once the draft is set back to them', () => {
+    draft.set({ device: 'hw:3' });
+    expect(draft.edited).toBe(true);
+    draft.set({ device: 'hw:1' });
+    expect(draft.edited).toBe(false);
+
+    saved = { device: 'hw:5', sampleRate: 48000 };
+    flushSync();
+    expect(draft.draft.device).toBe('hw:5');
+    expect(draft.visible).toBe(false);
+  });
+
+  it('drops the failure of an apply when the draft is cancelled', async () => {
+    store.saveStagedSection.mockResolvedValueOnce({
+      ...OK,
+      failed: [['sources']],
+      error: new Error('boom'),
+    });
+    draft.set({ device: 'hw:2' });
+    draft.apply(commit);
+    await vi.waitFor(() => expect(draft.failed).toBe(true));
+
+    draft.cancel();
+    expect(draft.failed).toBe(false);
+  });
+
+  it('keeps an edit made while the apply runs, waiting for its own Apply', async () => {
+    const pending = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+    draft.set({ device: 'hw:2' });
+    draft.apply(commit);
+    flushSync();
+
+    draft.set({ sampleRate: 96000 });
+    pending.resolve({ ...OK, saved: [['sources']] });
+    await vi.waitFor(() => expect(draft.applying).toBe(false));
+    flushSync();
+
+    expect(draft.draft).toEqual({ device: 'hw:2', sampleRate: 96000 });
+    expect(draft.visible).toBe(true);
+  });
+
+  it('keeps a draft set back to the sent values during an apply when that apply fails', async () => {
+    const pending = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+    draft.set({ device: 'hw:2' });
+    draft.apply(commit);
+    flushSync();
+
+    // While the apply runs the form holds the sent draft, so this equals the saved values.
+    draft.set({ device: 'hw:2' });
+    pending.resolve({ ...OK, failed: [['sources']], error: new Error('boom') });
+    await vi.waitFor(() => expect(draft.failed).toBe(true));
+    saved = { device: 'hw:1', sampleRate: 48000 }; // the store takes the form back
+    flushSync();
+
+    expect(draft.draft.device).toBe('hw:2');
+    expect(draft.visible).toBe(true);
+  });
 });

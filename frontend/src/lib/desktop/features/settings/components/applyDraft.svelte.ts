@@ -5,11 +5,17 @@
  * The draft follows the saved values until the user edits it. Apply commits it
  * through the caller's commit function under one auto-save field; a save hands
  * the draft back to the saved values, a failure keeps it so the user can apply
- * again or cancel. Construct it during component initialisation: it registers
- * two effects that live as long as the component.
+ * again or cancel. The commit function passed to apply must commit under the
+ * field given to the constructor: the draft waits for that field's status.
+ * Construct it during component initialisation: it registers two effects that
+ * live as long as the component.
  */
 import { untrack } from 'svelte';
-import { autoSaveStatus, type AutoSaveFieldStatus } from '$lib/stores/settingsAutoSave.svelte';
+import {
+  autoSaveStatus,
+  dismissAutoSaveError,
+  type AutoSaveFieldStatus,
+} from '$lib/stores/settingsAutoSave.svelte';
 
 /** True when two drafts hold the same value at every key. */
 export function sameDraft<T extends object>(a: T, b: T): boolean {
@@ -26,6 +32,8 @@ export class ApplyDraft<T extends object> {
   /** Set by an edit; the draft then no longer follows the saved values. */
   edited = $state(false);
   #pending = $state(false);
+  /** The values the running apply sent, to tell an edit made meanwhile. */
+  #sent: T | null = null;
   readonly #saved: () => T;
   readonly #field: string;
 
@@ -52,7 +60,11 @@ export class ApplyDraft<T extends object> {
       if (!this.#pending || state === 'saving') return;
       untrack(() => {
         this.#pending = false;
+        const sent = this.#sent;
+        this.#sent = null;
         if (state === 'error') return;
+        // An edit made while the apply ran waits for its own Apply.
+        if (sent && !sameDraft(this.draft, sent)) return;
         this.edited = false;
         this.draft = { ...this.#saved() };
       });
@@ -90,20 +102,24 @@ export class ApplyDraft<T extends object> {
   /** Changes the draft and stops it following the saved values. */
   set(patch: Partial<T>): void {
     this.draft = { ...this.draft, ...patch };
-    this.edited = true;
+    // A draft set back to the saved values follows them again, except while an
+    // apply runs: the saved values then hold the sent draft and roll back on a failure.
+    this.edited = this.applying || !sameDraft(this.draft, this.#saved());
   }
 
-  /** Drops the draft and returns to the saved values. */
+  /** Drops the draft and returns to the saved values, and the failure of an earlier apply. */
   cancel(): void {
     if (this.applying) return;
     this.edited = false;
     this.draft = { ...this.#saved() };
+    dismissAutoSaveError(this.#field);
   }
 
   /** Commits the draft; ignored while an apply runs. */
   apply(commit: (draft: T) => void): void {
     if (this.applying) return;
     this.#pending = true;
-    commit({ ...this.draft });
+    this.#sent = { ...this.draft };
+    commit({ ...this.#sent });
   }
 }
