@@ -118,6 +118,12 @@ export type SettingsSectionName = keyof SettingsSectionPayloads;
 export interface SettingsSectionPatchResponse {
   /** Fields in the request that the backend refused to change. */
   skippedFields?: string[] | null;
+  /**
+   * The section as the server now stores it, sanitized (secrets redacted). Some
+   * patchable sections have no GET /settings/:section endpoint. Absent from an
+   * older backend.
+   */
+  settings?: unknown;
 }
 
 /**
@@ -161,15 +167,25 @@ export const settingsAPI = {
    * Save a single backend section with PATCH /api/v2/settings/:section. The
    * backend merges the body into the stored section, so keys the body omits keep
    * their saved values and no other section is touched. Keys the server owns
-   * are dropped before sending.
+   * are dropped before sending. ifMatch is sent as If-Match, so the server
+   * answers 412 when the settings changed since the ETag was issued; onETag
+   * receives the ETag of the response (null when absent), also for an HTTP
+   * error, and is only called when ifMatch is set.
    */
   patchSection: <S extends SettingsSectionName>(
     section: S,
-    body: SettingsSectionPayloads[S]
+    body: SettingsSectionPayloads[S],
+    options?: { ifMatch?: string; onETag?: (etag: string | null) => void }
   ): Promise<SettingsSectionPatchResponse | null> => {
     return api.patch<SettingsSectionPatchResponse | null>(
       `${SETTINGS_ENDPOINT}/${section}`,
-      withoutServerOwnedKeys(section, body)
+      withoutServerOwnedKeys(section, body),
+      options?.ifMatch
+        ? {
+            headers: { 'If-Match': options.ifMatch },
+            onHeaders: headers => options.onETag?.(headers.get('ETag')),
+          }
+        : undefined
     );
   },
 

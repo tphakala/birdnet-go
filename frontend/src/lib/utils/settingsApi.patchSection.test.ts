@@ -82,4 +82,44 @@ describe('settingsAPI.patchSection', () => {
 
     expect(birdnet({ threshold: 0.8 })).toEqual({ threshold: 0.8 });
   });
+
+  it('patchSection sends If-Match only when ifMatch is given', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, {}));
+    const { settingsAPI } = await import('./settingsApi.js');
+
+    await settingsAPI.patchSection('privacyfilter', { enabled: true });
+    await settingsAPI.patchSection('privacyfilter', { enabled: true }, { ifMatch: '"e-1"' });
+
+    const [, plain] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [, conditional] = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(new Headers(plain.headers).has('If-Match')).toBe(false);
+    expect(new Headers(conditional.headers).get('If-Match')).toBe('"e-1"');
+  });
+
+  it('patchSection reports the response ETag to onETag on success and on a 412', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ...jsonResponse(200, { settings: { enabled: true } }),
+        headers: new Headers({ 'content-type': 'application/json', ETag: '"e-2"' }),
+      })
+      .mockResolvedValueOnce({
+        ...jsonResponse(412, { error: 'precondition failed' }),
+        headers: new Headers({ 'content-type': 'application/json', ETag: '"e-3"' }),
+      });
+    const { settingsAPI } = await import('./settingsApi.js');
+    const seen: Array<string | null> = [];
+    const onETag = (etag: string | null) => seen.push(etag);
+
+    const response = await settingsAPI.patchSection(
+      'privacyfilter',
+      { enabled: true },
+      { ifMatch: '"e-1"', onETag }
+    );
+    await expect(
+      settingsAPI.patchSection('privacyfilter', { enabled: false }, { ifMatch: '"e-2"', onETag })
+    ).rejects.toMatchObject({ status: 412 });
+
+    expect(response?.settings).toEqual({ enabled: true });
+    expect(seen).toEqual(['"e-2"', '"e-3"']);
+  });
 });
