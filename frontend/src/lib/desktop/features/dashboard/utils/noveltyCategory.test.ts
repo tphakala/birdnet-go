@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveNoveltyCategory,
   noveltyCategoryColorVar,
+  noveltyCategoryTextColor,
   type NoveltyFlags,
 } from './noveltyCategory';
 
@@ -75,5 +76,17 @@ describe('noveltyCategoryColorVar', () => {
     expect(noveltyCategoryColorVar('year')).toBe('var(--color-info)');
     expect(noveltyCategoryColorVar('season')).toBe('var(--color-success)');
     expect(noveltyCategoryColorVar('infrequent')).toBe('var(--color-secondary)');
+  });
+});
+
+describe('noveltyCategoryTextColor', () => {
+  it('maps the status categories to their AA text tokens', () => {
+    expect(noveltyCategoryTextColor('lifetime')).toBe('var(--text-warning)');
+    expect(noveltyCategoryTextColor('year')).toBe('var(--text-info)');
+    expect(noveltyCategoryTextColor('season')).toBe('var(--text-success)');
+  });
+
+  it('keeps the secondary accent for the infrequent category', () => {
+    expect(noveltyCategoryTextColor('infrequent')).toBe('var(--color-secondary)');
   });
 });

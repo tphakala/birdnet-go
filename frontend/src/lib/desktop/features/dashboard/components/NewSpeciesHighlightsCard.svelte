@@ -14,12 +14,12 @@ Shows up to 12 species, ordered by novelty category then detection count.
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { textColorFor } from '$lib/utils/statusTextColor';
   import { speciesTrackingSettings } from '$lib/stores/settings';
   import { confidenceColorClasses } from '$lib/desktop/features/dashboard/utils/confidenceColors';
   import {
     resolveNoveltyCategory,
     noveltyCategoryColorVar,
+    noveltyCategoryTextColor,
     type NoveltyCategory,
   } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
   import { AudioLines, CalendarDays, History, Leaf, Star } from '@lucide/svelte';
@@ -128,7 +128,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
 {#snippet categoryIcon(category: NoveltyCategory, season: string | undefined)}
   <span
     class="shrink-0"
-    style:color={textColorFor(noveltyCategoryColorVar(category))}
+    style:color={noveltyCategoryTextColor(category)}
     title={categoryLabel(category, season)}
     aria-label={categoryLabel(category, season)}
   >
