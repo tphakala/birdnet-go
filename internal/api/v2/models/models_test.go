@@ -93,34 +93,27 @@ func TestListModels_IncludesRegistryID(t *testing.T) {
 // not receive the host-derived fields.
 func TestListModels_LabelsFromLiveRuntime(t *testing.T) {
 	// Mutates the process-global settings snapshot: not parallel.
+	onnxInt8 := map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}}
 	tests := []struct {
 		name          string
 		authenticated bool
 		withAuth      bool
-		runtime       map[string]listedModelRuntime
-		wantBackend   map[string]string
-		wantPrecision map[string]string
+		want          map[string]listedModelRuntime // by config alias
 	}{
 		{
-			name:          "loaded model reports the live backend and precision",
-			runtime:       map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}},
-			wantBackend:   map[string]string{conf.ModelIDBirdNET: "ONNX", conf.ModelIDPerchV2: ""},
-			wantPrecision: map[string]string{conf.ModelIDBirdNET: "INT8", conf.ModelIDPerchV2: ""},
+			name: "loaded model reports the live backend and precision, an unlisted one none",
+			want: map[string]listedModelRuntime{
+				conf.ModelIDBirdNET: {backend: "ONNX", precision: "INT8"},
+				conf.ModelIDPerchV2: {},
+			},
 		},
 		{
-			name:          "authenticated request on an auth-enabled instance gets runtime fields",
-			withAuth:      true,
-			authenticated: true,
-			runtime:       map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}},
-			wantBackend:   map[string]string{conf.ModelIDBirdNET: "ONNX", conf.ModelIDPerchV2: ""},
-			wantPrecision: map[string]string{conf.ModelIDBirdNET: "INT8", conf.ModelIDPerchV2: ""},
-		},
-		{
-			name:          "anonymous request on an auth-enabled instance gets no runtime fields",
-			withAuth:      true,
-			runtime:       map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}},
-			wantBackend:   map[string]string{conf.ModelIDBirdNET: "", conf.ModelIDPerchV2: ""},
-			wantPrecision: map[string]string{conf.ModelIDBirdNET: "", conf.ModelIDPerchV2: ""},
+			name:     "anonymous request on an auth-enabled instance gets no runtime fields",
+			withAuth: true,
+			want: map[string]listedModelRuntime{
+				conf.ModelIDBirdNET: {},
+				conf.ModelIDPerchV2: {},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -131,7 +124,7 @@ func TestListModels_LabelsFromLiveRuntime(t *testing.T) {
 				authSvc = &stubAuth{authenticated: tt.authenticated}
 			}
 			h := New(core, authSvc)
-			h.modelRuntime = func() map[string]listedModelRuntime { return tt.runtime }
+			h.modelRuntime = func() map[string]listedModelRuntime { return onnxInt8 }
 
 			settings := &conf.Settings{}
 			settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}
@@ -148,11 +141,10 @@ func TestListModels_LabelsFromLiveRuntime(t *testing.T) {
 			for i := range items {
 				byID[items[i].ID] = items[i]
 			}
-			for id, want := range tt.wantBackend {
+			for id, want := range tt.want {
 				item, ok := byID[id]
 				require.True(t, ok, "model %q must be listed", id)
-				assert.Equal(t, want, item.Backend, "backend of %q", id)
-				assert.Equal(t, tt.wantPrecision[id], item.Precision, "precision of %q", id)
+				assert.Equal(t, want, listedModelRuntime{backend: item.Backend, precision: item.Precision}, "runtime of %q", id)
 				assert.NotContains(t, item.Name, "(", "name of %q must carry no backend suffix", id)
 			}
 		})

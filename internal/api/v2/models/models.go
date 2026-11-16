@@ -272,7 +272,8 @@ func (c *Handler) liveModelRuntime() map[string]listedModelRuntime {
 
 // mergeModelRuntime builds the runtime map for the loaded models. A non-empty
 // value from instanceRuntime (the live instance, which may be nil) replaces the
-// one from the model's info.
+// one from the model's info. The precedence matches applyRuntimeBackend in the
+// system package, which serves GET /api/v2/system/inference.
 func mergeModelRuntime(infos []classifier.ModelInfo, instanceRuntime func(id string) (backend, precision string)) map[string]listedModelRuntime {
 	runtime := make(map[string]listedModelRuntime, len(infos))
 	for i := range infos {
