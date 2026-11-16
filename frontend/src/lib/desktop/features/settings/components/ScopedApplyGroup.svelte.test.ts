@@ -138,6 +138,29 @@ describe('ScopedApplyGroup', () => {
     expect(draft.draft.device).toBe('hw:2');
   });
 
+  it('keeps the block reason in the row after a failed apply while the apply is blocked', async () => {
+    store.saveStagedSection.mockResolvedValueOnce({
+      ...OK,
+      failed: [['sources']],
+      error: new Error('boom'),
+    });
+    const view = renderGroup();
+    draft.set({ device: 'hw:2' });
+    await fireEvent.click(await screen.findByRole('button', { name: APPLY }));
+    await vi.waitFor(() => expect(draft.failed).toBe(true));
+    saved = { device: 'hw:1' };
+    expect(await screen.findByText(FAILED_HINT)).toBeInTheDocument();
+
+    // The caller blocks the apply: its hint names the reason and replaces the failure text.
+    await view.rerender({ disabled: true, hint: 'Test the URL first.' });
+
+    expect(screen.getByText('Test the URL first.')).toBeInTheDocument();
+    expect(screen.queryByText(FAILED_HINT)).toBeNull();
+    expect(screen.getByRole('button', { name: APPLY })).toHaveAccessibleDescription(
+      expect.stringContaining('Test the URL first.')
+    );
+  });
+
   it('does not apply while disabled', async () => {
     renderGroup(true);
     draft.set({ device: 'hw:2' });
