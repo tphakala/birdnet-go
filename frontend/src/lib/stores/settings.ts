@@ -2037,11 +2037,18 @@ function buildStagedPatch(
   return { patch, sent };
 }
 
-/** Fetches a snapshot and rebases on it, so the patch is rebuilt from a current baseline. */
-async function rebaseForStagedSave(result: StagedSaveResult): Promise<void> {
+/**
+ * Fetches a snapshot and rebases on it, so the patch is rebuilt from a current
+ * baseline. Reports the dropped paths of this section only; the listeners hear
+ * about every section.
+ */
+async function rebaseForStagedSave(
+  section: SettingsSectionName,
+  result: StagedSaveResult
+): Promise<void> {
   const { snapshot } = await fetchServerSnapshot();
   for (const dropped of rebaseStoreOn(snapshot)) {
-    pushUnique(result.dropped, dropped.path);
+    if (dropped.section === section) pushUnique(result.dropped, dropped.path);
   }
 }
 
@@ -2150,7 +2157,7 @@ async function runStagedSave(
       // Without a usable ETag the revision is unknown, so the baseline is refreshed first.
       if (!usableIfMatch(lastETag)) {
         pending = pendingStagedValues(section);
-        await rebaseForStagedSave(result);
+        await rebaseForStagedSave(section, result);
       }
       const built = buildStagedPatch(section, result);
       sent = built.sent;
@@ -2187,7 +2194,7 @@ async function runStagedSave(
             'Settings If-Match is rewritten between the browser and the server; saving without it for this page load'
           );
         }
-        await rebaseForStagedSave(result);
+        await rebaseForStagedSave(section, result);
       }
     }
   } catch (error) {

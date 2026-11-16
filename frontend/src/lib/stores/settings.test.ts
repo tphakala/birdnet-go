@@ -2573,9 +2573,10 @@ describe('Settings Store - staged section saves', () => {
       streams: [{ name: 'Theirs', url: 'rtsp://theirs', enabled: true, type: 'rtsp' }],
     });
 
-    await settingsActions.saveStagedSection('audio');
+    const own = await settingsActions.saveStagedSection('audio');
     const queued = await settingsActions.saveStagedSection('rtsp');
 
+    expect(own.dropped).toEqual([]);
     expect(callLog).toEqual(['patch:audio', 'patch:audio']);
     expect(queued.saved).toEqual([]);
     const streams = get(settingsStore).formData.realtime?.rtsp?.streams;
