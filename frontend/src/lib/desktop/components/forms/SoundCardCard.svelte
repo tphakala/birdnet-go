@@ -63,6 +63,7 @@
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
   import ModelToggleList from './ModelToggleList.svelte';
+  import SourceModelBadges from './SourceModelBadges.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
@@ -73,7 +74,9 @@
   import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
   import {
     AUDIO_SOURCES_FIELD_PREFIX,
-    normalizeEqualizer,
+    isContinuousEqualizerChange,
+    isContinuousQuietHoursChange,
+    savedEqualizer,
     sourceField,
     type SourceFieldPart,
   } from './sourceFields';
@@ -155,7 +158,6 @@
   const acousticAvailability = $derived(acousticModelAvailability());
   let defaultModels = $derived(defaultModelSelection(acousticAvailability, availableModels));
   let selectedModels = $derived(source.models ?? []);
-  let hasExplicitModels = $derived(selectedModels.length > 0);
   let listFailed = $derived(modelsFailed());
   let listLoading = $derived(modelsLoading());
 
@@ -163,42 +165,6 @@
 
   let deviceDisplayName = $derived(
     audioDevices.find(d => deviceMatches(d, source.device))?.name ?? source.device
-  );
-
-  function modelLabels(ids: readonly string[]): string {
-    return ids.map(id => modelOptions.find(m => m.value === id)?.label ?? id).join(', ');
-  }
-
-  // An empty list means "analyze with the server defaults": name them when the
-  // classifier reports them, say that no model is loaded when that is the
-  // verdict, hedge otherwise.
-  let modelDisplayName = $derived.by(() => {
-    if (hasExplicitModels) return modelLabels(selectedModels);
-    if (acousticAvailability.kind === 'none') return t('settings.audio.models.noneBadge');
-    if (acousticAvailability.kind === 'ready' && defaultModels.length > 0) {
-      return t('settings.audio.models.defaultBadge', { models: modelLabels(defaultModels) });
-    }
-    return t('settings.audio.models.defaultPendingBadge');
-  });
-
-  let modelBadgeIsWarning = $derived(!hasExplicitModels && acousticAvailability.kind === 'none');
-
-  let modelBadgeTitle = $derived.by(() => {
-    if (hasExplicitModels || acousticAvailability.kind !== 'none') return undefined;
-    return acousticAvailability.reason === 'load_failed'
-      ? t('settings.audio.models.loadFailedWarning')
-      : t('settings.audio.models.noneEnabledHelp');
-  });
-
-  // A selected model that the server no longer lists, or that is not loaded.
-  // Unknown while the list loads or after a failed fetch, so no warning then.
-  let needsModelAttention = $derived(
-    !listFailed &&
-      !listLoading &&
-      selectedModels.some(id => {
-        const model = availableModels.find(m => m.id === id);
-        return !model || model.state === 'failed' || model.state === 'pending';
-      })
   );
 
   const BADGE_CLASS = 'px-2 py-0.5 rounded text-xs font-semibold';
@@ -310,25 +276,23 @@
   let equalizer = $derived<EqualizerSettings>(source.equalizer ?? { enabled: false, filters: [] });
 
   function commitEqualizer(updated: EqualizerSettings) {
-    const next = normalizeEqualizer(updated);
-    // Switching it or adding and removing filters is discrete; a filter value is continuous.
-    const continuous =
-      updated.enabled === equalizer.enabled && updated.filters.length === equalizer.filters.length;
-    commit({ equalizer: next }, 'equalizer', continuous);
+    commit(
+      { equalizer: savedEqualizer(updated) },
+      'equalizer',
+      isContinuousEqualizerChange(updated, equalizer)
+    );
   }
 
   // ----- Quiet hours -----
 
   let quietHours = $derived<QuietHoursConfig>(source.quietHours ?? { ...defaultQuietHoursConfig });
-  const QUIET_HOURS_DISCRETE_KEYS = ['enabled', 'mode', 'startEvent', 'endEvent'] as const;
 
   function commitQuietHours(updated: QuietHoursConfig) {
-    // Times and offsets are typed or stepped, so they wait for a pause.
-    const continuous = QUIET_HOURS_DISCRETE_KEYS.every(
-      // eslint-disable-next-line security/detect-object-injection -- key is a fixed QuietHoursConfig key
-      key => updated[key] === quietHours[key]
+    commit(
+      { quietHours: updated },
+      'quietHours',
+      isContinuousQuietHoursChange(updated, quietHours)
     );
-    commit({ quietHours: updated }, 'quietHours', continuous);
   }
 </script>
 
@@ -361,29 +325,15 @@
         {source.gain > 0 ? '+' : ''}{source.gain} dB
       </span>
     {/if}
-    {#if needsModelAttention}
-      <span
-        class={cn(
-          BADGE_CLASS,
-          'inline-flex items-center gap-1 bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-        )}
-      >
-        <AlertTriangle class="size-3" aria-hidden="true" />
-        {t('settings.audio.models.warningBadge')}
-      </span>
-    {/if}
-    <span
-      class={cn(
-        BADGE_CLASS,
-        'max-w-64 truncate',
-        modelBadgeIsWarning
-          ? 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-          : 'bg-[var(--color-info)]/15 text-[var(--text-info)]'
-      )}
-      title={modelBadgeTitle ?? modelDisplayName}
-    >
-      {modelDisplayName}
-    </span>
+    <SourceModelBadges
+      {selectedModels}
+      {defaultModels}
+      {availableModels}
+      {modelOptions}
+      availability={acousticAvailability}
+      {listLoading}
+      {listFailed}
+    />
   {/snippet}
 
   <!-- Name and level -->

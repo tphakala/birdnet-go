@@ -14,7 +14,7 @@
   - failedHint: Shown in the row after a failed apply
   - applyLabel: Apply button text, named for its effect
   - applyingLabel: Apply button text while the apply is saved
-  - disabled: Blocks the apply
+  - disabled: Blocks the apply; the hint then names the reason and describes the button
   - statusId: Id of the element that shows the failure; the Apply button points
     aria-describedby at it after a failed apply
   - children: The controls
@@ -25,6 +25,7 @@
   import type { Snippet } from 'svelte';
   import { RotateCcw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import type { ApplyDraft } from './applyDraft.svelte';
 
   interface Props {
@@ -50,6 +51,14 @@
     statusId,
     children,
   }: Props = $props();
+
+  const hintId = generateId('apply-hint');
+
+  let applyDescribedBy = $derived(
+    [disabled ? hintId : undefined, draft.failed ? statusId : undefined]
+      .filter(Boolean)
+      .join(' ') || undefined
+  );
 </script>
 
 {@render children?.()}
@@ -57,9 +66,9 @@
   <div
     class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] px-3 py-2"
   >
-    <p class="flex items-center gap-2 text-sm text-[var(--color-base-content)]">
+    <p id={hintId} class="flex items-center gap-2 text-sm text-[var(--color-base-content)]">
       <RotateCcw class="size-4 shrink-0 text-muted" aria-hidden="true" />
-      {draft.failed ? failedHint : hint}
+      {draft.failed && !disabled ? failedHint : hint}
     </p>
     <div class="flex gap-2">
       <button
@@ -74,7 +83,7 @@
         type="button"
         class="btn btn-primary btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
         aria-disabled={draft.applying || disabled ? 'true' : undefined}
-        aria-describedby={draft.failed ? statusId : undefined}
+        aria-describedby={applyDescribedBy}
         onclick={() => {
           if (!disabled) draft.apply(onApply);
         }}

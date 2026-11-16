@@ -47,7 +47,7 @@
   } from '$lib/stores/models.svelte';
   import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
-  import { AUDIO_SOURCES_LIST_FIELD, normalizeEqualizer, RowRollback } from './sourceFields';
+  import { AUDIO_SOURCES_LIST_FIELD, savedEqualizer, RowRollback } from './sourceFields';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -282,7 +282,7 @@
       sampleRate: newSampleRate,
       gain: newGain,
       models: newModels,
-      equalizer: normalizeEqualizer(newEqualizer),
+      equalizer: savedEqualizer(newEqualizer),
       quietHours: newQuietHours,
     };
 

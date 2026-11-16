@@ -1,6 +1,10 @@
 import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
-import type { ChannelAnalysis } from '$lib/stores/settings';
+import { validateProtocolURL } from '$lib/utils/security';
+import { StreamTypes, type ChannelAnalysis, type StreamType } from '$lib/stores/settings';
+
+/** Longest stream URL the editors accept. */
+export const MAX_STREAM_URL_LENGTH = 2048;
 
 export const streamTypeOptions = [
   { value: 'rtsp', label: 'RTSP' },
@@ -35,4 +39,46 @@ export async function analyzeStreamChannels(url: string): Promise<ChannelAnalysi
   return api.post<ChannelAnalysis>('/api/v2/streams/analyze-channels', {
     url: url.trim(),
   });
+}
+
+/** The stream type a URL names by its scheme or extension; RTSP when it names none. */
+export function detectStreamType(url: string): StreamType {
+  const urlLower = url.toLowerCase();
+  if (urlLower.startsWith('rtsp://') || urlLower.startsWith('rtsps://')) return 'rtsp';
+  if (urlLower.startsWith('rtmp://') || urlLower.startsWith('rtmps://')) return 'rtmp';
+  if (urlLower.startsWith('udp://') || urlLower.startsWith('rtp://')) return 'udp';
+  if (urlLower.includes('.m3u8')) return 'hls';
+  if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) return 'http';
+  return 'rtsp';
+}
+
+/** URL schemes each stream type accepts. */
+function streamProtocols(type: StreamType): string[] {
+  switch (type) {
+    case 'rtmp':
+      return ['rtmp', 'rtmps'];
+    case 'http':
+    case 'hls':
+      return ['http', 'https'];
+    case 'udp':
+      return ['udp', 'rtp'];
+    case 'rtsp':
+    default:
+      return ['rtsp', 'rtsps'];
+  }
+}
+
+/** True when the URL is well formed and uses a scheme of the stream type. */
+export function isValidStreamUrl(url: string, type: StreamType): boolean {
+  return validateProtocolURL(url, streamProtocols(type), MAX_STREAM_URL_LENGTH);
+}
+
+/** True for the stream types that take a transport (TCP or UDP). */
+export function streamHasTransport(type: StreamType): boolean {
+  return type === 'rtsp' || type === 'rtmp';
+}
+
+/** The stream type a select option value names, or undefined for an unknown value. */
+export function toStreamType(value: string | string[]): StreamType | undefined {
+  return Object.values(StreamTypes).find(type => type === value);
 }
