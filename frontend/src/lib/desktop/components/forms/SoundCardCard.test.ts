@@ -343,4 +343,12 @@ describe('SoundCardCard immediate save', () => {
     });
     expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('96000');
   });
+
+  it('names the audio filters region after its disclosure button', () => {
+    renderCard();
+
+    expect(
+      screen.getByRole('region', { name: 'settings.audio.audioFilters.title' })
+    ).toBeInTheDocument();
+  });
 });

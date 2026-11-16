@@ -130,6 +130,7 @@
   const nameInputId = `${cardId}-name`;
   const captureHeadingId = `${cardId}-capture`;
   const modelsHeadingId = `${cardId}-models`;
+  const equalizerHeadingId = `${cardId}-equalizer`;
 
   function field(part: SourceFieldPart): string {
     return sourceField(AUDIO_SOURCES_FIELD_PREFIX, rowId, part);
@@ -505,9 +506,10 @@
   </SettingsGroup>
 
   <!-- Audio filters (collapsed by default) -->
-  <SettingsGroup class="space-y-0 py-4">
+  <SettingsGroup headingId={equalizerHeadingId} class="space-y-0 py-4">
     {#snippet heading()}
       <button
+        id={equalizerHeadingId}
         type="button"
         class="flex items-center gap-2 rounded text-sm font-semibold text-[var(--color-base-content)] transition-colors hover:text-[var(--text-primary)]"
         aria-expanded={showEqualizer}
