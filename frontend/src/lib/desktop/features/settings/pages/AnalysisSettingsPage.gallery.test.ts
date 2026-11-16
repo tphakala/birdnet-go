@@ -1044,6 +1044,18 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
     );
   });
 
+  it('keeps the blocked global build preselected in Global mode, not the auto-resolved slice', async () => {
+    settingsStores.birdnetSettings?.set({ ...BIRDNET_FORM_DEFAULTS, modelRegion: 'global' });
+
+    await installWithRegions('nordic');
+
+    // The blocked notice shows and the accepted license sends no install request
+    expect(await screen.findAllByText('analysis.gallery.variants.incompatible')).not.toHaveLength(
+      0
+    );
+    expect(modelsApi.installModel).not.toHaveBeenCalled();
+  });
+
   it('installs the slice of the unsaved region picked in the form, not the auto-resolved one', async () => {
     settingsStores.birdnetSettings?.set({ ...BIRDNET_FORM_DEFAULTS, modelRegion: 'nordic' });
 
