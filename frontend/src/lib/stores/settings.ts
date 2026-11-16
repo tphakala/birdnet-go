@@ -2049,8 +2049,8 @@ async function rebaseForStagedSave(result: StagedSaveResult): Promise<void> {
  * Records an accepted staged save. originalData takes the section the server
  * returned (the patch when it returned none). formData takes it too wherever it
  * still equals what was sent or was never edited; a path edited during the request
- * keeps the edit and stays staged. Sent values that still match the form are first
- * written into the baseline, so the three-way merge sees them as unedited.
+ * keeps the edit and stays staged. Every sent value is first
+ * written into the baseline, so the merge sees a form equal to it as unedited and any other as edited.
  */
 async function recordStagedSave<S extends SettingsSectionName>(
   section: S,
@@ -2067,10 +2067,10 @@ async function recordStagedSave<S extends SettingsSectionName>(
     let baseline = state.originalData;
     for (const { path, value } of sent) {
       const storePath = storePathOf(section, path);
-      if (sameValue(valueAt(state.formData, storePath), value)) {
-        baseline = withStoreValue(baseline, storePath, value);
-        confirmed.push(path);
-      }
+      // The server holds the sent value now, so it is the baseline even where the
+      // form moved on: an edit back to the old value then still counts as an edit.
+      baseline = withStoreValue(baseline, storePath, value);
+      if (sameValue(valueAt(state.formData, storePath), value)) confirmed.push(path);
     }
     return {
       ...state,

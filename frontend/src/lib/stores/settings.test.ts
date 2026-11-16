@@ -2406,6 +2406,26 @@ describe('Settings Store - staged section saves', () => {
     expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('v2') });
   });
 
+  it('keeps an edit made back to the stored value during the request, and sends it next', async () => {
+    const stored = savedAudio().sources;
+    stage({ sources: sources('v1') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: stored });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(stored);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(2);
+    expect(patchBody(1)).toEqual({ sources: stored });
+    expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(stored as Rec[]));
+  });
+
   it('refetches and resends once after a 412 when the server changed another path', async () => {
     stage({ sources: sources('A') });
     changeServerElsewhere('audio', { export: { type: 'flac' } });
