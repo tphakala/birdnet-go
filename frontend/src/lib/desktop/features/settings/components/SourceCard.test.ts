@@ -104,5 +104,6 @@ describe('SourceCard', () => {
 
     expect(onDelete).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).toBeNull();
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: DELETE })).toHaveFocus());
   });
 });

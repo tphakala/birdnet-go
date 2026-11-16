@@ -78,8 +78,12 @@
   }
 
   function executeDelete() {
+    if (disabled) {
+      void cancelDelete();
+      return;
+    }
     showDeleteConfirm = false;
-    if (!disabled) onDelete();
+    onDelete();
   }
 
   function handleDeleteKeydown(event: KeyboardEvent) {
