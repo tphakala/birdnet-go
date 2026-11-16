@@ -119,7 +119,7 @@
     border-radius: 50%;
     transform-origin: center;
     transform: rotate(180deg);
-    background: conic-gradient(currentcolor var(--progress), transparent 0);
+    background: conic-gradient(var(--confidence-ring, currentcolor) var(--progress), transparent 0);
     transition: all 0.3s ease;
     z-index: 1;
   }
@@ -140,6 +140,6 @@
     height: 100%;
   }
 
-  /* Confidence level colors are defined globally in custom.css
-     using CSS variables (--color-success, --color-warning, --color-error) */
+  /* Confidence level colors are defined globally in custom.css: --confidence-ring
+     paints the ring from the status fill, color (the text token) paints the number */
 </style>
