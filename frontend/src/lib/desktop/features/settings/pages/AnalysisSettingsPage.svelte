@@ -265,9 +265,18 @@
   const HUGGINGFACE_ENDPOINT_ID = 'huggingface-endpoint';
 
   let licenseModel = $state<CatalogEntry | null>(null);
-  // The variant preselected in the license/install dialog: the server-recommended
-  // one by default, overridable by the user. Empty for flat (variant-less) entries.
-  let selectedVariantId = $state('');
+  // The variant the user picked in the license/install dialog, null until they pick
+  // one. Reset each time the dialog opens.
+  let chosenVariantId = $state<string | null>(null);
+  // The variant the dialog installs: the user's pick, else the smart default (the
+  // server-recommended one, falling back sensibly and skipping other regions'
+  // slices). The default follows activeRegionSlug, so it is recomputed when the
+  // regions load after the dialog opened. Empty for flat (variant-less) entries.
+  const selectedVariantId = $derived.by(
+    () =>
+      chosenVariantId ??
+      (licenseModel ? pickPreselectedVariant(licenseModel, activeRegionSlug) : '')
+  );
   // The download-size row and the install target follow the selected variant when
   // the entry has variants; otherwise they fall back to the whole-entry size.
   const licenseSelectedVariant = $derived(
@@ -1561,10 +1570,7 @@
 
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
-    // Smart default: preselect the recommended variant (falls back sensibly when
-    // there is no recommendation, skipping other regions' slices). Empty string
-    // for flat entries.
-    selectedVariantId = pickPreselectedVariant(entry, activeRegionSlug);
+    chosenVariantId = null;
     licenseDialogRef?.showModal();
   }
 
@@ -2958,7 +2964,7 @@
             {selectedVariantId}
             {activeRegionSlug}
             regionNames={regionNameMap}
-            onSelect={id => (selectedVariantId = id)}
+            onSelect={id => (chosenVariantId = id)}
             idPrefix="license-variant"
           />
           <!-- Plain-language help for the precision jargon (FP32/FP16/INT8) and the

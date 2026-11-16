@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import type { CatalogEntry } from '$lib/types/models';
+import type { CatalogEntry, ModelRegionsResponse } from '$lib/types/models';
 import { catalogEntry as birdEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
 
 // Page-level coverage for the model-gallery install-error split:
@@ -975,7 +975,12 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
   });
 
   afterEach(() => {
-    for (const mock of [modelsApi.installModel, modelsApi.subscribeInstallProgress]) {
+    for (const mock of [
+      modelsApi.installModel,
+      modelsApi.subscribeInstallProgress,
+      modelsApi.fetchModelRegions,
+      modelsApi.fetchCatalog,
+    ]) {
       vi.mocked(mock).mockReset();
     }
     settingsStores.birdnetSettings?.set(BIRDNET_FORM_DEFAULTS);
@@ -1003,14 +1008,19 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
   // No recommended or installed id: the blocked global default comes first, then a
   // compatible africa slice, then a compatible nordic slice. Opens the install dialog
   // once the regions have loaded and accepts the license.
-  async function installWithRegions(resolvedSlug: string): Promise<void> {
-    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+  function regionsResolvingTo(resolvedSlug: string): ModelRegionsResponse {
+    return {
       modelRegion: 'auto',
       locationConfigured: true,
       resolved: { slug: resolvedSlug, source: 'auto', ambiguous: false },
       regions: [regionOption('africa'), regionOption('nordic')],
       families: [],
-    });
+    };
+  }
+
+  // Renders the page and opens the install dialog of the regional entry, after the
+  // regions response has been applied when waitForRegions is set.
+  async function openInstallDialog(waitForRegions = false): Promise<void> {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [
         birdEntry({
@@ -1022,19 +1032,76 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
         }),
       ],
     });
-
     render(AnalysisSettingsPage);
     await gotoAvailableTab();
-    // The dialog reads the active region when it opens, so let the regions load first.
-    await waitFor(() => expect(modelsApi.fetchModelRegions).toHaveBeenCalled());
-    await vi.mocked(modelsApi.fetchModelRegions).mock.results[0]?.value;
-    await tick();
-
+    if (waitForRegions) {
+      await waitFor(() => expect(modelsApi.fetchModelRegions).toHaveBeenCalled());
+      await vi.mocked(modelsApi.fetchModelRegions).mock.results[0]?.value;
+      await tick();
+    }
     await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+  }
+
+  async function acceptLicense(): Promise<void> {
     await fireEvent.click(
       await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
     );
   }
+
+  // Opens the install dialog once the regions have loaded and accepts the license.
+  async function installWithRegions(resolvedSlug: string): Promise<void> {
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue(regionsResolvingTo(resolvedSlug));
+    await openInstallDialog(true);
+    await acceptLicense();
+  }
+
+  // Holds the regions response until release is called, so the dialog can open first.
+  function holdRegions(resolvedSlug: string): () => Promise<void> {
+    let release: (value: ModelRegionsResponse) => void = () => {};
+    vi.mocked(modelsApi.fetchModelRegions).mockReturnValue(
+      new Promise(resolve => {
+        release = resolve;
+      })
+    );
+    return async () => {
+      release(regionsResolvingTo(resolvedSlug));
+      await tick();
+      await tick();
+    };
+  }
+
+  it('preselects the region slice once the regions load after the dialog opened', async () => {
+    const releaseRegions = holdRegions('nordic');
+    await openInstallDialog();
+
+    await releaseRegions();
+    await acceptLicense();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@nordic')
+    );
+  });
+
+  it('keeps a variant the user picked when the regions load afterwards', async () => {
+    const releaseRegions = holdRegions('nordic');
+    await openInstallDialog();
+    // No region is active yet, so the other regions' slices sit behind the disclosures
+    for (let i = 0; i < 2 && !document.getElementById('license-variant-fp32@africa'); i++) {
+      await fireEvent.click(
+        screen.getByRole('button', { name: /analysis\.gallery\.variants\.show/ })
+      );
+    }
+    const africa = document.getElementById('license-variant-fp32@africa');
+    if (!(africa instanceof HTMLInputElement)) throw new Error('the africa slice is not listed');
+    await fireEvent.click(africa);
+
+    await releaseRegions();
+    await acceptLicense();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@africa')
+    );
+  });
 
   it("installs the auto-resolved region's slice when nothing is recommended and the global build is blocked", async () => {
     await installWithRegions('nordic');
