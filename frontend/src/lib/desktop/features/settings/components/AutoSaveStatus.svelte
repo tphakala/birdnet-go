@@ -69,7 +69,7 @@
   {#if status.state === 'saving'}
     <div class="flex items-center gap-1.5 text-sm" aria-hidden="true">
       <LoadingSpinner size="xs" aria-hidden="true" />
-      <span class="text-[var(--color-base-content)]/70">{announcement}</span>
+      <span class="text-[var(--text-subtle)]">{announcement}</span>
     </div>
   {:else if status.state === 'saved'}
     <div class="flex items-center gap-1.5 text-sm" aria-hidden="true">

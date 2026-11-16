@@ -262,7 +262,7 @@
       {/if}
       <div
         class={cn(
-          'flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--color-base-content)]/70',
+          'flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--text-subtle)]',
           otherUnsavedTabs.length > 0 ? 'mt-3' : 'mt-6'
         )}
       >
