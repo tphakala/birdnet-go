@@ -787,16 +787,9 @@
                 maxlength={MAX_STREAM_NAME_LENGTH}
                 required
                 {disabled}
+                error={nameError ?? undefined}
+                oninput={() => (nameError = null)}
               />
-              {#if nameError}
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  class="text-xs text-[var(--text-error)] -mt-2"
-                >
-                  {nameError}
-                </p>
-              {/if}
             </div>
 
             <!-- Stream URL -->
