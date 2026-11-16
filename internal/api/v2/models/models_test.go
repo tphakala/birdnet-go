@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -83,6 +84,116 @@ func TestListModels_IncludesRegistryID(t *testing.T) {
 	require.NotNil(t, birdnet, "the enabled birdnet alias must be listed")
 	assert.Equal(t, classifier.RegistryIDBirdNETV24, birdnet.RegistryID,
 		"birdnet alias must map to the BirdNET v2.4 registry ID")
+}
+
+// TestListModels_LabelsFromLiveRuntime verifies that the backend and precision
+// come from the loaded instance (the runtime seam), not the static registry, that
+// the name carries no backend suffix, that a model the seam does not list gets no
+// runtime fields, and that an anonymous request on an auth-enabled instance does
+// not receive the host-derived fields.
+func TestListModels_LabelsFromLiveRuntime(t *testing.T) {
+	// Mutates the process-global settings snapshot: not parallel.
+	tests := []struct {
+		name          string
+		authenticated bool
+		withAuth      bool
+		runtime       map[string]listedModelRuntime
+		wantBackend   map[string]string
+		wantPrecision map[string]string
+	}{
+		{
+			name:          "loaded model reports the live backend and precision",
+			runtime:       map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}},
+			wantBackend:   map[string]string{conf.ModelIDBirdNET: "ONNX", conf.ModelIDPerchV2: ""},
+			wantPrecision: map[string]string{conf.ModelIDBirdNET: "INT8", conf.ModelIDPerchV2: ""},
+		},
+		{
+			name:          "authenticated request on an auth-enabled instance gets runtime fields",
+			withAuth:      true,
+			authenticated: true,
+			runtime:       map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}},
+			wantBackend:   map[string]string{conf.ModelIDBirdNET: "ONNX", conf.ModelIDPerchV2: ""},
+			wantPrecision: map[string]string{conf.ModelIDBirdNET: "INT8", conf.ModelIDPerchV2: ""},
+		},
+		{
+			name:          "anonymous request on an auth-enabled instance gets no runtime fields",
+			withAuth:      true,
+			runtime:       map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX", precision: "INT8"}},
+			wantBackend:   map[string]string{conf.ModelIDBirdNET: "", conf.ModelIDPerchV2: ""},
+			wantPrecision: map[string]string{conf.ModelIDBirdNET: "", conf.ModelIDPerchV2: ""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core := apitest.NewCore(t)
+			var authSvc auth.Service
+			if tt.withAuth {
+				authSvc = &stubAuth{authenticated: tt.authenticated}
+			}
+			h := New(core, authSvc)
+			h.modelRuntime = func() map[string]listedModelRuntime { return tt.runtime }
+
+			settings := &conf.Settings{}
+			settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}
+			apitest.PublishTestSettings(t, settings)
+
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/models", http.NoBody)
+			rec := httptest.NewRecorder()
+			require.NoError(t, h.ListModels(e.NewContext(req, rec)))
+
+			var items []ModelListItem
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
+			byID := make(map[string]ModelListItem, len(items))
+			for i := range items {
+				byID[items[i].ID] = items[i]
+			}
+			for id, want := range tt.wantBackend {
+				item, ok := byID[id]
+				require.True(t, ok, "model %q must be listed", id)
+				assert.Equal(t, want, item.Backend, "backend of %q", id)
+				assert.Equal(t, tt.wantPrecision[id], item.Precision, "precision of %q", id)
+				assert.NotContains(t, item.Name, "(", "name of %q must carry no backend suffix", id)
+			}
+		})
+	}
+}
+
+// TestMergeModelRuntime verifies that the live instance's backend and precision
+// replace the loaded model's own info only when non-empty, and that a missing
+// instance source leaves the info values in place.
+func TestMergeModelRuntime(t *testing.T) {
+	t.Parallel()
+	infos := []classifier.ModelInfo{
+		{ID: "a", Backend: "TFLite", Quantization: classifier.QuantizationFP32},
+		{ID: "b", Backend: "ONNX", Quantization: classifier.QuantizationFP16},
+	}
+	live := func(id string) (backend, precision string) {
+		if id == "a" {
+			return "OpenVINO", ""
+		}
+		return "", ""
+	}
+
+	withLive := mergeModelRuntime(infos, live)
+	assert.Equal(t, listedModelRuntime{backend: "OpenVINO", precision: "FP32"}, withLive["a"],
+		"a live backend wins and an empty live precision keeps the info value")
+	assert.Equal(t, listedModelRuntime{backend: "ONNX", precision: "FP16"}, withLive["b"],
+		"an instance reporting nothing keeps the info values")
+
+	withoutLive := mergeModelRuntime(infos, nil)
+	assert.Equal(t, listedModelRuntime{backend: "TFLite", precision: "FP32"}, withoutLive["a"])
+}
+
+// TestLiveModelRuntime_NothingLoaded verifies that no model is reported as loaded
+// without a model manager, or with a manager that has no orchestrator.
+func TestLiveModelRuntime_NothingLoaded(t *testing.T) {
+	core := apitest.NewCore(t)
+	core.ModelManager = nil
+	assert.Empty(t, New(core, nil).liveModelRuntime())
+
+	core.ModelManager = classifier.NewModelManager(t.TempDir(), nil, nil)
+	assert.Empty(t, New(core, nil).liveModelRuntime())
 }
 
 // TestInstallModel_RejectsHiddenEntries verifies that hidden, foundation-only

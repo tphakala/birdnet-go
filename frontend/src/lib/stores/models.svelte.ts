@@ -18,6 +18,13 @@ export interface BackendModel {
   category: string;
   minSampleRate?: number;
   recommendedSampleRate?: number;
+  /**
+   * Live execution backend of the loaded model (e.g. "ONNX"). Absent when the
+   * model is not loaded or the server withheld host data.
+   */
+  backend?: string;
+  /** Live runtime precision of the loaded model (e.g. "INT8"). Absent like `backend`. */
+  precision?: string;
 }
 
 export const DEFAULT_MODEL_ID = 'birdnet';
@@ -29,7 +36,7 @@ export const DEFAULT_MODEL_ID = 'birdnet';
  * empty (N=0: no model enabled).
  */
 const FALLBACK_MODELS: BackendModel[] = [
-  { id: DEFAULT_MODEL_ID, name: 'BirdNET v2.4 (TFLite)', category: 'bird' },
+  { id: DEFAULT_MODEL_ID, name: 'BirdNET v2.4', category: 'bird' },
 ];
 
 type ModelsFetchState = 'idle' | 'loading' | 'loaded' | 'error';

@@ -70,6 +70,8 @@ describe('models store', () => {
 
   it('offers the built-in fallback before anything has been fetched', () => {
     expect(getAvailableModels().map(m => m.id)).toEqual([DEFAULT_MODEL_ID]);
+    // The fallback is not a loaded model, so its name carries no backend suffix.
+    expect(getAvailableModels().map(m => m.name)).toEqual(['BirdNET v2.4']);
     expect(modelsLoaded()).toBe(false);
     expect(modelsLoading()).toBe(false);
   });

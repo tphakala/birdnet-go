@@ -99,6 +99,8 @@
       category: string;
       minSampleRate?: number;
       recommendedSampleRate?: number;
+      /** Live execution backend of the loaded model; absent when not loaded. */
+      backend?: string;
     }>;
     disabled?: boolean;
     onUpdate: (_stream: StreamConfig) => boolean;

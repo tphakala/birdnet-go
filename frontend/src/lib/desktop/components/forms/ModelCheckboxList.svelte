@@ -15,6 +15,7 @@
   import { AlertTriangle, Info, Loader2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { modelLabel } from '$lib/utils/modelLabel';
   import { SETTINGS_ROUTES, SYSTEM_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import type { AcousticModelAvailability } from '$lib/types/models';
@@ -28,6 +29,8 @@
     category: string;
     minSampleRate?: number;
     recommendedSampleRate?: number;
+    /** Live execution backend of the loaded model; absent when not loaded. */
+    backend?: string;
   }
 
   interface Props {
@@ -116,7 +119,7 @@
     >
       {#snippet children()}
         <span class="flex items-center gap-2 min-w-0">
-          <span class="text-sm text-[var(--color-base-content)]">{model.name}</span>
+          <span class="text-sm text-[var(--color-base-content)]">{modelLabel(model)}</span>
           {#if belowMin}
             <span
               class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--text-error)]"
