@@ -9,35 +9,46 @@ function pillOf(label: string): HTMLElement {
   return pill;
 }
 
-// Text uses the text token; the tint, border and dot keep the fill token.
-const VARIANT_TOKENS: ReadonlyArray<[StatusVariant, string, string]> = [
-  ['success', '--text-success', '--color-success'],
-  ['warning', '--text-warning', '--color-warning'],
-  ['info', '--text-info', '--color-info'],
-  ['error', '--text-error', '--color-error'],
-];
+/** The dot inside a pill. */
+function dotOf(pill: HTMLElement): HTMLElement {
+  const dot = pill.querySelector<HTMLElement>('span[aria-hidden="true"]');
+  if (!dot) throw new Error('no dot in the pill');
+  return dot;
+}
+
+const STATUS_VARIANTS: StatusVariant[] = ['success', 'warning', 'info', 'error'];
 
 describe('StatusPill', () => {
-  it.each(VARIANT_TOKENS)(
-    '%s colours its text with %s and keeps %s for tint, border and dot',
-    (variant, text, fill) => {
+  it.each(STATUS_VARIANTS)(
+    '%s takes tint and text from the shared badge class and border and dot from --status-fill',
+    variant => {
       renderTyped(StatusPill, { props: { variant, label: `pill-${variant}` } });
 
-      const style = pillOf(`pill-${variant}`).getAttribute('style') ?? '';
-      expect(style).toContain(`color: var(${text})`);
-      expect(style).toContain(`background-color: color-mix(in srgb, var(${fill}) 15%`);
-      expect(style).toContain(`border-color: color-mix(in srgb, var(${fill}) 30%`);
+      const pill = pillOf(`pill-${variant}`);
+      expect(pill).toHaveClass(`badge-status-${variant}`);
+      expect(pill.className).toContain('var(--status-fill)');
+      expect(pill).not.toHaveAttribute('style');
 
-      const dot = pillOf(`pill-${variant}`).querySelector('[aria-hidden="true"]');
-      expect(dot?.getAttribute('style')).toBe(`background-color: var(${fill});`);
+      const dot = dotOf(pill);
+      expect(dot.className).toContain('var(--status-fill)');
+      expect(dot).not.toHaveAttribute('style');
     }
   );
 
-  it('keeps the neutral pill on the base-content mix, with no text token', () => {
-    renderTyped(StatusPill, { props: { label: 'pill-neutral' } });
+  it.each([
+    ['neutral', undefined],
+    // Deliberately outside the StatusVariant union: untyped callers can still pass any string.
+    ['an unknown variant', 'bogus' as unknown as StatusVariant],
+  ])(
+    'colours the pill and dot from base-content for %s, without a status badge class',
+    (_, variant) => {
+      renderTyped(StatusPill, { props: { variant, label: 'pill-neutral' } });
 
-    const style = pillOf('pill-neutral').getAttribute('style') ?? '';
-    expect(style).toContain('color: color-mix(in srgb, var(--color-base-content) 70%');
-    expect(style).not.toContain('--text-');
-  });
+      const pill = pillOf('pill-neutral');
+      expect(pill.className).not.toContain('badge-status');
+      expect(pill.className).not.toContain('--status-fill');
+      expect(pill.className).toContain('var(--color-base-content)');
+      expect(dotOf(pill).className).toContain('var(--color-base-content)');
+    }
+  );
 });
