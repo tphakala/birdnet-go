@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Le frequenze superiori a 48 kHz utilizzano l'accesso esclusivo al dispositivo su Linux, impedendo ad altre applicazioni di condividere la scheda audio",
         "modelLabel": "Modelli di rilevamento",
         "modelHelp": "Seleziona quali modelli AI eseguire su questa sorgente audio",
-        "deleteConfirm": "Rimuovere questa sorgente scheda audio?",
+        "deleteConfirm": "Rimuovere la sorgente scheda audio \"{name}\"?",
         "emptyState": {
           "title": "Nessuna sorgente scheda audio configurata",
           "description": "Aggiungi una sorgente scheda audio per iniziare a catturare l'audio per il rilevamento degli uccelli.",

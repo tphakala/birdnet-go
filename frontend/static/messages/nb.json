@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Rater over 48 kHz bruker eksklusiv enhetstilgang på Linux, noe som forhindrer andre applikasjoner fra å dele lydkortet",
         "modelLabel": "Deteksjonsmodeller",
         "modelHelp": "Velg hvilke AI-modeller som skal kjøres på denne lydkilden",
-        "deleteConfirm": "Fjerne denne lydkortkilden?",
+        "deleteConfirm": "Fjerne lydkortkilden «{name}»?",
         "emptyState": {
           "title": "Ingen lydkortkilder konfigurert",
           "description": "Legg til en lydkortkilde for å begynne å fange lyd til fugledeteksjon.",

@@ -311,6 +311,7 @@ describe('SoundCardCard immediate save', () => {
     expect(onDelete).not.toHaveBeenCalled();
     const dialog = screen.getByRole('alertdialog');
     expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription('Remove sound card source "Living room"?');
 
     const confirm = Array.from(dialog.querySelectorAll('button')).find(
       button => button.textContent.trim() === 'common.delete'

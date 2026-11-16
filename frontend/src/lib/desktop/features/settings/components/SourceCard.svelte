@@ -13,7 +13,7 @@
   - icon: Icon component shown in the header
   - expanded: Whether the body shows (the parent owns the open state)
   - onToggleExpanded: Called by the disclosure button
-  - deleteConfirm: Question shown in the delete overlay, before the name
+  - deleteConfirm: Question shown in the delete overlay; it names the source itself
   - onDelete: Called after the delete was confirmed
   - disabled: Blocks delete
   - badges: Header badges after the disclosure button
@@ -114,7 +114,6 @@
         <span id={deleteTitleId} class="sr-only">{t('common.delete')}</span>
         <p id={deleteDescId} class="flex-1 text-sm font-medium text-[var(--color-base-content)]">
           {deleteConfirm}
-          <span class="font-semibold">{name}</span>
         </p>
         <div class="flex shrink-0 gap-2">
           <button

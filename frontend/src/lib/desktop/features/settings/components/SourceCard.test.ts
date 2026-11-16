@@ -29,7 +29,7 @@ function renderCard(extra: Partial<{ expanded: boolean; disabled: boolean }> = {
       icon: Mic,
       expanded: false,
       onToggleExpanded,
-      deleteConfirm: 'Delete source',
+      deleteConfirm: 'Delete source "Garden"?',
       onDelete,
       children: createRawSnippet(() => ({
         render: () => '<div><p>body</p><button>Body action</button></div>',
@@ -72,8 +72,7 @@ describe('SourceCard', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: DELETE }));
     const dialog = await screen.findByRole('alertdialog');
-    expect(dialog).toHaveTextContent('Delete source');
-    expect(dialog).toHaveTextContent('Garden');
+    expect(dialog).toHaveAccessibleDescription('Delete source "Garden"?');
     await vi.waitFor(() => expect(screen.getByRole('button', { name: CANCEL })).toHaveFocus());
     expect(onDelete).not.toHaveBeenCalled();
 

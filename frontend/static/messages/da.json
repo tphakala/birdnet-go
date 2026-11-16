@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvenser over 48 kHz bruger eksklusiv enhedsadgang på Linux, hvilket forhindrer andre programmer i at dele lydkortet",
         "modelLabel": "Detektionsmodeller",
         "modelHelp": "Vælg hvilke AI-modeller der skal køres på denne lydkilde",
-        "deleteConfirm": "Fjern denne lydkortkilde?",
+        "deleteConfirm": "Fjern lydkortkilden \"{name}\"?",
         "emptyState": {
           "title": "Ingen lydkortkilder konfigureret",
           "description": "Tilføj en lydkortkilde for at begynde at optage lyd til fugledetektering.",

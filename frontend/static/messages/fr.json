@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Les taux supérieurs à 48 kHz utilisent un accès exclusif au périphérique sous Linux, empêchant les autres applications de partager la carte son",
         "modelLabel": "Modèles de détection",
         "modelHelp": "Sélectionner les modèles d'IA pour cette source audio",
-        "deleteConfirm": "Supprimer cette source de carte son ?",
+        "deleteConfirm": "Supprimer la source de carte son \"{name}\" ?",
         "emptyState": {
           "title": "Aucune Source de Carte Son Configurée",
           "description": "Ajoutez une source de carte son pour commencer la capture audio pour la détection d'oiseaux.",

@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvences virs 48 kHz izmanto ekskluzīvu ierīces piekļuvi Linux sistēmā, neļaujot citām lietojumprogrammām koplietot skaņas karti",
         "modelLabel": "Noteikšanas modeļi",
         "modelHelp": "Izvēlieties, kurus AI modeļus palaist šajā audio avotā",
-        "deleteConfirm": "Noņemt šo skaņas kartes avotu?",
+        "deleteConfirm": "Noņemt skaņas kartes avotu \"{name}\"?",
         "emptyState": {
           "title": "Nav konfigurētu skaņas kartes avotu",
           "description": "Pievienojiet skaņas kartes avotu, lai sāktu audio ierakstīšanu putnu noteikšanai.",

@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Taxas acima de 48 kHz usam acesso exclusivo ao dispositivo no Linux, impedindo que outras aplicações compartilhem a placa de som",
         "modelLabel": "Modelos de deteção",
         "modelHelp": "Selecionar modelos de IA para esta fonte de áudio",
-        "deleteConfirm": "Remover esta fonte de placa de som?",
+        "deleteConfirm": "Remover a fonte de placa de som \"{name}\"?",
         "emptyState": {
           "title": "Nenhuma Fonte de Placa de Som Configurada",
           "description": "Adicione uma fonte de placa de som para começar a capturar áudio para detecção de pássaros.",

@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvenser över 48 kHz använder exklusiv enhetsåtkomst på Linux, vilket förhindrar andra program från att dela ljudkortet",
         "modelLabel": "Detektionsmodeller",
         "modelHelp": "Välj vilka AI-modeller som ska köras på denna ljudkälla",
-        "deleteConfirm": "Ta bort denna ljudkortskälla?",
+        "deleteConfirm": "Ta bort ljudkortskällan \"{name}\"?",
         "emptyState": {
           "title": "Inga ljudkortskällor konfigurerade",
           "description": "Lägg till en ljudkortskälla för att börja spela in ljud för fågeldetektering.",

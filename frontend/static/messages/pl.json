@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Częstotliwości powyżej 48 kHz używają wyłącznego dostępu do urządzenia w systemie Linux, uniemożliwiając innym aplikacjom współdzielenie karty dźwiękowej",
         "modelLabel": "Modele detekcji",
         "modelHelp": "Wybierz modele AI dla tego źródła audio",
-        "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",
+        "deleteConfirm": "Usunąć źródło karty dźwiękowej \"{name}\"?",
         "emptyState": {
           "title": "Brak Skonfigurowanych Źródeł Kart Dźwiękowych",
           "description": "Dodaj źródło karty dźwiękowej, aby rozpocząć przechwytywanie audio do wykrywania ptaków.",

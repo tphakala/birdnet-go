@@ -331,7 +331,7 @@
   icon={Mic}
   {expanded}
   {onToggleExpanded}
-  deleteConfirm={t('settings.audio.soundCards.deleteConfirm')}
+  deleteConfirm={t('settings.audio.soundCards.deleteConfirm', { name: source.name })}
   {onDelete}
   {disabled}
 >

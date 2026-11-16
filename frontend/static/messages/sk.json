@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Frekvencie nad 48 kHz používajú výhradný prístup k zariadeniu v Linuxe, čím bránia iným aplikáciám zdieľať zvukovú kartu",
         "modelLabel": "Detekčné modely",
         "modelHelp": "Vyberte, ktoré AI modely sa majú spustiť na tomto zvukovom zdroji",
-        "deleteConfirm": "Odstrániť tento zdroj zvukovej karty?",
+        "deleteConfirm": "Odstrániť zdroj zvukovej karty \"{name}\"?",
         "emptyState": {
           "title": "Nie sú nakonfigurované žiadne zdroje zvukovej karty",
           "description": "Pridajte zdroj zvukovej karty pre začatie nahrávania zvuku na detekciu vtákov.",

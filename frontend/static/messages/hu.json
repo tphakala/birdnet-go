@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "A 48 kHz feletti frekvenciák kizárólagos eszközhozzáférést használnak Linuxon, megakadályozva más alkalmazásokat a hangkártya megosztásában",
         "modelLabel": "Észlelési modellek",
         "modelHelp": "Válassza ki, mely AI-modellek fussanak ezen a hangforráson",
-        "deleteConfirm": "Eltávolítja ezt a hangkártya forrást?",
+        "deleteConfirm": "Eltávolítja a(z) \"{name}\" hangkártya forrást?",
         "emptyState": {
           "title": "Nincsenek hangkártya források konfigurálva",
           "description": "Adjon hozzá egy hangkártya forrást a madárészleléshez szükséges hangfelvétel elindításához.",

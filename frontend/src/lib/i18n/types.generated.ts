@@ -2715,7 +2715,7 @@ export type TranslationKey =
   | 'settings.audio.soundCards.sampleRateExclusive'
   | 'settings.audio.soundCards.modelLabel'
   | 'settings.audio.soundCards.modelHelp'
-  | 'settings.audio.soundCards.deleteConfirm'
+  | 'settings.audio.soundCards.deleteConfirm' // params: name
   | 'settings.audio.soundCards.emptyState.title'
   | 'settings.audio.soundCards.emptyState.description'
   | 'settings.audio.soundCards.emptyState.hintsTitle'
@@ -5037,6 +5037,7 @@ export type TranslationParams = {
     number: string | number;
   };
   'settings.audio.soundCards.summary': { count: string | number };
+  'settings.audio.soundCards.deleteConfirm': { name: string | number };
   'settings.audio.soundCards.compatibility.minSampleRate': { rate: string | number };
   'settings.audio.soundCards.compatibility.recommendedSampleRate': { rate: string | number };
   'settings.audio.audioCapture.streamsConfigured': { count: string | number };

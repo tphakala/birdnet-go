@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Rates above 48 kHz use exclusive device access on Linux, preventing other applications from sharing the sound card",
         "modelLabel": "Detection Models",
         "modelHelp": "Select which AI models to run on this audio source",
-        "deleteConfirm": "Remove this sound card source?",
+        "deleteConfirm": "Remove sound card source \"{name}\"?",
         "emptyState": {
           "title": "No Sound Card Sources Configured",
           "description": "Add a sound card source to start capturing audio for bird detection.",

@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Samplerates boven 48 kHz gebruiken exclusieve apparaattoegang op Linux, waardoor andere applicaties de geluidskaart niet kunnen delen",
         "modelLabel": "Detectiemodellen",
         "modelHelp": "Selecteer AI-modellen voor deze audiobron",
-        "deleteConfirm": "Deze geluidskaartbron verwijderen?",
+        "deleteConfirm": "De geluidskaartbron \"{name}\" verwijderen?",
         "emptyState": {
           "title": "Geen Geluidskaartbronnen Geconfigureerd",
           "description": "Voeg een geluidskaartbron toe om te beginnen met het opnemen van audio voor vogeldetectie.",

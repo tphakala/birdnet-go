@@ -3709,7 +3709,7 @@
         "sampleRateExclusive": "Las tasas superiores a 48 kHz usan acceso exclusivo al dispositivo en Linux, impidiendo que otras aplicaciones compartan la tarjeta de sonido",
         "modelLabel": "Modelos de detección",
         "modelHelp": "Seleccionar modelos de IA para esta fuente de audio",
-        "deleteConfirm": "¿Eliminar esta fuente de tarjeta de sonido?",
+        "deleteConfirm": "¿Eliminar la fuente de tarjeta de sonido \"{name}\"?",
         "emptyState": {
           "title": "No Hay Tarjetas de Sonido Configuradas",
           "description": "Agregue una tarjeta de sonido para comenzar a capturar audio para la detección de aves.",
