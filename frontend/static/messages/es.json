@@ -2480,6 +2480,15 @@
       "validationBlocked": "Algunos campos requieren atención antes de poder guardar.",
       "noChangesToSave": "No hay cambios que guardar."
     },
+    "autoSave": {
+      "saved": "Guardado",
+      "failed": "No guardado. Se restauró el valor anterior.",
+      "changedElsewhere": "Este ajuste se cambió en otro lugar. Se muestra el valor actual; vuelve a hacer el cambio.",
+      "tabNote": "Los cambios de esta pestaña se guardan al hacerlos.",
+      "failuresSummary": "{count, plural, one {# cambio no se guardó} other {# cambios no se guardaron}}",
+      "dismiss": "Descartar",
+      "otherTabsUnsaved": "Otras pestañas tienen cambios sin guardar. Abra una para guardarlos o restablecerlos:"
+    },
     "errors": {
       "loadFailed": "Error al cargar la configuración",
       "saveFailed": "Error al guardar la configuración",

@@ -2480,6 +2480,15 @@
       "validationBlocked": "Einige Felder müssen geprüft werden, bevor Sie speichern können.",
       "noChangesToSave": "Keine Änderungen zu speichern."
     },
+    "autoSave": {
+      "saved": "Gespeichert",
+      "failed": "Nicht gespeichert. Der vorherige Wert wurde wiederhergestellt.",
+      "changedElsewhere": "Diese Einstellung wurde an anderer Stelle geändert. Der aktuelle Wert wird angezeigt; nehmen Sie Ihre Änderung erneut vor.",
+      "tabNote": "Änderungen auf dieser Registerkarte werden beim Vornehmen gespeichert.",
+      "failuresSummary": "{count, plural, one {# Änderung wurde nicht gespeichert} other {# Änderungen wurden nicht gespeichert}}",
+      "dismiss": "Schließen",
+      "otherTabsUnsaved": "Andere Tabs haben ungespeicherte Änderungen. Öffnen Sie einen, um sie zu speichern oder zurückzusetzen:"
+    },
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",
       "saveFailed": "Einstellungen konnten nicht gespeichert werden",

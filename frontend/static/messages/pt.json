@@ -2480,6 +2480,15 @@
       "validationBlocked": "Alguns campos precisam de atenção antes de você poder salvar.",
       "noChangesToSave": "Não há alterações para salvar."
     },
+    "autoSave": {
+      "saved": "Salvo",
+      "failed": "Não salvo. O valor anterior foi restaurado.",
+      "changedElsewhere": "Esta configuração foi alterada em outro lugar. O valor atual é mostrado; faça a alteração novamente.",
+      "tabNote": "As alterações nesta aba são salvas à medida que você as faz.",
+      "failuresSummary": "{count, plural, one {# alteração não foi salva} other {# alterações não foram salvas}}",
+      "dismiss": "Dispensar",
+      "otherTabsUnsaved": "Outras abas têm alterações não salvas. Abra uma para salvá-las ou redefini-las:"
+    },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
       "saveFailed": "Falha ao salvar as configurações",

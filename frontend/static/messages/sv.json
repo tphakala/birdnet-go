@@ -2480,6 +2480,15 @@
       "validationBlocked": "Vissa fält behöver uppmärksammas innan du kan spara.",
       "noChangesToSave": "Inga ändringar att spara."
     },
+    "autoSave": {
+      "saved": "Sparat",
+      "failed": "Inte sparat. Det tidigare värdet återställdes.",
+      "changedElsewhere": "Den här inställningen ändrades någon annanstans. Det aktuella värdet visas; gör ändringen igen.",
+      "tabNote": "Ändringar på den här fliken sparas medan du gör dem.",
+      "failuresSummary": "{count, plural, one {# ändring sparades inte} other {# ändringar sparades inte}}",
+      "dismiss": "Stäng",
+      "otherTabsUnsaved": "Andra flikar har osparade ändringar. Öppna en för att spara eller återställa dem:"
+    },
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
       "saveFailed": "Kunde inte spara inställningar",

@@ -2480,6 +2480,15 @@
       "validationBlocked": "Alcuni campi richiedono attenzione prima di poter salvare.",
       "noChangesToSave": "Nessuna modifica da salvare."
     },
+    "autoSave": {
+      "saved": "Salvato",
+      "failed": "Non salvato. È stato ripristinato il valore precedente.",
+      "changedElsewhere": "Questa impostazione è stata modificata altrove. Viene mostrato il valore attuale; ripeti la modifica.",
+      "tabNote": "Le modifiche in questa scheda vengono salvate man mano che le fai.",
+      "failuresSummary": "{count, plural, one {# modifica non è stata salvata} other {# modifiche non sono state salvate}}",
+      "dismiss": "Chiudi",
+      "otherTabsUnsaved": "Altre schede hanno modifiche non salvate. Aprine una per salvarle o ripristinarle:"
+    },
     "errors": {
       "loadFailed": "Caricamento delle impostazioni non riuscito",
       "saveFailed": "Salvataggio delle impostazioni non riuscito",

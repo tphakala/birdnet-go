@@ -2480,6 +2480,15 @@
       "validationBlocked": "Some fields need attention before you can save.",
       "noChangesToSave": "No changes to save."
     },
+    "autoSave": {
+      "saved": "Saved",
+      "failed": "Not saved. The previous value was restored.",
+      "changedElsewhere": "This setting was changed elsewhere. The current value is shown; make your change again.",
+      "tabNote": "Changes on this tab are saved as you make them.",
+      "failuresSummary": "{count, plural, one {# change was not saved} other {# changes were not saved}}",
+      "dismiss": "Dismiss",
+      "otherTabsUnsaved": "Other tabs have unsaved changes. Open one to save or reset them:"
+    },
     "errors": {
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings",
