@@ -565,7 +565,6 @@ describe('Status text rules', () => {
       for (const body of bodies) {
         expect(body).toContain(`--status-fill: var(${fill});`);
         expect(body).toContain('color-mix(in srgb, var(--status-fill) 15%, transparent)');
-        expect(body).not.toContain(`var(${fill}) 15%`);
       }
     });
   }

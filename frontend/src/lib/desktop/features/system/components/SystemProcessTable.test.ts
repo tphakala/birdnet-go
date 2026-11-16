@@ -110,7 +110,7 @@ describe('SystemProcessTable', () => {
 
     const pill = within(screen.getByRole('table'))
       .getByText('zombie')
-      .closest<HTMLElement>('span.rounded-full.border');
+      .closest<HTMLElement>('span.status-pill');
     expect(pill).toHaveClass('badge-status-error');
   });
 
