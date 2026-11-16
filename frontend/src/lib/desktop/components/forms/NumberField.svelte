@@ -173,12 +173,12 @@
 
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
+      <span class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
     </div>
   {:else if clampedMessage}
     <div class="label">
       <span
-        class="label-text-alt text-[var(--color-warning)] animate-pulse"
+        class="text-xs leading-4 text-[var(--text-warning)] animate-pulse"
         role="status"
         aria-live="polite"
         aria-atomic="true"

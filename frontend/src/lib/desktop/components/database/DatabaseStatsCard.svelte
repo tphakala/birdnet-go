@@ -352,8 +352,8 @@
         <span
           class="px-2 py-1 text-xs font-medium rounded-full
                      {stats.connected
-            ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]'
-            : 'bg-[var(--color-error)]/10 text-[var(--color-error)]'}"
+            ? 'bg-[var(--color-success)]/10 text-[var(--text-success)]'
+            : 'bg-[var(--color-error)]/10 text-[var(--text-error)]'}"
         >
           {stats.connected
             ? t('system.database.stats.connected')
@@ -437,7 +437,7 @@
           </span>
           {#if backupStatus !== 'downloading'}
             <button
-              class="p-1 text-[var(--color-base-content)]/60 hover:text-[var(--color-error)] transition-colors"
+              class="p-1 text-[var(--color-base-content)]/60 hover:text-[var(--text-error)] transition-colors"
               onclick={cancelBackup}
               title={t('system.database.backup.cancel')}
             >
@@ -468,7 +468,7 @@
         class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
                text-sm font-medium rounded-lg transition-colors
                border border-[var(--color-error)]
-               text-[var(--color-error)]
+               text-[var(--text-error)]
                hover:bg-[var(--color-error)]/10"
         onclick={retryBackup}
       >

@@ -1240,7 +1240,7 @@
                     {#if hasExplicitBaseUrl}
                       <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getConfigRedirectURI(selectedProvider)}</code>
                     {:else}
-                      <p class="text-xs text-[var(--color-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
+                      <p class="text-xs text-[var(--text-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
                     {/if}
                   </div>
                   {#if getCredentialsUrl(selectedProvider)}
@@ -1269,7 +1269,7 @@
                     onchange={(value) => (providerFormData.issuerUrl = value)}
                   />
                   {#if oidcValidationError}
-                    <p class="text-xs text-[var(--color-error)] -mt-2">{oidcValidationError}</p>
+                    <p class="text-xs text-[var(--text-error)] -mt-2">{oidcValidationError}</p>
                   {/if}
                 {/if}
 
@@ -1336,7 +1336,7 @@
                      match the providers-list badge and avoid noise for draft/disabled providers. -->
                 {#if providerFormData.enabled && hasNoAllowedUsers(providerFormData.userId)}
                   <p
-                    class="text-xs text-[var(--color-warning)] -mt-2 flex items-start gap-1.5"
+                    class="text-xs text-[var(--text-warning)] -mt-2 flex items-start gap-1.5"
                     role="status"
                   >
                     <TriangleAlert class="size-3.5 shrink-0 mt-0.5" />
@@ -1426,7 +1426,7 @@
                                can log in with them (issue #3381). -->
                           {#if provider.enabled && hasNoAllowedUsers(provider.userId)}
                             <div
-                              class="text-xs text-[var(--color-warning)] flex items-center gap-1 mt-0.5"
+                              class="text-xs text-[var(--text-warning)] flex items-center gap-1 mt-0.5"
                               role="status"
                             >
                               <TriangleAlert class="size-3 shrink-0" />
@@ -1450,7 +1450,7 @@
                       </button>
                       <button
                         onclick={() => deleteProvider(index)}
-                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--text-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                         title={t('settings.security.oauth.providers.deleteButton')}
                         aria-label={t('settings.security.oauth.providers.deleteButton')}
                         disabled={showProviderForm}

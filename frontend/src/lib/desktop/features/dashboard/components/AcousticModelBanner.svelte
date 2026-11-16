@@ -56,7 +56,7 @@
       className
     )}
   >
-    <TriangleAlert class="size-6 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
+    <TriangleAlert class="size-6 shrink-0 text-[var(--text-warning)]" aria-hidden="true" />
     <div class="min-w-0 flex-1">
       <p class="font-semibold text-[var(--color-base-content)]">
         {t('dashboard.acousticModels.noneTitle')}
@@ -82,7 +82,7 @@
       className
     )}
   >
-    <CircleX class="size-6 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+    <CircleX class="size-6 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
     <div class="min-w-0 flex-1">
       <p class="font-semibold text-[var(--color-base-content)]">
         {t('dashboard.acousticModels.loadFailedTitle')}
@@ -109,7 +109,7 @@
       className
     )}
   >
-    <CircleX class="size-6 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+    <CircleX class="size-6 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
     <div class="min-w-0 flex-1">
       <p class="font-semibold text-[var(--color-base-content)]">
         {t('dashboard.acousticModels.failingTitle', { count: failingModels.length })}

@@ -187,7 +187,7 @@
       {#if error}
         <div class="absolute inset-0 flex items-center justify-center rounded-lg" role="alert">
           <div class="text-center max-w-sm px-4">
-            <TriangleAlert class="h-10 w-10 mx-auto mb-3 text-[var(--color-error)]" />
+            <TriangleAlert class="h-10 w-10 mx-auto mb-3 text-[var(--text-error)]" />
             <p class="text-lg mb-1">{t('analytics.hub.card.error')}</p>
             <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">{error}</p>
             <button
@@ -217,7 +217,7 @@
           role="status"
         >
           <div class="text-center px-4">
-            <Sprout class="h-10 w-10 mx-auto mb-3 text-[var(--color-success)] opacity-80" />
+            <Sprout class="h-10 w-10 mx-auto mb-3 text-[var(--text-success)] opacity-80" />
             <p class="text-lg mb-2">{t('analytics.hub.card.notEnoughData')}</p>
             <p class="text-sm">
               {t('analytics.hub.card.notEnoughDataHint', { min: chart.minDataPoints ?? 0 })}

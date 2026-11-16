@@ -89,11 +89,11 @@
 
   // Icon color classes per type
   const iconColorClasses: Record<AlertType, string> = {
-    error: 'text-[var(--color-error)]',
-    warning: 'text-[var(--color-warning)]',
-    info: 'text-[var(--color-info)]',
-    success: 'text-[var(--color-success)]',
-    check: 'text-[var(--color-success)]',
+    error: 'text-[var(--text-error)]',
+    warning: 'text-[var(--text-warning)]',
+    info: 'text-[var(--text-info)]',
+    success: 'text-[var(--text-success)]',
+    check: 'text-[var(--text-success)]',
   };
 
   function handleDismiss(event: MouseEvent) {

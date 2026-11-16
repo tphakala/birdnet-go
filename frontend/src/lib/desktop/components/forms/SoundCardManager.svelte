@@ -406,7 +406,7 @@
                 <p
                   role="alert"
                   aria-live="assertive"
-                  class="text-xs text-[var(--color-error)] -mt-2"
+                  class="text-xs text-[var(--text-error)] -mt-2"
                 >
                   {nameError}
                 </p>
@@ -427,11 +427,7 @@
                 menuSize="sm"
               />
               {#if deviceError}
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  class="text-xs text-[var(--color-error)] mt-1"
-                >
+                <p role="alert" aria-live="assertive" class="text-xs text-[var(--text-error)] mt-1">
                   {deviceError}
                 </p>
               {/if}
@@ -449,7 +445,7 @@
                 menuSize="sm"
               />
               {#if !newSampleRateVerified && !newSampleRateLoading}
-                <p class="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1">
+                <p class="flex items-center gap-1 text-xs text-[var(--text-warning)] mt-1">
                   <AlertTriangle class="size-3" />
                   {t('settings.audio.soundCards.sampleRateUnverified')}
                 </p>
@@ -460,7 +456,7 @@
                 </p>
               {/if}
               {#if newSampleRate > 48000}
-                <p class="flex items-center gap-1 text-xs text-[var(--color-info)] mt-1">
+                <p class="flex items-center gap-1 text-xs text-[var(--text-info)] mt-1">
                   <Info class="size-3 shrink-0" />
                   {t('settings.audio.soundCards.sampleRateExclusive')}
                 </p>

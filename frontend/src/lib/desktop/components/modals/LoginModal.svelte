@@ -402,7 +402,7 @@
               {#if error}
                 <div
                   id="loginError"
-                  class="text-[var(--color-error)] text-sm mt-2"
+                  class="text-[var(--text-error)] text-sm mt-2"
                   role="alert"
                   aria-live="polite"
                 >

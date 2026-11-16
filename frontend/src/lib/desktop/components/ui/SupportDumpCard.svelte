@@ -291,21 +291,21 @@
             </h4>
             <ul class="text-xs space-y-1 text-[var(--color-base-content)] opacity-70">
               <li class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)] shrink-0" />
+                <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
                 <span
                   >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
                 >
               </li>
               <li class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)] shrink-0" />
+                <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
                 <span>{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span>
               </li>
               <li class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)] shrink-0" />
+                <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
                 <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span>
               </li>
               <li class="flex items-center gap-2">
-                <XCircle class="size-4 text-[var(--color-error)] shrink-0" />
+                <XCircle class="size-4 text-[var(--text-error)] shrink-0" />
                 <span>{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span>
               </li>
             </ul>
@@ -336,7 +336,7 @@
               <label class="block py-1" for={githubIssueInputId}>
                 <span class="text-sm text-[var(--color-base-content)]">
                   {t('settings.support.supportReport.githubIssue.label')}
-                  <span class="text-[var(--color-error)]">*</span>
+                  <span class="text-[var(--text-error)]">*</span>
                 </span>
               </label>
               <input
@@ -405,7 +405,7 @@
                   {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
                 </p>
               </div>
-              <div class="text-xs text-[var(--color-warning)]/80 flex items-center gap-1">
+              <div class="text-xs text-[var(--text-warning)] flex items-center gap-1">
                 <Info class="size-4 shrink-0" />
                 {t('settings.support.supportReport.uploadOption.details.manualWarning')}
               </div>
@@ -419,13 +419,13 @@
               class="flex items-start gap-3 py-2 px-3 rounded-lg text-sm"
               class:bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)]={statusType ===
                 'info'}
-              class:text-[var(--color-info)]={statusType === 'info'}
+              class:text-[var(--text-info)]={statusType === 'info'}
               class:bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)]={statusType ===
                 'success'}
-              class:text-[var(--color-success)]={statusType === 'success'}
+              class:text-[var(--text-success)]={statusType === 'success'}
               class:bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)]={statusType ===
                 'error'}
-              class:text-[var(--color-error)]={statusType === 'error'}
+              class:text-[var(--text-error)]={statusType === 'error'}
               role="status"
               aria-live="polite"
             >

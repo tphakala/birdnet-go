@@ -826,7 +826,7 @@
       <LoadingSpinner size="lg" />
       <p class="text-[var(--color-base-content)]/70">{t('common.loading')}</p>
       {#if appState.retryCount > 0}
-        <p class="text-sm text-[var(--color-warning)]">
+        <p class="text-sm text-[var(--text-warning)]">
           {t('common.retrying')} ({appState.retryCount}/{MAX_RETRIES})...
         </p>
       {/if}
@@ -851,11 +851,11 @@
   >
     <div class="max-w-lg rounded-lg bg-[var(--color-base-100)] shadow-xl">
       <div class="flex flex-col items-center p-6 text-center">
-        <div class="mb-4 text-6xl text-[var(--color-error)]">500</div>
-        <h2 class="text-xl font-semibold text-[var(--color-error)]">{t('error.server.title')}</h2>
+        <div class="mb-4 text-6xl text-[var(--text-error)]">500</div>
+        <h2 class="text-xl font-semibold text-[var(--text-error)]">{t('error.server.title')}</h2>
         <p class="mt-1 text-[var(--color-base-content)]/70">{t('error.server.description')}</p>
         <div class="mt-4 w-full rounded-lg bg-[var(--color-base-200)] p-4 text-left">
-          <p class="font-mono text-sm text-[var(--color-error)]">{appError}</p>
+          <p class="font-mono text-sm text-[var(--text-error)]">{appError}</p>
         </div>
         <div class="mt-6">
           <Button variant="primary" size="md" onclick={() => window.location.reload()}>

@@ -258,7 +258,7 @@
                   {#if backup.status === 'completed' && backup.download_url}
                     <a
                       href={backup.download_url}
-                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-info)]"
+                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--text-info)]"
                       download
                     >
                       <Download class="w-3 h-3" />
@@ -266,13 +266,13 @@
                     </a>
                   {:else if backup.status === 'in_progress'}
                     <span
-                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--color-info)]"
+                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--text-info)]"
                     >
                       <Loader2 class="w-3 h-3 animate-spin" />
                       {backup.progress}%
                     </span>
                   {:else if backup.status === 'failed'}
-                    <span class="text-xs text-[var(--color-error)]" title={backup.error ?? ''}>
+                    <span class="text-xs text-[var(--text-error)]" title={backup.error ?? ''}>
                       {t('system.database.backup.history.failed')}
                     </span>
                   {:else}

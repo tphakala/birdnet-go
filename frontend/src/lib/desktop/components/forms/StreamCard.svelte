@@ -223,19 +223,19 @@
       case 'connected':
         return {
           bg: 'bg-[color-mix(in_srgb,var(--color-success)_20%,transparent)]',
-          text: 'text-[var(--color-success)]',
+          text: 'text-[var(--text-success)]',
           border: 'border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]',
         };
       case 'connecting':
         return {
           bg: 'bg-[color-mix(in_srgb,var(--color-warning)_20%,transparent)]',
-          text: 'text-[var(--color-warning)]',
+          text: 'text-[var(--text-warning)]',
           border: 'border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]',
         };
       case 'error':
         return {
           bg: 'bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)]',
-          text: 'text-[var(--color-error)]',
+          text: 'text-[var(--text-error)]',
           border: 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
         };
       case 'disabled':
@@ -247,7 +247,7 @@
       case 'suppressed':
         return {
           bg: 'bg-[color-mix(in_srgb,var(--color-info)_20%,transparent)]',
-          text: 'text-[var(--color-info)]',
+          text: 'text-[var(--text-info)]',
           border: 'border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]',
         };
       case 'idle':
@@ -494,7 +494,7 @@
       class="absolute inset-0 z-10 flex items-center rounded-lg bg-[var(--color-base-300)]/95 backdrop-blur-sm px-4"
     >
       <div class="flex items-center gap-3 w-full">
-        <AlertCircle class="size-6 text-[var(--color-error)] flex-shrink-0" />
+        <AlertCircle class="size-6 text-[var(--text-error)] flex-shrink-0" />
         <p class="text-sm font-medium text-[var(--color-base-content)] flex-1">
           {t('settings.audio.streams.deleteConfirm')}
         </p>
@@ -527,7 +527,7 @@
           <label class="block py-1" for="stream-name-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.streams.nameLabel')}
-              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
+              <span class="text-[var(--text-error)] ml-1" aria-hidden="true">*</span>
             </span>
           </label>
           <input
@@ -546,7 +546,7 @@
           <label class="block py-1" for="stream-url-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.streams.urlLabel')}
-              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
+              <span class="text-[var(--text-error)] ml-1" aria-hidden="true">*</span>
             </span>
           </label>
           <input
@@ -777,7 +777,7 @@
             {displayUrl}
           </p>
           {#if status === 'error' && statusMessage}
-            <p class="text-xs text-[var(--color-error)] mt-1">{statusMessage}</p>
+            <p class="text-xs text-[var(--text-error)] mt-1">{statusMessage}</p>
           {/if}
 
           <!-- Inline Stats Row -->
@@ -802,13 +802,13 @@
           <div class="hidden sm:flex items-center gap-1.5">
             {#if stream.gain}
               <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--text-warning)]"
               >
                 {stream.gain > 0 ? '+' : ''}{stream.gain} dB
               </span>
             {/if}
             <span
-              class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+              class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-info)]/15 text-[var(--text-info)]"
             >
               {stream.type.toUpperCase()}
             </span>
@@ -821,12 +821,12 @@
             {/if}
             {#if stream.channelMode === 'left'}
               <span
-                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--text-info)]"
                 >L</span
               >
             {:else if stream.channelMode === 'right'}
               <span
-                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--text-info)]"
                 >R</span
               >
             {/if}
@@ -887,7 +887,7 @@
       <!-- Stereo downmix warning: shown when a stereo source is still using downmix -->
       {#if showStereoWarning}
         <div
-          class="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5 text-[var(--color-warning)]"
+          class="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5 text-[var(--text-warning)]"
           title={t('settings.audio.streams.stereoWarning.tooltip')}
         >
           <AlertTriangle class="size-3.5 flex-shrink-0" />
@@ -914,7 +914,7 @@
                   health?.process_state === 'circuit_open' ||
                     health?.process_state === 'failed' ||
                     health?.process_state === 'stopped'
-                    ? 'text-[var(--color-error)]'
+                    ? 'text-[var(--text-error)]'
                     : 'text-[var(--color-base-content)]'
                 )}
               >
@@ -935,7 +935,7 @@
                 class={cn(
                   'ml-2',
                   (health?.restart_count ?? 0) > 0
-                    ? 'text-[var(--color-warning)]'
+                    ? 'text-[var(--text-warning)]'
                     : 'text-[var(--color-base-content)]'
                 )}
               >
@@ -950,11 +950,11 @@
                 class={cn(
                   'ml-2',
                   connectionStatus === 'Stable'
-                    ? 'text-[var(--color-success)]'
+                    ? 'text-[var(--text-success)]'
                     : connectionStatus === 'Degraded'
-                      ? 'text-[var(--color-warning)]'
+                      ? 'text-[var(--text-warning)]'
                       : connectionStatus === 'Failed'
-                        ? 'text-[var(--color-error)]'
+                        ? 'text-[var(--text-error)]'
                         : 'text-[var(--color-base-content)]'
                 )}
               >

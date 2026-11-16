@@ -95,12 +95,12 @@
         <div class="flex items-center gap-1">
           {#if legacyStats?.connected}
             <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
-            <span class="text-xs text-[var(--color-success)] font-medium"
+            <span class="text-xs text-[var(--text-success)] font-medium"
               >{t('system.database.stats.connected')}</span
             >
           {:else}
             <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
-            <span class="text-xs text-[var(--color-error)] font-medium"
+            <span class="text-xs text-[var(--text-error)] font-medium"
               >{t('system.database.stats.disconnected')}</span
             >
           {/if}
@@ -142,12 +142,12 @@
         <div class="flex items-center gap-1">
           {#if v2Stats?.connected}
             <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
-            <span class="text-xs text-[var(--color-success)] font-medium"
+            <span class="text-xs text-[var(--text-success)] font-medium"
               >{t('system.database.migration.strip.active')}</span
             >
           {:else}
             <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
-            <span class="text-xs text-[var(--color-error)] font-medium"
+            <span class="text-xs text-[var(--text-error)] font-medium"
               >{t('system.database.stats.disconnected')}</span
             >
           {/if}
@@ -221,7 +221,7 @@
       </div>
 
       {#if isCompleted}
-        <div class="flex items-center gap-2 text-sm text-[var(--color-success)] font-medium">
+        <div class="flex items-center gap-2 text-sm text-[var(--text-success)] font-medium">
           <CheckCircle class="w-4 h-4" />
           <span>{t('system.database.migration.strip.complete')}</span>
         </div>
@@ -251,7 +251,7 @@
           </div>
         </div>
       {:else if isFailed}
-        <div class="flex items-center gap-2 text-sm text-[var(--color-error)] font-medium">
+        <div class="flex items-center gap-2 text-sm text-[var(--text-error)] font-medium">
           <XCircle class="w-4 h-4" />
           <span>{t('system.database.migration.strip.validationFailed')}</span>
         </div>

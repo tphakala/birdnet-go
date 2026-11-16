@@ -101,8 +101,8 @@
   };
 
   const trendClasses: Record<TrendDirection, string> = {
-    up: 'text-[var(--color-success)]',
-    down: 'text-[var(--color-error)]',
+    up: 'text-[var(--text-success)]',
+    down: 'text-[var(--text-error)]',
     neutral: 'text-[var(--color-base-content)]/70',
   };
 

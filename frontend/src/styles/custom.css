@@ -54,7 +54,7 @@
   border-radius: 50%;
   transform-origin: center;
   transform: rotate(180deg);
-  background: conic-gradient(currentcolor var(--progress), transparent 0);
+  background: conic-gradient(var(--confidence-ring, currentcolor) var(--progress), transparent 0);
   transition: all 0.3s ease;
   z-index: 1;
 }
@@ -64,21 +64,27 @@
    in light mode only (dark mode uses --darker-color instead, selected by
    the [data-theme='dark'] .confidence-circle rules above). */
 .confidence-high {
-  color: var(--color-success);
+  --confidence-ring: var(--color-success);
+
+  color: var(--text-success);
 
   --lighter-color: color-mix(in srgb, var(--color-success) 8%, white);
   --darker-color: color-mix(in srgb, var(--color-success) 20%, var(--color-base-100));
 }
 
 .confidence-medium {
-  color: var(--color-warning);
+  --confidence-ring: var(--color-warning);
+
+  color: var(--text-warning);
 
   --lighter-color: color-mix(in srgb, var(--color-warning) 8%, white);
   --darker-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-base-100));
 }
 
 .confidence-low {
-  color: var(--color-error);
+  --confidence-ring: var(--color-error);
+
+  color: var(--text-error);
 
   --lighter-color: color-mix(in srgb, var(--color-error) 8%, white);
   --darker-color: color-mix(in srgb, var(--color-error) 20%, var(--color-base-100));
@@ -107,27 +113,24 @@
   stroke-width: 3;
 }
 
-/* Dark theme adjustments — --lighter-color is NOT used in dark mode
+/* Dark theme adjustments: --lighter-color is NOT used in dark mode
    (the component switches to --darker-color via the [data-theme='dark']
    .confidence-circle selector). We still override it defensively in case
    any code path reads it. */
 [data-theme='dark'] .confidence-high {
-  color: color-mix(in srgb, var(--color-success) 80%, white);
-
+  --confidence-ring: color-mix(in srgb, var(--color-success) 80%, white);
   --lighter-color: color-mix(in srgb, var(--color-success) 15%, black);
   --darker-color: color-mix(in srgb, var(--color-success) 20%, var(--color-base-100));
 }
 
 [data-theme='dark'] .confidence-medium {
-  color: color-mix(in srgb, var(--color-warning) 80%, white);
-
+  --confidence-ring: color-mix(in srgb, var(--color-warning) 80%, white);
   --lighter-color: color-mix(in srgb, var(--color-warning) 15%, black);
   --darker-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-base-100));
 }
 
 [data-theme='dark'] .confidence-low {
-  color: color-mix(in srgb, var(--color-error) 80%, white);
-
+  --confidence-ring: color-mix(in srgb, var(--color-error) 80%, white);
   --lighter-color: color-mix(in srgb, var(--color-error) 15%, black);
   --darker-color: color-mix(in srgb, var(--color-error) 20%, var(--color-base-100));
 }

@@ -1288,14 +1288,12 @@
     <div class="flex items-start gap-3">
       <TriangleAlert
         class="w-5 h-5 shrink-0 mt-0.5 {isError
-          ? 'text-[var(--color-error)]'
-          : 'text-[var(--color-warning)]'}"
+          ? 'text-[var(--text-error)]'
+          : 'text-[var(--text-warning)]'}"
       />
       <div>
         <p
-          class="font-medium {isError
-            ? 'text-[var(--color-error)]'
-            : 'text-[var(--color-warning)]'}"
+          class="font-medium {isError ? 'text-[var(--text-error)]' : 'text-[var(--text-warning)]'}"
         >
           {title}
         </p>
@@ -1384,7 +1382,7 @@
             <div
               class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
             >
-              <Bird class="w-3.5 h-3.5 text-[var(--color-success)]" />
+              <Bird class="w-3.5 h-3.5 text-[var(--text-success)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.species')}</span
@@ -1400,7 +1398,7 @@
         >
           <div class="flex items-center gap-2 mb-1.5">
             <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
-              <MapPin class="w-3.5 h-3.5 text-[var(--color-info)]" />
+              <MapPin class="w-3.5 h-3.5 text-[var(--text-info)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.location')}</span
@@ -1436,7 +1434,7 @@
             <div
               class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]"
             >
-              <Clock class="w-3.5 h-3.5 text-[var(--color-warning)]" />
+              <Clock class="w-3.5 h-3.5 text-[var(--text-warning)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.updated')}</span
@@ -1465,10 +1463,10 @@
         <div
           class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
         >
-          <p class="text-sm text-[var(--color-error)]">{activeSpeciesState.error}</p>
+          <p class="text-sm text-[var(--text-error)]">{activeSpeciesState.error}</p>
           <button
             type="button"
-            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_30%,transparent)] text-[var(--color-error)] transition-colors"
+            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_30%,transparent)] text-[var(--text-error)] transition-colors"
             onclick={() => {
               const birdnetData = store.formData?.birdnet;
               if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
@@ -1488,9 +1486,9 @@
           class="p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)]"
         >
           <div class="flex items-start gap-3">
-            <MapPin class="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
+            <MapPin class="w-5 h-5 text-[var(--text-warning)] shrink-0 mt-0.5" />
             <div>
-              <p class="font-medium text-[var(--color-warning)]">
+              <p class="font-medium text-[var(--text-warning)]">
                 {t('settings.species.activeSpecies.locationNotConfigured.title') ||
                   'Location Not Configured'}
               </p>
@@ -1687,7 +1685,7 @@
 
         <!-- Validation error -->
         {#if synonymError}
-          <p class="text-xs text-[var(--color-error)]" role="alert" aria-live="assertive">
+          <p class="text-xs text-[var(--text-error)]" role="alert" aria-live="assertive">
             {synonymError}
           </p>
         {/if}
@@ -1708,7 +1706,7 @@
                 </div>
                 <button
                   type="button"
-                  class="p-1 rounded-md text-muted hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                  class="p-1 rounded-md text-muted hover:text-[var(--text-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                   aria-label="{t('settings.species.remove')} {oldName}"
                   onclick={() => removeSynonym(oldName)}
                   disabled={store.isLoading || store.isSaving}

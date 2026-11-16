@@ -1946,7 +1946,7 @@
 
       {#if falsePositiveFilter.level === 0}
         <SettingsNote>
-          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
           <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
         </SettingsNote>
       {:else}
@@ -2108,9 +2108,7 @@
         {#if hasBsgBatModel}
           <div class="mt-4">
             <SettingsNote id={BSG_BAT_WARNING_ID}>
-              {#snippet icon()}<AlertTriangle
-                  class="size-4 text-[var(--color-warning)]"
-                />{/snippet}
+              {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
               <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
             </SettingsNote>
           </div>
@@ -2190,7 +2188,7 @@
 
         {#if batFPLevel === 0}
           <SettingsNote>
-            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
             <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
           </SettingsNote>
         {/if}
@@ -2314,7 +2312,7 @@
                 class={cn(
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                   rangeFilterStatus.geomodel.autoSelected
-                    ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
+                    ? 'bg-[var(--color-success)]/15 text-[var(--text-success)]'
                     : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
                 )}
               >
@@ -2393,7 +2391,7 @@
 
       {#if rangeFilterState.error}
         <div
-          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
           role="alert"
         >
           <XCircle class="size-5 shrink-0" aria-hidden="true" />
@@ -2533,7 +2531,7 @@
           role="alert"
         >
           <div class="flex items-start gap-3">
-            <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+            <AlertTriangle class="size-5 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
             <div class="min-w-0 flex-1">
               <p class="font-medium text-[var(--color-base-content)]">
                 {t('analysis.gallery.errors.actionFailed', { name: installError.modelName })}
@@ -2726,7 +2724,7 @@
     class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
     role="alert"
   >
-    <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+    <AlertTriangle class="size-5 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
     <span class="text-[var(--color-base-content)]">{catalogError}</span>
     <button
       type="button"
@@ -2866,7 +2864,7 @@
     class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
     role="note"
   >
-    <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]" aria-hidden="true" />
+    <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5 text-[var(--text-warning)]" aria-hidden="true" />
     <span class="text-[var(--color-base-content)]">{text}</span>
   </div>
 {/snippet}
@@ -2984,7 +2982,7 @@
             class="flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2.5 text-sm"
           >
             <ShieldAlert
-              class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]"
+              class="mt-0.5 size-4 shrink-0 text-[var(--text-warning)]"
               aria-hidden="true"
             />
             <p class="text-[var(--color-base-content)]">
@@ -2995,7 +2993,7 @@
       </div>
 
       {#if installBlocked}
-        <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--color-error)]" role="alert">
+        <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--text-error)]" role="alert">
           {t('analysis.gallery.variants.incompatible')}
         </p>
       {/if}
@@ -3033,7 +3031,7 @@
     <div class="w-full max-w-md p-6">
       <div class="flex items-start gap-3">
         <div class="shrink-0 rounded-full bg-[var(--color-error)]/10 p-2">
-          <AlertTriangle class="size-5 text-[var(--color-error)]" aria-hidden="true" />
+          <AlertTriangle class="size-5 text-[var(--text-error)]" aria-hidden="true" />
         </div>
         <div>
           <h3
@@ -3145,7 +3143,7 @@
 
       {#if rangeFilterState.error}
         <div
-          class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
           role="alert"
         >
           <XCircle class="size-5 shrink-0" aria-hidden="true" />

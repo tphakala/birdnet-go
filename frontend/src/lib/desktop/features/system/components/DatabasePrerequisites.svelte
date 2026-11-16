@@ -108,10 +108,10 @@
 
   /** Status icon color classes */
   const statusIconColor: Record<PrerequisiteCheckStatus, string> = {
-    passed: 'text-[var(--color-success)]',
-    failed: 'text-[var(--color-error)]',
-    error: 'text-[var(--color-error)]',
-    warning: 'text-[var(--color-warning)]',
+    passed: 'text-[var(--text-success)]',
+    failed: 'text-[var(--text-error)]',
+    error: 'text-[var(--text-error)]',
+    warning: 'text-[var(--text-warning)]',
     skipped: 'text-muted',
   };
 

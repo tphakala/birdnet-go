@@ -982,7 +982,7 @@
           </div>
         {:else if databaseStats.error}
           <div
-            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
             role="alert"
           >
             <XCircle class="size-5" />
@@ -1015,12 +1015,12 @@
               </div>
               <div class="text-lg font-semibold mt-1">
                 {#if databaseStats.data.connected}
-                  <span class="text-[var(--color-success)] flex items-center gap-2">
+                  <span class="text-[var(--text-success)] flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-[var(--color-success)]"></span>
                     {t('settings.main.sections.database.stats.connected')}
                   </span>
                 {:else}
-                  <span class="text-[var(--color-error)] flex items-center gap-2">
+                  <span class="text-[var(--text-error)] flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
                     {t('settings.main.sections.database.stats.disconnected')}
                   </span>

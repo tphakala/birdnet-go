@@ -2951,7 +2951,9 @@
       role="alert"
       class="pointer-events-none absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] rounded-md"
     >
-      <span class="text-[var(--color-error)] text-sm">{error}</span>
+      <span class="rounded bg-[var(--color-base-100)] px-2 py-0.5 text-sm text-[var(--text-error)]"
+        >{error}</span
+      >
     </div>
   {/if}
 </div>
