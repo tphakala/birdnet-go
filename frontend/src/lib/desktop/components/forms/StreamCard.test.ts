@@ -63,6 +63,7 @@ const baseStream: StreamConfig = {
 
 interface RenderOptions {
   stream?: StreamConfig;
+  models?: BackendModel[];
   streams?: StreamConfig[];
   expanded?: boolean;
 }
@@ -79,8 +80,8 @@ function renderCard(options: RenderOptions = {}) {
       index: 0,
       streams: options.streams ?? [stream],
       rowId: ROW_ID,
-      availableModels,
-      modelOptions: availableModels.map(m => ({ value: m.id, label: m.name })),
+      availableModels: options.models ?? availableModels,
+      modelOptions: (options.models ?? availableModels).map(m => ({ value: m.id, label: m.name })),
       expanded: options.expanded ?? true,
       onToggleExpanded: vi.fn(),
       onCommit,
@@ -210,6 +211,20 @@ describe('StreamCard immediate save', () => {
       { ...baseStream, gain: 4 },
       { field: `${FIELD_PREFIX}gain`, debounceMs: AUTOSAVE_DEBOUNCE_MS }
     );
+  });
+
+  it('limits the name to what the server accepts', () => {
+    renderCard();
+
+    const input = screen.getByLabelText<HTMLInputElement>(new RegExp(NAME_LABEL_KEY));
+    expect(input).toHaveAttribute('maxlength', '64');
+  });
+
+  it('warns about a bat model on a stream', () => {
+    const bat: BackendModel = { id: 'bat', registryId: 'Bat', name: 'Bat model', category: 'bat' };
+    renderCard({ models: [...availableModels, bat], stream: { ...baseStream, models: ['bat'] } });
+
+    expect(screen.getByText('settings.audio.streams.batWarning')).toBeInTheDocument();
   });
 
   it('commits a classifier switch at once with the complete list', async () => {

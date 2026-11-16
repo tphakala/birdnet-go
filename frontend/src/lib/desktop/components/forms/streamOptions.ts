@@ -6,6 +6,14 @@ import { StreamTypes, type ChannelAnalysis, type StreamType } from '$lib/stores/
 /** Longest stream URL the editors accept. */
 export const MAX_STREAM_URL_LENGTH = 2048;
 
+/**
+ * Longest stream name the fields accept. The server limits the name to this many
+ * bytes (MaxStreamNameLength, internal/conf/validate_audio.go:168, compared with
+ * len at :252), and the fields count characters, so a name with multibyte
+ * characters can still be refused.
+ */
+export const MAX_STREAM_NAME_LENGTH = 64;
+
 /** Rate a stream is assumed to deliver until a test reports its own. */
 export const DEFAULT_SAMPLE_RATE = 48000;
 

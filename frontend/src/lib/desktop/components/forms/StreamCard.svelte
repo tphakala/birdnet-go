@@ -100,6 +100,7 @@
   import StreamChannelControls from './StreamChannelControls.svelte';
   import {
     DEFAULT_SAMPLE_RATE,
+    MAX_STREAM_NAME_LENGTH,
     MAX_STREAM_URL_LENGTH,
     streamTypeOptions,
     transportOptions,
@@ -146,8 +147,6 @@
     onDelete,
   }: Props = $props();
 
-  /** Longest stream name the field accepts. */
-  const NAME_MAX_LENGTH = 100;
   const SECONDS_PER_MINUTE = 60;
   const SECONDS_PER_HOUR = 3600;
   const BYTES_PER_KIB = 1024;
@@ -619,7 +618,7 @@
         validate={validateName}
         onCommit={name => commit({ name }, 'name')}
         placeholder={t('settings.audio.streams.namePlaceholder')}
-        maxlength={NAME_MAX_LENGTH}
+        maxlength={MAX_STREAM_NAME_LENGTH}
         required
         {disabled}
         describedBy={errorDescription('name')}

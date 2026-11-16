@@ -73,6 +73,7 @@
   import StreamChannelControls from './StreamChannelControls.svelte';
   import {
     DEFAULT_SAMPLE_RATE,
+    MAX_STREAM_NAME_LENGTH,
     streamTypeOptions,
     transportOptions,
     analyzeStreamChannels,
@@ -722,6 +723,7 @@
                 label={t('settings.audio.streams.nameLabel')}
                 placeholder={t('settings.audio.streams.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.streams.nameHelp')}
+                maxlength={MAX_STREAM_NAME_LENGTH}
                 required
                 {disabled}
               />
