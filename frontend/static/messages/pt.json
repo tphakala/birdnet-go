@@ -2481,13 +2481,13 @@
       "noChangesToSave": "Não há alterações para salvar."
     },
     "autoSave": {
-      "saved": "Guardado",
-      "failed": "Não guardado. O valor anterior foi restaurado.",
-      "changedElsewhere": "Esta definição foi alterada noutro local. O valor atual é mostrado; faça a alteração novamente.",
-      "tabNote": "As alterações neste separador são guardadas à medida que as faz.",
-      "failuresSummary": "{count, plural, one {# alteração não foi guardada} other {# alterações não foram guardadas}}",
+      "saved": "Salvo",
+      "failed": "Não salvo. O valor anterior foi restaurado.",
+      "changedElsewhere": "Esta configuração foi alterada em outro lugar. O valor atual é mostrado; faça a alteração novamente.",
+      "tabNote": "As alterações nesta aba são salvas à medida que você as faz.",
+      "failuresSummary": "{count, plural, one {# alteração não foi salva} other {# alterações não foram salvas}}",
       "dismiss": "Dispensar",
-      "otherTabsUnsaved": "Outros separadores têm alterações não guardadas. Abra um para as guardar ou repor:"
+      "otherTabsUnsaved": "Outras abas têm alterações não salvas. Abra uma para salvá-las ou redefini-las:"
     },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
