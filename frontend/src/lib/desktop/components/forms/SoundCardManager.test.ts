@@ -485,6 +485,11 @@ describe('SoundCardManager rows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stubElementAnimate();
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(acousticModelAvailability).mockReturnValue({
+      kind: 'none',
+      reason: 'none_installed',
+    });
   });
 
   afterEach(() => {
@@ -518,6 +523,45 @@ describe('SoundCardManager rows', () => {
 
     await rerender({ sources: [sourceA, sourceB, sourceC] });
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the open state of every card when a refused add takes the list back', async () => {
+    const { rerender } = renderRows([sourceA, sourceB]);
+    await fireEvent.click(header('B'));
+
+    await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
+    // The open card has a device select of its own; the add form comes last.
+    const deviceSelect = (await screen.findAllByTestId(DEVICE_SELECT_TESTID)).at(-1);
+    if (deviceSelect) await fireEvent.change(deviceSelect, { target: { value: 'dev-c' } });
+    await fireEvent.input(screen.getByTestId('new-soundcard-name'), { target: { value: 'C' } });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
+
+    // The list grows at once, then the refusal takes it back.
+    await rerender({ sources: [sourceA, sourceB, sourceC] });
+    await rerender({ sources: [sourceA, sourceB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('brings a refused delete back with its open state', async () => {
+    const { rerender } = renderRows([sourceA, sourceB]);
+    await fireEvent.click(header('A'));
+    await fireEvent.click(header('B'));
+
+    const deleteButtons = screen.getAllByRole('button', { name: 'common.delete' });
+    await fireEvent.click(deleteButtons[0]);
+    const dialog = screen.getByRole('alertdialog');
+    const confirm = Array.from(dialog.querySelectorAll('button')).find(
+      button => button.textContent.trim() === 'common.delete'
+    );
+    if (confirm) await fireEvent.click(confirm);
+
+    await rerender({ sources: [sourceB] });
+    await rerender({ sources: [sourceA, sourceB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('deletes a source after confirmation with one list save', async () => {
