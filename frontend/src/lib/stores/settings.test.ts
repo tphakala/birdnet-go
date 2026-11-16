@@ -2468,6 +2468,26 @@ describe('Settings Store - staged section saves', () => {
     expect(second).toMatchObject({ saved: [['sources']], failed: [], remaining: false });
   });
 
+  it('keeps a path staged when a store listener edits it again while a save is published', async () => {
+    stage({ sources: sources('A') });
+    let armed = true;
+    const unsubscribe = settingsStore.subscribe(state => {
+      const saved = state.originalData.realtime?.audio?.sources;
+      if (armed && JSON.stringify(saved) === JSON.stringify(inServerShape(sources('A')))) {
+        armed = false;
+        stage({ sources: sources('B') });
+      }
+    });
+
+    const result = await settingsActions.saveStagedSection('audio');
+    unsubscribe();
+
+    expect(result.saved).toEqual([]);
+    expect(result.remaining).toBe(true);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('B') });
+  });
+
   it.each([
     ['resetAllSettings', () => settingsActions.resetAllSettings()],
     ['resetSection', () => settingsActions.resetSection('realtime')],

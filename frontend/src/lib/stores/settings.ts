@@ -1707,8 +1707,11 @@ function invalidateStaged(topKey?: string): void {
 interface StagedOutcome {
   /** Edits given up because the server changed the path and the user had a pending edit there. */
   dropped: DroppedStagedEdit[];
-  /** Paths no longer staged: the dropped ones, and those where the server value now stands. */
-  released: DroppedStagedEdit[];
+  /**
+   * Paths no longer staged: the dropped ones, and those where the server value now
+   * stands, with the edit generation they had then.
+   */
+  released: (DroppedStagedEdit & { generation: number })[];
 }
 
 function newStagedOutcome(): StagedOutcome {
@@ -1744,7 +1747,7 @@ function applyStagedRule(
       }
       result = withStoreValue(result, storePath, serverValue);
       const ref = { section, path };
-      outcome.released.push(ref);
+      outcome.released.push({ ...ref, generation: generationOf(section, path) });
       if (!sameValue(pending, lastSeen) && !sameValue(pending, serverValue)) {
         outcome.dropped.push(ref);
       }
@@ -1755,7 +1758,10 @@ function applyStagedRule(
 
 /** Unstages what the rule released and tells the listeners what it dropped. */
 function settleStaged(outcome: StagedOutcome): void {
-  for (const { section, path } of outcome.released) unstagePath(section, path);
+  for (const { section, path, generation } of outcome.released) {
+    // A newer edit made while the store published the rebase stays staged.
+    if (generationOf(section, path) === generation) unstagePath(section, path);
+  }
   if (outcome.dropped.length === 0) return;
   for (const listener of [...droppedListeners]) {
     try {
@@ -2104,7 +2110,8 @@ async function rebaseForStagedSave(
  * keeps the edit and stays staged. Every sent value is first
  * written into the baseline, so the merge sees a form equal to it as unedited and any other as edited.
  * The confirmed paths are unstaged and reported saved even when a store subscriber throws during
- * the update; the error then propagates to the caller.
+ * the update, unless a subscriber edited the same path again meanwhile (its generation moved
+ * on), which keeps it staged; the error then propagates to the caller.
  */
 async function recordStagedSave<S extends SettingsSectionName>(
   section: S,
@@ -2116,7 +2123,7 @@ async function recordStagedSave<S extends SettingsSectionName>(
   const origLocale = get(settingsStore).originalData.realtime?.dashboard?.locale;
   const echo = asRecord(response?.settings);
   const incoming = withoutServerOwnedKeys(section, echo ?? patch);
-  const confirmed: StagedPath[] = [];
+  const confirmed: { path: StagedPath; generation: number }[] = [];
   try {
     settingsStore.update(state => {
       let baseline = state.originalData;
@@ -2129,7 +2136,7 @@ async function recordStagedSave<S extends SettingsSectionName>(
           generationOf(section, path) === generation &&
           sameValue(valueAt(state.formData, storePath), value)
         ) {
-          confirmed.push(path);
+          confirmed.push({ path, generation });
         }
       }
       return {
@@ -2139,7 +2146,9 @@ async function recordStagedSave<S extends SettingsSectionName>(
     });
   } finally {
     // The update has run once the store holds the value; a throwing subscriber must not leave the paths staged.
-    for (const path of confirmed) {
+    for (const { path, generation } of confirmed) {
+      // A newer edit made while the store published the save stays staged.
+      if (generationOf(section, path) !== generation) continue;
       unstagePath(section, path);
       pushUnique(result.saved, path);
     }
@@ -2172,28 +2181,36 @@ function pendingStagedValues(section: SettingsSectionName): SentPath[] {
  * Takes the form back to the stored value at every sent path that was not edited
  * or reset since (same generation) and whose form value is still what was sent,
  * and unstages it. A path edited again keeps the newer edit, which stays staged
- * for the next send.
+ * for the next send, also when a store subscriber edits it while the reverted
+ * values are published. The reverted paths are settled even when a subscriber
+ * throws; the error then propagates to the caller.
  */
 function revertStagedPaths(
   section: SettingsSectionName,
   sent: SentPath[],
   result: StagedSaveResult
 ): void {
-  const reverted: StagedPath[] = [];
-  settingsStore.update(state => {
-    let formData = state.formData;
-    for (const { path, value, generation } of sent) {
-      const storePath = storePathOf(section, path);
+  const reverted: SentPath[] = [];
+  try {
+    settingsStore.update(state => {
+      let formData = state.formData;
+      for (const entry of sent) {
+        const storePath = storePathOf(section, entry.path);
+        if (generationOf(section, entry.path) !== entry.generation) continue;
+        if (!sameValue(valueAt(formData, storePath), entry.value)) continue;
+        formData = withStoreValue(formData, storePath, valueAt(state.originalData, storePath));
+        reverted.push(entry);
+      }
+      return { ...state, formData };
+    });
+  } finally {
+    // The store holds the reverted values even when a subscriber threw; a newer
+    // edit made while it published them stays staged.
+    for (const { path, generation } of reverted) {
       if (generationOf(section, path) !== generation) continue;
-      if (!sameValue(valueAt(formData, storePath), value)) continue;
-      formData = withStoreValue(formData, storePath, valueAt(state.originalData, storePath));
-      reverted.push(path);
+      unstagePath(section, path);
+      pushUnique(result.failed, path);
     }
-    return { ...state, formData };
-  });
-  for (const path of reverted) {
-    unstagePath(section, path);
-    pushUnique(result.failed, path);
   }
 }
 
@@ -2269,7 +2286,18 @@ async function runStagedSave(
     result.error = error;
     // A failure before anything was sent (the baseline fetch) leaves no sent list; the
     // edits captured before that fetch go back to the stored value unless edited again.
-    if (!accepted) revertStagedPaths(section, sent.length > 0 ? sent : pending, result);
+    if (!accepted) {
+      try {
+        revertStagedPaths(section, sent.length > 0 ? sent : pending, result);
+      } catch (rollbackError) {
+        // A store listener threw while the stored values were put back; the
+        // result still reports the failure and the paths it settled.
+        logger.error(
+          'A store listener threw while a failed staged save was taken back:',
+          rollbackError
+        );
+      }
+    }
   }
   result.remaining = stagedPathsOf(section).length > 0;
 }
