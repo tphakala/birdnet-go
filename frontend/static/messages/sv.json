@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Konfiguration av ljudströmmar",
-        "description": "Konfigurera nätverksljudströmmar för fjärrinspelning av ljud. Stöder RTSP, HTTP, HLS, RTMP och UDP-protokoll.",
         "noStreamsConfigured": "Inga strömmar konfigurerade"
       },
       "streams": {
@@ -3854,12 +3853,12 @@
           "eventAt": "Händelse vid {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Växla diagnostik",
           "processState": "Processtillstånd",
           "lastData": "Senaste data",
           "restartCount": "Antal omstarter",
           "connection": "Anslutning",
-          "stateErrorHistory": "Tillstånds- och felhistorik"
+          "stateErrorHistory": "Tillstånds- och felhistorik",
+          "title": "Diagnostik"
         },
         "connectionStatus": {
           "stable": "Stabil",
@@ -3906,8 +3905,19 @@
         },
         "stereoWarning": {
           "message": "Stereoström detekterad. Nedmixning av flera kanaler kan minska detektionsnoggrannheten på grund av fasskillnader mellan kanaler. Välj en specifik kanal (vänster/höger) eller använd kanaldetektorn för bästa resultat.",
-          "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal.",
-          "tooltip": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal."
+          "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Välj en specifik kanal under Anslutning."
+        },
+        "autoSaveHelp": "Ändringar sparas direkt. Ändringar av anslutningen ansluter strömmen på nytt och väntar därför tills du klickar på Verkställ.",
+        "connectionTitle": "Anslutning",
+        "connectionApplyHint": "Strömmen ansluts på nytt när du verkställer.",
+        "connectionApplyFailed": "Anslutningen ändrades inte. Verkställ igen eller avbryt.",
+        "applyConnection": "Verkställ och anslut på nytt",
+        "testBeforeApply": "Testa den nya URL:en innan du verkställer den.",
+        "statsLine": "Totalt: {total} · Hastighet: {rate} · Senast: {last}",
+        "ago": {
+          "seconds": "{count} s sedan",
+          "minutes": "{count} min sedan",
+          "hours": "{count} h sedan"
         }
       },
       "audioFilters": {

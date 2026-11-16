@@ -1,7 +1,7 @@
 <!--
-  Test fixture: stand-in for ModelCheckboxList that renders the current
+  Test fixture: stand-in for ModelToggleList that renders the current
   selection as plain text so a parent's default model pre-selection can be
-  asserted without driving the real checkbox UI. Other props are ignored.
+  asserted without driving the real switches. Other props are ignored.
 
   @component
 -->
@@ -13,4 +13,4 @@
   let { selectedModels = [] }: Props = $props();
 </script>
 
-<div data-testid="model-checkbox-list">{selectedModels.join(',')}</div>
+<div data-testid="model-toggle-list">{selectedModels.join(',')}</div>

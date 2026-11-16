@@ -2775,7 +2775,6 @@ export type TranslationKey =
   | 'settings.audio.quietHours.enabledBadge'
   | 'settings.audio.quietHours.enableLabel'
   | 'settings.audio.rtspStreams.title'
-  | 'settings.audio.rtspStreams.description'
   | 'settings.audio.rtspStreams.noStreamsConfigured'
   | 'settings.audio.streams.streamLabel'
   | 'settings.audio.streams.nameLabel'
@@ -2829,12 +2828,12 @@ export type TranslationKey =
   | 'settings.audio.streams.timeline.to'
   | 'settings.audio.streams.timeline.reason'
   | 'settings.audio.streams.timeline.eventAt' // params: time
-  | 'settings.audio.streams.diagnostics.toggleDiagnostics'
   | 'settings.audio.streams.diagnostics.processState'
   | 'settings.audio.streams.diagnostics.lastData'
   | 'settings.audio.streams.diagnostics.restartCount'
   | 'settings.audio.streams.diagnostics.connection'
   | 'settings.audio.streams.diagnostics.stateErrorHistory'
+  | 'settings.audio.streams.diagnostics.title'
   | 'settings.audio.streams.connectionStatus.stable'
   | 'settings.audio.streams.connectionStatus.degraded'
   | 'settings.audio.streams.connectionStatus.failed'
@@ -2870,7 +2869,16 @@ export type TranslationKey =
   | 'settings.audio.streams.format.withSampleRate' // params: rate, channels
   | 'settings.audio.streams.stereoWarning.message'
   | 'settings.audio.streams.stereoWarning.short'
-  | 'settings.audio.streams.stereoWarning.tooltip'
+  | 'settings.audio.streams.autoSaveHelp'
+  | 'settings.audio.streams.connectionTitle'
+  | 'settings.audio.streams.connectionApplyHint'
+  | 'settings.audio.streams.connectionApplyFailed'
+  | 'settings.audio.streams.applyConnection'
+  | 'settings.audio.streams.testBeforeApply'
+  | 'settings.audio.streams.statsLine' // params: total, rate, last
+  | 'settings.audio.streams.ago.seconds' // params: count
+  | 'settings.audio.streams.ago.minutes' // params: count
+  | 'settings.audio.streams.ago.hours' // params: count
   | 'settings.audio.audioFilters.title'
   | 'settings.audio.audioFilters.description'
   | 'settings.audio.audioFilters.enableEqualizer'
@@ -5051,6 +5059,14 @@ export type TranslationParams = {
     rate: string | number;
     channels: string | number;
   };
+  'settings.audio.streams.statsLine': {
+    total: string | number;
+    rate: string | number;
+    last: string | number;
+  };
+  'settings.audio.streams.ago.seconds': { count: string | number };
+  'settings.audio.streams.ago.minutes': { count: string | number };
+  'settings.audio.streams.ago.hours': { count: string | number };
   'settings.audio.audioFilters.attenuationLevels.custom': { db: string | number };
   'settings.audio.audioFilters.graph.sampleRate': { rate: string | number };
   'settings.audio.audioFilters.graph.clipped': { peak: string | number };

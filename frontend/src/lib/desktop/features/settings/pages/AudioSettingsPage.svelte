@@ -29,7 +29,10 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
   import SoundCardManager from '$lib/desktop/components/forms/SoundCardManager.svelte';
-  import { AUDIO_SOURCES_FIELD_PREFIX } from '$lib/desktop/components/forms/sourceFields';
+  import {
+    AUDIO_SOURCES_FIELD_PREFIX,
+    STREAMS_FIELD_PREFIX,
+  } from '$lib/desktop/components/forms/sourceFields';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -241,14 +244,8 @@
   }
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection per tab with $derived.
-  // The sound card tab saves as it changes, so it has no unsaved state to track.
-  // Streams tab changes
-  let streamsTabHasChanges = $derived(
-    hasSettingsChanged(
-      store.originalData.realtime?.rtsp?.streams,
-      store.formData.realtime?.rtsp?.streams
-    )
-  );
+  // The sound card and streams tabs save as they change, so they have no unsaved
+  // state to track.
 
   // Audio Normalization section changes (moved here for dependency order)
   let normalizationHasChanges = $derived(
@@ -504,16 +501,10 @@
     commitSetting('audio', { sources }, options);
   }
 
-  function updateRTSPStreams(streams: StreamConfig[]) {
-    const storeState = $settingsStore;
-    const currentRtsp = storeState.formData.realtime?.rtsp || { streams: [] };
-
-    settingsActions.updateSection('realtime', {
-      rtsp: {
-        ...currentRtsp,
-        streams,
-      },
-    });
+  // The streams tab saves each change at once: the whole streams array, under the
+  // field key of the control that made the change.
+  function updateRTSPStreams(streams: StreamConfig[], options: CommitOptions) {
+    commitSetting('rtsp', { streams }, options);
   }
 
   function updateExportEnabled(enabled: boolean) {
@@ -686,7 +677,8 @@
       id: 'streams',
       label: t('settings.audio.tabs.streams'),
       icon: Radio,
-      hasChanges: streamsTabHasChanges,
+      saveMode: 'immediate',
+      autoSaveScope: STREAMS_FIELD_PREFIX,
       content: streamsTabContent,
     },
     {
@@ -793,13 +785,11 @@
     <!-- RTSP Stream Configuration -->
     <SettingsSection
       title={t('settings.audio.rtspStreams.title')}
-      description={t('settings.audio.rtspStreams.description')}
-      originalData={store.originalData.realtime?.rtsp?.streams}
-      currentData={store.formData.realtime?.rtsp?.streams}
+      description={t('settings.audio.streams.autoSaveHelp')}
     >
       <StreamManager
         streams={settings.rtsp.streams}
-        disabled={store.isLoading || store.isSaving}
+        disabled={store.isLoading}
         onUpdateStreams={updateRTSPStreams}
       />
     </SettingsSection>

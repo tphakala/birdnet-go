@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Configuration des Flux Audio",
-        "description": "Configurez les flux audio réseau pour la capture audio à distance. Supporte les protocoles RTSP, HTTP, HLS, RTMP et UDP.",
         "noStreamsConfigured": "Aucun flux configuré"
       },
       "streams": {
@@ -3854,12 +3853,12 @@
           "eventAt": "Événement à {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Afficher/masquer les diagnostics",
           "processState": "État du processus",
           "lastData": "Dernières données",
           "restartCount": "Redémarrages",
           "connection": "Connexion",
-          "stateErrorHistory": "Historique des états et erreurs"
+          "stateErrorHistory": "Historique des états et erreurs",
+          "title": "Diagnostic"
         },
         "connectionStatus": {
           "stable": "Stable",
@@ -3906,8 +3905,19 @@
         },
         "stereoWarning": {
           "message": "Flux stéréo détecté. Le mixage de plusieurs canaux peut réduire la précision de détection en raison des différences de phase entre les canaux. Sélectionnez un canal spécifique (gauche/droit) ou utilisez le détecteur de canaux pour de meilleurs résultats.",
-          "short": "Downmix stéréo actif. La précision de détection peut être réduite. Modifiez pour sélectionner un canal spécifique.",
-          "tooltip": "Downmix stéréo actif. La précision de détection peut être réduite. Modifiez pour sélectionner un canal spécifique."
+          "short": "Downmix stéréo actif. La précision de détection peut être réduite. Sélectionnez un canal spécifique dans Connexion."
+        },
+        "autoSaveHelp": "Les modifications sont enregistrées immédiatement. Les modifications de la connexion reconnectent le flux : elles attendent donc que vous cliquiez sur Appliquer.",
+        "connectionTitle": "Connexion",
+        "connectionApplyHint": "Le flux se reconnecte lorsque vous appliquez.",
+        "connectionApplyFailed": "La connexion n'a pas été modifiée. Appliquez à nouveau ou annulez.",
+        "applyConnection": "Appliquer et reconnecter",
+        "testBeforeApply": "Testez la nouvelle URL avant de l'appliquer.",
+        "statsLine": "Total : {total} · Débit : {rate} · Dernier : {last}",
+        "ago": {
+          "seconds": "il y a {count} s",
+          "minutes": "il y a {count} min",
+          "hours": "il y a {count} h"
         }
       },
       "audioFilters": {

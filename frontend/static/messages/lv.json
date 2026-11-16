@@ -3785,7 +3785,6 @@
       },
       "rtspStreams": {
         "title": "Audio straumju konfigurācija",
-        "description": "Konfigurēt tīkla audio straumes attālinātai audio uztveršanai. Atbalsta RTSP, HTTP, HLS, RTMP un UDP protokolus.",
         "noStreamsConfigured": "Nav konfigurētu straumju"
       },
       "streams": {
@@ -3854,12 +3853,12 @@
           "eventAt": "Notikums {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Pārslēgt diagnostiku",
           "processState": "Procesa stāvoklis",
           "lastData": "Pēdējie dati",
           "restartCount": "Pārstartēšanas skaits",
           "connection": "Savienojums",
-          "stateErrorHistory": "Stāvokļu un kļūdu vēsture"
+          "stateErrorHistory": "Stāvokļu un kļūdu vēsture",
+          "title": "Diagnostika"
         },
         "connectionStatus": {
           "stable": "Stabils",
@@ -3906,8 +3905,19 @@
         },
         "stereoWarning": {
           "message": "Konstatēta stereo straume. Vairāku kanālu samazināšana var pazemināt noteikšanas precizitāti fāzu atšķirību dēļ starp kanāliem. Izvēlieties konkrētu kanālu (kreiso/labo) vai izmantojiet kanālu detektoru labākajiem rezultātiem.",
-          "short": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Rediģējiet, lai izvēlētos konkrētu kanālu.",
-          "tooltip": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Rediģējiet, lai izvēlētos konkrētu kanālu."
+          "short": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Izvēlieties konkrētu kanālu sadaļā Savienojums."
+        },
+        "autoSaveHelp": "Izmaiņas tiek saglabātas uzreiz. Savienojuma izmaiņas atkārtoti savieno straumi, tāpēc tās gaida, līdz noklikšķināt uz Lietot.",
+        "connectionTitle": "Savienojums",
+        "connectionApplyHint": "Straume tiks atkārtoti savienota, kad lietosiet izmaiņas.",
+        "connectionApplyFailed": "Savienojums netika mainīts. Lietojiet vēlreiz vai atceliet.",
+        "applyConnection": "Lietot un savienot atkārtoti",
+        "testBeforeApply": "Pirms lietošanas pārbaudiet jauno URL.",
+        "statsLine": "Kopā: {total} · Ātrums: {rate} · Pēdējie: {last}",
+        "ago": {
+          "seconds": "pirms {count} s",
+          "minutes": "pirms {count} min",
+          "hours": "pirms {count} h"
         }
       },
       "audioFilters": {

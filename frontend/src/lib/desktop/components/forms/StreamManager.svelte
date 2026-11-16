@@ -1,12 +1,18 @@
 <!--
   Stream Manager Component
 
-  Purpose: Manage multiple audio streams with health status monitoring,
-  add/edit/delete functionality, and visual status summary.
+  Purpose: Manage the audio streams of a tab that saves as it changes: stream
+  cards with live health, an add form that saves the new stream at once,
+  delete, a status summary bar and empty state guidance.
+
+  Every change goes out through onUpdateStreams as the whole streams array with
+  the auto-save options of the control that made it. Rows carry a UI-only id
+  (never persisted) that keys the cards, their field keys and their expanded
+  state; a length change the manager did not make gives every row a fresh id.
 
   Features:
-  - Display stream cards with health indicators
-  - Add new streams with name, type, and protocol settings
+  - Stream cards: one stream opens by default, several start closed
+  - Add new streams with name, URL (tested first), type and protocol settings
   - Real-time health status via SSE
   - Summary bar showing healthy/unhealthy counts
   - Empty state with guidance
@@ -15,7 +21,8 @@
   @component
 -->
 <script lang="ts">
-  import { onMount, onDestroy, setContext } from 'svelte';
+  import { onMount, onDestroy, setContext, tick, untrack } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { t } from '$lib/i18n';
@@ -23,10 +30,20 @@
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
-  import { toastActions } from '$lib/stores/toast';
+  import { sanitizeUrlForComparison } from '$lib/utils/security';
+  import { generateId } from '$lib/utils/uuid';
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
-  import { getAvailableModels, watchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    getAvailableModels,
+    watchModels,
+    modelsLoading,
+    modelsFailed,
+    refreshModels,
+  } from '$lib/stores/models.svelte';
+  import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
+  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
+  import { modelLabel } from '$lib/utils/modelLabel';
+  import { STREAMS_LIST_FIELD } from './sourceFields';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -34,7 +51,7 @@
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import InlineSlider from './InlineSlider.svelte';
-  import ModelCheckboxList from './ModelCheckboxList.svelte';
+  import ModelToggleList from './ModelToggleList.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -54,7 +71,15 @@
   } from '$lib/stores/settings';
   import StreamTestButton from './StreamTestButton.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
-  import { streamTypeOptions, transportOptions, analyzeStreamChannels } from './streamOptions';
+  import {
+    streamTypeOptions,
+    transportOptions,
+    analyzeStreamChannels,
+    detectStreamType,
+    isValidStreamUrl,
+    streamHasTransport,
+    toStreamType,
+  } from './streamOptions';
 
   const logger = loggers.audio;
 
@@ -75,8 +100,11 @@
     return defaultModelSelection(acousticAvailability, availableModels);
   }
 
-  // Maximum allowed URL length for stream configuration
-  const MAX_STREAM_URL_LENGTH = 2048;
+  const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
+
+  const ROW_ID_PREFIX = 'stream-row';
+  /** Delay before the health of a newly added stream is fetched, so it has started. */
+  const HEALTH_REFRESH_AFTER_ADD_MS = 1000;
 
   // Error context from FFmpeg error parsing (matching backend ErrorContextResponse)
   export interface ErrorContext {
@@ -129,7 +157,7 @@
   interface Props {
     streams: StreamConfig[];
     disabled?: boolean;
-    onUpdateStreams: (_streams: StreamConfig[]) => void;
+    onUpdateStreams: (_streams: StreamConfig[], _options: CommitOptions) => void;
   }
 
   let { streams = [], disabled = false, onUpdateStreams }: Props = $props();
@@ -158,6 +186,9 @@
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
   let newTestResult = $state<{ sampleRate: number; channels: number } | null>(null);
+  // The URL the test result belongs to; any other URL needs a new test.
+  let newTestedUrl = $state<string | null>(null);
+  let newNeedsTest = $derived(newUrl.trim() !== '' && newTestedUrl !== newUrl.trim());
   let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? 48000);
   // Detected channel count for a new stream comes only from a stream test
   // (0 = not yet tested). Drives the adaptive channel controls.
@@ -172,7 +203,7 @@
   let eventSource: ReconnectingEventSource | null = null;
 
   // Show transport dropdown only for RTSP and RTMP
-  let showTransportInAdd = $derived(newStreamType === 'rtsp' || newStreamType === 'rtmp');
+  let showTransportInAdd = $derived(streamHasTransport(newStreamType));
 
   // Summary stats
   let healthySummary = $derived.by(() => {
@@ -337,43 +368,11 @@
     }
   }
 
-  // Auto-detect stream type from URL
-  function detectStreamType(url: string): StreamType {
-    const urlLower = url.toLowerCase();
-    if (urlLower.startsWith('rtsp://') || urlLower.startsWith('rtsps://')) return 'rtsp';
-    if (urlLower.startsWith('rtmp://') || urlLower.startsWith('rtmps://')) return 'rtmp';
-    if (urlLower.startsWith('udp://') || urlLower.startsWith('rtp://')) return 'udp';
-    if (urlLower.includes('.m3u8')) return 'hls';
-    if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) return 'http';
-    return 'rtsp'; // Default
-  }
-
   // Handle URL input with auto-detection
   function handleUrlInput(value: string) {
     if (value.includes('://')) {
       newStreamType = detectStreamType(value);
     }
-  }
-
-  // Validate URL based on stream type
-  function validateUrl(url: string, streamType: StreamType): boolean {
-    // Define allowed protocols for each stream type
-    const getProtocols = (type: StreamType): string[] => {
-      switch (type) {
-        case 'rtsp':
-          return ['rtsp', 'rtsps'];
-        case 'rtmp':
-          return ['rtmp', 'rtmps'];
-        case 'http':
-        case 'hls':
-          return ['http', 'https'];
-        case 'udp':
-          return ['udp', 'rtp'];
-        default:
-          return ['rtsp', 'rtsps'];
-      }
-    };
-    return validateProtocolURL(url, getProtocols(streamType), MAX_STREAM_URL_LENGTH);
   }
 
   async function analyzeChannels(url: string) {
@@ -398,6 +397,7 @@
 
   function handleNewTestResult(result: { sampleRate: number; channels: number } | null) {
     newTestResult = result;
+    newTestedUrl = result ? newUrl.trim() : null;
     if (!result) {
       analysisResult = null;
       analysisError = null;
@@ -419,6 +419,7 @@
     newModels = getDefaultModels();
     newQuietHours = { ...defaultQuietHoursConfig };
     newTestResult = null;
+    newTestedUrl = null;
     analysisResult = null;
     analysisError = null;
     clearErrors();
@@ -438,122 +439,139 @@
     showAddForm = true;
   }
 
+  // ----- Rows -----
+
+  function newRowIds(count: number): string[] {
+    return Array.from({ length: count }, () => generateId(ROW_ID_PREFIX));
+  }
+
+  let rowIds = $state<string[]>(untrack(() => newRowIds(streams.length)));
+  // One stream opens by default, several start closed.
+  const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
+
+  // A length change this manager did not make (a reload, another window, a
+  // refused add or delete taking the list back) gives every row a fresh id, so
+  // no status or open state lands on the wrong stream.
+  $effect.pre(() => {
+    const count = streams.length;
+    untrack(() => {
+      if (rowIds.length === count) return;
+      rowIds = newRowIds(count);
+      expandedRows.clear();
+      if (count === 1) expandedRows.add(rowIds[0]);
+    });
+  });
+
+  let rows = $derived(
+    streams.map((stream, index) => ({ stream, index, id: rowIds.at(index) ?? `${index}` }))
+  );
+
+  function toggleRow(id: string) {
+    if (expandedRows.has(id)) expandedRows.delete(id);
+    else expandedRows.add(id);
+  }
+
+  let addButton = $state<HTMLButtonElement>();
+
+  // ----- Add (saved at once) -----
+
+  let listStatus = $derived(autoSaveStatus(STREAMS_LIST_FIELD));
+  let addPending = $state(false);
+  let adding = $derived(addPending && listStatus.state === 'saving');
+  let addBlocked = $derived(adding || disabled || newNeedsTest);
+
+  // Ends an add: a save closes the form and fetches the new stream's health, a
+  // failure keeps the form open with the reason.
+  $effect(() => {
+    const state = listStatus.state;
+    untrack(() => {
+      if (!addPending || state === 'saving') return;
+      addPending = false;
+      if (state === 'error') return;
+      resetAddForm();
+      setTimeout(() => void loadHealthStatus(), HEALTH_REFRESH_AFTER_ADD_MS);
+    });
+  });
+
   function addStream() {
+    if (addBlocked) return;
     clearErrors();
 
     const trimmedName = newName.trim();
     const trimmedUrl = newUrl.trim();
 
-    // Validate name
     if (!trimmedName) {
       nameError = t('settings.audio.streams.errors.nameRequired');
       return;
     }
-
     // Check for duplicate name (case-insensitive)
     const nameLower = trimmedName.toLowerCase();
     if (streams.some(s => s.name.toLowerCase() === nameLower)) {
       nameError = t('settings.audio.streams.errors.duplicateName');
       return;
     }
-
-    // Validate URL
     if (!trimmedUrl) {
       urlError = t('settings.audio.streams.errors.urlRequired');
       return;
     }
-
-    if (!validateUrl(trimmedUrl, newStreamType)) {
+    if (!isValidStreamUrl(trimmedUrl, newStreamType)) {
       urlError = t('settings.audio.streams.errors.invalidUrl');
       return;
     }
-
-    // Check for duplicate URL
     if (streams.some(s => s.url === trimmedUrl)) {
       urlError = t('settings.audio.streams.errors.duplicate');
       return;
     }
 
     // Ensure at least one model is selected when the classifier offers one
-    if (newModels.length === 0) {
-      newModels = getDefaultModels();
-    }
+    const models = newModels.length > 0 ? newModels : getDefaultModels();
 
-    // Create new stream config - only include transport for RTSP/RTMP types
+    // Only RTSP and RTMP take a transport.
     const newStream: StreamConfig = {
       name: trimmedName,
       url: trimmedUrl,
       enabled: true,
       type: newStreamType,
-      models: newModels,
+      models,
       channelMode: newChannelMode,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
       gain: newGain,
       quietHours: newQuietHours,
     };
 
-    // Add the new stream
-    const updatedStreams = [...streams, newStream];
-    onUpdateStreams(updatedStreams);
-
-    resetAddForm();
-
-    // Refresh health status
-    setTimeout(() => loadHealthStatus(), 1000);
+    const rowId = generateId(ROW_ID_PREFIX);
+    rowIds = [...rowIds, rowId];
+    if (streams.length === 0) expandedRows.add(rowId);
+    addPending = true;
+    onUpdateStreams([...streams, newStream], { field: STREAMS_LIST_FIELD });
   }
 
-  // Update stream - returns boolean indicating success
-  function updateStream(index: number, updatedStream: StreamConfig): boolean {
-    const updatedStreams = [...streams];
-    if (index >= 0 && index < updatedStreams.length) {
-      const oldStream = updatedStreams.at(index);
+  // ----- Change and delete -----
 
-      // Check for duplicate name (excluding current stream, case-insensitive)
-      const nameLower = updatedStream.name.toLowerCase();
-      if (updatedStreams.some((s, i) => i !== index && s.name.toLowerCase() === nameLower)) {
-        logger.warn('Attempted to update stream to a duplicate name', null, {
-          component: 'StreamManager',
-          action: 'updateStream',
-        });
-        toastActions.error(t('settings.audio.streams.errors.duplicateName'));
-        return false;
-      }
-
-      // Check for duplicate URL (excluding current stream)
-      if (
-        updatedStream.url !== oldStream?.url &&
-        updatedStreams.some((s, i) => i !== index && s.url === updatedStream.url)
-      ) {
-        logger.warn('Attempted to update stream to a duplicate URL', null, {
-          component: 'StreamManager',
-          action: 'updateStream',
-        });
-        toastActions.error(t('settings.audio.streams.errors.duplicate'));
-        return false;
-      }
-
-      // Update health state if URL changed
-      if (oldStream && oldStream.url !== updatedStream.url) {
-        delete streamHealth[oldStream.url];
-      }
-
-      updatedStreams.splice(index, 1, updatedStream);
-      onUpdateStreams(updatedStreams);
-      return true;
-    }
-    return false;
+  function commitStream(index: number, updated: StreamConfig, options: CommitOptions) {
+    const current = streams.at(index);
+    if (!current) return;
+    // Health is keyed by URL; a new URL starts without the old one's.
+    if (current.url !== updated.url) delete streamHealth[current.url];
+    onUpdateStreams(
+      streams.map((stream, i) => (i === index ? updated : stream)),
+      options
+    );
   }
 
-  // Delete stream
-  function deleteStream(index: number) {
+  async function deleteStream(index: number) {
     const streamToDelete = streams.at(index);
-    const updatedStreams = streams.filter((_, i) => i !== index);
-    onUpdateStreams(updatedStreams);
-
-    // Clean up health data from state
-    if (streamToDelete) {
-      delete streamHealth[streamToDelete.url];
-    }
+    const id = rowIds.at(index);
+    rowIds = rowIds.filter((_, i) => i !== index);
+    if (id !== undefined) expandedRows.delete(id);
+    onUpdateStreams(
+      streams.filter((_, i) => i !== index),
+      { field: STREAMS_LIST_FIELD }
+    );
+    if (streamToDelete) delete streamHealth[streamToDelete.url];
+    // The deleted card took focus with it; land on the add button instead.
+    await tick();
+    addButton?.focus();
   }
 
   onMount(() => {
@@ -661,18 +679,27 @@
     />
   {:else}
     <div class="space-y-3">
-      {#each streams as stream, index (`${stream.url}_${index}`)}
+      {#each rows as row (row.id)}
         <StreamCard
-          {stream}
-          {index}
-          status={getStreamStatus(stream.url, stream)}
+          stream={row.stream}
+          index={row.index}
+          {streams}
+          rowId={row.id}
+          status={getStreamStatus(row.stream.url, row.stream)}
           {availableModels}
+          {modelOptions}
           {disabled}
-          onUpdate={updatedStream => updateStream(index, updatedStream)}
-          onDelete={() => deleteStream(index)}
+          expanded={expandedRows.has(row.id)}
+          onToggleExpanded={() => toggleRow(row.id)}
+          onCommit={(updated, options) => commitStream(row.index, updated, options)}
+          onDelete={() => void deleteStream(row.index)}
         />
       {/each}
     </div>
+
+    {#if !showAddForm}
+      <AutoSaveStatus field={STREAMS_LIST_FIELD} />
+    {/if}
 
     <!-- Add Stream Section -->
     {#if showAddForm}
@@ -746,7 +773,7 @@
                 label={t('settings.audio.streams.typeLabel')}
                 options={streamTypeOptions}
                 {disabled}
-                onChange={value => (newStreamType = value as StreamType)}
+                onChange={value => (newStreamType = toStreamType(value) ?? newStreamType)}
                 groupBy={false}
                 menuSize="sm"
               />
@@ -757,7 +784,9 @@
                   label={t('settings.audio.streams.transportLabel')}
                   options={transportOptions}
                   {disabled}
-                  onChange={value => (newTransport = value as 'tcp' | 'udp')}
+                  onChange={value => {
+                    if (value === 'tcp' || value === 'udp') newTransport = value;
+                  }}
                   groupBy={false}
                   menuSize="sm"
                 />
@@ -791,16 +820,26 @@
             />
 
             <!-- Model Selection -->
-            <ModelCheckboxList
-              models={availableModels}
-              selectedModels={newModels}
-              sourceSampleRate={newSourceSampleRate}
-              isStream={true}
-              loading={modelsLoading()}
-              availability={acousticAvailability}
-              {disabled}
-              onToggle={models => (newModels = models)}
-            />
+            <div class="space-y-2">
+              <h4 id="new-stream-models" class="text-sm font-semibold">
+                {t('settings.audio.soundCards.modelLabel')}
+              </h4>
+              <ModelToggleList
+                models={availableModels}
+                selectedModels={newModels}
+                defaultModels={getDefaultModels()}
+                sourceName={newName.trim()}
+                sourceSampleRate={newSourceSampleRate}
+                isStream
+                loading={modelsLoading()}
+                failed={modelsFailed()}
+                availability={acousticAvailability}
+                labelledBy="new-stream-models"
+                {disabled}
+                onChange={models => (newModels = models)}
+                onRetry={() => void refreshModels()}
+              />
+            </div>
 
             <!-- Quiet Hours -->
             <QuietHoursEditor
@@ -811,29 +850,37 @@
             />
 
             <!-- Action Buttons -->
-            <div class="flex gap-2 justify-end pt-2">
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <div class="mr-auto flex min-w-0 flex-col gap-1">
+                <AutoSaveStatus field={STREAMS_LIST_FIELD} />
+                {#if newNeedsTest}
+                  <p id="new-stream-test-required" class="text-xs text-muted">
+                    {t('settings.audio.streams.testRequired')}
+                  </p>
+                {/if}
+              </div>
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-transparent text-[var(--color-base-content)] hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={resetAddForm}
+                class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                aria-disabled={adding ? 'true' : undefined}
+                onclick={() => {
+                  if (!adding) resetAddForm();
+                }}
               >
                 {t('common.cancel')}
               </button>
-              <span
-                title={!newTestResult && newUrl.trim()
-                  ? t('settings.audio.streams.testRequired')
-                  : undefined}
+              <button
+                type="button"
+                class="btn btn-primary btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                aria-disabled={addBlocked ? 'true' : undefined}
+                aria-describedby={newNeedsTest ? 'new-stream-test-required' : undefined}
+                onclick={addStream}
               >
-                <button
-                  type="button"
-                  class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  onclick={addStream}
-                  disabled={!newName.trim() || !newUrl.trim() || !newTestResult || disabled}
-                >
-                  <Plus class="size-4" />
-                  {t('settings.audio.streams.addStream')}
-                </button>
-              </span>
+                <Plus class="size-4" aria-hidden="true" />
+                {adding
+                  ? t('settings.audio.soundCards.adding')
+                  : t('settings.audio.streams.addStream')}
+              </button>
             </div>
           </div>
         </div>
@@ -841,6 +888,7 @@
     {:else}
       <!-- Add Stream Button -->
       <button
+        bind:this={addButton}
         type="button"
         class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={openAddForm}
