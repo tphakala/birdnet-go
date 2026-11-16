@@ -440,9 +440,6 @@
     testResult = result;
     testedUrl = result ? draftUrl : null;
     if (!result) {
-      // A pending analysis belongs to the URL the test was cleared for.
-      analysisSeq++;
-      isAnalyzing = false;
       analysisResult = null;
       analysisError = null;
     }

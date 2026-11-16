@@ -257,23 +257,22 @@ describe('StreamCard immediate save', () => {
     expect(input).toHaveAccessibleDescription('settings.audio.streams.errors.nameTooLong');
   });
 
-  it('ignores a channel analysis that finishes after a URL change cleared the test', async () => {
+  it('applies a channel analysis of the current URL when Test is clicked again meanwhile', async () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
     renderCard();
 
     await fireEvent.input(urlInput(), { target: { value: 'rtsp://other/stream' } });
     await fireEvent.click(screen.getByTestId('channel-analyze'));
-    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'true');
 
-    // The test button reports a cleared result when its URL changes.
+    // A new test run, or a failed one, reports a cleared result for the same URL.
     await fireEvent.click(screen.getByTestId('stream-test-clear'));
-    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'false');
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'true');
 
     pending.resolve(LEFT_ANALYSIS);
     await pending.promise;
     await tick();
-    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'left');
     expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'false');
   });
 
