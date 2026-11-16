@@ -255,6 +255,15 @@ describe('StreamManager add outcome', () => {
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
   }
 
+  it('limits the name of a new stream to what the server accepts', async () => {
+    renderTyped(StreamManager, {
+      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(screen.getByTestId(NAME_TESTID)).toHaveAttribute('maxlength', '64');
+  });
+
   it('closes the add form once the new stream is saved', async () => {
     store.saveStagedSection.mockResolvedValue(SAVED);
 
