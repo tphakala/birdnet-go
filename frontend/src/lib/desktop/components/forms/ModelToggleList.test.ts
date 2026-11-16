@@ -136,7 +136,7 @@ describe('ModelToggleList', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('shows a selected model that is no longer listed as missing, with a Remove that is always allowed', async () => {
+  it('shows a selected model that is no longer listed as missing, with a Remove that works while the list is enabled', async () => {
     const onChange = vi.fn();
     renderList({ models: [BIRDNET], selectedModels: ['perch_v2'], onChange });
 
@@ -148,6 +148,29 @@ describe('ModelToggleList', () => {
     // Removing the last explicit model is allowed: the source then follows the defaults.
     await fireEvent.click(screen.getByRole('button', { name: REMOVE_MISSING_ARIA_KEY }));
     expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('shows one row for a missing alias that the config lists twice, and Remove drops both', async () => {
+    const onChange = vi.fn();
+    renderList({
+      models: [BIRDNET],
+      selectedModels: ['perch_v2', 'birdnet', 'perch_v2'],
+      onChange,
+    });
+
+    expect(screen.getAllByText('perch_v2')).toHaveLength(1);
+    await fireEvent.click(screen.getByRole('button', { name: REMOVE_MISSING_ARIA_KEY }));
+    expect(onChange).toHaveBeenLastCalledWith(['birdnet']);
+  });
+
+  it('counts a listed alias once, so the last selected model stays on', async () => {
+    const onChange = vi.fn();
+    renderList({ models: [BIRDNET], selectedModels: ['birdnet', 'birdnet'], onChange });
+
+    const last = toggle('BirdNET v2.4');
+    expect(last).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(last);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('turns a missing row back into a toggle when the model returns, still on', async () => {

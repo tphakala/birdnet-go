@@ -10,7 +10,8 @@
   - Pending or failed to load: a state badge; it can be turned off, not on
   - Last one selected: stays on, with the reason
   - Missing: a selected alias the server no longer lists, shown raw with a
-    Remove button that is always allowed
+    Remove button that works whatever the list holds (not while the whole list
+    is disabled)
   - Following defaults: an empty list shows the default models as on; the first
     toggle writes an explicit list
 
@@ -98,11 +99,11 @@
 
   let followsDefaults = $derived(selectedModels.length === 0);
   // What the source runs: its own list, or the defaults while it has none.
-  let effective = $derived(followsDefaults ? defaultModels : selectedModels);
+  let effective = $derived([...new Set(followsDefaults ? defaultModels : selectedModels)]);
   let listedIds = $derived(new Set(models.map(m => m.id)));
   let listedOn = $derived(effective.filter(id => listedIds.has(id)));
   // Only an explicit list can name a model the server no longer lists.
-  let missing = $derived(selectedModels.filter(id => !listedIds.has(id)));
+  let missing = $derived([...new Set(selectedModels)].filter(id => !listedIds.has(id)));
 
   let showSkeleton = $derived(loading && models.length === 0);
   let showFailed = $derived(failed && !showSkeleton);
@@ -187,7 +188,7 @@
       <p class="help-text">{t('settings.audio.models.followsDefaults')}</p>
     {:else}
       <ul class="space-y-1 pl-1">
-        {#each selectedModels as alias (alias)}
+        {#each new Set(selectedModels) as alias (alias)}
           <li class="font-mono text-sm text-[var(--color-base-content)]">{alias}</li>
         {/each}
       </ul>
