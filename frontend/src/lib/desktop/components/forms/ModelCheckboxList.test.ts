@@ -31,7 +31,7 @@ const LOAD_FAILED_LINK_KEY = 'settings.audio.models.loadFailedLink';
 
 function renderList(
   props: Partial<{
-    models: Array<{ id: string; name: string; category: string }>;
+    models: Array<{ id: string; name: string; category: string; backend?: string }>;
     selectedModels: string[];
     loading: boolean;
     availability: AcousticModelAvailability;
@@ -64,6 +64,16 @@ describe('ModelCheckboxList', () => {
     expect(boxes).toHaveLength(2);
     await fireEvent.click(boxes[1]);
     expect(onToggle).toHaveBeenCalledWith(['birdnet', 'perch_v2']);
+  });
+
+  it('labels a loaded model with its live backend and an unloaded one with the bare name', () => {
+    renderList({
+      models: [{ ...BIRDNET, backend: 'ONNX' }, PERCH],
+      selectedModels: ['birdnet'],
+    });
+
+    expect(screen.getByText('BirdNET v2.4 (ONNX)')).toBeInTheDocument();
+    expect(screen.getByText('Perch v2')).toBeInTheDocument();
   });
 
   it('shows a labelled loading line while the list is empty and loading', () => {

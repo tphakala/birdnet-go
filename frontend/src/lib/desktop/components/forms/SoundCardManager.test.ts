@@ -324,6 +324,31 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
     expect(screen.getByTestId(MODEL_LIST_TESTID)).toHaveTextContent('birdnet,perch_v2');
   });
 
+  it('labels the classifier summary of a source with the live backend', () => {
+    vi.mocked(getAvailableModels).mockReturnValue([
+      {
+        id: 'birdnet',
+        registryId: 'BirdNET_V2.4',
+        name: 'BirdNET v2.4',
+        category: 'bird',
+        backend: 'ONNX',
+      },
+    ]);
+
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [{ name: 'Garden', device: USB_MIC, gain: 0, models: ['birdnet'] }],
+        audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources: vi.fn(),
+        onRefreshDevices: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('BirdNET v2.4 (ONNX)')).toBeInTheDocument();
+  });
+
   it('pre-selects nothing at N=0 and never invents a phantom BirdNET', async () => {
     vi.mocked(getAvailableModels).mockReturnValue([]);
     vi.mocked(acousticModelAvailability).mockReturnValue({
