@@ -177,4 +177,19 @@ describe('SoundCardCard device capability probe (issue #3593, open card)', () =>
     await waitFor(() => expect(hasRate(RATE_192K.value)).toBe(true));
     await waitFor(() => expect(rateSelect().value).toBe(RATE_48K.value));
   });
+
+  it('restores the saved rate when the draft returns to the saved device', async () => {
+    // Saved on dev1 at 96 kHz, which dev2 lacks, so picking dev2 coerces the draft to 48 kHz.
+    await openCard(renderCard(Number(RATE_96K.value)));
+    await waitFor(() => expect(rateSelect().value).toBe(RATE_96K.value));
+
+    const deviceSelect = screen.getByTestId(DEVICE_SELECT_TESTID);
+    await fireEvent.change(deviceSelect, { target: { value: DEV2 } });
+    await waitFor(() => expect(rateSelect().value).toBe(RATE_48K.value));
+
+    // Back on dev1: the draft equals the saved values again, so nothing is left to apply.
+    await fireEvent.change(deviceSelect, { target: { value: DEV1 } });
+    await waitFor(() => expect(hasRate(RATE_96K.value)).toBe(true));
+    expect(rateSelect().value).toBe(RATE_96K.value);
+  });
 });

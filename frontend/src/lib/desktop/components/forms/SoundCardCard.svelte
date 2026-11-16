@@ -246,7 +246,14 @@
   );
 
   function setDraftDevice(value: string | string[]) {
-    if (typeof value === 'string') capture.set({ device: value });
+    if (typeof value !== 'string') return;
+    // Back on the saved device the saved rate returns with it, so a rate the probe
+    // coerced for another device does not leave a change to apply.
+    capture.set(
+      value === source.device
+        ? { device: value, sampleRate: source.sampleRate || DEFAULT_SAMPLE_RATE }
+        : { device: value }
+    );
   }
 
   function setDraftRate(value: string | string[]) {
