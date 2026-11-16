@@ -205,7 +205,7 @@
     </button>
 
     {#if badges}
-      <div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      <div class="flex min-w-0 max-w-1/2 flex-wrap items-center justify-end gap-1.5">
         {@render badges()}
       </div>
     {/if}
