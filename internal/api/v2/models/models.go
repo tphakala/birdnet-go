@@ -69,6 +69,18 @@ type Handler struct {
 	// superseded latches the superseded-model bell notice (superseded_notice.go),
 	// evaluated alongside the optimize notice.
 	superseded supersededNotice
+	// modelRuntime reports the live backend and precision of each loaded model,
+	// keyed by registry ID. It is an injectable seam: nil means the live default
+	// (liveModelRuntime, read from the model manager and the orchestrator), and
+	// tests inject a fixed map. A per-Handler field so tests stay parallel-safe.
+	modelRuntime func() map[string]listedModelRuntime
+}
+
+// listedModelRuntime is the live execution backend and runtime precision of one
+// loaded model, as the list endpoint reports them.
+type listedModelRuntime struct {
+	backend   string
+	precision string
 }
 
 // New builds a models Handler around the shared core and the facade-injected
@@ -99,7 +111,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 // ModelListItem represents a model in the API response.
 type ModelListItem struct {
 	ID   string `json:"id"`   // Config alias (e.g., "birdnet", "perch_v2")
-	Name string `json:"name"` // Display name (e.g., "BirdNET v2.4 (TFLite)")
+	Name string `json:"name"` // Display name without a backend suffix (e.g., "BirdNET v2.4")
 	// RegistryID is the classifier registry ID (e.g., "BirdNET_V2.4"). It is the
 	// join key against the registry-ID entries in the defaultTargets list served by
 	// GET /api/v2/system/inference, letting the frontend map default targets back to
@@ -108,6 +120,13 @@ type ModelListItem struct {
 	Category              string `json:"category"`                        // Model category (e.g., "bird", "bat")
 	MinSampleRate         int    `json:"minSampleRate,omitempty"`         // Minimum required sample rate in Hz
 	RecommendedSampleRate int    `json:"recommendedSampleRate,omitempty"` // Recommended sample rate in Hz
+	// Backend is the live execution backend of the loaded model (for example
+	// "TFLite", "ONNX" or "OpenVINO"). Omitted when the model is not loaded or the
+	// request may not receive host-derived data.
+	Backend string `json:"backend,omitempty"`
+	// Precision is the live runtime precision of the loaded model (for example
+	// "FP32" or "INT8"). Omitted under the same conditions as Backend.
+	Precision string `json:"precision,omitempty"`
 }
 
 // CatalogEntryResponse represents a model in the catalog API response.
@@ -231,7 +250,62 @@ type installModelRequest struct {
 	AllowIncompatible bool `json:"allowIncompatible"`
 }
 
+// liveModelRuntime reads the backend and precision of every loaded model, keyed
+// by registry ID. The orchestrator's live instance wins when it reports a value;
+// the loaded model's own info is the fallback. Without a model manager the
+// result is empty, so no model is reported as loaded.
+func (c *Handler) liveModelRuntime() map[string]listedModelRuntime {
+	if c.ModelManager == nil {
+		return nil
+	}
+	var instanceRuntime func(id string) (backend, precision string)
+	if c.Processor != nil {
+		if orch := c.Processor.GetBirdNET(); orch != nil {
+			instanceRuntime = func(id string) (backend, precision string) {
+				_, backend, precision = orch.GetModelRuntimeInfo(id)
+				return backend, precision
+			}
+		}
+	}
+	return mergeModelRuntime(c.ModelManager.ModelInfos(), instanceRuntime)
+}
+
+// mergeModelRuntime builds the runtime map for the loaded models. A non-empty
+// value from instanceRuntime (the live instance, which may be nil) replaces the
+// one from the model's info. The precedence matches applyRuntimeBackend in the
+// system package, which serves GET /api/v2/system/inference.
+func mergeModelRuntime(infos []classifier.ModelInfo, instanceRuntime func(id string) (backend, precision string)) map[string]listedModelRuntime {
+	runtime := make(map[string]listedModelRuntime, len(infos))
+	for i := range infos {
+		item := listedModelRuntime{backend: infos[i].Backend, precision: string(infos[i].Quantization)}
+		if instanceRuntime != nil {
+			backend, precision := instanceRuntime(infos[i].ID)
+			if backend != "" {
+				item.backend = backend
+			}
+			if precision != "" {
+				item.precision = precision
+			}
+		}
+		runtime[infos[i].ID] = item
+	}
+	return runtime
+}
+
+// catalogCategory returns the category of the catalog entry for a registry ID,
+// defaulting to "bird" when the catalog has no entry for it.
+func catalogCategory(catalog []classifier.CatalogEntry, registryID string) string {
+	for i := range catalog {
+		if catalog[i].RegistryID == registryID {
+			return catalog[i].Category
+		}
+	}
+	return "bird"
+}
+
 // ListModels returns classifier models that are enabled in the configuration.
+// Loaded models also carry their live backend and precision, for requests that
+// may receive host-derived data (see recommendationsAllowed).
 func (c *Handler) ListModels(ctx echo.Context) error {
 	// Read from the live settings (atomic pointer) so that models added
 	// at runtime (via gallery install) are immediately visible.
@@ -245,28 +319,33 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 
 	models := make([]ModelListItem, 0, len(enabled))
 
+	// Live backend and precision are host-derived and this route is public, so
+	// they follow the same gate as the catalog's host data.
+	var runtime map[string]listedModelRuntime
+	if c.recommendationsAllowed(ctx) {
+		read := c.modelRuntime
+		if read == nil {
+			read = c.liveModelRuntime
+		}
+		runtime = read()
+	}
+
 	// Snapshot the active catalog once (honors a user-edited model-catalog.json).
 	catalog := classifier.ActiveCatalog()
 	for id := range classifier.ModelRegistry {
 		info := classifier.ModelRegistry[id]
 		for _, alias := range info.ConfigAliases {
 			if enabled[strings.ToLower(alias)] {
-				// Determine category from catalog entry (if any), default to "bird".
-				category := "bird"
-				for j := range catalog {
-					if catalog[j].RegistryID == id {
-						category = catalog[j].Category
-						break
-					}
-				}
-
+				live := runtime[id]
 				models = append(models, ModelListItem{
 					ID:                    alias,
-					Name:                  info.DisplayName(),
+					Name:                  info.Name,
 					RegistryID:            id,
-					Category:              category,
+					Category:              catalogCategory(catalog, id),
 					MinSampleRate:         info.Spec.MinRawSampleRate,
 					RecommendedSampleRate: info.Spec.RecommendedSampleRate,
+					Backend:               live.backend,
+					Precision:             live.precision,
 				})
 				break // one entry per model
 			}

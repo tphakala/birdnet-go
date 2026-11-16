@@ -35,6 +35,7 @@
     acousticModelAvailability,
     subscribeAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
+  import { modelLabel } from '$lib/utils/modelLabel';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -87,7 +88,7 @@
     return subscribeAcousticModels();
   });
 
-  const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: m.name })));
+  const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
 
   interface Props {
     sources: AudioSourceConfig[];
