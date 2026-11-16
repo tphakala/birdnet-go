@@ -34,12 +34,18 @@ const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STATUS = '(?:success|warning|error|info)';
 
 const RULES: RegExp[] = [
-  new RegExp(String.raw`(?<![\w-])text-\[var\(--color-${STATUS}(?:-hover)?\)\]`, 'g'),
+  new RegExp(
+    String.raw`(?<![\w-])text-\[(?!color:)[^\]]*?var\(--color-${STATUS}(?:-hover)?\s*[,)][^\]]*\]`,
+    'g'
+  ),
   new RegExp(
     String.raw`(?<![\w:-])(?!class:!?text-${STATUS}(?![\w/!-]))(?:[^\s:"'\`{}]+:)+!?text-${STATUS}(?![\w-])`,
     'g'
   ),
-  new RegExp(String.raw`(?<![\w:-])(?:!text-${STATUS}(?![\w-])|text-${STATUS}(?:\/\d+|!))`, 'g'),
+  new RegExp(
+    String.raw`(?<![\w:-])!text-${STATUS}(?![\w-])|(?<![\w:!-])text-${STATUS}(?:\/(?:\d+|\[)|!)|(?<=class:)!text-${STATUS}(?![\w/!-])`,
+    'g'
+  ),
   new RegExp(
     String.raw`(?<![\w-])color:\s*[^;{}"'\`]*?var\(--color-${STATUS}(?:-hover)?\s*[,)][^;{}"'\`]*`,
     'g'
@@ -124,6 +130,14 @@ describe('status-text-tokens', () => {
     ['stacked dark:hover:text-success', 'class="dark:hover:text-success"'],
     ['a class: directive behind a variant', 'class:hover:text-error={x}'],
     ['text-warning/80', 'class="text-warning/80"'],
+    ['an arbitrary opacity', 'class="text-error/[0.8]"'],
+    ['a class: directive with the important modifier', 'class:!text-error={x}'],
+    ['a class: directive with the important modifier and an opacity', 'class:!text-error/80={x}'],
+    ['a fill with a fallback as the text colour', 'class="text-[var(--color-error,#f00)]"'],
+    [
+      'a fill inside color-mix as the text colour',
+      'class="text-[color-mix(in_srgb,var(--color-error)_80%,white)]"',
+    ],
     ['!text-error', 'class="!text-error"'],
     ['text-error!', 'class="text-error!"'],
     ['a color declaration', 'color: var(--color-success);'],
