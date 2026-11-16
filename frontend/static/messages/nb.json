@@ -3736,11 +3736,16 @@
           "minSampleRate": "Krever minst {rate} kHz opptakshastighet",
           "recommendedSampleRate": "{rate} kHz anbefalt for best resultat",
           "atLeastOneModel": "Minst én modell må velges"
-        }
+        },
+        "captureTitle": "Opptak",
+        "levelTitle": "Inngangsnivå",
+        "captureApplyHint": "Opptaket startes på nytt når du bruker endringene.",
+        "applyCapture": "Bruk og start opptaket på nytt",
+        "applying": "Bruker...",
+        "adding": "Legger til..."
       },
       "audioCapture": {
         "title": "Lydkortkonfigurasjon",
-        "description": "Velg lydinngangsenheten for fuglelydeteksjon. Endringer krever applikasjonsomstart.",
         "soundCardSource": "Lydkortkilde",
         "audioSourceLabel": "Lydkilde (krever applikasjonsomstart for å ta effekt)",
         "audioSourceHelp": "Velg lydinngangsenheten for fuglelydeteksjon. Endringer krever applikasjonsomstart.",
@@ -3774,7 +3779,8 @@
         "fixedHint": "Opptak settes på pause mellom start- og sluttid daglig. Nattevinduer (f.eks. 22:00 til 06:00) støttes.",
         "solarHint": "Tidene beregnes fra soloppgang/solnedgang ved konfigurert posisjon. Bruk negative forskyvninger for før hendelsen, positive for etter.",
         "badge": "Stille",
-        "enabledBadge": "Stille timer aktivert for denne strømmen"
+        "enabledBadge": "Stille timer aktivert for denne strømmen",
+        "enableLabel": "Sett opptaket på pause i stille timer"
       },
       "rtspStreams": {
         "title": "Lydstrøm-konfigurasjon",
@@ -4121,12 +4127,23 @@
         "loadFailedLink": "Vis status for AI-modeller",
         "state": {
           "pending": "Laster",
-          "failed": "Kunne ikke lastes"
+          "failed": "Kunne ikke lastes",
+          "missing": "Ikke installert"
         },
         "notLoadedHelp": "Denne modellen er ikke lastet og kan derfor ikke velges.",
         "defaultBadge": "{models} (standard)",
         "defaultPendingBadge": "Standardmodeller",
-        "noneBadge": "Ingen modell lastet inn"
+        "noneBadge": "Ingen modell lastet inn",
+        "missingHelp": "Denne modellen er ikke lenger installert. Denne kilden ignorerer den.",
+        "removeMissing": "Fjern",
+        "removeMissingAria": "Fjern {model} fra {source}",
+        "lastSelectedHelp": "Minst én klassifikator forblir valgt.",
+        "followsDefaults": "Denne kilden bruker standardmodellene.",
+        "listFailed": "Modellisten kunne ikke lastes inn.",
+        "warningBadge": "Kontroller klassifikatorer"
+      },
+      "sources": {
+        "autoSaveHelp": "Endringer lagres umiddelbart. Endringer av enhet og samplingsfrekvens starter opptaket på nytt og venter derfor til du klikker Bruk."
       }
     },
     "security": {

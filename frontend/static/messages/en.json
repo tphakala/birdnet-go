@@ -3736,11 +3736,16 @@
           "minSampleRate": "Requires at least {rate}kHz capture rate",
           "recommendedSampleRate": "{rate}kHz recommended for best results",
           "atLeastOneModel": "At least one model must be selected"
-        }
+        },
+        "captureTitle": "Capture",
+        "levelTitle": "Input level",
+        "captureApplyHint": "Capture restarts when you apply.",
+        "applyCapture": "Apply and restart capture",
+        "applying": "Applying...",
+        "adding": "Adding..."
       },
       "audioCapture": {
         "title": "Sound Card Configuration",
-        "description": "Select the audio input device for bird sound detection. Changes require application restart.",
         "soundCardSource": "Sound Card Source",
         "audioSourceLabel": "Audio Source (requires application restart to take effect)",
         "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
@@ -3774,7 +3779,8 @@
         "fixedHint": "Capture pauses between start and end times daily. Overnight windows (e.g., 22:00 to 06:00) are supported.",
         "solarHint": "Times are calculated from sunrise/sunset at your configured location. Use negative offsets for before the event, positive for after.",
         "badge": "Quiet",
-        "enabledBadge": "Quiet hours enabled for this stream"
+        "enabledBadge": "Quiet hours enabled for this stream",
+        "enableLabel": "Pause capture during quiet hours"
       },
       "rtspStreams": {
         "title": "Audio Stream Configuration",
@@ -4121,12 +4127,23 @@
         "loadFailedLink": "View AI Models status",
         "state": {
           "pending": "Loading",
-          "failed": "Failed to load"
+          "failed": "Failed to load",
+          "missing": "Not installed"
         },
         "notLoadedHelp": "This model is not loaded, so it cannot be selected.",
         "defaultBadge": "{models} (default)",
         "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "noneBadge": "No model loaded",
+        "missingHelp": "This model is no longer installed. This source ignores it.",
+        "removeMissing": "Remove",
+        "removeMissingAria": "Remove {model} from {source}",
+        "lastSelectedHelp": "At least one classifier stays selected.",
+        "followsDefaults": "This source follows the default models.",
+        "listFailed": "The model list could not be loaded.",
+        "warningBadge": "Check classifiers"
+      },
+      "sources": {
+        "autoSaveHelp": "Changes are saved as you make them. Device and sample rate changes restart capture, so they wait until you press Apply."
       }
     },
     "security": {

@@ -3736,11 +3736,16 @@
           "minSampleRate": "Nepieciešama vismaz {rate}kHz ierakstīšanas frekvence",
           "recommendedSampleRate": "{rate}kHz ieteicams labākajiem rezultātiem",
           "atLeastOneModel": "Jāizvēlas vismaz viens modelis"
-        }
+        },
+        "captureTitle": "Ierakstīšana",
+        "levelTitle": "Ieejas līmenis",
+        "captureApplyHint": "Ierakstīšana tiks restartēta, kad lietosiet izmaiņas.",
+        "applyCapture": "Lietot un restartēt ierakstīšanu",
+        "applying": "Lieto...",
+        "adding": "Pievieno..."
       },
       "audioCapture": {
         "title": "Skaņas kartes konfigurācija",
-        "description": "Izvēlieties audio ievades ierīci putnu skaņu noteikšanai. Izmaiņām nepieciešama lietojumprogrammas pārstartēšana.",
         "soundCardSource": "Skaņas kartes avots",
         "audioSourceLabel": "Audio avots (nepieciešama lietojumprogrammas pārstartēšana, lai izmaiņas stātos spēkā)",
         "audioSourceHelp": "Izvēlieties audio ievades ierīci putnu skaņu noteikšanai. Izmaiņām nepieciešama lietojumprogrammas pārstartēšana.",
@@ -3774,7 +3779,8 @@
         "fixedHint": "Uztveršana tiek apturēta starp sākuma un beigu laikiem katru dienu. Nakts logi (piem., 22:00 līdz 06:00) tiek atbalstīti.",
         "solarHint": "Laiki tiek aprēķināti no saullēkta/saulrieta jūsu konfigurētajā atrašanās vietā. Izmantojiet negatīvas nobīdes pirms notikuma, pozitīvas - pēc.",
         "badge": "Kluss",
-        "enabledBadge": "Klusās stundas iespējotas šai straumei"
+        "enabledBadge": "Klusās stundas iespējotas šai straumei",
+        "enableLabel": "Apturēt ierakstīšanu klusuma stundās"
       },
       "rtspStreams": {
         "title": "Audio straumju konfigurācija",
@@ -4121,12 +4127,23 @@
         "loadFailedLink": "Skatīt MI Modeļi statusu",
         "state": {
           "pending": "Ielādē",
-          "failed": "Neizdevās ielādēt"
+          "failed": "Neizdevās ielādēt",
+          "missing": "Nav instalēts"
         },
         "notLoadedHelp": "Šis modelis nav ielādēts, tāpēc to nevar izvēlēties.",
         "defaultBadge": "{models} (noklusējums)",
         "defaultPendingBadge": "Noklusējuma modeļi",
-        "noneBadge": "Nav ielādēts modelis"
+        "noneBadge": "Nav ielādēts modelis",
+        "missingHelp": "Šis modelis vairs nav instalēts. Šis avots to ignorē.",
+        "removeMissing": "Noņemt",
+        "removeMissingAria": "Noņemt {model} no {source}",
+        "lastSelectedHelp": "Vismaz viens klasifikators paliek atlasīts.",
+        "followsDefaults": "Šis avots izmanto noklusējuma modeļus.",
+        "listFailed": "Modeļu sarakstu neizdevās ielādēt.",
+        "warningBadge": "Pārbaudiet klasifikatorus"
+      },
+      "sources": {
+        "autoSaveHelp": "Izmaiņas tiek saglabātas uzreiz. Ierīces un iztveršanas frekvences izmaiņas restartē ierakstīšanu, tāpēc tās gaida, līdz noklikšķināt uz Lietot."
       }
     },
     "security": {

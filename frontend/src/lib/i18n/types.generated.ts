@@ -2733,8 +2733,13 @@ export type TranslationKey =
   | 'settings.audio.soundCards.compatibility.minSampleRate' // params: rate
   | 'settings.audio.soundCards.compatibility.recommendedSampleRate' // params: rate
   | 'settings.audio.soundCards.compatibility.atLeastOneModel'
+  | 'settings.audio.soundCards.captureTitle'
+  | 'settings.audio.soundCards.levelTitle'
+  | 'settings.audio.soundCards.captureApplyHint'
+  | 'settings.audio.soundCards.applyCapture'
+  | 'settings.audio.soundCards.applying'
+  | 'settings.audio.soundCards.adding'
   | 'settings.audio.audioCapture.title'
-  | 'settings.audio.audioCapture.description'
   | 'settings.audio.audioCapture.soundCardSource'
   | 'settings.audio.audioCapture.audioSourceLabel'
   | 'settings.audio.audioCapture.audioSourceHelp'
@@ -2767,6 +2772,7 @@ export type TranslationKey =
   | 'settings.audio.quietHours.solarHint'
   | 'settings.audio.quietHours.badge'
   | 'settings.audio.quietHours.enabledBadge'
+  | 'settings.audio.quietHours.enableLabel'
   | 'settings.audio.rtspStreams.title'
   | 'settings.audio.rtspStreams.description'
   | 'settings.audio.rtspStreams.noStreamsConfigured'
@@ -3047,10 +3053,19 @@ export type TranslationKey =
   | 'settings.audio.models.loadFailedLink'
   | 'settings.audio.models.state.pending'
   | 'settings.audio.models.state.failed'
+  | 'settings.audio.models.state.missing'
   | 'settings.audio.models.notLoadedHelp'
   | 'settings.audio.models.defaultBadge' // params: models
   | 'settings.audio.models.defaultPendingBadge'
   | 'settings.audio.models.noneBadge'
+  | 'settings.audio.models.missingHelp'
+  | 'settings.audio.models.removeMissing'
+  | 'settings.audio.models.removeMissingAria' // params: model, source
+  | 'settings.audio.models.lastSelectedHelp'
+  | 'settings.audio.models.followsDefaults'
+  | 'settings.audio.models.listFailed'
+  | 'settings.audio.models.warningBadge'
+  | 'settings.audio.sources.autoSaveHelp'
   | 'settings.security.pageLabel'
   | 'settings.security.baseUrlLabel'
   | 'settings.security.baseUrlHelp'
@@ -5064,6 +5079,7 @@ export type TranslationParams = {
   'settings.audio.fileSettings.bitrateHelp': { min: string | number; max: string | number };
   'settings.audio.exportDenoise.lossyNote': { minBitrate: string | number };
   'settings.audio.models.defaultBadge': { models: string | number };
+  'settings.audio.models.removeMissingAria': { model: string | number; source: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
   'settings.security.oauth.oidc.postLogoutRedirectHelpText': { url: string | number };

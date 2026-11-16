@@ -3736,11 +3736,16 @@
           "minSampleRate": "Requer pelo menos {rate}kHz de taxa de amostragem",
           "recommendedSampleRate": "{rate}kHz recomendado para melhores resultados",
           "atLeastOneModel": "Pelo menos um modelo deve ser selecionado"
-        }
+        },
+        "captureTitle": "Captura",
+        "levelTitle": "Nível de entrada",
+        "captureApplyHint": "A captura é reiniciada ao aplicar.",
+        "applyCapture": "Aplicar e reiniciar a captura",
+        "applying": "A aplicar...",
+        "adding": "A adicionar..."
       },
       "audioCapture": {
         "title": "Captura de áudio",
-        "description": "Definir fonte de captura de áudio, placa de som ou fluxo RTSP",
         "soundCardSource": "Fonte da placa de som",
         "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação)",
         "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
@@ -3774,7 +3779,8 @@
         "fixedHint": "A captura é pausada diariamente entre as horas de início e fim. Janelas noturnas (por exemplo, 22:00 às 06:00) são suportadas.",
         "solarHint": "Os horários são calculados a partir do nascer/pôr do sol na sua localização configurada. Use deslocamentos negativos para antes do evento, positivos para depois.",
         "badge": "Silêncio",
-        "enabledBadge": "Horas silenciosas habilitadas para este fluxo"
+        "enabledBadge": "Horas silenciosas habilitadas para este fluxo",
+        "enableLabel": "Pausar a captura durante as horas de silêncio"
       },
       "rtspStreams": {
         "title": "Configuração de Fluxos de Áudio",
@@ -4121,12 +4127,23 @@
         "loadFailedLink": "Ver status de Modelos de IA",
         "state": {
           "pending": "A carregar",
-          "failed": "Falha ao carregar"
+          "failed": "Falha ao carregar",
+          "missing": "Não instalado"
         },
         "notLoadedHelp": "Este modelo não está carregado, por isso não pode ser selecionado.",
         "defaultBadge": "{models} (padrão)",
         "defaultPendingBadge": "Modelos padrão",
-        "noneBadge": "Nenhum modelo carregado"
+        "noneBadge": "Nenhum modelo carregado",
+        "missingHelp": "Este modelo já não está instalado. Esta fonte ignora-o.",
+        "removeMissing": "Remover",
+        "removeMissingAria": "Remover {model} de {source}",
+        "lastSelectedHelp": "Pelo menos um classificador permanece selecionado.",
+        "followsDefaults": "Esta fonte usa os modelos predefinidos.",
+        "listFailed": "Não foi possível carregar a lista de modelos.",
+        "warningBadge": "Verificar classificadores"
+      },
+      "sources": {
+        "autoSaveHelp": "As alterações são guardadas de imediato. As alterações de dispositivo e taxa de amostragem reiniciam a captura, por isso aguardam até clicar em Aplicar."
       }
     },
     "security": {

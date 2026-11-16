@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
-import { screen, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
-import { renderTyped } from '../../../../test/render-helpers';
+import { screen, cleanup, fireEvent, waitFor, within } from '@testing-library/svelte';
+import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
 import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
 import SoundCardManager from './SoundCardManager.svelte';
+import { AUDIO_SOURCES_LIST_FIELD } from './audioSourceFields';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import {
   ADD_SOURCE_KEY,
@@ -38,7 +39,7 @@ vi.mock('./InlineSlider.svelte', async () => ({
 }));
 // The model list renders the current selection as text so the default model
 // pre-selection of the add form can be asserted without the real checkbox UI.
-vi.mock('./ModelCheckboxList.svelte', async () => ({
+vi.mock('./ModelToggleList.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockModelCheckboxList.svelte')).default,
 }));
 vi.mock('./QuietHoursEditor.svelte', async () => ({
@@ -55,6 +56,8 @@ vi.mock('$lib/stores/models.svelte', () => ({
   watchModels: vi.fn(() => () => {}),
   modelsLoaded: vi.fn(() => true),
   modelsLoading: vi.fn(() => false),
+  modelsFailed: vi.fn(() => false),
+  refreshModels: vi.fn(),
 }));
 
 // The acoustic model verdict drives the add form's default pick; the pure
@@ -246,7 +249,10 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
     );
     await openAddForm();
 
-    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    // The configured source's card is open too, so read the add form's own dropdown.
+    const addForm = screen.getByRole('heading', { name: ADD_SOURCE_KEY }).parentElement;
+    expect(addForm).not.toBeNull();
+    const deviceSelect = within(addForm ?? document.body).getByTestId(DEVICE_SELECT_TESTID);
     // Device A is fully excluded under BOTH identifier forms (it must not reappear
     // as its legacy id either), while the unconfigured B remains selectable.
     expect(deviceSelect.querySelector('option[value="usb-path:portA"]')).toBeNull();
@@ -409,7 +415,9 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
     // Complete the add flow via the Add button (not the heading of the same text).
     await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
 
+    // One save, under the list field, carrying the whole array with the new source.
     expect(onUpdateSources).toHaveBeenCalledTimes(1);
+    expect(onUpdateSources.mock.calls[0][1]).toEqual({ field: AUDIO_SOURCES_LIST_FIELD });
     const savedSources = onUpdateSources.mock.calls[0][0] as AudioSourceConfig[];
     expect(savedSources).toHaveLength(1);
     // The saved source carries an empty model list; no default is invented.
@@ -424,5 +432,88 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
 
     expect(screen.getByTestId(MODEL_LIST_TESTID)).toHaveTextContent('birdnet');
     expect(screen.getByTestId(MODEL_LIST_TESTID)).not.toHaveTextContent('perch_v2');
+  });
+});
+
+describe('SoundCardManager rows', () => {
+  const devices = [
+    { index: 0, name: 'Mic A', id: 'dev-a' },
+    { index: 1, name: 'Mic B', id: 'dev-b' },
+    { index: 2, name: 'Mic C', id: 'dev-c' },
+  ];
+  const sourceA: AudioSourceConfig = { name: 'A', device: 'dev-a', gain: 0, models: [] };
+  const sourceB: AudioSourceConfig = { name: 'B', device: 'dev-b', gain: 0, models: [] };
+  const sourceC: AudioSourceConfig = { name: 'C', device: 'dev-c', gain: 0, models: [] };
+
+  function renderRows(sources: AudioSourceConfig[]) {
+    const onUpdateSources = vi.fn();
+    const view = createComponentTestFactory(SoundCardManager, {
+      sources,
+      audioDevices: devices,
+      audioDevicesLoading: false,
+      disabled: false,
+      onUpdateSources,
+      onRefreshDevices: vi.fn(),
+    }).render();
+    return { ...view, onUpdateSources };
+  }
+
+  function header(name: string): HTMLElement {
+    // The header button is named by the source name followed by its device.
+    return screen.getByRole('button', { name: accessible => accessible.startsWith(`${name} `) });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('opens a single source and keeps several closed', () => {
+    renderRows([sourceA]);
+    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
+    cleanup();
+
+    renderRows([sourceA, sourceB]);
+    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps a row open when its source changes, since rows are keyed by their own id', async () => {
+    const { rerender } = renderRows([sourceA, sourceB]);
+    await fireEvent.click(header('B'));
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+
+    // A saved device change replaces the source object; the row id stays.
+    await rerender({ sources: [sourceA, { ...sourceB, device: 'dev-c' }] });
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('gives every row a fresh id when the list length changes from outside', async () => {
+    const { rerender } = renderRows([sourceA, sourceB]);
+    await fireEvent.click(header('B'));
+
+    await rerender({ sources: [sourceA, sourceB, sourceC] });
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('deletes a source after confirmation with one list save', async () => {
+    const { onUpdateSources } = renderRows([sourceA, sourceB]);
+
+    const deleteButtons = screen.getAllByRole('button', { name: 'common.delete' });
+    await fireEvent.click(deleteButtons[0]);
+    const dialog = screen.getByRole('alertdialog');
+    const confirm = Array.from(dialog.querySelectorAll('button')).find(
+      button => button.textContent.trim() === 'common.delete'
+    );
+    if (confirm) await fireEvent.click(confirm);
+
+    expect(onUpdateSources).toHaveBeenCalledExactlyOnceWith([sourceB], {
+      field: AUDIO_SOURCES_LIST_FIELD,
+    });
   });
 });

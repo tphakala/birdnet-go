@@ -209,7 +209,6 @@ const translations: Record<string, string> = {
   'dashboard.recentDetections.actions.deleteDetection': 'Delete detection',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
-  'settings.audio.audioCapture.description': 'Configure audio capture settings',
   'settings.audio.audioCapture.rtspSource': 'RTSP Source',
   'settings.audio.audioCapture.rtspUrlsLabel': 'RTSP URLs',
   'settings.audio.audioCapture.rtspUrlsHelp': 'Enter RTSP stream URLs',

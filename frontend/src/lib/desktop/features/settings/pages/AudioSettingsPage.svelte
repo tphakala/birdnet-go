@@ -46,6 +46,9 @@
     type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { commitSetting, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import {
     DEFAULT_DENOISE_PRESET,
     DENOISE_STRENGTH_OPTIONS,
@@ -236,15 +239,8 @@
     });
   }
 
-  // PERFORMANCE OPTIMIZATION: Reactive change detection per tab with $derived
-  // Sound Card tab changes
-  let soundCardTabHasChanges = $derived(
-    hasSettingsChanged(
-      store.originalData.realtime?.audio?.sources,
-      store.formData.realtime?.audio?.sources
-    )
-  );
-
+  // PERFORMANCE OPTIMIZATION: Reactive change detection per tab with $derived.
+  // The sound card tab saves as it changes, so it has no unsaved state to track.
   // Streams tab changes
   let streamsTabHasChanges = $derived(
     hasSettingsChanged(
@@ -496,19 +492,10 @@
   });
 
   // Update handlers
-  function updateAudioSources(sources: AudioSourceConfig[]) {
-    for (const src of sources) {
-      logger.debug('updateAudioSources', {
-        component: 'AudioSettingsPage',
-        sourceName: src.name,
-        eqPresent: src.equalizer !== undefined,
-        eqEnabled: src.equalizer?.enabled,
-        eqFilterCount: src.equalizer?.filters?.length ?? 0,
-      });
-    }
-    settingsActions.updateSection('realtime', {
-      audio: { ...settings.audio, sources },
-    });
+  // The sound card tab saves each change at once: the whole sources array, under
+  // the field key of the control that made the change.
+  function updateAudioSources(sources: AudioSourceConfig[], options: CommitOptions) {
+    commitSetting('audio', { sources }, options);
   }
 
   function updateRTSPStreams(streams: StreamConfig[]) {
@@ -685,7 +672,7 @@
       id: 'soundcard',
       label: t('settings.audio.tabs.soundCard'),
       icon: Volume2,
-      hasChanges: soundCardTabHasChanges,
+      saveMode: 'immediate',
       content: soundCardTabContent,
     },
     {
@@ -735,15 +722,27 @@
         }}
       />
     {:else if audioDevices.loading && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
-      <!-- Initial Loading State (only when no data yet) -->
-      <div role="status" class="flex items-center justify-center py-12">
-        <span
-          aria-hidden="true"
-          class="inline-block w-10 h-10 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-        ></span>
-        <span class="ml-3 text-[var(--color-base-content)] opacity-90"
-          >{t('settings.audio.loading')}</span
-        >
+      <!-- First load: a skeleton of the section with its summary bar and two source cards -->
+      <div class="card bg-[var(--color-base-100)] shadow-2xs">
+        <div class="space-y-2 px-6 py-4">
+          <Skeleton className="h-6 w-56" />
+          <SkeletonStatus label={t('settings.audio.loading')} class="block text-sm" />
+        </div>
+        <div class="space-y-4 px-6 pb-7">
+          <Skeleton className="h-14 w-full rounded-lg" />
+          {#each { length: 2 } as _, row (row)}
+            <div
+              class="flex items-center gap-3 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] p-3"
+            >
+              <Skeleton className="size-10 rounded-lg" />
+              <div class="flex-1 space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-5 w-28" />
+            </div>
+          {/each}
+        </div>
       </div>
     {:else if !audioDevices.loading && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
       <!-- Empty State: No Sound Cards Found -->
@@ -767,15 +766,13 @@
       <!-- Sound Card Source Manager -->
       <SettingsSection
         title={t('settings.audio.audioCapture.title')}
-        description={t('settings.audio.audioCapture.description')}
-        originalData={store.originalData.realtime?.audio?.sources}
-        currentData={store.formData.realtime?.audio?.sources}
+        description={t('settings.audio.sources.autoSaveHelp')}
       >
         <SoundCardManager
           sources={settings.audio.sources}
           audioDevices={audioDevices.data}
           audioDevicesLoading={audioDevices.loading}
-          disabled={store.isLoading || store.isSaving}
+          disabled={store.isLoading}
           onUpdateSources={updateAudioSources}
           onRefreshDevices={loadAudioDevices}
         />
