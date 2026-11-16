@@ -64,6 +64,9 @@ let refreshQueued = false;
 let settingsRefreshPending = false;
 // Set while a pending form refresh waits for the initial settings load.
 let stopWaitingForSettings: (() => void) | null = null;
+// Counts model list changes, so a form refresh clears the pending flag only
+// when no newer change arrived while it ran.
+let settingsChangeGeneration = 0;
 let watchers = 0;
 let unlistenTopology: (() => void) | null = null;
 
@@ -199,8 +202,10 @@ function idSet(models: readonly BackendModel[]): string {
  * that arrives while the first fetch runs queues one that starts only if that
  * fetch succeeds. When the set of listed ids changed, the settings form
  * is refreshed once, keeping unsaved edits, because the server strips aliases of
- * removed models from the sources; a failed form refresh is retried by the next
- * refresh. Before the first successful fetch it is the plain fetch.
+ * removed models from the sources. That form refresh waits for the initial
+ * settings load when it is still running, and one that failed or was overtaken
+ * by a newer list change is retried by the next refresh. Before the first
+ * successful fetch it is the plain fetch.
  */
 export async function refreshModels(): Promise<void> {
   if (fetchState !== 'loaded') {
@@ -220,7 +225,10 @@ export async function refreshModels(): Promise<void> {
   try {
     const data = await api.get<BackendModel[]>('/api/v2/models', { signal: controller.signal });
     if (controller.signal.aborted || !Array.isArray(data)) return;
-    if (idSet(data) !== idSet(fetchedModels)) settingsRefreshPending = true;
+    if (idSet(data) !== idSet(fetchedModels)) {
+      settingsRefreshPending = true;
+      settingsChangeGeneration++;
+    }
     fetchedModels = data;
     if (settingsRefreshPending) await syncSettingsForm();
   } catch (err: unknown) {
@@ -274,15 +282,16 @@ export function watchModels(): () => void {
  * Drops aliases of removed models from the settings form. No rebase can run
  * before the settings have loaded, and a load already in flight may carry the
  * old list, so it waits for the load and runs then. The pending flag clears
- * only after a rebase succeeded.
+ * only after a rebase that started after the latest list change succeeded.
  */
 async function syncSettingsForm(): Promise<void> {
   if (!get(settingsDataLoaded)) {
     waitForSettingsLoad();
     return;
   }
+  const generation = settingsChangeGeneration;
   await settingsActions.refreshKeepingEdits();
-  settingsRefreshPending = false;
+  if (generation === settingsChangeGeneration) settingsRefreshPending = false;
 }
 
 function waitForSettingsLoad(): void {
@@ -314,6 +323,7 @@ export function resetModelsForTest(): void {
   settingsRefreshPending = false;
   stopWaitingForSettings?.();
   stopWaitingForSettings = null;
+  settingsChangeGeneration = 0;
   fetchedModels = [];
   fetchState = 'idle';
   subscribers = 0;

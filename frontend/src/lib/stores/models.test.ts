@@ -540,6 +540,33 @@ describe('models store live refresh', () => {
     unwatch();
   });
 
+  it('keeps a later list change pending when an earlier form refresh succeeds after it', async () => {
+    const unwatch = await loadWith([BIRDNET, PERCH]);
+    settingsLoaded.set(false);
+    apiGet.mockResolvedValueOnce([BIRDNET]);
+    await refreshModels();
+
+    // Rebase A starts when the settings load, and is still running when a
+    // second change arrives whose own rebase B fails.
+    let finishA: () => void = () => {};
+    refreshKeepingEdits.mockImplementationOnce(
+      () => new Promise<void>(resolve => (finishA = resolve))
+    );
+    settingsLoaded.set(true);
+    refreshKeepingEdits.mockRejectedValueOnce(new Error('settings offline'));
+    apiGet.mockResolvedValueOnce([]);
+    await refreshModels();
+    finishA();
+    await settle();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(2);
+
+    // The second change is still pending, so the next refresh retries it.
+    apiGet.mockResolvedValueOnce([]);
+    await refreshModels();
+    expect(refreshKeepingEdits).toHaveBeenCalledTimes(3);
+    unwatch();
+  });
+
   it('retries the settings refresh on the next refresh when it failed', async () => {
     const unwatch = await loadWith([BIRDNET, PERCH]);
 
