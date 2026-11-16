@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Esta definição foi alterada noutro local. O valor atual é mostrado; faça a alteração novamente.",
       "tabNote": "As alterações neste separador são guardadas à medida que as faz.",
       "failuresSummary": "{count, plural, one {# alteração não foi guardada} other {# alterações não foram guardadas}}",
-      "dismiss": "Dispensar"
+      "dismiss": "Dispensar",
+      "otherTabsUnsaved": "Outros separadores têm alterações não guardadas. Abra um para as guardar ou repor:"
     },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",

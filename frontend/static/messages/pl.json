@@ -2486,7 +2486,8 @@
       "changedElsewhere": "To ustawienie zostało zmienione gdzie indziej. Widoczna jest bieżąca wartość; wprowadź zmianę ponownie.",
       "tabNote": "Zmiany na tej karcie są zapisywane na bieżąco.",
       "failuresSummary": "{count, plural, one {# zmiana nie została zapisana} few {# zmiany nie zostały zapisane} many {# zmian nie zostało zapisanych} other {# zmiany nie zostały zapisane}}",
-      "dismiss": "Zamknij"
+      "dismiss": "Zamknij",
+      "otherTabsUnsaved": "Inne karty mają niezapisane zmiany. Otwórz jedną, aby je zapisać lub zresetować:"
     },
     "errors": {
       "loadFailed": "Nie udało się załadować ustawień",

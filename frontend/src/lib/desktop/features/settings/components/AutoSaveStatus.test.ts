@@ -14,7 +14,12 @@ vi.mock('$lib/stores/settings', async importOriginal => {
   return { ...actual, settingsActions: { ...actual.settingsActions, ...store } };
 });
 
-import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
+import {
+  autoSaveFailures,
+  autoSaveStatus,
+  commitSetting,
+  resetAutoSaveForTest,
+} from '$lib/stores/settingsAutoSave.svelte';
 import AutoSaveStatus from './AutoSaveStatus.svelte';
 
 const FIELD = 'audio:a:models';
@@ -77,5 +82,21 @@ describe('AutoSaveStatus', () => {
     expect(document.getElementById('status-1')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('');
     expect(document.activeElement).toBe(container.firstElementChild);
+  });
+
+  it('clears the error of its field when it unmounts, so nothing undismissable is left', async () => {
+    store.saveStagedSection.mockResolvedValueOnce({
+      ...OK,
+      failed: [['sources']],
+      error: new Error('boom'),
+    });
+    const { unmount } = render(AutoSaveStatus, { props: { field: FIELD } });
+    commit();
+    await screen.findByRole('button', { name: 'settings.autoSave.dismiss' });
+    expect(autoSaveFailures()).toBe(1);
+
+    unmount();
+    expect(autoSaveFailures()).toBe(0);
+    expect(autoSaveStatus(FIELD).state).toBe('idle');
   });
 });

@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Toto nastavení bylo změněno jinde. Zobrazena je aktuální hodnota; proveďte změnu znovu.",
       "tabNote": "Změny na této kartě se ukládají průběžně.",
       "failuresSummary": "{count, plural, one {# změna nebyla uložena} few {# změny nebyly uloženy} many {# změny nebyly uloženy} other {# změn nebylo uloženo}}",
-      "dismiss": "Zavřít"
+      "dismiss": "Zavřít",
+      "otherTabsUnsaved": "Jiné karty mají neuložené změny. Otevřete jednu a uložte je nebo obnovte:"
     },
     "errors": {
       "loadFailed": "Nepodařilo se načíst nastavení",

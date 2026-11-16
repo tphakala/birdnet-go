@@ -12,7 +12,8 @@
   - ARIA compliance for screen readers
   - Lazy content rendering (only active tab content is mounted)
   - Integrated save/reset actions bar, replaced on a tab with saveMode 'immediate' by a
-    note and the aggregate auto-save state
+    note, the auto-save state of the tab's own fields (autoSaveScope) and the names of
+    other tabs with unsaved changes, each opening its tab
 
   Props:
   - tabs: Array of tab definitions
@@ -36,6 +37,7 @@
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
   import { autoSaveBusy, autoSaveFailures } from '$lib/stores/settingsAutoSave.svelte';
+  import { CircleAlert } from '@lucide/svelte';
 
   export interface TabDefinition {
     id: string;
@@ -47,6 +49,11 @@
      * each change as it is made and replaces the bar with a note.
      */
     saveMode?: 'manual' | 'immediate';
+    /**
+     * Immediate tabs: the field key prefix of the tab's controls, so its save state
+     * counts only its own fields. Without it every field counts.
+     */
+    autoSaveScope?: string;
     content: Snippet;
   }
 
@@ -87,10 +94,14 @@
     );
   });
 
-  const immediateSave = $derived(
-    tabs.find(tab => tab.id === selectedTab)?.saveMode === 'immediate'
+  const currentTab = $derived(tabs.find(tab => tab.id === selectedTab));
+  const immediateSave = $derived(currentTab?.saveMode === 'immediate');
+  const saveScope = $derived(currentTab?.autoSaveScope ?? '');
+  const failedSaves = $derived(immediateSave ? autoSaveFailures(saveScope) : 0);
+  // Unsaved edits on manual tabs are saved there; an immediate tab only points at them.
+  const otherUnsavedTabs = $derived(
+    immediateSave ? tabs.filter(tab => tab.id !== selectedTab && tab.hasChanges) : []
   );
-  const failedSaves = $derived(immediateSave ? autoSaveFailures() : 0);
 
   // Parents use the binding for tab-specific work (e.g. mounting the location map).
   $effect(() => {
@@ -229,14 +240,38 @@
   <!-- Integrated Save/Reset Actions -->
   {#if showActions}
     {#if immediateSave}
+      {#if otherUnsavedTabs.length > 0}
+        <div
+          class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] px-3 py-2 text-sm text-[var(--color-base-content)]"
+        >
+          <CircleAlert class="size-4 shrink-0 text-[var(--text-warning)]" aria-hidden="true" />
+          <p>{t('settings.autoSave.otherTabsUnsaved')}</p>
+          <ul class="flex flex-wrap gap-x-3 gap-y-1">
+            {#each otherUnsavedTabs as tab (tab.id)}
+              <li>
+                <button
+                  type="button"
+                  class="font-medium text-[var(--text-primary)] underline underline-offset-2 hover:no-underline"
+                  onclick={() => selectTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
       <div
-        class="mt-6 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--color-base-content)]/70"
+        class={cn(
+          'flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--color-base-content)]/70',
+          otherUnsavedTabs.length > 0 ? 'mt-3' : 'mt-6'
+        )}
       >
         <p>{t('settings.autoSave.tabNote')}</p>
         <p role="status" class={failedSaves > 0 ? 'text-[var(--text-error)]' : undefined}>
           {#if failedSaves > 0}
             {t('settings.autoSave.failuresSummary', { count: failedSaves })}
-          {:else if autoSaveBusy()}
+          {:else if autoSaveBusy(saveScope)}
             {t('settings.actions.saving')}
           {/if}
         </p>

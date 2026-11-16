@@ -66,6 +66,13 @@ const statuses = new SvelteMap<string, AutoSaveFieldStatus>();
 const fieldPaths = new Map<string, { section: SettingsSectionName; keys: Set<string> }>();
 const sections = new Map<SettingsSectionName, SectionState>();
 const savedTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Mounted indicators per field (registerAutoSaveField). */
+const mountedFields = new Map<string, number>();
+/**
+ * Fields whose indicators all unmounted. Their status stays for a remount but is
+ * not counted, since nothing on screen could show or dismiss it.
+ */
+const detachedFields = new Set<string>();
 let unsubscribeDrops: (() => void) | null = null;
 let pagehideListening = false;
 
@@ -105,22 +112,61 @@ export function autoSaveStatus(field: string): AutoSaveFieldStatus {
   return statuses.get(field) ?? IDLE;
 }
 
-function countStatuses(state: AutoSaveFieldStatus['state']): number {
+function countStatuses(
+  state: AutoSaveFieldStatus['state'],
+  scope: string,
+  includeDetached: boolean
+): number {
   let count = 0;
-  for (const status of statuses.values()) {
-    if (status.state === state) count++;
+  for (const [field, status] of statuses) {
+    if (status.state !== state || !field.startsWith(scope)) continue;
+    if (!includeDetached && detachedFields.has(field)) continue;
+    count++;
   }
   return count;
 }
 
-/** True while any field is waiting for a save or being saved. */
-export function autoSaveBusy(): boolean {
-  return countStatuses('saving') > 0;
+/**
+ * True while a field is waiting for a save or being saved; with a scope, only
+ * fields whose key starts with it count. A request still running counts after
+ * its control unmounted.
+ */
+export function autoSaveBusy(scope = ''): boolean {
+  return countStatuses('saving', scope, true) > 0;
 }
 
-/** The number of fields whose last save failed and was not dismissed. */
-export function autoSaveFailures(): number {
-  return countStatuses('error');
+/**
+ * The number of fields whose last save failed and was not dismissed; with a
+ * scope, only fields whose key starts with it. A field whose indicator
+ * unmounted is not counted, since nothing on screen could dismiss it.
+ */
+export function autoSaveFailures(scope = ''): number {
+  return countStatuses('error', scope, false);
+}
+
+/**
+ * Registers a mounted indicator of a field; AutoSaveStatus calls it. The
+ * returned function unregisters it. When the last indicator of a field
+ * unmounts, its error is cleared: the control it described is gone (a row
+ * deleted, a tab switched, a page left), and "Saved" expires on its own. An
+ * error that arrives later is kept for a remount but not counted.
+ */
+export function registerAutoSaveField(field: string): () => void {
+  mountedFields.set(field, (mountedFields.get(field) ?? 0) + 1);
+  detachedFields.delete(field);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = (mountedFields.get(field) ?? 1) - 1;
+    if (remaining > 0) {
+      mountedFields.set(field, remaining);
+      return;
+    }
+    mountedFields.delete(field);
+    detachedFields.add(field);
+    if (statuses.get(field)?.state === 'error') setStatus(field, IDLE);
+  };
 }
 
 /** Clears the error of a field, for the dismiss button of its indicator. */
@@ -265,11 +311,8 @@ function flushSection(section: SettingsSectionName): Promise<void> {
   const running = runFlush(section).catch(error => {
     logger.error('Auto save flush failed:', error);
   });
+  // runFlush awaits the save before it can return, so this runs before its finally clears the marker.
   state.running = running;
-  // A flush that finished before this assignment (it never awaited) must not stay marked.
-  void running.then(() => {
-    if (state.running === running) state.running = null;
-  });
   return running;
 }
 
@@ -341,6 +384,8 @@ export function resetAutoSaveForTest(): void {
   for (const timer of savedTimers.values()) clearTimeout(timer);
   sections.clear();
   savedTimers.clear();
+  mountedFields.clear();
+  detachedFields.clear();
   fieldPaths.clear();
   statuses.clear();
   unsubscribeDrops?.();

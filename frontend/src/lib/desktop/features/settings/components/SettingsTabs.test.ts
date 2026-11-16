@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import { settingsActions } from '$lib/stores/settings';
 import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
@@ -146,6 +146,44 @@ describe('SettingsTabs save mode', () => {
     commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
 
     expect(await screen.findByRole('status')).toHaveTextContent('settings.actions.saving');
+  });
+
+  it('counts only the failures and saves of its own fields, given a scope', async () => {
+    const scoped: TabDefinition = {
+      ...modeTab('live', 'immediate'),
+      autoSaveScope: 'audio:sources:',
+    };
+    renderWithBar([scoped], 'live');
+
+    // Settings have not loaded, so staging is refused and the field ends in error.
+    commitSetting('rtsp', { streams: [] }, { field: 'rtsp:s:name' });
+    await Promise.resolve();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:sources:a:models' });
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'settings.autoSave.failuresSummary'
+    );
+  });
+
+  it('names the other tabs with unsaved changes and opens one on request', async () => {
+    renderWithBar(
+      [modeTab('live', 'immediate'), { ...modeTab('rec', 'manual'), hasChanges: true }],
+      'live'
+    );
+
+    expect(screen.getByText('settings.autoSave.otherTabsUnsaved')).toBeInTheDocument();
+    // Saving them stays on their own tab: no second save action here.
+    expect(screen.queryByRole('button', { name: SAVE_NAME })).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Label rec' }));
+    expect(screen.getByRole('tab', { name: 'Label rec' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('says nothing about other tabs when none has unsaved changes', () => {
+    renderWithBar([modeTab('live', 'immediate'), modeTab('rec', 'manual')], 'live');
+
+    expect(screen.queryByText('settings.autoSave.otherTabsUnsaved')).toBeNull();
   });
 
   it('treats a tab without a save mode as manual', () => {

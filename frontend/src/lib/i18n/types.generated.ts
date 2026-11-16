@@ -1946,6 +1946,7 @@ export type TranslationKey =
   | 'settings.autoSave.tabNote'
   | 'settings.autoSave.failuresSummary' // params: count
   | 'settings.autoSave.dismiss'
+  | 'settings.autoSave.otherTabsUnsaved'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
   | 'settings.errors.changedElsewhere'

@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Toto nastavenie bolo zmenené inde. Zobrazená je aktuálna hodnota; vykonajte zmenu znova.",
       "tabNote": "Zmeny na tejto karte sa ukladajú priebežne.",
       "failuresSummary": "{count, plural, one {# zmena nebola uložená} few {# zmeny neboli uložené} many {# zmeny neboli uložené} other {# zmien nebolo uložených}}",
-      "dismiss": "Zavrieť"
+      "dismiss": "Zavrieť",
+      "otherTabsUnsaved": "Iné karty majú neuložené zmeny. Otvorte jednu a uložte ich alebo obnovte:"
     },
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",

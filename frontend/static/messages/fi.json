@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Tätä asetusta muutettiin muualla. Nykyinen arvo näytetään; tee muutos uudelleen.",
       "tabNote": "Tämän välilehden muutokset tallennetaan, kun teet ne.",
       "failuresSummary": "{count, plural, one {# muutosta ei tallennettu} other {# muutosta ei tallennettu}}",
-      "dismiss": "Sulje"
+      "dismiss": "Sulje",
+      "otherTabsUnsaved": "Muilla välilehdillä on tallentamattomia muutoksia. Avaa välilehti tallentaaksesi tai palauttaaksesi ne:"
     },
     "errors": {
       "loadFailed": "Asetusten lataaminen epäonnistui",

@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Denne indstilling er ændret et andet sted. Den aktuelle værdi vises; foretag din ændring igen.",
       "tabNote": "Ændringer på denne fane gemmes, mens du foretager dem.",
       "failuresSummary": "{count, plural, one {# ændring blev ikke gemt} other {# ændringer blev ikke gemt}}",
-      "dismiss": "Luk"
+      "dismiss": "Luk",
+      "otherTabsUnsaved": "Andre faner har ikke-gemte ændringer. Åbn en for at gemme eller nulstille dem:"
     },
     "errors": {
       "loadFailed": "Kunne ikke indlæse indstillinger",

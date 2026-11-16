@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Diese Einstellung wurde an anderer Stelle geändert. Der aktuelle Wert wird angezeigt; nehmen Sie Ihre Änderung erneut vor.",
       "tabNote": "Änderungen auf dieser Registerkarte werden beim Vornehmen gespeichert.",
       "failuresSummary": "{count, plural, one {# Änderung wurde nicht gespeichert} other {# Änderungen wurden nicht gespeichert}}",
-      "dismiss": "Schließen"
+      "dismiss": "Schließen",
+      "otherTabsUnsaved": "Andere Tabs haben ungespeicherte Änderungen. Öffnen Sie einen, um sie zu speichern oder zurückzusetzen:"
     },
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",

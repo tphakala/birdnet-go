@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Deze instelling is elders gewijzigd. De huidige waarde wordt getoond; maak je wijziging opnieuw.",
       "tabNote": "Wijzigingen op dit tabblad worden opgeslagen terwijl je ze maakt.",
       "failuresSummary": "{count, plural, one {# wijziging is niet opgeslagen} other {# wijzigingen zijn niet opgeslagen}}",
-      "dismiss": "Sluiten"
+      "dismiss": "Sluiten",
+      "otherTabsUnsaved": "Andere tabbladen hebben niet-opgeslagen wijzigingen. Open er een om ze op te slaan of te herstellen:"
     },
     "errors": {
       "loadFailed": "Instellingen konden niet worden geladen",

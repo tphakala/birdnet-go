@@ -4,7 +4,8 @@
   Purpose: The inline feedback of one immediately saved setting. Shows nothing
   while idle, "Saving..." while its edit is waiting for or in a request, "Saved"
   for a moment after, and the reason with a dismiss button when the save failed
-  or the setting was changed elsewhere. A persistent visually hidden status
+  or the setting was changed elsewhere. Unmounting clears an error of its
+  field (registerAutoSaveField). A persistent visually hidden status
   region announces each state, because a region mounted together with its text
   is often not announced; the visible parts are not live regions themselves.
 
@@ -20,7 +21,11 @@
   import { Check, CircleAlert, X } from '@lucide/svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { t } from '$lib/i18n';
-  import { autoSaveStatus, dismissAutoSaveError } from '$lib/stores/settingsAutoSave.svelte';
+  import {
+    autoSaveStatus,
+    dismissAutoSaveError,
+    registerAutoSaveField,
+  } from '$lib/stores/settingsAutoSave.svelte';
   import { cn } from '$lib/utils/cn';
 
   interface Props {
@@ -32,6 +37,10 @@
   let { field, id, class: className }: Props = $props();
 
   let status = $derived(autoSaveStatus(field));
+
+  // While mounted the field's status is shown here; on unmount its error is
+  // cleared, so the tab's failure count never holds one nothing can dismiss.
+  $effect(() => registerAutoSaveField(field));
   let announcement = $derived.by(() => {
     switch (status.state) {
       case 'saving':

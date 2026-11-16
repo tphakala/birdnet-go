@@ -26,6 +26,7 @@ import {
   commitSetting,
   dismissAutoSaveError,
   flushAutoSaves,
+  registerAutoSaveField,
   resetAutoSaveForTest,
 } from './settingsAutoSave.svelte';
 
@@ -407,5 +408,46 @@ describe('settings auto save engine', () => {
     expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
     expect(autoSaveStatus('audio:a:models').state).toBe('saved');
     expect(autoSaveStatus('audio:b:gain').state).toBe('saved');
+  });
+
+  it('scopes busy and failure counts to a field key prefix', async () => {
+    store.saveStagedSection.mockResolvedValue({
+      ...OK,
+      failed: [['sources']],
+      error: new Error('boom'),
+    });
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:sources:a:gain' });
+    await flushAutoSaves();
+
+    expect(autoSaveFailures()).toBe(1);
+    expect(autoSaveFailures('audio:sources:')).toBe(1);
+    expect(autoSaveFailures('rtsp:')).toBe(0);
+
+    const pending = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+    commitSetting('rtsp', { streams: [] }, { field: 'rtsp:s:name' });
+    expect(autoSaveBusy('rtsp:')).toBe(true);
+    expect(autoSaveBusy('audio:sources:')).toBe(false);
+    pending.resolve(OK);
+    await flushAutoSaves();
+  });
+
+  it('does not count an error that arrives after its control unmounted, and shows it again on remount', async () => {
+    const pending = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(pending.promise);
+    const release = registerAutoSaveField('audio:a:models');
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:models' });
+    release();
+    // A request still running keeps the field busy.
+    expect(autoSaveBusy()).toBe(true);
+
+    pending.resolve({ ...OK, failed: [['sources']], error: new Error('boom') });
+    await flushAutoSaves();
+    expect(autoSaveFailures()).toBe(0);
+
+    const releaseAgain = registerAutoSaveField('audio:a:models');
+    expect(autoSaveStatus('audio:a:models').state).toBe('error');
+    expect(autoSaveFailures()).toBe(1);
+    releaseAgain();
   });
 });

@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Ce paramètre a été modifié ailleurs. La valeur actuelle est affichée ; refaites votre modification.",
       "tabNote": "Les modifications de cet onglet sont enregistrées au fur et à mesure.",
       "failuresSummary": "{count, plural, one {# modification n'a pas été enregistrée} other {# modifications n'ont pas été enregistrées}}",
-      "dismiss": "Ignorer"
+      "dismiss": "Ignorer",
+      "otherTabsUnsaved": "D'autres onglets ont des modifications non enregistrées. Ouvrez-en un pour les enregistrer ou les réinitialiser :"
     },
     "errors": {
       "loadFailed": "Échec du chargement des paramètres",

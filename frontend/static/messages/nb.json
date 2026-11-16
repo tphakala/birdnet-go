@@ -2486,7 +2486,8 @@
       "changedElsewhere": "Denne innstillingen ble endret et annet sted. Gjeldende verdi vises; gjør endringen på nytt.",
       "tabNote": "Endringer på denne fanen lagres mens du gjør dem.",
       "failuresSummary": "{count, plural, one {# endring ble ikke lagret} other {# endringer ble ikke lagret}}",
-      "dismiss": "Lukk"
+      "dismiss": "Lukk",
+      "otherTabsUnsaved": "Andre faner har ulagrede endringer. Åpne en for å lagre eller tilbakestille dem:"
     },
     "errors": {
       "loadFailed": "Innlasting av innstillinger mislyktes",
