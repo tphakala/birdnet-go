@@ -915,7 +915,7 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
 [
   {
     "id": "birdnet",
-    "name": "BirdNET GLOBAL 6K V2.4",
+    "name": "BirdNET v2.4",
     "registryId": "BirdNET_V2.4",
     "category": "bird",
     "backend": "ONNX",
@@ -923,7 +923,7 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
   },
   {
     "id": "perch_v2",
-    "name": "Google Perch V2",
+    "name": "Google Perch v2",
     "registryId": "Perch_V2",
     "category": "bird"
   }
