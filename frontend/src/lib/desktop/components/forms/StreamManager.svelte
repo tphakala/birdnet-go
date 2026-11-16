@@ -105,6 +105,8 @@
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
 
   const ROW_ID_PREFIX = 'stream-row';
+  /** How many lists the manager remembers sending or holding, to tell its own from foreign ones. */
+  const MAX_KNOWN_LISTS = 16;
   /** Delay before the health of a newly added stream is fetched, so it has started. */
   const HEALTH_REFRESH_AFTER_ADD_MS = 1000;
   let healthRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -454,15 +456,45 @@
 
   const rollback = new RowRollback();
 
-  // A refused add or delete takes the list back to the rows this manager
-  // remembered, which keeps every card's id, open state and drafts. Any other
-  // length change (a reload, another window) gives every row a fresh id, so no
-  // status or open state lands on the wrong stream.
+  // A stream is identified by its name and URL, the two fields a row's open
+  // state and drafts are about; other edits (gain, models) keep the identity.
+  function listIdentity(list: readonly StreamConfig[]): string {
+    return JSON.stringify(list.map(stream => [stream.name, stream.url]));
+  }
+
+  // Identities of the lists this manager has held or sent: the one it started
+  // with, each list it sent (add, delete, a card's commit) and the list that
+  // was current when it sent, which a refused save takes the list back to. A
+  // list outside this history came from elsewhere (a reload, another window).
+  const knownLists: string[] = untrack(() => [listIdentity(streams)]);
+
+  function remember(identity: string) {
+    if (knownLists.includes(identity)) return;
+    knownLists.push(identity);
+    if (knownLists.length > MAX_KNOWN_LISTS) knownLists.shift();
+  }
+
+  /** Sends a list to the parent and remembers it, with the list it replaces. */
+  function sendStreams(list: StreamConfig[], options: CommitOptions) {
+    remember(listIdentity(streams));
+    remember(listIdentity(list));
+    onUpdateStreams(list, options);
+  }
+
+  // A list this manager did not produce gives every row a fresh id, so no open
+  // state, status or unapplied draft lands on a different stream, and forgets
+  // the rollback baseline. A refused add or delete takes the list back to the
+  // rows this manager remembered, which keeps every card's id, open state and
+  // drafts; a length change from a list the manager knows but cannot restore
+  // also gives fresh ids.
   $effect.pre(() => {
     const count = streams.length;
+    const identity = listIdentity(streams);
     untrack(() => {
-      if (rowIds.length === count) return;
-      const previous = rollback.take(count);
+      const own = knownLists.includes(identity);
+      remember(identity);
+      if (own && rowIds.length === count) return;
+      const previous = own ? rollback.take(count) : null;
       if (previous) {
         rowIds = previous.ids;
         expandedRows.clear();
@@ -564,7 +596,7 @@
     rowIds = [...rowIds, rowId];
     if (streams.length === 0) expandedRows.add(rowId);
     addPending = true;
-    onUpdateStreams([...streams, newStream], { field: STREAMS_LIST_FIELD });
+    sendStreams([...streams, newStream], { field: STREAMS_LIST_FIELD });
   }
 
   // ----- Change and delete -----
@@ -574,7 +606,7 @@
     if (!current) return;
     // Health is keyed by URL; a new URL starts without the old one's.
     if (current.url !== updated.url) delete streamHealth[current.url];
-    onUpdateStreams(
+    sendStreams(
       streams.map((stream, i) => (i === index ? updated : stream)),
       options
     );
@@ -586,7 +618,7 @@
     rollback.remember(rowIds, expandedRows);
     rowIds = rowIds.filter((_, i) => i !== index);
     if (id !== undefined) expandedRows.delete(id);
-    onUpdateStreams(
+    sendStreams(
       streams.filter((_, i) => i !== index),
       { field: STREAMS_LIST_FIELD }
     );

@@ -143,12 +143,51 @@ describe('StreamManager', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('keeps a row open when its URL changes, since rows are keyed by their own id', async () => {
-    const { rerender } = renderRows([streamA, streamB]);
+  it('keeps a card open when its own rename or URL apply comes back as the list', async () => {
+    const { rerender, onUpdateStreams } = renderRows([streamA, streamB]);
     await fireEvent.click(header('B'));
 
-    await rerender({ streams: [streamA, { ...streamB, url: 'rtsp://b/other' }] });
+    const name = screen.getByLabelText<HTMLInputElement>(/settings\.audio\.streams\.nameLabel/);
+    await fireEvent.input(name, { target: { value: 'B2' } });
+    await fireEvent.blur(name);
+    const renamed = onUpdateStreams.mock.calls[0][0];
+    expect(renamed.map((s: StreamConfig) => s.name)).toEqual(['A', 'B2']);
+    await rerender({ streams: renamed });
+    expect(header('B2')).toHaveAttribute('aria-expanded', 'true');
+
+    // A refused rename takes the list back to the old name; the card stays too.
+    await rerender({ streams: [streamA, streamB] });
     expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+
+    await fireEvent.input(screen.getByTestId(/-url$/), {
+      target: { value: 'rtsp://b/other' },
+    });
+    await fireEvent.click(screen.getAllByTestId('stream-test-button')[0]);
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'settings.audio.streams.applyConnection' })
+    );
+    const reconnected = onUpdateStreams.mock.calls.at(-1)?.[0];
+    expect(reconnected?.[1].url).toBe('rtsp://b/other');
+    await rerender({ streams: reconnected });
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('gives every row a fresh id when other streams replace the list at the same length', async () => {
+    const { rerender } = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+    await fireEvent.input(screen.getByTestId(/-url$/), {
+      target: { value: 'rtsp://b/draft' },
+    });
+    expect(
+      screen.getByRole('button', { name: 'settings.audio.streams.applyConnection' })
+    ).toBeInTheDocument();
+
+    await rerender({ streams: [streamA, streamC] });
+
+    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('button', { name: 'settings.audio.streams.applyConnection' })
+    ).toBeNull();
   });
 
   it('gives every row a fresh id when the list length changes from outside', async () => {
