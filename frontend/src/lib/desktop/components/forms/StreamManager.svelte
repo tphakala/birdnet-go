@@ -72,6 +72,7 @@
   import StreamTestButton from './StreamTestButton.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
   import {
+    DEFAULT_SAMPLE_RATE,
     streamTypeOptions,
     transportOptions,
     analyzeStreamChannels,
@@ -96,15 +97,14 @@
 
   // Pre-selection for a stream without an explicit list: the classifier's
   // default targets when known, nothing at N=0, the legacy BirdNET pick otherwise.
-  function getDefaultModels(): string[] {
-    return defaultModelSelection(acousticAvailability, availableModels);
-  }
+  const defaultModels = $derived(defaultModelSelection(acousticAvailability, availableModels));
 
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
 
   const ROW_ID_PREFIX = 'stream-row';
   /** Delay before the health of a newly added stream is fetched, so it has started. */
   const HEALTH_REFRESH_AFTER_ADD_MS = 1000;
+  let healthRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Error context from FFmpeg error parsing (matching backend ErrorContextResponse)
   export interface ErrorContext {
@@ -189,7 +189,7 @@
   // The URL the test result belongs to; any other URL needs a new test.
   let newTestedUrl = $state<string | null>(null);
   let newNeedsTest = $derived(newUrl.trim() !== '' && newTestedUrl !== newUrl.trim());
-  let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? 48000);
+  let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? DEFAULT_SAMPLE_RATE);
   // Detected channel count for a new stream comes only from a stream test
   // (0 = not yet tested). Drives the adaptive channel controls.
   let newDetectedChannels = $derived(newTestResult?.channels ?? 0);
@@ -416,7 +416,7 @@
     newStreamType = 'rtsp';
     newChannelMode = 'downmix';
     newGain = 0;
-    newModels = getDefaultModels();
+    newModels = defaultModels;
     newQuietHours = { ...defaultQuietHoursConfig };
     newTestResult = null;
     newTestedUrl = null;
@@ -435,7 +435,7 @@
   // Open add form with the default models pre-selected
   function openAddForm() {
     if (disabled) return;
-    newModels = getDefaultModels();
+    newModels = defaultModels;
     showAddForm = true;
   }
 
@@ -489,7 +489,8 @@
       addPending = false;
       if (state === 'error') return;
       resetAddForm();
-      setTimeout(() => void loadHealthStatus(), HEALTH_REFRESH_AFTER_ADD_MS);
+      clearTimeout(healthRefreshTimer);
+      healthRefreshTimer = setTimeout(() => void loadHealthStatus(), HEALTH_REFRESH_AFTER_ADD_MS);
     });
   });
 
@@ -524,7 +525,7 @@
     }
 
     // Ensure at least one model is selected when the classifier offers one
-    const models = newModels.length > 0 ? newModels : getDefaultModels();
+    const models = newModels.length > 0 ? newModels : defaultModels;
 
     // Only RTSP and RTMP take a transport.
     const newStream: StreamConfig = {
@@ -583,6 +584,7 @@
   });
 
   onDestroy(() => {
+    clearTimeout(healthRefreshTimer);
     quietHoursStore.stopPolling();
     if (eventSource) {
       eventSource.close();
@@ -827,7 +829,7 @@
               <ModelToggleList
                 models={availableModels}
                 selectedModels={newModels}
-                defaultModels={getDefaultModels()}
+                {defaultModels}
                 sourceName={newName.trim()}
                 sourceSampleRate={newSourceSampleRate}
                 isStream

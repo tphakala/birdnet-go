@@ -6,6 +6,9 @@ import { StreamTypes, type ChannelAnalysis, type StreamType } from '$lib/stores/
 /** Longest stream URL the editors accept. */
 export const MAX_STREAM_URL_LENGTH = 2048;
 
+/** Rate a stream is assumed to deliver until a test reports its own. */
+export const DEFAULT_SAMPLE_RATE = 48000;
+
 export const streamTypeOptions = [
   { value: 'rtsp', label: 'RTSP' },
   { value: 'http', label: 'HTTP' },

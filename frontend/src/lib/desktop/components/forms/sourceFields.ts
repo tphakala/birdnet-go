@@ -20,7 +20,7 @@ export function sourceField(prefix: string, rowId: string, part: SourceFieldPart
 }
 
 /** Field key of adding and deleting rows of a source tab. */
-export function sourceListField(prefix: string): string {
+function sourceListField(prefix: string): string {
   return `${prefix}list`;
 }
 

@@ -99,6 +99,7 @@
   import StreamTimeline from './StreamTimeline.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
   import {
+    DEFAULT_SAMPLE_RATE,
     MAX_STREAM_URL_LENGTH,
     streamTypeOptions,
     transportOptions,
@@ -145,8 +146,6 @@
     onDelete,
   }: Props = $props();
 
-  /** Rate a stream is assumed to deliver until a test reports its own. */
-  const DEFAULT_SAMPLE_RATE = 48000;
   /** Longest stream name the field accepts. */
   const NAME_MAX_LENGTH = 100;
   const SECONDS_PER_MINUTE = 60;
