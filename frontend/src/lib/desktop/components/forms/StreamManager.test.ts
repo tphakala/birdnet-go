@@ -461,7 +461,11 @@ describe('StreamManager add outcome', () => {
     expect(onUpdateStreams).not.toHaveBeenCalled();
     expect(name).toHaveAttribute('aria-invalid', 'true');
     expect(name).toHaveAccessibleDescription('settings.audio.streams.errors.nameTooLong');
-    expect(screen.queryByRole('alert')).toBeNull();
+    // The reason is shown once, by the input itself, not by a separate alert.
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent('settings.audio.streams.errors.nameTooLong');
+    expect(name.getAttribute('aria-describedby')).toContain(alerts[0].id);
 
     await fireEvent.input(name, { target: { value: 'Gate' } });
     expect(name).not.toHaveAttribute('aria-invalid');

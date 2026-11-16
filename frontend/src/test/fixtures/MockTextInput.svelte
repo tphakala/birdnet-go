@@ -34,5 +34,5 @@
   oninput={event => oninput?.(event.currentTarget.value)}
 />
 {#if error}
-  <p id="{id}-error">{error}</p>
+  <p id="{id}-error" role="alert">{error}</p>
 {/if}
