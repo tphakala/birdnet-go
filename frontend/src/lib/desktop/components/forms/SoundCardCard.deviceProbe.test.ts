@@ -75,10 +75,10 @@ describe('SoundCardCard device capability probe (issue #3593, open card)', () =>
   const modelOptions = [{ value: DEFAULT_MODEL, label: 'BirdNET' }];
   const availableModels = [{ id: DEFAULT_MODEL, name: 'BirdNET', category: 'bird' }];
 
-  function renderCard(sampleRate = Number(RATE_48K.value)) {
+  function renderCard(sampleRate = Number(RATE_48K.value), device = DEV1) {
     const source: AudioSourceConfig = {
       name: 'Living room',
-      device: DEV1,
+      device,
       sampleRate,
       gain: 0,
       models: [DEFAULT_MODEL],
@@ -155,6 +155,26 @@ describe('SoundCardCard device capability probe (issue #3593, open card)', () =>
 
     // dev2 lacks 96 kHz, so the selection must fall back to 48 kHz rather than
     // persist an unsupported rate.
+    await waitFor(() => expect(rateSelect().value).toBe(RATE_48K.value));
+  });
+
+  it('coerces a rate the saved device cannot honor when the user returns to it after another pick', async () => {
+    // Saved on dev2 at 48 kHz; dev2 supports 48, 192 and 384 kHz but not 96 kHz.
+    await openCard(renderCard(Number(RATE_48K.value), DEV2));
+    await waitFor(() => expect(hasRate(RATE_192K.value)).toBe(true));
+
+    const deviceSelect = screen.getByTestId(DEVICE_SELECT_TESTID);
+    await fireEvent.change(deviceSelect, { target: { value: DEV1 } });
+    await waitFor(() => expect(hasRate(RATE_96K.value)).toBe(true));
+    await fireEvent.change(screen.getByTestId(SAMPLE_RATE_SELECT_TESTID), {
+      target: { value: RATE_96K.value },
+    });
+    expect(rateSelect().value).toBe(RATE_96K.value);
+
+    // Back on the saved device: the draft differs from the saved values, so the
+    // 96 kHz pick must not survive on a device that lacks it.
+    await fireEvent.change(deviceSelect, { target: { value: DEV2 } });
+    await waitFor(() => expect(hasRate(RATE_192K.value)).toBe(true));
     await waitFor(() => expect(rateSelect().value).toBe(RATE_48K.value));
   });
 });

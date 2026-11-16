@@ -267,9 +267,11 @@
       if (fetchController !== controller) return;
       sampleRateOptions = result.options;
       sampleRateVerified = result.verified;
-      // A newly picked device gets a rate it supports. The saved device keeps its
-      // saved rate, so opening a card never creates a change to apply.
-      if (capture.draft.device !== source.device) {
+      // A changed draft gets a rate the device supports. Only a draft that still
+      // equals the saved values is left alone, so opening a card never creates a
+      // change to apply.
+      const savedRate = source.sampleRate || DEFAULT_SAMPLE_RATE;
+      if (capture.draft.device !== source.device || capture.draft.sampleRate !== savedRate) {
         const sampleRate = coerceSupportedRate(result.options, capture.draft.sampleRate);
         if (sampleRate !== capture.draft.sampleRate) capture.set({ sampleRate });
       }
