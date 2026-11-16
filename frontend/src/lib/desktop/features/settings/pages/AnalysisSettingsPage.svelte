@@ -296,9 +296,9 @@
       : null
   );
   // Block install when the selected variant cannot run on this host. The
-  // preselection can be blocked while another variant would run: it skips other
-  // regions' slices, so a host whose global build and own slice do not fit gets
-  // the blocked default.
+  // preselection can be blocked while another variant would run, for example when
+  // the global build and the host's own slice do not fit but another region's
+  // slice does (pickPreselectedVariant skips other regions' slices).
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );
