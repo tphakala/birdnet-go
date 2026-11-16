@@ -224,6 +224,29 @@ describe('StreamManager', () => {
     ).toBeNull();
   });
 
+  it('gives fresh ids to an outside list at the length of a pending add baseline', async () => {
+    const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
+    const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
+    const { rerender } = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await fireEvent.input(screen.getByTestId('new-stream-name'), { target: { value: 'C' } });
+    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+      target: { value: 'rtsp://c/stream' },
+    });
+    const testButton = screen.getAllByTestId('stream-test-button').at(-1);
+    if (testButton) await fireEvent.click(testButton);
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await rerender({ streams: [streamA, streamB, streamC] });
+
+    // Not the list before the add: another window replaced it. The add's
+    // baseline must not give its open card to the second stream.
+    await rerender({ streams: [streamP, streamQ] });
+
+    expect(header('Q')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('saves a change of one stream as the whole array under that row field', async () => {
     const { onUpdateStreams } = renderRows([streamA, streamB]);
 
