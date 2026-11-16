@@ -139,6 +139,20 @@ describe('AudioSettingsPage sound card tab saves immediately', () => {
     expect(screen.queryByText('settings.audio.loading')).toBeNull();
   });
 
+  it('shows the skeleton, not the empty state, while Retry reloads after a failed first load', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
+    await renderTab('soundcard', []);
+    const retry = await screen.findByRole('button', {
+      name: 'settings.audio.emptyStates.soundCard.retry',
+    });
+
+    vi.mocked(api.get).mockReturnValueOnce(new Promise(() => {}));
+    await fireEvent.click(retry);
+
+    expect(await screen.findByText('settings.audio.loading')).toBeInTheDocument();
+    expect(screen.queryByText('settings.audio.emptyStates.soundCard.title')).toBeNull();
+  });
+
   it('shows the loading skeleton before the first device load completes', async () => {
     vi.mocked(api.get).mockReturnValueOnce(new Promise(() => {}));
     await renderTab('soundcard', []);

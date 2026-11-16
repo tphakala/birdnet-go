@@ -368,13 +368,15 @@
     try {
       const data = await api.get<AudioDevice[]>('/api/v2/system/audio/devices');
       audioDevices.data = data || [];
+      // Only a load that answered counts: after a failure, Retry shows the
+      // skeleton again instead of an empty state that is not known yet.
+      devicesLoadedOnce = true;
     } catch (error) {
       logger.error('Error fetching audio devices:', error);
       audioDevices.error = t('settings.audio.errors.devicesLoadFailed');
       audioDevices.data = [];
     } finally {
       audioDevices.loading = false;
-      devicesLoadedOnce = true;
     }
   }
 
