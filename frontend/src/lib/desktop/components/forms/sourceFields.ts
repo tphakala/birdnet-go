@@ -42,23 +42,27 @@ export interface RowSnapshot {
  * Remembers the rows as they were before the manager's own add or delete, so a
  * refused save that takes the list back can restore them instead of giving
  * every card a fresh id (which would drop its open state and unapplied drafts).
+ * The engine coalesces list edits made while a save runs, so the rows stay those
+ * from before the first unconfirmed edit until the save is confirmed or the
+ * list returns to them.
  */
 export class RowRollback {
   private snapshot: RowSnapshot | null = null;
 
-  /** Records the rows before an add or delete. */
+  /** Records the rows before an add or delete, unless an earlier edit is still unconfirmed. */
   remember(ids: readonly string[], expanded: Iterable<string>): void {
-    this.snapshot = { ids: [...ids], expanded: [...expanded] };
+    this.snapshot ??= { ids: [...ids], expanded: [...expanded] };
   }
 
   /**
-   * Returns the remembered rows when the list is back at their length, and
-   * forgets them either way: the list changed again, so they are spent.
+   * Returns the remembered rows, and forgets them, when the list is back at
+   * their length. Any other length leaves them for a later edit to undo.
    */
   take(count: number): RowSnapshot | null {
+    if (this.snapshot?.ids.length !== count) return null;
     const snapshot = this.snapshot;
     this.snapshot = null;
-    return snapshot?.ids.length === count ? snapshot : null;
+    return snapshot;
   }
 
   /** Forgets the remembered rows once the save went through. */

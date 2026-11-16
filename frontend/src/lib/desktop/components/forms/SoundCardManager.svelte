@@ -217,6 +217,7 @@
         for (const id of previous.expanded) expandedRows.add(id);
         return;
       }
+      rollback.clear();
       rowIds = newRowIds(count);
       expandedRows.clear();
       if (count === 1) expandedRows.add(rowIds[0]);

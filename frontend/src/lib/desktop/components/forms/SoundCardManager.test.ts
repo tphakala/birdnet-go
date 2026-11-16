@@ -564,6 +564,35 @@ describe('SoundCardManager rows', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('brings the original rows back when a refused save undoes two deletes made before its result', async () => {
+    const { rerender } = renderRows([sourceA, sourceB, sourceC]);
+    await fireEvent.click(header('A'));
+    await fireEvent.click(header('B'));
+
+    async function deleteFirstCard() {
+      const deleteButtons = screen.getAllByRole('button', { name: 'common.delete' });
+      await fireEvent.click(deleteButtons[0]);
+      const dialog = screen.getByRole('alertdialog');
+      const confirm = Array.from(dialog.querySelectorAll('button')).find(
+        button => button.textContent.trim() === 'common.delete'
+      );
+      if (confirm) await fireEvent.click(confirm);
+    }
+
+    // The engine coalesces the second delete into the save that is still running.
+    await deleteFirstCard();
+    await rerender({ sources: [sourceB, sourceC] });
+    await deleteFirstCard();
+    await rerender({ sources: [sourceC] });
+
+    // The refusal takes the list back to where it was before the first delete.
+    await rerender({ sources: [sourceA, sourceB, sourceC] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('deletes a source after confirmation with one list save', async () => {
     const { onUpdateSources } = renderRows([sourceA, sourceB]);
 
