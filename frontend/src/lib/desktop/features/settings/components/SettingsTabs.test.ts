@@ -73,3 +73,17 @@ describe('SettingsTabs tablist label', () => {
     expect(screen.queryByRole('tablist', { name: 'settings.tabs.navigation' })).toBeNull();
   });
 });
+
+describe('SettingsTabs tab styling', () => {
+  it('leaves the label colour to .tab and marks only the selected tab', () => {
+    renderTabs([tab('one', false), tab('two', false), tab('three', false)]);
+
+    for (const element of screen.getAllByRole('tab')) {
+      expect(element.className).not.toContain('text-[');
+      expect(element.className).not.toContain('opacity-');
+    }
+    expect(screen.getByRole('tab', { name: 'Label one' })).toHaveClass('tab-active');
+    expect(screen.getByRole('tab', { name: 'Label two' })).not.toHaveClass('tab-active');
+    expect(screen.getByRole('tab', { name: 'Label three' })).not.toHaveClass('tab-active');
+  });
+});

@@ -277,6 +277,12 @@ scheme, so colour alone never marks a link: a link or link-like text control is
 underlined at rest (`underline hover:decoration-2`, or `.link`). Show hover
 with a thicker underline, not opacity, which pulls the token under 4.5:1.
 
+Dim text through its colour (`--color-base-content` at 70% or more, or
+`--text-muted`), never through element opacity: opacity multiplies with any
+colour alpha on the element and also fades its focus ring. The detection card
+media area is a dark surface in both themes (`--media-surface-from` and
+`--media-surface-to`), so what is drawn over it is light.
+
 The bare `text-error|success|warning|info|primary` utility maps to the text
 token only in its plain form; behind a variant, with an opacity suffix or with
 `!`, Tailwind's generated utility wins and gives the fill.

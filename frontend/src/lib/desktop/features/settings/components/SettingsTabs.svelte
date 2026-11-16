@@ -164,10 +164,7 @@
         aria-label={tab.label}
         class={cn(
           'tab gap-2 transition-all duration-200 font-medium -mb-px',
-          'hover:text-[color:var(--text-primary)]',
-          isActive
-            ? 'tab-active text-[var(--text-primary)] border-b-2 border-[var(--color-primary)]'
-            : 'text-[var(--color-base-content)]/75 hover:text-[var(--color-base-content)]'
+          isActive && 'tab-active'
         )}
         aria-selected={isActive}
         aria-controls="settings-tabpanel-{tab.id}"

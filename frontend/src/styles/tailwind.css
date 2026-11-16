@@ -163,6 +163,10 @@
   --radius-selector: 0.25rem;
   --radius-full: 9999px;
 
+  /* Media tiles (detection cards) are dark in both themes: everything drawn over them is light */
+  --media-surface-from: #1e293b; /* slate-800 */
+  --media-surface-to: #0f172a; /* slate-900 */
+
   /* Animation */
   --animation-btn: 0.15s;
   --animation-input: 0.2s;
@@ -1704,26 +1708,42 @@
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    color: var(--color-base-content);
-    opacity: 0.7;
+
+    /* The inactive label is dimmed through its colour, never through element opacity: opacity
+       multiplies with any colour alpha a caller adds and also fades the focus ring. 70% keeps
+       4.5:1 on base-100, base-200 and base-300 in both themes (color-contrast.test.ts). */
+    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
     transition: all var(--animation-btn) ease-in-out;
     border-bottom: 2px solid transparent;
+
+    /* Forced colours paint every border, the transparent one included, so each tab would look
+       selected. Hide the unselected underline in the page colour. */
+    @media (forced-colors: active) {
+      border-bottom-color: Canvas;
+    }
   }
 
-  .tab:hover {
-    opacity: 1;
+  .tab:not(.tab-active):hover {
+    color: var(--color-base-content);
   }
 
   .tab-active {
-    opacity: 1;
     border-bottom-color: var(--color-primary);
     color: var(--text-primary);
     background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+
+    @media (forced-colors: active) {
+      border-bottom-color: CanvasText;
+    }
   }
 
   .tab:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
+
+    @media (forced-colors: active) {
+      outline-color: CanvasText;
+    }
   }
 
   .tab:disabled {
@@ -1768,6 +1788,14 @@
   .tabs-boxed .tab-active {
     background-color: var(--color-base-100);
     color: var(--color-base-content);
+
+    /* Forced colours drop the fill that marks the selected segment: paint the system selection
+       pair, as ViewToggle does. */
+    @media (forced-colors: active) {
+      forced-color-adjust: none;
+      background-color: Highlight;
+      color: HighlightText;
+    }
   }
 
   /* Tab sizes */

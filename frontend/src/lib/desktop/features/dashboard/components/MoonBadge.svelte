@@ -19,7 +19,7 @@
 </script>
 
 <div
-  class="flex items-center justify-center rounded-full bg-black/50 px-1.5 py-0.5 backdrop-blur-sm {className}"
+  class="flex items-center justify-center rounded-full bg-black/50 px-1.5 py-0.5 text-white backdrop-blur-sm {className}"
   title={translatedName}
   role="img"
   aria-label={translatedName}

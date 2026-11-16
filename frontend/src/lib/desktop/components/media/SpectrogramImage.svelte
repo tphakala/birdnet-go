@@ -14,7 +14,8 @@
   - className: Extra classes for the image container
   - alt: Alternative text for the image (default: a generic spectrogram label)
   - cover: Fill the container and crop the image to it, anchored at the bottom, instead
-    of showing the image at its natural aspect ratio (used inside fixed-height cards)
+    of showing the image at its natural aspect ratio (used inside fixed-height cards). The host is
+    a dark media surface, so the unavailable state is drawn in light colours
 -->
 
 <script lang="ts">
@@ -46,8 +47,11 @@
 <div class="spectrogram-image-container {className}" class:cover>
   {#if failed}
     <div class="spectrogram-unavailable" class:cover>
-      <XCircle class="size-5 text-[var(--color-base-content)]/30" aria-hidden="true" />
-      <span class="text-xs text-[var(--color-base-content)]/75">
+      <XCircle
+        class={cover ? 'size-5 text-white/40' : 'size-5 text-[var(--color-base-content)]/30'}
+        aria-hidden="true"
+      />
+      <span class={cover ? 'text-xs text-white/75' : 'text-xs text-[var(--color-base-content)]/75'}>
         {t('components.audio.spectrogramUnavailable')}
       </span>
     </div>
