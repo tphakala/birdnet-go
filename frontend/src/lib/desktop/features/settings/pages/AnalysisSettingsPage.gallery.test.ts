@@ -37,8 +37,6 @@ vi.mock('$lib/stores/models.svelte', () => ({
 // no-op component so it does not pull in its own network calls.
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
 
-// The Settings tab (not exercised here) reads these stores; provide minimal shapes
-// so the page's derived state initializes without touching a real settings load.
 // The live BirdNET form section, kept reachable so a test can set an unsaved value
 const { BIRDNET_FORM_DEFAULTS, settingsStores } = vi.hoisted(() => {
   const settingsStores: { birdnetSettings?: { set: (value: Record<string, unknown>) => void } } =
@@ -49,6 +47,8 @@ const { BIRDNET_FORM_DEFAULTS, settingsStores } = vi.hoisted(() => {
   };
 });
 
+// The page reads these stores; provide minimal shapes so its derived state
+// initializes without touching a real settings load.
 vi.mock('$lib/stores/settings', async () => {
   const { writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
   const settingsStore = writable({
