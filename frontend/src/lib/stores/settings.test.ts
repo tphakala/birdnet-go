@@ -2428,14 +2428,44 @@ describe('Settings Store - staged section saves', () => {
     expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(stored as Rec[]));
   });
 
-  it('does not stage an empty object, which the server merge would not clear', () => {
-    const before = formAudio().export;
-    stage({ export: {} });
-    expect(formAudio().export).toEqual(before);
-    return settingsActions.saveStagedSection('audio').then(result => {
-      expect(patchCalls()).toHaveLength(0);
-      expect(result).toMatchObject({ saved: [], failed: [], remaining: false });
-    });
+  it('reverts only the newest edit of a path when an older request fails after A, B, A', async () => {
+    const stored = savedAudio().sources;
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    failHeld = true;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: sources('B') });
+    stage({ sources: sources('A') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.failed).toEqual([]);
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('A'));
+    expect(formAudio().sources).not.toEqual(stored);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('A') });
+  });
+
+  it('keeps a path staged after a success when it was edited to the sent value again', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: sources('B') });
+    stage({ sources: sources('A') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    const second = await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(1);
+    expect(second).toMatchObject({ saved: [['sources']], failed: [], remaining: false });
   });
 
   it('keeps a saved path saved when a store listener throws after the request succeeded', async () => {
@@ -2458,6 +2488,39 @@ describe('Settings Store - staged section saves', () => {
     expect(result.remaining).toBe(false);
     expect(formAudio().sources).toEqual(inServerShape(sources('A')));
     expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it.each([
+    ['resetAllSettings', () => settingsActions.resetAllSettings()],
+    ['resetSection', () => settingsActions.resetSection('realtime')],
+  ])('%s drops staged paths so a request in flight does not resend them', async (_name, reset) => {
+    const stored = savedAudio().sources;
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    reset();
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(false);
+    expect(result.failed).toEqual([]);
+    expect(formAudio().sources).toEqual(stored);
+    const next = await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(1);
+    expect(next.saved).toEqual([]);
+  });
+
+  it('does not stage an empty object, which the server merge would not clear', () => {
+    const before = formAudio().export;
+    stage({ export: {} });
+    expect(formAudio().export).toEqual(before);
+    return settingsActions.saveStagedSection('audio').then(result => {
+      expect(patchCalls()).toHaveLength(0);
+      expect(result).toMatchObject({ saved: [], failed: [], remaining: false });
+    });
   });
 
   it('takes staged edits back when the baseline fetch fails before the first send', async () => {
