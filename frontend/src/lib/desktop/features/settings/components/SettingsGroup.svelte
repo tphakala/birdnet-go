@@ -7,7 +7,8 @@
   Props:
   - title: Group title
   - field: Auto-save field key of the group; its status shows beside the title
-  - statusId: Id of the status message, for the controls' aria-describedby
+  - statusId: Id of the status message; while the group's field shows an error the
+    group points aria-describedby at it
   - headingId: Id of the title heading; the group is labelled by it
   - labelFor: Renders the title as the label of this control id instead of a heading
   - required: Marks the labelled control as required
@@ -20,6 +21,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { cn } from '$lib/utils/cn';
+  import { autoSaveStatus } from '$lib/stores/settingsAutoSave.svelte';
   import AutoSaveStatus from './AutoSaveStatus.svelte';
 
   interface Props {
@@ -47,11 +49,14 @@
   }: Props = $props();
 
   const TITLE_CLASS = 'text-sm font-semibold text-[var(--color-base-content)]';
+
+  let failed = $derived(field !== undefined && autoSaveStatus(field).state === 'error');
 </script>
 
 <section
   class={cn('min-w-0 space-y-3', className)}
   aria-labelledby={labelFor ? undefined : headingId}
+  aria-describedby={failed ? statusId : undefined}
 >
   <div class="flex min-h-6 items-center justify-between gap-3">
     {#if heading}
