@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
+import { settingsActions } from '$lib/stores/settings';
 import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
 import SettingsTabs, { type TabDefinition } from './SettingsTabs.svelte';
 
@@ -107,6 +108,7 @@ describe('SettingsTabs save mode', () => {
   });
 
   afterEach(() => {
+    resetAutoSaveForTest();
     vi.restoreAllMocks();
     window.history.replaceState(null, '', '/');
   });
@@ -134,7 +136,16 @@ describe('SettingsTabs save mode', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'settings.autoSave.failuresSummary'
     );
-    resetAutoSaveForTest();
+  });
+
+  it('says Saving in the status line while a field waits for its save', async () => {
+    vi.spyOn(settingsActions, 'stageSectionEdit').mockImplementation(() => undefined);
+    vi.spyOn(settingsActions, 'saveStagedSection').mockReturnValue(new Promise(() => undefined));
+    renderWithBar([modeTab('live', 'immediate')], 'live');
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('settings.actions.saving');
   });
 
   it('treats a tab without a save mode as manual', () => {

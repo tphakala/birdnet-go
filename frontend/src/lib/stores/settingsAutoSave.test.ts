@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AudioSourceConfig, StagedSaveResult, DroppedStagedEdit } from './settings';
 import { deferred } from '../../test/async-helpers';
+import { ApiError } from '$lib/utils/api';
+import { SettingsChangedElsewhereError } from './settings';
 
 type DropListener = (edits: DroppedStagedEdit[]) => void;
 
@@ -152,22 +154,31 @@ describe('settings auto save engine', () => {
     expect(autoSaveStatus('audio:a:models').state).toBe('idle');
   });
 
-  it('marks only the fields that own a dropped path', async () => {
+  it('marks only the fields that own a dropped path, in one shared request', async () => {
     store.saveStagedSection.mockResolvedValueOnce({
       ...OK,
       saved: [['equalizer']],
       dropped: [['sources']],
     });
-    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+    commitSetting(
+      'audio',
+      { sources: [] },
+      {
+        field: 'audio:a:models',
+        debounceMs: AUTOSAVE_DEBOUNCE_MS,
+      }
+    );
     commitSetting(
       'audio',
       { equalizer: { enabled: true, filters: [] } },
       {
         field: 'audio:a:equalizer',
+        debounceMs: AUTOSAVE_DEBOUNCE_MS,
       }
     );
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
 
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
     expect(autoSaveStatus('audio:a:models')).toEqual({
       state: 'error',
       message: 'settings.autoSave.changedElsewhere',
@@ -292,5 +303,92 @@ describe('settings auto save engine', () => {
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS * 2);
 
     expect(autoSaveStatus('audio:a:gain').state).toBe('error');
+  });
+
+  it('keeps a field on Saving while a newer commit of it waits for the next request', async () => {
+    const first = deferred<StagedSaveResult>();
+    const second = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    commitSetting('audio', { sources: [source({ gain: 1 })] }, { field: 'audio:a:gain' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting('audio', { sources: [source({ gain: 2 })] }, { field: 'audio:a:gain' });
+
+    first.resolve(saved(['sources']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(autoSaveStatus('audio:a:gain').state).toBe('saving');
+
+    second.resolve(saved(['sources']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(autoSaveStatus('audio:a:gain').state).toBe('saved');
+  });
+
+  it('holds a debounced commit made during a request until its quiet time ends', async () => {
+    const first = deferred<StagedSaveResult>();
+    store.saveStagedSection.mockReturnValueOnce(first.promise);
+    commitSetting('audio', { sources: [source()] }, { field: 'audio:a:models' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting(
+      'audio',
+      { sources: [source({ gain: 4 })] },
+      {
+        field: 'audio:a:gain',
+        debounceMs: AUTOSAVE_DEBOUNCE_MS,
+      }
+    );
+
+    first.resolve({ ...saved(['sources']), remaining: true });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS / 2);
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not loop on a result that is not done but made no progress', async () => {
+    store.saveStagedSection.mockResolvedValue({ ...OK, remaining: true });
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.saveStagedSection).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Saved when the section had nothing to send', async () => {
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:models' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(autoSaveStatus('audio:a:models').state).toBe('saved');
+  });
+
+  it('shows the server message of an error with a key and the conflict text of a conflict', async () => {
+    const serverError = new ApiError('Name is already used', 400, new Response());
+    serverError.errorKey = 'settings.errors.duplicateName';
+    store.saveStagedSection
+      .mockResolvedValueOnce({ ...OK, failed: [['sources']], error: serverError })
+      .mockResolvedValueOnce({
+        ...OK,
+        failed: [['equalizer']],
+        error: new SettingsChangedElsewhereError(),
+      });
+
+    commitSetting('audio', { sources: [] }, { field: 'audio:a:name' });
+    await vi.advanceTimersByTimeAsync(0);
+    commitSetting(
+      'audio',
+      { equalizer: { enabled: true, filters: [] } },
+      {
+        field: 'audio:a:equalizer',
+      }
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(autoSaveStatus('audio:a:name')).toEqual({
+      state: 'error',
+      message: 'Name is already used',
+    });
+    expect(autoSaveStatus('audio:a:equalizer')).toEqual({
+      state: 'error',
+      message: 'settings.errors.changedElsewhere',
+    });
   });
 });
