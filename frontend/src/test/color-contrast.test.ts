@@ -585,47 +585,32 @@ describe('Status text rules', () => {
       )
     );
 
-    const neutralBodies = ruleBodies(pillSource, '.status-pill:global(.badge-status-neutral)');
-    const share = (body: string, property: string): number => {
-      // eslint-disable-next-line security/detect-non-literal-regexp -- property is a fixed literal from the callers below
-      const match = new RegExp(
-        `(?<![\\w-])${property}:\\s*color-mix\\(in srgb, var\\(--color-base-content\\) (\\d+)%, transparent\\)`
-      ).exec(body);
-      expect(match, `${property} is a base-content mix`).not.toBeNull();
-      return Number(match?.[1]) / 100;
-    };
+    /** Percentage of every `<prefix>-[color:color-mix(in_srgb,<fill>_N%,transparent)]` utility. */
+    const mixShares = (prefix: string, fill: string): number[] =>
+      [
+        ...pillSource.matchAll(
+          // eslint-disable-next-line security/detect-non-literal-regexp -- prefix and fill are fixed literals from the callers below
+          new RegExp(
+            `'${prefix}-\\[color:color-mix\\(in_srgb,${fill}_(\\d+)%,transparent\\)\\]`,
+            'g'
+          )
+        ),
+      ].map(match => Number(match[1]));
 
-    const neutralDotBodies = ruleBodies(
-      pillSource,
-      '.status-pill:global(.badge-status-neutral) .status-pill-dot'
-    );
-
-    it('keeps the status border share, solid dot and the neutral recipe at their old values', () => {
-      expect(ruleBodies(pillSource, '.status-pill')).toHaveLength(1);
-      expect(ruleBodies(pillSource, '.status-pill')[0]).toContain(
-        'border-color: color-mix(in srgb, var(--status-fill) 30%, transparent)'
-      );
-      expect(
-        ruleBodies(pillSource, '.status-pill-dot').filter(body =>
-          body.includes('background-color: var(--status-fill);')
-        )
-      ).toHaveLength(1);
-
-      expect(neutralBodies).toHaveLength(1);
-      expect(share(neutralBodies[0], 'background')).toBe(0.08);
-      expect(share(neutralBodies[0], 'color')).toBe(0.7);
-      expect(share(neutralBodies[0], 'border-color')).toBe(0.15);
-      expect(neutralDotBodies).toHaveLength(1);
-      expect(share(neutralDotBodies[0], 'background-color')).toBe(0.4);
+    it('holds no per-status colour token, only --status-fill', () => {
+      expect(pillSource).not.toMatch(/--(?:color|text)-(?:success|warning|error|info)\b/);
     });
 
-    it('holds no per-status colour token and draws its border and dot from --status-fill', () => {
-      expect(pillSource).not.toMatch(/--(?:color|text)-(?:success|warning|error|info)\b/);
-      for (const selector of ['.status-pill', '.status-pill-dot']) {
-        const bodies = ruleBodies(pillSource, selector);
-        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
-        expect(bodies.some(body => body.includes('var(--status-fill)'))).toBe(true);
-      }
+    it('keeps the status border share and solid dot, both drawn from --status-fill', () => {
+      expect(mixShares('border', 'var\\(--status-fill\\)')).toEqual([30]);
+      expect(pillSource).toContain("'bg-[color:var(--status-fill)]'");
+    });
+
+    it('keeps the neutral recipe at 8% tint, 70% text, 15% border and 40% dot', () => {
+      const base = 'var\\(--color-base-content\\)';
+      expect(mixShares('bg', base)).toEqual([8, 40]);
+      expect(mixShares('text', base)).toEqual([70]);
+      expect(mixShares('border', base)).toEqual([15]);
     });
 
     for (const [name, block] of [
@@ -634,11 +619,14 @@ describe('Status text rules', () => {
     ] as const) {
       for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
         it(`neutral pill text passes AA on its tint over ${surface} in the ${name} theme`, () => {
-          expect(neutralBodies).toHaveLength(1);
+          const base = 'var\\(--color-base-content\\)';
           const content = readVar(block, '--color-base-content');
-          const base = readVar(block, surface);
-          const tint = applyOpacity(content, base, share(neutralBodies[0], 'background'));
-          const text = applyOpacity(content, tint, share(neutralBodies[0], 'color'));
+          const tint = applyOpacity(
+            content,
+            readVar(block, surface),
+            mixShares('bg', base)[0] / 100
+          );
+          const text = applyOpacity(content, tint, mixShares('text', base)[0] / 100);
           expect(getContrastRatio(text, tint)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
         });
       }
