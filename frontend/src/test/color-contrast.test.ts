@@ -1648,10 +1648,16 @@ describe('Text dimmed through its colour', () => {
     expect(ruleBodies(toolbar, '.audio-toolbar')[0]).toContain('background: var(--color-base-200)');
   });
 
-  it('the tab rules keep their forced-colours indicators', () => {
-    expect(ruleBodies(css, '.tab')[0]).toContain('border-bottom-color: Canvas');
-    expect(ruleBodies(css, '.tab-active')[0]).toContain('border-bottom-color: CanvasText');
-    expect(ruleBodies(css, '.tabs-boxed .tab-active')[0]).toContain('background-color: Highlight');
+  it('the tab rules set their forced-colours indicators inside a forced-colors query', () => {
+    const forced = (declarations: string) =>
+      // eslint-disable-next-line security/detect-non-literal-regexp -- declarations are literals written in this test
+      new RegExp(`@media \\(forced-colors: active\\) \\{\\s*${declarations}\\s*$`);
+    expect(ruleBodies(css, '.tab')[0]).toMatch(forced('border-bottom-color: Canvas;'));
+    expect(ruleBodies(css, '.tab-active')[0]).toMatch(forced('border-bottom-color: CanvasText;'));
+    expect(ruleBodies(css, '.tab:focus-visible')[0]).toMatch(forced('outline-color: CanvasText;'));
+    expect(ruleBodies(css, '.tabs-boxed .tab-active')[0]).toMatch(
+      forced('forced-color-adjust: none;\\s*background-color: Highlight;\\s*color: HighlightText;')
+    );
   });
 });
 
@@ -1671,11 +1677,14 @@ describe('Detection card media surface', () => {
   );
   const TOKENS = ['--media-surface-from', '--media-surface-to'];
 
-  /** Alpha of an `rgb(255 255 255 / A)` colour declared by the rule `selector`. */
-  function whiteAlpha(source: string, selector: string): number {
-    const value = colorValues(ruleBodies(source, selector))[0];
-    const match = /^rgb\(255 255 255 \/ ([\d.]+)\)$/.exec(value);
-    expect(match, `${selector} is white with an alpha`).not.toBeNull();
+  /** Alpha of the `rgb(255 255 255 / A)` colour that rule `selector` sets as `property`. */
+  function whiteAlpha(source: string, selector: string, property = 'color'): number {
+    const body = ruleBodies(source, selector)[0];
+    // eslint-disable-next-line security/detect-non-literal-regexp -- property is one of two fixed names used by the callers
+    const match = new RegExp(`(?:^|[\\s;{])${property}:\\s*rgb\\(255 255 255 / ([\\d.]+)\\)`).exec(
+      body
+    );
+    expect(match, `${selector} sets ${property} to white with an alpha`).not.toBeNull();
     return Number(match?.[1]);
   }
 
@@ -1690,11 +1699,39 @@ describe('Detection card media surface', () => {
   it('is drawn from the two tokens by both card variants, with no dark-theme override', () => {
     for (const file of cardFiles) {
       const source = stripComments(read(file));
-      const surface = ruleBodies(source, '.spectrogram-error')[0];
-      expect(surface, `${file}`).toContain('var(--media-surface-from)');
-      expect(surface, `${file}`).toContain('var(--media-surface-to)');
+      // The grouped rule covers the container, the loading overlay and the error overlay
+      expect(source, `${file}`).toMatch(
+        /\.spectrogram-container,\s*\.spectrogram-loading,\s*\.spectrogram-error\s*\{[^}]*var\(--media-surface-from\)[^}]*var\(--media-surface-to\)/
+      );
       expect(source, `${file}`).not.toContain("[data-theme='dark']");
       expect(source, `${file}`).not.toMatch(/text-\[var\(--color-base-content\)\]/);
+    }
+  });
+
+  it('keeps the status badges of the species bar at 4.5:1 on both stops in both themes', () => {
+    for (const [selector, token] of [
+      ['.unlikely-badge', '--color-warning'],
+      ['.false-positive-badge', '--color-error'],
+    ]) {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- token is one of two fixed names above
+      const fill = new RegExp(
+        `background-color:\\s*color-mix\\(in srgb, var\\(${token}\\) (\\d+)%, transparent\\)`
+      );
+      const share = fill.exec(ruleBodies(infoBar, selector)[0]);
+      expect(share, `${selector} fills with a share of ${token}`).not.toBeNull();
+      expect(ruleBodies(infoBar, selector)[0]).toContain(`color: var(${token}-content)`);
+      for (const theme of ['light', 'dark'] as const) {
+        const tokenIn = (name: string) =>
+          (theme === 'dark' ? findVar(darkBlock, name) : null) ??
+          readVar(blockBody(css, '@theme'), name);
+        for (const stop of TOKENS.map(name => readVar(rootBlock, name))) {
+          const backdrop = applyOpacity(tokenIn(token), stop, Number(share?.[1]) / 100);
+          expect(
+            getContrastRatio(tokenIn(`${token}-content`), backdrop),
+            `${selector} in the ${theme} theme on ${stop}`
+          ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        }
+      }
     }
   });
 
@@ -1703,34 +1740,30 @@ describe('Detection card media surface', () => {
       file,
       whiteAlpha(stripComments(read(file)), '.spectrogram-placeholder'),
     ]);
-    const stops = TOKENS.map(token => readVar(rootBlock, token));
-    for (const theme of ['light', 'dark'] as const) {
-      const tokenIn = (name: string) =>
-        (theme === 'dark' ? findVar(darkBlock, name) : null) ??
-        readVar(blockBody(css, '@theme'), name);
-      for (const stop of stops) {
-        const texts = {
-          name: '#ffffff',
-          subLabel: applyOpacity('#ffffff', stop, whiteAlpha(infoBar, '.scientific-name')),
-          relativeTime: applyOpacity('#ffffff', stop, whiteAlpha(infoBar, '.relative-time')),
-        };
-        for (const [what, text] of Object.entries(texts)) {
-          expect(getContrastRatio(text, stop), `${what} on ${stop}`).toBeGreaterThanOrEqual(
-            WCAG_AA_NORMAL
-          );
-        }
-        // Unverified badge: warning-content on warning at 90% over the surface
-        const badge = applyOpacity(tokenIn('--color-warning'), stop, 0.9);
+    const badgeText = whiteAlpha(infoBar, '.unverified-badge');
+    const badgeFill = whiteAlpha(infoBar, '.unverified-badge', 'background-color');
+    for (const stop of TOKENS.map(token => readVar(rootBlock, token))) {
+      const texts = {
+        name: '#ffffff',
+        subLabel: applyOpacity('#ffffff', stop, whiteAlpha(infoBar, '.scientific-name')),
+        relativeTime: applyOpacity('#ffffff', stop, whiteAlpha(infoBar, '.relative-time')),
+      };
+      for (const [what, text] of Object.entries(texts)) {
+        expect(getContrastRatio(text, stop), `${what} on ${stop}`).toBeGreaterThanOrEqual(
+          WCAG_AA_NORMAL
+        );
+      }
+      // Unverified badge: translucent white text on its own translucent white fill over the stop
+      const badgeBackdrop = applyOpacity('#ffffff', stop, badgeFill);
+      expect(
+        getContrastRatio(applyOpacity('#ffffff', badgeBackdrop, badgeText), badgeBackdrop),
+        `unverified badge on ${stop}`
+      ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      for (const [file, alpha] of statusAlphas) {
         expect(
-          getContrastRatio(tokenIn('--color-warning-content'), badge),
-          `${theme} unverified badge on ${stop}`
+          getContrastRatio(applyOpacity('#ffffff', stop, alpha), stop),
+          `${file} status text on ${stop}`
         ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-        for (const [file, alpha] of statusAlphas) {
-          expect(
-            getContrastRatio(applyOpacity('#ffffff', stop, alpha), stop),
-            `${file} status text on ${stop}`
-          ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-        }
       }
     }
   });

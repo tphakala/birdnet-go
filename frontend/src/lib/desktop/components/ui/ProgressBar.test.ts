@@ -383,6 +383,15 @@ describe('ProgressBar', () => {
       expect(chipOf(container)).toHaveClass(expected);
     });
 
+    it('gives both label copies the same box so they stay aligned at the fill edge', () => {
+      const { container } = progressTest.render({ value: 50, showLabel: true, striped: true });
+      const track = container.querySelector('[data-label-part="track"] span');
+
+      expect(track?.className).toBe(
+        chipOf(container)?.className.replace(' bg-[var(--color-primary)]', '')
+      );
+    });
+
     it('leaves the chip of an unstriped bar without a background', () => {
       const { container } = progressTest.render({ value: 90, showLabel: true });
 
