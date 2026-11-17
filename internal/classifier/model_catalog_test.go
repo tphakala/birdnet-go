@@ -519,6 +519,16 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.True(t, entry.CommercialUse, "birdnet-v3.0 is CC-BY-SA-4.0, which permits commercial use")
 }
 
+func TestGetCatalogEntry_BirdNETPlusV30(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok, "expected to find catalog entry birdnet-plus-v3.0")
+	assert.Equal(t, "BirdNET+ v3.0", entry.Name)
+	assert.Contains(t, entry.Description, "BirdNET+ v3.0 ", "the description names the model with the lowercase v")
+	assert.Equal(t, RegistryIDBirdNETPlusV3, entry.RegistryID)
+}
+
 // TestEmbeddedCatalog_VariantRequirementsPopulated pins the per-variant MinRAMMB
 // floors, the fp16 exclude token, and the BirdNET v3.0 benchmark data. These
 // values are mirrored from the acoustic-models manifests and drive the hardware
