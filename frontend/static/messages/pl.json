@@ -5788,6 +5788,7 @@
         "soundCardsHeading": "Karty dźwiękowe",
         "streamsHeading": "Strumienie",
         "alreadyOn": "Już analizuje modelem {name}.",
+        "followsDefaultsRuns": "Korzysta z modeli domyślnych, wśród których jest {name}.",
         "followsDefaultsAdd": "Korzysta z modeli domyślnych. Włączenie zachowa je i doda {name}.",
         "batStreamWarning": "Modele nietoperzy wymagają strumienia z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz; BSG-BAT wymaga co najmniej 192 kHz. Typowy strumień z kamery nie zawiera ultradźwięków, więc przetestuj strumień w ustawieniach dźwięku, zanim na nim polegasz.",
         "allRunning": "Wszystkie źródła dźwięku już analizują modelem {name}. Nie ma nic do zmiany.",

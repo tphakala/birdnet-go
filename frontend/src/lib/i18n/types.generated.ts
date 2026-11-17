@@ -4270,6 +4270,7 @@ export type TranslationKey =
   | 'wizard.steps.enableOnSources.soundCardsHeading'
   | 'wizard.steps.enableOnSources.streamsHeading'
   | 'wizard.steps.enableOnSources.alreadyOn' // params: name
+  | 'wizard.steps.enableOnSources.followsDefaultsRuns' // params: name
   | 'wizard.steps.enableOnSources.followsDefaultsAdd' // params: name
   | 'wizard.steps.enableOnSources.batStreamWarning'
   | 'wizard.steps.enableOnSources.allRunning' // params: name
@@ -5263,6 +5264,7 @@ export type TranslationParams = {
   'wizard.steps.detection.descriptionStored': { threshold: string | number };
   'wizard.steps.enableOnSources.intro': { name: string | number };
   'wizard.steps.enableOnSources.alreadyOn': { name: string | number };
+  'wizard.steps.enableOnSources.followsDefaultsRuns': { name: string | number };
   'wizard.steps.enableOnSources.followsDefaultsAdd': { name: string | number };
   'wizard.steps.enableOnSources.allRunning': { name: string | number };
   'wizard.steps.enableOnSources.notListed': { name: string | number };

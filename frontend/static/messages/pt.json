@@ -5788,6 +5788,7 @@
         "soundCardsHeading": "Placas de som",
         "streamsHeading": "Fluxos",
         "alreadyOn": "Já analisa com {name}.",
+        "followsDefaultsRuns": "Usa os modelos predefinidos, que incluem {name}.",
         "followsDefaultsAdd": "Usa os modelos predefinidos. Ao ativar, estes mantêm-se e {name} é adicionado.",
         "batStreamWarning": "Os modelos de morcegos precisam de um fluxo com um codec sem perdas (PCM) e uma taxa de amostragem de pelo menos 96 kHz; o BSG-BAT precisa de pelo menos 192 kHz. Um fluxo de câmara típico não é ultrassónico, por isso teste o fluxo nas definições de áudio antes de confiar nele.",
         "allRunning": "Todas as fontes de áudio já analisam com {name}. Não há nada a alterar.",

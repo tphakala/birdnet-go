@@ -5788,6 +5788,7 @@
         "soundCardsHeading": "Schede audio",
         "streamsHeading": "Stream",
         "alreadyOn": "Analizza già con {name}.",
+        "followsDefaultsRuns": "Usa i modelli predefiniti, che includono {name}.",
         "followsDefaultsAdd": "Usa i modelli predefiniti. Attivandolo vengono mantenuti e si aggiunge {name}.",
         "batStreamWarning": "I modelli per pipistrelli richiedono uno stream con codec senza perdita (PCM) e una frequenza di campionamento di almeno 96 kHz; BSG-BAT richiede almeno 192 kHz. Un normale stream di una telecamera non è ultrasonico, quindi prova lo stream nelle impostazioni audio prima di farci affidamento.",
         "allRunning": "Tutte le sorgenti audio analizzano già con {name}. Non c’è nulla da cambiare.",

@@ -5788,6 +5788,7 @@
         "soundCardsHeading": "Hangkártyák",
         "streamsHeading": "Streamek",
         "alreadyOn": "Már elemez a következővel: {name}.",
+        "followsDefaultsRuns": "Az alapértelmezett modelleket használja, amelyek között ott van a(z) {name}.",
         "followsDefaultsAdd": "Az alapértelmezett modelleket használja. Bekapcsoláskor ezek megmaradnak, és a(z) {name} is hozzáadódik.",
         "batStreamWarning": "A denevérmodellekhez veszteségmentes kodekkel (PCM) és legalább 96 kHz mintavételi frekvenciával rendelkező stream kell; a BSG-BAT legalább 192 kHz-et igényel. Egy átlagos kamerastream nem ultrahangos, ezért tesztelje a streamet a hangbeállításokban, mielőtt számítana rá.",
         "allRunning": "Minden hangforrás már elemez a következővel: {name}. Nincs mit módosítani.",

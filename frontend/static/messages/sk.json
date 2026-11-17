@@ -5788,6 +5788,7 @@
         "soundCardsHeading": "Zvukové karty",
         "streamsHeading": "Streamy",
         "alreadyOn": "Už analyzuje modelom {name}.",
+        "followsDefaultsRuns": "Používa predvolené modely, medzi ktoré patrí {name}.",
         "followsDefaultsAdd": "Používa predvolené modely. Zapnutím sa zachovajú a pridá sa {name}.",
         "batStreamWarning": "Modely netopierov potrebujú stream s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz; BSG-BAT potrebuje aspoň 192 kHz. Bežný stream z kamery nie je ultrazvukový, preto stream pred použitím otestujte v nastaveniach zvuku.",
         "allRunning": "Všetky zvukové zdroje už analyzujú modelom {name}. Nie je čo meniť.",

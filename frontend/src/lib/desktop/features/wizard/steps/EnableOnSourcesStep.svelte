@@ -174,7 +174,8 @@
   }
 
   function rowDescription(row: SourceRow): string {
-    if (row.runs && row.followsDefaults) return t('settings.audio.models.followsDefaults');
+    if (row.runs && row.followsDefaults)
+      return t('wizard.steps.enableOnSources.followsDefaultsRuns', { name: modelName });
     if (row.runs) return t('wizard.steps.enableOnSources.alreadyOn', { name: modelName });
     if (row.followsDefaults)
       return t('wizard.steps.enableOnSources.followsDefaultsAdd', { name: modelName });

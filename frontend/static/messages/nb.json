@@ -5788,6 +5788,7 @@
         "soundCardsHeading": "Lydkort",
         "streamsHeading": "Strømmer",
         "alreadyOn": "Analyserer allerede med {name}.",
+        "followsDefaultsRuns": "Bruker standardmodellene, som omfatter {name}.",
         "followsDefaultsAdd": "Bruker standardmodellene. Når du slår dette på, beholdes de, og {name} legges til.",
         "batStreamWarning": "Flaggermusmodeller trenger en strøm med en tapsfri kodek (PCM) og en samplingsfrekvens på minst 96 kHz; BSG-BAT trenger minst 192 kHz. En vanlig kamerastrøm er ikke ultralyd, så test strømmen i lydinnstillingene før du stoler på den.",
         "allRunning": "Alle lydkilder analyserer allerede med {name}. Det er ingenting å endre.",

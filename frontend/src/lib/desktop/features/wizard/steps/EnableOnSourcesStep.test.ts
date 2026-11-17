@@ -199,6 +199,16 @@ describe('EnableOnSourcesStep', () => {
     });
   });
 
+  it('describes a locked default-following source by the model it already runs', async () => {
+    seed([card('Default', []), card('Garden', ['birdnet'])]);
+    await renderLoaded();
+
+    expect(sourceSwitch('Default')).toHaveAccessibleDescription(
+      expect.stringContaining(`${KEY}.followsDefaultsRuns`)
+    );
+    expect(t).toHaveBeenCalledWith(`${KEY}.followsDefaultsRuns`, { name: 'Perch v2' });
+  });
+
   it('writes the defaults plus the model for a default following source that does not run it', async () => {
     // Bat models are schedule gated, so they are not default targets (orchestrator.go DefaultTargets)
     serveModels([BIRDNET, PERCH, BAT]);
