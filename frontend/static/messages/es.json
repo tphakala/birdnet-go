@@ -2544,12 +2544,12 @@
           "title": "Umbral dinámico",
           "description": "Ajustar automáticamente la sensibilidad de detección basada en observaciones previas",
           "enable": {
-            "label": "Habilitar umbral dinámico (función específica de BirdNET-Go)",
-            "helpText": "Habilita la función de umbral de confianza dinámico para una detección de cantos de aves más adaptativa."
+            "label": "Habilitar umbral dinámico",
+            "helpText": "Reduce el umbral de confianza para una especie después de que haya sido detectada con alta confianza."
           },
           "trigger": {
             "label": "Umbral de activación",
-            "helpText": "El nivel de confianza en el que se activa el umbral dinámico. Si se detecta un canto de ave con confianza superior a este valor, el umbral para coincidencias positivas de esa especie se reducirá para cantos posteriores."
+            "helpText": "El nivel de confianza en el que se activa el umbral dinámico. Si se detecta una especie con confianza superior a este valor, el umbral para coincidencias positivas de esa especie se reducirá para detecciones posteriores."
           },
           "minimum": {
             "label": "Umbral dinámico mínimo",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Este dispositivo no puede seguir el ritmo del análisis",
           "overloadedNotice": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} supera la capacidad medida de este dispositivo incluso sin superposición. El análisis puede retrasarse y pueden perderse detecciones. Active menos modelos o fuentes de audio, o elija una variante de modelo más rápida.",
           "unknownLatency": "No se pudo medir el tiempo de procesamiento de {models}, por lo que no se tiene en cuenta al limitar la superposición. El análisis aún puede retrasarse.",
-          "cpuNote": "Una intensidad mayor analiza el audio superpuesto con más frecuencia, lo que consume tiempo de CPU por cada modelo y fuente de audio activados. BirdNET-Go limita automáticamente la superposición a lo que este dispositivo puede procesar."
+          "cpuNote": "Una intensidad mayor analiza el audio superpuesto con más frecuencia, lo que consume tiempo de CPU por cada clasificador activado al que se aplica este filtro y por cada fuente de audio. BirdNET-Go limita automáticamente la superposición a lo que este dispositivo puede procesar."
         },
         "rangeFilter": {
           "title": "Filtro de rango",
@@ -5784,23 +5784,20 @@
   "analysis": {
     "title": "Análisis",
     "tabs": {
-      "settings": "Ajustes",
-      "models": "Modelos"
+      "models": "Modelos",
+      "detection": "Detección",
+      "bats": "Murciélagos",
+      "inference": "Inferencia",
+      "filters": "Filtros"
     },
     "detection": {
       "title": "Configuración de detección",
       "description": "Configurar umbrales de confianza para la clasificación de especies.",
-      "confidenceThreshold": {
-        "label": "Umbral de confianza",
-        "helpText": "Puntuación mínima de confianza (0.0 - 1.0) requerida para registrar una detección."
-      },
       "batThreshold": {
-        "label": "Umbral de detección de murciélagos (BattyBirdNET)",
-        "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BattyBirdNET. BSG-BAT tiene su propio umbral."
+        "label": "Umbral de detección de murciélagos (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Umbral de detección de murciélagos (BSG-BAT)",
-        "helpText": "Puntuación de confianza mínima para las detecciones de especies de murciélagos de BSG-BAT.",
         "sampleRateWarning": "Las grabaciones a 192 kHz funcionan, pero las especies que emiten por encima de 96 kHz no se pueden identificar y las puntuaciones son menos fiables. Se recomienda una frecuencia de captura de 384 kHz."
       },
       "bsgBatStep": {
@@ -5841,27 +5838,9 @@
       "locale": {
         "label": "Idioma de especies",
         "helpText": "Idioma utilizado para los nombres comunes de especies en la interfaz."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Umbral de confianza de BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "El filtro de rango se aplica solo a clasificadores de aves. Los modelos de murciélagos usan sus propias listas de especies.",
       "status": {
         "title": "Resumen del filtro de rango",
         "geomodelInfo": "BirdNET Geomodelo {version} - {species} especies conocidas",
@@ -5876,13 +5855,13 @@
         "noFilter": "Ningún filtro de rango activo",
         "passUnmapped": {
           "label": "Permitir especies sin datos de rango",
-          "helpText": "Permitir detecciones de especies para las que el geomodelo no tiene datos geográficos. Cuando está desactivado, estas especies siempre se filtran."
+          "helpText": "Permitir detecciones de especies para las que el geomodelo no tiene datos geográficos. Cuando está desactivado, estas especies siempre se filtran. Esto solo afecta a los clasificadores a los que se aplica el filtro de rango."
         }
       }
     },
     "advanced": {
       "title": "Avanzado",
-      "description": "Configuración de procesamiento y modelos personalizados."
+      "description": "Archivos de modelo y etiquetas personalizados."
     },
     "downloadSource": {
       "title": "Origen de descarga",
@@ -5896,7 +5875,7 @@
     },
     "gallery": {
       "title": "Galería de modelos",
-      "description": "Gestionar modelos clasificadores para la detección de aves y murciélagos.",
+      "description": "Gestionar los modelos clasificadores.",
       "region": {
         "title": "Región del modelo",
         "modeAuto": "Automático",
@@ -6081,28 +6060,89 @@
         "licenseNote": "El cambio se realiza dentro del mismo modelo, por lo que su licencia no cambia."
       }
     },
-    "bird": {
-      "title": "Detección de aves",
-      "description": "Configure el umbral de confianza, el idioma de especies y el filtrado de falsos positivos para clasificadores de aves."
-    },
     "bat": {
       "title": "Detección de murciélagos",
-      "description": "Configure el umbral, la programación y el filtrado de falsos positivos para clasificadores de murciélagos."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "El umbral dinámico se aplica solo a clasificadores de aves."
+      "description": "Programación, validación y filtrado de falsos positivos para clasificadores de murciélagos."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "Detección de BirdNET+ V3.0",
-      "description": "Establece un umbral de confianza específico para las detecciones de BirdNET+ V3.0, independiente del umbral principal de BirdNET."
+      "title": "Detección de BirdNET+ V3.0"
+    },
+    "thresholds": {
+      "title": "Umbrales de detección",
+      "description": "Confianza mínima que necesita una detección para ser registrada, para cada clasificador activado.",
+      "category": {
+        "bat": "Murciélagos"
+      },
+      "state": {
+        "pending": "Cargando",
+        "failed": "Error al cargar"
+      },
+      "empty": "No hay clasificadores activados.",
+      "shared": {
+        "label": "Umbral compartido",
+        "usedBy": "Utilizado por cada clasificador sin un umbral personalizado: {models}.",
+        "unused": "Utilizado por cada clasificador sin un umbral personalizado. Ningún clasificador activado lo usa ahora mismo."
+      },
+      "customSwitch": "Umbral personalizado",
+      "usesShared": "Usa el umbral compartido"
+    },
+    "speciesNames": {
+      "title": "Nombres de especies",
+      "description": "Cómo se nombran las especies detectadas en la interfaz."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Entorno de inferencia",
+        "description": "Qué entorno de ejecución y dispositivo ejecutan los clasificadores, y cuántos hilos de CPU utilizan."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Automático elige el entorno de ejecución más rápido compatible con este dispositivo para cada modelo.",
+        "options": {
+          "auto": "Automático (recomendado)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "Dispositivo OpenVINO",
+        "helpText": "Se usa para los modelos que se ejecutan en OpenVINO.",
+        "options": {
+          "auto": "Automático",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Cambiar el backend o el dispositivo recarga los modelos, por lo que la detección se pausa unos segundos.",
+      "backendsLoading": "Comprobando qué entornos de ejecución admite este dispositivo.",
+      "backendsUnavailable": "No se pudo leer qué entornos de ejecución admite este dispositivo. El backend y el dispositivo se pueden cambiar cuando cargue.",
+      "running": {
+        "title": "En ejecución",
+        "description": "El entorno de ejecución y la precisión con los que se ejecuta cada clasificador activado.",
+        "unknown": "No informado"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Se aplica a todos los clasificadores, incluidos los de murciélagos. Las especies con su propio umbral personalizado no se ajustan.",
+      "speciesNames": "Se aplica a todos los clasificadores. Una especie sin nombre en el idioma elegido conserva el nombre de su clasificador.",
+      "falsePositiveFilter": "Se aplica a todos los clasificadores excepto a los de murciélagos, que tienen su propio filtro de falsos positivos.",
+      "falsePositiveFilterBatTab": "Se aplica a todos los clasificadores excepto a los de murciélagos, que tienen su propio filtro de falsos positivos en la pestaña Murciélagos.",
+      "rangeFilter": {
+        "appliesTo": "Se aplica a {models}.",
+        "notApplied": "Sin filtro de rango: {models}.",
+        "generic": "Se aplica a los clasificadores compatibles con el modelo de rango. Los clasificadores de murciélagos nunca se filtran por rango.",
+        "needsLocation": "Solo funciona cuando está establecida la ubicación de la estación."
+      },
+      "bat": "Se aplica solo a los clasificadores de murciélagos."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "El umbral mínimo no debe superar el umbral de activación."
     }
   },
   "restart": {

@@ -401,6 +401,27 @@ describe('ToggleField off-state track contrast', () => {
 });
 
 describe('ToggleField naming and description', () => {
+  it('reads the context label before its own label in the accessible name', () => {
+    const context = document.createElement('span');
+    context.id = 'row-heading';
+    context.textContent = 'Google Perch v2';
+    document.body.append(context);
+
+    render(ToggleField, {
+      props: {
+        label: 'Custom threshold',
+        contextLabelId: 'row-heading',
+        value: false,
+        onUpdate: vi.fn(),
+      },
+    });
+
+    expect(
+      screen.getByRole('switch', { name: 'Google Perch v2 Custom threshold' })
+    ).toBeInTheDocument();
+    context.remove();
+  });
+
   it('aria-describedby points at the rendered description', () => {
     render(ToggleField, {
       props: {

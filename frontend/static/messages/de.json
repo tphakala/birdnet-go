@@ -2544,12 +2544,12 @@
           "title": "Dynamischer Schwellenwert",
           "description": "Erkennungsempfindlichkeit automatisch basierend auf vorherigen Beobachtungen anpassen",
           "enable": {
-            "label": "Dynamischen Schwellenwert aktivieren (BirdNET-Go-spezifische Funktion)",
-            "helpText": "Aktiviert die dynamische Konfidenzschwellenwert-Funktion für adaptivere Vogelruferkennung."
+            "label": "Dynamischen Schwellenwert aktivieren",
+            "helpText": "Senkt den Konfidenzschwellenwert für eine Art, nachdem sie mit hoher Konfidenz erkannt wurde."
           },
           "trigger": {
             "label": "Auslöseschwellenwert",
-            "helpText": "Das Konfidenzniveau, bei dem der dynamische Schwellenwert aktiviert wird. Wenn ein Vogelruf mit einer Konfidenz über diesem Wert erkannt wird, wird der Schwellenwert für positive Übereinstimmungen dieser Art für nachfolgende Rufe gesenkt."
+            "helpText": "Das Konfidenzniveau, bei dem der dynamische Schwellenwert aktiviert wird. Wenn eine Art mit einer Konfidenz über diesem Wert erkannt wird, wird der Schwellenwert für positive Übereinstimmungen dieser Art für nachfolgende Erkennungen gesenkt."
           },
           "minimum": {
             "label": "Minimaler dynamischer Schwellenwert",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Dieses Gerät kommt mit der Analyse nicht hinterher",
           "overloadedNotice": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung. Die Analyse kann in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen, oder wählen Sie eine schnellere Modellvariante.",
           "unknownLatency": "Die Verarbeitungszeit konnte für {models} nicht gemessen werden und wird beim Begrenzen der Überlappung nicht berücksichtigt. Die Analyse kann dennoch in Verzug geraten.",
-          "cpuNote": "Eine höhere Stärke analysiert überlappendes Audio häufiger, was für jedes aktivierte Modell und jede Audioquelle CPU-Zeit kostet. BirdNET-Go begrenzt die Überlappung automatisch auf das, was dieses Gerät verarbeiten kann."
+          "cpuNote": "Eine höhere Stärke analysiert überlappendes Audio häufiger, was für jeden aktivierten Klassifikator, für den dieser Filter gilt, und jede Audioquelle CPU-Zeit kostet. BirdNET-Go begrenzt die Überlappung automatisch auf das, was dieses Gerät verarbeiten kann."
         },
         "rangeFilter": {
           "title": "Reichweitenfilter",
@@ -5784,23 +5784,20 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Einstellungen",
-      "models": "Modelle"
+      "models": "Modelle",
+      "detection": "Erkennung",
+      "bats": "Fledermäuse",
+      "inference": "Inferenz",
+      "filters": "Filter"
     },
     "detection": {
       "title": "Erkennungseinstellungen",
       "description": "Konfidenz-Schwellenwerte für die Artenklassifizierung konfigurieren.",
-      "confidenceThreshold": {
-        "label": "Konfidenz-Schwellenwert",
-        "helpText": "Mindest-Konfidenzwert (0.0 - 1.0), ab dem eine Erkennung aufgezeichnet wird."
-      },
       "batThreshold": {
-        "label": "Fledermaus-Erkennungsschwelle (BattyBirdNET)",
-        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BattyBirdNET. BSG-BAT hat eine eigene Schwelle."
+        "label": "Fledermaus-Erkennungsschwelle (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Fledermaus-Erkennungsschwelle (BSG-BAT)",
-        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen mit BSG-BAT.",
         "sampleRateWarning": "Aufnahmen mit 192 kHz funktionieren, aber Arten, die oberhalb von 96 kHz rufen, können nicht erkannt werden, und die Bewertungen sind weniger zuverlässig. Empfohlen wird eine Abtastrate von 384 kHz."
       },
       "bsgBatStep": {
@@ -5841,27 +5838,9 @@
       "locale": {
         "label": "Artensprache",
         "helpText": "Sprache für die gebräuchlichen Artnamen in der Benutzeroberfläche."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "BirdNET+ V3.0 Konfidenzschwellenwert"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Der Reichweitenfilter gilt nur für Vogelklassifikatoren. Fledermausmodelle verwenden eigene Artenlisten.",
       "status": {
         "title": "Gebietsfilter-Übersicht",
         "geomodelInfo": "BirdNET-Geomodell {version} - {species} bekannte Arten",
@@ -5876,13 +5855,13 @@
         "noFilter": "Kein Gebietsfilter aktiv",
         "passUnmapped": {
           "label": "Arten ohne Gebietsdaten zulassen",
-          "helpText": "Erkennungen von Arten zulassen, für die das Geomodell keine geografischen Daten hat. Wenn deaktiviert, werden diese Arten immer herausgefiltert."
+          "helpText": "Erkennungen von Arten zulassen, für die das Geomodell keine geografischen Daten hat. Wenn deaktiviert, werden diese Arten immer herausgefiltert. Dies betrifft nur die Klassifikatoren, auf die der Gebietsfilter angewendet wird."
         }
       }
     },
     "advanced": {
       "title": "Erweitert",
-      "description": "Verarbeitungs- und benutzerdefinierte Modellkonfiguration."
+      "description": "Benutzerdefinierte Modell- und Label-Dateien."
     },
     "downloadSource": {
       "title": "Download-Quelle",
@@ -5896,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modellgalerie",
-      "description": "Klassifikatormodelle für Vogel- und Fledermauserkennungen verwalten.",
+      "description": "Klassifikatormodelle verwalten.",
       "region": {
         "title": "Modellregion",
         "modeAuto": "Automatisch",
@@ -6081,28 +6060,89 @@
         "licenseNote": "Der Wechsel erfolgt innerhalb desselben Modells, daher ändert sich die Lizenz nicht."
       }
     },
-    "bird": {
-      "title": "Vogelerkennung",
-      "description": "Konfigurieren Sie Konfidenzschwelle, Artensprache und Falsch-Positiv-Filterung für Vogelklassifikatoren."
-    },
     "bat": {
       "title": "Fledermauserkennung",
-      "description": "Konfigurieren Sie Schwellenwert, Zeitplanung und Falsch-Positiv-Filterung für Fledermausklassifikatoren."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Der dynamische Schwellenwert gilt nur für Vogelklassifikatoren."
+      "description": "Zeitplanung, Validierung und Falsch-Positiv-Filterung für Fledermausklassifikatoren."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0-Erkennung",
-      "description": "Legen Sie einen eigenen Konfidenzschwellenwert für BirdNET+ V3.0-Erkennungen fest, unabhängig vom Haupt-BirdNET-Schwellenwert."
+      "title": "BirdNET+ V3.0-Erkennung"
+    },
+    "thresholds": {
+      "title": "Erkennungsschwellenwerte",
+      "description": "Minimale Konfidenz, die eine Erkennung benötigt, um aufgezeichnet zu werden, für jeden aktivierten Klassifikator.",
+      "category": {
+        "bat": "Fledermaus"
+      },
+      "state": {
+        "pending": "Wird geladen",
+        "failed": "Laden fehlgeschlagen"
+      },
+      "empty": "Keine Klassifikatoren aktiviert.",
+      "shared": {
+        "label": "Gemeinsamer Schwellenwert",
+        "usedBy": "Wird von jedem Klassifikator ohne benutzerdefinierten Schwellenwert verwendet: {models}.",
+        "unused": "Wird von jedem Klassifikator ohne benutzerdefinierten Schwellenwert verwendet. Derzeit nutzt ihn kein aktivierter Klassifikator."
+      },
+      "customSwitch": "Benutzerdefinierter Schwellenwert",
+      "usesShared": "Verwendet den gemeinsamen Schwellenwert"
+    },
+    "speciesNames": {
+      "title": "Artnamen",
+      "description": "Wie erkannte Arten in der Oberfläche benannt werden."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inferenz-Laufzeitumgebung",
+        "description": "Welche Laufzeitumgebung und welches Gerät die Klassifikatoren ausführen und wie viele CPU-Threads sie nutzen."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Automatisch wählt die schnellste Laufzeitumgebung, die dieses Gerät für jedes Modell unterstützt.",
+        "options": {
+          "auto": "Automatisch (empfohlen)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO-Gerät",
+        "helpText": "Wird für Modelle verwendet, die auf OpenVINO laufen.",
+        "options": {
+          "auto": "Automatisch",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Beim Ändern des Backends oder Geräts werden die Modelle neu geladen, sodass die Erkennung für einige Sekunden pausiert.",
+      "backendsLoading": "Es wird geprüft, welche Laufzeitumgebungen dieses Gerät unterstützt.",
+      "backendsUnavailable": "Es konnte nicht gelesen werden, welche Laufzeitumgebungen dieses Gerät unterstützt. Backend und Gerät können nach dem Laden geändert werden.",
+      "running": {
+        "title": "Aktuell aktiv",
+        "description": "Laufzeitumgebung und Präzision, mit der jeder aktivierte Klassifikator läuft.",
+        "unknown": "Nicht gemeldet"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Gilt für alle Klassifikatoren, einschließlich Fledermausklassifikatoren. Eine Art mit eigenem benutzerdefiniertem Schwellenwert wird nicht angepasst.",
+      "speciesNames": "Gilt für alle Klassifikatoren. Eine Art ohne Namen in der gewählten Sprache behält den Namen aus ihrem Klassifikator.",
+      "falsePositiveFilter": "Gilt für alle Klassifikatoren außer Fledermausklassifikatoren, die über einen eigenen Falsch-Positiv-Filter verfügen.",
+      "falsePositiveFilterBatTab": "Gilt für alle Klassifikatoren außer Fledermausklassifikatoren, die auf dem Tab Fledermäuse über einen eigenen Falsch-Positiv-Filter verfügen.",
+      "rangeFilter": {
+        "appliesTo": "Gilt für {models}.",
+        "notApplied": "Nicht gebietsgefiltert: {models}.",
+        "generic": "Gilt für die Klassifikatoren, die das Gebietsmodell unterstützt. Fledermausklassifikatoren werden nie gebietsgefiltert.",
+        "needsLocation": "Funktioniert nur, wenn der Stationsstandort festgelegt ist."
+      },
+      "bat": "Gilt nur für Fledermausklassifikatoren."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Das Minimum darf den Auslöseschwellenwert nicht überschreiten."
     }
   },
   "restart": {

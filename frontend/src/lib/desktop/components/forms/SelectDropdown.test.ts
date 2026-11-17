@@ -43,6 +43,18 @@ describe('SelectDropdown', () => {
     { value: 'cherry', label: 'Cherry', description: 'Small stone fruit', icon: '🍒' },
   ];
 
+  describe('Disabled trigger', () => {
+    it('uses the disabled field fill and not the active one', () => {
+      selectTest.render({
+        props: { options: basicOptions, disabled: true, 'aria-label': 'Fruit' },
+      });
+
+      const trigger = screen.getByRole('combobox', { name: 'Fruit' });
+      expect(trigger.className).toContain('bg-[var(--field-bg-disabled)]');
+      expect(trigger.className).not.toContain('bg-[var(--field-bg)]');
+    });
+  });
+
   describe('Basic Functionality', () => {
     it('renders with placeholder', () => {
       selectTest.render({

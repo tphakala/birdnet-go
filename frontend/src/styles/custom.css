@@ -230,14 +230,6 @@
    Miscellaneous Utilities
    ======================================================================== */
 
-/* Focus states for inputs and selects */
-.input:focus-visible,
-.select:focus-visible {
-  outline: 1px solid transparent;
-  outline-offset: 0;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent);
-}
-
 /* Progress minimum height */
 .progress {
   min-height: 14px;

@@ -2544,12 +2544,12 @@
           "title": "Dynamic Threshold",
           "description": "Automatically adjust detection sensitivity based on prior observations",
           "enable": {
-            "label": "Enable Dynamic Threshold (BirdNET-Go specific feature)",
-            "helpText": "Enables dynamic confidence threshold feature for more adaptive bird call detection."
+            "label": "Enable dynamic threshold",
+            "helpText": "Lowers the confidence threshold for a species after it has been detected with high confidence."
           },
           "trigger": {
             "label": "Trigger Threshold",
-            "helpText": "The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls."
+            "helpText": "The confidence level at which the dynamic threshold is activated. If a species is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent detections."
           },
           "minimum": {
             "label": "Minimum Dynamic Threshold",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "This device cannot keep up with analysis",
           "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant.",
           "unknownLatency": "Processing time could not be measured for {models}, so it is not counted when the overlap is limited. Analysis may still fall behind.",
-          "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled model and audio source. BirdNET-Go limits the overlap automatically to what this device can process."
+          "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled classifier this filter applies to and for every audio source. BirdNET-Go limits the overlap automatically to what this device can process."
         },
         "rangeFilter": {
           "title": "Range Filter",
@@ -5784,23 +5784,20 @@
   "analysis": {
     "title": "Analysis",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "models": "Models",
+      "detection": "Detection",
+      "bats": "Bats",
+      "inference": "Inference",
+      "filters": "Filters"
     },
     "detection": {
       "title": "Detection Settings",
       "description": "Configure confidence thresholds and language for species classification.",
-      "confidenceThreshold": {
-        "label": "Confidence Threshold",
-        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
-      },
       "batThreshold": {
-        "label": "Bat Detection Threshold (BattyBirdNET)",
-        "helpText": "Minimum confidence score for BattyBirdNET bat species detections. BSG-BAT has its own threshold."
+        "label": "Bat Detection Threshold (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Bat Detection Threshold (BSG-BAT)",
-        "helpText": "Minimum confidence score for BSG-BAT bat species detections.",
         "sampleRateWarning": "Captures at 192 kHz work, but species that call above 96 kHz cannot be identified and scores are less reliable. A capture rate of 384 kHz is recommended."
       },
       "bsgBatStep": {
@@ -5841,27 +5838,9 @@
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "BirdNET+ V3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
         "title": "Range Filter Overview",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} known species",
@@ -5876,13 +5855,13 @@
         "noFilter": "No range filter active",
         "passUnmapped": {
           "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out. This affects only the classifiers the range filter applies to."
         }
       }
     },
     "advanced": {
       "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "description": "Custom model and label files."
     },
     "downloadSource": {
       "title": "Download Source",
@@ -5896,7 +5875,7 @@
     },
     "gallery": {
       "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "description": "Manage the classifier models.",
       "region": {
         "title": "Model region",
         "modeAuto": "Automatic",
@@ -6081,28 +6060,89 @@
         "licenseNote": "Swapping stays within the same model, so its license does not change."
       }
     },
-    "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
-    },
     "bat": {
       "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "description": "Scheduling, validation and false positive filtering for bat classifiers."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET+ V3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET+ V3.0 Detection"
+    },
+    "thresholds": {
+      "title": "Detection thresholds",
+      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "category": {
+        "bat": "Bat"
+      },
+      "state": {
+        "pending": "Loading",
+        "failed": "Failed to load"
+      },
+      "empty": "No classifiers are enabled.",
+      "shared": {
+        "label": "Shared threshold",
+        "usedBy": "Used by every classifier without a custom threshold: {models}.",
+        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+      },
+      "customSwitch": "Custom threshold",
+      "usesShared": "Uses the shared threshold"
+    },
+    "speciesNames": {
+      "title": "Species names",
+      "description": "How detected species are named in the interface."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inference runtime",
+        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "options": {
+          "auto": "Auto (recommended)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO device",
+        "helpText": "Used for models that run on OpenVINO.",
+        "options": {
+          "auto": "Auto",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
+      "backendsLoading": "Checking which runtimes this device supports.",
+      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "running": {
+        "title": "Running now",
+        "description": "The runtime and precision each enabled classifier runs with.",
+        "unknown": "Not reported"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
+      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
+      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter.",
+      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "rangeFilter": {
+        "appliesTo": "Applies to {models}.",
+        "notApplied": "Not range filtered: {models}.",
+        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
+        "needsLocation": "Works only when the station location is set."
+      },
+      "bat": "Applies to bat classifiers only."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "The minimum must not be higher than the trigger."
     }
   },
   "restart": {

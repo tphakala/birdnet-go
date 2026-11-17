@@ -1,7 +1,7 @@
 /** Settings destinations; resolve the deployment prefix with buildAppUrl at each use. */
 export const SETTINGS_ROUTES = {
   mainLocation: '/ui/settings/main?tab=location',
-  analysisSettings: '/ui/settings/analysis?tab=settings',
+  analysisDetection: '/ui/settings/analysis?tab=detection',
   analysisModels: '/ui/settings/analysis?tab=models',
   securityServer: '/ui/settings/security?tab=server',
   securityReverseProxy: '/ui/settings/security?tab=server#reverse-proxy',

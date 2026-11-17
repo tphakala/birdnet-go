@@ -272,11 +272,11 @@
   <!-- Description -->
   <p class="text-sm text-muted">{t('settings.species.dynamicThreshold.description')}</p>
   <a
-    href={buildAppUrl(SETTINGS_ROUTES.analysisSettings)}
+    href={buildAppUrl(SETTINGS_ROUTES.analysisDetection)}
     onclick={handleAppLinkClick}
     class="inline-block text-sm text-primary underline"
   >
-    {t('settings.sections.analysis')} → {t('analysis.tabs.settings')}
+    {t('settings.sections.analysis')} → {t('analysis.tabs.detection')}
   </a>
 
   <!-- Stats Cards -->

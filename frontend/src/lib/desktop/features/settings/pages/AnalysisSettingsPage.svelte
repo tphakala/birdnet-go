@@ -6,18 +6,19 @@
   model gallery (install/uninstall additional classifier models).
 
   Features:
-  - Two main tabs: Settings and Models
-  - Settings tab: Detection settings, false positive filter, range filter,
-    dynamic threshold, and advanced options
-  - Models tab: Model gallery with Installed and Available tabs
-  - Confidence threshold slider for bird detection
-  - Bat detection threshold slider (visible when a BattyBirdNET model is installed)
-  - BSG-BAT detection threshold slider (visible when the BSG-BAT model is installed)
+  - Tabs grouped by what a setting does and which classifiers it acts on:
+    Detection (thresholds, dynamic threshold, species names: every classifier),
+    Filters (false positive filter: every classifier except bats; range filter: the
+    classifiers the range model supports), Bats (bat-only settings, shown while a bat
+    model is installed), Inference (backend, device, threads) and Models (gallery,
+    region, download source, custom model paths)
+  - Detection thresholds list: one row per enabled classifier, with a slider and a number
+    field for its threshold and a switch for classifiers that can use the BirdNET v2.4 threshold
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
   - Dynamic threshold with enable/disable and parameter tuning
-  - Advanced section with processing threads and custom classifier paths
+  - Advanced section with custom classifier paths
   - License acceptance dialog for model installation
   - Remove confirmation dialog for model uninstallation
   - Real-time download progress via SSE
@@ -27,18 +28,12 @@
   @component
 -->
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
-  import type {
-    CatalogEntry,
-    DownloadProgress,
-    InstalledModel,
-    ModelRegionsResponse,
-  } from '$lib/types/models';
+  import type { CatalogEntry, DownloadProgress, ModelRegionsResponse } from '$lib/types/models';
   import {
     fetchCatalog,
-    fetchInstalled,
     fetchModelRegions,
     installModel,
     reinstallModel,
@@ -47,7 +42,24 @@
     isNetworkDownloadError,
     MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
-  import { invalidateModels } from '$lib/stores/models.svelte';
+  import {
+    getAvailableModels,
+    modelsLoading,
+    refreshModels,
+    watchModels,
+  } from '$lib/stores/models.svelte';
+  import {
+    SECTION_THRESHOLD_DEFAULT,
+    SHARED_BOUNDS,
+    SHARED_THRESHOLD_FALLBACK,
+    usesSharedThreshold,
+    type ClassifierThresholdSection,
+    type ThresholdBounds,
+    thresholdRows,
+    thresholdSnapshot,
+    type ThresholdRow,
+    type ThresholdSectionValues,
+  } from './analysisThresholds';
   import {
     analysisCadence,
     invalidateAcousticModels,
@@ -80,18 +92,24 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
   import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import FalsePositiveFilterControl, {
     type FilterLevel,
   } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
+  import type {
+    InferenceBackends,
+    InferenceStatusResponse,
+  } from '$lib/desktop/features/system/inference.types';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -103,6 +121,7 @@
     perchSettings,
     birdNetV3Settings,
     birdNetPlusSettings,
+    setValidationIssues,
     type BSGBatSettings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
@@ -139,6 +158,10 @@
     XCircle,
     X,
     Sparkles,
+    Filter,
+    Cpu,
+    Gauge,
+    Moon,
     Settings as SettingsIcon,
   } from '@lucide/svelte';
 
@@ -150,40 +173,17 @@
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
   /** Catalog ID of the BSG-BAT model (the other bat catalog entries are BattyBirdNET models). */
   const BSG_BAT_CATALOG_ID = 'bsg-bat';
-  /** Catalog ID of the BirdNET+ V3.0 model; the threshold card shows only while it is installed. */
-  const BIRDNET_PLUS_CATALOG_ID = 'birdnet-plus-v3.0';
-  /** Backend default of birdnetplus.threshold, used until the section is loaded. */
-  const BIRDNET_PLUS_DEFAULT_THRESHOLD = 0.5;
-  /** Backend default of bsgbat.threshold, used until the section is loaded. */
-  const BSG_BAT_DEFAULT_THRESHOLD = 0.5;
-  /** Bounds and step of the bat model threshold fields. */
-  const BAT_THRESHOLD_MIN = 0.01;
-  const BAT_THRESHOLD_MAX = 0.99;
-  const BAT_THRESHOLD_STEP = 0.01;
   /** Frames are whole numbers. */
   const BSG_BAT_STEP_INCREMENT = 1;
   /** Decimals of the step shown in seconds (one frame is 2 ms, so 0.01 s is five frames). */
   const BSG_BAT_STEP_SECONDS_DECIMALS = 2;
-  /**
-   * Subgrid rows for two threshold fields side by side: each field spans four rows (the three
-   * of its form control plus the message row below it) and its form control spans the first
-   * three, so labels, inputs and help texts line up across the fields at their natural heights.
-   */
-  const BAT_THRESHOLD_SHARED_ROWS = [
-    'md:gap-y-1',
-    'md:[&>*]:row-span-4 md:[&>*]:grid md:[&>*]:grid-rows-subgrid',
-    'md:[&>*>.form-control]:row-span-3 md:[&>*>.form-control]:grid md:[&>*>.form-control]:grid-rows-subgrid',
-  ].join(' ');
 
   // ── Page-level tab state ──────────────────────────────────────────────
-  type PageTab = 'settings' | 'models';
-  let pageTab = $state<PageTab>('settings');
+  type PageTab = 'detection' | 'filters' | 'bats' | 'inference' | 'models';
+  let pageTab = $state<PageTab>('detection');
 
   // ── Gallery (Models tab) state ────────────────────────────────────────
   let catalog = $state<CatalogEntry[]>([]);
-  // Installed models incl. hidden ones (drives the secondary-model threshold
-  // sections, which the visibility-filtered catalog cannot).
-  let installedModels = $state<InstalledModel[]>([]);
   let loading = $state(true);
   // Catalog loading failure: gates the two gallery tab bodies and drives the
   // banner whose Retry re-runs loadCatalog.
@@ -314,8 +314,41 @@
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
-  const BSG_BAT_WARNING_ID = generateId('bsg-bat-warning');
   const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
+  /** Bounds of the dynamic threshold fields (confidence values and a number of hours). */
+  const DYNAMIC_TRIGGER_BOUNDS = SHARED_BOUNDS;
+  const DYNAMIC_MIN_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
+  const DYNAMIC_HOURS_BOUNDS = { min: 0, max: 1000, step: 1 };
+  /** Bounds of the CPU threads field; 0 uses all available threads. */
+  const THREADS_BOUNDS = { min: 0, max: 32, step: 1 };
+  /** Ids linking the shared threshold and the dynamic threshold fields to their help text. */
+  const SHARED_THRESHOLD_HELP_ID = generateId('shared-threshold-help');
+  const RANGE_OVERVIEW_HEADING_ID = generateId('range-overview-heading');
+  const RANGE_THRESHOLD_HELP_ID = generateId('range-threshold-help');
+  /** Range filter threshold bounds, and the backend default shown until settings load. */
+  const RANGE_THRESHOLD_BOUNDS = DYNAMIC_MIN_BOUNDS;
+  const RANGE_THRESHOLD_FALLBACK = 0.01;
+  const DYNAMIC_TRIGGER_HELP_ID = generateId('dynamic-trigger-help');
+  const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
+  const DYNAMIC_MIN_ERROR_ID = generateId('dynamic-min-error');
+  const DYNAMIC_HOURS_HELP_ID = generateId('dynamic-hours-help');
+  const SPECIES_LANGUAGE_HELP_ID = generateId('species-language-help');
+  /** One setting row: label and help on the left, the control on the right from tablet width. */
+  const SETTING_ROW_CLASS =
+    'grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]';
+  /** Inference backend and OpenVINO device values ('' in the config also means auto). */
+  const INFERENCE_AUTO = 'auto';
+  const BACKEND_ONNX = 'onnx';
+  const BACKEND_OPENVINO = 'openvino';
+  const DEVICE_CPU = 'cpu';
+  const DEVICE_GPU = 'gpu';
+  const INFERENCE_STATUS_ENDPOINT = '/api/v2/system/inference';
+  // The line that says why the runtime selects are disabled: loading, or the failure warning.
+  const INFERENCE_STATUS_ID = generateId('inference-status');
+  // The Backend select, where focus goes when a successful Retry removes the warning.
+  const INFERENCE_BACKEND_ID = generateId('inference-backend');
+  /** Prefix of the element IDs inside one threshold row (its name and its source note). */
+  const THRESHOLD_ROW_ID_PREFIX = generateId('threshold-row');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -385,11 +418,27 @@
       validHours: 24,
     }
   );
+  // The server rejects a dynamic threshold whose minimum is above its trigger, so while that
+  // holds the save bar blocks Save and says why.
+  const DYNAMIC_MIN_ISSUE_KEY = 'analysis-dynamic-threshold-min-above-trigger';
+  const VALIDATION_ISSUE_KEYS = [DYNAMIC_MIN_ISSUE_KEY];
+  let dynamicMinError = $derived(
+    dynamicThreshold.enabled && dynamicThreshold.min > dynamicThreshold.trigger
+      ? t('analysis.dynamicThreshold.minAboveTrigger')
+      : undefined
+  );
+  $effect(() => {
+    setValidationIssues(
+      VALIDATION_ISSUE_KEYS,
+      new Map(dynamicMinError ? [[DYNAMIC_MIN_ISSUE_KEY, dynamicMinError]] : [])
+    );
+  });
+  onDestroy(() => setValidationIssues(VALIDATION_ISSUE_KEYS, new Map()));
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
   let bat = $derived(
     $batSettings ?? {
       enabled: false,
-      threshold: 0.5,
+      threshold: SECTION_THRESHOLD_DEFAULT,
       filterEnabled: false,
       nighttimeOnly: true,
       falsePositiveFilter: { level: 0 },
@@ -398,7 +447,7 @@
   );
 
   let bsgBat: BSGBatSettings = $derived(
-    $bsgBatSettings ?? { threshold: BSG_BAT_DEFAULT_THRESHOLD }
+    $bsgBatSettings ?? { threshold: SECTION_THRESHOLD_DEFAULT }
   );
   // The step the form shows: the saved value, or the default for 0 or no value (the API can store
   // a raw 0, which the backend resolves to the default).
@@ -416,20 +465,24 @@
   );
   const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
-  // Secondary acoustic classifiers with a per-model threshold override. These are
-  // gated on the installed-models list (not the catalog): the catalog endpoint
-  // hides foundation/preview models such as BirdNET v3.0 via VisibleCatalog(), so
-  // a catalog-based check would never light up the v3.0 section. The installed
-  // endpoint returns every downloaded model, hidden or not, keyed by catalogId.
-  let perch = $derived($perchSettings ?? { overrideThreshold: false, threshold: 0.5 });
-  let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
-  const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
-  const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
-  let birdnetPlus = $derived(
-    $birdNetPlusSettings ?? { overrideThreshold: false, threshold: BIRDNET_PLUS_DEFAULT_THRESHOLD }
+  // ── Detection thresholds table ────────────────────────────────────────
+  // One row per enabled classifier (GET /api/v2/models, refreshed on topology
+  // changes), so the table follows what is installed and running.
+  let perch = $derived(
+    $perchSettings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
   );
-  const hasBirdNetPlusModel = $derived(
-    installedModels.some(m => m.catalogId === BIRDNET_PLUS_CATALOG_ID)
+  let birdnetV3 = $derived(
+    $birdNetV3Settings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  let birdnetPlus = $derived(
+    $birdNetPlusSettings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  const thresholdTableRows = $derived(thresholdRows(getAvailableModels()));
+  // The shared threshold (birdnet.threshold) is a setting of its own: it applies to every
+  // classifier without a threshold of its own, whichever classifiers are installed.
+  const sharedThreshold = $derived(birdnet?.threshold ?? SHARED_THRESHOLD_FALLBACK);
+  const sharedThresholdUsers = $derived(
+    thresholdTableRows.filter(row => rowUsesShared(row)).map(row => row.model.name)
   );
 
   // ── Change detection ──────────────────────────────────────────────────
@@ -440,58 +493,46 @@
     current: unknown;
   }
 
-  const birdDetectionChange: ChangePair = $derived({
-    original: {
-      threshold: store.originalData.birdnet?.threshold,
-      locale: store.originalData.birdnet?.locale,
-      fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
-    },
-    current: {
-      threshold: birdnet?.threshold,
-      locale: birdnet?.locale,
-      fpFilter: falsePositiveFilter.level,
-    },
+  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
+  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
+  const formOverlap = $derived(birdnet?.overlap ?? 0);
+  // Unsaved edits to the level or the overlap the level adjusts (picking the saved level again
+  // can leave the overlap moved). The card badge, the tab dot and the cadence readout share it.
+  const fpFilterEdited = $derived(
+    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
+  );
+  const falsePositiveChange: ChangePair = $derived({
+    original: { edited: false },
+    current: { edited: fpFilterEdited },
   });
-  const perchChange: ChangePair = $derived({
-    original: {
-      override: store.originalData.perch?.overrideThreshold ?? false,
-      threshold: store.originalData.perch?.threshold ?? 0.5,
-    },
-    current: { override: perch.overrideThreshold, threshold: perch.threshold },
+  const speciesNamesChange: ChangePair = $derived({
+    original: { locale: store.originalData.birdnet?.locale },
+    current: { locale: birdnet?.locale },
   });
-  const birdnetV3Change: ChangePair = $derived({
-    original: {
-      override: store.originalData.birdnetv3?.overrideThreshold ?? false,
-      threshold: store.originalData.birdnetv3?.threshold ?? 0.5,
-    },
-    current: { override: birdnetV3.overrideThreshold, threshold: birdnetV3.threshold },
-  });
-  const birdnetPlusChange: ChangePair = $derived({
-    original: {
-      override: store.originalData.birdnetplus?.overrideThreshold ?? false,
-      threshold: store.originalData.birdnetplus?.threshold ?? BIRDNET_PLUS_DEFAULT_THRESHOLD,
-    },
-    current: { override: birdnetPlus.overrideThreshold, threshold: birdnetPlus.threshold },
+  const thresholdsChange: ChangePair = $derived({
+    original: thresholdSnapshot(thresholdTableRows, store.originalData),
+    current: thresholdSnapshot(thresholdTableRows, {
+      birdnet,
+      perch,
+      birdnetv3: birdnetV3,
+      birdnetplus: birdnetPlus,
+      bat,
+      bsgbat: bsgBat,
+    }),
   });
   const batChange: ChangePair = $derived({
     original: {
-      batThreshold: store.originalData.bat?.threshold,
       batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
       batDiscardUnlikely: store.originalData.bat?.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
-      bsgBatThreshold: hasBsgBatModel
-        ? (store.originalData.bsgbat?.threshold ?? BSG_BAT_DEFAULT_THRESHOLD)
-        : undefined,
       bsgBatStepFrames: hasBsgBatModel ? savedBsgBatStepFrames : undefined,
     },
     current: {
-      batThreshold: bat.threshold,
       batNighttimeOnly: bat.nighttimeOnly,
       batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
       batDiscardUnlikely: bat.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: batFPLevel,
-      bsgBatThreshold: hasBsgBatModel ? bsgBat.threshold : undefined,
       bsgBatStepFrames: hasBsgBatModel ? bsgBatStepFrames : undefined,
     },
   });
@@ -505,14 +546,28 @@
   });
   const advancedChange: ChangePair = $derived({
     original: {
-      threads: store.originalData.birdnet?.threads,
       modelPath: store.originalData.birdnet?.modelPath,
       labelPath: store.originalData.birdnet?.labelPath,
     },
     current: {
-      threads: birdnet?.threads,
       modelPath: birdnet?.modelPath,
       labelPath: birdnet?.labelPath,
+    },
+  });
+  const selectedBackend = $derived(birdnet?.backend || INFERENCE_AUTO);
+  const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
+  const savedBackend = $derived(store.originalData.birdnet?.backend || INFERENCE_AUTO);
+  const savedDevice = $derived(store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO);
+  const inferenceChange: ChangePair = $derived({
+    original: {
+      backend: savedBackend,
+      openVinoDevice: savedDevice,
+      threads: store.originalData.birdnet?.threads,
+    },
+    current: {
+      backend: selectedBackend,
+      openVinoDevice: selectedDevice,
+      threads: birdnet?.threads,
     },
   });
   const modelRegionChange: ChangePair = $derived({
@@ -524,25 +579,75 @@
     current: { huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' },
   });
 
-  // A tab shows the change dot when any card badge on it would. The Perch, BirdNET v3.0, BirdNET+
-  // V3.0 and bat cards count only while they are shown, so the dot and the badges stay in step.
-  // For Perch, BirdNET v3.0 and BirdNET+ V3.0 the gate changes nothing today, since the
-  // defaults equal the saved-side fallbacks. For bat it is load-bearing: with no bat section saved, the page's defaults differ
-  // from the saved values and would light the dot for good.
-  const settingsTabHasChanges = $derived(
-    [
-      birdDetectionChange,
-      rangeFilterChange,
-      dynamicThresholdChange,
-      advancedChange,
-      ...(hasPerchModel ? [perchChange] : []),
-      ...(hasBirdNetV3Model ? [birdnetV3Change] : []),
-      ...(hasBirdNetPlusModel ? [birdnetPlusChange] : []),
-      ...(hasBatModel ? [batChange] : []),
-    ].some(c => hasSettingsChanged(c.original, c.current))
+  // A tab shows the change dot when any card badge on it would. The thresholds card holds only
+  // the rows on screen, and the Bats tab exists only while a bat model is installed, so the dot
+  // and the badges stay in step. For bat the gate is load-bearing: with no bat section saved, the
+  // page's defaults differ from the saved values and would light the dot for good.
+  const anyChanged = (pairs: ChangePair[]) =>
+    pairs.some(c => hasSettingsChanged(c.original, c.current));
+  const detectionTabHasChanges = $derived(
+    anyChanged([thresholdsChange, dynamicThresholdChange, speciesNamesChange])
   );
+  const filtersTabHasChanges = $derived(anyChanged([falsePositiveChange, rangeFilterChange]));
+  const batsTabHasChanges = $derived(hasBatModel && anyChanged([batChange]));
+  const inferenceTabHasChanges = $derived(anyChanged([inferenceChange]));
   const modelsTabHasChanges = $derived(
-    [modelRegionChange, downloadSourceChange].some(c => hasSettingsChanged(c.original, c.current))
+    anyChanged([modelRegionChange, downloadSourceChange, advancedChange])
+  );
+
+  // ── Inference tab ─────────────────────────────────────────────────────
+  // The runtimes this host offers come from GET /api/v2/system/inference, so the backend and
+  // device lists only hold choices that can load here. A saved choice the host lacks stays in
+  // the list, so the field still shows what the config says.
+
+  let inferenceBackends = $state<InferenceBackends | null>(null);
+  let inferenceBackendsFailed = $state(false);
+
+  async function loadInferenceBackends() {
+    try {
+      const status = await api.get<InferenceStatusResponse>(INFERENCE_STATUS_ENDPOINT);
+      inferenceBackends = status.backends;
+      inferenceBackendsFailed = false;
+    } catch (e) {
+      logger.error('Failed to load inference backends:', e);
+      // A list that already loaded stays valid, so a later failure does not warn beside it.
+      if (!inferenceBackends) inferenceBackendsFailed = true;
+    }
+  }
+
+  $effect(() => {
+    if (pageTab === 'inference' && !inferenceBackends) untrack(() => void loadInferenceBackends());
+  });
+
+  // A choice the host lacks stays offered while it is selected or saved, so picking another
+  // one keeps the way back to the saved choice.
+  const keptBackends = $derived(new Set([selectedBackend, savedBackend]));
+  const keptDevices = $derived(new Set([selectedDevice, savedDevice]));
+  const openVinoSupported = $derived(inferenceBackends?.openvino.supported ?? false);
+  const hostHasGpu = $derived(
+    inferenceBackends?.openvino.devices?.some(d => d.toLowerCase().startsWith(DEVICE_GPU)) ?? false
+  );
+
+  const backendOptions: SelectOption[] = $derived([
+    { value: INFERENCE_AUTO, label: t('analysis.inference.backend.options.auto') },
+    ...(inferenceBackends?.onnx.available || keptBackends.has(BACKEND_ONNX)
+      ? [{ value: BACKEND_ONNX, label: t('analysis.inference.backend.options.onnx') }]
+      : []),
+    ...(openVinoSupported || keptBackends.has(BACKEND_OPENVINO)
+      ? [{ value: BACKEND_OPENVINO, label: t('analysis.inference.backend.options.openvino') }]
+      : []),
+  ]);
+  const deviceOptions: SelectOption[] = $derived([
+    { value: INFERENCE_AUTO, label: t('analysis.inference.device.options.auto') },
+    { value: DEVICE_CPU, label: t('analysis.inference.device.options.cpu') },
+    ...(hostHasGpu || keptDevices.has(DEVICE_GPU)
+      ? [{ value: DEVICE_GPU, label: t('analysis.inference.device.options.gpu') }]
+      : []),
+  ]);
+  // The device applies only to models that OpenVINO runs.
+  const showDeviceField = $derived(
+    (openVinoSupported || selectedDevice !== INFERENCE_AUTO || savedDevice !== INFERENCE_AUTO) &&
+      selectedBackend !== BACKEND_ONNX
   );
 
   // ── Derived catalog views ─────────────────────────────────────────────
@@ -688,6 +793,11 @@
     }))
   );
 
+  // The species language option behind a dropdown option, which carries the flag's locale code.
+  function localeOptionFor(option: SelectOption): BirdnetLocaleOption | undefined {
+    return birdnetLocaleOptions.find(candidate => candidate.value === option.value);
+  }
+
   async function loadBirdnetLocales() {
     birdnetLocales.loading = true;
     birdnetLocales.error = null;
@@ -805,20 +915,13 @@
   // description then falls back to the count from the configured overlap.
   const cadence = $derived(analysisCadence());
   const cadenceHasBirdModels = $derived(cadence ? hasBirdCadenceModels(cadence) : false);
-  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
-  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
-  const formOverlap = $derived(birdnet?.overlap ?? 0);
   const fpFilterActive = $derived(falsePositiveFilter.level >= FILTER_ACTIVE_MIN_LEVEL);
-  // Unsaved edits to the level or the overlap the level adjusts.
-  const fpCadenceEdited = $derived(
-    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
-  );
   // The snapshot does not reflect the saved settings yet. Every consumer checks
-  // fpCadenceEdited first, so this need not exclude unsaved edits.
+  // fpFilterEdited first, so this need not exclude unsaved edits.
   const fpCadencePending = $derived(
     cadence !== null && planLagsSettings(cadence, savedOverlap, savedFpLevel)
   );
-  const fpReadoutIsEstimate = $derived(fpCadenceEdited || fpCadencePending);
+  const fpReadoutIsEstimate = $derived(fpFilterEdited || fpCadencePending);
   const fpReadoutRows = $derived.by<CadenceReadoutRow[]>(() => {
     if (!cadence || !fpFilterActive) return [];
     if (fpReadoutIsEstimate) {
@@ -885,6 +988,7 @@
   // Keep the cadence readout live while the page is open: the topology stream
   // announces each re-plan.
   $effect(() => watchAcousticModels());
+  $effect(() => watchModels());
 
   // A saved level change that stays on one side of the filter on/off line does
   // not re-plan, so no topology event follows; the per-model counts the server
@@ -924,6 +1028,8 @@
     totalSpecies: number;
     withRangeData: number;
     withoutRangeData: number;
+    /** False when this classifier takes part but the active range backend does not filter it. */
+    coveredByBackend?: boolean;
   }
 
   interface RangeFilterStatus {
@@ -936,6 +1042,34 @@
   }
 
   let rangeFilterStatus = $state<RangeFilterStatus | null>(null);
+
+  // Which classifiers the range filter acts on, from the range filter's own participant list
+  // (GET /api/v2/range/status), and which enabled ones it skips. The backend decides
+  // participation per model, so this never names a classifier the filter does not reach.
+  // A participant the active range backend does not cover is not filtered (for example Perch
+  // under the legacy BirdNET v2.4 range data), so it is listed as not range filtered and the
+  // overview table leaves it out.
+  const rangeCoveredClassifiers = $derived(
+    (rangeFilterStatus?.classifiers ?? []).filter(c => c.coveredByBackend !== false)
+  );
+
+  const rangeFilterScope = $derived.by(() => {
+    const participants = rangeCoveredClassifiers;
+    if (participants.length === 0) return t('analysis.scope.rangeFilter.generic');
+    const ids = new Set(participants.map(c => c.id));
+    const skipped = getAvailableModels()
+      .filter(m => m.registryId && !ids.has(m.registryId))
+      .map(m => m.name);
+    const lines = [
+      t('analysis.scope.rangeFilter.appliesTo', {
+        models: participants.map(c => c.name).join(', '),
+      }),
+    ];
+    if (skipped.length > 0)
+      lines.push(t('analysis.scope.rangeFilter.notApplied', { models: skipped.join(', ') }));
+    lines.push(t('analysis.scope.rangeFilter.needsLocation'));
+    return lines.join(' ');
+  });
 
   async function loadRangeFilterStatus() {
     try {
@@ -1262,8 +1396,25 @@
   }
 
   // ── Update handlers ───────────────────────────────────────────────────
+  // The runtime takes a whole number of threads, so a fractional entry becomes one.
+  function updateThreads(value: number) {
+    const snapped = snapToStep(value, THREADS_BOUNDS);
+    updateBirdnetSetting('threads', snapped);
+    return snapped;
+  }
+
   function updateBirdnetSetting(key: string, value: string | number) {
     settingsActions.updateSection('birdnet', { [key]: value });
+  }
+
+  // The config stores an empty backend or device for auto. Picking the saved choice again writes
+  // the saved raw value back, so the form compares equal to the saved settings and the save bar
+  // does not stay active, as updateBsgBatStep does for the step.
+  function updateInferenceChoice(key: 'backend' | 'openVinoDevice', value: string) {
+    const saved = store.originalData.birdnet?.[key];
+    settingsActions.updateSection('birdnet', {
+      [key]: value === (saved || INFERENCE_AUTO) ? saved : value,
+    });
   }
 
   function updateDynamicThreshold(key: string, value: number | boolean) {
@@ -1272,22 +1423,32 @@
     });
   }
 
-  function updateBatThreshold(value: number) {
-    settingsActions.updateSection('bat', { threshold: value });
+  function updateRangeThreshold(value: number) {
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, RANGE_THRESHOLD_BOUNDS);
+    settingsActions.updateSection('birdnet', {
+      rangeFilter: { ...birdnet?.rangeFilter, threshold: snapped },
+    });
+    return snapped;
   }
 
-  function updateBsgBatThreshold(value: number) {
-    settingsActions.updateSection('bsgbat', { threshold: value });
+  function updateDynamicValue(key: string, bounds: ThresholdBounds, value: number) {
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, bounds);
+    updateDynamicThreshold(key, snapped);
+    return snapped;
   }
 
   // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
   // saved effective one restores the saved raw value (0 or none for the default), so the form
-  // compares equal to the saved settings again and the save bar does not stay active.
+  // compares equal to the saved settings again and the save bar does not stay active. It returns
+  // the whole frame count kept, so the field shows it when the prop does not change.
   function updateBsgBatStep(value: number) {
     const frames = Math.round(value);
     const stepFrames =
       frames === savedBsgBatStepFrames ? store.originalData.bsgbat?.stepFrames : frames;
     settingsActions.updateSection('bsgbat', { stepFrames });
+    return frames;
   }
 
   function updateBatNighttimeOnly(value: boolean) {
@@ -1425,50 +1586,128 @@
     });
   }
 
-  function updateThreshold(value: number) {
-    settingsActions.updateSection('birdnet', { threshold: value });
+  // Rounds a value to a field's step and bounds, so the field, the slider and the saved value
+  // agree (a value off the step would also mark the field invalid).
+  function snapToStep(value: number, { min, max, step }: ThresholdBounds): number {
+    const decimals = Math.max(0, Math.ceil(-Math.log10(step)));
+    const snapped = Math.min(max, Math.max(min, Math.round(value / step) * step));
+    return Number(snapped.toFixed(decimals));
   }
 
-  // Config for the shared secondary-model threshold section snippet.
-  interface SecondaryModelThresholdConfig {
-    titleKey: string;
-    descKey: string;
-    thresholdLabelKey: string;
-    // The BirdNET threshold this model follows while the override is off; shown
-    // in the disabled field so the number on screen matches the effective value.
-    effectiveThreshold: number;
-    current: { overrideThreshold: boolean; threshold: number };
-    // Saved and current values for the section's unsaved-changes badge.
-    change: ChangePair;
-    onOverride: (_value: boolean) => void;
-    onThreshold: (_value: number) => void;
+  function updateSharedThreshold(value: number) {
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, SHARED_BOUNDS);
+    settingsActions.updateSection('birdnet', { threshold: snapped });
+    return snapped;
   }
 
-  // Secondary-model threshold override handlers. When the override is off, the
-  // model follows the BirdNET threshold (backend modelGlobalConfidenceThreshold),
-  // so the threshold field is disabled until the override is enabled.
-  function updatePerchOverride(value: boolean) {
-    settingsActions.updateSection('perch', { overrideThreshold: value });
+  function updateRowThreshold(row: ThresholdRow, value: number) {
+    const { section } = row.descriptor;
+    if (!section || !Number.isFinite(value)) return;
+    const snapped = snapToStep(value, row.descriptor);
+    settingsActions.updateSection(section, { threshold: snapped });
+    return snapped;
   }
 
-  function updatePerchThreshold(value: number) {
-    settingsActions.updateSection('perch', { threshold: value });
+  // Switching a row to a custom threshold keeps its saved value when that value is inside the
+  // row's bounds; otherwise (for example a saved 0) it starts from the shared threshold it
+  // showed. Switching it off again restores the value it replaced, while the seeded value is
+  // untouched and still unsaved, so the round trip leaves the section as it was.
+  const seededThresholds = new Map<
+    ClassifierThresholdSection,
+    { seeded: number; previous: number | undefined }
+  >();
+
+  function updateRowCustom(row: ThresholdRow, custom: boolean) {
+    const { section, min, max } = row.descriptor;
+    if (!section) return;
+    const own = classifierValues(section).threshold;
+    if (!custom) {
+      const seed = seededThresholds.get(section);
+      seededThresholds.delete(section);
+      // A saved seeded value (the section's saved threshold equals it) is the user's own now.
+      const restorable =
+        seed !== undefined &&
+        own === seed.seeded &&
+        savedClassifierThreshold(section) === seed.previous;
+      settingsActions.updateSection(
+        section,
+        restorable
+          ? { overrideThreshold: false, threshold: seed.previous }
+          : { overrideThreshold: false }
+      );
+      return;
+    }
+    if (own !== undefined && own >= min && own <= max) {
+      settingsActions.updateSection(section, { overrideThreshold: true });
+      return;
+    }
+    const seeded = snapToStep(sharedThreshold, row.descriptor);
+    seededThresholds.set(section, { seeded, previous: own });
+    settingsActions.updateSection(section, { overrideThreshold: true, threshold: seeded });
   }
 
-  function updateBirdNetV3Override(value: boolean) {
-    settingsActions.updateSection('birdnetv3', { overrideThreshold: value });
+  // The single value of a one-choice select, whichever shape its callback reports.
+  function firstValue(value: string | string[]): string {
+    return Array.isArray(value) ? (value[0] ?? '') : value;
   }
 
-  function updateBirdNetV3Threshold(value: number) {
-    settingsActions.updateSection('birdnetv3', { threshold: value });
+  // The threshold a classifier section had when settings were last loaded or saved.
+  function savedClassifierThreshold(section: ClassifierThresholdSection): number | undefined {
+    return store.originalData[section]?.threshold;
   }
 
-  function updateBirdNetPlusOverride(value: boolean) {
-    settingsActions.updateSection('birdnetplus', { overrideThreshold: value });
+  // The settings values behind a classifier's own threshold section.
+  function classifierValues(section: ClassifierThresholdSection): ThresholdSectionValues {
+    switch (section) {
+      case 'perch':
+        return perch;
+      case 'birdnetv3':
+        return birdnetV3;
+      case 'birdnetplus':
+        return birdnetPlus;
+      case 'bat':
+        return bat;
+      case 'bsgbat':
+        return bsgBat;
+    }
   }
 
-  function updateBirdNetPlusThreshold(value: number) {
-    settingsActions.updateSection('birdnetplus', { threshold: value });
+  function rowUsesShared(row: ThresholdRow): boolean {
+    const { section } = row.descriptor;
+    return usesSharedThreshold(row.descriptor, section ? classifierValues(section) : undefined);
+  }
+
+  // The value a row shows: the threshold that applies to it.
+  function rowThresholdValue(row: ThresholdRow): number {
+    const { section } = row.descriptor;
+    if (!section || rowUsesShared(row)) return sharedThreshold;
+    return classifierValues(section).threshold ?? sharedThreshold;
+  }
+
+  // One slider plus number field (or a number field alone) in the control column of a
+  // setting row. The thresholds and the dynamic threshold cards both use it, so their rows
+  // look and behave the same.
+  interface ValueControl {
+    label: string;
+    value: number;
+    bounds: ThresholdBounds;
+    disabled: boolean;
+    describedBy?: string;
+    /** False for a value without a meaningful range to slide over (a number of hours). */
+    slider?: boolean;
+    /** Field-level error shown under the number field. */
+    error?: string;
+    /** Called with the typed or slid value; returns the value it kept, which the field shows. */
+    onChange: (_value: number) => void | number;
+    /** Id of the message the page renders below the control row when `error` is set. */
+    errorId?: string;
+  }
+
+  // The ids a control's inputs describe themselves with: its help text and, while it has one, its
+  // error message.
+  function describedByOf(c: ValueControl): string | undefined {
+    return [c.describedBy, c.error ? c.errorId : undefined].filter(Boolean).join(' ') || undefined;
   }
 
   // ── Gallery tab definitions ───────────────────────────────────────────
@@ -1490,11 +1729,36 @@
   // ── Page-level tab definitions ────────────────────────────────────────
   const pageTabs: TabDefinition[] = $derived([
     {
-      id: 'settings',
-      label: t('analysis.tabs.settings'),
-      icon: SettingsIcon,
-      content: settingsTabContent,
-      hasChanges: settingsTabHasChanges,
+      id: 'detection',
+      label: t('analysis.tabs.detection'),
+      icon: Gauge,
+      content: detectionTabContent,
+      hasChanges: detectionTabHasChanges,
+    },
+    {
+      id: 'filters',
+      label: t('analysis.tabs.filters'),
+      icon: Filter,
+      content: filtersTabContent,
+      hasChanges: filtersTabHasChanges,
+    },
+    ...(hasBatModel
+      ? [
+          {
+            id: 'bats',
+            label: t('analysis.tabs.bats'),
+            icon: Moon,
+            content: batsTabContent,
+            hasChanges: batsTabHasChanges,
+          },
+        ]
+      : []),
+    {
+      id: 'inference',
+      label: t('analysis.tabs.inference'),
+      icon: Cpu,
+      content: inferenceTabContent,
+      hasChanges: inferenceTabHasChanges,
     },
     {
       id: 'models',
@@ -1531,9 +1795,6 @@
       // response cannot overwrite the newer region's catalog.
       if (seq !== catalogRequestSeq) return;
       catalog = response.catalog;
-      // Refresh the installed list alongside the catalog so the secondary-model
-      // threshold sections track install/uninstall. Swallows its own errors.
-      await loadInstalledModels(seq);
     } catch (e) {
       if (seq !== catalogRequestSeq) return;
       catalogError =
@@ -1542,18 +1803,6 @@
       // Only the newest request owns the loading flag, so a superseded response
       // does not clear the spinner out from under the one still running.
       if (seq === catalogRequestSeq) loading = false;
-    }
-  }
-
-  // seq, when passed, is the owning loadCatalog request's sequence: a stale
-  // installed-list response is dropped rather than overwriting a newer one.
-  async function loadInstalledModels(seq?: number) {
-    try {
-      const installed = await fetchInstalled();
-      if (seq !== undefined && seq !== catalogRequestSeq) return;
-      installedModels = installed;
-    } catch (e) {
-      logger.error('Failed to load installed models:', e);
     }
   }
 
@@ -1642,7 +1891,7 @@
               installingId = null;
               downloadProgress = null;
             }
-            invalidateModels();
+            void refreshModels();
             loadCatalog();
           }, 2000);
         },
@@ -1720,7 +1969,7 @@
     try {
       await uninstallModel(modelId);
       refreshSettingsAfterGalleryChange();
-      invalidateModels();
+      void refreshModels();
       await loadCatalog();
       toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
@@ -1791,7 +2040,7 @@
               reinstallingId = null;
               downloadProgress = null;
             }
-            invalidateModels();
+            void refreshModels();
             loadCatalog();
           }, 2000);
         },
@@ -1844,96 +2093,314 @@
   }
 </script>
 
-<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0, BirdNET+ V3.0) ── -->
-{#snippet secondaryModelThreshold(cfg: SecondaryModelThresholdConfig)}
-  <SettingsSection
-    title={t(cfg.titleKey)}
-    description={t(cfg.descKey)}
-    defaultOpen={true}
-    originalData={cfg.change.original}
-    currentData={cfg.change.current}
-  >
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Checkbox
-        checked={cfg.current.overrideThreshold}
-        label={t('analysis.detection.secondaryThresholdOverride.label')}
-        helpText={t('analysis.detection.secondaryThresholdOverride.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={cfg.onOverride}
-      />
+<!-- ── Detection Tab: settings that apply to every classifier ────────── -->
+<!-- The control column of a setting row: a slider and a number field editing one value, or a
+     number field alone in the same column, so fields line up across rows and cards. An error
+     is rendered here, in flow below the row, so a wrapped message pushes the next row down
+     instead of covering it. The field's own message box carries the clamp notice, out of flow so
+     the rows do not jump, and is hidden while an error shows so the two never overlap. -->
+{#snippet valueControl(c: ValueControl)}
+  <div class="min-w-0">
+    <div class="flex min-w-0 items-center gap-4">
+      {#if c.slider === false}
+        <div class="min-w-0 flex-1"></div>
+      {:else}
+        <input
+          type="range"
+          class="range range-sm min-w-0 flex-1"
+          aria-label={c.label}
+          aria-describedby={describedByOf(c)}
+          aria-invalid={c.error ? 'true' : undefined}
+          min={c.bounds.min}
+          max={c.bounds.max}
+          step={c.bounds.step}
+          value={c.value}
+          disabled={c.disabled}
+          oninput={event => c.onChange(event.currentTarget.valueAsNumber)}
+        />
+      {/if}
       <NumberField
-        label={t(cfg.thresholdLabelKey)}
-        value={cfg.current.overrideThreshold ? cfg.current.threshold : cfg.effectiveThreshold}
-        onUpdate={cfg.onThreshold}
-        min={0.01}
-        max={0.99}
-        step={0.01}
-        disabled={store.isLoading || store.isSaving || !cfg.current.overrideThreshold}
-        helpText={cfg.current.overrideThreshold
-          ? t('analysis.detection.secondaryThreshold.helpText')
-          : t('analysis.detection.secondaryThreshold.followsBirdnet')}
+        label={c.label}
+        labelClassName="sr-only"
+        className="relative w-24 shrink-0"
+        errorClassName={c.error ? 'hidden' : 'absolute right-0 top-full w-max max-w-72 text-right'}
+        value={c.value}
+        onUpdate={c.onChange}
+        min={c.bounds.min}
+        max={c.bounds.max}
+        step={c.bounds.step}
+        describedByExtra={describedByOf(c)}
+        disabled={c.disabled}
+        invalid={!!c.error}
       />
     </div>
-  </SettingsSection>
+    {#if c.error}
+      <p id={c.errorId} class="mt-1 text-right text-xs leading-4 text-[var(--text-error)]">
+        {c.error}
+      </p>
+    {/if}
+  </div>
 {/snippet}
 
-<!-- ── Settings Tab Content ──────────────────────────────────────────── -->
-{#snippet settingsTabContent()}
+<!-- The label and help text on the left of a setting row. The label is a block so wrapped lines
+     keep the text-sm line height. -->
+{#snippet settingText(label: string, help: string, helpId?: string)}
+  <div class="min-w-0">
+    <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
+    <p id={helpId} class="help-text mt-1">{help}</p>
+  </div>
+{/snippet}
+
+<!-- A dynamic threshold setting row, laid out like a detection threshold row. -->
+{#snippet dynamicRow(label: string, help: string, helpId: string, control: ValueControl)}
+  <li class={SETTING_ROW_CLASS}>
+    {@render settingText(label, help, helpId)}
+    {@render valueControl(control)}
+  </li>
+{/snippet}
+
+<!-- One line stating which classifiers a card's settings act on. -->
+{#snippet scopeLine(text: string)}
+  <p class="mb-4 text-sm text-[var(--color-base-content)]/70">{text}</p>
+{/snippet}
+
+{#snippet detectionTabContent()}
   <div class="space-y-6">
-    <!-- 1. Bird Detection -->
+    <!-- Detection thresholds: one row per enabled classifier -->
     <SettingsSection
-      title={t('analysis.bird.title')}
-      description={t('analysis.bird.description')}
+      title={t('analysis.thresholds.title')}
+      description={t('analysis.thresholds.description')}
       defaultOpen={true}
-      originalData={birdDetectionChange.original}
-      currentData={birdDetectionChange.current}
+      originalData={thresholdsChange.original}
+      currentData={thresholdsChange.current}
     >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <NumberField
-          label={t('analysis.detection.confidenceThreshold.label')}
-          value={birdnet?.threshold ?? 0.3}
-          onUpdate={updateThreshold}
-          min={0}
-          max={1}
-          step={0.05}
-          disabled={store.isLoading || store.isSaving}
-          helpText={t('analysis.detection.confidenceThreshold.helpText')}
-        />
-
-        <SelectDropdown
-          options={birdnetLocaleOptions}
-          value={birdnet?.locale ?? 'en'}
-          label={t('analysis.detection.locale.label')}
-          helpText={t('analysis.detection.locale.helpText')}
-          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          variant="select"
-          groupBy={false}
-          searchable={true}
-          onChange={value => updateBirdnetSetting('locale', value as string)}
-        >
-          {#snippet renderOption(option)}
-            {@const localeOption = option as BirdnetLocaleOption}
-            <div class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
+      <ul class="divide-y divide-[var(--border-100)]" data-testid="threshold-list">
+        <!-- The shared threshold: a setting of its own, used by every classifier without a
+             threshold of its own, whichever classifiers are installed. -->
+        <li class={SETTING_ROW_CLASS} data-testid="threshold-row-shared">
+          {@render settingText(
+            t('analysis.thresholds.shared.label'),
+            sharedThresholdUsers.length > 0
+              ? t('analysis.thresholds.shared.usedBy', {
+                  models: sharedThresholdUsers.join(', '),
+                })
+              : modelsLoading()
+                ? t('common.loading')
+                : t('analysis.thresholds.shared.unused'),
+            SHARED_THRESHOLD_HELP_ID
+          )}
+          {@render valueControl({
+            label: t('analysis.thresholds.shared.label'),
+            value: sharedThreshold,
+            bounds: SHARED_BOUNDS,
+            disabled: store.isLoading || store.isSaving,
+            describedBy: SHARED_THRESHOLD_HELP_ID,
+            onChange: updateSharedThreshold,
+          })}
+        </li>
+        {#each thresholdTableRows as row (row.model.id)}
+          {@const section = row.descriptor.section}
+          {@const usesShared = rowUsesShared(row)}
+          {@const nameId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-name`}
+          {@const sourceId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-source`}
+          <li class={SETTING_ROW_CLASS} data-testid="threshold-row-{row.model.id}">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  id={nameId}
+                  class="block text-sm font-medium text-[var(--color-base-content)]"
+                >
+                  {row.model.name}
+                </span>
+                {#if row.model.category === 'bat'}
+                  <Badge variant="neutral" size="xs">
+                    {t('analysis.thresholds.category.bat')}
+                  </Badge>
+                {/if}
+                {#if row.model.state === 'pending'}
+                  <Badge variant="warning" size="xs">
+                    {t('analysis.thresholds.state.pending')}
+                  </Badge>
+                {:else if row.model.state === 'failed'}
+                  <Badge variant="error" size="xs">
+                    {t('analysis.thresholds.state.failed')}
+                  </Badge>
+                {/if}
+              </div>
+              {#if row.descriptor.kind === 'optional'}
+                <ToggleField
+                  className="mt-2"
+                  variant="inline"
+                  size="sm"
+                  label={t('analysis.thresholds.customSwitch')}
+                  value={!usesShared}
+                  contextLabelId={nameId}
+                  disabled={store.isLoading || store.isSaving}
+                  onUpdate={custom => updateRowCustom(row, custom)}
+                />
+              {/if}
+              {#if usesShared}
+                <p id={sourceId} class="help-text mt-1">{t('analysis.thresholds.usesShared')}</p>
+              {/if}
             </div>
-          {/snippet}
-          {#snippet renderSelected(options)}
-            {#if options[0]}
-              {@const localeOption = options[0] as BirdnetLocaleOption}
-              <span class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </span>
-            {:else}
-              <span>{birdnet?.locale ?? 'en'}</span>
-            {/if}
-          {/snippet}
-        </SelectDropdown>
-      </div>
+            {@render valueControl({
+              label: row.model.name,
+              value: rowThresholdValue(row),
+              bounds: usesShared ? SHARED_BOUNDS : row.descriptor,
+              disabled: store.isLoading || store.isSaving || usesShared || !section,
+              describedBy: usesShared ? sourceId : undefined,
+              onChange: value => updateRowThreshold(row, value),
+            })}
+          </li>
+        {:else}
+          {#if modelsLoading()}
+            <li class="py-3 text-sm text-[var(--color-base-content)]/70">
+              {t('common.loading')}
+            </li>
+          {/if}
+        {/each}
+      </ul>
+    </SettingsSection>
 
-      <!-- Bird False Positive Filter -->
-      <div class="mt-6">
+    <!-- Dynamic threshold -->
+    <SettingsSection
+      title={t('settings.main.sections.dynamicThreshold.title')}
+      description={t('settings.main.sections.dynamicThreshold.description')}
+      originalData={dynamicThresholdChange.original}
+      currentData={dynamicThresholdChange.current}
+    >
+      {@render scopeLine(t('analysis.scope.dynamicThreshold'))}
+      <ToggleField
+        value={dynamicThreshold.enabled}
+        label={t('settings.main.sections.dynamicThreshold.enable.label')}
+        description={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+        disabled={store.isLoading || store.isSaving}
+        onUpdate={enabled => updateDynamicThreshold('enabled', enabled)}
+      />
+
+      {#if dynamicThreshold.enabled}
+        <ul class="mt-4 divide-y divide-[var(--border-100)] border-t border-[var(--border-100)]">
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.trigger.label'),
+            t('settings.main.sections.dynamicThreshold.trigger.helpText'),
+            DYNAMIC_TRIGGER_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.trigger.label'),
+              value: dynamicThreshold.trigger,
+              bounds: DYNAMIC_TRIGGER_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_TRIGGER_HELP_ID,
+              onChange: value => updateDynamicValue('trigger', DYNAMIC_TRIGGER_BOUNDS, value),
+            }
+          )}
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.minimum.label'),
+            t('settings.main.sections.dynamicThreshold.minimum.helpText'),
+            DYNAMIC_MIN_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.minimum.label'),
+              value: dynamicThreshold.min,
+              bounds: DYNAMIC_MIN_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_MIN_HELP_ID,
+              errorId: DYNAMIC_MIN_ERROR_ID,
+              error: dynamicMinError,
+              onChange: value => updateDynamicValue('min', DYNAMIC_MIN_BOUNDS, value),
+            }
+          )}
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.expireTime.label'),
+            t('settings.main.sections.dynamicThreshold.expireTime.helpText'),
+            DYNAMIC_HOURS_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.expireTime.label'),
+              value: dynamicThreshold.validHours,
+              bounds: DYNAMIC_HOURS_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_HOURS_HELP_ID,
+              slider: false,
+              onChange: value => updateDynamicValue('validHours', DYNAMIC_HOURS_BOUNDS, value),
+            }
+          )}
+        </ul>
+      {/if}
+    </SettingsSection>
+
+    <!-- Species names -->
+    <SettingsSection
+      title={t('analysis.speciesNames.title')}
+      description={t('analysis.speciesNames.description')}
+      originalData={speciesNamesChange.original}
+      currentData={speciesNamesChange.current}
+    >
+      {@render scopeLine(t('analysis.scope.speciesNames'))}
+      <ul>
+        <li class={SETTING_ROW_CLASS}>
+          {@render settingText(
+            t('analysis.detection.locale.label'),
+            t('analysis.detection.locale.helpText'),
+            SPECIES_LANGUAGE_HELP_ID
+          )}
+          <div class="min-w-0">
+            <SelectDropdown
+              options={birdnetLocaleOptions}
+              value={birdnet?.locale ?? 'en'}
+              aria-label={t('analysis.detection.locale.label')}
+              aria-describedby={SPECIES_LANGUAGE_HELP_ID}
+              disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
+              variant="select"
+              size="md"
+              groupBy={false}
+              searchable={true}
+              onChange={value => updateBirdnetSetting('locale', firstValue(value))}
+            >
+              {#snippet renderOption(option)}
+                {@const localeOption = localeOptionFor(option)}
+                <div class="flex items-center gap-2">
+                  {#if localeOption}
+                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  {/if}
+                  <span>{option.label}</span>
+                </div>
+              {/snippet}
+              {#snippet renderSelected(options)}
+                {#if options[0]}
+                  {@const localeOption = localeOptionFor(options[0])}
+                  <span class="flex items-center gap-2">
+                    {#if localeOption}
+                      <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                    {/if}
+                    <span>{options[0].label}</span>
+                  </span>
+                {:else}
+                  <span>{birdnet?.locale ?? 'en'}</span>
+                {/if}
+              {/snippet}
+            </SelectDropdown>
+          </div>
+        </li>
+      </ul>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+<!-- ── Filters Tab: settings that drop detections after scoring ─────────── -->
+{#snippet filtersTabContent()}
+  <div class="space-y-6">
+    <!-- False positive filter: every classifier except bats -->
+    <SettingsSection
+      title={t('settings.main.sections.falsePositiveFilter.title')}
+      description={t('settings.main.sections.falsePositiveFilter.description')}
+      defaultOpen={true}
+      originalData={falsePositiveChange.original}
+      currentData={falsePositiveChange.current}
+    >
+      {@render scopeLine(
+        hasBatModel
+          ? t('analysis.scope.falsePositiveFilterBatTab')
+          : t('analysis.scope.falsePositiveFilter')
+      )}
+      <div>
         <FalsePositiveFilterControl
           id="false-positive-filter-level"
           level={falsePositiveFilter.level}
@@ -1995,7 +2462,7 @@
                 </ul>
                 {#if fpReadoutIsEstimate}
                   <p class="mt-2 text-xs text-[var(--color-base-content)]/80">
-                    {fpCadenceEdited
+                    {fpFilterEdited
                       ? t('settings.main.sections.falsePositiveFilter.readoutPreview')
                       : t('settings.main.sections.falsePositiveFilter.readoutPending')}
                   </p>
@@ -2020,286 +2487,119 @@
       {/if}
     </SettingsSection>
 
-    <!-- 2. Perch v2 threshold override (only when the Perch model is installed) -->
-    {#if hasPerchModel}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.perch.title',
-        descKey: 'analysis.perch.description',
-        thresholdLabelKey: 'analysis.detection.perchThreshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: perch,
-        change: perchChange,
-        onOverride: updatePerchOverride,
-        onThreshold: updatePerchThreshold,
-      })}
-    {/if}
-
-    <!-- 3. BirdNET v3.0 threshold override (only when the v3.0 model is installed) -->
-    {#if hasBirdNetV3Model}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.birdnetv3.title',
-        descKey: 'analysis.birdnetv3.description',
-        thresholdLabelKey: 'analysis.detection.birdnetv3Threshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: birdnetV3,
-        change: birdnetV3Change,
-        onOverride: updateBirdNetV3Override,
-        onThreshold: updateBirdNetV3Threshold,
-      })}
-    {/if}
-
-    <!-- 3b. BirdNET+ V3.0 threshold override (only when the BirdNET+ model is installed) -->
-    {#if hasBirdNetPlusModel}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.birdnetplus.title',
-        descKey: 'analysis.birdnetplus.description',
-        thresholdLabelKey: 'analysis.detection.birdnetplusThreshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: birdnetPlus,
-        change: birdnetPlusChange,
-        onOverride: updateBirdNetPlusOverride,
-        onThreshold: updateBirdNetPlusThreshold,
-      })}
-    {/if}
-
-    <!-- 4. Bat Detection (only when a bat model is installed) -->
-    {#if hasBatModel}
-      <SettingsSection
-        title={t('analysis.bat.title')}
-        description={t('analysis.bat.description')}
-        defaultOpen={true}
-        originalData={batChange.original}
-        currentData={batChange.current}
-      >
-        <!-- Side by side at md and up, the two fields share the rows of one grid (label, input, help text, message) through subgrid, so a label that wraps in a longer translation keeps both inputs level without reserving height for labels that do not wrap. -->
-        <div
-          class={cn(
-            'grid grid-cols-1 md:grid-cols-2 gap-6',
-            hasBattyBirdNetModel && hasBsgBatModel && BAT_THRESHOLD_SHARED_ROWS
-          )}
-        >
-          {#if hasBattyBirdNetModel}
-            <NumberField
-              label={t('analysis.detection.batThreshold.label')}
-              value={bat.threshold}
-              onUpdate={updateBatThreshold}
-              min={BAT_THRESHOLD_MIN}
-              max={BAT_THRESHOLD_MAX}
-              step={BAT_THRESHOLD_STEP}
-              disabled={store.isLoading || store.isSaving}
-              helpText={t('analysis.detection.batThreshold.helpText')}
-            />
-          {/if}
-          {#if hasBsgBatModel}
-            <NumberField
-              label={t('analysis.detection.bsgBatThreshold.label')}
-              value={bsgBat.threshold}
-              onUpdate={updateBsgBatThreshold}
-              min={BAT_THRESHOLD_MIN}
-              max={BAT_THRESHOLD_MAX}
-              step={BAT_THRESHOLD_STEP}
-              disabled={store.isLoading || store.isSaving}
-              helpText={t('analysis.detection.bsgBatThreshold.helpText')}
-              describedByExtra={BSG_BAT_WARNING_ID}
-            />
-          {/if}
-        </div>
-
-        {#if hasBsgBatModel}
-          <div class="mt-4">
-            <SettingsNote id={BSG_BAT_WARNING_ID}>
-              {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
-              <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
-            </SettingsNote>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div>
-              <NumberField
-                label={t('analysis.detection.bsgBatStep.label')}
-                value={bsgBatStepFrames}
-                onUpdate={updateBsgBatStep}
-                min={BSG_BAT_STEP_MIN_FRAMES}
-                max={BSG_BAT_STEP_MAX_FRAMES}
-                step={BSG_BAT_STEP_INCREMENT}
-                disabled={store.isLoading || store.isSaving}
-                helpText={t('analysis.detection.bsgBatStep.helpText')}
-                describedByExtra={BSG_BAT_STEP_READOUT_ID}
-              />
-              <p
-                id={BSG_BAT_STEP_READOUT_ID}
-                class="mt-1 text-xs text-[var(--color-base-content)]/70"
-              >
-                {#if batFPLevel === 0}
-                  {t('analysis.detection.bsgBatStep.readout', { seconds: bsgBatStepSecondsText })}
-                {:else}
-                  {t('analysis.detection.bsgBatStep.readoutWithFilter', {
-                    seconds: bsgBatStepSecondsText,
-                    level: t(fpLevelNameKey(batFPLevel)),
-                    count: bsgBatMinDetections(batFPLevel).toString(),
-                  })}
-                {/if}
-                {t('analysis.detection.bsgBatStep.restartNote')}
-              </p>
-            </div>
-          </div>
-        {/if}
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          <Checkbox
-            checked={bat.nighttimeOnly ?? true}
-            label={t('analysis.detection.batNighttimeOnly.label')}
-            helpText={t('analysis.detection.batNighttimeOnly.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateBatNighttimeOnly}
-          />
-          <!-- One grid cell, so the dependent checkbox sits under the filter it belongs to -->
-          <div class="flex flex-col gap-6">
-            <Checkbox
-              checked={bat.ultrasonicFilter?.enabled ?? true}
-              label={t('analysis.detection.batUltrasonicFilter.label')}
-              helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateBatUltrasonicFilter}
-            />
-            {#if bat.ultrasonicFilter?.enabled ?? true}
-              <Checkbox
-                checked={bat.ultrasonicFilter?.discardUnlikely ?? false}
-                label={t('analysis.detection.batDiscardUnlikely.label')}
-                helpText={t('analysis.detection.batDiscardUnlikely.helpText')}
-                disabled={store.isLoading || store.isSaving}
-                onchange={updateBatDiscardUnlikely}
-              />
-            {/if}
-          </div>
-        </div>
-
-        <!-- Bat False Positive Filter -->
-        <div class="mt-6">
-          <FalsePositiveFilterControl
-            id="bat-false-positive-filter-level"
-            level={batFPLevel}
-            levels={BAT_FP_LEVELS}
-            onUpdate={updateBatFalsePositiveFilterLevel}
-            getDescription={level => getBatFalsePositiveFilterDescription(level)}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-
-        {#if batFPLevel === 0}
-          <SettingsNote>
-            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
-            <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
-          </SettingsNote>
-        {/if}
-      </SettingsSection>
-    {/if}
-
-    <!-- 5. Range Filter -->
+    <!-- Range filter -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
       originalData={rangeFilterChange.original}
       currentData={rangeFilterChange.current}
     >
-      <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
+      {@render scopeLine(rangeFilterScope)}
+      <ul class="divide-y divide-[var(--border-100)]">
+        <li class={SETTING_ROW_CLASS}>
+          {@render settingText(
+            t('settings.main.sections.rangeFilter.threshold.label'),
+            t('settings.main.sections.rangeFilter.threshold.helpText'),
+            RANGE_THRESHOLD_HELP_ID
+          )}
+          {@render valueControl({
+            label: t('settings.main.sections.rangeFilter.threshold.label'),
+            value: birdnet?.rangeFilter?.threshold ?? RANGE_THRESHOLD_FALLBACK,
+            bounds: RANGE_THRESHOLD_BOUNDS,
+            disabled: store.isLoading || store.isSaving,
+            describedBy: RANGE_THRESHOLD_HELP_ID,
+            onChange: updateRangeThreshold,
+          })}
+        </li>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-        <NumberField
-          label={t('settings.main.sections.rangeFilter.threshold.label')}
-          value={birdnet?.rangeFilter?.threshold ?? 0.01}
-          onUpdate={value =>
-            settingsActions.updateSection('birdnet', {
-              rangeFilter: { ...birdnet?.rangeFilter, threshold: value },
-            })}
-          min={0.0}
-          max={0.99}
-          step={0.01}
-          helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <div>
-          <div class="flex justify-start mb-1">
-            <span class="text-sm text-[var(--color-base-content)]"
-              >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-            >
-          </div>
-          <div class="flex items-center gap-3">
-            <div
-              class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
-              class:opacity-60={rangeFilterState.testing}
-            >
-              {rangeFilterState.speciesCount !== null
-                ? formatNumber(rangeFilterState.speciesCount)
-                : '-'}
-            </div>
-            {#if rangeFilterState.testing}
-              <!-- Decorative: the status region below announces the state. -->
-              <LoadingSpinner size="sm" aria-hidden="true" />
-            {/if}
-            <!-- Always rendered so screen readers hear loading and the new count. -->
-            <span class="sr-only" role="status">
-              {rangeFilterState.testing
-                ? t('settings.main.sections.rangeFilter.speciesCount.loading')
-                : rangeFilterState.speciesCount !== null
-                  ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
-                  : ''}
-            </span>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 mt-2">
-            <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
-                 natively disabled button would drop focus before the dialog could return it here -->
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
-              aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
-              aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
-              onclick={() => {
-                if (viewSpeciesBlocked) return;
-                rangeFilterState.showModal = true;
-                loadRangeFilterSpecies();
-              }}
-            >
-              {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.downloading ||
-                !birdnet?.locationConfigured}
-              onclick={downloadSpeciesCSV}
-            >
-              <Download class="size-4" />
-              {t('analytics.filters.exportCsv')}
-            </button>
-            <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
-            {#if viewSpeciesBlockedReason}
-              <span
-                id="range-species-blocked-reason"
-                class="text-xs text-[var(--color-base-content)]/70"
+        <li class={SETTING_ROW_CLASS}>
+          {@render settingText(
+            t('settings.main.sections.rangeFilter.speciesCount.label'),
+            t('settings.main.sections.rangeFilter.speciesCount.helpText')
+          )}
+          <div class="min-w-0">
+            <div class="flex items-center gap-3">
+              <div
+                class={cn(
+                  'text-2xl font-bold tabular-nums',
+                  // Dimmed through the colour's alpha, which keeps the hue and dims in every
+                  // theme while staying above 3:1 for this large bold text.
+                  rangeFilterState.testing
+                    ? 'text-[var(--text-primary)]/70'
+                    : 'text-[var(--text-primary)]'
+                )}
               >
-                {viewSpeciesBlockedReason}
+                {rangeFilterState.speciesCount !== null
+                  ? formatNumber(rangeFilterState.speciesCount)
+                  : '-'}
+              </div>
+              {#if rangeFilterState.testing}
+                <!-- Decorative: the status region below announces the state. -->
+                <LoadingSpinner size="sm" aria-hidden="true" />
+              {/if}
+              <!-- Always rendered so screen readers hear loading and the new count. -->
+              <span class="sr-only" role="status">
+                {rangeFilterState.testing
+                  ? t('settings.main.sections.rangeFilter.speciesCount.loading')
+                  : rangeFilterState.speciesCount !== null
+                    ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
+                    : ''}
               </span>
-            {/if}
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mt-2">
+              <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
+                 natively disabled button would drop focus before the dialog could return it here -->
+              <button
+                type="button"
+                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
+                aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
+                aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
+                onclick={() => {
+                  if (viewSpeciesBlocked) return;
+                  rangeFilterState.showModal = true;
+                  loadRangeFilterSpecies();
+                }}
+              >
+                {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!rangeFilterState.speciesCount ||
+                  rangeFilterState.downloading ||
+                  !birdnet?.locationConfigured}
+                onclick={downloadSpeciesCSV}
+              >
+                <Download class="size-4" />
+                {t('analytics.filters.exportCsv')}
+              </button>
+              <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
+              {#if viewSpeciesBlockedReason}
+                <span
+                  id="range-species-blocked-reason"
+                  class="text-xs text-[var(--color-base-content)]/70"
+                >
+                  {viewSpeciesBlockedReason}
+                </span>
+              {/if}
+            </div>
           </div>
-          <span class="help-text mt-1">
-            {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-          </span>
-        </div>
-      </div>
+        </li>
+      </ul>
 
       {#if rangeFilterStatus && rangeFilterStatus.geomodel}
-        <details
-          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
+        <!-- Always shown: the Filters tab is short, so the overview needs no disclosure. -->
+        <section
+          class="mt-6 border-t border-[var(--border-100)] pt-5"
+          aria-labelledby={RANGE_OVERVIEW_HEADING_ID}
         >
-          <summary
-            class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
+          <h3
+            id={RANGE_OVERVIEW_HEADING_ID}
+            class="mb-3 text-sm font-medium text-[var(--color-base-content)]"
           >
             {t('analysis.rangeFilter.status.title')}
-          </summary>
-          <div class="px-4 pb-4">
+          </h3>
+          <div>
             <!-- Geomodel info line -->
             <div class="flex items-center gap-2 text-sm mb-3">
               <span class="font-medium">
@@ -2323,37 +2623,33 @@
             </div>
 
             <!-- Per-classifier coverage table -->
-            {#if rangeFilterStatus.classifiers.length > 0}
+            {#if rangeCoveredClassifiers.length > 0}
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="border-b border-[var(--color-base-300)]">
-                      <th
-                        scope="col"
-                        class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                      <th scope="col" class="text-left py-2 pr-4 font-medium text-muted"
                         >{t('analysis.rangeFilter.status.classifier')}</th
                       >
-                      <th
-                        scope="col"
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                      <th scope="col" class="text-right py-2 px-4 font-medium text-muted"
                         >{t('analysis.rangeFilter.status.totalSpecies')}</th
                       >
                       <th
                         scope="col"
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        class="text-right py-2 px-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withRangeData')}</th
                       >
                       <th
                         scope="col"
-                        class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                        class="text-right py-2 pl-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withoutRangeData')}</th
                       >
                     </tr>
                   </thead>
                   <tbody>
-                    {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                    {#each rangeCoveredClassifiers as classifier (classifier.id)}
                       <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
                         <td class="py-2 pr-4 font-medium">{classifier.name}</td>
                         <td class="py-2 px-4 text-right tabular-nums"
@@ -2372,19 +2668,19 @@
               </div>
             {/if}
           </div>
-        </details>
+        </section>
 
         <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
-        <div class="mt-3">
-          <Checkbox
+        <div class="mt-5 border-t border-[var(--border-100)] pt-5">
+          <ToggleField
             label={t('analysis.rangeFilter.status.passUnmapped.label')}
-            checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
-            onchange={value =>
-              settingsActions.updateSection('birdnet', {
-                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
-              })}
-            helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+            description={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+            value={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
             disabled={store.isLoading || store.isSaving}
+            onUpdate={enabled =>
+              settingsActions.updateSection('birdnet', {
+                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: enabled },
+              })}
           />
         </div>
       {/if}
@@ -2407,106 +2703,209 @@
         </div>
       {/if}
     </SettingsSection>
+  </div>
+{/snippet}
 
-    <!-- 6. Dynamic Threshold -->
+<!-- ── Bats Tab: shown while a bat model is installed ────────────────── -->
+{#snippet batsTabContent()}
+  <div class="space-y-6">
+    <!-- Bat detection -->
     <SettingsSection
-      title={t('settings.main.sections.dynamicThreshold.title')}
-      description={t('settings.main.sections.dynamicThreshold.description')}
-      originalData={dynamicThresholdChange.original}
-      currentData={dynamicThresholdChange.current}
+      title={t('analysis.bat.title')}
+      description={t('analysis.bat.description')}
+      defaultOpen={true}
+      originalData={batChange.original}
+      currentData={batChange.current}
     >
-      <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
-
-      <div class="mt-4">
-        <Checkbox
-          checked={dynamicThreshold.enabled}
-          label={t('settings.main.sections.dynamicThreshold.enable.label')}
-          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+      {@render scopeLine(t('analysis.scope.bat'))}
+      <div class="divide-y divide-[var(--border-100)]">
+        <ToggleField
+          className="pb-4"
+          value={bat.nighttimeOnly ?? true}
+          label={t('analysis.detection.batNighttimeOnly.label')}
+          description={t('analysis.detection.batNighttimeOnly.helpText')}
           disabled={store.isLoading || store.isSaving}
-          onchange={value => updateDynamicThreshold('enabled', value)}
+          onUpdate={updateBatNighttimeOnly}
+        />
+        <ToggleField
+          className="py-4"
+          value={bat.ultrasonicFilter?.enabled ?? true}
+          label={t('analysis.detection.batUltrasonicFilter.label')}
+          description={t('analysis.detection.batUltrasonicFilter.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onUpdate={updateBatUltrasonicFilter}
+        />
+        {#if bat.ultrasonicFilter?.enabled ?? true}
+          <!-- Indented under the filter it depends on -->
+          <ToggleField
+            className="py-4 pl-6"
+            value={bat.ultrasonicFilter?.discardUnlikely ?? false}
+            label={t('analysis.detection.batDiscardUnlikely.label')}
+            description={t('analysis.detection.batDiscardUnlikely.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updateBatDiscardUnlikely}
+          />
+        {/if}
+      </div>
+
+      <!-- Bat False Positive Filter -->
+      <div class="mt-2 border-t border-[var(--border-100)] pt-5">
+        <FalsePositiveFilterControl
+          id="bat-false-positive-filter-level"
+          level={batFPLevel}
+          levels={BAT_FP_LEVELS}
+          onUpdate={updateBatFalsePositiveFilterLevel}
+          getDescription={level => getBatFalsePositiveFilterDescription(level)}
+          disabled={store.isLoading || store.isSaving}
         />
       </div>
 
-      {#if dynamicThreshold.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.trigger.label')}
-            value={dynamicThreshold.trigger}
-            onUpdate={value => updateDynamicThreshold('trigger', value)}
-            min={0.0}
-            max={1.0}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+      {#if batFPLevel === 0}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+          <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
+        </SettingsNote>
+      {/if}
 
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.minimum.label')}
-            value={dynamicThreshold.min}
-            onUpdate={value => updateDynamicThreshold('min', value)}
-            min={0.0}
-            max={0.99}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+      {#if hasBsgBatModel}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+          <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
+        </SettingsNote>
 
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
-            value={dynamicThreshold.validHours}
-            onUpdate={value => updateDynamicThreshold('validHours', value)}
-            min={0}
-            max={1000}
-            step={1}
-            helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div>
+            <NumberField
+              label={t('analysis.detection.bsgBatStep.label')}
+              value={bsgBatStepFrames}
+              onUpdate={updateBsgBatStep}
+              min={BSG_BAT_STEP_MIN_FRAMES}
+              max={BSG_BAT_STEP_MAX_FRAMES}
+              step={BSG_BAT_STEP_INCREMENT}
+              disabled={store.isLoading || store.isSaving}
+              helpText={t('analysis.detection.bsgBatStep.helpText')}
+              describedByExtra={BSG_BAT_STEP_READOUT_ID}
+            />
+            <p
+              id={BSG_BAT_STEP_READOUT_ID}
+              class="mt-1 text-xs text-[var(--color-base-content)]/70"
+            >
+              {#if batFPLevel === 0}
+                {t('analysis.detection.bsgBatStep.readout', { seconds: bsgBatStepSecondsText })}
+              {:else}
+                {t('analysis.detection.bsgBatStep.readoutWithFilter', {
+                  seconds: bsgBatStepSecondsText,
+                  level: t(fpLevelNameKey(batFPLevel)),
+                  count: bsgBatMinDetections(batFPLevel).toString(),
+                })}
+              {/if}
+              {t('analysis.detection.bsgBatStep.restartNote')}
+            </p>
+          </div>
         </div>
       {/if}
     </SettingsSection>
+  </div>
+{/snippet}
 
-    <!-- 7. Advanced (collapsed by default) -->
+<!-- ── Inference Tab: where and how the models run ────────────────────── -->
+{#snippet inferenceTabContent()}
+  <div class="space-y-6">
     <SettingsSection
-      title={t('analysis.advanced.title')}
-      description={t('analysis.advanced.description')}
-      defaultOpen={false}
-      originalData={advancedChange.original}
-      currentData={advancedChange.current}
+      title={t('analysis.inference.runtime.title')}
+      description={t('analysis.inference.runtime.description')}
+      originalData={inferenceChange.original}
+      currentData={inferenceChange.current}
     >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {#if inferenceBackendsFailed}
+        <ErrorAlert
+          id={INFERENCE_STATUS_ID}
+          type="warning"
+          className="mb-6"
+          onRetry={loadInferenceBackends}
+          focusFallback={() => [document.getElementById(INFERENCE_BACKEND_ID)]}
+        >
+          {t('analysis.inference.backendsUnavailable')}
+        </ErrorAlert>
+      {:else if !inferenceBackends}
+        <p class="mb-6 text-sm">
+          <SkeletonStatus
+            id={INFERENCE_STATUS_ID}
+            label={t('analysis.inference.backendsLoading')}
+          />
+        </p>
+      {/if}
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <SelectDropdown
+          id={INFERENCE_BACKEND_ID}
+          options={backendOptions}
+          value={selectedBackend}
+          label={t('analysis.inference.backend.label')}
+          helpText={t('analysis.inference.backend.helpText')}
+          disabled={store.isLoading || store.isSaving || !inferenceBackends}
+          aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
+          variant="select"
+          size="md"
+          groupBy={false}
+          onChange={value => updateInferenceChoice('backend', firstValue(value))}
+        />
+        {#if showDeviceField}
+          <SelectDropdown
+            options={deviceOptions}
+            value={selectedDevice}
+            label={t('analysis.inference.device.label')}
+            helpText={t('analysis.inference.device.helpText')}
+            disabled={store.isLoading || store.isSaving || !inferenceBackends}
+            aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
+            variant="select"
+            size="md"
+            groupBy={false}
+            onChange={value => updateInferenceChoice('openVinoDevice', firstValue(value))}
+          />
+        {/if}
+      </div>
+      <div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <NumberField
           label={t('settings.main.fields.inferenceThreads.label')}
           value={birdnet?.threads ?? 0}
-          onUpdate={value => updateBirdnetSetting('threads', value)}
-          min={0}
-          max={32}
-          step={1}
+          onUpdate={updateThreads}
+          min={THREADS_BOUNDS.min}
+          max={THREADS_BOUNDS.max}
+          step={THREADS_BOUNDS.step}
           helpText={t('settings.main.fields.inferenceThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
       </div>
+      <SettingsNote><span>{t('analysis.inference.reloadNote')}</span></SettingsNote>
+    </SettingsSection>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-        <TextInput
-          id="model-path"
-          value={birdnet?.modelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.modelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('modelPath', value)}
-        />
-
-        <TextInput
-          id="label-path"
-          value={birdnet?.labelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.labelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('labelPath', value)}
-        />
-      </div>
+    <SettingsSection
+      title={t('analysis.inference.running.title')}
+      description={t('analysis.inference.running.description')}
+    >
+      <ul class="divide-y divide-[var(--border-100)]" data-testid="inference-running-list">
+        {#each getAvailableModels() as model (model.id)}
+          <li class="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
+            <span class="min-w-0 flex-1 text-sm font-medium text-[var(--color-base-content)]">
+              {model.name}
+            </span>
+            {#if model.state === 'pending'}
+              <Badge variant="warning" size="xs">{t('analysis.thresholds.state.pending')}</Badge>
+            {:else if model.state === 'failed'}
+              <Badge variant="error" size="xs">{t('analysis.thresholds.state.failed')}</Badge>
+            {:else}
+              <span class="text-sm tabular-nums text-[var(--text-subtle)]">
+                {[model.backend, model.precision].filter(Boolean).join(' · ') ||
+                  t('analysis.inference.running.unknown')}
+              </span>
+            {/if}
+          </li>
+        {:else}
+          <li class="py-3 text-sm text-[var(--text-subtle)]">
+            {modelsLoading() ? t('common.loading') : t('analysis.thresholds.empty')}
+          </li>
+        {/each}
+      </ul>
     </SettingsSection>
   </div>
 {/snippet}
@@ -2711,6 +3110,37 @@
       <SettingsNote>
         {t('analysis.downloadSource.note')}
       </SettingsNote>
+    </SettingsSection>
+
+    <!-- Advanced -->
+    <SettingsSection
+      title={t('analysis.advanced.title')}
+      description={t('analysis.advanced.description')}
+      defaultOpen={false}
+      originalData={advancedChange.original}
+      currentData={advancedChange.current}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TextInput
+          id="model-path"
+          value={birdnet?.modelPath ?? ''}
+          label={t('settings.main.sections.customClassifier.modelPath.label')}
+          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
+          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('modelPath', value)}
+        />
+
+        <TextInput
+          id="label-path"
+          value={birdnet?.labelPath ?? ''}
+          label={t('settings.main.sections.customClassifier.labelPath.label')}
+          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
+          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('labelPath', value)}
+        />
+      </div>
     </SettingsSection>
   </div>
 {/snippet}

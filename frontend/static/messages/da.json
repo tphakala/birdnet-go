@@ -2544,12 +2544,12 @@
           "title": "Dynamisk tærskel",
           "description": "Justér automatisk detektionsfølsomhed baseret på tidligere observationer",
           "enable": {
-            "label": "Aktivér dynamisk tærskel (BirdNET-Go-specifik funktion)",
-            "helpText": "Aktiverer funktionen for dynamisk konfidenstærskel til mere adaptiv fuglesangsdetektion."
+            "label": "Aktivér dynamisk tærskel",
+            "helpText": "Sænker konfidenstærsklen for en art, efter at den er blevet detekteret med høj konfidens."
           },
           "trigger": {
             "label": "Udløsningstærskel",
-            "helpText": "Konfidensniveauet hvor den dynamiske tærskel aktiveres. Hvis et fuglekald detekteres med konfidens over denne værdi, sænkes tærsklen for positive match af den pågældende art for efterfølgende kald."
+            "helpText": "Konfidensniveauet hvor den dynamiske tærskel aktiveres. Hvis en art detekteres med konfidens over denne værdi, sænkes tærsklen for positive match af den pågældende art for efterfølgende detektioner."
           },
           "minimum": {
             "label": "Minimum dynamisk tærskel",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Denne enhed kan ikke følge med analysen",
           "overloadedNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap. Analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant.",
           "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den tælles ikke med, når overlappet begrænses. Analysen kan stadig komme bagud.",
-          "cpuNote": "En højere styrke analyserer overlappende lyd oftere, hvilket koster CPU-tid for hver aktiveret model og lydkilde. BirdNET-Go begrænser automatisk overlappet til, hvad denne enhed kan behandle."
+          "cpuNote": "En højere styrke analyserer overlappende lyd oftere, hvilket koster CPU-tid for hver aktiveret klassifikator, dette filter gælder for, og for hver lydkilde. BirdNET-Go begrænser automatisk overlappet til, hvad denne enhed kan behandle."
         },
         "rangeFilter": {
           "title": "Områdefilter",
@@ -5784,23 +5784,20 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Indstillinger",
-      "models": "Modeller"
+      "models": "Modeller",
+      "detection": "Detektion",
+      "bats": "Flagermus",
+      "inference": "Inferens",
+      "filters": "Filtre"
     },
     "detection": {
       "title": "Detektionsindstillinger",
       "description": "Konfigurer tærskler for konfidens og sprog til artsklassificering.",
-      "confidenceThreshold": {
-        "label": "Konfidenstærskel",
-        "helpText": "Minimum konfidensværdi (0,0 - 1,0) der kræves for at en detektion registreres."
-      },
       "batThreshold": {
-        "label": "Flagermus-detekteringsgrænse (BattyBirdNET)",
-        "helpText": "Minimum konfidensscore for BattyBirdNET-flagermusartsdetektioner. BSG-BAT har sin egen grænseværdi."
+        "label": "Flagermus-detekteringsgrænse (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Flagermus-detekteringsgrænse (BSG-BAT)",
-        "helpText": "Minimum konfidensscore for BSG-BAT-flagermusartsdetektioner.",
         "sampleRateWarning": "Optagelser ved 192 kHz fungerer, men arter, der kalder over 96 kHz, kan ikke identificeres, og scorerne er mindre pålidelige. En optagelsesfrekvens på 384 kHz anbefales."
       },
       "bsgBatStep": {
@@ -5841,27 +5838,9 @@
       "locale": {
         "label": "Artssprog",
         "helpText": "Sprog brugt til arternes almindelige navne i brugerfladen."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Konfidenstærskel for BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Områdefilter gælder kun for fugleklassifikatorer. Flagermusmodeller bruger deres egne artslister.",
       "status": {
         "title": "Områdefilter oversigt",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} kendte arter",
@@ -5876,13 +5855,13 @@
         "noFilter": "Intet områdefilter aktivt",
         "passUnmapped": {
           "label": "Tillad arter uden områdedata",
-          "helpText": "Tillad detektioner af arter, som geomodellen ikke har geografiske data for. Når deaktiveret, filtreres disse arter altid fra."
+          "helpText": "Tillad detektioner af arter, som geomodellen ikke har geografiske data for. Når deaktiveret, filtreres disse arter altid fra. Dette påvirker kun de klassifikatorer, områdefilteret gælder for."
         }
       }
     },
     "advanced": {
       "title": "Avanceret",
-      "description": "Behandling og brugerdefineret modelkonfiguration."
+      "description": "Brugerdefinerede model- og labelfiler."
     },
     "downloadSource": {
       "title": "Downloadkilde",
@@ -5896,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modelgalleri",
-      "description": "Administrer klassifikatormodeller til fugle- og flagermusdetektion.",
+      "description": "Administrer klassifikatormodellerne.",
       "region": {
         "title": "Modelregion",
         "modeAuto": "Automatisk",
@@ -6081,28 +6060,89 @@
         "licenseNote": "Udskiftning forbliver inden for den samme model, så licensen ændres ikke."
       }
     },
-    "bird": {
-      "title": "Fugleregistrering",
-      "description": "Konfigurer konfidenstærskel, artssprog og filtrering af falske positiver for fugleklassifikatorer."
-    },
     "bat": {
       "title": "Flagermusregistrering",
-      "description": "Konfigurer tærskel, planlægning og filtrering af falske positiver for flagermusklassifikatorer."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Dynamisk tærskel gælder kun for fugleklassifikatorer."
+      "description": "Planlægning, validering og filtrering af falske positiver for flagermusklassifikatorer."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0-detektion",
-      "description": "Angiv en dedikeret konfidenstærskel for BirdNET+ V3.0-detektioner, uafhængig af den primære BirdNET-tærskel."
+      "title": "BirdNET+ V3.0-detektion"
+    },
+    "thresholds": {
+      "title": "Detektionstærskler",
+      "description": "Mindste konfidens, en detektion skal have for at blive registreret, for hver aktiveret klassifikator.",
+      "category": {
+        "bat": "Flagermus"
+      },
+      "state": {
+        "pending": "Indlæser",
+        "failed": "Kunne ikke indlæses"
+      },
+      "empty": "Ingen klassifikatorer er aktiveret.",
+      "shared": {
+        "label": "Delt tærskel",
+        "usedBy": "Bruges af alle klassifikatorer uden en brugerdefineret tærskel: {models}.",
+        "unused": "Bruges af alle klassifikatorer uden en brugerdefineret tærskel. Ingen aktiveret klassifikator bruger den i øjeblikket."
+      },
+      "customSwitch": "Brugerdefineret tærskel",
+      "usesShared": "Bruger den delte tærskel"
+    },
+    "speciesNames": {
+      "title": "Artsnavne",
+      "description": "Hvordan detekterede arter navngives i brugerfladen."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inferens-runtime",
+        "description": "Hvilken runtime og enhed der kører klassifikatorerne, og hvor mange CPU-tråde de bruger."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Automatisk vælger den hurtigste runtime, som denne enhed understøtter for hver model.",
+        "options": {
+          "auto": "Automatisk (anbefalet)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO-enhed",
+        "helpText": "Bruges til modeller, der kører på OpenVINO.",
+        "options": {
+          "auto": "Automatisk",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Ændring af backend eller enhed genindlæser modellerne, så detektionen sættes på pause i et par sekunder.",
+      "backendsLoading": "Kontrollerer, hvilke runtimes denne enhed understøtter.",
+      "backendsUnavailable": "Kunne ikke aflæse, hvilke runtimes denne enhed understøtter. Backend og enhed kan ændres, når den er indlæst.",
+      "running": {
+        "title": "Kører nu",
+        "description": "Den runtime og præcision, som hver aktiveret klassifikator kører med.",
+        "unknown": "Ikke rapporteret"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Gælder for alle klassifikatorer, inklusive flagermusklassifikatorer. En art med sin egen brugerdefinerede tærskel justeres ikke.",
+      "speciesNames": "Gælder for alle klassifikatorer. En art uden navn på det valgte sprog beholder navnet fra sin klassifikator.",
+      "falsePositiveFilter": "Gælder for alle klassifikatorer undtagen flagermusklassifikatorer, som har deres eget falsk positiv-filter.",
+      "falsePositiveFilterBatTab": "Gælder for alle klassifikatorer undtagen flagermusklassifikatorer, som har deres eget falsk positiv-filter under fanen Flagermus.",
+      "rangeFilter": {
+        "appliesTo": "Gælder for {models}.",
+        "notApplied": "Ikke områdefiltreret: {models}.",
+        "generic": "Gælder for de klassifikatorer, områdemodellen understøtter. Flagermusklassifikatorer områdefiltreres aldrig.",
+        "needsLocation": "Virker kun, når stationsplaceringen er angivet."
+      },
+      "bat": "Gælder kun for flagermusklassifikatorer."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimum må ikke være højere end udløsningstærsklen."
     }
   },
   "restart": {

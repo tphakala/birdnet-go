@@ -2544,12 +2544,12 @@
           "title": "Dynaaminen kynnysarvo",
           "description": "Säädä tunnistusherkkyyttä automaattisesti aikaisempien havaintojen perusteella",
           "enable": {
-            "label": "Ota käyttöön dynaaminen kynnysarvo (BirdNET-Go-erityisominaisuus)",
-            "helpText": "Ottaa käyttöön dynaamisen luottamuskynnysarvon mukautuvampaa lintuäänten tunnistusta varten."
+            "label": "Ota käyttöön dynaaminen kynnysarvo",
+            "helpText": "Alentaa lajin luottamuskynnysarvoa, kun laji on tunnistettu suurella varmuudella."
           },
           "trigger": {
             "label": "Laukaisukynnys",
-            "helpText": "Luottamustaso, jolla dynaaminen kynnysarvo aktivoituu. Jos lintuääni havaitaan tätä arvoa suuremmalla luottamuksella, kyseisen lajin positiivisten osumien kynnysarvoa alennetaan seuraavia ääniä varten."
+            "helpText": "Luottamustaso, jolla dynaaminen kynnysarvo aktivoituu. Jos laji tunnistetaan tätä arvoa suuremmalla varmuudella, kyseisen lajin positiivisten osumien kynnysarvoa alennetaan seuraavia havaintoja varten."
           },
           "minimum": {
             "label": "Dynaamisen kynnysarvon minimi",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Laite ei pysy analyysin tahdissa",
           "overloadedNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä. Analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti.",
           "unknownLatency": "Käsittelyaikaa ei voitu mitata malleille {models}, joten sitä ei huomioida päällekkäisyyttä rajoitettaessa. Analyysi voi silti jäädä jälkeen.",
-          "cpuNote": "Voimakkaampi taso analysoi päällekkäistä ääntä useammin, mikä kuluttaa suoritinaikaa jokaista käytössä olevaa mallia ja äänilähdettä kohden. BirdNET-Go rajoittaa päällekkäisyyden automaattisesti siihen, minkä tämä laite pystyy käsittelemään."
+          "cpuNote": "Voimakkaampi taso analysoi päällekkäistä ääntä useammin, mikä kuluttaa suoritinaikaa jokaista suodattimen piirissä olevaa käytössä olevaa luokittelijaa ja jokaista äänilähdettä kohden. BirdNET-Go rajoittaa päällekkäisyyden automaattisesti siihen, minkä tämä laite pystyy käsittelemään."
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
@@ -5784,23 +5784,20 @@
   "analysis": {
     "title": "Analyysi",
     "tabs": {
-      "settings": "Asetukset",
-      "models": "Mallit"
+      "models": "Mallit",
+      "detection": "Tunnistus",
+      "bats": "Lepakot",
+      "inference": "Inferenssi",
+      "filters": "Suodattimet"
     },
     "detection": {
       "title": "Tunnistusasetukset",
       "description": "Määritä luotettavuuskynnykset lajien luokitteluun.",
-      "confidenceThreshold": {
-        "label": "Luotettavuuskynnys",
-        "helpText": "Vähimmäisluotettavuuspisteet (0.0 - 1.0), joka vaaditaan tunnistuksen tallentamiseen."
-      },
       "batThreshold": {
-        "label": "Lepakkotunnistuksen kynnysarvo (BattyBirdNET)",
-        "helpText": "Vähimmäisluottamusarvo BattyBirdNETin lepakkolajitunnistuksille. BSG-BATilla on oma kynnysarvonsa."
+        "label": "Lepakkotunnistuksen kynnysarvo (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Lepakkotunnistuksen kynnysarvo (BSG-BAT)",
-        "helpText": "Vähimmäisluottamusarvo BSG-BATin lepakkolajitunnistuksille.",
         "sampleRateWarning": "192 kHz:n tallenteet toimivat, mutta yli 96 kHz:n taajuudella kutsuvia lajeja ei voida tunnistaa ja pisteet ovat epäluotettavampia. Suositeltu tallennustaajuus on 384 kHz."
       },
       "bsgBatStep": {
@@ -5841,27 +5838,9 @@
       "locale": {
         "label": "Lajien kieli",
         "helpText": "Kieli, jolla lajien yleisnimistö näytetään käyttöliittymässä."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "BirdNET+ V3.0 -luottamuskynnys"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Aluesuodatin koskee vain lintuluokittimia. Lepakkomallit käyttävät omia lajilistojaan.",
       "status": {
         "title": "Aluesuodattimen yhteenveto",
         "geomodelInfo": "BirdNET-geomalli {version} - {species} tunnettua lajia",
@@ -5876,13 +5855,13 @@
         "noFilter": "Ei aktiivista aluesuodatinta",
         "passUnmapped": {
           "label": "Salli lajit ilman aluetietoja",
-          "helpText": "Salli sellaisten lajien havainnot, joille geomallilla ei ole maantieteellisiä tietoja. Kun pois päältä, nämä lajit suodatetaan aina pois."
+          "helpText": "Salli sellaisten lajien havainnot, joille geomallilla ei ole maantieteellisiä tietoja. Kun pois päältä, nämä lajit suodatetaan aina pois. Tämä koskee vain luokittelijoita, joihin aluesuodatinta sovelletaan."
         }
       }
     },
     "advanced": {
       "title": "Lisäasetukset",
-      "description": "Käsittelyn ja mukautettujen mallien asetukset."
+      "description": "Mukautetut malli- ja nimiketiedostot."
     },
     "downloadSource": {
       "title": "Latauslähde",
@@ -5896,7 +5875,7 @@
     },
     "gallery": {
       "title": "Malligalleria",
-      "description": "Hallitse lintu- ja lepakkotunnistuksen luokittelumalleja.",
+      "description": "Hallitse luokittelumalleja.",
       "region": {
         "title": "Mallialue",
         "modeAuto": "Automaattinen",
@@ -6081,28 +6060,89 @@
         "licenseNote": "Vaihto tapahtuu saman mallin sisällä, joten sen lisenssi ei muutu."
       }
     },
-    "bird": {
-      "title": "Lintuhavainnot",
-      "description": "Määritä luottamuskynnys, lajikieli ja väärien positiivisten suodatus lintuluokittimille."
-    },
     "bat": {
       "title": "Lepakkohavainnot",
-      "description": "Määritä kynnys, ajastus ja väärien positiivisten suodatus lepakkoluokittimille."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Dynaaminen kynnys koskee vain lintuluokittimia."
+      "description": "Ajastus, validointi ja väärien positiivisten suodatus lepakkoluokittelijoille."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0 -tunnistus",
-      "description": "Aseta BirdNET+ V3.0 -tunnistuksille oma luottamuskynnys, joka on riippumaton BirdNETin pääkynnyksestä."
+      "title": "BirdNET+ V3.0 -tunnistus"
+    },
+    "thresholds": {
+      "title": "Tunnistuskynnykset",
+      "description": "Vähimmäisvarmuus, jonka havainto tarvitsee tallentuakseen, kullekin käytössä olevalle luokittelijalle.",
+      "category": {
+        "bat": "Lepakko"
+      },
+      "state": {
+        "pending": "Ladataan",
+        "failed": "Lataus epäonnistui"
+      },
+      "empty": "Yhtään luokittelijaa ei ole käytössä.",
+      "shared": {
+        "label": "Jaettu kynnysarvo",
+        "usedBy": "Käytössä kaikilla luokittelijoilla ilman omaa kynnysarvoa: {models}.",
+        "unused": "Käytössä kaikilla luokittelijoilla ilman omaa kynnysarvoa. Mikään käytössä oleva luokittelija ei käytä sitä nyt."
+      },
+      "customSwitch": "Mukautettu kynnysarvo",
+      "usesShared": "Käyttää jaettua kynnysarvoa"
+    },
+    "speciesNames": {
+      "title": "Lajinimet",
+      "description": "Miten tunnistetut lajit nimetään käyttöliittymässä."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inferenssin suoritusympäristö",
+        "description": "Mikä suoritusympäristö ja laite suorittavat luokittelijat, ja kuinka monta CPU-säiettä ne käyttävät."
+      },
+      "backend": {
+        "label": "Taustajärjestelmä",
+        "helpText": "Automaattinen valitsee nopeimman tämän laitteen tukeman suoritusympäristön kullekin mallille.",
+        "options": {
+          "auto": "Automaattinen (suositeltu)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO-laite",
+        "helpText": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa.",
+        "options": {
+          "auto": "Automaattinen",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Taustajärjestelmän tai laitteen vaihtaminen lataa mallit uudelleen, joten tunnistus keskeytyy muutamaksi sekunniksi.",
+      "backendsLoading": "Tarkistetaan, mitä suoritusympäristöjä tämä laite tukee.",
+      "backendsUnavailable": "Ei voitu lukea, mitä suoritusympäristöjä tämä laite tukee. Taustajärjestelmä ja laite voidaan vaihtaa latauksen jälkeen.",
+      "running": {
+        "title": "Nyt käynnissä",
+        "description": "Suoritusympäristö ja tarkkuus, joilla kukin käytössä oleva luokittelija toimii.",
+        "unknown": "Ei raportoitu"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Koskee kaikkia luokittelijoita, lepakkoluokittelijat mukaan lukien. Lajia, jolla on oma mukautettu kynnysarvo, ei säädetä.",
+      "speciesNames": "Koskee kaikkia luokittelijoita. Laji, jolla ei ole nimeä valitulla kielellä, säilyttää luokittelijansa nimen.",
+      "falsePositiveFilter": "Koskee kaikkia muita luokittelijoita paitsi lepakkoluokittelijoita, joilla on oma väärien positiivisten suodattimensa.",
+      "falsePositiveFilterBatTab": "Koskee kaikkia muita luokittelijoita paitsi lepakkoluokittelijoita, joilla on oma väärien positiivisten suodattimensa Lepakot-välilehdellä.",
+      "rangeFilter": {
+        "appliesTo": "Koskee malleja: {models}.",
+        "notApplied": "Ei aluesuodatettu: {models}.",
+        "generic": "Koskee luokittelijoita, joita aluemalli tukee. Lepakkoluokittelijoita ei koskaan aluesuodateta.",
+        "needsLocation": "Toimii vain, kun aseman sijainti on asetettu."
+      },
+      "bat": "Koskee vain lepakkoluokittelijoita."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimi ei saa olla suurempi kuin laukaisukynnys."
     }
   },
   "restart": {

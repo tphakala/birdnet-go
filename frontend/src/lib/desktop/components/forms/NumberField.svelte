@@ -13,17 +13,20 @@
   Props:
   - min/max: Define valid range; values outside are clamped
   - step: Increment/decrement step size
-  - onUpdate: Called with the clamped value after validation
+  - onUpdate: Called with the clamped value after validation. It may return the value the
+    parent kept (for example after snapping to a step); the field then shows that value
 -->
 <script lang="ts">
   import FormField from './FormField.svelte';
   import { t } from '$lib/i18n';
+  import { cn } from '$lib/utils/cn';
+  import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
     value: number;
-    onUpdate: (_value: number) => void;
+    onUpdate: (_value: number) => void | number;
     min?: number;
     max?: number;
     step?: number;
@@ -31,9 +34,21 @@
     helpText?: string;
     /** Extra element IDs appended to the input's aria-describedby (see FormField). */
     describedByExtra?: string;
+    /** Classes for the label wrapper, e.g. `sr-only` where a table header names the field. */
+    labelClassName?: string;
     required?: boolean;
     disabled?: boolean;
     error?: string;
+    /**
+     * Marks the field invalid when the caller shows the message itself (point
+     * `describedByExtra` at it). Without `error` the field renders no message.
+     */
+    invalid?: boolean;
+    /**
+     * Classes for the box that holds the message under the field (the error or the clamp
+     * notice), for example to take it out of flow so it spills past a narrow field.
+     */
+    errorClassName?: string;
     className?: string;
   }
 
@@ -47,12 +62,18 @@
     placeholder = '',
     helpText = '',
     describedByExtra,
+    labelClassName = '',
     required = false,
     disabled = false,
     error,
+    invalid = false,
+    errorClassName = '',
     className = '',
     ...rest
   }: Props = $props();
+
+  // Id of the error message, so the input can point at it.
+  const errorId = `number-field-error-${generateId()}`;
 
   // Reactive state for showing clamping feedback
   let wasClamped = $state(false);
@@ -97,6 +118,13 @@
     }
   }
 
+  // Shows the value and reports it; when the parent answers with the value it kept, shows that.
+  function commit(next: number) {
+    value = next;
+    const kept = onUpdate(next);
+    if (typeof kept === 'number') value = kept;
+  }
+
   function handleChange(newValue: string | number | boolean | string[]) {
     // Explicitly handle different input types
     if (Array.isArray(newValue)) {
@@ -133,8 +161,7 @@
 
     // Apply clamping for all numeric values (including NaN, Infinity, -Infinity)
     const clampedValue = clampValue(numValue);
-    value = clampedValue;
-    onUpdate(clampedValue);
+    commit(clampedValue);
   }
 
   function handleBlur() {
@@ -143,8 +170,7 @@
     const clampedValue = clampValue(currentNumValue);
 
     if (clampedValue !== value) {
-      value = clampedValue;
-      onUpdate(clampedValue);
+      commit(clampedValue);
     }
   }
 </script>
@@ -163,20 +189,23 @@
     {step}
     {placeholder}
     {helpText}
-    {describedByExtra}
+    describedByExtra={[describedByExtra, error ? errorId : undefined].filter(Boolean).join(' ') ||
+      undefined}
+    {labelClassName}
     {required}
     {disabled}
     onChange={handleChange}
     onBlur={handleBlur}
-    inputClassName={error || clampedMessage ? 'input-error' : ''}
+    invalid={!!error || invalid}
+    inputClassName={error || invalid || clampedMessage ? 'input-error' : ''}
   />
 
   {#if error}
-    <div class="label">
-      <span class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
+    <div class={cn('label', errorClassName)}>
+      <span id={errorId} class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
     </div>
   {:else if clampedMessage}
-    <div class="label">
+    <div class={cn('label', errorClassName)}>
       <span
         class="text-xs leading-4 text-[var(--text-warning)] animate-pulse"
         role="status"

@@ -24,7 +24,10 @@ vi.mock('$lib/utils/modelsApi', async () => {
 });
 
 vi.mock('$lib/stores/models.svelte', () => ({
-  invalidateModels: vi.fn(),
+  getAvailableModels: vi.fn(() => []),
+  modelsLoading: vi.fn(() => false),
+  refreshModels: vi.fn(),
+  watchModels: vi.fn(() => () => {}),
 }));
 
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
@@ -67,6 +70,8 @@ vi.mock('$lib/stores/settings', async () => {
     formData: { birdnet: { huggingFaceEndpoint: '' } },
   });
   return {
+    // The page reports a blocking dynamic threshold error here; these tests do not read it.
+    setValidationIssues: vi.fn(),
     settingsStore,
     settingsActions: {
       updateSection: vi.fn(),
@@ -138,7 +143,7 @@ describe('AnalysisSettingsPage range filter dialog', () => {
       writable: true,
       configurable: true,
     });
-    navigation.redirect('/ui/settings/analysis');
+    navigation.redirect('/ui/settings/analysis?tab=filters');
     // Stands in for an always-mounted Modal (the header's ConfirmModal) that comes
     // earlier in the document and carries the same shared title id
     decoy = document.createElement('div');
