@@ -92,6 +92,12 @@
     /** True when the source already analyzes with the model. */
     runs: boolean;
     followsDefaults: boolean;
+    /**
+     * True for a source that follows the defaults while they are not known: what
+     * it runs, and the list a save would write, cannot be worked out, so it is
+     * left for the audio settings.
+     */
+    blocked: boolean;
   }
 
   // Sound cards are told apart by name and device, streams by name and URL. The
@@ -111,6 +117,9 @@
     model?.registryId ? models.find(m => m.registryId === model.registryId) : undefined
   );
   let defaults = $derived(defaultModelSelection(acousticModelAvailability(), models));
+  // Unknown until the inference status loads, and after it fails or carries a
+  // verdict this client does not know
+  let defaultsUnknown = $derived(acousticModelAvailability().kind === 'unknown');
 
   function rowFor(
     key: string,
@@ -120,13 +129,16 @@
     sampleRate: number
   ): SourceRow {
     const alias = listed?.id ?? '';
+    const followsDefaults = selected.length === 0;
+    const blocked = followsDefaults && defaultsUnknown;
     return {
       key,
       kind,
       name,
       sampleRate,
-      runs: effectiveSourceModels(selected, defaults).includes(alias),
-      followsDefaults: selected.length === 0,
+      runs: !blocked && effectiveSourceModels(selected, defaults).includes(alias),
+      followsDefaults,
+      blocked,
     };
   }
 
@@ -147,24 +159,15 @@
       rowFor(streamKey(stream), 'stream', stream.name, stream.models ?? [], DEFAULT_SAMPLE_RATE)
     )
   );
-  let toggleable = $derived([...cardRows, ...streamRows].filter(row => !row.runs));
+  let toggleable = $derived([...cardRows, ...streamRows].filter(row => !row.runs && !row.blocked));
 
   let chosen = $state<string[]>([]);
   let allChosen = $derived(toggleable.length > 0 && toggleable.every(r => chosen.includes(r.key)));
-
-  // A source that follows the defaults is saved as the defaults plus the model, so
-  // it waits until the defaults are known; with them unknown the save would drop
-  // the default models the source really runs
-  let defaultsPending = $derived(
-    acousticModelAvailability().kind === 'unknown' &&
-      [...cardRows, ...streamRows].some(row => row.followsDefaults)
-  );
 
   type View = 'loading' | 'listFailed' | 'notListed' | 'notLoaded' | 'noSources' | 'sources';
   let view = $derived.by((): View => {
     if (listLoading) return 'loading';
     if (listFailed) return 'listFailed';
-    if (defaultsPending) return 'loading';
     if (!listed) return 'notListed';
     if (listed.state === 'failed' || listed.state === 'pending') return 'notLoaded';
     if (cardRows.length === 0 && streamRows.length === 0) return 'noSources';
@@ -184,6 +187,8 @@
   }
 
   function rowDescription(row: SourceRow): string {
+    if (row.blocked)
+      return t('wizard.steps.enableOnSources.followsDefaultsUnknown', { name: modelName });
     if (row.runs && row.followsDefaults)
       return t('wizard.steps.enableOnSources.followsDefaultsRuns', { name: modelName });
     if (row.runs) return t('wizard.steps.enableOnSources.alreadyOn', { name: modelName });
@@ -284,7 +289,7 @@
               label={row.name}
               icon={row.kind === 'soundcard' ? Mic : Radio}
               value={row.runs || chosen.includes(row.key)}
-              disabled={row.runs}
+              disabled={row.runs || row.blocked}
               description={rowDescription(row) || undefined}
               describedBy={badgesId}
               onUpdate={on => setChosen(row.key, on)}

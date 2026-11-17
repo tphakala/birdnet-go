@@ -5790,6 +5790,7 @@
         "alreadyOn": "Already analyzes with {name}.",
         "followsDefaultsRuns": "Follows the default models, which include {name}.",
         "followsDefaultsAdd": "Follows the default models. Turning this on keeps them and adds {name}.",
+        "followsDefaultsUnknown": "Follows the default models, which could not be read. Turn {name} on for this source in the audio settings.",
         "batStreamWarning": "Bat models need a stream with a lossless codec (PCM) and a sample rate of at least 96 kHz; BSG-BAT needs at least 192 kHz. A typical camera stream is not ultrasonic, so test the stream in the audio settings before relying on it.",
         "allRunning": "Every audio source already analyzes with {name}. There is nothing to change.",
         "notListed": "{name} is not in the list of enabled models, so it cannot be turned on for an audio source here.",

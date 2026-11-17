@@ -5790,6 +5790,7 @@
         "alreadyOn": "Analysoi jo mallilla {name}.",
         "followsDefaultsRuns": "Käyttää oletusmalleja, joihin {name} kuuluu.",
         "followsDefaultsAdd": "Käyttää oletusmalleja. Kun tämä otetaan käyttöön, ne säilyvät ja {name} lisätään.",
+        "followsDefaultsUnknown": "Käyttää oletusmalleja, joita ei voitu lukea. Ota {name} käyttöön tälle lähteelle ääniasetuksissa.",
         "batStreamWarning": "Lepakkomallit tarvitsevat streamin, jossa on häviötön koodekki (PCM) ja vähintään 96 kHz:n näytteenottotaajuus; BSG-BAT tarvitsee vähintään 192 kHz. Tavallinen kameran stream ei sisällä ultraääntä, joten testaa stream ääniasetuksissa ennen kuin luotat siihen.",
         "allRunning": "Kaikki äänilähteet analysoivat jo mallilla {name}. Muutettavaa ei ole.",
         "notListed": "{name} ei ole käytössä olevien mallien luettelossa, joten sitä ei voi ottaa tässä käyttöön äänilähteelle.",

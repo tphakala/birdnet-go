@@ -5790,6 +5790,7 @@
         "alreadyOn": "Analyseert al met {name}.",
         "followsDefaultsRuns": "Volgt de standaardmodellen, waaronder {name}.",
         "followsDefaultsAdd": "Volgt de standaardmodellen. Inschakelen behoudt ze en voegt {name} toe.",
+        "followsDefaultsUnknown": "Volgt de standaardmodellen, die niet konden worden gelezen. Schakel {name} in voor deze bron in de audio-instellingen.",
         "batStreamWarning": "Vleermuismodellen hebben een stream nodig met een verliesvrije codec (PCM) en een samplefrequentie van minstens 96 kHz; BSG-BAT heeft minstens 192 kHz nodig. Een gewone camerastream bevat geen ultrasoon geluid, dus test de stream in de audio-instellingen voordat u erop vertrouwt.",
         "allRunning": "Alle audiobronnen analyseren al met {name}. Er valt niets te wijzigen.",
         "notListed": "{name} staat niet in de lijst met ingeschakelde modellen en kan hier daarom niet voor een audiobron worden ingeschakeld.",

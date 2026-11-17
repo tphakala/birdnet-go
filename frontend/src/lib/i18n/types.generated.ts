@@ -4272,6 +4272,7 @@ export type TranslationKey =
   | 'wizard.steps.enableOnSources.alreadyOn' // params: name
   | 'wizard.steps.enableOnSources.followsDefaultsRuns' // params: name
   | 'wizard.steps.enableOnSources.followsDefaultsAdd' // params: name
+  | 'wizard.steps.enableOnSources.followsDefaultsUnknown' // params: name
   | 'wizard.steps.enableOnSources.batStreamWarning'
   | 'wizard.steps.enableOnSources.allRunning' // params: name
   | 'wizard.steps.enableOnSources.notListed' // params: name
@@ -5269,6 +5270,7 @@ export type TranslationParams = {
   'wizard.steps.enableOnSources.alreadyOn': { name: string | number };
   'wizard.steps.enableOnSources.followsDefaultsRuns': { name: string | number };
   'wizard.steps.enableOnSources.followsDefaultsAdd': { name: string | number };
+  'wizard.steps.enableOnSources.followsDefaultsUnknown': { name: string | number };
   'wizard.steps.enableOnSources.allRunning': { name: string | number };
   'wizard.steps.enableOnSources.notListed': { name: string | number };
   'wizard.steps.enableOnSources.notLoadedPending': { name: string | number };

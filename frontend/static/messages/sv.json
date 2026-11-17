@@ -5790,6 +5790,7 @@
         "alreadyOn": "Analyserar redan med {name}.",
         "followsDefaultsRuns": "Använder standardmodellerna, som omfattar {name}.",
         "followsDefaultsAdd": "Använder standardmodellerna. När du aktiverar detta behålls de och {name} läggs till.",
+        "followsDefaultsUnknown": "Följer standardmodellerna, som inte kunde läsas. Slå på {name} för den här källan i ljudinställningarna.",
         "batStreamWarning": "Fladdermusmodeller behöver en ström med en förlustfri codec (PCM) och en samplingsfrekvens på minst 96 kHz; BSG-BAT behöver minst 192 kHz. En vanlig kameraström är inte ultraljud, så testa strömmen i ljudinställningarna innan du förlitar dig på den.",
         "allRunning": "Alla ljudkällor analyserar redan med {name}. Det finns inget att ändra.",
         "notListed": "{name} finns inte i listan över aktiverade modeller, så den kan inte aktiveras för en ljudkälla här.",

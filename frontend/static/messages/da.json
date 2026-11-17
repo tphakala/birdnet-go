@@ -5790,6 +5790,7 @@
         "alreadyOn": "Analyserer allerede med {name}.",
         "followsDefaultsRuns": "Bruger standardmodellerne, som omfatter {name}.",
         "followsDefaultsAdd": "Bruger standardmodellerne. Når du slår dette til, beholdes de, og {name} tilføjes.",
+        "followsDefaultsUnknown": "Følger standardmodellerne, som ikke kunne læses. Slå {name} til for denne kilde i lydindstillingerne.",
         "batStreamWarning": "Flagermusmodeller kræver en stream med et tabsfrit codec (PCM) og en samplingsfrekvens på mindst 96 kHz; BSG-BAT kræver mindst 192 kHz. En almindelig kamerastream er ikke ultralyd, så test streamen i lydindstillingerne, før du stoler på den.",
         "allRunning": "Alle lydkilder analyserer allerede med {name}. Der er intet at ændre.",
         "notListed": "{name} er ikke på listen over aktiverede modeller, så den kan ikke slås til for en lydkilde her.",

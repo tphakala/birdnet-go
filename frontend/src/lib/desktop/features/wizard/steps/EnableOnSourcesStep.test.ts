@@ -156,18 +156,24 @@ describe('EnableOnSourcesStep', () => {
     expect(screen.queryByText('settings.audio.models.loading')).toBeNull();
   });
 
-  it('waits for the default models before it offers a source that follows them', async () => {
+  it('locks only the sources that follow the defaults while the defaults are unknown', async () => {
     // With the defaults unknown, a default-following source would be saved without
-    // the default models it really runs
+    // the default models it really runs; a source with its own list is unaffected
     acoustic.availability = { kind: 'unknown' };
     serveModels([BIRDNET, PERCH, BAT]);
-    seed([card('Default', [])]);
-    wizard.model = BAT_CONTEXT;
+    seed([card('Default', []), card('Garden', ['birdnet'])]);
+    const { leave } = await renderLoaded(BAT_CONTEXT);
 
-    renderStep(EnableOnSourcesStep);
+    expect(sourceSwitch('Default')).toHaveAttribute('aria-disabled', 'true');
+    expect(t).toHaveBeenCalledWith(`${KEY}.followsDefaultsUnknown`, { name: 'BattyBirdNET' });
+    expect(sourceSwitch('Garden')).not.toHaveAttribute('aria-disabled', 'true');
 
-    expect(await screen.findByText('settings.audio.models.loading')).toBeInTheDocument();
-    expect(screen.queryByRole('switch')).toBeNull();
+    await fireEvent.click(sourceSwitch('Garden'));
+    await leave();
+
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('audio', {
+      sources: [card('Default', []), card('Garden', ['birdnet', 'bat'])],
+    });
   });
 
   it('shows a failed model list even while the default models are unknown', async () => {

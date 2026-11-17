@@ -5790,6 +5790,7 @@
         "alreadyOn": "Již analyzuje modelem {name}.",
         "followsDefaultsRuns": "Používá výchozí modely, mezi které patří {name}.",
         "followsDefaultsAdd": "Používá výchozí modely. Zapnutím se zachovají a přidá se {name}.",
+        "followsDefaultsUnknown": "Používá výchozí modely, které se nepodařilo načíst. Zapněte {name} pro tento zdroj v nastavení zvuku.",
         "batStreamWarning": "Modely netopýrů potřebují stream s bezztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz; BSG-BAT potřebuje alespoň 192 kHz. Běžný stream z kamery není ultrazvukový, proto stream před použitím otestujte v nastavení zvuku.",
         "allRunning": "Všechny zvukové zdroje již analyzují modelem {name}. Není co měnit.",
         "notListed": "Model {name} není v seznamu povolených modelů, proto ho zde nelze zapnout pro zvukový zdroj.",

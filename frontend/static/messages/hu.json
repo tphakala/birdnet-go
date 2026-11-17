@@ -5790,6 +5790,7 @@
         "alreadyOn": "Már elemez a következővel: {name}.",
         "followsDefaultsRuns": "Az alapértelmezett modelleket használja, amelyek között ott van a(z) {name}.",
         "followsDefaultsAdd": "Az alapértelmezett modelleket használja. Bekapcsoláskor ezek megmaradnak, és a(z) {name} is hozzáadódik.",
+        "followsDefaultsUnknown": "Az alapértelmezett modelleket követi, amelyeket nem sikerült beolvasni. Kapcsolja be a(z) {name} modellt ehhez a forráshoz a hangbeállításokban.",
         "batStreamWarning": "A denevérmodellekhez veszteségmentes kodekkel (PCM) és legalább 96 kHz mintavételi frekvenciával rendelkező stream kell; a BSG-BAT legalább 192 kHz-et igényel. Egy átlagos kamerastream nem ultrahangos, ezért tesztelje a streamet a hangbeállításokban, mielőtt számítana rá.",
         "allRunning": "Minden hangforrás már elemez a következővel: {name}. Nincs mit módosítani.",
         "notListed": "A(z) {name} nincs az engedélyezett modellek listáján, ezért itt nem kapcsolható be hangforráshoz.",

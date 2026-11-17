@@ -5790,6 +5790,7 @@
         "alreadyOn": "Jau analizē ar {name}.",
         "followsDefaultsRuns": "Izmanto noklusējuma modeļus, starp kuriem ir {name}.",
         "followsDefaultsAdd": "Izmanto noklusējuma modeļus. Ieslēdzot tie tiek saglabāti un tiek pievienots {name}.",
+        "followsDefaultsUnknown": "Izmanto noklusējuma modeļus, kurus neizdevās nolasīt. Ieslēdziet {name} šim avotam audio iestatījumos.",
         "batStreamWarning": "Sikspārņu modeļiem nepieciešama straume ar bezzudumu kodeku (PCM) un vismaz 96 kHz iztveršanas frekvenci; BSG-BAT nepieciešami vismaz 192 kHz. Parasta kameras straume nav ultraskaņas, tāpēc pirms paļaušanās uz to pārbaudiet straumi audio iestatījumos.",
         "allRunning": "Visi audio avoti jau analizē ar {name}. Nav ko mainīt.",
         "notListed": "{name} nav iespējoto modeļu sarakstā, tāpēc šeit to nevar ieslēgt audio avotam.",

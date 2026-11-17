@@ -5790,6 +5790,7 @@
         "alreadyOn": "Analysiert bereits mit {name}.",
         "followsDefaultsRuns": "Verwendet die Standardmodelle, zu denen {name} gehört.",
         "followsDefaultsAdd": "Verwendet die Standardmodelle. Beim Einschalten bleiben sie erhalten und {name} kommt hinzu.",
+        "followsDefaultsUnknown": "Folgt den Standardmodellen, die nicht gelesen werden konnten. Aktiviere {name} für diese Quelle in den Audioeinstellungen.",
         "batStreamWarning": "Fledermausmodelle benötigen einen Stream mit verlustfreiem Codec (PCM) und einer Abtastrate von mindestens 96 kHz; BSG-BAT benötigt mindestens 192 kHz. Ein typischer Kamerastream enthält keinen Ultraschall, testen Sie den Stream daher in den Audioeinstellungen, bevor Sie sich darauf verlassen.",
         "allRunning": "Alle Audioquellen analysieren bereits mit {name}. Es gibt nichts zu ändern.",
         "notListed": "{name} steht nicht in der Liste der aktivierten Modelle und kann hier daher für keine Audioquelle eingeschaltet werden.",
