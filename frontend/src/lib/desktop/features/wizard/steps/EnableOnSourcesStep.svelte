@@ -71,6 +71,7 @@
   const SKELETON_ROWS = 3;
   const SOUND_CARDS_HEADING_ID = generateId('enable-sound-cards');
   const STREAMS_HEADING_ID = generateId('enable-streams');
+  const ROW_ID = generateId('enable-source');
   const LIST_CLASS =
     'divide-y divide-[var(--border-100)] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)]';
   const LINK_CLASS =
@@ -266,7 +267,8 @@
         {heading}
       </h4>
       <ul class={LIST_CLASS}>
-        {#each rows as row (row.key)}
+        {#each rows as row, index (row.key)}
+          {@const badgesId = `${ROW_ID}-${row.kind}-${index}-badges`}
           <li class="px-3 py-2.5">
             <ToggleField
               label={row.name}
@@ -274,14 +276,18 @@
               value={row.runs || chosen.includes(row.key)}
               disabled={row.runs}
               description={rowDescription(row) || undefined}
+              describedBy={badgesId}
               onUpdate={on => setChosen(row.key, on)}
             >
               {#snippet badges()}
-                <SampleRateBadge
-                  sampleRate={row.sampleRate}
-                  minRate={listed?.minSampleRate}
-                  recommendedRate={listed?.recommendedSampleRate}
-                />
+                <!-- The badge is not part of the switch's name, so the switch is described by it -->
+                <span id={badgesId}>
+                  <SampleRateBadge
+                    sampleRate={row.sampleRate}
+                    minRate={listed?.minSampleRate}
+                    recommendedRate={listed?.recommendedSampleRate}
+                  />
+                </span>
               {/snippet}
             </ToggleField>
           </li>

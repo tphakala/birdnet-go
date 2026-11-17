@@ -253,6 +253,18 @@ describe('EnableOnSourcesStep', () => {
     expect(toastActions.success).toHaveBeenCalledTimes(1);
   });
 
+  it('describes a row below the model minimum rate with the rate warning', async () => {
+    serveModels([BIRDNET, { ...BAT, minSampleRate: 96000 }]);
+    seed([card('Garden', ['birdnet']), card('Ultrasonic', ['birdnet'], 256000)]);
+    await renderLoaded(BAT_CONTEXT);
+
+    const minKey = 'settings.audio.soundCards.compatibility.minSampleRate';
+    expect(sourceSwitch('Garden')).toHaveAccessibleDescription(expect.stringContaining(minKey));
+    expect(sourceSwitch('Ultrasonic')).not.toHaveAccessibleDescription(
+      expect.stringContaining(minKey)
+    );
+  });
+
   it('saves nothing when the user leaves without turning a source on', async () => {
     const { leave } = await renderLoaded();
 
