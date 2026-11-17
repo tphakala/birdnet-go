@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Nächste Schritte für {name}"
+      "title": "Nächste Schritte für {name}",
+      "errors": {
+        "saveFailed": "Speichern fehlgeschlagen. Prüfen Sie die Verbindung und versuchen Sie es erneut, oder wählen Sie Nicht jetzt und schalten Sie das Modell später unter Einstellungen > Audio für Ihre Quellen ein.",
+        "saveRejected": "Die Änderung wurde nicht angenommen. Versuchen Sie es erneut, oder wählen Sie Nicht jetzt und schalten Sie das Modell später unter Einstellungen > Audio für Ihre Quellen ein."
+      }
     }
   },
   "analysis": {

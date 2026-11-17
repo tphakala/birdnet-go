@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Ďalšie kroky pre {name}"
+      "title": "Ďalšie kroky pre {name}",
+      "errors": {
+        "saveFailed": "Uloženie zlyhalo. Skontrolujte pripojenie a skúste to znova, alebo zvoľte Teraz nie a zapnite model pre svoje zdroje neskôr v Nastavenia > Zvuk.",
+        "saveRejected": "Zmena nebola prijatá. Skúste to znova, alebo zvoľte Teraz nie a zapnite model pre svoje zdroje neskôr v Nastavenia > Zvuk."
+      }
     }
   },
   "analysis": {

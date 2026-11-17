@@ -52,23 +52,32 @@ let leaveHandler: StepLeaveHandler | null = null;
 // belongs to an earlier session can be recognised and dropped.
 let session = 0;
 
-const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
-const SAVE_REJECTED_KEY: TranslationKey = 'wizard.errors.saveRejected';
+// The save error keys per flow: the onboarding ones point to skipping setup, which
+// the model next steps flow does not have
+const SAVE_ERROR_KEYS = {
+  setup: { failed: 'wizard.errors.saveFailed', rejected: 'wizard.errors.saveRejected' },
+  modelNextSteps: {
+    failed: 'wizard.modelNextSteps.errors.saveFailed',
+    rejected: 'wizard.modelNextSteps.errors.saveRejected',
+  },
+} as const satisfies Record<string, { failed: TranslationKey; rejected: TranslationKey }>;
 const SAVE_UNFINISHED_KEY: TranslationKey = 'wizard.errors.saveUnfinished';
 const HTTP_STATUS_BAD_REQUEST = 400;
 const HTTP_STATUS_UNPROCESSABLE = 422;
 
 /**
- * The error message key for a failed step save: "not accepted" when the server
- * answered 400 or 422, so the user is not told to check the connection after a
- * validation refusal; the connection message for everything else.
+ * The error message key for a failed step save in a flow: "not accepted" when the
+ * server answered 400 or 422, so the user is not told to check the connection
+ * after a validation refusal; the connection message for everything else.
  */
-function saveErrorKey(err: unknown): TranslationKey {
+function saveErrorKey(err: unknown, wizardFlow: WizardFlow | null): TranslationKey {
   const refused =
     err instanceof ApiError &&
     !err.isNetworkError &&
     (err.status === HTTP_STATUS_BAD_REQUEST || err.status === HTTP_STATUS_UNPROCESSABLE);
-  return refused ? SAVE_REJECTED_KEY : SAVE_FAILED_KEY;
+  const keys =
+    wizardFlow === 'model-next-steps' ? SAVE_ERROR_KEYS.modelNextSteps : SAVE_ERROR_KEYS.setup;
+  return refused ? keys.rejected : keys.failed;
 }
 
 /**
@@ -263,7 +272,7 @@ async function runLeave(move: () => void): Promise<void> {
     if (isStale()) {
       reportUnfinishedSave(startStep);
     } else {
-      stepError = saveErrorKey(err);
+      stepError = saveErrorKey(err, flow);
       isSaving = false;
     }
     return;

@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Neste trinn for {name}"
+      "title": "Neste trinn for {name}",
+      "errors": {
+        "saveFailed": "Kunne ikke lagre. Sjekk tilkoblingen og prøv igjen, eller velg Ikke nå og slå på modellen for kildene dine senere under Innstillinger > Lyd.",
+        "saveRejected": "Endringen ble ikke godtatt. Prøv igjen, eller velg Ikke nå og slå på modellen for kildene dine senere under Innstillinger > Lyd."
+      }
     }
   },
   "analysis": {

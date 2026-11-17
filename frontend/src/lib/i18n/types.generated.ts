@@ -4281,6 +4281,8 @@ export type TranslationKey =
   | 'wizard.steps.enableOnSources.openAudioSettings'
   | 'wizard.steps.enableOnSources.enabledToast' // params: name, count
   | 'wizard.modelNextSteps.title' // params: name
+  | 'wizard.modelNextSteps.errors.saveFailed'
+  | 'wizard.modelNextSteps.errors.saveRejected'
   | 'analysis.title'
   | 'analysis.tabs.models'
   | 'analysis.tabs.detection'

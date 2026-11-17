@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Étapes suivantes pour {name}"
+      "title": "Étapes suivantes pour {name}",
+      "errors": {
+        "saveFailed": "Échec de l’enregistrement. Vérifiez la connexion et réessayez, ou choisissez Pas maintenant et activez le modèle pour vos sources plus tard dans Paramètres > Audio.",
+        "saveRejected": "La modification n’a pas été acceptée. Réessayez, ou choisissez Pas maintenant et activez le modèle pour vos sources plus tard dans Paramètres > Audio."
+      }
     }
   },
   "analysis": {

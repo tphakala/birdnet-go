@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Volgende stappen voor {name}"
+      "title": "Volgende stappen voor {name}",
+      "errors": {
+        "saveFailed": "Opslaan is mislukt. Controleer de verbinding en probeer het opnieuw, of kies Niet nu en schakel het model later in voor uw bronnen via Instellingen > Audio.",
+        "saveRejected": "De wijziging is niet geaccepteerd. Probeer het opnieuw, of kies Niet nu en schakel het model later in voor uw bronnen via Instellingen > Audio."
+      }
     }
   },
   "analysis": {

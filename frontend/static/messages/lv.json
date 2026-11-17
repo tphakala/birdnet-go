@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Nākamie soļi: {name}"
+      "title": "Nākamie soļi: {name}",
+      "errors": {
+        "saveFailed": "Neizdevās saglabāt. Pārbaudiet savienojumu un mēģiniet vēlreiz, vai izvēlieties Ne tagad un vēlāk ieslēdziet modeli saviem avotiem sadaļā Iestatījumi > Audio.",
+        "saveRejected": "Izmaiņas netika pieņemtas. Mēģiniet vēlreiz, vai izvēlieties Ne tagad un vēlāk ieslēdziet modeli saviem avotiem sadaļā Iestatījumi > Audio."
+      }
     }
   },
   "analysis": {

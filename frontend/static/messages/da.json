@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Næste trin for {name}"
+      "title": "Næste trin for {name}",
+      "errors": {
+        "saveFailed": "Kunne ikke gemme. Tjek forbindelsen og prøv igen, eller vælg Ikke nu og slå modellen til for dine kilder senere under Indstillinger > Lyd.",
+        "saveRejected": "Ændringen blev ikke accepteret. Prøv igen, eller vælg Ikke nu og slå modellen til for dine kilder senere under Indstillinger > Lyd."
+      }
     }
   },
   "analysis": {

@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Następne kroki dla {name}"
+      "title": "Następne kroki dla {name}",
+      "errors": {
+        "saveFailed": "Nie udało się zapisać. Sprawdź połączenie i spróbuj ponownie albo wybierz Nie teraz i włącz model dla swoich źródeł później w Ustawienia > Dźwięk.",
+        "saveRejected": "Zmiana nie została przyjęta. Spróbuj ponownie albo wybierz Nie teraz i włącz model dla swoich źródeł później w Ustawienia > Dźwięk."
+      }
     }
   },
   "analysis": {

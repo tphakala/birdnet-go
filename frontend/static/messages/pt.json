@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Próximos passos para {name}"
+      "title": "Próximos passos para {name}",
+      "errors": {
+        "saveFailed": "Não foi possível guardar. Verifique a ligação e tente novamente, ou escolha Agora não e ative o modelo para as suas fontes mais tarde em Configurações > Áudio.",
+        "saveRejected": "A alteração não foi aceite. Tente novamente, ou escolha Agora não e ative o modelo para as suas fontes mais tarde em Configurações > Áudio."
+      }
     }
   },
   "analysis": {

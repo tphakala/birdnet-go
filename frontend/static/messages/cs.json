@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Další kroky pro {name}"
+      "title": "Další kroky pro {name}",
+      "errors": {
+        "saveFailed": "Uložení se nezdařilo. Zkontrolujte připojení a zkuste to znovu, nebo zvolte Teď ne a zapněte model pro své zdroje později v Nastavení > Zvuk.",
+        "saveRejected": "Změna nebyla přijata. Zkuste to znovu, nebo zvolte Teď ne a zapněte model pro své zdroje později v Nastavení > Zvuk."
+      }
     }
   },
   "analysis": {

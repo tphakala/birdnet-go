@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Nästa steg för {name}"
+      "title": "Nästa steg för {name}",
+      "errors": {
+        "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen, eller välj Inte nu och aktivera modellen för dina källor senare under Inställningar > Ljud.",
+        "saveRejected": "Ändringen godtogs inte. Försök igen, eller välj Inte nu och aktivera modellen för dina källor senare under Inställningar > Ljud."
+      }
     }
   },
   "analysis": {

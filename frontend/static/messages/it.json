@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Prossimi passi per {name}"
+      "title": "Prossimi passi per {name}",
+      "errors": {
+        "saveFailed": "Impossibile salvare. Controlla la connessione e riprova, oppure scegli Non ora e attiva il modello per le tue sorgenti più tardi in Impostazioni > Audio.",
+        "saveRejected": "La modifica non è stata accettata. Riprova, oppure scegli Non ora e attiva il modello per le tue sorgenti più tardi in Impostazioni > Audio."
+      }
     }
   },
   "analysis": {

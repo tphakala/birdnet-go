@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Next steps for {name}"
+      "title": "Next steps for {name}",
+      "errors": {
+        "saveFailed": "Could not save. Check the connection and try again, or choose Not now and turn the model on for your sources later in Settings > Audio.",
+        "saveRejected": "The change was not accepted. Try again, or choose Not now and turn the model on for your sources later in Settings > Audio."
+      }
     }
   },
   "analysis": {

@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Seuraavat vaiheet: {name}"
+      "title": "Seuraavat vaiheet: {name}",
+      "errors": {
+        "saveFailed": "Tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen, tai valitse Ei nyt ja ota malli käyttöön lähteillesi myöhemmin kohdassa Asetukset > Ääni.",
+        "saveRejected": "Muutosta ei hyväksytty. Yritä uudelleen, tai valitse Ei nyt ja ota malli käyttöön lähteillesi myöhemmin kohdassa Asetukset > Ääni."
+      }
     }
   },
   "analysis": {

@@ -615,6 +615,21 @@ describe('wizardState - state machine', () => {
       expect(wizardState.installedModel).toEqual(model);
     });
 
+    it('shows its own save errors, not the onboarding ones', async () => {
+      vi.mocked(getStepsForFlow).mockReturnValue(createComponentSteps([undefined]));
+      wizardState.launch('model-next-steps', { model });
+      wizardState.registerLeaveHandler(() => Promise.reject(new Error('offline')));
+      readyStep();
+
+      await wizardState.complete();
+      expect(wizardState.stepError).toBe('wizard.modelNextSteps.errors.saveFailed');
+
+      const refusal = new ApiError('bad', 400, new Response(null, { status: 400 }));
+      wizardState.registerLeaveHandler(() => Promise.reject(refusal));
+      await wizardState.complete();
+      expect(wizardState.stepError).toBe('wizard.modelNextSteps.errors.saveRejected');
+    });
+
     it('closing it does not record the app wizard as dismissed and clears the model', () => {
       launchModelFlow();
 

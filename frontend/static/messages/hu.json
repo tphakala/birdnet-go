@@ -5801,7 +5801,11 @@
       }
     },
     "modelNextSteps": {
-      "title": "Következő lépések: {name}"
+      "title": "Következő lépések: {name}",
+      "errors": {
+        "saveFailed": "A mentés nem sikerült. Ellenőrizze a kapcsolatot, és próbálja újra, vagy válassza a Most nem lehetőséget, és később kapcsolja be a modellt a forrásaihoz a Beállítások > Hang menüben.",
+        "saveRejected": "A módosítást nem fogadta el a rendszer. Próbálja újra, vagy válassza a Most nem lehetőséget, és később kapcsolja be a modellt a forrásaihoz a Beállítások > Hang menüben."
+      }
     }
   },
   "analysis": {
