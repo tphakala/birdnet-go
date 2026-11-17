@@ -156,22 +156,23 @@
     md: 'text-sm py-2 px-3',
   };
 
-  // Shared focus ring style (theme-aware via color-mix)
+  // Shared focus ring: the solid primary outline of the .input field style
   const focusRingClasses =
-    'focus:outline-none focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_10%,transparent)]';
+    'focus:outline-none focus:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]';
 
   // Trigger button classes based on variant
   let triggerClasses = $derived(
     variant === 'select'
       ? cn(
           'w-full flex items-center justify-between text-left cursor-pointer leading-5',
-          'bg-[var(--color-base-100)] text-[var(--color-base-content)]',
-          'border border-[var(--border-100)] rounded-[var(--radius-field)]',
+          'border rounded-[var(--radius-field)]',
           'transition-all',
-          'hover:border-[var(--border-200)]',
           focusRingClasses,
           safeGet(sizeClasses, size, ''),
-          disabled && 'opacity-50 cursor-not-allowed bg-[var(--color-base-200)] pointer-events-none'
+          // cn does not merge conflicting utilities, so the fill and border are chosen by state
+          disabled
+            ? 'cursor-not-allowed pointer-events-none bg-[var(--field-bg-disabled)] border-[var(--field-border-disabled)] text-[var(--text-muted)]'
+            : 'bg-[var(--field-bg)] border-[var(--field-border)] hover:border-[var(--field-border-hover)] text-[var(--color-base-content)] shadow-[var(--field-shadow)]'
         )
       : cn(
           'inline-flex items-center justify-center gap-2 w-full justify-between',
@@ -669,7 +670,7 @@
               onkeydown={handleSearchKeyDown}
               placeholder={t('common.ui.search')}
               class={cn(
-                'block w-full py-2 px-3 text-sm leading-5 bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--color-base-content)] placeholder:opacity-50 hover:border-[var(--border-200)]',
+                'block w-full py-2 px-3 text-sm leading-5 bg-[var(--field-bg)] text-[var(--color-base-content)] border border-[var(--field-border)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--text-muted)] hover:border-[var(--field-border-hover)]',
                 focusRingClasses
               )}
               aria-label={t('components.forms.select.searchOptions')}
