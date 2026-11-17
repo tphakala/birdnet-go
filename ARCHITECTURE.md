@@ -118,7 +118,7 @@ All audio infrastructure lives in `internal/audiocore`. (The older `myaudio` pac
 **From frames to analysis windows.**
 
 1. `analysis.BufferConsumer` is registered per source. It resamples to each enabled model's sample rate (one resampler per distinct target rate) and writes PCM16 to a per-source, per-model analysis buffer and to the source's capture buffer.
-2. The analysis buffer is a ring sized to one model clip, in overwrite mode. A monitor goroutine per source and model polls it and reads a full window when one is available. The window is 3 seconds for BirdNET v2.4, Bat and BSG, and 5 seconds for BirdNET v3, BirdNET+ V3.0 and Perch. The `birdnet.overlap` setting (default none) is scaled proportionally for 5 second models.
+2. The analysis buffer is a ring sized to one model clip, in overwrite mode. A monitor goroutine per source and model polls it and reads a full window when one is available. The window is 3 seconds for BirdNET v2.4, Bat and BSG, and 5 seconds for BirdNET v3, BirdNET+ v3.0 and Perch. The `birdnet.overlap` setting (default none) is scaled proportionally for 5 second models.
 3. The capture buffer holds recent audio (120 seconds by default, longer with extended capture) so that a clip can be cut with pre-roll when a detection is saved.
 
 **Other consumers on a route** include audio level metering (the live level meter in the UI), sound level monitoring (`internal/analysis/sound_level*.go`), and live listening, which is served as HLS (see the API section). Sound level series exposed to Prometheus are labelled with the source id, never the display name, because the metrics listener has no authentication.
@@ -139,7 +139,7 @@ All audio infrastructure lives in `internal/audiocore`. (The older `myaudio` pac
 | ------------- | ------ | ---- | -------------------------------------------------------------- |
 | BirdNET v2.4  | TFLite | 3 s  | Default. FP32 model and range filter models are embedded.      |
 | BirdNET v3    | ONNX   | 5 s  | Downloaded.                                                    |
-| BirdNET+ V3.0 | ONNX   | 5 s  | Own settings section (`birdnetplus`).                          |
+| BirdNET+ v3.0 | ONNX   | 5 s  | Own settings section (`birdnetplus`).                          |
 | Perch v2      | ONNX   | 5 s  | Downloaded.                                                    |
 | Bat           | ONNX   | 3 s  | Ultrasonic source; gated by a night-time schedule. Downloaded. |
 | BSG Finland   | ONNX   | 3 s  | Regional model. Downloaded.                                    |

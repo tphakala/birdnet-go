@@ -71,7 +71,7 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 
 // TestCreateDetectionResult_ThresholdModelAware verifies the stored detection
 // Threshold reflects the model-aware gating threshold: Bat records Bat.Threshold,
-// Perch v2, BirdNET v3.0 and BirdNET+ V3.0 with their override record their own
+// Perch v2, BirdNET v3.0 and BirdNET+ v3.0 with their override record their own
 // threshold, and every other model (including those with the override off) records the BirdNET threshold.
 func TestCreateDetectionResult_ThresholdModelAware(t *testing.T) {
 	t.Parallel()

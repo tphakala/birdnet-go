@@ -223,7 +223,7 @@ type CatalogFile struct {
 // information to drive the download process.
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
-	// BirdNET+ V3.0 acoustic classifier (GA, stable channel). Global GPU-native
+	// BirdNET+ v3.0 acoustic classifier (GA, stable channel). Global GPU-native
 	// model (11,725 classes: 11,709 species plus 16 non-animal sound classes,
 	// 32kHz/5s) in its own HuggingFace repo, paired with the v3.0 geomodel range
 	// filter. Only fp32 is published: the graph computes the sigmoid itself and
@@ -233,8 +233,8 @@ var EmbeddedCatalog = []CatalogEntry{
 	// models.json manifest, which TestGlobalVariants_MatchManifest checks.
 	{
 		ID:              "birdnet-plus-v3.0",
-		Name:            "BirdNET+ V3.0",
-		Description:     "BirdNET+ V3.0 global wildlife classifier (11,725 classes: 11,709 species, birds and other fauna, and 16 non-animal sound classes; scientific and common names).",
+		Name:            "BirdNET+ v3.0",
+		Description:     "BirdNET+ v3.0 global wildlife classifier (11,725 classes: 11,709 species, birds and other fauna, and 16 non-animal sound classes; scientific and common names).",
 		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
 		License:         "Apache-2.0",
 		CommercialUse:   true,
@@ -279,7 +279,7 @@ var EmbeddedCatalog = []CatalogEntry{
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
 	// builds off hosts that cannot run them. The two global variants plus the
 	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
-	// labelled a developer preview and is superseded by the BirdNET+ V3.0 entry
+	// labelled a developer preview and is superseded by the BirdNET+ v3.0 entry
 	// above (SupersededBy), which the gallery surfaces as a note. The backend
 	// loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
@@ -629,7 +629,7 @@ const (
 	embeddingsSizeBytes int64 = 58763257
 )
 
-// Shared v3.0 geomodel, used as range filter companion by Perch v2, BirdNET v3.0 and BirdNET+ V3.0.
+// Shared v3.0 geomodel, used as range filter companion by Perch v2, BirdNET v3.0 and BirdNET+ v3.0.
 const (
 	geomodelHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
 	geomodelONNXSHA256            = "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017"
@@ -679,8 +679,8 @@ func birdnetV30LabelsFile() []CatalogFile {
 	}
 }
 
-// birdnetPlusV30LabelsFile returns the shared global BirdNET+ V3.0 labels file.
-// Every global BirdNET+ V3.0 variant shares one label set, so each variant's
+// birdnetPlusV30LabelsFile returns the shared global BirdNET+ v3.0 labels file.
+// Every global BirdNET+ v3.0 variant shares one label set, so each variant's
 // Files includes it.
 func birdnetPlusV30LabelsFile() []CatalogFile {
 	return []CatalogFile{
@@ -689,7 +689,7 @@ func birdnetPlusV30LabelsFile() []CatalogFile {
 }
 
 // geomodelFiles returns the shared geomodel CatalogFile entries appended to
-// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0, BirdNET+ V3.0).
+// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0, BirdNET+ v3.0).
 func geomodelFiles() []CatalogFile {
 	return []CatalogFile{
 		{

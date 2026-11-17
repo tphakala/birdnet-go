@@ -1435,11 +1435,11 @@ type BirdNETV3Config struct {
 	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
-// BirdNETPlusConfig holds configuration for the BirdNET+ V3.0 acoustic classifier.
+// BirdNETPlusConfig holds configuration for the BirdNET+ v3.0 acoustic classifier.
 type BirdNETPlusConfig struct {
-	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET+ V3.0 ONNX model file
-	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET+ V3.0 label file
-	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate BirdNET+ V3.0 detections on Threshold instead of following BirdNET.Threshold
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET+ v3.0 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET+ v3.0 label file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate BirdNET+ v3.0 detections on Threshold instead of following BirdNET.Threshold
 	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
 	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
@@ -2066,7 +2066,7 @@ type Settings struct {
 	BirdNET     BirdNETConfig     `yaml:"birdnet" json:"birdnet"`         // BirdNET configuration
 	Perch       PerchConfig       `yaml:"perch" json:"perch"`             // Perch v2 model configuration
 	BirdNETV3   BirdNETV3Config   `yaml:"birdnetv3" json:"birdnetv3"`     // BirdNET v3.0 acoustic classifier configuration
-	BirdNETPlus BirdNETPlusConfig `yaml:"birdnetplus" json:"birdnetplus"` // BirdNET+ V3.0 acoustic classifier configuration
+	BirdNETPlus BirdNETPlusConfig `yaml:"birdnetplus" json:"birdnetplus"` // BirdNET+ v3.0 acoustic classifier configuration
 	Bat         BatConfig         `yaml:"bat" json:"bat"`                 // Bat detection configuration
 	BSGBat      BSGBatConfig      `yaml:"bsgbat" json:"bsgbat"`           // BSG-BAT bat classifier configuration
 	BSG         BSGConfig         `yaml:"bsg" json:"bsg"`                 // BSG regional bird model configuration

@@ -1419,7 +1419,7 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 
 // RangeFilterStatus returns introspection data about the range filter,
 // including per-classifier geomodel coverage for all active non-bat models and a
-// diagnosis of why a loaded Perch, BirdNET v3.0 or BirdNET+ V3.0 model is not served by the geomodel.
+// diagnosis of why a loaded Perch, BirdNET v3.0 or BirdNET+ v3.0 model is not served by the geomodel.
 func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	settings := o.CurrentSettings()
 	rf := settings.BirdNET.RangeFilter

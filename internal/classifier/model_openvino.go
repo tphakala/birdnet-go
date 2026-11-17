@@ -65,7 +65,7 @@ type openVINOPlan struct {
 // of the auto path (a non-win); an explicit "cpu" device is still allowed on amd64
 // for benchmarking/advanced use. On arm64 the auto backend declines the OpenVINO
 // CPU before any OpenVINO library is loaded (see autoDeclinesOpenVINOCPU); backend
-// "openvino" or device "cpu" opts back in. Perch, bat, v3.0 and BirdNET+ V3.0 require ONNX
+// "openvino" or device "cpu" opts back in. Perch, bat, v3.0 and BirdNET+ v3.0 require ONNX
 // Runtime before they plan (their builders call checkORTOrFail), so this entry
 // point passes ONNX Runtime as available and auto always declines the arm64 CPU
 // for them; BirdNET v2.4 plans through birdnetV24BasePlan, which passes the live
@@ -185,8 +185,8 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // flipping detections. Unlike Perch v2 this is not GPU-only. Do NOT relax it to
 // f16 without re-running the bat embedding parity check.
 //
-// BirdNET v3.0 and BirdNET+ V3.0 (same architecture) are likewise forced to f32 on
-// EVERY device. The measurements below are for the BirdNET v3.0 preview. BirdNET+ V3.0
+// BirdNET v3.0 and BirdNET+ v3.0 (same architecture) are likewise forced to f32 on
+// EVERY device. The measurements below are for the BirdNET v3.0 preview. BirdNET+ v3.0
 // was measured separately on its published fp32 files: at f16 its scores differed from
 // ONNX Runtime by up to about 0.75 with top-1 changes on the A76 CPU and on Intel GPUs,
 // while f32 stayed within about 3.4e-4 with no top-1 change. The
@@ -473,7 +473,7 @@ func openVINOPrecisionLabel(precision string) string {
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
 // default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
 // explicit override OVPrecisionF32 (Perch v2 on the GPU, and BirdNET v2.4, the bat
-// embedding model, BirdNET v3.0 and BirdNET+ V3.0 on every device) maps to FP32.
+// embedding model, BirdNET v3.0 and BirdNET+ v3.0 on every device) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)

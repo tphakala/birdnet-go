@@ -22,8 +22,8 @@ const modelIDCustom = "Custom"
 const (
 	ModelNameBirdNETv24 = "BirdNET v2.4"
 	ModelNameBirdNETv30 = "BirdNET v3.0"
-	// ModelNameBirdNETPlusV30 is the display name of the BirdNET+ V3.0 family.
-	ModelNameBirdNETPlusV30 = "BirdNET+ V3.0"
+	// ModelNameBirdNETPlusV30 is the display name of the BirdNET+ v3.0 family.
+	ModelNameBirdNETPlusV30 = "BirdNET+ v3.0"
 	ModelNamePerchV2        = "Google Perch v2"
 )
 
@@ -60,7 +60,7 @@ const (
 // Registry ID constants for model identification across packages.
 const (
 	RegistryIDBirdNETV3 = "BirdNET_V3.0"
-	// RegistryIDBirdNETPlusV3 identifies BirdNET+ V3.0, a family separate from the
+	// RegistryIDBirdNETPlusV3 identifies BirdNET+ v3.0, a family separate from the
 	// BirdNET v3.0 preview: own settings section, own detection model row.
 	RegistryIDBirdNETPlusV3 = "BirdNET_Plus_V3.0"
 	RegistryIDBSG           = "BSG"
@@ -255,7 +255,7 @@ var ModelRegistry = map[string]ModelInfo{
 		Backend:          BackendONNX,
 		DetectionName:    detection.ModelNameBirdNETPlus,
 		DetectionVersion: "3.0",
-		Description:      "BirdNET+ V3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
+		Description:      "BirdNET+ v3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
 		// Catalog form mirrors the catalog entry ID; the underscore primary stays
 		// canonical for write-back. See BirdNET v2.4 entry above.
@@ -675,7 +675,7 @@ func DetectionModelInfoForID(modelID string) detection.ModelInfo {
 // given registry ID should be gated by the geographic range filter. Registry
 // models participate when their label space is range-filter compatible
 // (rangeFilterCompat != rangeFilterCompatNone): BirdNET v2.4 (MData), BirdNET v3.0,
-// BirdNET+ V3.0 and Perch (mapped geomodel). Bat, BSG-BAT and BSG classify their own label spaces and do
+// BirdNET+ v3.0 and Perch (mapped geomodel). Bat, BSG-BAT and BSG classify their own label spaces and do
 // not participate.
 //
 // An ID absent from the registry (a custom or otherwise unknown classifier) does

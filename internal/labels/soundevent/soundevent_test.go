@@ -69,21 +69,21 @@ func TestIsLabel(t *testing.T) {
 		{"Perch full label with whitespace and CR", " power_tool\r", true},
 		{"class word in the common half does not match", "Cercomacra nigricans_Jet Antbird", false},
 		{"BirdNET bird label", "Turdus merula_Common Blackbird", false},
-		{"BirdNET+ V3.0 class Chainsaw", "Chainsaw_Chainsaw", true},
-		{"BirdNET+ V3.0 class Aircraft", "Aircraft_Aircraft", true},
-		{"BirdNET+ V3.0 class Boat", "Boat_Boat", true},
-		{"BirdNET+ V3.0 class Explosion", "Explosion_Explosion", true},
-		{"BirdNET+ V3.0 class Engine", "Engine_Engine", true},
-		{"BirdNET+ V3.0 class Fire", "Fire_Fire", true},
-		{"BirdNET+ V3.0 class Fireworks", "Fireworks_Fireworks", true},
-		{"BirdNET+ V3.0 class Hammer", "Hammer_Hammer", true},
-		{"BirdNET+ V3.0 class Motor vehicle", "Motor vehicle_Motor vehicle", true},
-		{"BirdNET+ V3.0 class Music", "Music_Music", true},
-		{"BirdNET+ V3.0 class Power tool", "Power tool_Power tool", true},
-		{"BirdNET+ V3.0 class Train", "Train_Train", true},
-		{"BirdNET+ V3.0 class Sawing", "Sawing_Sawing", true},
-		{"BirdNET+ V3.0 class Siren", "Siren_Siren", true},
-		{"BirdNET+ V3.0 class Vehicle horn", "Vehicle horn_Vehicle horn", true},
+		{"BirdNET+ v3.0 class Chainsaw", "Chainsaw_Chainsaw", true},
+		{"BirdNET+ v3.0 class Aircraft", "Aircraft_Aircraft", true},
+		{"BirdNET+ v3.0 class Boat", "Boat_Boat", true},
+		{"BirdNET+ v3.0 class Explosion", "Explosion_Explosion", true},
+		{"BirdNET+ v3.0 class Engine", "Engine_Engine", true},
+		{"BirdNET+ v3.0 class Fire", "Fire_Fire", true},
+		{"BirdNET+ v3.0 class Fireworks", "Fireworks_Fireworks", true},
+		{"BirdNET+ v3.0 class Hammer", "Hammer_Hammer", true},
+		{"BirdNET+ v3.0 class Motor vehicle", "Motor vehicle_Motor vehicle", true},
+		{"BirdNET+ v3.0 class Music", "Music_Music", true},
+		{"BirdNET+ v3.0 class Power tool", "Power tool_Power tool", true},
+		{"BirdNET+ v3.0 class Train", "Train_Train", true},
+		{"BirdNET+ v3.0 class Sawing", "Sawing_Sawing", true},
+		{"BirdNET+ v3.0 class Siren", "Siren_Siren", true},
+		{"BirdNET+ v3.0 class Vehicle horn", "Vehicle horn_Vehicle horn", true},
 	}
 
 	for _, tc := range tests {
@@ -120,11 +120,11 @@ func TestIsName(t *testing.T) {
 		// BirdNET stored names
 		{"BirdNET stored name in lowercase", "human vocal", true},
 		{"legacy BirdNET class Jet", "Jet", true},
-		// BirdNET+ V3.0 stored names
-		{"BirdNET+ V3.0 stored name Chainsaw", "Chainsaw", true},
-		{"BirdNET+ V3.0 stored name Motor vehicle", "Motor vehicle", true},
-		{"BirdNET+ V3.0 stored name Power tool", "Power tool", true},
-		{"BirdNET+ V3.0 stored name Vehicle horn", "Vehicle horn", true},
+		// BirdNET+ v3.0 stored names
+		{"BirdNET+ v3.0 stored name Chainsaw", "Chainsaw", true},
+		{"BirdNET+ v3.0 stored name Motor vehicle", "Motor vehicle", true},
+		{"BirdNET+ v3.0 stored name Power tool", "Power tool", true},
+		{"BirdNET+ v3.0 stored name Vehicle horn", "Vehicle horn", true},
 	}
 
 	for _, tc := range tests {

@@ -11,7 +11,7 @@
 // The BirdNET models also emit a few non-species classes: the eleven classes
 // present in every V2.4 label file (Dog, Engine, Environmental, Fireworks, Gun,
 // Human non-vocal, Human vocal, Human whistle, Noise, Power tools, Siren), the
-// legacy "Jet", and the sixteen classes that end the BirdNET+ V3.0 label files
+// legacy "Jet", and the sixteen classes that end the BirdNET+ v3.0 label files
 // (Gun, Chainsaw, Aircraft, Boat, Explosion, Engine, Fire, Fireworks, Hammer,
 // Motor vehicle, Music, Power tool, Train, Sawing, Siren, Vehicle horn). They
 // are kept in birdnet_classes.go, matched by [IsLabel] on the part of a raw

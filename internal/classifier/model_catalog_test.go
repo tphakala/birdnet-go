@@ -519,6 +519,16 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.True(t, entry.CommercialUse, "birdnet-v3.0 is CC-BY-SA-4.0, which permits commercial use")
 }
 
+func TestGetCatalogEntry_BirdNETPlusV30(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok, "expected to find catalog entry birdnet-plus-v3.0")
+	assert.Equal(t, "BirdNET+ v3.0", entry.Name)
+	assert.Contains(t, entry.Description, "BirdNET+ v3.0 ", "the description names the model with the lowercase v")
+	assert.Equal(t, RegistryIDBirdNETPlusV3, entry.RegistryID)
+}
+
 // TestEmbeddedCatalog_VariantRequirementsPopulated pins the per-variant MinRAMMB
 // floors, the fp16 exclude token, and the BirdNET v3.0 benchmark data. These
 // values are mirrored from the acoustic-models manifests and drive the hardware
@@ -742,7 +752,7 @@ func TestIsPermanentEntry(t *testing.T) {
 }
 
 // TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
-// entries (Perch v2, BirdNET v3.0, BirdNET+ V3.0) resolve their default variant into entry.Files
+// entries (Perch v2, BirdNET v3.0, BirdNET+ v3.0) resolve their default variant into entry.Files
 // with the model and labels LocalName + checksum unchanged from the pre-variant flat
 // entries (so existing installs are undisturbed), carry the shared geomodel + taxonomy
 // companions, and declare exactly one Default variant, which is never Legacy (an
@@ -859,7 +869,7 @@ func fileRoles(files []CatalogFile) map[string]bool {
 // just the resolved default) carries the companions it needs. resolveVariantDefaults
 // sets entry.Files = variant.Files without merging, so a variant that omits the
 // geomodel/taxonomy companion would silently break the range-filter wiring once a
-// variant selector installs it. Perch v2, BirdNET v3.0 and BirdNET+ V3.0 variants must each carry
+// variant selector installs it. Perch v2, BirdNET v3.0 and BirdNET+ v3.0 variants must each carry
 // model + labels + geomodel + taxonomy; BirdNET v2.4 variants deliberately carry only
 // the model (embedded labels, no geomodel).
 func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {

@@ -85,7 +85,7 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 			device:  inference.OVDeviceCPU,
 			want:    inference.OVPrecisionF32,
 		},
-		// BirdNET+ V3.0 shares the v3.0 architecture and is forced to f32 on both devices.
+		// BirdNET+ v3.0 shares the v3.0 architecture and is forced to f32 on both devices.
 		{
 			name:    "birdnet plus v3.0 on GPU is forced to f32",
 			modelID: RegistryIDBirdNETPlusV3,

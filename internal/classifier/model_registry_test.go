@@ -38,6 +38,7 @@ func TestModelRegistry_BackendAndDisplayName(t *testing.T) {
 		{"BirdNET_V2.4", ModelNameBirdNETv24, BackendTFLite, "BirdNET v2.4 (TFLite)"},
 		{"BirdNET_V3.0", ModelNameBirdNETv30, BackendONNX, "BirdNET v3.0 (ONNX)"},
 		{"Perch_V2", ModelNamePerchV2, BackendONNX, "Google Perch v2 (ONNX)"},
+		{RegistryIDBirdNETPlusV3, ModelNameBirdNETPlusV30, BackendONNX, "BirdNET+ v3.0 (ONNX)"},
 	}
 
 	for _, tt := range tests {
