@@ -175,9 +175,9 @@ export interface BSGBatSettings {
   stepFrames?: number;
 }
 
-// Secondary acoustic classifiers (Perch v2, BirdNET v3.0, BirdNET+ V3.0). Their detections
-// follow the primary BirdNET threshold unless overrideThreshold is enabled, in
-// which case `threshold` gates them instead. modelPath/labelPath/locale are
+// Additional acoustic classifiers (Perch v2, BirdNET v3.0, BirdNET+ v3.0). Their detections
+// follow the BirdNET v2.4 threshold (birdnet.threshold) unless overrideThreshold is enabled,
+// in which case `threshold` gates them instead. modelPath/labelPath/locale are
 // managed by the model gallery, not the detection-settings form.
 export interface PerchSettings {
   modelPath?: string | null;

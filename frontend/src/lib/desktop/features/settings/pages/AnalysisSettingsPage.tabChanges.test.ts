@@ -161,7 +161,7 @@ const MODEL = {
   birdnetplus: {
     id: 'birdnet_plus_v3.0',
     registryId: 'BirdNET_Plus_V3.0',
-    name: 'BirdNET+ V3.0',
+    name: 'BirdNET+ v3.0',
     category: 'wildlife',
   },
   bat: { id: 'bat', registryId: 'Bat', name: 'Bat Classifier', category: 'bat' },
@@ -373,7 +373,7 @@ describe('AnalysisSettingsPage tab change dots', () => {
         edit: { overrideThreshold: true },
       },
       {
-        name: 'BirdNET+ V3.0',
+        name: 'BirdNET+ v3.0',
         model: MODEL.birdnetplus,
         section: 'birdnetplus',
         saved: { overrideThreshold: true, threshold: 0.5 },
