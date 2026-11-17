@@ -7,7 +7,8 @@ import (
 )
 
 // DocumentKindAcceptableUse is the kind of an acceptable use policy. A manifest
-// may carry other kinds, "license" among them; they are shown generically.
+// may carry other kinds, "license" among them; the API passes every kind
+// through unchanged.
 const DocumentKindAcceptableUse = "acceptable_use"
 
 // CatalogDocument is one licence or policy document of a model repo, as pinned
@@ -77,9 +78,8 @@ func EntryDocuments(entry *CatalogEntry) []RepoDocument {
 }
 
 // documentBySHA256 finds a hosted document by its digest, in sorted repo order
-// when two repos pin the same bytes. It serves the read-only text endpoint
-// only; agreement code must not use it to decide which repo a document belongs
-// to.
+// when two repos pin the same bytes. Agreement code must not use it to decide
+// which repo a document belongs to.
 func documentBySHA256(sha string) (RepoDocument, bool) {
 	if sha == "" {
 		return RepoDocument{}, false
