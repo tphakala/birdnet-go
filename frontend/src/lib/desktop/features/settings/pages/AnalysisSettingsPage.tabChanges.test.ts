@@ -29,7 +29,9 @@ vi.mock('$lib/utils/modelsApi', async () => {
 
 // The enabled models list (GET /api/v2/models) that drives the threshold rows. Tests set it
 // before rendering.
-const { modelsList } = vi.hoisted(() => ({ modelsList: { current: [] as BackendModel[] } }));
+const { modelsList } = vi.hoisted((): { modelsList: { current: BackendModel[] } } => ({
+  modelsList: { current: [] },
+}));
 vi.mock('$lib/stores/models.svelte', () => ({
   getAvailableModels: vi.fn(() => modelsList.current),
   modelsLoading: vi.fn(() => false),
@@ -948,10 +950,8 @@ describe('AnalysisSettingsPage species language', () => {
     const select = await screen.findByRole('combobox', { name: 'analysis.detection.locale.label' });
 
     const row = select.closest('li');
-    expect(row).not.toBeNull();
-    expect(
-      within(row as HTMLElement).getByText('analysis.detection.locale.helpText')
-    ).toBeVisible();
+    if (!row) throw new Error('the species language select is not inside a setting row');
+    expect(within(row).getByText('analysis.detection.locale.helpText')).toBeVisible();
     expect(select.getAttribute('aria-describedby')).toBeTruthy();
   });
 });

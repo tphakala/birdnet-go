@@ -764,6 +764,11 @@
     }))
   );
 
+  // The species language option behind a dropdown option, which carries the flag's locale code.
+  function localeOptionFor(option: SelectOption): BirdnetLocaleOption | undefined {
+    return birdnetLocaleOptions.find(candidate => candidate.value === option.value);
+  }
+
   async function loadBirdnetLocales() {
     birdnetLocales.loading = true;
     birdnetLocales.error = null;
@@ -2316,18 +2321,22 @@
               onChange={value => updateBirdnetSetting('locale', firstValue(value))}
             >
               {#snippet renderOption(option)}
-                {@const localeOption = option as BirdnetLocaleOption}
+                {@const localeOption = localeOptionFor(option)}
                 <div class="flex items-center gap-2">
-                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                  <span>{localeOption.label}</span>
+                  {#if localeOption}
+                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  {/if}
+                  <span>{option.label}</span>
                 </div>
               {/snippet}
               {#snippet renderSelected(options)}
                 {#if options[0]}
-                  {@const localeOption = options[0] as BirdnetLocaleOption}
+                  {@const localeOption = localeOptionFor(options[0])}
                   <span class="flex items-center gap-2">
-                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                    <span>{localeOption.label}</span>
+                    {#if localeOption}
+                      <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                    {/if}
+                    <span>{options[0].label}</span>
                   </span>
                 {:else}
                   <span>{birdnet?.locale ?? 'en'}</span>
