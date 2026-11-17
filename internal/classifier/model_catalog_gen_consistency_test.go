@@ -405,6 +405,7 @@ func TestEntryDocuments(t *testing.T) {
 		{name: "standalone Geomodel has its own", entry: lookup(t, "birdnet-geomodel-v3"), wantRequired: []string{"tphakala/BirdNET-Geomodel"}},
 		{name: "an entry depending on a gated entry has none", entry: &CatalogEntry{ID: "fixture", HuggingFaceRepo: "example/ungated", DependsOn: []string{"birdnet-plus-v3.0", "birdnet-geomodel-v3"}}, wantNone: true},
 		{name: "repo casing and a trailing slash still match", entry: &CatalogEntry{ID: "edited", HuggingFaceRepo: " TPHAKALA/birdnet-plus-v3.0/ "}, wantRequired: []string{"tphakala/BirdNET-Plus-V3.0"}},
+		{name: "the hidden BSG entry has no registry row and nothing to agree to", entry: lookup(t, "bsg-finland"), wantNone: true},
 		{name: "an unknown repo gives nil", entry: &CatalogEntry{ID: "x", HuggingFaceRepo: "nobody/nothing"}, wantNone: true},
 		{name: "an empty repo gives nil", entry: &CatalogEntry{ID: "x"}, wantNone: true},
 	}

@@ -1052,7 +1052,10 @@ func (c *Handler) GetInstalledModels(ctx echo.Context) error {
 // while another model operation runs gets a synchronous 409 with
 // operationInProgressKey instead of a 202 for work that never starts. When the
 // background install succeeds it announces the list change, whether or not the
-// hot load of the model succeeded.
+// hot load of the model succeeded. A request for an entry whose own repo has a
+// requires-agreement document that is neither agreed nor listed in
+// acceptedDocuments gets a synchronous 409 with agreementRequiredKey before the
+// slot is taken, and records nothing.
 func (c *Handler) InstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1139,6 +1142,13 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return err
 	}
 
+	// Refuse while a document of the entry's own repo has no agreement. Like the
+	// accepted-document resolution above it runs before the slot is taken, so a
+	// refusal holds nothing and records nothing.
+	if handled, err := c.refuseOutstandingAgreements(ctx, &entry, acceptedDocs); handled {
+		return err
+	}
+
 	// Reserve the operation slot synchronously, so a refusal reaches the client as a
 	// 409. The lease is handed to the goroutine below, which releases it; nothing
 	// between here and c.Go can return.
@@ -1214,7 +1224,10 @@ func (c *Handler) reinstallRefusal(ctx echo.Context, entry *classifier.CatalogEn
 // Files that pass SHA256 validation are skipped. It returns 202 Accepted
 // immediately while the re-download runs in the background. Like InstallModel it
 // answers a synchronous 409 with operationInProgressKey while another model
-// operation runs, and announces the list change when the reinstall succeeds.
+// operation runs, and announces the list change when the reinstall succeeds. It
+// also answers a 409 with agreementRequiredKey while a requires-agreement
+// document of the entry's own repo is neither agreed nor accepted in the body;
+// that check runs after the busy-slot and installed checks and frees the slot.
 func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1284,6 +1297,13 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 
 	if refused := c.reinstallRefusal(ctx, &entry, catalogID); refused != nil {
 		return refused()
+	}
+
+	// Refuse while a document of the entry's own repo has no agreement. It runs
+	// after the checks above, so a busy slot and a model that is not installed keep
+	// their answers; the deferred release frees the slot.
+	if handled, err := c.refuseOutstandingAgreements(ctx, &entry, acceptedDocs); handled {
+		return err
 	}
 
 	// The last synchronous step: only a request that is answered 202 records.

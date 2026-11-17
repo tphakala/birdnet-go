@@ -161,6 +161,12 @@ func (l *OperationLease) check(op ModelOperation, entry *CatalogEntry) error {
 
 // InstallOrReplace runs ModelManager.InstallOrReplace under an OperationInstall
 // lease for the same catalog entry, then releases the lease whatever the outcome.
+//
+// It checks no document agreement. That check belongs to the user-facing install
+// handlers (internal/api/v2/models), which refuse a request while a document of
+// the requested entry's own repo has no recorded agreement. Keeping it out of
+// here means an automatic install, such as the Geomodel files that arrive with
+// another model, can never be blocked by a terms agreement.
 func (l *OperationLease) InstallOrReplace(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
 	defer l.Release()
 	if err := l.check(OperationInstall, entry); err != nil {
@@ -170,7 +176,9 @@ func (l *OperationLease) InstallOrReplace(ctx context.Context, entry *CatalogEnt
 }
 
 // Reinstall runs ModelManager.Reinstall under an OperationReinstall lease for the
-// same catalog entry, then releases the lease whatever the outcome.
+// same catalog entry, then releases the lease whatever the outcome. Like
+// InstallOrReplace it checks no document agreement; the user-facing reinstall
+// handler owns that check.
 func (l *OperationLease) Reinstall(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
 	defer l.Release()
 	if err := l.check(OperationReinstall, entry); err != nil {

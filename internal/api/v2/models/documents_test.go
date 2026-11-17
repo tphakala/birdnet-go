@@ -216,12 +216,14 @@ func TestInstallAndReinstall_AcceptedDocuments(t *testing.T) {
 			lease.Release()
 		})
 
-		t.Run(rt.name+" keeps working with no body", func(t *testing.T) {
+		t.Run(rt.name+" keeps working with no body once agreed", func(t *testing.T) {
 			h, fake, _ := documentFixture(t, nil)
+			require.NoError(t, fake.Record(fake.byEntry[rt.id]))
+			before := len(fake.recordedDocs())
 			rec := guardRequest(t, rt.handle(h), http.MethodPost, rt.id, "")
 			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 			h.Wait()
-			assert.Empty(t, fake.recordedDocs(), "this build does not refuse and does not record without a body")
+			assert.Len(t, fake.recordedDocs(), before, "an empty body records nothing")
 		})
 	}
 
@@ -233,10 +235,11 @@ func TestInstallAndReinstall_AcceptedDocuments(t *testing.T) {
 		assert.Len(t, fake.recordedDocs(), 1, "the repeated digest is one agreement")
 
 		fake.recorded = nil
+		require.NoError(t, fake.Record(fake.byEntry[apiDepA]))
 		rec = guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, body())
 		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 		h.Wait()
-		assert.Empty(t, fake.recordedDocs())
+		assert.Len(t, fake.recordedDocs(), 1, "an empty list records nothing beyond the earlier agreement")
 	})
 
 	t.Run("a request refused for another reason records nothing", func(t *testing.T) {
@@ -426,4 +429,176 @@ func TestReinstallModel_SlowDocumentDoesNotHoldTheSlot(t *testing.T) {
 	rec := <-done
 	assert.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 	h.Wait()
+}
+
+// gateParams is the error_params shape of the agreement-required 409.
+type gateParams struct {
+	Name      string `json:"name"`
+	Documents []struct {
+		Repo   string `json:"repo"`
+		Kind   string `json:"kind"`
+		SHA256 string `json:"sha256"`
+	} `json:"documents"`
+}
+
+// requireAgreementRequired asserts rec is the agreement-required 409 for the
+// named model listing exactly the given digests.
+func requireAgreementRequired(t *testing.T, rec *httptest.ResponseRecorder, name string, shas ...string) {
+	t.Helper()
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	var body struct {
+		ErrorKey    string     `json:"error_key"`
+		ErrorParams gateParams `json:"error_params"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, agreementRequiredKey, body.ErrorKey)
+	assert.Equal(t, name, body.ErrorParams.Name)
+	got := make([]string, 0, len(body.ErrorParams.Documents))
+	for _, d := range body.ErrorParams.Documents {
+		assert.NotEmpty(t, d.Repo)
+		assert.Equal(t, classifier.DocumentKindAcceptableUse, d.Kind)
+		got = append(got, d.SHA256)
+	}
+	assert.Equal(t, shas, got)
+}
+
+// TestInstall_AgreementGate pins the refusal of a user-initiated install, variant
+// swap or reinstall of an entry whose own repo has an agreement document nobody
+// agreed to, and that it never looks beyond the requested entry.
+func TestInstall_AgreementGate(t *testing.T) {
+	const docShaP = "dd44"
+	acceptBody := func(sha string) string {
+		b, err := json.Marshal(installModelRequest{AcceptedDocuments: []string{sha}})
+		require.NoError(t, err)
+		return string(b)
+	}
+	swapBody := `{"variantId":"` + guardVariantDFT + `","allowIncompatible":true}`
+	swapAccepted := `{"variantId":"` + guardVariantDFT + `","allowIncompatible":true,"acceptedDocuments":["` + docShaP + `"]}`
+
+	type row struct {
+		name string
+		call func(h *Handler, body string) *httptest.ResponseRecorder
+		body string
+		// agreedEntry, when set, is the entry whose documents were agreed earlier.
+		agreedEntry string
+		// refusedName is the model named in the 409; empty means 202.
+		refusedName string
+		shas        []string
+		recorded    int
+	}
+	install := func(h *Handler, body string) *httptest.ResponseRecorder {
+		return guardRequest(t, h.InstallModel, http.MethodPost, apiDepN, body)
+	}
+	swap := func(h *Handler, body string) *httptest.ResponseRecorder {
+		return guardRequest(t, h.InstallModel, http.MethodPost, apiDepP, body)
+	}
+	reinstall := func(h *Handler, body string) *httptest.ResponseRecorder {
+		return guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, body)
+	}
+	rows := []row{
+		{name: "install with nothing accepted", call: install, refusedName: "No geomodel", shas: []string{docShaN}},
+		{name: "install with the agreement accepted", call: install, body: acceptBody(docShaN), recorded: 1},
+		{name: "install agreed earlier with an empty body", call: install, agreedEntry: apiDepN},
+		{name: "reinstall with nothing accepted", call: reinstall, refusedName: "Dependent A", shas: []string{docShaA}},
+		{name: "reinstall with the agreement accepted", call: reinstall, body: acceptBody(docShaA), recorded: 1},
+		{name: "reinstall agreed earlier with an empty body", call: reinstall, agreedEntry: apiDepA},
+		{name: "variant swap of an installed gated entry is refused like an install", call: swap, body: swapBody, refusedName: "Primary", shas: []string{docShaP}},
+		{name: "variant swap with the agreement accepted", call: swap, body: swapAccepted, recorded: 1},
+	}
+	for _, tc := range rows {
+		t.Run(tc.name, func(t *testing.T) {
+			h, fake, mm := documentFixture(t, nil)
+			fake.byEntry[apiDepP] = []classifier.RepoDocument{{
+				Repo: "t/p", Kind: classifier.DocumentKindAcceptableUse, RequiresAgreement: true, SHA256: docShaP,
+			}}
+			fake.texts[docShaP] = docText
+			if tc.agreedEntry != "" {
+				require.NoError(t, fake.Record(fake.byEntry[tc.agreedEntry]))
+			}
+			before := len(fake.recordedDocs())
+
+			rec := tc.call(h, tc.body)
+
+			if tc.refusedName != "" {
+				requireAgreementRequired(t, rec, tc.refusedName, tc.shas...)
+				assert.Len(t, fake.recordedDocs(), before, "a refusal records nothing")
+				// Neither a leaked slot nor a started download: a second request is
+				// not answered "operation in progress".
+				lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepN)
+				require.NoError(t, err, "a refusal leaves the operation slot free")
+				lease.Release()
+				return
+			}
+			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+			h.Wait()
+			assert.Len(t, fake.recordedDocs(), before+tc.recorded)
+		})
+	}
+
+	t.Run("an entry depending on a gated entry is not refused", func(t *testing.T) {
+		h, fake, _ := documentFixture(t, nil)
+		// G is gated; P depends on G and has no document of its own.
+		fake.byEntry[apiDepG] = []classifier.RepoDocument{{
+			Repo: "t/g", Kind: classifier.DocumentKindAcceptableUse, RequiresAgreement: true, SHA256: "ee55",
+		}}
+		rec := guardRequest(t, h.InstallModel, http.MethodPost, apiDepP, swapBody)
+		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+		h.Wait()
+		assert.Empty(t, fake.recordedDocs())
+	})
+
+	t.Run("a reinstall while another operation runs still answers operation in progress", func(t *testing.T) {
+		h, _, mm := documentFixture(t, nil)
+		holdSlot(t, mm)
+		rec := guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, "")
+		requireOperationInProgress(t, rec, apiDepG, "Geomodel", "uninstall")
+	})
+
+	t.Run("a reinstall of a model that is not installed is not an agreement question", func(t *testing.T) {
+		h, _, _ := documentFixture(t, nil)
+		rec := guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepN, "")
+		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	})
+}
+
+// TestInstall_AgreementGateReadsOwnRepoOnly runs the live registry: an entry
+// whose own repo is gated is refused, while an entry that merely downloads files
+// from that repo (the Perch v2 shape) or whose repo has no registry row (the
+// hidden BSG shape) installs with an empty body.
+func TestInstall_AgreementGateReadsOwnRepoOnly(t *testing.T) {
+	const gatedRepo = "tphakala/BirdNET-Plus-V3.0"
+	file := func(name, repo string) classifier.CatalogFile {
+		f := apiFile(classifier.RoleModel, name, apiSizeModel)
+		f.HuggingFaceRepo = repo
+		return f
+	}
+	entry := func(id, repo string, files ...classifier.CatalogFile) classifier.CatalogEntry {
+		return classifier.CatalogEntry{
+			ID: id, Name: id, Version: "1.0", Category: classifier.CategoryBird,
+			HuggingFaceRepo: repo, Files: files,
+		}
+	}
+	useCatalog(t, []classifier.CatalogEntry{
+		entry("own-gated", gatedRepo, file("a.onnx", "")),
+		entry("companion-gated", "example/ungated", file("b.onnx", ""), file("c.onnx", gatedRepo)),
+		entry("no-registry-row", "tphakala/BSG", file("d.onnx", "")),
+	})
+	newHandler := func() *Handler {
+		h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+		h.Cancel()
+		h.ortProbe = availableORT
+		return h
+	}
+
+	h := newHandler()
+	rec := guardRequest(t, h.InstallModel, http.MethodPost, "own-gated", "")
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), agreementRequiredKey)
+
+	for _, id := range []string{"companion-gated", "no-registry-row"} {
+		h := newHandler()
+		rec := guardRequest(t, h.InstallModel, http.MethodPost, id, "")
+		require.Equal(t, http.StatusAccepted, rec.Code, "%s: %s", id, rec.Body.String())
+		h.Wait()
+	}
 }
