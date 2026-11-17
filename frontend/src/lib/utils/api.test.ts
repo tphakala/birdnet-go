@@ -263,6 +263,21 @@ describe('API utilities', () => {
       const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).errorKey).toBeUndefined();
+      expect((err as ApiError).errorParams).toBeUndefined();
+
+      // A key without params carries no params either.
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        headers: new Headers(),
+        json: () => Promise.resolve({ error_key: 'analysis.gallery.errors.operationInProgress' }),
+      });
+
+      const keyOnly = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
+      expect(keyOnly).toBeInstanceOf(ApiError);
+      expect((keyOnly as ApiError).errorKey).toBe('analysis.gallery.errors.operationInProgress');
+      expect((keyOnly as ApiError).errorParams).toBeUndefined();
     });
 
     it('returns null for empty responses', async () => {

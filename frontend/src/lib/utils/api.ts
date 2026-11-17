@@ -242,14 +242,13 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
         // Try i18n translation via error_key first
         if (errorData.error_key && typeof errorData.error_key === 'string') {
           serverErrorKey = errorData.error_key;
-          const params =
+          serverErrorParams =
             errorData.error_params &&
             typeof errorData.error_params === 'object' &&
             !Array.isArray(errorData.error_params)
               ? (errorData.error_params as Record<string, unknown>)
-              : {};
-          serverErrorParams = params;
-          const translated = t(errorData.error_key, params);
+              : undefined;
+          const translated = t(errorData.error_key, serverErrorParams ?? {});
           if (translated !== errorData.error_key) {
             serverMessage = translated;
           }
