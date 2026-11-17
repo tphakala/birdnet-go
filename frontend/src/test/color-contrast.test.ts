@@ -449,7 +449,46 @@ describe('Accessibility: disabled field text', () => {
       expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
     });
   }
+
+  // The token check above holds only while the disabled rules use those tokens and dim by
+  // colour: an element opacity on top would pull the text under AA again. A rule is found by
+  // its selector list, so grouping the three rules into one keeps the check valid.
+  it.each(['.input:disabled', '.select:disabled', '.textarea:disabled'])(
+    '%s uses the disabled field tokens with no opacity',
+    selector => {
+      const bodies = bodiesNaming(css, selector);
+      expect(bodies).toHaveLength(1);
+      const declarations = declarationsOf(bodies[0] ?? '');
+      expect(declarations).toContain('color: var(--field-text-disabled)');
+      expect(declarations).toContain('background-color: var(--field-bg-disabled)');
+      expect(declarations.filter(d => d.startsWith('opacity:'))).toEqual([]);
+    }
+  );
 });
+
+/** Bodies of the rules whose comma-separated selector list names `selector` exactly. */
+function bodiesNaming(source: string, selector: string): string[] {
+  const bodies: string[] = [];
+  for (const chunk of source.split('}')) {
+    const open = chunk.lastIndexOf('{');
+    if (open < 0) continue;
+    // The last line of each list entry, so a comment or an at-rule before the rule is skipped.
+    const selectors = chunk
+      .slice(0, open)
+      .split(',')
+      .map(entry => entry.trim().split('\n').pop()?.trim() ?? '');
+    if (selectors.includes(selector)) bodies.push(chunk.slice(open + 1));
+  }
+  return bodies;
+}
+
+/** The declarations of a rule body, trimmed and without their trailing semicolons. */
+function declarationsOf(body: string): string[] {
+  return body
+    .split(';')
+    .map(declaration => declaration.trim())
+    .filter(Boolean);
+}
 
 /** Data visualization fills: chart series and meter tones. */
 const VIZ_FILL_TOKENS = [
