@@ -6139,6 +6139,9 @@
         "needsLocation": "Funktioniert nur, wenn der Stationsstandort festgelegt ist."
       },
       "bat": "Gilt nur für Fledermausklassifikatoren."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Das Minimum darf den Auslöseschwellenwert nicht überschreiten."
     }
   },
   "restart": {

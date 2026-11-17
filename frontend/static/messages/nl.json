@@ -6102,7 +6102,7 @@
         "description": "Welke runtime en welk apparaat de classificatoren uitvoeren, en hoeveel CPU-threads ze gebruiken."
       },
       "backend": {
-        "label": "Backend",
+        "label": "Back-end",
         "helpText": "Automatisch kiest de snelste runtime die dit apparaat ondersteunt voor elk model.",
         "options": {
           "auto": "Automatisch (aanbevolen)",
@@ -6139,6 +6139,9 @@
         "needsLocation": "Werkt alleen als de stationlocatie is ingesteld."
       },
       "bat": "Geldt alleen voor vleermuisclassificatoren."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Het minimum mag niet hoger zijn dan de trigger drempelwaarde."
     }
   },
   "restart": {

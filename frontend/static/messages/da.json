@@ -6139,6 +6139,9 @@
         "needsLocation": "Virker kun, når stationsplaceringen er angivet."
       },
       "bat": "Gælder kun for flagermusklassifikatorer."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimum må ikke være højere end udløsningstærsklen."
     }
   },
   "restart": {

@@ -6139,6 +6139,9 @@
         "needsLocation": "Fungerar bara när stationsplatsen är inställd."
       },
       "bat": "Gäller bara fladdermusklassificerare."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimum får inte vara högre än utlösningströskelvärdet."
     }
   },
   "restart": {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/svelte';
+import { render, screen, cleanup, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import type { CatalogEntry } from '$lib/types/models';
@@ -529,6 +529,30 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     });
   });
 
+  it('returns to the saved values when a seeded custom threshold is switched off again', async () => {
+    modelsList.current = [MODEL.birdnetv3];
+    seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
+    // Apply updates to the form copy, as the real store does.
+    vi.mocked(settingsActions.updateSection).mockImplementation((section, patch) =>
+      editSection(section, patch)
+    );
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.birdnetv3.name) });
+    const user = userEvent.setup();
+
+    await user.click(toggle);
+    await tick();
+    expect(dottedTabs()).toEqual(['detection']);
+    await user.click(toggle);
+    await tick();
+
+    expect(dottedTabs()).toEqual([]);
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
+      overrideThreshold: false,
+      threshold: 0,
+    });
+  });
+
   it('saves a typed classifier threshold rounded to the step, to its own section only', async () => {
     modelsList.current = [MODEL.bsgbat];
     seedSection('bsgbat', { threshold: 0.5 });
@@ -573,6 +597,83 @@ describe('AnalysisSettingsPage range filter scope', () => {
     expect(paramsFor('analysis.scope.rangeFilter.notApplied').at(-1)).toEqual({
       models: `${MODEL.perch.name}, ${MODEL.bat.name}`,
     });
+  });
+});
+
+describe('AnalysisSettingsPage range filter overview', () => {
+  beforeEach(() => resetPage('filters'));
+
+  it('lists only the classifiers the active range backend covers', async () => {
+    modelsList.current = [MODEL.birdnet, MODEL.perch];
+    const classifier = (id: string, name: string, coveredByBackend: boolean) => ({
+      id,
+      name,
+      coveredByBackend,
+      totalSpecies: 100,
+      withRangeData: 90,
+      withoutRangeData: 10,
+    });
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url === RANGE_STATUS_URL
+        ? {
+            geomodel: { version: '1', totalSpecies: 100, autoSelected: true },
+            classifiers: [
+              classifier('BirdNET_V2.4', MODEL.birdnet.name, true),
+              classifier('Perch_V2', MODEL.perch.name, false),
+            ],
+          }
+        : {}
+    );
+    render(AnalysisSettingsPage);
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText(MODEL.birdnet.name)).toBeInTheDocument();
+    expect(within(table).queryByText(MODEL.perch.name)).toBeNull();
+  });
+});
+
+describe('AnalysisSettingsPage dynamic threshold', () => {
+  beforeEach(() => resetPage());
+
+  const MIN_ABOVE_TRIGGER = 'analysis.dynamicThreshold.minAboveTrigger';
+
+  function seedDynamic(patch: Record<string, unknown>) {
+    editSection('realtime', {
+      dynamicThreshold: { ...BASE_REALTIME.dynamicThreshold, enabled: true, ...patch },
+    });
+  }
+
+  it('flags a minimum above the trigger on the minimum field', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.9 });
+    render(AnalysisSettingsPage);
+
+    expect(await screen.findByText(MIN_ABOVE_TRIGGER)).toBeInTheDocument();
+  });
+
+  it('shows no error while the minimum does not exceed the trigger', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.5 });
+    render(AnalysisSettingsPage);
+    await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+
+    expect(screen.queryByText(MIN_ABOVE_TRIGGER)).toBeNull();
+  });
+});
+
+describe('AnalysisSettingsPage species language', () => {
+  beforeEach(() => resetPage());
+
+  it('is a setting row with the label and help beside the select', async () => {
+    render(AnalysisSettingsPage);
+    const select = await screen.findByRole('combobox', { name: 'analysis.detection.locale.label' });
+
+    const row = select.closest('li');
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement).getByText('analysis.detection.locale.helpText')
+    ).toBeVisible();
+    expect(select.getAttribute('aria-describedby')).toBeTruthy();
   });
 });
 

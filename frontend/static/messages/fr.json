@@ -6102,7 +6102,7 @@
         "description": "Quel moteur d'exécution et quel appareil exécutent les classificateurs, et combien de threads CPU ils utilisent."
       },
       "backend": {
-        "label": "Backend",
+        "label": "Moteur d'inférence",
         "helpText": "Automatique choisit le moteur d'exécution le plus rapide pris en charge par cet appareil pour chaque modèle.",
         "options": {
           "auto": "Automatique (recommandé)",
@@ -6139,6 +6139,9 @@
         "needsLocation": "Fonctionne uniquement lorsque l'emplacement de la station est défini."
       },
       "bat": "S'applique uniquement aux classificateurs de chauves-souris."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Le minimum ne doit pas dépasser le seuil de déclenchement."
     }
   },
   "restart": {

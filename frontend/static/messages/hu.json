@@ -6139,6 +6139,9 @@
         "needsLocation": "Csak akkor működik, ha az állomás helyszíne be van állítva."
       },
       "bat": "Csak a denevérosztályozókra érvényes."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "A minimum nem lehet magasabb a trigger küszöbértéknél."
     }
   },
   "restart": {

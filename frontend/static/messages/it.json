@@ -6102,7 +6102,7 @@
         "description": "Quale runtime e dispositivo eseguono i classificatori, e quanti thread CPU utilizzano."
       },
       "backend": {
-        "label": "Backend",
+        "label": "Motore di inferenza",
         "helpText": "Automatico sceglie il runtime più veloce supportato da questo dispositivo per ciascun modello.",
         "options": {
           "auto": "Automatico (consigliato)",
@@ -6139,6 +6139,9 @@
         "needsLocation": "Funziona solo quando è impostata la posizione della stazione."
       },
       "bat": "Si applica solo ai classificatori di pipistrelli."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Il minimo non deve superare la soglia di attivazione."
     }
   },
   "restart": {

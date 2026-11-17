@@ -6102,7 +6102,7 @@
         "description": "Qué entorno de ejecución y dispositivo ejecutan los clasificadores, y cuántos hilos de CPU utilizan."
       },
       "backend": {
-        "label": "Backend",
+        "label": "Motor de inferencia",
         "helpText": "Automático elige el entorno de ejecución más rápido compatible con este dispositivo para cada modelo.",
         "options": {
           "auto": "Automático (recomendado)",
@@ -6139,6 +6139,9 @@
         "needsLocation": "Solo funciona cuando está establecida la ubicación de la estación."
       },
       "bat": "Se aplica solo a los clasificadores de murciélagos."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "El umbral mínimo no debe superar el umbral de activación."
     }
   },
   "restart": {

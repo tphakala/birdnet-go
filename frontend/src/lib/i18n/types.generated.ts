@@ -4514,6 +4514,7 @@ export type TranslationKey =
   | 'analysis.scope.rangeFilter.generic'
   | 'analysis.scope.rangeFilter.needsLocation'
   | 'analysis.scope.bat'
+  | 'analysis.dynamicThreshold.minAboveTrigger'
   | 'restart.applicationRestart'
   | 'restart.containerRestart'
   | 'restart.confirmTitle'

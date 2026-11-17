@@ -6139,6 +6139,9 @@
         "needsLocation": "Funguje pouze tehdy, když je nastavena poloha stanice."
       },
       "bat": "Vztahuje se pouze na klasifikátory netopýrů."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimální práh nesmí být vyšší než spouštěcí práh."
     }
   },
   "restart": {

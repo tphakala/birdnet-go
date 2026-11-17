@@ -6139,6 +6139,9 @@
         "needsLocation": "Darbojas tikai tad, kad ir iestatīta stacijas atrašanās vieta."
       },
       "bat": "Attiecas tikai uz sikspārņu klasifikatoriem."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimālais slieksnis nedrīkst pārsniegt aktivizēšanas slieksni."
     }
   },
   "restart": {

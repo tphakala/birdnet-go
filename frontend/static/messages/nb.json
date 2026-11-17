@@ -6139,6 +6139,9 @@
         "needsLocation": "Fungerer bare når stasjonsposisjonen er satt."
       },
       "bat": "Gjelder bare flaggermusklassifikatorer."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimum kan ikke være høyere enn utløsningsterskelen."
     }
   },
   "restart": {

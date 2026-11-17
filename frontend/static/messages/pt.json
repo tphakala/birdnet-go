@@ -6102,7 +6102,7 @@
         "description": "Que ambiente de execução e dispositivo executam os classificadores, e quantas threads de CPU utilizam."
       },
       "backend": {
-        "label": "Backend",
+        "label": "Mecanismo de inferência",
         "helpText": "Automático escolhe o ambiente de execução mais rápido suportado por este dispositivo para cada modelo.",
         "options": {
           "auto": "Automático (recomendado)",
@@ -6139,6 +6139,9 @@
         "needsLocation": "Funciona apenas quando a localização da estação está definida."
       },
       "bat": "Aplica-se apenas a classificadores de morcegos."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "O mínimo não pode ser superior ao limiar de ativação."
     }
   },
   "restart": {

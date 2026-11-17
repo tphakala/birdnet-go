@@ -330,6 +330,7 @@
   const DYNAMIC_TRIGGER_HELP_ID = generateId('dynamic-trigger-help');
   const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
   const DYNAMIC_HOURS_HELP_ID = generateId('dynamic-hours-help');
+  const SPECIES_LANGUAGE_HELP_ID = generateId('species-language-help');
   /** One setting row: label and help on the left, the control on the right from tablet width. */
   const SETTING_ROW_CLASS =
     'grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]';
@@ -1005,12 +1006,15 @@
   // Which classifiers the range filter acts on, from the range filter's own participant list
   // (GET /api/v2/range/status), and which enabled ones it skips. The backend decides
   // participation per model, so this never names a classifier the filter does not reach.
+  // A participant the active range backend does not cover is not filtered (for example Perch
+  // under the legacy BirdNET v2.4 range data), so it is listed as not range filtered and the
+  // overview table leaves it out.
+  const rangeCoveredClassifiers = $derived(
+    (rangeFilterStatus?.classifiers ?? []).filter(c => c.coveredByBackend !== false)
+  );
+
   const rangeFilterScope = $derived.by(() => {
-    // A participant the active range backend does not cover is not filtered (for example
-    // Perch under the legacy BirdNET v2.4 range data), so it is listed as not range filtered.
-    const participants = (rangeFilterStatus?.classifiers ?? []).filter(
-      c => c.coveredByBackend !== false
-    );
+    const participants = rangeCoveredClassifiers;
     if (participants.length === 0) return t('analysis.scope.rangeFilter.generic');
     const ids = new Set(participants.map(c => c.id));
     const skipped = getAvailableModels()
@@ -1542,18 +1546,35 @@
 
   // Switching a row to a custom threshold keeps its saved value when that value is inside the
   // row's bounds; otherwise (for example a saved 0) it starts from the shared threshold it
-  // showed.
+  // showed. Switching it off again, with that seeded value untouched, puts the saved value
+  // back, so the round trip leaves the section as it was.
+  const seededThresholds = new Map<
+    ClassifierThresholdSection,
+    { seeded: number; previous: number | undefined }
+  >();
+
   function updateRowCustom(row: ThresholdRow, custom: boolean) {
     const { section, min, max } = row.descriptor;
     if (!section) return;
     const own = classifierValues(section).threshold;
-    const inBounds = own !== undefined && own >= min && own <= max;
-    settingsActions.updateSection(
-      section,
-      custom && !inBounds
-        ? { overrideThreshold: true, threshold: snapToStep(sharedThreshold, row.descriptor) }
-        : { overrideThreshold: custom }
-    );
+    if (!custom) {
+      const seed = seededThresholds.get(section);
+      seededThresholds.delete(section);
+      settingsActions.updateSection(
+        section,
+        seed && own === seed.seeded
+          ? { overrideThreshold: false, threshold: seed.previous }
+          : { overrideThreshold: false }
+      );
+      return;
+    }
+    if (own !== undefined && own >= min && own <= max) {
+      settingsActions.updateSection(section, { overrideThreshold: true });
+      return;
+    }
+    const seeded = snapToStep(sharedThreshold, row.descriptor);
+    seededThresholds.set(section, { seeded, previous: own });
+    settingsActions.updateSection(section, { overrideThreshold: true, threshold: seeded });
   }
 
   // The settings values behind a classifier's own threshold section.
@@ -1595,6 +1616,8 @@
     describedBy?: string;
     /** False for a value without a meaningful range to slide over (a number of hours). */
     slider?: boolean;
+    /** Field-level error shown under the number field. */
+    error?: string;
     onChange: (_value: number) => void;
   }
 
@@ -2013,6 +2036,7 @@
       step={c.bounds.step}
       describedByExtra={c.describedBy}
       disabled={c.disabled}
+      error={c.error}
     />
   </div>
 {/snippet}
@@ -2021,7 +2045,7 @@
 {#snippet dynamicRow(label: string, help: string, helpId: string, control: ValueControl)}
   <li class={SETTING_ROW_CLASS}>
     <div class="min-w-0">
-      <span class="text-sm font-medium text-[var(--color-base-content)]">{label}</span>
+      <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
       <p id={helpId} class="help-text mt-1">{help}</p>
     </div>
     {@render valueControl(control)}
@@ -2048,7 +2072,7 @@
              threshold of its own, whichever classifiers are installed. -->
         <li class={SETTING_ROW_CLASS} data-testid="threshold-row-shared">
           <div class="min-w-0">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
+            <span class="block text-sm font-medium text-[var(--color-base-content)]">
               {t('analysis.thresholds.shared.label')}
             </span>
             <p id={SHARED_THRESHOLD_HELP_ID} class="help-text mt-1">
@@ -2076,7 +2100,10 @@
           <li class={SETTING_ROW_CLASS} data-testid="threshold-row-{row.model.id}">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <span id={nameId} class="text-sm font-medium text-[var(--color-base-content)]">
+                <span
+                  id={nameId}
+                  class="block text-sm font-medium text-[var(--color-base-content)]"
+                >
                   {row.model.name}
                 </span>
                 {#if row.model.category === 'bat'}
@@ -2170,6 +2197,10 @@
               bounds: DYNAMIC_MIN_BOUNDS,
               disabled: store.isLoading || store.isSaving,
               describedBy: DYNAMIC_MIN_HELP_ID,
+              error:
+                dynamicThreshold.min > dynamicThreshold.trigger
+                  ? t('analysis.dynamicThreshold.minAboveTrigger')
+                  : undefined,
               onChange: value => updateDynamicValue('min', DYNAMIC_MIN_BOUNDS, value),
             }
           )}
@@ -2199,39 +2230,51 @@
       currentData={speciesNamesChange.current}
     >
       {@render scopeLine(t('analysis.scope.speciesNames'))}
-      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SelectDropdown
-          options={birdnetLocaleOptions}
-          value={birdnet?.locale ?? 'en'}
-          label={t('analysis.detection.locale.label')}
-          helpText={t('analysis.detection.locale.helpText')}
-          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          variant="select"
-          size="md"
-          groupBy={false}
-          searchable={true}
-          onChange={value => updateBirdnetSetting('locale', value as string)}
-        >
-          {#snippet renderOption(option)}
-            {@const localeOption = option as BirdnetLocaleOption}
-            <div class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
-            </div>
-          {/snippet}
-          {#snippet renderSelected(options)}
-            {#if options[0]}
-              {@const localeOption = options[0] as BirdnetLocaleOption}
-              <span class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </span>
-            {:else}
-              <span>{birdnet?.locale ?? 'en'}</span>
-            {/if}
-          {/snippet}
-        </SelectDropdown>
-      </div>
+      <ul>
+        <li class={SETTING_ROW_CLASS}>
+          <div class="min-w-0">
+            <span class="block text-sm font-medium text-[var(--color-base-content)]">
+              {t('analysis.detection.locale.label')}
+            </span>
+            <p id={SPECIES_LANGUAGE_HELP_ID} class="help-text mt-1">
+              {t('analysis.detection.locale.helpText')}
+            </p>
+          </div>
+          <div class="min-w-0">
+            <SelectDropdown
+              options={birdnetLocaleOptions}
+              value={birdnet?.locale ?? 'en'}
+              aria-label={t('analysis.detection.locale.label')}
+              aria-describedby={SPECIES_LANGUAGE_HELP_ID}
+              disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
+              variant="select"
+              size="md"
+              groupBy={false}
+              searchable={true}
+              onChange={value => updateBirdnetSetting('locale', value as string)}
+            >
+              {#snippet renderOption(option)}
+                {@const localeOption = option as BirdnetLocaleOption}
+                <div class="flex items-center gap-2">
+                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  <span>{localeOption.label}</span>
+                </div>
+              {/snippet}
+              {#snippet renderSelected(options)}
+                {#if options[0]}
+                  {@const localeOption = options[0] as BirdnetLocaleOption}
+                  <span class="flex items-center gap-2">
+                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                    <span>{localeOption.label}</span>
+                  </span>
+                {:else}
+                  <span>{birdnet?.locale ?? 'en'}</span>
+                {/if}
+              {/snippet}
+            </SelectDropdown>
+          </div>
+        </li>
+      </ul>
     </SettingsSection>
   </div>
 {/snippet}
@@ -2350,7 +2393,7 @@
       <ul class="divide-y divide-[var(--border-100)]">
         <li class={SETTING_ROW_CLASS}>
           <div class="min-w-0">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
+            <span class="block text-sm font-medium text-[var(--color-base-content)]">
               {t('settings.main.sections.rangeFilter.threshold.label')}
             </span>
             <p id={RANGE_THRESHOLD_HELP_ID} class="help-text mt-1">
@@ -2369,7 +2412,7 @@
 
         <li class={SETTING_ROW_CLASS}>
           <div class="min-w-0">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
+            <span class="block text-sm font-medium text-[var(--color-base-content)]">
               {t('settings.main.sections.rangeFilter.speciesCount.label')}
             </span>
             <p class="help-text mt-1">
@@ -2476,37 +2519,33 @@
             </div>
 
             <!-- Per-classifier coverage table -->
-            {#if rangeFilterStatus.classifiers.length > 0}
+            {#if rangeCoveredClassifiers.length > 0}
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="border-b border-[var(--color-base-300)]">
-                      <th
-                        scope="col"
-                        class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                      <th scope="col" class="text-left py-2 pr-4 font-medium text-muted"
                         >{t('analysis.rangeFilter.status.classifier')}</th
                       >
-                      <th
-                        scope="col"
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                      <th scope="col" class="text-right py-2 px-4 font-medium text-muted"
                         >{t('analysis.rangeFilter.status.totalSpecies')}</th
                       >
                       <th
                         scope="col"
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        class="text-right py-2 px-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withRangeData')}</th
                       >
                       <th
                         scope="col"
-                        class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                        class="text-right py-2 pl-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withoutRangeData')}</th
                       >
                     </tr>
                   </thead>
                   <tbody>
-                    {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                    {#each rangeCoveredClassifiers as classifier (classifier.id)}
                       <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
                         <td class="py-2 pr-4 font-medium">{classifier.name}</td>
                         <td class="py-2 px-4 text-right tabular-nums"

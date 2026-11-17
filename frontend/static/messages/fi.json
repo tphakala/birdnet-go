@@ -6139,6 +6139,9 @@
         "needsLocation": "Toimii vain, kun aseman sijainti on asetettu."
       },
       "bat": "Koskee vain lepakkoluokittelijoita."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimi ei saa olla suurempi kuin laukaisukynnys."
     }
   },
   "restart": {

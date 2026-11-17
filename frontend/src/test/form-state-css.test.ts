@@ -50,6 +50,8 @@ describe('form state borders on hover', () => {
   });
 
   it('leaves the base hover rule unlowered so .input-ghost keeps its hover border', () => {
-    expect(findRule(`.input${HOVER_GUARD}`)?.body).toContain('border-color: var(--border-200)');
+    expect(findRule(`.input${HOVER_GUARD}`)?.body).toContain(
+      'border-color: var(--field-border-hover)'
+    );
   });
 });

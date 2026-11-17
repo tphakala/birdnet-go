@@ -6139,6 +6139,9 @@
         "needsLocation": "Works only when the station location is set."
       },
       "bat": "Applies to bat classifiers only."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "The minimum must not be higher than the trigger."
     }
   },
   "restart": {
