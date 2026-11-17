@@ -1433,12 +1433,14 @@
 
   // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
   // saved effective one restores the saved raw value (0 or none for the default), so the form
-  // compares equal to the saved settings again and the save bar does not stay active.
+  // compares equal to the saved settings again and the save bar does not stay active. It returns
+  // the whole frame count kept, so the field shows it when the prop does not change.
   function updateBsgBatStep(value: number) {
     const frames = Math.round(value);
     const stepFrames =
       frames === savedBsgBatStepFrames ? store.originalData.bsgbat?.stepFrames : frames;
     settingsActions.updateSection('bsgbat', { stepFrames });
+    return frames;
   }
 
   function updateBatNighttimeOnly(value: boolean) {

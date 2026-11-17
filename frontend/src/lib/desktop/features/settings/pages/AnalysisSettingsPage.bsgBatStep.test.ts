@@ -370,6 +370,15 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
         stepFrames: 301,
       });
     });
+
+    it('shows the whole frame when a fractional entry rounds back to the current step', async () => {
+      seedSection('bsgbat', { threshold: 0.5, stepFrames: 250 });
+      await renderWithCatalog(BSG_BAT_CATALOG_ID);
+
+      await typeStep('250.4');
+
+      expect(stepInput()).toHaveValue(250);
+    });
   });
 
   describe('change tracking', () => {
