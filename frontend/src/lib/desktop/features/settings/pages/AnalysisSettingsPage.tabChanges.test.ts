@@ -776,6 +776,13 @@ describe('AnalysisSettingsPage inference runtime', () => {
     const savedGpu = await screen.findByRole('combobox', { name: DEVICE_LABEL });
     await waitFor(() => expect(savedGpu).toBeEnabled());
     expect(await optionLabels(savedGpu)).toContain('analysis.inference.device.options.gpu');
+
+    resetPage('inference');
+    mockRuntime(async () => runtimeStatus({ devices: ['CPU', 'GPU.0'] }));
+    render(AnalysisSettingsPage);
+    const hostGpu = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    await waitFor(() => expect(hostGpu).toBeEnabled());
+    expect(await optionLabels(hostGpu)).toContain('analysis.inference.device.options.gpu');
   });
 });
 
