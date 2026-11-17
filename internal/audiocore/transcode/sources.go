@@ -184,9 +184,9 @@ func openM4A(f *os.File) (*source, error) {
 			total = int64(frames)
 		}
 	}
-	// A corrupt edit list can declare an EncoderDelay near MaxInt64; the track
-	// cannot decode to more than FrameCount access units, so a larger skip is
-	// clamped to that.
+	// go-m4a clamps EncoderDelay to the media length the file declares, which a
+	// corrupt file can inflate past what the track holds; it cannot decode to
+	// more than FrameCount access units, so a larger skip is clamped to that.
 	frameCount := int64(info.FrameCount)
 	skip := min(max(info.EncoderDelay, 0), frameCount*aaccodec.FrameSize)
 	seek := func(frame int64) (int64, error) {
