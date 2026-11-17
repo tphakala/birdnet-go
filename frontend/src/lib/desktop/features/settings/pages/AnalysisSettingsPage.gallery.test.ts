@@ -1332,6 +1332,23 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     );
   });
 
+  it('waits for the model list refresh before it offers the next steps', async () => {
+    const models = deferred();
+    vi.mocked(refreshModels).mockReturnValueOnce(models.promise);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
+    expect(wizardState.launch).not.toHaveBeenCalled();
+
+    models.resolve();
+    await waitFor(() =>
+      expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL })
+    );
+  });
+
   it('offers nothing when the page was left before the settings refresh finished', async () => {
     const refresh = deferred();
     vi.mocked(settingsActions.refreshKeepingEdits).mockReturnValueOnce(refresh.promise);
