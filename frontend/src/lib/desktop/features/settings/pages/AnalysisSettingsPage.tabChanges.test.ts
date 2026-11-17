@@ -122,6 +122,7 @@ import * as modelsApi from '$lib/utils/modelsApi';
 import { api } from '$lib/utils/api';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { settingsActions } from '$lib/stores/settings';
+import { modelsLoading } from '$lib/stores/models.svelte';
 import { t } from '$lib/i18n';
 
 const HAS_CHANGES = 'settings.tabs.hasChanges';
@@ -467,6 +468,21 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     expect(paramsFor('analysis.thresholds.shared.usedBy').at(-1)).toEqual({
       models: `${MODEL.birdnet.name}, ${MODEL.bsg.name}`,
     });
+  });
+
+  it('shows a loading help on the shared row while the models list loads', async () => {
+    const original = vi.mocked(modelsLoading).getMockImplementation();
+    vi.mocked(modelsLoading).mockReturnValue(true);
+    try {
+      render(AnalysisSettingsPage);
+      const row = await screen.findByTestId('threshold-row-shared');
+
+      expect(within(row).getByText('common.loading')).toBeInTheDocument();
+      expect(within(row).queryByText('analysis.thresholds.shared.unused')).toBeNull();
+    } finally {
+      vi.mocked(modelsLoading).mockReset();
+      if (original) vi.mocked(modelsLoading).mockImplementation(original);
+    }
   });
 
   it('says so when no enabled classifier uses the shared threshold', async () => {

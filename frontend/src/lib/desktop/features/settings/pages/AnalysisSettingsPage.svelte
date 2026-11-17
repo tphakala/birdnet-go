@@ -2134,7 +2134,9 @@
               ? t('analysis.thresholds.shared.usedBy', {
                   models: sharedThresholdUsers.join(', '),
                 })
-              : t('analysis.thresholds.shared.unused'),
+              : modelsLoading()
+                ? t('common.loading')
+                : t('analysis.thresholds.shared.unused'),
             SHARED_THRESHOLD_HELP_ID,
             SHARED_THRESHOLD_CONTROL_ID
           )}
