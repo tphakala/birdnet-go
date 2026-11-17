@@ -144,6 +144,7 @@ const BAT_CATALOG_ID = 'bat-test';
 const BSG_BAT_CATALOG_ID = 'bsg-bat';
 const EDITED_THRESHOLD = 0.7;
 const EDITED_TRIGGER = 0.9;
+const EDITED_OVERLAP = 2.8;
 const RANGE_STATUS_URL = '/api/v2/range/status';
 
 /** Enabled models as GET /api/v2/models lists them. */
@@ -297,6 +298,13 @@ describe('AnalysisSettingsPage tab change dots', () => {
     {
       name: 'false positive filter',
       edit: () => editSection('realtime', { falsePositiveFilter: { level: 3 } }),
+      tab: 'filters',
+    },
+    // The filter level moves the overlap with it, and a level picked back to the saved one can
+    // leave the overlap moved, so an overlap edit alone must still light the Filters tab.
+    {
+      name: 'false positive filter overlap',
+      edit: () => editBirdnet({ overlap: EDITED_OVERLAP }),
       tab: 'filters',
     },
     {
@@ -745,6 +753,13 @@ describe('AnalysisSettingsPage inference runtime', () => {
     return screen.getAllByRole('option').map(option => option.textContent.trim());
   }
 
+  /** Pick an option in a select by its label. */
+  async function pick(select: HTMLElement, label: string) {
+    const user = userEvent.setup();
+    await user.click(select);
+    await user.click(screen.getByRole('option', { name: label }));
+  }
+
   beforeEach(() => resetPage('inference'));
 
   it('says why the runtime selects are disabled while the runtime list loads', async () => {
@@ -833,16 +848,9 @@ describe('AnalysisSettingsPage inference runtime', () => {
     render(AnalysisSettingsPage);
     const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
     await waitFor(() => expect(backend).toBeEnabled());
-    const user = userEvent.setup();
 
-    await user.click(backend);
-    await user.click(
-      screen.getByRole('option', { name: 'analysis.inference.backend.options.onnx' })
-    );
-    await user.click(backend);
-    await user.click(
-      screen.getByRole('option', { name: 'analysis.inference.backend.options.auto' })
-    );
+    await pick(backend, 'analysis.inference.backend.options.onnx');
+    await pick(backend, 'analysis.inference.backend.options.auto');
 
     // The saved config has no backend key, so the form must not keep a raw 'auto' that a
     // whole-form comparison would count as an unsaved change.
@@ -857,14 +865,9 @@ describe('AnalysisSettingsPage inference runtime', () => {
     render(AnalysisSettingsPage);
     const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
     await waitFor(() => expect(device).toBeEnabled());
-    const user = userEvent.setup();
 
-    await user.click(device);
-    await user.click(screen.getByRole('option', { name: 'analysis.inference.device.options.cpu' }));
-    await user.click(device);
-    await user.click(
-      screen.getByRole('option', { name: 'analysis.inference.device.options.auto' })
-    );
+    await pick(device, 'analysis.inference.device.options.cpu');
+    await pick(device, 'analysis.inference.device.options.auto');
 
     expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', {
       openVinoDevice: undefined,
@@ -878,18 +881,40 @@ describe('AnalysisSettingsPage inference runtime', () => {
     render(AnalysisSettingsPage);
     const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
     await waitFor(() => expect(backend).toBeEnabled());
-    const user = userEvent.setup();
 
-    await user.click(backend);
-    await user.click(
-      screen.getByRole('option', { name: 'analysis.inference.backend.options.onnx' })
-    );
-    await user.click(backend);
-    await user.click(
-      screen.getByRole('option', { name: 'analysis.inference.backend.options.auto' })
-    );
+    await pick(backend, 'analysis.inference.backend.options.onnx');
+    await pick(backend, 'analysis.inference.backend.options.auto');
 
     expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { backend: 'auto' });
+  });
+
+  it('keeps offering a saved backend the host lacks after another one is picked', async () => {
+    seedSection('birdnet', { ...BASE_BIRDNET, backend: 'openvino' });
+    mockRuntime(async () => runtimeStatus({ openvino: false }));
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+    await waitFor(() => expect(backend).toBeEnabled());
+
+    await pick(backend, 'analysis.inference.backend.options.auto');
+
+    expect(await optionLabels(backend)).toContain('analysis.inference.backend.options.openvino');
+  });
+
+  it('keeps offering a saved GPU the host lacks after another device is picked', async () => {
+    seedSection('birdnet', { ...BASE_BIRDNET, openVinoDevice: 'gpu' });
+    // Without OpenVINO the device field shows only for a device other than Auto, so picking
+    // Auto must not hide the field and with it the way back to the saved GPU.
+    mockRuntime(async () => runtimeStatus({ openvino: false, devices: [] }));
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    await waitFor(() => expect(device).toBeEnabled());
+
+    await pick(device, 'analysis.inference.device.options.auto');
+
+    const shown = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    expect(await optionLabels(shown)).toContain('analysis.inference.device.options.gpu');
   });
 
   it('offers GPU only when the host has one or it is saved', async () => {

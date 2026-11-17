@@ -493,9 +493,17 @@
     current: unknown;
   }
 
+  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
+  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
+  const formOverlap = $derived(birdnet?.overlap ?? 0);
+  // Unsaved edits to the level or the overlap the level adjusts (picking the saved level again
+  // can leave the overlap moved). The card badge, the tab dot and the cadence readout share it.
+  const fpFilterEdited = $derived(
+    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
+  );
   const falsePositiveChange: ChangePair = $derived({
-    original: { fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0 },
-    current: { fpFilter: falsePositiveFilter.level },
+    original: { edited: false },
+    current: { edited: fpFilterEdited },
   });
   const speciesNamesChange: ChangePair = $derived({
     original: { locale: store.originalData.birdnet?.locale },
@@ -546,15 +554,19 @@
       labelPath: birdnet?.labelPath,
     },
   });
+  const selectedBackend = $derived(birdnet?.backend || INFERENCE_AUTO);
+  const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
+  const savedBackend = $derived(store.originalData.birdnet?.backend || INFERENCE_AUTO);
+  const savedDevice = $derived(store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO);
   const inferenceChange: ChangePair = $derived({
     original: {
-      backend: store.originalData.birdnet?.backend || INFERENCE_AUTO,
-      openVinoDevice: store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO,
+      backend: savedBackend,
+      openVinoDevice: savedDevice,
       threads: store.originalData.birdnet?.threads,
     },
     current: {
-      backend: birdnet?.backend || INFERENCE_AUTO,
-      openVinoDevice: birdnet?.openVinoDevice || INFERENCE_AUTO,
+      backend: selectedBackend,
+      openVinoDevice: selectedDevice,
       threads: birdnet?.threads,
     },
   });
@@ -607,8 +619,10 @@
     if (pageTab === 'inference' && !inferenceBackends) untrack(() => void loadInferenceBackends());
   });
 
-  const selectedBackend = $derived(birdnet?.backend || INFERENCE_AUTO);
-  const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
+  // A choice the host lacks stays offered while it is selected or saved, so picking another
+  // one keeps the way back to the saved choice.
+  const keptBackends = $derived(new Set([selectedBackend, savedBackend]));
+  const keptDevices = $derived(new Set([selectedDevice, savedDevice]));
   const openVinoSupported = $derived(inferenceBackends?.openvino.supported ?? false);
   const hostHasGpu = $derived(
     inferenceBackends?.openvino.devices?.some(d => d.toLowerCase().startsWith(DEVICE_GPU)) ?? false
@@ -616,23 +630,24 @@
 
   const backendOptions: SelectOption[] = $derived([
     { value: INFERENCE_AUTO, label: t('analysis.inference.backend.options.auto') },
-    ...(inferenceBackends?.onnx.available || selectedBackend === BACKEND_ONNX
+    ...(inferenceBackends?.onnx.available || keptBackends.has(BACKEND_ONNX)
       ? [{ value: BACKEND_ONNX, label: t('analysis.inference.backend.options.onnx') }]
       : []),
-    ...(openVinoSupported || selectedBackend === BACKEND_OPENVINO
+    ...(openVinoSupported || keptBackends.has(BACKEND_OPENVINO)
       ? [{ value: BACKEND_OPENVINO, label: t('analysis.inference.backend.options.openvino') }]
       : []),
   ]);
   const deviceOptions: SelectOption[] = $derived([
     { value: INFERENCE_AUTO, label: t('analysis.inference.device.options.auto') },
     { value: DEVICE_CPU, label: t('analysis.inference.device.options.cpu') },
-    ...(hostHasGpu || selectedDevice === DEVICE_GPU
+    ...(hostHasGpu || keptDevices.has(DEVICE_GPU)
       ? [{ value: DEVICE_GPU, label: t('analysis.inference.device.options.gpu') }]
       : []),
   ]);
   // The device applies only to models that OpenVINO runs.
   const showDeviceField = $derived(
-    (openVinoSupported || selectedDevice !== INFERENCE_AUTO) && selectedBackend !== BACKEND_ONNX
+    (openVinoSupported || selectedDevice !== INFERENCE_AUTO || savedDevice !== INFERENCE_AUTO) &&
+      selectedBackend !== BACKEND_ONNX
   );
 
   // ── Derived catalog views ─────────────────────────────────────────────
@@ -900,20 +915,13 @@
   // description then falls back to the count from the configured overlap.
   const cadence = $derived(analysisCadence());
   const cadenceHasBirdModels = $derived(cadence ? hasBirdCadenceModels(cadence) : false);
-  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
-  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
-  const formOverlap = $derived(birdnet?.overlap ?? 0);
   const fpFilterActive = $derived(falsePositiveFilter.level >= FILTER_ACTIVE_MIN_LEVEL);
-  // Unsaved edits to the level or the overlap the level adjusts.
-  const fpCadenceEdited = $derived(
-    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
-  );
   // The snapshot does not reflect the saved settings yet. Every consumer checks
-  // fpCadenceEdited first, so this need not exclude unsaved edits.
+  // fpFilterEdited first, so this need not exclude unsaved edits.
   const fpCadencePending = $derived(
     cadence !== null && planLagsSettings(cadence, savedOverlap, savedFpLevel)
   );
-  const fpReadoutIsEstimate = $derived(fpCadenceEdited || fpCadencePending);
+  const fpReadoutIsEstimate = $derived(fpFilterEdited || fpCadencePending);
   const fpReadoutRows = $derived.by<CadenceReadoutRow[]>(() => {
     if (!cadence || !fpFilterActive) return [];
     if (fpReadoutIsEstimate) {
@@ -2454,7 +2462,7 @@
                 </ul>
                 {#if fpReadoutIsEstimate}
                   <p class="mt-2 text-xs text-[var(--color-base-content)]/80">
-                    {fpCadenceEdited
+                    {fpFilterEdited
                       ? t('settings.main.sections.falsePositiveFilter.readoutPreview')
                       : t('settings.main.sections.falsePositiveFilter.readoutPending')}
                   </p>
