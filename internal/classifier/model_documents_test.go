@@ -299,6 +299,24 @@ func TestModelDocuments_AgreementsAcrossRestarts(t *testing.T) {
 		assert.True(t, svc.Agreed(&docA))
 	})
 
+	t.Run("a record whose write failed is written by the next Record of the same document", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		svc, _ := newTestDocuments(t, dir)
+		// Make the first write fail: a regular file stands where the directory is.
+		require.NoError(t, os.Remove(dir))
+		require.NoError(t, os.WriteFile(dir, nil, 0o600))
+		require.Error(t, svc.Record([]RepoDocument{docA}))
+
+		// The directory recovers; the same agreement is accepted again.
+		require.NoError(t, os.Remove(dir))
+		require.NoError(t, os.Mkdir(dir, 0o750))
+		require.NoError(t, svc.Record([]RepoDocument{docA}))
+
+		reloaded, _ := newTestDocuments(t, dir)
+		assert.True(t, reloaded.Agreed(&docA), "the agreement reached the file on the retry")
+	})
+
 	t.Run("without a state dir records stay in memory", func(t *testing.T) {
 		t.Parallel()
 		svc, _ := newTestDocuments(t, "")

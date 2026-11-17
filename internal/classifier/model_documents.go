@@ -162,16 +162,14 @@ func (d *ModelDocuments) disablePersistence(reason string, err error) {
 	GetLogger().Warn(reason+"; agreements are kept in memory and the file is left unchanged", fields...)
 }
 
-// addLocked adds rec when its key is not present and reports whether it was new.
-// The caller holds d.mu.
-func (d *ModelDocuments) addLocked(rec agreementRecord) bool {
+// addLocked adds rec when its key is not present. The caller holds d.mu.
+func (d *ModelDocuments) addLocked(rec agreementRecord) {
 	key := agreementKey{repo: normalizeDocumentRepo(rec.Repo), kind: rec.Kind, sha256: rec.SHA256}
 	if _, ok := d.agreed[key]; ok {
-		return false
+		return
 	}
 	d.agreed[key] = struct{}{}
 	d.records = append(d.records, rec)
-	return true
 }
 
 // Agreed reports whether an agreement is recorded for the document's repo, kind
@@ -201,22 +199,22 @@ func (d *ModelDocuments) Outstanding(docs []RepoDocument) []RepoDocument {
 }
 
 // Record stores an agreement for every document not already recorded and writes
-// the agreements file atomically. A write failure keeps the records in memory and
-// is returned so the caller can log it; with no state dir, or with persistence
+// the whole agreements file atomically, also when every document was already
+// recorded, so an earlier failed write is retried. A write failure keeps the
+// records in memory and is returned so the caller can log it; with no state dir, or with persistence
 // switched off by an untrusted file, it only records in memory.
 func (d *ModelDocuments) Record(docs []RepoDocument) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	now := time.Now().UTC()
-	added := false
 	for i := range docs {
-		rec := agreementRecord{Repo: docs[i].Repo, Kind: docs[i].Kind, SHA256: docs[i].SHA256, AgreedAt: now}
-		if d.addLocked(rec) {
-			added = true
-		}
+		d.addLocked(agreementRecord{Repo: docs[i].Repo, Kind: docs[i].Kind, SHA256: docs[i].SHA256, AgreedAt: now})
 	}
-	if !added || d.dir == "" || d.persistDisabled {
+	// The file is written even when every document was already recorded, so a
+	// record whose earlier write failed (or was made before SetStateDir) reaches
+	// the file the next time the same agreement is recorded.
+	if len(docs) == 0 || d.dir == "" || d.persistDisabled {
 		return nil
 	}
 	data, err := json.MarshalIndent(agreementsFile{Version: agreementsFileVersion, Agreements: d.records}, "", "  ")
