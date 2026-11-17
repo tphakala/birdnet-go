@@ -38,7 +38,10 @@
     required?: boolean;
     disabled?: boolean;
     error?: string;
-    /** Classes for the error message, for example to let it spill past a narrow field. */
+    /**
+     * Classes for the box that holds the message under the field (the error or the clamp
+     * notice), for example to take it out of flow so it spills past a narrow field.
+     */
     errorClassName?: string;
     className?: string;
   }
@@ -186,13 +189,11 @@
   />
 
   {#if error}
-    <div class="label">
-      <span id={errorId} class={cn('text-xs leading-4 text-[var(--text-error)]', errorClassName)}
-        >{error}</span
-      >
+    <div class={cn('label', errorClassName)}>
+      <span id={errorId} class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
     </div>
   {:else if clampedMessage}
-    <div class="label">
+    <div class={cn('label', errorClassName)}>
       <span
         class="text-xs leading-4 text-[var(--text-warning)] animate-pulse"
         role="status"

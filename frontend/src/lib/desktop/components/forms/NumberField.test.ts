@@ -30,6 +30,23 @@ describe('NumberField', () => {
     expect(screen.getByRole('spinbutton', { name: 'Shared threshold' })).toHaveValue(0.7);
   });
 
+  it('applies errorClassName to the box around the clamp notice', async () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 5,
+        onUpdate: vi.fn(),
+        min: 0,
+        errorClassName: 'absolute',
+      },
+    });
+
+    await fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '-5' } });
+
+    // The box around the notice takes the classes, so an out-of-flow box adds no height.
+    expect(screen.getByRole('status').parentElement).toHaveClass('absolute');
+  });
+
   it('passes extra describedby ids to the input after the help text id', () => {
     render(NumberField, {
       props: {
