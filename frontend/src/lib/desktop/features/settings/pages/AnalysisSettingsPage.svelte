@@ -28,7 +28,7 @@
   @component
 -->
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
   import type { CatalogEntry, DownloadProgress, ModelRegionsResponse } from '$lib/types/models';
@@ -121,6 +121,7 @@
     perchSettings,
     birdNetV3Settings,
     birdNetPlusSettings,
+    setValidationIssues,
     type BSGBatSettings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
@@ -329,6 +330,7 @@
   const RANGE_THRESHOLD_FALLBACK = 0.01;
   const DYNAMIC_TRIGGER_HELP_ID = generateId('dynamic-trigger-help');
   const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
+  const DYNAMIC_MIN_ERROR_ID = generateId('dynamic-min-error');
   const DYNAMIC_HOURS_HELP_ID = generateId('dynamic-hours-help');
   const SPECIES_LANGUAGE_HELP_ID = generateId('species-language-help');
   /** One setting row: label and help on the left, the control on the right from tablet width. */
@@ -416,6 +418,22 @@
       validHours: 24,
     }
   );
+  // The server rejects a dynamic threshold whose minimum is above its trigger, so while that
+  // holds the save bar blocks Save and says why.
+  const DYNAMIC_MIN_ISSUE_KEY = 'analysis-dynamic-threshold-min-above-trigger';
+  const VALIDATION_ISSUE_KEYS = [DYNAMIC_MIN_ISSUE_KEY];
+  let dynamicMinError = $derived(
+    dynamicThreshold.enabled && dynamicThreshold.min > dynamicThreshold.trigger
+      ? t('analysis.dynamicThreshold.minAboveTrigger')
+      : undefined
+  );
+  $effect(() => {
+    setValidationIssues(
+      VALIDATION_ISSUE_KEYS,
+      new Map(dynamicMinError ? [[DYNAMIC_MIN_ISSUE_KEY, dynamicMinError]] : [])
+    );
+  });
+  onDestroy(() => setValidationIssues(VALIDATION_ISSUE_KEYS, new Map()));
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
   let bat = $derived(
     $batSettings ?? {
@@ -1370,6 +1388,13 @@
   }
 
   // ── Update handlers ───────────────────────────────────────────────────
+  // The runtime takes a whole number of threads, so a fractional entry becomes one.
+  function updateThreads(value: number) {
+    const snapped = snapToStep(value, THREADS_BOUNDS);
+    updateBirdnetSetting('threads', snapped);
+    return snapped;
+  }
+
   function updateBirdnetSetting(key: string, value: string | number) {
     settingsActions.updateSection('birdnet', { [key]: value });
   }
@@ -1392,16 +1417,18 @@
 
   function updateRangeThreshold(value: number) {
     if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, RANGE_THRESHOLD_BOUNDS);
     settingsActions.updateSection('birdnet', {
-      rangeFilter: {
-        ...birdnet?.rangeFilter,
-        threshold: snapToStep(value, RANGE_THRESHOLD_BOUNDS),
-      },
+      rangeFilter: { ...birdnet?.rangeFilter, threshold: snapped },
     });
+    return snapped;
   }
 
   function updateDynamicValue(key: string, bounds: ThresholdBounds, value: number) {
-    if (Number.isFinite(value)) updateDynamicThreshold(key, snapToStep(value, bounds));
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, bounds);
+    updateDynamicThreshold(key, snapped);
+    return snapped;
   }
 
   // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
@@ -1559,13 +1586,17 @@
 
   function updateSharedThreshold(value: number) {
     if (!Number.isFinite(value)) return;
-    settingsActions.updateSection('birdnet', { threshold: snapToStep(value, SHARED_BOUNDS) });
+    const snapped = snapToStep(value, SHARED_BOUNDS);
+    settingsActions.updateSection('birdnet', { threshold: snapped });
+    return snapped;
   }
 
   function updateRowThreshold(row: ThresholdRow, value: number) {
     const { section } = row.descriptor;
     if (!section || !Number.isFinite(value)) return;
-    settingsActions.updateSection(section, { threshold: snapToStep(value, row.descriptor) });
+    const snapped = snapToStep(value, row.descriptor);
+    settingsActions.updateSection(section, { threshold: snapped });
+    return snapped;
   }
 
   // Switching a row to a custom threshold keeps its saved value when that value is inside the
@@ -1657,7 +1688,16 @@
     slider?: boolean;
     /** Field-level error shown under the number field. */
     error?: string;
-    onChange: (_value: number) => void;
+    /** Called with the typed or slid value; returns the value it kept, which the field shows. */
+    onChange: (_value: number) => void | number;
+    /** Id of the message the page renders below the control row when `error` is set. */
+    errorId?: string;
+  }
+
+  // The ids a control's inputs describe themselves with: its help text and, while it has one, its
+  // error message.
+  function describedByOf(c: ValueControl): string | undefined {
+    return [c.describedBy, c.error ? c.errorId : undefined].filter(Boolean).join(' ') || undefined;
   }
 
   // ── Gallery tab definitions ───────────────────────────────────────────
@@ -2047,37 +2087,45 @@
 <!-- The control column of a setting row: a slider and a number field editing one value, or a
      number field alone in the same column, so fields line up across rows and cards. -->
 {#snippet valueControl(c: ValueControl)}
-  <div class="flex min-w-0 items-center gap-4">
-    {#if c.slider === false}
-      <div class="min-w-0 flex-1"></div>
-    {:else}
-      <input
-        type="range"
-        class="range range-sm min-w-0 flex-1"
-        aria-label={c.label}
-        aria-describedby={c.describedBy}
+  <div class="min-w-0">
+    <div class="flex min-w-0 items-center gap-4">
+      {#if c.slider === false}
+        <div class="min-w-0 flex-1"></div>
+      {:else}
+        <input
+          type="range"
+          class="range range-sm min-w-0 flex-1"
+          aria-label={c.label}
+          aria-describedby={describedByOf(c)}
+          aria-invalid={c.error ? 'true' : undefined}
+          min={c.bounds.min}
+          max={c.bounds.max}
+          step={c.bounds.step}
+          value={c.value}
+          disabled={c.disabled}
+          oninput={event => c.onChange(event.currentTarget.valueAsNumber)}
+        />
+      {/if}
+      <NumberField
+        label={c.label}
+        labelClassName="sr-only"
+        className="relative w-24 shrink-0"
+        errorClassName="absolute right-0 top-full w-max max-w-72 text-right"
+        value={c.value}
+        onUpdate={c.onChange}
         min={c.bounds.min}
         max={c.bounds.max}
         step={c.bounds.step}
-        value={c.value}
+        describedByExtra={describedByOf(c)}
         disabled={c.disabled}
-        oninput={event => c.onChange(event.currentTarget.valueAsNumber)}
+        invalid={!!c.error}
       />
+    </div>
+    {#if c.error}
+      <p id={c.errorId} class="mt-1 text-right text-xs leading-4 text-[var(--text-error)]">
+        {c.error}
+      </p>
     {/if}
-    <NumberField
-      label={c.label}
-      labelClassName="sr-only"
-      className="relative w-24 shrink-0"
-      errorClassName="absolute right-0 top-full w-max max-w-72 text-right"
-      value={c.value}
-      onUpdate={c.onChange}
-      min={c.bounds.min}
-      max={c.bounds.max}
-      step={c.bounds.step}
-      describedByExtra={c.describedBy}
-      disabled={c.disabled}
-      error={c.error}
-    />
   </div>
 {/snippet}
 
@@ -2242,10 +2290,8 @@
               bounds: DYNAMIC_MIN_BOUNDS,
               disabled: store.isLoading || store.isSaving,
               describedBy: DYNAMIC_MIN_HELP_ID,
-              error:
-                dynamicThreshold.min > dynamicThreshold.trigger
-                  ? t('analysis.dynamicThreshold.minAboveTrigger')
-                  : undefined,
+              errorId: DYNAMIC_MIN_ERROR_ID,
+              error: dynamicMinError,
               onChange: value => updateDynamicValue('min', DYNAMIC_MIN_BOUNDS, value),
             }
           )}
@@ -2809,7 +2855,7 @@
         <NumberField
           label={t('settings.main.fields.inferenceThreads.label')}
           value={birdnet?.threads ?? 0}
-          onUpdate={value => updateBirdnetSetting('threads', value)}
+          onUpdate={updateThreads}
           min={THREADS_BOUNDS.min}
           max={THREADS_BOUNDS.max}
           step={THREADS_BOUNDS.step}

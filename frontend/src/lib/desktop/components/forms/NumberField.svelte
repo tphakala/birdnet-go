@@ -13,7 +13,9 @@
   Props:
   - min/max: Define valid range; values outside are clamped
   - step: Increment/decrement step size
-  - onUpdate: Called with the clamped value after validation
+  - onUpdate: Called with the clamped value after validation. It may return the value the
+    parent kept (for example after snapping to a step), which the field then shows, so the
+    text cannot stay on a typed value the parent rounded back to the one it already had
 -->
 <script lang="ts">
   import FormField from './FormField.svelte';
@@ -25,7 +27,7 @@
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
     value: number;
-    onUpdate: (_value: number) => void;
+    onUpdate: (_value: number) => void | number;
     min?: number;
     max?: number;
     step?: number;
@@ -38,6 +40,11 @@
     required?: boolean;
     disabled?: boolean;
     error?: string;
+    /**
+     * Marks the field invalid when the caller shows the message itself (point
+     * `describedByExtra` at it). Without `error` the field renders no message.
+     */
+    invalid?: boolean;
     /**
      * Classes for the box that holds the message under the field (the error or the clamp
      * notice), for example to take it out of flow so it spills past a narrow field.
@@ -60,6 +67,7 @@
     required = false,
     disabled = false,
     error,
+    invalid = false,
     errorClassName = '',
     className = '',
     ...rest
@@ -148,7 +156,8 @@
     // Apply clamping for all numeric values (including NaN, Infinity, -Infinity)
     const clampedValue = clampValue(numValue);
     value = clampedValue;
-    onUpdate(clampedValue);
+    const kept = onUpdate(clampedValue);
+    if (typeof kept === 'number') value = kept;
   }
 
   function handleBlur() {
@@ -158,7 +167,8 @@
 
     if (clampedValue !== value) {
       value = clampedValue;
-      onUpdate(clampedValue);
+      const kept = onUpdate(clampedValue);
+      if (typeof kept === 'number') value = kept;
     }
   }
 </script>
@@ -184,8 +194,8 @@
     {disabled}
     onChange={handleChange}
     onBlur={handleBlur}
-    invalid={!!error}
-    inputClassName={error || clampedMessage ? 'input-error' : ''}
+    invalid={!!error || invalid}
+    inputClassName={error || invalid || clampedMessage ? 'input-error' : ''}
   />
 
   {#if error}

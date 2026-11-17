@@ -55,8 +55,9 @@ interface MockSettingsState {
 // The saved config every test starts from: a birdnet section with a range filter and a realtime
 // section with a dynamic threshold, so those cards have something to compare. The store is built
 // here, typed, so the tests and the module mock share one instance without a cast.
-const { BASE_BIRDNET, BASE_REALTIME, mockStore } = await vi.hoisted(async () => {
+const { BASE_BIRDNET, BASE_REALTIME, mockStore, validationErrors } = await vi.hoisted(async () => {
   const { writable } = await import('svelte/store');
+  const validationErrors = writable<string[]>([]);
   const BASE_BIRDNET = {
     huggingFaceEndpoint: '',
     threshold: 0.03,
@@ -77,7 +78,7 @@ const { BASE_BIRDNET, BASE_REALTIME, mockStore } = await vi.hoisted(async () => 
     originalData: { birdnet: { ...BASE_BIRDNET }, realtime: { ...BASE_REALTIME } },
     formData: { birdnet: { ...BASE_BIRDNET }, realtime: { ...BASE_REALTIME } },
   });
-  return { BASE_BIRDNET, BASE_REALTIME, mockStore };
+  return { BASE_BIRDNET, BASE_REALTIME, mockStore, validationErrors };
 });
 
 // The store mock holds the saved copy and the form copy; the section stores are derived from the
@@ -92,6 +93,16 @@ vi.mock('$lib/stores/settings', async () => {
       refreshKeepingEdits: vi.fn().mockResolvedValue(undefined),
     },
     hasUnsavedChanges: writable(false),
+    // The save bar disables Save while this list is not empty; the mock keeps the list as the
+    // real setValidationIssues does, so tests can read it.
+    settingsValidationErrors: validationErrors,
+    setValidationIssues: vi.fn(
+      (ownedKeys: readonly string[], active: ReadonlyMap<string, string>) =>
+        validationErrors.update(errors => [
+          ...errors.filter(key => !ownedKeys.includes(key)),
+          ...[...active.keys()].filter(key => ownedKeys.includes(key)),
+        ])
+    ),
     birdnetSettings: derived(mockStore, state => state.formData.birdnet),
     dynamicThresholdSettings: derived(mockStore, state => state.formData.realtime.dynamicThreshold),
     realtimeSettings: derived(mockStore, state => state.formData.realtime),
@@ -126,6 +137,7 @@ import { navigation } from '$lib/stores/navigation.svelte';
 import { settingsActions } from '$lib/stores/settings';
 import { modelsLoading } from '$lib/stores/models.svelte';
 import { t } from '$lib/i18n';
+import { get } from 'svelte/store';
 
 const HAS_CHANGES = 'settings.tabs.hasChanges';
 const BAT_CATALOG_ID = 'bat-test';
@@ -252,6 +264,7 @@ function resetPage(tabId = 'detection') {
   // clearAllMocks keeps implementations, so drop the form-writing one applyUpdatesToForm installs.
   vi.mocked(settingsActions.updateSection).mockReset();
   modelsList.current = [];
+  validationErrors.set([]);
   mockStore.update(state => ({ ...state, originalData: savedConfig(), formData: savedConfig() }));
   vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
   vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
@@ -518,6 +531,19 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { threshold: 0.46 });
   });
 
+  it('shows the snapped value when a typed value snaps back to the current one', async () => {
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', { name: SHARED_LABEL });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.034');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { threshold: 0.03 });
+    expect(input).toHaveValue(0.03);
+  });
+
   it('shows the shared value, disabled, on a row that uses it', async () => {
     modelsList.current = [MODEL.perch];
     seedSection('perch', { overrideThreshold: false, threshold: 0.6 });
@@ -650,6 +676,25 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     expect(
       vi.mocked(settingsActions.updateSection).mock.calls.map(([section]) => section)
     ).not.toContain('bat');
+  });
+});
+
+describe('AnalysisSettingsPage inference threads', () => {
+  beforeEach(() => resetPage('inference'));
+
+  it('saves a fractional thread count as a whole number', async () => {
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.fields.inferenceThreads.label',
+    });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '2.5');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { threads: 3 });
+    expect(input).toHaveValue(3);
   });
 });
 
@@ -948,6 +993,7 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
   beforeEach(() => resetPage());
 
   const MIN_ABOVE_TRIGGER = 'analysis.dynamicThreshold.minAboveTrigger';
+  const MIN_ABOVE_TRIGGER_ISSUE_KEY = 'analysis-dynamic-threshold-min-above-trigger';
 
   function seedDynamic(patch: Record<string, unknown>) {
     editSection('realtime', {
@@ -971,6 +1017,49 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
         name: 'settings.main.sections.dynamicThreshold.trigger.label',
       })
     ).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('blocks saving while the minimum is above the trigger and allows it once fixed', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.9 });
+    const { unmount } = render(AnalysisSettingsPage);
+    await screen.findByText(MIN_ABOVE_TRIGGER);
+    await waitFor(() => expect(get(validationErrors)).toEqual([MIN_ABOVE_TRIGGER_ISSUE_KEY]));
+
+    seedDynamic({ trigger: 0.5, min: 0.4 });
+    await waitFor(() => expect(get(validationErrors)).toEqual([]));
+
+    seedDynamic({ trigger: 0.5, min: 0.9 });
+    await waitFor(() => expect(get(validationErrors)).toHaveLength(1));
+    unmount();
+    expect(get(validationErrors)).toEqual([]);
+  });
+
+  it('does not block saving while the dynamic threshold is off', async () => {
+    seedDynamic({ enabled: false, trigger: 0.5, min: 0.9 });
+    render(AnalysisSettingsPage);
+    await screen.findByRole('tab', { name: /analysis\.tabs\.detection/ });
+
+    expect(get(validationErrors)).toEqual([]);
+  });
+
+  it('marks the slider invalid and points it at the same error as the field', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.9 });
+    render(AnalysisSettingsPage);
+    const message = await screen.findByText(MIN_ABOVE_TRIGGER);
+
+    const slider = screen.getByRole('slider', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+    expect(slider).toHaveAttribute('aria-invalid', 'true');
+    expect(slider.getAttribute('aria-describedby')?.split(' ')).toContain(message.id);
+  });
+
+  it('renders the error in flow, so a wrapped message cannot cover the next row', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.9 });
+    render(AnalysisSettingsPage);
+    const message = await screen.findByText(MIN_ABOVE_TRIGGER);
+
+    expect(message.closest('.absolute')).toBeNull();
   });
 
   it('shows no error while the minimum does not exceed the trigger', async () => {

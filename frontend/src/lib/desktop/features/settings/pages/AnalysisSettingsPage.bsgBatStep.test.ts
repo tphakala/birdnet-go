@@ -80,6 +80,8 @@ vi.mock('$lib/stores/settings', async () => {
   const { writable, derived } =
     await vi.importActual<typeof import('svelte/store')>('svelte/store');
   return {
+    // The page reports a blocking dynamic threshold error here; these tests do not read it.
+    setValidationIssues: vi.fn(),
     settingsStore: mockStore,
     settingsActions: {
       updateSection: vi.fn(),

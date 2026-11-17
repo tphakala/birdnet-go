@@ -57,6 +57,8 @@ vi.mock('$lib/stores/settings', async () => {
   stores.birdnetSettings = birdnetSettings;
   stores.realtimeSettings = realtimeSettings;
   return {
+    // The page reports a blocking dynamic threshold error here; these tests do not read it.
+    setValidationIssues: vi.fn(),
     settingsStore,
     settingsActions: {
       updateSection: vi.fn(),

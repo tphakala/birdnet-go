@@ -609,4 +609,15 @@ describe('NumberField', () => {
 
     expect(onUpdate).toHaveBeenCalledWith(1); // Should clamp to max
   });
+
+  it('shows the value onUpdate returns when the parent kept a different one', async () => {
+    render(NumberField, {
+      props: { label: 'Test Number', value: 3, onUpdate: () => 3, min: 0, max: 10 },
+    });
+
+    const input = screen.getByRole('spinbutton');
+    await fireEvent.change(input, { target: { value: '3.4' } });
+
+    expect(input).toHaveValue(3);
+  });
 });
