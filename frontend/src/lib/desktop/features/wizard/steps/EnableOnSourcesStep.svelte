@@ -383,6 +383,10 @@
       t('wizard.steps.enableOnSources.streamsHeading')
     )}
 
+    <!-- Always rendered so the warning is announced when a stream is turned on -->
+    <span role="status" class="sr-only">
+      {showBatStreamWarning ? t('wizard.steps.enableOnSources.batStreamWarning') : ''}
+    </span>
     {#if showBatStreamWarning}
       <div
         class="flex items-start gap-2 rounded-lg border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] p-2.5 text-xs leading-relaxed text-[var(--color-base-content)]"

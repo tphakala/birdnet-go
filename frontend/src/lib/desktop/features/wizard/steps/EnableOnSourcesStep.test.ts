@@ -383,7 +383,11 @@ describe('EnableOnSourcesStep', () => {
     await fireEvent.click(sourceSwitch('Garden'));
     expect(screen.queryByText(`${KEY}.batStreamWarning`)).toBeNull();
     await fireEvent.click(sourceSwitch('Feeder'));
-    expect(screen.getByText(`${KEY}.batStreamWarning`)).toBeInTheDocument();
+    expect(screen.getAllByText(`${KEY}.batStreamWarning`).length).toBeGreaterThan(0);
+    // Announced through a status region that was already in the page
+    expect(
+      screen.getAllByRole('status').some(el => el.textContent.includes(`${KEY}.batStreamWarning`))
+    ).toBe(true);
   });
 
   it('saves nothing for a source switched on and off again', async () => {
