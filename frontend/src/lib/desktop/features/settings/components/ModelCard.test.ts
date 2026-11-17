@@ -5,7 +5,7 @@ import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
 import type { CatalogVariant } from '$lib/types/models';
-import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW } from '$lib/utils/variantSelection';
+import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW, NEW_MODEL_IDS } from '$lib/utils/variantSelection';
 import {
   catalogEntry as entry,
   downloadProgress as progress,
@@ -342,14 +342,33 @@ describe('ModelCard', () => {
       }
     );
 
-    it('adds the preview notice on the Available tab only', () => {
-      const preview = entry({ channel: CHANNEL_PREVIEW });
-      const { unmount } = renderCard({ entry: preview, mode: 'available' });
-      expect(screen.getByRole('note')).toHaveTextContent('analysis.gallery.preview.cardNotice');
-      unmount();
+    it.each(['available', 'installed'] as const)('adds no notice on a %s card', mode => {
+      renderCard({ entry: entry({ channel: CHANNEL_PREVIEW, installed: true }), mode });
 
-      renderCard({ entry: { ...preview, installed: true }, mode: 'installed' });
       expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('new badge', () => {
+    it.each(['available', 'installed'] as const)(
+      'flags a listed entry next to its channel pill on a %s card',
+      mode => {
+        renderCard({
+          entry: entry({ id: NEW_MODEL_IDS[0], channel: CHANNEL_PREVIEW, installed: true }),
+          mode,
+        });
+
+        const header = screen.getByRole('heading').parentElement;
+        if (!header) throw new Error('the card title has no row');
+        expect(within(header).getByText('analysis.gallery.newBadge')).toBeInTheDocument();
+        expect(within(header).getByText('analysis.gallery.preview.badge')).toBeInTheDocument();
+      }
+    );
+
+    it('leaves an unlisted entry unflagged', () => {
+      renderCard({ entry: entry(), mode: 'available' });
+
+      expect(screen.queryByText('analysis.gallery.newBadge')).not.toBeInTheDocument();
     });
   });
 

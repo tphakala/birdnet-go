@@ -4437,9 +4437,9 @@ export type TranslationKey =
   | 'analysis.gallery.reinstalling'
   | 'analysis.gallery.reinstallComplete'
   | 'analysis.gallery.geomodelBadge'
+  | 'analysis.gallery.newBadge'
   | 'analysis.gallery.preview.badge'
   | 'analysis.gallery.preview.buildLabel' // params: version, build
-  | 'analysis.gallery.preview.cardNotice'
   | 'analysis.gallery.preview.dialogNotice' // params: build
   | 'analysis.gallery.experimental.badge'
   | 'analysis.gallery.experimental.cardNotice'

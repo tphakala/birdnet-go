@@ -6016,10 +6016,10 @@
       "reinstalling": "Přeinstalování…",
       "reinstallComplete": "Soubory úspěšně ověřeny",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
+      "newBadge": "Nový",
       "preview": {
         "badge": "Náhled",
         "buildLabel": "{version} · {build}",
-        "cardNotice": "Vývojářský náhled, nejedná se o finální verzi. Jde o rané sestavení pro testování; výsledky se mohou před stabilní verzí změnit.",
         "dialogNotice": "Instalujete vývojářský náhled ({build}). Hodí se k vyzkoušení, ale zatím se nedoporučuje jako váš jediný klasifikátor."
       },
       "experimental": {

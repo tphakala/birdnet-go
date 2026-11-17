@@ -780,9 +780,7 @@ describe('AnalysisSettingsPage model gallery cards', () => {
     const previewCard = await screen.findByRole('article', { name: 'Preview Available' });
     const available = [previewCard, cardNamed('Bad Available')];
     expect(screen.getAllByRole('article')).toHaveLength(available.length);
-    expect(within(previewCard).getByRole('note')).toHaveTextContent(
-      'analysis.gallery.preview.cardNotice'
-    );
+    expect(within(previewCard).queryByRole('note')).toBeNull();
     expect(previewCard).toHaveTextContent('analysis.gallery.preview.badge');
     expect(noticeOf(cardNamed('Bad Available'))).toHaveTextContent(
       'analysis.gallery.entryIncompatible'

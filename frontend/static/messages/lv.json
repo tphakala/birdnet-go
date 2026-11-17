@@ -6016,10 +6016,10 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "newBadge": "Jauns",
       "preview": {
         "badge": "Priekšskatījums",
         "buildLabel": "{version} · {build}",
-        "cardNotice": "Izstrādātāja priekšskatījums, nav galīgais laidiens. Šī ir agrīna versija testēšanai; rezultāti var mainīties pirms stabilās versijas.",
         "dialogNotice": "Jūs instalējat izstrādātāja priekšskatījumu ({build}). Piemērots izmēģināšanai, taču vēl nav ieteicams kā jūsu vienīgais klasifikators."
       },
       "experimental": {

@@ -67,6 +67,7 @@
   import {
     CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
+    NEW_MODEL_IDS,
     translateReason,
     variantHardwareLabel,
   } from '$lib/utils/variantSelection';
@@ -161,19 +162,18 @@
   }
 
   const logo = $derived(getModelLogo(entry.id));
+  const isNew = $derived(NEW_MODEL_IDS.includes(entry.id));
   const upstreamUrl = $derived(
     entry.upstreamUrl && validateProtocolURL(entry.upstreamUrl, LINK_PROTOCOLS)
       ? entry.upstreamUrl
       : null
   );
-  // The pill and the Available-tab notice that flag a non-stable release channel
-  const channelCopy = $derived.by(() => {
+  // The pill and the Available-tab notice that flag a non-stable release channel; a preview
+  // entry carries the pill and its build label only
+  const channelCopy = $derived.by((): { badge: string; notice: string | null } | null => {
     switch (entry.channel) {
       case CHANNEL_PREVIEW:
-        return {
-          badge: t('analysis.gallery.preview.badge'),
-          notice: t('analysis.gallery.preview.cardNotice'),
-        };
+        return { badge: t('analysis.gallery.preview.badge'), notice: null };
       case CHANNEL_EXPERIMENTAL:
         return {
           badge: t('analysis.gallery.experimental.badge'),
@@ -368,6 +368,15 @@
             size="sm"
             showDot={false}
             label={channelCopy.badge}
+            className="whitespace-nowrap"
+          />
+        {/if}
+        {#if isNew}
+          <StatusPill
+            variant="info"
+            size="sm"
+            showDot={false}
+            label={t('analysis.gallery.newBadge')}
             className="whitespace-nowrap"
           />
         {/if}

@@ -270,8 +270,8 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
 
 /**
  * The catalog release channel marking a developer-preview (not-GA) build. The gallery
- * flags an entry on this channel with a PREVIEW badge and a not-GA notice. Mirrors the
- * Go `classifier.ChannelPreview` constant.
+ * flags an entry on this channel with a PREVIEW badge. Mirrors the Go
+ * `classifier.ChannelPreview` constant.
  */
 export const CHANNEL_PREVIEW = 'preview';
 
@@ -289,6 +289,13 @@ export const CHANNEL_EXPERIMENTAL = 'experimental';
  * constant.
  */
 export const CHANNEL_STABLE = 'stable';
+
+/**
+ * Catalog ids of the entries the gallery flags with a NEW badge. A static list for
+ * now: a temporary stand-in until per-browser tracking of the models a user has
+ * already seen replaces it.
+ */
+export const NEW_MODEL_IDS: readonly string[] = ['birdnet-plus-v3.0'];
 
 /**
  * The canonical "automatic" region mode. An empty string, null, and undefined
