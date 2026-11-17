@@ -4,11 +4,6 @@ import { deferred } from '../../../../../test/async-helpers';
 import type { AcousticModelAvailability } from '$lib/types/models';
 import type { InstalledModelContext } from '../types';
 
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
 vi.mock('$lib/utils/api', async importOriginal => ({
   ...(await importOriginal<typeof import('$lib/utils/api')>()),
   api: {
@@ -36,9 +31,10 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   onTopologyChanged: () => () => {},
 }));
 
-const wizard = vi.hoisted(() => ({
-  model: null as InstalledModelContext | null,
-}));
+const wizard = vi.hoisted(() => {
+  const state: { model: InstalledModelContext | null } = { model: null };
+  return state;
+});
 vi.mock('../wizardState.svelte', () => ({
   wizardState: {
     get installedModel() {
@@ -50,7 +46,7 @@ vi.mock('../wizardState.svelte', () => ({
 
 import EnableOnSourcesStep from './EnableOnSourcesStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
-import type { SettingsFormData } from '$lib/stores/settings';
+import type { AudioSourceConfig, SettingsFormData, StreamConfig } from '$lib/stores/settings';
 import { api } from '$lib/utils/api';
 import { resetModelsForTest, type BackendModel } from '$lib/stores/models.svelte';
 import { renderStep } from './stepTestUtils';
@@ -92,20 +88,27 @@ const BAT_CONTEXT: InstalledModelContext = {
   registryId: 'Bat',
 };
 
-function card(name: string, models: string[]) {
-  return { name, device: `hw:${name}`, gain: 0, sampleRate: 48000, models };
+function card(name: string, models: string[], sampleRate = 48000): AudioSourceConfig {
+  return { name, device: `hw:${name}`, gain: 0, sampleRate, models };
 }
-function stream(name: string, models: string[]) {
+function stream(name: string, models: string[]): StreamConfig {
   return { name, url: `rtsp://${name}.example/live`, enabled: true, type: 'rtsp', models };
 }
 
-// The step reads what the server holds, so seed both copies
-function seed(sources: unknown[], streams: unknown[] = []) {
+// The step reads only realtime.audio.sources and realtime.rtsp.streams, so the
+// settings fixture is deliberately partial; it reads what the server holds, so
+// both copies are seeded.
+function realtimeOnly(sources: AudioSourceConfig[], streams: StreamConfig[]): SettingsFormData {
   const realtime = { audio: { sources }, rtsp: { streams } };
+  const copy: unknown = JSON.parse(JSON.stringify({ realtime }));
+  return copy as SettingsFormData;
+}
+
+function seed(sources: AudioSourceConfig[], streams: StreamConfig[] = []) {
   settingsStore.update(state => ({
     ...state,
-    originalData: JSON.parse(JSON.stringify({ realtime })) as SettingsFormData,
-    formData: JSON.parse(JSON.stringify({ realtime })) as SettingsFormData,
+    originalData: realtimeOnly(sources, streams),
+    formData: realtimeOnly(sources, streams),
   }));
 }
 
