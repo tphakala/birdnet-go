@@ -18,6 +18,16 @@ import (
 // licence or policy document could not be fetched and verified.
 const documentUnavailableKey = "analysis.gallery.errors.documentUnavailable"
 
+// agreementRequiredKey is the i18n key of the 409 returned when a user-initiated
+// install, variant swap or reinstall is refused because a document of the entry's
+// own repo that requires agreement has none recorded. The frontend interpolates
+// error_params.name (the model) and reads error_params.documents ({repo, kind,
+// sha256}) to show exactly what is outstanding.
+const agreementRequiredKey = "analysis.gallery.errors.agreementRequired"
+
+// agreementRequiredMsg is the message of the agreement-required 409.
+const agreementRequiredMsg = "a document of this model requires agreement before it can be installed"
+
 // documentRequestTimeout bounds the whole document resolution of one request: the
 // text endpoint, or every accepted document of an install or reinstall. It sits
 // below the HTTP server's write timeout (DefaultWriteTimeout in internal/api/config.go,
@@ -207,4 +217,49 @@ func (c *Handler) recordAgreements(catalogID string, docs []classifier.RepoDocum
 			logger.String("catalog_id", catalogID),
 			logger.Error(err))
 	}
+}
+
+// agreementDocumentParam identifies one outstanding agreement document in the
+// error_params of the agreement-required 409.
+type agreementDocumentParam struct {
+	Repo   string `json:"repo"`
+	Kind   string `json:"kind"`
+	SHA256 string `json:"sha256"`
+}
+
+// refuseOutstandingAgreements answers the agreement-required 409 when the entry's
+// own repo has a requires-agreement document that is neither agreed nor in
+// accepted, and reports whether it did. It records nothing and holds no
+// operation slot, so a refusal leaves no trace.
+//
+// The check is the user-facing boundary and looks only at classifier.EntryDocuments
+// of the requested entry: never at companion files, DependsOn entries or the
+// manager's install path, because a model installed automatically with another
+// (the Geomodel files that arrive with Perch v2 and BirdNET+ v3.0) must never be
+// blocked by a terms agreement. An entry whose repo has no registry row, such as
+// the hidden BSG entry (repo tphakala/BSG), has nothing to agree to and passes.
+func (c *Handler) refuseOutstandingAgreements(ctx echo.Context, entry *classifier.CatalogEntry, accepted []classifier.RepoDocument) (handled bool, err error) {
+	svc := c.documentSvc()
+	own := svc.EntryDocuments(entry)
+	var outstanding []agreementDocumentParam
+	for i := range own {
+		doc := &own[i]
+		if !doc.RequiresAgreement || svc.Agreed(doc) {
+			continue
+		}
+		if slices.ContainsFunc(accepted, func(a classifier.RepoDocument) bool {
+			return a.Repo == doc.Repo && a.Kind == doc.Kind && a.SHA256 == doc.SHA256
+		}) {
+			continue
+		}
+		outstanding = append(outstanding, agreementDocumentParam{Repo: doc.Repo, Kind: doc.Kind, SHA256: doc.SHA256})
+	}
+	if len(outstanding) == 0 {
+		return false, nil
+	}
+	return true, c.HandleErrorWithKey(ctx, nil, agreementRequiredMsg, http.StatusConflict,
+		agreementRequiredKey, map[string]any{
+			"name":      entry.Name,
+			"documents": outstanding,
+		})
 }
