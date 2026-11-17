@@ -18,6 +18,8 @@
 <script lang="ts">
   import FormField from './FormField.svelte';
   import { t } from '$lib/i18n';
+  import { cn } from '$lib/utils/cn';
+  import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -36,6 +38,8 @@
     required?: boolean;
     disabled?: boolean;
     error?: string;
+    /** Classes for the error message, for example to let it spill past a narrow field. */
+    errorClassName?: string;
     className?: string;
   }
 
@@ -53,9 +57,13 @@
     required = false,
     disabled = false,
     error,
+    errorClassName = '',
     className = '',
     ...rest
   }: Props = $props();
+
+  // Id of the error message, so the input can point at it.
+  const errorId = `number-field-error-${generateId()}`;
 
   // Reactive state for showing clamping feedback
   let wasClamped = $state(false);
@@ -166,18 +174,22 @@
     {step}
     {placeholder}
     {helpText}
-    {describedByExtra}
+    describedByExtra={[describedByExtra, error ? errorId : undefined].filter(Boolean).join(' ') ||
+      undefined}
     {labelClassName}
     {required}
     {disabled}
     onChange={handleChange}
     onBlur={handleBlur}
+    invalid={!!error}
     inputClassName={error || clampedMessage ? 'input-error' : ''}
   />
 
   {#if error}
     <div class="label">
-      <span class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
+      <span id={errorId} class={cn('text-xs leading-4 text-[var(--text-error)]', errorClassName)}
+        >{error}</span
+      >
     </div>
   {:else if clampedMessage}
     <div class="label">

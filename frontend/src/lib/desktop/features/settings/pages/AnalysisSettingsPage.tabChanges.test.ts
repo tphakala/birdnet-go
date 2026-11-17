@@ -173,6 +173,13 @@ function editSection(section: string, patch: Record<string, unknown>) {
   }));
 }
 
+/** Make updateSection write to the form copy, as the real store does. */
+function applyUpdatesToForm() {
+  vi.mocked(settingsActions.updateSection).mockImplementation((section, patch) =>
+    editSection(section, patch)
+  );
+}
+
 /** Put a top-level config section into both the saved copy and the form copy. */
 function seedSection(section: string, value: Record<string, unknown>) {
   mockStore.update(state => ({
@@ -532,10 +539,7 @@ describe('AnalysisSettingsPage detection thresholds', () => {
   it('returns to the saved values when a seeded custom threshold is switched off again', async () => {
     modelsList.current = [MODEL.birdnetv3];
     seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
-    // Apply updates to the form copy, as the real store does.
-    vi.mocked(settingsActions.updateSection).mockImplementation((section, patch) =>
-      editSection(section, patch)
-    );
+    applyUpdatesToForm();
     render(AnalysisSettingsPage);
     const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.birdnetv3.name) });
     const user = userEvent.setup();
@@ -550,6 +554,45 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
       overrideThreshold: false,
       threshold: 0,
+    });
+  });
+
+  it('keeps a value typed into a seeded custom threshold when the switch goes off', async () => {
+    modelsList.current = [MODEL.birdnetv3];
+    seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.birdnetv3.name) });
+    const user = userEvent.setup();
+
+    await user.click(toggle);
+    const input = screen.getByRole('spinbutton', { name: MODEL.birdnetv3.name });
+    await user.clear(input);
+    await user.type(input, '0.8');
+    await user.tab();
+    await user.click(toggle);
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
+      overrideThreshold: false,
+    });
+  });
+
+  it('leaves a saved custom threshold alone when the switch goes off after a save', async () => {
+    modelsList.current = [MODEL.birdnetv3];
+    seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.birdnetv3.name) });
+    const user = userEvent.setup();
+
+    await user.click(toggle);
+    // Saving makes the seeded value the saved one.
+    seedSection('birdnetv3', { overrideThreshold: true, threshold: BASE_BIRDNET.threshold });
+    await tick();
+    await user.click(toggle);
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
+      overrideThreshold: false,
     });
   });
 
@@ -630,6 +673,36 @@ describe('AnalysisSettingsPage range filter overview', () => {
     expect(within(table).getByText(MODEL.birdnet.name)).toBeInTheDocument();
     expect(within(table).queryByText(MODEL.perch.name)).toBeNull();
   });
+
+  it('lists a classifier whose coverage flag is missing and hides the table when none is covered', async () => {
+    modelsList.current = [MODEL.birdnet, MODEL.perch];
+    const status = (classifiers: Array<Record<string, unknown>>) => ({
+      geomodel: { version: '1', totalSpecies: 100, autoSelected: true },
+      classifiers,
+    });
+    const row = { totalSpecies: 100, withRangeData: 90, withoutRangeData: 10 };
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url === RANGE_STATUS_URL
+        ? status([
+            { id: 'BirdNET_V2.4', name: MODEL.birdnet.name, ...row },
+            { id: 'Perch_V2', name: MODEL.perch.name, coveredByBackend: false, ...row },
+          ])
+        : {}
+    );
+    render(AnalysisSettingsPage);
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText(MODEL.birdnet.name)).toBeInTheDocument();
+
+    cleanup();
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url === RANGE_STATUS_URL
+        ? status([{ id: 'Perch_V2', name: MODEL.perch.name, coveredByBackend: false, ...row }])
+        : {}
+    );
+    render(AnalysisSettingsPage);
+    await screen.findByText('analysis.rangeFilter.status.title');
+    expect(screen.queryByRole('table')).toBeNull();
+  });
 });
 
 describe('AnalysisSettingsPage dynamic threshold', () => {
@@ -647,7 +720,18 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
     seedDynamic({ trigger: 0.5, min: 0.9 });
     render(AnalysisSettingsPage);
 
-    expect(await screen.findByText(MIN_ABOVE_TRIGGER)).toBeInTheDocument();
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+    const message = await screen.findByText(MIN_ABOVE_TRIGGER);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(message.id);
+    expect(screen.getAllByText(MIN_ABOVE_TRIGGER)).toHaveLength(1);
+    expect(
+      screen.getByRole('spinbutton', {
+        name: 'settings.main.sections.dynamicThreshold.trigger.label',
+      })
+    ).not.toHaveAttribute('aria-invalid');
   });
 
   it('shows no error while the minimum does not exceed the trigger', async () => {
@@ -663,6 +747,16 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
 
 describe('AnalysisSettingsPage species language', () => {
   beforeEach(() => resetPage());
+
+  it('renders every setting row label as a block, so wrapped lines keep the text-sm line height', async () => {
+    render(AnalysisSettingsPage);
+    await screen.findByRole('combobox', { name: 'analysis.detection.locale.label' });
+
+    const labels = ['analysis.thresholds.shared.label', 'analysis.detection.locale.label'].map(
+      text => screen.getAllByText(text).find(el => el.tagName === 'SPAN')
+    );
+    for (const label of labels) expect(label).toHaveClass('block', 'text-sm');
+  });
 
   it('is a setting row with the label and help beside the select', async () => {
     render(AnalysisSettingsPage);

@@ -6102,7 +6102,7 @@
         "description": "Które środowisko uruchomieniowe i urządzenie uruchamiają klasyfikatory oraz ile wątków CPU używają."
       },
       "backend": {
-        "label": "Silnik wnioskowania",
+        "label": "Backend",
         "helpText": "Automatyczny wybiera najszybsze środowisko uruchomieniowe obsługiwane przez to urządzenie dla każdego modelu.",
         "options": {
           "auto": "Automatyczny (zalecany)",

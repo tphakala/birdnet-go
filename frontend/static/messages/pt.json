@@ -6102,7 +6102,7 @@
         "description": "Que ambiente de execução e dispositivo executam os classificadores, e quantas threads de CPU utilizam."
       },
       "backend": {
-        "label": "Mecanismo de inferência",
+        "label": "Backend",
         "helpText": "Automático escolhe o ambiente de execução mais rápido suportado por este dispositivo para cada modelo.",
         "options": {
           "auto": "Automático (recomendado)",

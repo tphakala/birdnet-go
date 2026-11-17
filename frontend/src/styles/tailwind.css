@@ -685,7 +685,7 @@
   }
 
   .input::placeholder {
-    color: var(--text-muted);
+    color: var(--text-subtle);
     opacity: 1;
   }
 

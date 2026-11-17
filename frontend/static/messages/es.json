@@ -6102,7 +6102,7 @@
         "description": "Qué entorno de ejecución y dispositivo ejecutan los clasificadores, y cuántos hilos de CPU utilizan."
       },
       "backend": {
-        "label": "Motor de inferencia",
+        "label": "Backend",
         "helpText": "Automático elige el entorno de ejecución más rápido compatible con este dispositivo para cada modelo.",
         "options": {
           "auto": "Automático (recomendado)",

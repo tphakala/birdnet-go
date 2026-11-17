@@ -35,6 +35,8 @@
      * Ignored when a `children` snippet is rendered, like `helpText`: the snippet owns its own input.
      */
     describedByExtra?: string;
+    /** Marks the input aria-invalid when the caller shows the error itself. */
+    invalid?: boolean;
     required?: boolean;
     disabled?: boolean;
     readonly?: boolean;
@@ -76,6 +78,7 @@
     placeholder = '',
     helpText = '',
     describedByExtra,
+    invalid = false,
     required = false,
     disabled = false,
     readonly = false,
@@ -431,6 +434,7 @@
         {pattern}
         {autocomplete}
         aria-describedby={describedBy}
+        aria-invalid={error || invalid ? 'true' : undefined}
         class={getInputClasses()}
         onchange={handleChange}
         oninput={handleInput}

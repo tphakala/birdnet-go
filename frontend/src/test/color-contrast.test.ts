@@ -430,6 +430,27 @@ describe('Accessibility: status text tokens', () => {
   }
 });
 
+describe('Accessibility: disabled field text', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
+    'utf8'
+  );
+  const blocks = [
+    { name: 'light', body: blockBody(css, ":root,\n[data-theme='light']") },
+    { name: 'dark', body: blockBody(css, "[data-theme='dark']") },
+  ];
+
+  for (const { name, body } of blocks) {
+    it(`--field-text-disabled passes AA on --field-bg-disabled in the ${name} theme`, () => {
+      const ratio = getContrastRatio(
+        readVar(body, '--field-text-disabled'),
+        readVar(body, '--field-bg-disabled')
+      );
+      expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+    });
+  }
+});
+
 /** Data visualization fills: chart series and meter tones. */
 const VIZ_FILL_TOKENS = [
   ...Array.from({ length: 8 }, (_, i) => `--viz-${i + 1}`),

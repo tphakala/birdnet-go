@@ -1547,8 +1547,8 @@
 
   // Switching a row to a custom threshold keeps its saved value when that value is inside the
   // row's bounds; otherwise (for example a saved 0) it starts from the shared threshold it
-  // showed. Switching it off again, with that seeded value untouched, puts the saved value
-  // back, so the round trip leaves the section as it was.
+  // showed. Switching it off again restores the value it replaced, while the seeded value is
+  // untouched and still unsaved, so the round trip leaves the section as it was.
   const seededThresholds = new Map<
     ClassifierThresholdSection,
     { seeded: number; previous: number | undefined }
@@ -1561,9 +1561,14 @@
     if (!custom) {
       const seed = seededThresholds.get(section);
       seededThresholds.delete(section);
+      // A saved seeded value (the section's saved threshold equals it) is the user's own now.
+      const restorable =
+        seed !== undefined &&
+        own === seed.seeded &&
+        savedClassifierThreshold(section) === seed.previous;
       settingsActions.updateSection(
         section,
-        seed && own === seed.seeded
+        restorable
           ? { overrideThreshold: false, threshold: seed.previous }
           : { overrideThreshold: false }
       );
@@ -1576,6 +1581,16 @@
     const seeded = snapToStep(sharedThreshold, row.descriptor);
     seededThresholds.set(section, { seeded, previous: own });
     settingsActions.updateSection(section, { overrideThreshold: true, threshold: seeded });
+  }
+
+  // The single value of a one-choice select, whichever shape its callback reports.
+  function firstValue(value: string | string[]): string {
+    return Array.isArray(value) ? (value[0] ?? '') : value;
+  }
+
+  // The threshold a classifier section had when settings were last loaded or saved.
+  function savedClassifierThreshold(section: ClassifierThresholdSection): number | undefined {
+    return store.originalData[section]?.threshold;
   }
 
   // The settings values behind a classifier's own threshold section.
@@ -2029,7 +2044,8 @@
     <NumberField
       label={c.label}
       labelClassName="sr-only"
-      className="w-24 shrink-0"
+      className="relative w-24 shrink-0"
+      errorClassName="absolute right-0 top-full w-max max-w-72 text-right"
       value={c.value}
       onUpdate={c.onChange}
       min={c.bounds.min}
@@ -2252,7 +2268,7 @@
               size="md"
               groupBy={false}
               searchable={true}
-              onChange={value => updateBirdnetSetting('locale', value as string)}
+              onChange={value => updateBirdnetSetting('locale', firstValue(value))}
             >
               {#snippet renderOption(option)}
                 {@const localeOption = option as BirdnetLocaleOption}
@@ -2722,7 +2738,7 @@
           variant="select"
           size="md"
           groupBy={false}
-          onChange={value => updateBirdnetSetting('backend', value as string)}
+          onChange={value => updateBirdnetSetting('backend', firstValue(value))}
         />
         {#if showDeviceField}
           <SelectDropdown
@@ -2734,7 +2750,7 @@
             variant="select"
             size="md"
             groupBy={false}
-            onChange={value => updateBirdnetSetting('openVinoDevice', value as string)}
+            onChange={value => updateBirdnetSetting('openVinoDevice', firstValue(value))}
           />
         {/if}
       </div>

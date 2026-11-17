@@ -6102,7 +6102,7 @@
         "description": "Quale runtime e dispositivo eseguono i classificatori, e quanti thread CPU utilizzano."
       },
       "backend": {
-        "label": "Motore di inferenza",
+        "label": "Backend",
         "helpText": "Automatico sceglie il runtime più veloce supportato da questo dispositivo per ciascun modello.",
         "options": {
           "auto": "Automatico (consigliato)",

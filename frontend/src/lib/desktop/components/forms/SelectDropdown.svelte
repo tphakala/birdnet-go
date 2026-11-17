@@ -670,7 +670,7 @@
               onkeydown={handleSearchKeyDown}
               placeholder={t('common.ui.search')}
               class={cn(
-                'block w-full py-2 px-3 text-sm leading-5 bg-[var(--field-bg)] text-[var(--color-base-content)] border border-[var(--field-border)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--text-muted)] hover:border-[var(--field-border-hover)]',
+                'block w-full py-2 px-3 text-sm leading-5 bg-[var(--field-bg)] text-[var(--color-base-content)] border border-[var(--field-border)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--text-subtle)] hover:border-[var(--field-border-hover)]',
                 focusRingClasses
               )}
               aria-label={t('components.forms.select.searchOptions')}

@@ -6102,7 +6102,7 @@
         "description": "Welke runtime en welk apparaat de classificatoren uitvoeren, en hoeveel CPU-threads ze gebruiken."
       },
       "backend": {
-        "label": "Back-end",
+        "label": "Backend",
         "helpText": "Automatisch kiest de snelste runtime die dit apparaat ondersteunt voor elk model.",
         "options": {
           "auto": "Automatisch (aanbevolen)",

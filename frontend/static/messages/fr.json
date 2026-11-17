@@ -6102,7 +6102,7 @@
         "description": "Quel moteur d'exécution et quel appareil exécutent les classificateurs, et combien de threads CPU ils utilisent."
       },
       "backend": {
-        "label": "Moteur d'inférence",
+        "label": "Backend",
         "helpText": "Automatique choisit le moteur d'exécution le plus rapide pris en charge par cet appareil pour chaque modèle.",
         "options": {
           "auto": "Automatique (recommandé)",
