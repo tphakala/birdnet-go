@@ -30,7 +30,10 @@ export function documentKindLabel(kind: string): string {
 export interface EntryDocumentSplit {
   /** Hosted documents that require an agreement the server has not recorded. */
   outstanding: AgreementDocument[];
-  /** The other documents, shown for reference (a link or text to view). */
+  /**
+   * The other documents, shown for reference (a link or text to view). An outstanding
+   * document whose sha256 is already in `outstanding` is in neither list.
+   */
   reference: CatalogDocument[];
 }
 
