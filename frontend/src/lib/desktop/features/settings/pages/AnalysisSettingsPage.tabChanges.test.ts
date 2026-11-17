@@ -679,6 +679,24 @@ describe('AnalysisSettingsPage detection thresholds', () => {
   });
 });
 
+describe('AnalysisSettingsPage classifier threshold snap back', () => {
+  beforeEach(() => resetPage());
+
+  it('shows the snapped value when a typed classifier threshold snaps back to the saved one', async () => {
+    modelsList.current = [MODEL.bsgbat];
+    seedSection('bsgbat', { threshold: 0.5 });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', { name: MODEL.bsgbat.name });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.504');
+    await user.tab();
+
+    expect(input).toHaveValue(0.5);
+  });
+});
+
 describe('AnalysisSettingsPage inference threads', () => {
   beforeEach(() => resetPage('inference'));
 
@@ -901,6 +919,20 @@ describe('AnalysisSettingsPage inference runtime', () => {
 describe('AnalysisSettingsPage range filter scope', () => {
   beforeEach(() => resetPage('filters'));
 
+  it('shows the snapped value when a typed range threshold snaps back to the saved one', async () => {
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.rangeFilter.threshold.label',
+    });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.014');
+    await user.tab();
+
+    expect(input).toHaveValue(0.01);
+  });
+
   it('names only the classifiers the active range backend filters', async () => {
     modelsList.current = [MODEL.birdnet, MODEL.perch, MODEL.bat];
     vi.mocked(api.get).mockImplementation(async (url: string) =>
@@ -1060,6 +1092,42 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
     const message = await screen.findByText(MIN_ABOVE_TRIGGER);
 
     expect(message.closest('.absolute')).toBeNull();
+  });
+
+  it.each([
+    { field: 'trigger', typed: '0.804', shown: 0.8 },
+    { field: 'minimum', typed: '0.304', shown: 0.3 },
+    { field: 'expireTime', typed: '24.4', shown: 24 },
+  ])(
+    'shows the snapped value when a typed $field snaps back to the saved one',
+    async ({ field, typed, shown }) => {
+      seedDynamic({});
+      render(AnalysisSettingsPage);
+      const input = await screen.findByRole('spinbutton', {
+        name: `settings.main.sections.dynamicThreshold.${field}.label`,
+      });
+
+      const user = userEvent.setup();
+      await user.clear(input);
+      await user.type(input, typed);
+      await user.tab();
+
+      expect(input).toHaveValue(shown);
+    }
+  );
+
+  it('keeps the slider free of invalid state and the error id while the minimum is valid', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.4 });
+    render(AnalysisSettingsPage);
+    await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+
+    const slider = screen.getByRole('slider', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+    expect(slider).not.toHaveAttribute('aria-invalid');
+    expect(slider.getAttribute('aria-describedby')?.split(' ')).toHaveLength(1);
   });
 
   it('hides the clamp notice box while the minimum error shows', async () => {
