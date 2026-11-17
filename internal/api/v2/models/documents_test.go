@@ -364,6 +364,19 @@ func TestDocumentResolution_IsBounded(t *testing.T) {
 	}
 }
 
+// TestReinstallModel_RefusedBeforeFetchingDocuments pins that a reinstall the
+// request checks refuse answers that refusal, not a document error: a model that
+// is not installed is a 400 even when its accepted document cannot be fetched.
+func TestReinstallModel_RefusedBeforeFetchingDocuments(t *testing.T) {
+	h, fake, _ := documentFixture(t, nil)
+	delete(fake.texts, docShaN)
+
+	rec := guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepN, `{"acceptedDocuments":["`+docShaN+`"]}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "not installed")
+	assert.Empty(t, fake.recordedDocs())
+}
+
 // TestReinstallModel_SlowDocumentDoesNotHoldTheSlot pins that accepted documents
 // are resolved before the operation slot is taken: while the text is still being
 // fetched, another operation can start.

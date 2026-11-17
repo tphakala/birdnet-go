@@ -1189,6 +1189,27 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	})
 }
 
+// reinstallRefusal returns a responder for the first check that refuses a
+// reinstall of entry (the model is not installed, or it needs an ONNX Runtime that
+// is not available), or nil when every check passes.
+func (c *Handler) reinstallRefusal(ctx echo.Context, entry *classifier.CatalogEntry, catalogID string) func() error {
+	if !c.ModelManager.IsInstalled(catalogID) {
+		return func() error {
+			return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
+		}
+	}
+	if entry.RequiresONNX {
+		if ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath); !ortStatus.Available {
+			return func() error {
+				return c.HandleError(ctx, nil,
+					"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
+					http.StatusConflict)
+			}
+		}
+	}
+	return nil
+}
+
 // ReinstallModel re-downloads missing or corrupt files for an installed model.
 // Files that pass SHA256 validation are skipped. It returns 202 Accepted
 // immediately while the re-download runs in the background. Like InstallModel it
@@ -1229,6 +1250,16 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
 	}
 
+	// A request that names documents runs the reinstall checks before fetching
+	// them, so a refused request never fetches a document. The checks run again
+	// under the lease below, where they are authoritative; without documents
+	// there is nothing to fetch, and the busy-slot answer keeps coming first.
+	if len(req.AcceptedDocuments) > 0 {
+		if refused := c.reinstallRefusal(ctx, &entry, catalogID); refused != nil {
+			return refused()
+		}
+	}
+
 	// Resolve the accepted agreements before taking the operation slot, as
 	// InstallModel does, so a slow document fetch never holds the slot and blocks
 	// other operations. It records nothing yet.
@@ -1251,18 +1282,8 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		}
 	}()
 
-	if !c.ModelManager.IsInstalled(catalogID) {
-		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
-	}
-
-	// Reject reinstall of ONNX-dependent models when ORT is unavailable.
-	if entry.RequiresONNX {
-		ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath)
-		if !ortStatus.Available {
-			return c.HandleError(ctx, nil,
-				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
-				http.StatusConflict)
-		}
+	if refused := c.reinstallRefusal(ctx, &entry, catalogID); refused != nil {
+		return refused()
 	}
 
 	// The last synchronous step: only a request that is answered 202 records.
