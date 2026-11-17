@@ -10,9 +10,7 @@
   - Settings tab: Detection settings, false positive filter, range filter,
     dynamic threshold, and advanced options
   - Models tab: Model gallery with Installed and Available tabs
-  - Confidence threshold slider for bird detection
-  - Bat detection threshold slider (visible when a BattyBirdNET model is installed)
-  - BSG-BAT detection threshold slider (visible when the BSG-BAT model is installed)
+  - Detection thresholds table: one row per enabled classifier, each with its threshold
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
@@ -30,15 +28,9 @@
   import { onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
-  import type {
-    CatalogEntry,
-    DownloadProgress,
-    InstalledModel,
-    ModelRegionsResponse,
-  } from '$lib/types/models';
+  import type { CatalogEntry, DownloadProgress, ModelRegionsResponse } from '$lib/types/models';
   import {
     fetchCatalog,
-    fetchInstalled,
     fetchModelRegions,
     installModel,
     reinstallModel,
@@ -47,7 +39,20 @@
     isNetworkDownloadError,
     MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
-  import { invalidateModels } from '$lib/stores/models.svelte';
+  import {
+    getAvailableModels,
+    modelsLoading,
+    refreshModels,
+    watchModels,
+  } from '$lib/stores/models.svelte';
+  import {
+    PRIMARY_THRESHOLD_FALLBACK,
+    thresholdRows,
+    thresholdSnapshot,
+    type ThresholdRow,
+    type ThresholdSection,
+    type ThresholdSectionValues,
+  } from './analysisThresholds';
   import {
     analysisCadence,
     invalidateAcousticModels,
@@ -92,6 +97,7 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -150,30 +156,14 @@
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
   /** Catalog ID of the BSG-BAT model (the other bat catalog entries are BattyBirdNET models). */
   const BSG_BAT_CATALOG_ID = 'bsg-bat';
-  /** Catalog ID of the BirdNET+ V3.0 model; the threshold card shows only while it is installed. */
-  const BIRDNET_PLUS_CATALOG_ID = 'birdnet-plus-v3.0';
   /** Backend default of birdnetplus.threshold, used until the section is loaded. */
   const BIRDNET_PLUS_DEFAULT_THRESHOLD = 0.5;
   /** Backend default of bsgbat.threshold, used until the section is loaded. */
   const BSG_BAT_DEFAULT_THRESHOLD = 0.5;
-  /** Bounds and step of the bat model threshold fields. */
-  const BAT_THRESHOLD_MIN = 0.01;
-  const BAT_THRESHOLD_MAX = 0.99;
-  const BAT_THRESHOLD_STEP = 0.01;
   /** Frames are whole numbers. */
   const BSG_BAT_STEP_INCREMENT = 1;
   /** Decimals of the step shown in seconds (one frame is 2 ms, so 0.01 s is five frames). */
   const BSG_BAT_STEP_SECONDS_DECIMALS = 2;
-  /**
-   * Subgrid rows for two threshold fields side by side: each field spans four rows (the three
-   * of its form control plus the message row below it) and its form control spans the first
-   * three, so labels, inputs and help texts line up across the fields at their natural heights.
-   */
-  const BAT_THRESHOLD_SHARED_ROWS = [
-    'md:gap-y-1',
-    'md:[&>*]:row-span-4 md:[&>*]:grid md:[&>*]:grid-rows-subgrid',
-    'md:[&>*>.form-control]:row-span-3 md:[&>*>.form-control]:grid md:[&>*>.form-control]:grid-rows-subgrid',
-  ].join(' ');
 
   // ── Page-level tab state ──────────────────────────────────────────────
   type PageTab = 'settings' | 'models';
@@ -181,9 +171,6 @@
 
   // ── Gallery (Models tab) state ────────────────────────────────────────
   let catalog = $state<CatalogEntry[]>([]);
-  // Installed models incl. hidden ones (drives the secondary-model threshold
-  // sections, which the visibility-filtered catalog cannot).
-  let installedModels = $state<InstalledModel[]>([]);
   let loading = $state(true);
   // Catalog loading failure: gates the two gallery tab bodies and drives the
   // banner whose Retry re-runs loadCatalog.
@@ -314,7 +301,6 @@
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
-  const BSG_BAT_WARNING_ID = generateId('bsg-bat-warning');
   const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
@@ -416,21 +402,16 @@
   );
   const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
-  // Secondary acoustic classifiers with a per-model threshold override. These are
-  // gated on the installed-models list (not the catalog): the catalog endpoint
-  // hides foundation/preview models such as BirdNET v3.0 via VisibleCatalog(), so
-  // a catalog-based check would never light up the v3.0 section. The installed
-  // endpoint returns every downloaded model, hidden or not, keyed by catalogId.
+  // ── Detection thresholds table ────────────────────────────────────────
+  // One row per enabled classifier (GET /api/v2/models, refreshed on topology
+  // changes), so the table follows what is installed and running.
   let perch = $derived($perchSettings ?? { overrideThreshold: false, threshold: 0.5 });
   let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
-  const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
-  const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
   let birdnetPlus = $derived(
     $birdNetPlusSettings ?? { overrideThreshold: false, threshold: BIRDNET_PLUS_DEFAULT_THRESHOLD }
   );
-  const hasBirdNetPlusModel = $derived(
-    installedModels.some(m => m.catalogId === BIRDNET_PLUS_CATALOG_ID)
-  );
+  const thresholdTableRows = $derived(thresholdRows(getAvailableModels()));
+  const birdnetThreshold = $derived(birdnet?.threshold ?? PRIMARY_THRESHOLD_FALLBACK);
 
   // ── Change detection ──────────────────────────────────────────────────
   // The saved and the current value of each card, used by the card's unsaved-changes badge
@@ -442,56 +423,38 @@
 
   const birdDetectionChange: ChangePair = $derived({
     original: {
-      threshold: store.originalData.birdnet?.threshold,
       locale: store.originalData.birdnet?.locale,
       fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
     },
     current: {
-      threshold: birdnet?.threshold,
       locale: birdnet?.locale,
       fpFilter: falsePositiveFilter.level,
     },
   });
-  const perchChange: ChangePair = $derived({
-    original: {
-      override: store.originalData.perch?.overrideThreshold ?? false,
-      threshold: store.originalData.perch?.threshold ?? 0.5,
-    },
-    current: { override: perch.overrideThreshold, threshold: perch.threshold },
-  });
-  const birdnetV3Change: ChangePair = $derived({
-    original: {
-      override: store.originalData.birdnetv3?.overrideThreshold ?? false,
-      threshold: store.originalData.birdnetv3?.threshold ?? 0.5,
-    },
-    current: { override: birdnetV3.overrideThreshold, threshold: birdnetV3.threshold },
-  });
-  const birdnetPlusChange: ChangePair = $derived({
-    original: {
-      override: store.originalData.birdnetplus?.overrideThreshold ?? false,
-      threshold: store.originalData.birdnetplus?.threshold ?? BIRDNET_PLUS_DEFAULT_THRESHOLD,
-    },
-    current: { override: birdnetPlus.overrideThreshold, threshold: birdnetPlus.threshold },
+  const thresholdsChange: ChangePair = $derived({
+    original: thresholdSnapshot(thresholdTableRows, store.originalData),
+    current: thresholdSnapshot(thresholdTableRows, {
+      birdnet,
+      perch,
+      birdnetv3: birdnetV3,
+      birdnetplus: birdnetPlus,
+      bat,
+      bsgbat: bsgBat,
+    }),
   });
   const batChange: ChangePair = $derived({
     original: {
-      batThreshold: store.originalData.bat?.threshold,
       batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
       batDiscardUnlikely: store.originalData.bat?.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
-      bsgBatThreshold: hasBsgBatModel
-        ? (store.originalData.bsgbat?.threshold ?? BSG_BAT_DEFAULT_THRESHOLD)
-        : undefined,
       bsgBatStepFrames: hasBsgBatModel ? savedBsgBatStepFrames : undefined,
     },
     current: {
-      batThreshold: bat.threshold,
       batNighttimeOnly: bat.nighttimeOnly,
       batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
       batDiscardUnlikely: bat.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: batFPLevel,
-      bsgBatThreshold: hasBsgBatModel ? bsgBat.threshold : undefined,
       bsgBatStepFrames: hasBsgBatModel ? bsgBatStepFrames : undefined,
     },
   });
@@ -524,20 +487,17 @@
     current: { huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' },
   });
 
-  // A tab shows the change dot when any card badge on it would. The Perch, BirdNET v3.0, BirdNET+
-  // V3.0 and bat cards count only while they are shown, so the dot and the badges stay in step.
-  // For Perch, BirdNET v3.0 and BirdNET+ V3.0 the gate changes nothing today, since the
-  // defaults equal the saved-side fallbacks. For bat it is load-bearing: with no bat section saved, the page's defaults differ
-  // from the saved values and would light the dot for good.
+  // A tab shows the change dot when any card badge on it would. The thresholds card holds only
+  // the rows on screen, and the bat card counts only while it is shown, so the dot and the
+  // badges stay in step. For bat the gate is load-bearing: with no bat section saved, the page's
+  // defaults differ from the saved values and would light the dot for good.
   const settingsTabHasChanges = $derived(
     [
+      thresholdsChange,
       birdDetectionChange,
       rangeFilterChange,
       dynamicThresholdChange,
       advancedChange,
-      ...(hasPerchModel ? [perchChange] : []),
-      ...(hasBirdNetV3Model ? [birdnetV3Change] : []),
-      ...(hasBirdNetPlusModel ? [birdnetPlusChange] : []),
       ...(hasBatModel ? [batChange] : []),
     ].some(c => hasSettingsChanged(c.original, c.current))
   );
@@ -885,6 +845,7 @@
   // Keep the cadence readout live while the page is open: the topology stream
   // announces each re-plan.
   $effect(() => watchAcousticModels());
+  $effect(() => watchModels());
 
   // A saved level change that stays on one side of the filter on/off line does
   // not re-plan, so no topology event follows; the per-model counts the server
@@ -1272,14 +1233,6 @@
     });
   }
 
-  function updateBatThreshold(value: number) {
-    settingsActions.updateSection('bat', { threshold: value });
-  }
-
-  function updateBsgBatThreshold(value: number) {
-    settingsActions.updateSection('bsgbat', { threshold: value });
-  }
-
   // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
   // saved effective one restores the saved raw value (0 or none for the default), so the form
   // compares equal to the saved settings again and the save bar does not stay active.
@@ -1425,50 +1378,49 @@
     });
   }
 
-  function updateThreshold(value: number) {
-    settingsActions.updateSection('birdnet', { threshold: value });
+  // Threshold table handlers. Every edit saves to the row's own settings section.
+  function updateRowThreshold(section: ThresholdSection, value: number) {
+    settingsActions.updateSection(section, { threshold: value });
   }
 
-  // Config for the shared secondary-model threshold section snippet.
-  interface SecondaryModelThresholdConfig {
-    titleKey: string;
-    descKey: string;
-    thresholdLabelKey: string;
-    // The BirdNET threshold this model follows while the override is off; shown
-    // in the disabled field so the number on screen matches the effective value.
-    effectiveThreshold: number;
-    current: { overrideThreshold: boolean; threshold: number };
-    // Saved and current values for the section's unsaved-changes badge.
-    change: ChangePair;
-    onOverride: (_value: boolean) => void;
-    onThreshold: (_value: number) => void;
+  function updateRowOverride(section: ThresholdSection, value: boolean) {
+    settingsActions.updateSection(section, { overrideThreshold: value });
   }
 
-  // Secondary-model threshold override handlers. When the override is off, the
-  // model follows the BirdNET threshold (backend modelGlobalConfidenceThreshold),
-  // so the threshold field is disabled until the override is enabled.
-  function updatePerchOverride(value: boolean) {
-    settingsActions.updateSection('perch', { overrideThreshold: value });
+  // The settings values behind a row's section.
+  function sectionValues(section: ThresholdSection): ThresholdSectionValues {
+    switch (section) {
+      case 'birdnet':
+        return { threshold: birdnetThreshold };
+      case 'perch':
+        return perch;
+      case 'birdnetv3':
+        return birdnetV3;
+      case 'birdnetplus':
+        return birdnetPlus;
+      case 'bat':
+        return bat;
+      case 'bsgbat':
+        return bsgBat;
+    }
   }
 
-  function updatePerchThreshold(value: number) {
-    settingsActions.updateSection('perch', { threshold: value });
+  // Whether a row follows the BirdNET threshold: always for 'follows' rows, and for
+  // 'override' rows until their own threshold is switched on (backend
+  // modelGlobalConfidenceThreshold).
+  function rowFollowsBirdnet(row: ThresholdRow): boolean {
+    const { kind, section } = row.descriptor;
+    if (kind === 'follows') return true;
+    if (kind !== 'override' || !section) return false;
+    return !sectionValues(section).overrideThreshold;
   }
 
-  function updateBirdNetV3Override(value: boolean) {
-    settingsActions.updateSection('birdnetv3', { overrideThreshold: value });
-  }
-
-  function updateBirdNetV3Threshold(value: number) {
-    settingsActions.updateSection('birdnetv3', { threshold: value });
-  }
-
-  function updateBirdNetPlusOverride(value: boolean) {
-    settingsActions.updateSection('birdnetplus', { overrideThreshold: value });
-  }
-
-  function updateBirdNetPlusThreshold(value: number) {
-    settingsActions.updateSection('birdnetplus', { threshold: value });
+  // The value the row's field shows: the effective threshold, so a row that follows
+  // BirdNET shows the BirdNET value.
+  function rowThresholdValue(row: ThresholdRow): number {
+    const { section } = row.descriptor;
+    if (!section || rowFollowsBirdnet(row)) return birdnetThreshold;
+    return sectionValues(section).threshold ?? birdnetThreshold;
   }
 
   // ── Gallery tab definitions ───────────────────────────────────────────
@@ -1531,9 +1483,6 @@
       // response cannot overwrite the newer region's catalog.
       if (seq !== catalogRequestSeq) return;
       catalog = response.catalog;
-      // Refresh the installed list alongside the catalog so the secondary-model
-      // threshold sections track install/uninstall. Swallows its own errors.
-      await loadInstalledModels(seq);
     } catch (e) {
       if (seq !== catalogRequestSeq) return;
       catalogError =
@@ -1542,18 +1491,6 @@
       // Only the newest request owns the loading flag, so a superseded response
       // does not clear the spinner out from under the one still running.
       if (seq === catalogRequestSeq) loading = false;
-    }
-  }
-
-  // seq, when passed, is the owning loadCatalog request's sequence: a stale
-  // installed-list response is dropped rather than overwriting a newer one.
-  async function loadInstalledModels(seq?: number) {
-    try {
-      const installed = await fetchInstalled();
-      if (seq !== undefined && seq !== catalogRequestSeq) return;
-      installedModels = installed;
-    } catch (e) {
-      logger.error('Failed to load installed models:', e);
     }
   }
 
@@ -1642,7 +1579,7 @@
               installingId = null;
               downloadProgress = null;
             }
-            invalidateModels();
+            void refreshModels();
             loadCatalog();
           }, 2000);
         },
@@ -1720,7 +1657,7 @@
     try {
       await uninstallModel(modelId);
       refreshSettingsAfterGalleryChange();
-      invalidateModels();
+      void refreshModels();
       await loadCatalog();
       toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
@@ -1791,7 +1728,7 @@
               reinstallingId = null;
               downloadProgress = null;
             }
-            invalidateModels();
+            void refreshModels();
             loadCatalog();
           }, 2000);
         },
@@ -1844,43 +1781,122 @@
   }
 </script>
 
-<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0, BirdNET+ V3.0) ── -->
-{#snippet secondaryModelThreshold(cfg: SecondaryModelThresholdConfig)}
-  <SettingsSection
-    title={t(cfg.titleKey)}
-    description={t(cfg.descKey)}
-    defaultOpen={true}
-    originalData={cfg.change.original}
-    currentData={cfg.change.current}
-  >
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Checkbox
-        checked={cfg.current.overrideThreshold}
-        label={t('analysis.detection.secondaryThresholdOverride.label')}
-        helpText={t('analysis.detection.secondaryThresholdOverride.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={cfg.onOverride}
-      />
-      <NumberField
-        label={t(cfg.thresholdLabelKey)}
-        value={cfg.current.overrideThreshold ? cfg.current.threshold : cfg.effectiveThreshold}
-        onUpdate={cfg.onThreshold}
-        min={0.01}
-        max={0.99}
-        step={0.01}
-        disabled={store.isLoading || store.isSaving || !cfg.current.overrideThreshold}
-        helpText={cfg.current.overrideThreshold
-          ? t('analysis.detection.secondaryThreshold.helpText')
-          : t('analysis.detection.secondaryThreshold.followsBirdnet')}
-      />
-    </div>
-  </SettingsSection>
-{/snippet}
-
 <!-- ── Settings Tab Content ──────────────────────────────────────────── -->
 {#snippet settingsTabContent()}
   <div class="space-y-6">
-    <!-- 1. Bird Detection -->
+    <!-- 1. Detection thresholds: one row per enabled classifier -->
+    <SettingsSection
+      title={t('analysis.thresholds.title')}
+      description={t('analysis.thresholds.description')}
+      defaultOpen={true}
+      originalData={thresholdsChange.original}
+      currentData={thresholdsChange.current}
+    >
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm" data-testid="threshold-table">
+          <caption class="sr-only">{t('analysis.thresholds.title')}</caption>
+          <thead>
+            <tr
+              class="border-b border-[var(--border-100)] text-left text-xs font-medium text-[var(--color-base-content)]/70"
+            >
+              <th scope="col" class="py-2 pr-4 font-medium">
+                {t('analysis.thresholds.columns.classifier')}
+              </th>
+              <th scope="col" class="py-2 pr-4 font-medium">
+                {t('analysis.thresholds.columns.threshold')}
+              </th>
+              <th scope="col" class="py-2 font-medium">
+                {t('analysis.thresholds.columns.source')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each thresholdTableRows as row (row.model.id)}
+              {@const section = row.descriptor.section}
+              {@const follows = rowFollowsBirdnet(row)}
+              <tr
+                class="border-b border-[var(--border-100)] last:border-b-0"
+                data-testid="threshold-row-{row.model.id}"
+              >
+                <th scope="row" class="py-3 pr-4 text-left align-middle font-normal">
+                  <span class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-[var(--color-base-content)]">
+                      {row.model.name}
+                    </span>
+                    {#if row.descriptor.kind === 'primary'}
+                      <Badge variant="primary" size="xs">
+                        {t('analysis.thresholds.primary')}
+                      </Badge>
+                    {/if}
+                    {#if row.model.category === 'bat'}
+                      <Badge variant="neutral" size="xs">
+                        {t('analysis.thresholds.category.bat')}
+                      </Badge>
+                    {/if}
+                    {#if row.model.state === 'pending'}
+                      <Badge variant="warning" size="xs">
+                        {t('analysis.thresholds.state.pending')}
+                      </Badge>
+                    {:else if row.model.state === 'failed'}
+                      <Badge variant="error" size="xs">
+                        {t('analysis.thresholds.state.failed')}
+                      </Badge>
+                    {/if}
+                  </span>
+                </th>
+                <td class="py-3 pr-4 align-middle">
+                  <NumberField
+                    label={row.model.name}
+                    labelClassName="sr-only"
+                    className="w-28"
+                    value={rowThresholdValue(row)}
+                    onUpdate={value => section && updateRowThreshold(section, value)}
+                    min={row.descriptor.min}
+                    max={row.descriptor.max}
+                    step={row.descriptor.step}
+                    disabled={store.isLoading || store.isSaving || follows}
+                  />
+                </td>
+                <td class="py-3 align-middle">
+                  {#if row.descriptor.kind === 'override' && section}
+                    <Checkbox
+                      checked={!follows}
+                      size="sm"
+                      disabled={store.isLoading || store.isSaving}
+                      onchange={value => updateRowOverride(section, value)}
+                    >
+                      {t('analysis.thresholds.useOwn')}<span class="sr-only">
+                        ({row.model.name})</span
+                      >
+                    </Checkbox>
+                  {:else if row.descriptor.kind === 'follows'}
+                    <span class="text-[var(--color-base-content)]/70">
+                      {t('analysis.thresholds.followsBirdnet')}
+                    </span>
+                  {:else if row.descriptor.kind === 'primary'}
+                    <span class="text-[var(--color-base-content)]/70">
+                      {t('analysis.thresholds.primaryNote')}
+                    </span>
+                  {:else}
+                    <span class="text-[var(--color-base-content)]/70">
+                      {t('analysis.thresholds.ownAlways')}
+                    </span>
+                  {/if}
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="3" class="py-3 text-[var(--color-base-content)]/70">
+                  {modelsLoading() ? t('common.loading') : t('analysis.thresholds.empty')}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </SettingsSection>
+
+    <!-- 2. Bird Detection -->
     <SettingsSection
       title={t('analysis.bird.title')}
       description={t('analysis.bird.description')}
@@ -1889,17 +1905,6 @@
       currentData={birdDetectionChange.current}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <NumberField
-          label={t('analysis.detection.confidenceThreshold.label')}
-          value={birdnet?.threshold ?? 0.3}
-          onUpdate={updateThreshold}
-          min={0}
-          max={1}
-          step={0.05}
-          disabled={store.isLoading || store.isSaving}
-          helpText={t('analysis.detection.confidenceThreshold.helpText')}
-        />
-
         <SelectDropdown
           options={birdnetLocaleOptions}
           value={birdnet?.locale ?? 'en'}
@@ -2020,49 +2025,7 @@
       {/if}
     </SettingsSection>
 
-    <!-- 2. Perch v2 threshold override (only when the Perch model is installed) -->
-    {#if hasPerchModel}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.perch.title',
-        descKey: 'analysis.perch.description',
-        thresholdLabelKey: 'analysis.detection.perchThreshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: perch,
-        change: perchChange,
-        onOverride: updatePerchOverride,
-        onThreshold: updatePerchThreshold,
-      })}
-    {/if}
-
-    <!-- 3. BirdNET v3.0 threshold override (only when the v3.0 model is installed) -->
-    {#if hasBirdNetV3Model}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.birdnetv3.title',
-        descKey: 'analysis.birdnetv3.description',
-        thresholdLabelKey: 'analysis.detection.birdnetv3Threshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: birdnetV3,
-        change: birdnetV3Change,
-        onOverride: updateBirdNetV3Override,
-        onThreshold: updateBirdNetV3Threshold,
-      })}
-    {/if}
-
-    <!-- 3b. BirdNET+ V3.0 threshold override (only when the BirdNET+ model is installed) -->
-    {#if hasBirdNetPlusModel}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.birdnetplus.title',
-        descKey: 'analysis.birdnetplus.description',
-        thresholdLabelKey: 'analysis.detection.birdnetplusThreshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: birdnetPlus,
-        change: birdnetPlusChange,
-        onOverride: updateBirdNetPlusOverride,
-        onThreshold: updateBirdNetPlusThreshold,
-      })}
-    {/if}
-
-    <!-- 4. Bat Detection (only when a bat model is installed) -->
+    <!-- 3. Bat Detection (only when a bat model is installed) -->
     {#if hasBatModel}
       <SettingsSection
         title={t('analysis.bat.title')}
@@ -2071,47 +2034,11 @@
         originalData={batChange.original}
         currentData={batChange.current}
       >
-        <!-- Side by side at md and up, the two fields share the rows of one grid (label, input, help text, message) through subgrid, so a label that wraps in a longer translation keeps both inputs level without reserving height for labels that do not wrap. -->
-        <div
-          class={cn(
-            'grid grid-cols-1 md:grid-cols-2 gap-6',
-            hasBattyBirdNetModel && hasBsgBatModel && BAT_THRESHOLD_SHARED_ROWS
-          )}
-        >
-          {#if hasBattyBirdNetModel}
-            <NumberField
-              label={t('analysis.detection.batThreshold.label')}
-              value={bat.threshold}
-              onUpdate={updateBatThreshold}
-              min={BAT_THRESHOLD_MIN}
-              max={BAT_THRESHOLD_MAX}
-              step={BAT_THRESHOLD_STEP}
-              disabled={store.isLoading || store.isSaving}
-              helpText={t('analysis.detection.batThreshold.helpText')}
-            />
-          {/if}
-          {#if hasBsgBatModel}
-            <NumberField
-              label={t('analysis.detection.bsgBatThreshold.label')}
-              value={bsgBat.threshold}
-              onUpdate={updateBsgBatThreshold}
-              min={BAT_THRESHOLD_MIN}
-              max={BAT_THRESHOLD_MAX}
-              step={BAT_THRESHOLD_STEP}
-              disabled={store.isLoading || store.isSaving}
-              helpText={t('analysis.detection.bsgBatThreshold.helpText')}
-              describedByExtra={BSG_BAT_WARNING_ID}
-            />
-          {/if}
-        </div>
-
         {#if hasBsgBatModel}
-          <div class="mt-4">
-            <SettingsNote id={BSG_BAT_WARNING_ID}>
-              {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
-              <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
-            </SettingsNote>
-          </div>
+          <SettingsNote>
+            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+            <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
+          </SettingsNote>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div>
@@ -2195,7 +2122,7 @@
       </SettingsSection>
     {/if}
 
-    <!-- 5. Range Filter -->
+    <!-- 4. Range Filter -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
@@ -2408,7 +2335,7 @@
       {/if}
     </SettingsSection>
 
-    <!-- 6. Dynamic Threshold -->
+    <!-- 5. Dynamic Threshold -->
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
       description={t('settings.main.sections.dynamicThreshold.description')}
@@ -2465,7 +2392,7 @@
       {/if}
     </SettingsSection>
 
-    <!-- 7. Advanced (collapsed by default) -->
+    <!-- 6. Advanced (collapsed by default) -->
     <SettingsSection
       title={t('analysis.advanced.title')}
       description={t('analysis.advanced.description')}

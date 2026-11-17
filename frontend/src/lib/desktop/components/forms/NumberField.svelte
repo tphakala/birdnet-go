@@ -31,6 +31,8 @@
     helpText?: string;
     /** Extra element IDs appended to the input's aria-describedby (see FormField). */
     describedByExtra?: string;
+    /** Classes for the label wrapper, e.g. `sr-only` where a table header names the field. */
+    labelClassName?: string;
     required?: boolean;
     disabled?: boolean;
     error?: string;
@@ -47,6 +49,7 @@
     placeholder = '',
     helpText = '',
     describedByExtra,
+    labelClassName = '',
     required = false,
     disabled = false,
     error,
@@ -164,6 +167,7 @@
     {placeholder}
     {helpText}
     {describedByExtra}
+    {labelClassName}
     {required}
     {disabled}
     onChange={handleChange}

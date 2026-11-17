@@ -6103,6 +6103,28 @@
     "birdnetplus": {
       "title": "BirdNET+ V3.0 észlelés",
       "description": "Állítson be egy dedikált megbízhatósági küszöbértéket a BirdNET+ V3.0 észlelésekhez, a fő BirdNET küszöbértékétől függetlenül."
+    },
+    "thresholds": {
+      "title": "Detection thresholds",
+      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "columns": {
+        "classifier": "Classifier",
+        "threshold": "Threshold",
+        "source": "Applies"
+      },
+      "primary": "Primary",
+      "primaryNote": "Default for classifiers without their own threshold",
+      "useOwn": "Use own threshold",
+      "followsBirdnet": "Follows the BirdNET threshold",
+      "ownAlways": "Own threshold",
+      "category": {
+        "bat": "Bat"
+      },
+      "state": {
+        "pending": "Loading",
+        "failed": "Failed to load"
+      },
+      "empty": "No classifiers are enabled."
     }
   },
   "restart": {

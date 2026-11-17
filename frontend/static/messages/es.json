@@ -6103,6 +6103,28 @@
     "birdnetplus": {
       "title": "Detección de BirdNET+ V3.0",
       "description": "Establece un umbral de confianza específico para las detecciones de BirdNET+ V3.0, independiente del umbral principal de BirdNET."
+    },
+    "thresholds": {
+      "title": "Detection thresholds",
+      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "columns": {
+        "classifier": "Classifier",
+        "threshold": "Threshold",
+        "source": "Applies"
+      },
+      "primary": "Primary",
+      "primaryNote": "Default for classifiers without their own threshold",
+      "useOwn": "Use own threshold",
+      "followsBirdnet": "Follows the BirdNET threshold",
+      "ownAlways": "Own threshold",
+      "category": {
+        "bat": "Bat"
+      },
+      "state": {
+        "pending": "Loading",
+        "failed": "Failed to load"
+      },
+      "empty": "No classifiers are enabled."
     }
   },
   "restart": {
