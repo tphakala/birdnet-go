@@ -888,18 +888,28 @@ describe('AnalysisSettingsPage inference runtime', () => {
     expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { backend: 'auto' });
   });
 
-  it('keeps offering a saved backend the host lacks after another one is picked', async () => {
-    seedSection('birdnet', { ...BASE_BIRDNET, backend: 'openvino' });
-    mockRuntime(async () => runtimeStatus({ openvino: false }));
-    applyUpdatesToForm();
-    render(AnalysisSettingsPage);
-    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
-    await waitFor(() => expect(backend).toBeEnabled());
+  it.each([
+    { backend: 'onnx', runtime: { onnx: false } },
+    { backend: 'openvino', runtime: { openvino: false } },
+  ])(
+    'keeps offering a saved $backend backend the host lacks after Auto is picked',
+    async ({ backend: saved, runtime }) => {
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: saved });
+      mockRuntime(async () => runtimeStatus(runtime));
+      applyUpdatesToForm();
+      render(AnalysisSettingsPage);
+      const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+      await waitFor(() => expect(backend).toBeEnabled());
 
-    await pick(backend, 'analysis.inference.backend.options.auto');
+      await pick(backend, 'analysis.inference.backend.options.auto');
 
-    expect(await optionLabels(backend)).toContain('analysis.inference.backend.options.openvino');
-  });
+      // The pick reached the form, so only the saved value can keep the option.
+      expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', {
+        backend: 'auto',
+      });
+      expect(await optionLabels(backend)).toContain(`analysis.inference.backend.options.${saved}`);
+    }
+  );
 
   it('keeps offering a saved GPU the host lacks after another device is picked', async () => {
     seedSection('birdnet', { ...BASE_BIRDNET, openVinoDevice: 'gpu' });
