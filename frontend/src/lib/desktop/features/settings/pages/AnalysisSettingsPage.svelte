@@ -49,6 +49,7 @@
     watchModels,
   } from '$lib/stores/models.svelte';
   import {
+    BIRDNET_BOUNDS,
     BIRDNET_THRESHOLD_FALLBACK,
     thresholdRows,
     thresholdSnapshot,
@@ -1503,8 +1504,19 @@
     settingsActions.updateSection(section, { threshold: rounded });
   }
 
-  function updateRowOverride(section: ThresholdSection, value: boolean) {
-    settingsActions.updateSection(section, { overrideThreshold: value });
+  // Switching a row to its own threshold keeps its saved value when that value is inside the
+  // row's bounds; otherwise (for example a saved 0) it starts from the value the row showed.
+  function updateRowOverride(row: ThresholdRow, value: boolean) {
+    const { section, min, max } = row.descriptor;
+    if (!section) return;
+    const own = sectionValues(section).threshold;
+    const inBounds = own !== undefined && own >= min && own <= max;
+    settingsActions.updateSection(
+      section,
+      value && !inBounds
+        ? { overrideThreshold: true, threshold: Math.min(max, Math.max(min, birdnetThreshold)) }
+        : { overrideThreshold: value }
+    );
   }
 
   // The settings values behind a row's section.
@@ -1950,6 +1962,7 @@
           {@const nameId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-name`}
           {@const sourceId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-source`}
           {@const controlsDisabled = store.isLoading || store.isSaving || follows}
+          {@const bounds = follows ? BIRDNET_BOUNDS : row.descriptor}
           <li
             class="grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]"
             data-testid="threshold-row-{row.model.id}"
@@ -1988,11 +2001,16 @@
                   value={follows}
                   contextLabelId={nameId}
                   disabled={store.isLoading || store.isSaving}
-                  onUpdate={matches => updateRowOverride(section, !matches)}
+                  onUpdate={matches => updateRowOverride(row, !matches)}
                 />
               {/if}
-              {#if !row.enabled || row.descriptor.kind === 'follows'}
-                <p id={sourceId} class="help-text mt-1">
+              {#if !row.enabled || follows}
+                <p
+                  id={sourceId}
+                  class={!row.enabled || row.descriptor.kind === 'follows'
+                    ? 'help-text mt-1'
+                    : 'sr-only'}
+                >
                   {#if !row.enabled}
                     {t('analysis.thresholds.notEnabledNote')}
                   {:else}
@@ -2008,12 +2026,10 @@
                 type="range"
                 class="range range-sm min-w-0 flex-1"
                 aria-label={t('analysis.thresholds.sliderLabel', { name: row.model.name })}
-                aria-describedby={!row.enabled || row.descriptor.kind === 'follows'
-                  ? sourceId
-                  : undefined}
-                min={row.descriptor.min}
-                max={row.descriptor.max}
-                step={row.descriptor.step}
+                aria-describedby={!row.enabled || follows ? sourceId : undefined}
+                min={bounds.min}
+                max={bounds.max}
+                step={bounds.step}
                 {value}
                 disabled={controlsDisabled}
                 oninput={event => updateRowThreshold(row, event.currentTarget.valueAsNumber)}
@@ -2024,12 +2040,10 @@
                 className="w-24 shrink-0"
                 {value}
                 onUpdate={newValue => updateRowThreshold(row, newValue)}
-                min={row.descriptor.min}
-                max={row.descriptor.max}
-                step={row.descriptor.step}
-                describedByExtra={!row.enabled || row.descriptor.kind === 'follows'
-                  ? sourceId
-                  : undefined}
+                min={bounds.min}
+                max={bounds.max}
+                step={bounds.step}
+                describedByExtra={!row.enabled || follows ? sourceId : undefined}
                 disabled={controlsDisabled}
               />
             </div>
@@ -2060,7 +2074,7 @@
 
       {#if dynamicThreshold.enabled}
         <div
-          class="mt-5 grid grid-cols-1 gap-6 border-t border-[var(--border-100)] pt-5 md:grid-cols-2 xl:grid-cols-3"
+          class="mt-5 grid grid-cols-1 gap-6 border-t border-[var(--border-100)] pt-5 md:grid-cols-3"
         >
           <NumberField
             label={t('settings.main.sections.dynamicThreshold.trigger.label')}

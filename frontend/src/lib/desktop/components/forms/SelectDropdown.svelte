@@ -158,7 +158,7 @@
 
   // Shared focus ring: the solid primary outline of the .input field style
   const focusRingClasses =
-    'focus:outline-none focus:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]';
+    'focus:outline-none focus:border-[var(--color-primary)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]';
 
   // Trigger button classes based on variant
   let triggerClasses = $derived(
