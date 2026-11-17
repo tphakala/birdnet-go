@@ -318,6 +318,8 @@
   const DYNAMIC_TRIGGER_BOUNDS = SHARED_BOUNDS;
   const DYNAMIC_MIN_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
   const DYNAMIC_HOURS_BOUNDS = { min: 0, max: 1000, step: 1 };
+  /** Bounds of the CPU threads field; 0 uses all available threads. */
+  const THREADS_BOUNDS = { min: 0, max: 32, step: 1 };
   /** Ids linking the shared threshold and the dynamic threshold fields to their help text. */
   const SHARED_THRESHOLD_HELP_ID = generateId('shared-threshold-help');
   const RANGE_OVERVIEW_HEADING_ID = generateId('range-overview-heading');
@@ -2831,9 +2833,9 @@
           label={t('settings.main.fields.inferenceThreads.label')}
           value={birdnet?.threads ?? 0}
           onUpdate={value => updateBirdnetSetting('threads', value)}
-          min={0}
-          max={32}
-          step={1}
+          min={THREADS_BOUNDS.min}
+          max={THREADS_BOUNDS.max}
+          step={THREADS_BOUNDS.step}
           helpText={t('settings.main.fields.inferenceThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
