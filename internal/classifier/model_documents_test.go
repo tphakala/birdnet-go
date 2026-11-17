@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,6 +197,33 @@ func TestModelDocuments_Text(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, testDocText, string(got))
 		assert.Equal(t, []string{live.URL}, *noted)
+	})
+
+	t.Run("hanging endpoints are cut off by the total budget, not one attempt each", func(t *testing.T) {
+		t.Parallel()
+		release := make(chan struct{})
+		hang := func() *httptest.Server {
+			srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				select {
+				case <-r.Context().Done():
+				case <-release:
+				}
+			}))
+			t.Cleanup(srv.Close)
+			return srv
+		}
+		first, second := hang(), hang()
+		t.Cleanup(func() { close(release) })
+		svc, _ := newTestDocuments(t, t.TempDir(), first.URL, second.URL)
+		const budget = 200 * time.Millisecond
+		svc.fetchBudget = budget
+
+		start := time.Now()
+		_, err := svc.Text(t.Context(), new(testPolicyDoc(testDocRepo, testDocText)))
+		require.ErrorIs(t, err, ErrDocumentUnavailable)
+		// One attempt alone may take documentFetchTimeout, so finishing far below
+		// it shows the whole call was bounded by the budget.
+		assert.Less(t, time.Since(start), documentFetchTimeout/2)
 	})
 
 	t.Run("a 404 does not fail over", func(t *testing.T) {

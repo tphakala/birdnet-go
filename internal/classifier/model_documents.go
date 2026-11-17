@@ -31,8 +31,13 @@ const (
 	// and writes. A file that states another version is never overwritten.
 	agreementsFileVersion = 1
 	// documentFetchTimeout bounds one fetch attempt against one endpoint, so a
-	// host that connects and stalls fails over promptly.
-	documentFetchTimeout = 20 * time.Second
+	// host that connects and stalls fails over promptly. An attempt also never
+	// outlives the remaining documentFetchBudget.
+	documentFetchTimeout = 10 * time.Second
+	// documentFetchBudget bounds one whole fetch across every endpoint of the
+	// chain, so an unreachable canonical host plus a slow mirror cannot run past
+	// the HTTP server's write timeout.
+	documentFetchBudget = 15 * time.Second
 	// documentMaxBytes caps a document body. The pinned documents are a few
 	// kilobytes; the cap bounds what a broken or hostile mirror can make the
 	// server read.
@@ -87,6 +92,9 @@ type agreementsFile struct {
 type ModelDocuments struct {
 	endpoints   func() []string
 	noteWorking func(string)
+	// fetchBudget is the total time one fetch may take over all endpoints; tests
+	// shorten it.
+	fetchBudget time.Duration
 
 	mu sync.Mutex
 	// dir is the config directory; empty keeps everything in memory.
@@ -108,6 +116,7 @@ func newModelDocuments(endpoints func() []string, noteWorking func(string)) *Mod
 	return &ModelDocuments{
 		endpoints:   endpoints,
 		noteWorking: noteWorking,
+		fetchBudget: documentFetchBudget,
 		agreed:      make(map[agreementKey]struct{}),
 		memText:     make(map[string][]byte),
 	}
@@ -299,10 +308,12 @@ func hexSHA256(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// fetch walks the endpoint chain for doc, failing over only on a reachability
+// fetch walks the endpoint chain for doc within documentFetchBudget, failing over only on a reachability
 // failure (never on a definite status such as 404 or on a digest mismatch), and
 // notes the endpoint that served it.
 func (d *ModelDocuments) fetch(ctx context.Context, doc *RepoDocument) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.fetchBudget)
+	defer cancel()
 	endpoints := d.endpoints()
 	var lastErr error
 	for i, endpoint := range endpoints {

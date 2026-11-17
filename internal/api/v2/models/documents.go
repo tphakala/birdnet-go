@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -16,6 +17,13 @@ import (
 // documentUnavailableKey is the i18n key of the 502 returned when the text of a
 // licence or policy document could not be fetched and verified.
 const documentUnavailableKey = "analysis.gallery.errors.documentUnavailable"
+
+// documentRequestTimeout bounds the whole document resolution of one request: the
+// text endpoint, or every accepted document of an install or reinstall. It sits
+// below the HTTP server's write timeout (DefaultWriteTimeout in internal/api/config.go,
+// 30 seconds), so a slow fetch ends in the unavailable 502 instead of a dropped
+// connection.
+const documentRequestTimeout = 20 * time.Second
 
 // documentUnavailableMsg is the message of the document-unavailable 502.
 const documentUnavailableMsg = "the document text could not be fetched and verified"
@@ -68,6 +76,16 @@ func (l liveDocuments) Record(docs []classifier.RepoDocument) error {
 	return l.store.Record(docs)
 }
 
+// documentContext derives the context that bounds document resolution for one
+// request from the request context.
+func (c *Handler) documentContext(ctx echo.Context) (context.Context, context.CancelFunc) {
+	timeout := documentRequestTimeout
+	if c.documentTimeout > 0 {
+		timeout = c.documentTimeout
+	}
+	return context.WithTimeout(ctx.Request().Context(), timeout)
+}
+
 // documentSvc returns the injected document service, or the live one.
 func (c *Handler) documentSvc() documentService {
 	if c.documents != nil {
@@ -106,7 +124,9 @@ func (c *Handler) GetModelDocument(ctx echo.Context) error {
 	if !ok {
 		return c.HandleError(ctx, nil, "unknown document", http.StatusNotFound)
 	}
-	text, err := svc.Text(ctx.Request().Context(), &doc)
+	reqCtx, cancel := c.documentContext(ctx)
+	defer cancel()
+	text, err := svc.Text(reqCtx, &doc)
 	if err != nil {
 		return c.documentUnavailable(ctx, err)
 	}
@@ -153,6 +173,8 @@ func (c *Handler) acceptDocuments(ctx echo.Context, entry *classifier.CatalogEnt
 	}
 	svc := c.documentSvc()
 	own := svc.EntryDocuments(entry)
+	reqCtx, cancel := c.documentContext(ctx)
+	defer cancel()
 	for _, sha := range accepted {
 		idx := slices.IndexFunc(own, func(d classifier.RepoDocument) bool {
 			return d.RequiresAgreement && d.SHA256 != "" && d.SHA256 == sha
@@ -163,7 +185,7 @@ func (c *Handler) acceptDocuments(ctx echo.Context, entry *classifier.CatalogEnt
 		if slices.ContainsFunc(docs, func(d classifier.RepoDocument) bool { return d.SHA256 == sha }) {
 			continue
 		}
-		if _, terr := svc.Text(ctx.Request().Context(), &own[idx]); terr != nil {
+		if _, terr := svc.Text(reqCtx, &own[idx]); terr != nil {
 			return nil, true, c.documentUnavailable(ctx, terr)
 		}
 		docs = append(docs, own[idx])

@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -36,6 +38,10 @@ type fakeDocuments struct {
 	byEntry  map[string][]classifier.RepoDocument
 	texts    map[string]string
 	recorded []classifier.RepoDocument
+	// gate, when set, blocks Text until it is closed or the context ends.
+	gate chan struct{}
+	// entered, when set, receives a value each time Text starts waiting on gate.
+	entered chan struct{}
 }
 
 func (f *fakeDocuments) EntryDocuments(entry *classifier.CatalogEntry) []classifier.RepoDocument {
@@ -53,7 +59,20 @@ func (f *fakeDocuments) DocumentBySHA256(sha string) (classifier.RepoDocument, b
 	return classifier.RepoDocument{}, false
 }
 
-func (f *fakeDocuments) Text(_ context.Context, doc *classifier.RepoDocument) ([]byte, error) {
+func (f *fakeDocuments) Text(ctx context.Context, doc *classifier.RepoDocument) ([]byte, error) {
+	if f.gate != nil {
+		if f.entered != nil {
+			select {
+			case f.entered <- struct{}{}:
+			default:
+			}
+		}
+		select {
+		case <-f.gate:
+		case <-ctx.Done():
+			return nil, errors.Join(classifier.ErrDocumentUnavailable, ctx.Err())
+		}
+	}
 	if text, ok := f.texts[doc.SHA256]; ok {
 		return []byte(text), nil
 	}
@@ -308,4 +327,78 @@ func TestGetModelDocument(t *testing.T) {
 		require.Equal(t, http.StatusBadGateway, rec.Code)
 		assert.Contains(t, rec.Body.String(), documentUnavailableKey)
 	})
+}
+
+// TestDocumentResolution_IsBounded pins the request-level deadline: a document
+// fetch that never finishes answers the unavailable 502 instead of running on, for
+// the text endpoint and for accepted documents of both starters.
+func TestDocumentResolution_IsBounded(t *testing.T) {
+	body := `{"acceptedDocuments":["` + docShaN + `"]}`
+	for name, call := range map[string]func(h *Handler) *httptest.ResponseRecorder{
+		"text endpoint": func(h *Handler) *httptest.ResponseRecorder {
+			rec := httptest.NewRecorder()
+			ctx := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
+			ctx.SetParamNames("sha256")
+			ctx.SetParamValues(docShaN)
+			require.NoError(t, h.GetModelDocument(ctx))
+			return rec
+		},
+		"install": func(h *Handler) *httptest.ResponseRecorder {
+			return guardRequest(t, h.InstallModel, http.MethodPost, apiDepN, body)
+		},
+		"reinstall": func(h *Handler) *httptest.ResponseRecorder {
+			return guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, `{"acceptedDocuments":["`+docShaA+`"]}`)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, fake, _ := documentFixture(t, nil)
+			fake.gate = make(chan struct{})
+			t.Cleanup(func() { close(fake.gate) })
+			h.documentTimeout = 50 * time.Millisecond
+
+			rec := call(h)
+			require.Equal(t, http.StatusBadGateway, rec.Code, rec.Body.String())
+			assert.Contains(t, rec.Body.String(), documentUnavailableKey)
+			assert.Empty(t, fake.recordedDocs())
+		})
+	}
+}
+
+// TestReinstallModel_SlowDocumentDoesNotHoldTheSlot pins that accepted documents
+// are resolved before the operation slot is taken: while the text is still being
+// fetched, another operation can start.
+func TestReinstallModel_SlowDocumentDoesNotHoldTheSlot(t *testing.T) {
+	h, fake, mm := documentFixture(t, nil)
+	fake.gate = make(chan struct{})
+	fake.entered = make(chan struct{}, 1)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/models/reinstall/"+apiDepA, strings.NewReader(`{"acceptedDocuments":["`+docShaA+`"]}`))
+		rec := httptest.NewRecorder()
+		ctx := echo.New().NewContext(req, rec)
+		ctx.SetParamNames("id")
+		ctx.SetParamValues(apiDepA)
+		_ = h.ReinstallModel(ctx)
+		done <- rec
+	}()
+
+	// Wait until the fetch is blocked, then the slot must be free for another operation.
+	select {
+	case <-fake.entered:
+	case <-time.After(guardWait):
+		t.Fatal("the reinstall never started resolving the document")
+	}
+	require.Eventually(t, func() bool {
+		lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepN)
+		if err != nil {
+			return false
+		}
+		lease.Release()
+		return true
+	}, guardWait, 10*time.Millisecond, "the slot was held while the document was being fetched")
+
+	close(fake.gate)
+	rec := <-done
+	assert.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	h.Wait()
 }

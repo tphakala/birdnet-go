@@ -83,6 +83,8 @@ type Handler struct {
 	// documents serves document text and records agreements. nil means the live
 	// service (documentSvc), and tests inject a fake.
 	documents documentService
+	// documentTimeout overrides documentRequestTimeout when positive; tests set it.
+	documentTimeout time.Duration
 }
 
 // Model load states reported in ModelListItem.State.
@@ -1227,6 +1229,14 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
 	}
 
+	// Resolve the accepted agreements before taking the operation slot, as
+	// InstallModel does, so a slow document fetch never holds the slot and blocks
+	// other operations. It records nothing yet.
+	acceptedDocs, handled, err := c.acceptDocuments(ctx, &entry, req.AcceptedDocuments)
+	if handled {
+		return err
+	}
+
 	// Reserve the operation slot synchronously (see InstallModel), before the
 	// installed check, so an uninstall cannot complete between the check and the
 	// 202. A validation failure below releases it; the goroutine owns it after.
@@ -1255,13 +1265,6 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		}
 	}
 
-	// Resolve the accepted agreements under the lease, after the existing checks;
-	// the text is a cache hit in the normal flow. The deferred release above frees
-	// the slot on a refusal.
-	acceptedDocs, handled, err := c.acceptDocuments(ctx, &entry, req.AcceptedDocuments)
-	if handled {
-		return err
-	}
 	// The last synchronous step: only a request that is answered 202 records.
 	c.recordAgreements(catalogID, acceptedDocs)
 
