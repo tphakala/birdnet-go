@@ -78,9 +78,9 @@ test.describe('Contextual settings links', () => {
         },
         {
           source: 'settings/species?tab=dynamicThreshold',
-          name: 'Analysis → Settings',
+          name: 'Analysis → Detection',
           section: 'analysis',
-          tab: 'settings',
+          tab: 'detection',
         },
       ];
       for (const { source, name, section, tab } of links) {
