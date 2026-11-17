@@ -176,6 +176,15 @@ describe('EnableOnSourcesStep', () => {
     });
   });
 
+  it('does not claim every source runs the model when sources are only locked', async () => {
+    acoustic.availability = { kind: 'unknown' };
+    serveModels([BIRDNET, PERCH, BAT]);
+    seed([card('Default', [])]);
+    await renderLoaded(BAT_CONTEXT);
+
+    expect(t).not.toHaveBeenCalledWith(`${KEY}.allRunning`, expect.anything());
+  });
+
   it('shows a failed model list even while the default models are unknown', async () => {
     acoustic.availability = { kind: 'unknown' };
     vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));

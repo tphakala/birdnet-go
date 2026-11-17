@@ -5790,7 +5790,7 @@
         "alreadyOn": "Ya analiza con {name}.",
         "followsDefaultsRuns": "Usa los modelos predeterminados, que incluyen {name}.",
         "followsDefaultsAdd": "Usa los modelos predeterminados. Al activarlo se mantienen y se añade {name}.",
-        "followsDefaultsUnknown": "Sigue los modelos predeterminados, que no se pudieron leer. Activa {name} para esta fuente en los ajustes de audio.",
+        "followsDefaultsUnknown": "Sigue los modelos predeterminados, que no se pudieron leer. Active {name} para esta fuente en la configuración de audio.",
         "batStreamWarning": "Los modelos de murciélagos necesitan una transmisión con un códec sin pérdidas (PCM) y una frecuencia de muestreo de al menos 96 kHz; BSG-BAT necesita al menos 192 kHz. Una transmisión de cámara típica no es ultrasónica, así que pruebe la transmisión en la configuración de audio antes de confiar en ella.",
         "allRunning": "Todas las fuentes de audio ya analizan con {name}. No hay nada que cambiar.",
         "notListed": "{name} no está en la lista de modelos habilitados, por lo que no se puede activar aquí para una fuente de audio.",

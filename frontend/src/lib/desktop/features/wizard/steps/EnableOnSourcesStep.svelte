@@ -162,7 +162,13 @@
   let toggleable = $derived([...cardRows, ...streamRows].filter(row => !row.runs && !row.blocked));
 
   let chosen = $state<string[]>([]);
-  let allChosen = $derived(toggleable.length > 0 && toggleable.every(r => chosen.includes(r.key)));
+  // A choice counts only while its row can still be toggled: a row that became
+  // locked (the defaults became unknown) is neither shown on nor saved
+  let chosenKeys = $derived(chosen.filter(key => toggleable.some(row => row.key === key)));
+  let allChosen = $derived(
+    toggleable.length > 0 && toggleable.every(r => chosenKeys.includes(r.key))
+  );
+  let anyBlocked = $derived([...cardRows, ...streamRows].some(row => row.blocked));
 
   type View = 'loading' | 'listFailed' | 'notListed' | 'notLoaded' | 'noSources' | 'sources';
   let view = $derived.by((): View => {
@@ -175,7 +181,7 @@
   });
 
   let showBatStreamWarning = $derived(
-    listed?.category === 'bat' && streamRows.some(row => row.runs || chosen.includes(row.key))
+    listed?.category === 'bat' && streamRows.some(row => row.runs || chosenKeys.includes(row.key))
   );
 
   function setChosen(key: string, on: boolean) {
@@ -222,7 +228,7 @@
     let changed = 0;
     const next = list.map(item => {
       const selected = item.models ?? [];
-      if (!chosen.includes(keyOf(item))) return item;
+      if (!chosenKeys.includes(keyOf(item))) return item;
       if (effectiveSourceModels(selected, defaults).includes(alias)) return item;
       changed++;
       return { ...item, models: sourceModelsWith(selected, defaults, alias) };
@@ -236,7 +242,7 @@
   // even when a later save fails or the wizard was closed meanwhile.
   async function commit(): Promise<void> {
     const alias = listed?.id;
-    if (view !== 'sources' || alias === undefined || chosen.length === 0) return;
+    if (view !== 'sources' || alias === undefined || chosenKeys.length === 0) return;
 
     let enabled = 0;
     try {
@@ -288,7 +294,7 @@
             <ToggleField
               label={row.name}
               icon={row.kind === 'soundcard' ? Mic : Radio}
-              value={row.runs || chosen.includes(row.key)}
+              value={row.runs || chosenKeys.includes(row.key)}
               disabled={row.runs || row.blocked}
               description={rowDescription(row) || undefined}
               describedBy={badgesId}
@@ -369,7 +375,7 @@
       {/if}
     </div>
 
-    {#if toggleable.length === 0}
+    {#if toggleable.length === 0 && !anyBlocked}
       <SettingsNote className="mt-0">
         {#snippet icon()}
           <Info class="mt-0.5 size-4 text-[var(--text-info)]" aria-hidden="true" />
