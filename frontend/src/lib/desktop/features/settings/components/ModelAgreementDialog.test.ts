@@ -151,6 +151,24 @@ describe('ModelAgreementDialog', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
+  it('keeps focus in the dialog after Retry', async () => {
+    vi.mocked(fetchModelDocument)
+      .mockRejectedValueOnce(
+        new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }))
+      )
+      .mockReturnValue(new Promise(() => {}));
+    renderDialog([policy]);
+    const retry = await screen.findByRole('button', { name: /common\.retry/ });
+    retry.focus();
+
+    await fireEvent.click(retry);
+
+    await screen.findByText('analysis.gallery.documents.loading');
+    const dialog = document.querySelector('dialog');
+    expect(document.activeElement).not.toBe(document.body);
+    expect(dialog?.contains(document.activeElement)).toBe(true);
+  });
+
   it('names a document kind it does not know generically', async () => {
     vi.mocked(fetchModelDocument).mockResolvedValue({
       repo: 'org/model',

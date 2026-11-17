@@ -38,6 +38,10 @@
   // Widths of the skeleton bars, varied so the placeholder reads as running text.
   const SKELETON_LINE_WIDTHS = ['w-1/3', 'w-full', 'w-11/12', 'w-full', 'w-4/5', 'w-full', 'w-2/3'];
 
+  // The root element: Retry replaces the alert holding focus with the skeleton, so
+  // focus falls back here instead of dropping to the page body.
+  let rootEl: HTMLDivElement | undefined;
+
   let status = $state<DocumentTextStatus>('loading');
   let text = $state('');
   let errorMessage = $state('');
@@ -76,9 +80,13 @@
   });
 </script>
 
-<div class={className}>
+<div bind:this={rootEl} tabindex="-1" class={cn('outline-none', className)}>
   {#if status === 'error'}
-    <ErrorAlert message={errorMessage} onRetry={() => load(sha256)} />
+    <ErrorAlert
+      message={errorMessage}
+      onRetry={() => load(sha256)}
+      focusFallback={() => [rootEl]}
+    />
   {:else if status === 'loading'}
     <div
       class="flex h-64 flex-col gap-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 text-sm"
