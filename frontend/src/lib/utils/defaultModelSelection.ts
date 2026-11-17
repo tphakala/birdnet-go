@@ -80,3 +80,28 @@ export function defaultModelSelection(
       return legacyDefaultSelection(loaded);
   }
 }
+
+/**
+ * The models a source runs: its own list, or the defaults while its list is
+ * empty (it follows the defaults). Duplicates are dropped.
+ */
+export function effectiveSourceModels(
+  selected: readonly string[],
+  defaults: readonly string[]
+): string[] {
+  return [...new Set(selected.length === 0 ? defaults : selected)];
+}
+
+/**
+ * The explicit list a source saves when a model is turned on: the models it
+ * runs now plus `alias`. A source that follows the defaults gets them written
+ * out, so the models it already runs keep running.
+ */
+export function sourceModelsWith(
+  selected: readonly string[],
+  defaults: readonly string[],
+  alias: string
+): string[] {
+  const effective = effectiveSourceModels(selected, defaults);
+  return effective.includes(alias) ? effective : [...effective, alias];
+}

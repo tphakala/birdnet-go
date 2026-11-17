@@ -16,6 +16,7 @@
   const logger = loggers.ui;
 
   const TITLE_ID = generateId('wizard-title');
+  const FLOW_TITLE_ID = generateId('wizard-flow-title');
   const NEXT_REASON_ID = generateId('wizard-next-reason');
   const ALERT_ID = generateId('wizard-alert');
   const SAVING_STATUS_ID = generateId('wizard-saving-status');
@@ -222,6 +223,20 @@
       : DEFAULT_STEP_SIZE
   );
 
+  // The model next steps flow names the model above the step title; the other
+  // flows show the step title alone
+  let flowTitle = $derived(
+    wizardState.flow === 'model-next-steps' && wizardState.installedModel
+      ? t('wizard.modelNextSteps.title', { name: wizardState.installedModel.name })
+      : ''
+  );
+
+  // Onboarding is skipped; a model next steps flow is put off, since it saves
+  // nothing until Done
+  let closeLabel = $derived(
+    wizardState.flow === 'model-next-steps' ? t('wizard.notNow') : t('wizard.skip')
+  );
+
   // Resolve step title: use i18n key if available, fall back to plain string
   let stepTitle = $derived.by(() => {
     const step = wizardState.currentStep;
@@ -241,12 +256,19 @@
   closeOnBackdrop={false}
   closeOnEsc={!leaveConfirmOpen}
   onClose={requestLeave}
-  aria-labelledby={TITLE_ID}
+  aria-labelledby={flowTitle ? `${FLOW_TITLE_ID} ${TITLE_ID}` : TITLE_ID}
 >
   {#snippet header()}
     <!-- pe-10 keeps the row clear of the close button, which sits in the panel corner -->
     <div class="flex items-center justify-between pe-10">
-      <h3 id={TITLE_ID} class="text-lg font-bold">{stepTitle}</h3>
+      <div class="min-w-0">
+        {#if flowTitle}
+          <p id={FLOW_TITLE_ID} class="text-sm font-medium text-[var(--color-base-content)]/80">
+            {flowTitle}
+          </p>
+        {/if}
+        <h3 id={TITLE_ID} class="text-lg font-bold">{stepTitle}</h3>
+      </div>
       <WizardProgressBar
         currentStep={wizardState.currentStepIndex}
         totalSteps={wizardState.totalSteps}
@@ -314,7 +336,7 @@
          being cut off, so a long translation can make the footer taller -->
       <div class="flex w-full items-center gap-3">
         <Button variant="ghost" size="md" className="shrink-0" onclick={() => wizardState.skip()}>
-          {t('wizard.skip')}
+          {closeLabel}
         </Button>
         <p
           id={NEXT_REASON_ID}

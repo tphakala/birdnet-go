@@ -46,6 +46,7 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import type { AcousticModelAvailability } from '$lib/types/models';
   import type { BackendModel } from '$lib/stores/models.svelte';
+  import { effectiveSourceModels, sourceModelsWith } from '$lib/utils/defaultModelSelection';
   import ToggleField from './ToggleField.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
@@ -99,7 +100,7 @@
 
   let followsDefaults = $derived(selectedModels.length === 0);
   // What the source runs: its own list, or the defaults while it has none.
-  let effective = $derived([...new Set(followsDefaults ? defaultModels : selectedModels)]);
+  let effective = $derived(effectiveSourceModels(selectedModels, defaultModels));
   let listedIds = $derived(new Set(models.map(m => m.id)));
   let listedOn = $derived(effective.filter(id => listedIds.has(id)));
   // Only an explicit list can name a model the server no longer lists.
@@ -144,7 +145,9 @@
   }
 
   function setModel(id: string, on: boolean) {
-    const next = on ? [...effective, id] : effective.filter(existing => existing !== id);
+    const next = on
+      ? sourceModelsWith(selectedModels, defaultModels, id)
+      : effective.filter(existing => existing !== id);
     onChange(next);
   }
 

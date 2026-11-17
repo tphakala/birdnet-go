@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { TranslationKey } from '$lib/i18n';
-import type { WizardStep } from './types';
+import type { InstalledModelContext, WizardStep } from './types';
 import { deferred, type Deferred } from '../../../../test/async-helpers';
 
 // Mock the API module before importing wizardState
@@ -593,6 +593,55 @@ describe('wizardState - state machine', () => {
       await wizardState.next();
 
       expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('model-next-steps flow', () => {
+    const model = {
+      catalogId: 'perch-v2',
+      name: 'Perch v2',
+      category: 'bird',
+      registryId: 'Perch_V2',
+    } satisfies InstalledModelContext;
+
+    function launchModelFlow(): void {
+      vi.mocked(getStepsForFlow).mockReturnValue(createTestSteps(1));
+      wizardState.launch('model-next-steps', { model });
+    }
+
+    it('exposes the installed model while active', () => {
+      launchModelFlow();
+      expect(wizardState.installedModel).toEqual(model);
+    });
+
+    it('closing it does not record the app wizard as dismissed and clears the model', () => {
+      launchModelFlow();
+
+      wizardState.skip();
+
+      expect(api.post).not.toHaveBeenCalled();
+      expect(localStorage.getItem('birdnet-wizard-dismissed-version')).toBeNull();
+      expect(wizardState.installedModel).toBeNull();
+    });
+
+    it('finishing it does not record the app wizard as dismissed', async () => {
+      launchModelFlow();
+      readyStep();
+
+      await wizardState.complete();
+
+      expect(wizardState.isActive).toBe(false);
+      expect(api.post).not.toHaveBeenCalled();
+      expect(wizardState.installedModel).toBeNull();
+    });
+
+    it('onboarding still records the dismissal when finished', async () => {
+      launchSteps(1);
+      readyStep();
+
+      await wizardState.complete();
+
+      expect(api.post).toHaveBeenCalledWith('/api/v2/app/wizard/dismiss');
     });
   });
 

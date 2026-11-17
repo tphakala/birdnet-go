@@ -5660,6 +5660,7 @@
       "reloadPage": "Pagina opnieuw laden"
     },
     "skip": "Overslaan",
+    "notNow": "Niet nu",
     "back": "Terug",
     "next": "Volgende",
     "done": "Gereed",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Gebruik AI-detecties als startpunt voor je eigen waarnemingen",
         "outro": "Deze aanpak waarborgt gegevenskwaliteit voor wetenschappelijk onderzoek en maximaliseert tegelijk je leerervaring en plezier bij het vogelen.",
         "acknowledge": "Ik begrijp het"
+      },
+      "enableOnSources": {
+        "title": "Inschakelen voor audiobronnen",
+        "intro": "{name} is geïnstalleerd. Kies de audiobronnen die ermee geanalyseerd moeten worden.",
+        "saveHint": "Uw keuze wordt opgeslagen wanneer u Gereed kiest. Niet nu sluit dit zonder wijzigingen.",
+        "allSources": "Alle audiobronnen",
+        "soundCardsHeading": "Geluidskaarten",
+        "streamsHeading": "Audiostreams",
+        "alreadyOn": "Analyseert al met {name}.",
+        "followsDefaultsAdd": "Volgt de standaardmodellen. Inschakelen behoudt ze en voegt {name} toe.",
+        "batStreamWarning": "Vleermuismodellen hebben een stream nodig met een verliesvrije codec (PCM) en een samplefrequentie van minstens 96 kHz; BSG-BAT heeft minstens 192 kHz nodig. Een gewone camerastream bevat geen ultrasoon geluid, dus test de stream in de audio-instellingen voordat u erop vertrouwt.",
+        "allRunning": "Alle audiobronnen analyseren al met {name}. Er valt niets te wijzigen.",
+        "notListed": "{name} staat niet in de lijst met ingeschakelde modellen en kan hier daarom niet voor een audiobron worden ingeschakeld.",
+        "notLoadedPending": "{name} wordt nog geladen en kan daarom nog niet voor een audiobron worden ingeschakeld. Schakel het na het laden in bij de instellingen van de audiobronnen.",
+        "notLoadedFailed": "{name} kon niet worden geladen en kan daarom niet voor een audiobron worden ingeschakeld.",
+        "noSources": "Er is nog geen audiobron ingesteld. Voeg een geluidskaart of stream toe in de audio-instellingen en schakel {name} daar in.",
+        "openAudioSettings": "Audio-instellingen openen",
+        "enabledToast": "{name} ingeschakeld voor {count, plural, one {# audiobron} other {# audiobronnen}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Volgende stappen voor {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Wacht tot de huidige installatie, herinstallatie of verwijdering van het model is voltooid",
+      "installSuccess": "{name} geïnstalleerd",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Draait op {backend}, de aanbevolen backend voor jouw hardware",

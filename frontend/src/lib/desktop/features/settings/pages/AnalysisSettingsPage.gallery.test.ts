@@ -36,6 +36,11 @@ vi.mock('$lib/stores/models.svelte', () => ({
   watchModels: vi.fn(() => () => {}),
 }));
 
+// The next steps wizard is global (App mounts it); only its launch is under test here
+vi.mock('$lib/desktop/features/wizard/wizardState.svelte', () => ({
+  wizardState: { isActive: false, launch: vi.fn(() => true) },
+}));
+
 // The region selector fetches on mount and is irrelevant to this flow; stub it to a
 // no-op component so it does not pull in its own network calls.
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
@@ -107,6 +112,7 @@ import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { ApiError } from '$lib/utils/api';
+import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
 
 beforeEach(() => {
   // Use jsdom's real Location so pushState updates the URL used by nested tabs.
@@ -1134,5 +1140,133 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
     await waitFor(() =>
       expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@nordic')
     );
+  });
+});
+
+describe('AnalysisSettingsPage model gallery next steps after an install', () => {
+  // The completion timer that refreshes the gallery after an install
+  const COMPLETION_WAIT = { timeout: 3000 };
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.mocked(wizardState.launch).mockReturnValue(true);
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.reinstallModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, _onProgress, onComplete) => {
+        onComplete();
+        return () => {};
+      }
+    );
+  });
+
+  async function installFromLicenseDialog(cardButton: RegExp): Promise<void> {
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    await fireEvent.click(await screen.findByRole('button', { name: cardButton }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+  }
+
+  // The gallery reloads its catalog when the completion timer has run
+  async function waitForCompletionTimer(): Promise<void> {
+    await waitFor(
+      () => expect(vi.mocked(modelsApi.fetchCatalog).mock.calls.length).toBeGreaterThan(1),
+      COMPLETION_WAIT
+    );
+    await tick();
+  }
+
+  it('offers the next steps for the installed model after a fresh install', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+
+    await waitFor(
+      () =>
+        expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', {
+          model: {
+            catalogId: 'test-bird',
+            name: 'Test Bird Model',
+            category: 'bird',
+            registryId: 'Test_Bird',
+          },
+        }),
+      COMPLETION_WAIT
+    );
+    expect(settingsActions.refreshKeepingEdits).toHaveBeenCalled();
+    expect(toastActions.success).not.toHaveBeenCalled();
+  });
+
+  it('shows the success toast instead when no next step applies', async () => {
+    vi.mocked(wizardState.launch).mockReturnValue(false);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
+
+    await installFromLicenseDialog(installButtonName);
+
+    await waitFor(() => expect(toastActions.success).toHaveBeenCalled(), COMPLETION_WAIT);
+    expect(t).toHaveBeenCalledWith('analysis.gallery.installSuccess', { name: 'Test Bird Model' });
+  });
+
+  it('does not offer the next steps after a reinstall', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+
+    await waitForCompletionTimer();
+    expect(wizardState.launch).not.toHaveBeenCalled();
+  });
+
+  it('does not offer the next steps after a variant swap of an installed model', async () => {
+    const variant = {
+      speciesCount: 100,
+      sizeBytes: 1000,
+      compatible: true,
+      default: false,
+    };
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({
+          id: 'inst',
+          name: 'Installed Model',
+          registryId: 'Test_Bird',
+          installed: true,
+          installedVariantId: 'fp32',
+          recommendedVariantId: 'int8',
+          variants: [
+            { ...variant, id: 'fp32', precision: 'fp32', installed: true, recommended: false },
+            { ...variant, id: 'int8', precision: 'int8', installed: false, recommended: true },
+          ],
+        }),
+      ],
+    });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', {
+        name: /analysis\.gallery\.optimize\.swap.*Installed Model/,
+      })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledWith('inst', 'int8'));
+    await waitForCompletionTimer();
+    expect(wizardState.launch).not.toHaveBeenCalled();
   });
 });

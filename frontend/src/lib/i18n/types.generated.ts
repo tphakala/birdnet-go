@@ -4170,6 +4170,7 @@ export type TranslationKey =
   | 'weather.birding.poor'
   | 'wizard.actions.reloadPage'
   | 'wizard.skip'
+  | 'wizard.notNow'
   | 'wizard.back'
   | 'wizard.next'
   | 'wizard.done'
@@ -4262,6 +4263,23 @@ export type TranslationKey =
   | 'wizard.steps.responsibleUse.citizenPoint3'
   | 'wizard.steps.responsibleUse.outro'
   | 'wizard.steps.responsibleUse.acknowledge'
+  | 'wizard.steps.enableOnSources.title'
+  | 'wizard.steps.enableOnSources.intro' // params: name
+  | 'wizard.steps.enableOnSources.saveHint'
+  | 'wizard.steps.enableOnSources.allSources'
+  | 'wizard.steps.enableOnSources.soundCardsHeading'
+  | 'wizard.steps.enableOnSources.streamsHeading'
+  | 'wizard.steps.enableOnSources.alreadyOn' // params: name
+  | 'wizard.steps.enableOnSources.followsDefaultsAdd' // params: name
+  | 'wizard.steps.enableOnSources.batStreamWarning'
+  | 'wizard.steps.enableOnSources.allRunning' // params: name
+  | 'wizard.steps.enableOnSources.notListed' // params: name
+  | 'wizard.steps.enableOnSources.notLoadedPending' // params: name
+  | 'wizard.steps.enableOnSources.notLoadedFailed' // params: name
+  | 'wizard.steps.enableOnSources.noSources' // params: name
+  | 'wizard.steps.enableOnSources.openAudioSettings'
+  | 'wizard.steps.enableOnSources.enabledToast' // params: name, count
+  | 'wizard.modelNextSteps.title' // params: name
   | 'analysis.title'
   | 'analysis.tabs.models'
   | 'analysis.tabs.detection'
@@ -4368,6 +4386,7 @@ export type TranslationKey =
   | 'analysis.gallery.variants.precisionInfo'
   | 'analysis.gallery.variants.precisionHelp'
   | 'analysis.gallery.actionInProgress'
+  | 'analysis.gallery.installSuccess' // params: name
   | 'analysis.gallery.removeSuccess' // params: name
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
   | 'analysis.gallery.reasons.backendSupported' // params: backend
@@ -5242,6 +5261,16 @@ export type TranslationParams = {
   'wizard.progress': { current: string | number; total: string | number };
   'wizard.whatsNew.title': { version: string | number };
   'wizard.steps.detection.descriptionStored': { threshold: string | number };
+  'wizard.steps.enableOnSources.intro': { name: string | number };
+  'wizard.steps.enableOnSources.alreadyOn': { name: string | number };
+  'wizard.steps.enableOnSources.followsDefaultsAdd': { name: string | number };
+  'wizard.steps.enableOnSources.allRunning': { name: string | number };
+  'wizard.steps.enableOnSources.notListed': { name: string | number };
+  'wizard.steps.enableOnSources.notLoadedPending': { name: string | number };
+  'wizard.steps.enableOnSources.notLoadedFailed': { name: string | number };
+  'wizard.steps.enableOnSources.noSources': { name: string | number };
+  'wizard.steps.enableOnSources.enabledToast': { name: string | number; count: string | number };
+  'wizard.modelNextSteps.title': { name: string | number };
   'analysis.detection.bsgBatStep.readout': { seconds: string | number };
   'analysis.detection.bsgBatStep.readoutWithFilter': {
     seconds: string | number;
@@ -5276,6 +5305,7 @@ export type TranslationParams = {
   'analysis.gallery.variants.showAllRegions': { count: string | number };
   'analysis.gallery.variants.regionContext': { region: string | number };
   'analysis.gallery.variants.filterNoMatch': { query: string | number };
+  'analysis.gallery.installSuccess': { name: string | number };
   'analysis.gallery.removeSuccess': { name: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
   'analysis.gallery.reasons.backendSupported': { backend: string | number };

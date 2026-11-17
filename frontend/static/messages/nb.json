@@ -5660,6 +5660,7 @@
       "reloadPage": "Last siden på nytt"
     },
     "skip": "Hopp over",
+    "notNow": "Ikke nå",
     "back": "Tilbake",
     "next": "Neste",
     "done": "Ferdig",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Bruk KI-registreringer som utgangspunkt for egne observasjoner",
         "outro": "Denne tilnærmingen sikrer datakvalitet for vitenskapelig forskning og maksimerer din glede av og lærdom om fugler.",
         "acknowledge": "Jeg forstår"
+      },
+      "enableOnSources": {
+        "title": "Slå på for lydkilder",
+        "intro": "{name} er installert. Velg lydkildene som skal analyseres med den.",
+        "saveHint": "Valget lagres når du velger Ferdig. Ikke nå lukker dette uten endringer.",
+        "allSources": "Alle lydkilder",
+        "soundCardsHeading": "Lydkort",
+        "streamsHeading": "Strømmer",
+        "alreadyOn": "Analyserer allerede med {name}.",
+        "followsDefaultsAdd": "Bruker standardmodellene. Når du slår dette på, beholdes de, og {name} legges til.",
+        "batStreamWarning": "Flaggermusmodeller trenger en strøm med en tapsfri kodek (PCM) og en samplingsfrekvens på minst 96 kHz; BSG-BAT trenger minst 192 kHz. En vanlig kamerastrøm er ikke ultralyd, så test strømmen i lydinnstillingene før du stoler på den.",
+        "allRunning": "Alle lydkilder analyserer allerede med {name}. Det er ingenting å endre.",
+        "notListed": "{name} er ikke i listen over aktiverte modeller, så den kan ikke slås på for en lydkilde her.",
+        "notLoadedPending": "{name} lastes fortsatt, så den kan ikke slås på for en lydkilde ennå. Når den er lastet, slår du den på i innstillingene for lydkilder.",
+        "notLoadedFailed": "{name} kunne ikke lastes, så den kan ikke slås på for en lydkilde.",
+        "noSources": "Ingen lydkilde er konfigurert ennå. Legg til et lydkort eller en strøm i lydinnstillingene, og slå på {name} der.",
+        "openAudioSettings": "Åpne lydinnstillinger",
+        "enabledToast": "{name} slått på for {count, plural, one {# lydkilde} other {# lydkilder}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Neste trinn for {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Vent til den pågående installasjonen, reinstallasjonen eller fjerningen av modellen er ferdig",
+      "installSuccess": "{name} er installert",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Kjører på {backend}, som er den anbefalte backenden for din maskinvare",

@@ -1,4 +1,4 @@
-import type { WizardFlow, WizardStep, WizardLaunchOptions } from './types';
+import type { ModelNextStep, WizardFlow, WizardStep, WizardLaunchOptions } from './types';
 
 // Onboarding steps, in the order they are shown
 const onboardingSteps: WizardStep[] = [
@@ -42,6 +42,21 @@ const onboardingSteps: WizardStep[] = [
   },
 ];
 
+// Recommended steps after a model install, in the order they are shown. Each
+// step is offered only when its predicate holds for the installed model.
+const modelNextSteps: ModelNextStep[] = [
+  {
+    id: 'enable-on-sources',
+    type: 'component',
+    titleKey: 'wizard.steps.enableOnSources.title',
+    component: () => import('./steps/EnableOnSourcesStep.svelte'),
+    appliesTo: model => Boolean(model.registryId),
+  },
+  // Extension point: a bat classifier gets a step that sets up its species range
+  // filter by hand, as one more entry here with
+  // `appliesTo: model => model.category === 'bat'`.
+];
+
 // Changelog registry, ordered from oldest to newest
 interface ChangelogEntry {
   version: string;
@@ -54,12 +69,16 @@ const changelogs: ChangelogEntry[] = [
 ];
 
 export function getStepsForFlow(flow: WizardFlow, options?: WizardLaunchOptions): WizardStep[] {
-  if (flow === 'onboarding') {
-    return onboardingSteps;
+  switch (flow) {
+    case 'onboarding':
+      return onboardingSteps;
+    case 'model-next-steps': {
+      const model = options?.model;
+      return model ? modelNextSteps.filter(step => step.appliesTo(model)) : [];
+    }
+    case 'whats-new':
+      return resolveChangelogSteps(options?.previousVersion, options?.currentVersion);
   }
-
-  // flow === 'whats-new'
-  return resolveChangelogSteps(options?.previousVersion, options?.currentVersion);
 }
 
 function resolveChangelogSteps(previousVersion?: string, currentVersion?: string): WizardStep[] {

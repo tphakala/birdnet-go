@@ -5660,6 +5660,7 @@
       "reloadPage": "Oldal újratöltése"
     },
     "skip": "Kihagyás",
+    "notNow": "Most nem",
     "back": "Vissza",
     "next": "Tovább",
     "done": "Kész",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Az AI észleléseket kiindulópontként használja a saját megfigyeléseihez",
         "outro": "Ez a megközelítés biztosítja az adatok minőségét a tudományos kutatáshoz, miközben maximalizálja a madarakkal kapcsolatos tanulást és élvezetet.",
         "acknowledge": "Megértem"
+      },
+      "enableOnSources": {
+        "title": "Bekapcsolás hangforrásokon",
+        "intro": "A(z) {name} telepítve van. Válassza ki, mely hangforrásokat elemezze.",
+        "saveHint": "A választás a Kész gombra kattintva mentődik. A Most nem módosítás nélkül bezárja ezt.",
+        "allSources": "Összes hangforrás",
+        "soundCardsHeading": "Hangkártyák",
+        "streamsHeading": "Streamek",
+        "alreadyOn": "Már elemez a következővel: {name}.",
+        "followsDefaultsAdd": "Az alapértelmezett modelleket használja. Bekapcsoláskor ezek megmaradnak, és a(z) {name} is hozzáadódik.",
+        "batStreamWarning": "A denevérmodellekhez veszteségmentes kodekkel (PCM) és legalább 96 kHz mintavételi frekvenciával rendelkező stream kell; a BSG-BAT legalább 192 kHz-et igényel. Egy átlagos kamerastream nem ultrahangos, ezért tesztelje a streamet a hangbeállításokban, mielőtt számítana rá.",
+        "allRunning": "Minden hangforrás már elemez a következővel: {name}. Nincs mit módosítani.",
+        "notListed": "A(z) {name} nincs az engedélyezett modellek listáján, ezért itt nem kapcsolható be hangforráshoz.",
+        "notLoadedPending": "A(z) {name} még töltődik, ezért még nem kapcsolható be hangforráshoz. Betöltés után kapcsolja be a hangforrások beállításaiban.",
+        "notLoadedFailed": "A(z) {name} betöltése sikertelen, ezért nem kapcsolható be hangforráshoz.",
+        "noSources": "Még nincs beállítva hangforrás. Adjon hozzá hangkártyát vagy streamet a hangbeállításokban, és ott kapcsolja be a(z) {name} modellt.",
+        "openAudioSettings": "Hangbeállítások megnyitása",
+        "enabledToast": "A(z) {name} bekapcsolva {count, plural, one {# hangforráson} other {# hangforráson}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Következő lépések: {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "A pontosság (FP32, FP16, INT8) a méret és a sebesség javára csökkenti a pontosságot: az FP32 a legpontosabb, az INT8 a legkisebb és leggyorsabb. Az Ajánlott a hardveréhez legjobban illő verzió; az Alapértelmezett a modell szabvány build-je."
       },
       "actionInProgress": "Várd meg a modell jelenlegi telepítésének, újratelepítésének vagy eltávolításának befejezését",
+      "installSuccess": "{name} telepítve",
       "removeSuccess": "{name} eltávolítva",
       "reasons": {
         "backendRecommended": "Ezen fut: {backend}, amely a hardveredhez ajánlott backend",

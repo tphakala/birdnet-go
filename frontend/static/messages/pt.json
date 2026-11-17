@@ -5660,6 +5660,7 @@
       "reloadPage": "Recarregar página"
     },
     "skip": "Ignorar",
+    "notNow": "Agora não",
     "back": "Voltar",
     "next": "Seguinte",
     "done": "Concluído",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Use as deteções de IA como ponto de partida para as suas próprias observações",
         "outro": "Esta abordagem garante a qualidade dos dados para investigação científica, maximizando a sua aprendizagem e prazer com as aves.",
         "acknowledge": "Compreendo"
+      },
+      "enableOnSources": {
+        "title": "Ativar nas fontes de áudio",
+        "intro": "{name} está instalado. Escolha as fontes de áudio que devem ser analisadas com ele.",
+        "saveHint": "A sua escolha é guardada quando seleciona Concluído. Agora não fecha isto sem alterações.",
+        "allSources": "Todas as fontes de áudio",
+        "soundCardsHeading": "Placas de som",
+        "streamsHeading": "Fluxos",
+        "alreadyOn": "Já analisa com {name}.",
+        "followsDefaultsAdd": "Usa os modelos predefinidos. Ao ativar, estes mantêm-se e {name} é adicionado.",
+        "batStreamWarning": "Os modelos de morcegos precisam de um fluxo com um codec sem perdas (PCM) e uma taxa de amostragem de pelo menos 96 kHz; o BSG-BAT precisa de pelo menos 192 kHz. Um fluxo de câmara típico não é ultrassónico, por isso teste o fluxo nas definições de áudio antes de confiar nele.",
+        "allRunning": "Todas as fontes de áudio já analisam com {name}. Não há nada a alterar.",
+        "notListed": "{name} não está na lista de modelos ativados, por isso não pode ser ativado aqui para uma fonte de áudio.",
+        "notLoadedPending": "{name} ainda está a carregar, por isso ainda não pode ser ativado para uma fonte de áudio. Depois de carregado, ative-o nas definições das fontes de áudio.",
+        "notLoadedFailed": "Não foi possível carregar {name}, por isso não pode ser ativado para uma fonte de áudio.",
+        "noSources": "Ainda não existe nenhuma fonte de áudio configurada. Adicione uma placa de som ou um stream nas definições de áudio e ative {name} aí.",
+        "openAudioSettings": "Abrir definições de áudio",
+        "enabledToast": "{name} ativado em {count, plural, one {# fonte de áudio} other {# fontes de áudio}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Próximos passos para {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Aguarde a conclusão da instalação, reinstalação ou remoção do modelo atual",
+      "installSuccess": "{name} instalado",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Roda em {backend}, o backend recomendado para o seu hardware",

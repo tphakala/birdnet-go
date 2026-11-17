@@ -5660,6 +5660,7 @@
       "reloadPage": "Recargar página"
     },
     "skip": "Omitir",
+    "notNow": "Ahora no",
     "back": "Atrás",
     "next": "Siguiente",
     "done": "Listo",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Usa las detecciones de IA como punto de partida para tus propias observaciones",
         "outro": "Este enfoque garantiza la calidad de los datos para la investigación científica mientras maximiza tu aprendizaje y disfrute de las aves.",
         "acknowledge": "Entendido"
+      },
+      "enableOnSources": {
+        "title": "Activar en fuentes de audio",
+        "intro": "{name} está instalado. Elija las fuentes de audio que deben analizarse con él.",
+        "saveHint": "Su elección se guarda al seleccionar Listo. Ahora no cierra esto sin cambios.",
+        "allSources": "Todas las fuentes de audio",
+        "soundCardsHeading": "Tarjetas de sonido",
+        "streamsHeading": "Transmisiones",
+        "alreadyOn": "Ya analiza con {name}.",
+        "followsDefaultsAdd": "Usa los modelos predeterminados. Al activarlo se mantienen y se añade {name}.",
+        "batStreamWarning": "Los modelos de murciélagos necesitan una transmisión con un códec sin pérdidas (PCM) y una frecuencia de muestreo de al menos 96 kHz; BSG-BAT necesita al menos 192 kHz. Una transmisión de cámara típica no es ultrasónica, así que pruebe la transmisión en la configuración de audio antes de confiar en ella.",
+        "allRunning": "Todas las fuentes de audio ya analizan con {name}. No hay nada que cambiar.",
+        "notListed": "{name} no está en la lista de modelos habilitados, por lo que no se puede activar aquí para una fuente de audio.",
+        "notLoadedPending": "{name} todavía se está cargando, por lo que aún no se puede activar para una fuente de audio. Cuando termine de cargarse, actívelo en la configuración de las fuentes de audio.",
+        "notLoadedFailed": "{name} no se pudo cargar, por lo que no se puede activar para una fuente de audio.",
+        "noSources": "Aún no hay ninguna fuente de audio configurada. Añada una tarjeta de sonido o un stream en la configuración de audio y active {name} allí.",
+        "openAudioSettings": "Abrir configuración de audio",
+        "enabledToast": "{name} activado en {count, plural, one {# fuente de audio} other {# fuentes de audio}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Próximos pasos para {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Espera a que termine la instalación, reinstalación o eliminación del modelo actual",
+      "installSuccess": "{name} instalado",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Se ejecuta en {backend}, el backend recomendado para tu hardware",

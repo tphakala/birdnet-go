@@ -5660,6 +5660,7 @@
       "reloadPage": "Reload page"
     },
     "skip": "Skip",
+    "notNow": "Not now",
     "back": "Back",
     "next": "Next",
     "done": "Done",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Use AI detections as a starting point for your own observations",
         "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
         "acknowledge": "I understand"
+      },
+      "enableOnSources": {
+        "title": "Enable on audio sources",
+        "intro": "{name} is installed. Choose the audio sources that should analyze with it.",
+        "saveHint": "Your choice is saved when you select Done. Not now closes this without changes.",
+        "allSources": "All audio sources",
+        "soundCardsHeading": "Sound cards",
+        "streamsHeading": "Streams",
+        "alreadyOn": "Already analyzes with {name}.",
+        "followsDefaultsAdd": "Follows the default models. Turning this on keeps them and adds {name}.",
+        "batStreamWarning": "Bat models need a stream with a lossless codec (PCM) and a sample rate of at least 96 kHz; BSG-BAT needs at least 192 kHz. A typical camera stream is not ultrasonic, so test the stream in the audio settings before relying on it.",
+        "allRunning": "Every audio source already analyzes with {name}. There is nothing to change.",
+        "notListed": "{name} is not in the list of enabled models, so it cannot be turned on for an audio source here.",
+        "notLoadedPending": "{name} is still loading, so it cannot be turned on for an audio source yet. Once it has loaded, turn it on in the audio source settings.",
+        "notLoadedFailed": "{name} failed to load, so it cannot be turned on for an audio source.",
+        "noSources": "No audio source is configured yet. Add a sound card or a stream in the audio settings, then turn on {name} there.",
+        "openAudioSettings": "Open audio settings",
+        "enabledToast": "{name} turned on for {count, plural, one {# audio source} other {# audio sources}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Next steps for {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Wait for the current model install, reinstall, or remove to finish",
+      "installSuccess": "Installed {name}",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Runs on {backend}, the recommended backend for your hardware",

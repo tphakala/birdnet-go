@@ -802,7 +802,8 @@ describe('WizardDialog', () => {
       renderWizard(componentSteps(3));
       await waitForPrimaryEnabled();
 
-      expect(heading().parentElement).toHaveClass('pe-10');
+      // The heading sits in a title block, beside the progress dots in the header row
+      expect(heading().parentElement?.parentElement).toHaveClass('pe-10');
     });
 
     it('starts each step at the top of the scrolling body, on Next and on Back', async () => {

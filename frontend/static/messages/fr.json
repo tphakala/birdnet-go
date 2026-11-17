@@ -5660,6 +5660,7 @@
       "reloadPage": "Recharger la page"
     },
     "skip": "Passer",
+    "notNow": "Pas maintenant",
     "back": "Retour",
     "next": "Suivant",
     "done": "Terminé",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Utilisez les détections IA comme point de départ pour vos propres observations",
         "outro": "Cette approche garantit la qualité des données pour la recherche scientifique tout en maximisant votre apprentissage et votre plaisir de l'observation des oiseaux.",
         "acknowledge": "Je comprends"
+      },
+      "enableOnSources": {
+        "title": "Activer sur les sources audio",
+        "intro": "{name} est installé. Choisissez les sources audio à analyser avec ce modèle.",
+        "saveHint": "Votre choix est enregistré lorsque vous sélectionnez Terminé. Pas maintenant ferme cette fenêtre sans modification.",
+        "allSources": "Toutes les sources audio",
+        "soundCardsHeading": "Cartes son",
+        "streamsHeading": "Flux",
+        "alreadyOn": "Analyse déjà avec {name}.",
+        "followsDefaultsAdd": "Utilise les modèles par défaut. L’activer les conserve et ajoute {name}.",
+        "batStreamWarning": "Les modèles de chauves-souris nécessitent un flux avec un codec sans perte (PCM) et une fréquence d’échantillonnage d’au moins 96 kHz ; BSG-BAT nécessite au moins 192 kHz. Un flux de caméra classique n’est pas ultrasonore : testez le flux dans les paramètres audio avant de vous y fier.",
+        "allRunning": "Toutes les sources audio analysent déjà avec {name}. Il n’y a rien à modifier.",
+        "notListed": "{name} ne figure pas dans la liste des modèles activés et ne peut donc pas être activé ici pour une source audio.",
+        "notLoadedPending": "{name} est encore en cours de chargement et ne peut donc pas encore être activé pour une source audio. Une fois chargé, activez-le dans les paramètres des sources audio.",
+        "notLoadedFailed": "{name} n’a pas pu être chargé et ne peut donc pas être activé pour une source audio.",
+        "noSources": "Aucune source audio n’est encore configurée. Ajoutez une carte son ou un flux dans les paramètres audio, puis activez {name} à cet endroit.",
+        "openAudioSettings": "Ouvrir les paramètres audio",
+        "enabledToast": "{name} activé sur {count, plural, one {# source audio} other {# sources audio}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Étapes suivantes pour {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Attendez la fin de l'installation, de la réinstallation ou de la suppression du modèle en cours",
+      "installSuccess": "{name} installé",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "S'exécute sur {backend}, le backend recommandé pour votre matériel",

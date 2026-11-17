@@ -5660,6 +5660,7 @@
       "reloadPage": "Obnoviť stránku"
     },
     "skip": "Preskočiť",
+    "notNow": "Teraz nie",
     "back": "Späť",
     "next": "Ďalej",
     "done": "Hotovo",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Použite AI detekcie ako východiskový bod pre vaše vlastné pozorovania",
         "outro": "Tento prístup zabezpečuje kvalitu dát pre vedecký výskum a zároveň maximalizuje vaše učenie a radosť z pozorovania vtákov.",
         "acknowledge": "Rozumiem"
+      },
+      "enableOnSources": {
+        "title": "Zapnúť na zvukových zdrojoch",
+        "intro": "Model {name} je nainštalovaný. Vyberte zvukové zdroje, ktoré ním majú analyzovať zvuk.",
+        "saveHint": "Voľba sa uloží, keď vyberiete Hotovo. Teraz nie toto okno zavrie bez zmien.",
+        "allSources": "Všetky zvukové zdroje",
+        "soundCardsHeading": "Zvukové karty",
+        "streamsHeading": "Streamy",
+        "alreadyOn": "Už analyzuje modelom {name}.",
+        "followsDefaultsAdd": "Používa predvolené modely. Zapnutím sa zachovajú a pridá sa {name}.",
+        "batStreamWarning": "Modely netopierov potrebujú stream s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz; BSG-BAT potrebuje aspoň 192 kHz. Bežný stream z kamery nie je ultrazvukový, preto stream pred použitím otestujte v nastaveniach zvuku.",
+        "allRunning": "Všetky zvukové zdroje už analyzujú modelom {name}. Nie je čo meniť.",
+        "notListed": "Model {name} nie je v zozname povolených modelov, preto ho tu nemožno zapnúť pre zvukový zdroj.",
+        "notLoadedPending": "Model {name} sa stále načítava, preto ho zatiaľ nemožno zapnúť pre zvukový zdroj. Po načítaní ho zapnite v nastaveniach zvukových zdrojov.",
+        "notLoadedFailed": "Model {name} sa nepodarilo načítať, preto ho nemožno zapnúť pre zvukový zdroj.",
+        "noSources": "Zatiaľ nie je nastavený žiadny zvukový zdroj. Pridajte zvukovú kartu alebo stream v nastaveniach zvuku a tam zapnite {name}.",
+        "openAudioSettings": "Otvoriť nastavenia zvuku",
+        "enabledToast": "Model {name} zapnutý pre {count, plural, one {# zvukový zdroj} few {# zvukové zdroje} many {# zvukových zdrojov} other {# zvukových zdrojov}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Ďalšie kroky pre {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Počkajte na dokončenie prebiehajúcej inštalácie, preinštalovania alebo odstránenia modelu",
+      "installSuccess": "Model {name} bol nainštalovaný",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Beží na {backend}, čo je odporúčaný backend pre váš hardvér",

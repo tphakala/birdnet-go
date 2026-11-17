@@ -5660,6 +5660,7 @@
       "reloadPage": "Ladda om sidan"
     },
     "skip": "Hoppa över",
+    "notNow": "Inte nu",
     "back": "Tillbaka",
     "next": "Nästa",
     "done": "Klar",
@@ -5778,7 +5779,28 @@
         "citizenPoint3": "Använd AI-detekteringar som utgångspunkt för dina egna observationer",
         "outro": "Detta tillvägagångssätt säkerställer datakvalitet för vetenskaplig forskning samtidigt som det maximerar ditt lärande och din glädje av fåglar.",
         "acknowledge": "Jag förstår"
+      },
+      "enableOnSources": {
+        "title": "Aktivera för ljudkällor",
+        "intro": "{name} är installerad. Välj de ljudkällor som ska analyseras med den.",
+        "saveHint": "Ditt val sparas när du väljer Klar. Inte nu stänger detta utan ändringar.",
+        "allSources": "Alla ljudkällor",
+        "soundCardsHeading": "Ljudkort",
+        "streamsHeading": "Strömmar",
+        "alreadyOn": "Analyserar redan med {name}.",
+        "followsDefaultsAdd": "Använder standardmodellerna. När du aktiverar detta behålls de och {name} läggs till.",
+        "batStreamWarning": "Fladdermusmodeller behöver en ström med en förlustfri codec (PCM) och en samplingsfrekvens på minst 96 kHz; BSG-BAT behöver minst 192 kHz. En vanlig kameraström är inte ultraljud, så testa strömmen i ljudinställningarna innan du förlitar dig på den.",
+        "allRunning": "Alla ljudkällor analyserar redan med {name}. Det finns inget att ändra.",
+        "notListed": "{name} finns inte i listan över aktiverade modeller, så den kan inte aktiveras för en ljudkälla här.",
+        "notLoadedPending": "{name} läses fortfarande in, så den kan inte aktiveras för en ljudkälla ännu. När den har lästs in aktiverar du den i inställningarna för ljudkällor.",
+        "notLoadedFailed": "{name} kunde inte läsas in, så den kan inte aktiveras för en ljudkälla.",
+        "noSources": "Ingen ljudkälla är konfigurerad ännu. Lägg till ett ljudkort eller en ström i ljudinställningarna och aktivera {name} där.",
+        "openAudioSettings": "Öppna ljudinställningar",
+        "enabledToast": "{name} aktiverad för {count, plural, one {# ljudkälla} other {# ljudkällor}}"
       }
+    },
+    "modelNextSteps": {
+      "title": "Nästa steg för {name}"
     }
   },
   "analysis": {
@@ -5931,6 +5953,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Vänta tills den pågående installationen, ominstallationen eller borttagningen av modellen är klar",
+      "installSuccess": "{name} har installerats",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Körs på {backend}, den rekommenderade backend-motorn för din hårdvara",

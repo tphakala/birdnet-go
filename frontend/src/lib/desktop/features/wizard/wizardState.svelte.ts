@@ -3,6 +3,7 @@ import { loggers } from '$lib/utils/logger';
 import { t, type TranslationKey } from '$lib/i18n';
 import { toastActions } from '$lib/stores/toast';
 import type {
+  InstalledModelContext,
   StepLeaveHandler,
   StepStatus,
   WizardFlow,
@@ -30,6 +31,8 @@ let stepError = $state<TranslationKey | null>(null);
 let stepBlockedReason = $state<TranslationKey | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
+// The model a model next steps flow was launched for; null for every other flow
+let installedModel = $state<InstalledModelContext | null>(null);
 
 const totalSteps = $derived(steps.length);
 // eslint-disable-next-line security/detect-object-injection -- currentStepIndex is a numeric index bounded by steps.length
@@ -114,6 +117,14 @@ function resetStepFlags(): void {
   clearStepMoveGuard();
 }
 
+/**
+ * Whether closing the flow records the app wizard as dismissed for this version.
+ * Only the flows tied to the app version do; the model next steps flow just closes.
+ */
+function recordsDismissal(wizardFlow: WizardFlow | null): boolean {
+  return wizardFlow === 'onboarding' || wizardFlow === 'whats-new';
+}
+
 async function dismiss(): Promise<void> {
   // Optimistic localStorage update
   const version = currentVersion ?? '';
@@ -141,6 +152,7 @@ function resetState(): void {
   steps = [];
   previousVersion = null;
   currentVersion = null;
+  installedModel = null;
   session++;
   resetStepFlags();
 }
@@ -170,9 +182,10 @@ function _resetForTesting(): void {
   status = 'idle';
 }
 
-function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
+/** Opens a flow; returns false, and changes nothing, when no step applies. */
+function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): boolean {
   const resolvedSteps = getStepsForFlow(wizardFlow, options);
-  if (resolvedSteps.length === 0) return;
+  if (resolvedSteps.length === 0) return false;
 
   flow = wizardFlow;
   steps = resolvedSteps;
@@ -180,8 +193,10 @@ function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
   status = 'active';
   previousVersion = options?.previousVersion ?? null;
   currentVersion = options?.currentVersion ?? null;
+  installedModel = options?.model ?? null;
   session++;
   resetStepFlags();
+  return true;
 }
 
 function registerLeaveHandler(handler: StepLeaveHandler): () => void {
@@ -273,14 +288,14 @@ async function back(): Promise<void> {
 }
 
 function skip(): void {
-  void dismiss();
+  if (recordsDismissal(flow)) void dismiss();
   resetState();
 }
 
 async function complete(): Promise<void> {
   if (!canAdvance || !isLastStep || isStepMoveGuarded()) return;
   await runLeave(() => {
-    void dismiss();
+    if (recordsDismissal(flow)) void dismiss();
     resetState();
   });
 }
@@ -333,6 +348,10 @@ export const wizardState = {
   },
   get previousVersion() {
     return previousVersion;
+  },
+  /** The model the model next steps flow was launched for; null for the other flows. */
+  get installedModel() {
+    return installedModel;
   },
   launch,
   next,
