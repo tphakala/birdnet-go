@@ -14,8 +14,7 @@
   - min/max: Define valid range; values outside are clamped
   - step: Increment/decrement step size
   - onUpdate: Called with the clamped value after validation. It may return the value the
-    parent kept (for example after snapping to a step), which the field then shows, so the
-    text cannot stay on a typed value the parent rounded back to the one it already had
+    parent kept (for example after snapping to a step); the field then shows that value
 -->
 <script lang="ts">
   import FormField from './FormField.svelte';
@@ -119,6 +118,13 @@
     }
   }
 
+  // Shows the value and reports it; when the parent answers with the value it kept, shows that.
+  function commit(next: number) {
+    value = next;
+    const kept = onUpdate(next);
+    if (typeof kept === 'number') value = kept;
+  }
+
   function handleChange(newValue: string | number | boolean | string[]) {
     // Explicitly handle different input types
     if (Array.isArray(newValue)) {
@@ -155,9 +161,7 @@
 
     // Apply clamping for all numeric values (including NaN, Infinity, -Infinity)
     const clampedValue = clampValue(numValue);
-    value = clampedValue;
-    const kept = onUpdate(clampedValue);
-    if (typeof kept === 'number') value = kept;
+    commit(clampedValue);
   }
 
   function handleBlur() {
@@ -166,9 +170,7 @@
     const clampedValue = clampValue(currentNumValue);
 
     if (clampedValue !== value) {
-      value = clampedValue;
-      const kept = onUpdate(clampedValue);
-      if (typeof kept === 'number') value = kept;
+      commit(clampedValue);
     }
   }
 </script>

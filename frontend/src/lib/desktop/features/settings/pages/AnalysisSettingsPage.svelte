@@ -2085,7 +2085,9 @@
 
 <!-- ── Detection Tab: settings that apply to every classifier ────────── -->
 <!-- The control column of a setting row: a slider and a number field editing one value, or a
-     number field alone in the same column, so fields line up across rows and cards. -->
+     number field alone in the same column, so fields line up across rows and cards. An error
+     is rendered here, in flow below the row, so a wrapped message pushes the next row down
+     instead of covering it; the field's own message box stays for the clamp notice. -->
 {#snippet valueControl(c: ValueControl)}
   <div class="min-w-0">
     <div class="flex min-w-0 items-center gap-4">
