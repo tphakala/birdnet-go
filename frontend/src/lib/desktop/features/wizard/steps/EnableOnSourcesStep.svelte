@@ -266,7 +266,7 @@
         {heading}
       </h4>
       <ul class={LIST_CLASS}>
-        {#each rows as row, index (`${row.kind}-${index}`)}
+        {#each rows as row (row.key)}
           <li class="px-3 py-2.5">
             <ToggleField
               label={row.name}
