@@ -109,7 +109,7 @@ import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
 import { MODEL_OPERATION_IN_PROGRESS_KEY } from '$lib/utils/modelsApi';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
-import { refreshModels } from '$lib/stores/models.svelte';
+import { getAvailableModels, refreshModels } from '$lib/stores/models.svelte';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
@@ -1156,6 +1156,10 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     // testing-library waits keep working
     vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
     vi.mocked(wizardState.launch).mockReturnValue(true);
+    // The refreshed model list includes the installed model, as after a real install
+    vi.mocked(getAvailableModels).mockReturnValue([
+      { id: 'test_bird', registryId: 'Test_Bird', name: 'Test Bird Model', category: 'bird' },
+    ] as ReturnType<typeof getAvailableModels>);
     vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
     vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
     vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
@@ -1347,6 +1351,22 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     await waitFor(() =>
       expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL })
     );
+  });
+
+  it('points to the audio settings when the refreshed model list lacks the new model', async () => {
+    // A refresh that failed or was already running leaves the old list in place
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
+
+    expect(wizardState.launch).not.toHaveBeenCalled();
+    expect(t).toHaveBeenCalledWith('analysis.gallery.installedEnableOnSources', {
+      name: 'Test Bird Model',
+    });
   });
 
   it('offers nothing when the page was left before the settings refresh finished', async () => {

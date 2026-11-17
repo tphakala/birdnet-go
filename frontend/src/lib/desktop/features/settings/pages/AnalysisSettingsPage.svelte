@@ -1885,9 +1885,13 @@
   // refresh that succeeded opens them.
   function offerNextSteps(model: InstalledModelContext, settingsFresh: boolean) {
     if (unmounted) return;
-    // Without fresh settings the steps cannot run, so the user is pointed to the
-    // audio settings, where a new model is turned on for a source
-    if (!settingsFresh) {
+    // Without fresh settings, or with a model list that does not include the new
+    // model yet (its refresh failed or was already running), the steps cannot run,
+    // so the user is pointed to the audio settings, where a model is turned on for
+    // a source
+    const listed =
+      !model.registryId || getAvailableModels().some(m => m.registryId === model.registryId);
+    if (!settingsFresh || !listed) {
       toastActions.info(t('analysis.gallery.installedEnableOnSources', { name: model.name }));
       return;
     }
