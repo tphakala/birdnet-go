@@ -117,14 +117,14 @@ func TestBirdNETV3_LoaderRegistered(t *testing.T) {
 	assert.True(t, ok, "BirdNET v3.0 must have an OpenVINO-capable secondary builder")
 
 	_, ok = modelLoaders[RegistryIDBirdNETPlusV3]
-	assert.True(t, ok, "BirdNET+ V3.0 must have a modelLoaders entry")
+	assert.True(t, ok, "BirdNET+ v3.0 must have a modelLoaders entry")
 
 	_, ok = openvinoCapableSecondaryBuilders[RegistryIDBirdNETPlusV3]
-	assert.True(t, ok, "BirdNET+ V3.0 must have an OpenVINO-capable secondary builder")
+	assert.True(t, ok, "BirdNET+ v3.0 must have an OpenVINO-capable secondary builder")
 }
 
 // TestBirdNETV3_RegistryIDCarriesIdentity guards the parametrised registry ID: an
-// instance built for BirdNET+ V3.0 must report that ID and name and tag a failed
+// instance built for BirdNET+ v3.0 must report that ID and name and tag a failed
 // prediction with it, not with the BirdNET v3.0 preview's ID.
 func TestBirdNETV3_RegistryIDCarriesIdentity(t *testing.T) {
 	resetGlobalMetrics(t)
@@ -146,7 +146,7 @@ func TestBirdNETV3_RegistryIDCarriesIdentity(t *testing.T) {
 	_, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2}})
 	require.Error(t, err)
 	assert.InDelta(t, 1.0, predictionCount(t, m, RegistryIDBirdNETPlusV3, "error"), 0,
-		"the failure must be tagged with the BirdNET+ V3.0 registry ID")
+		"the failure must be tagged with the BirdNET+ v3.0 registry ID")
 	assert.InDelta(t, 0.0, predictionCount(t, m, RegistryIDBirdNETV3, "error"), 0,
 		"the failure must not be tagged with the BirdNET v3.0 preview ID")
 }

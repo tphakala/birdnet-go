@@ -34,7 +34,7 @@ func TestParticipatesInRangeFilter_MatchesLegacyGate(t *testing.T) {
 		t.Run("registry/"+id, func(t *testing.T) {
 			t.Parallel()
 			if id == RegistryIDBirdNETPlusV3 {
-				t.Skip("BirdNET+ V3.0 postdates the legacy display-name gate (its detection name is not BirdNET); TestParticipatesInRangeFilter_ExpectedPerModel pins it")
+				t.Skip("BirdNET+ v3.0 postdates the legacy display-name gate (its detection name is not BirdNET); TestParticipatesInRangeFilter_ExpectedPerModel pins it")
 			}
 			assert.Equal(t, legacyShouldRangeFilter(id), ParticipatesInRangeFilter(id),
 				"capability gate must match the legacy display-name gate for registry ID %q", id)

@@ -8,7 +8,7 @@ import (
 )
 
 // buildBirdNETV3 constructs a model instance of the BirdNET v3.0 architecture
-// (the BirdNET v3.0 preview or BirdNET+ V3.0, chosen by registryID; paths and
+// (the BirdNET v3.0 preview or BirdNET+ v3.0, chosen by registryID; paths and
 // thresholds come from the family's settings section via familyFields) from the
 // given settings snapshot WITHOUT registering it in o.models. loadBirdNETV3 uses it for the
 // initial registration; the hot-reload path (ReloadSecondaryModels) uses it
@@ -82,7 +82,7 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 	return o.loadBirdNETV3Family(RegistryIDBirdNETV3, threads)
 }
 
-// loadBirdNETPlusV3 creates and registers a BirdNET+ V3.0 model instance from
+// loadBirdNETPlusV3 creates and registers a BirdNET+ v3.0 model instance from
 // settings. o.mu.Lock() is held by the caller.
 func (o *Orchestrator) loadBirdNETPlusV3(threads int) error {
 	return o.loadBirdNETV3Family(RegistryIDBirdNETPlusV3, threads)

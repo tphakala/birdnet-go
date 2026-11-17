@@ -8,7 +8,7 @@ import "github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 const ModelNameBSGBat = "BSG-BAT"
 
 // ModelNameBirdNETPlus is the detection model name of the BirdNET+ family. The
-// classifier registry's DetectionName for BirdNET+ V3.0 is this constant, so the
+// classifier registry's DetectionName for BirdNET+ v3.0 is this constant, so the
 // model type resolved here and the stored model row cannot drift apart.
 const ModelNameBirdNETPlus = "BirdNET+"
 

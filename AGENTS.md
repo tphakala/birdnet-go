@@ -84,7 +84,7 @@ yourself before touching code in that area.
   releases, no fixes for bugs that only show on them, and no end of life dates
   in code. The current list is in `internal/datastore/AGENTS.md`.
 - **HARD RULE: there are NO primary or secondary models.** Every classifier
-  model (BirdNET v2.4, BirdNET+ V3.0, Perch v2, the bat models and the rest)
+  model (BirdNET v2.4, BirdNET+ v3.0, Perch v2, the bat models and the rest)
   is a peer. BirdNET v2.4 is the built-in model that cannot be uninstalled; it
   is not a primary model, and no other model is secondary to it. Never call a
   model primary, secondary or main, and never design for that hierarchy: no

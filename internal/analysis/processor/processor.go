@@ -1710,7 +1710,7 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 
 // modelGlobalConfidenceThreshold returns the global confidence threshold applied
 // to a model's detections when the species has no custom per-species threshold.
-// The Bat and BSG-BAT models always use their own thresholds. Perch v2, BirdNET v3.0 and BirdNET+ V3.0
+// The Bat and BSG-BAT models always use their own thresholds. Perch v2, BirdNET v3.0 and BirdNET+ v3.0
 // use their own threshold only when their OverrideThreshold toggle is enabled;
 // otherwise, and for every other model (including the primary BirdNET), the
 // primary BirdNET threshold applies.

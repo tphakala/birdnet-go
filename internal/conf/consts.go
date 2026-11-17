@@ -7,7 +7,7 @@ const (
 	// Model IDs identify the inference backends available for detection.
 	ModelIDBirdNET   = "birdnet"
 	ModelIDBirdNETV3 = "birdnet_v3.0"
-	// ModelIDBirdNETPlusV3 is the BirdNET+ V3.0 model ID (its own family, separate
+	// ModelIDBirdNETPlusV3 is the BirdNET+ v3.0 model ID (its own family, separate
 	// from the BirdNET v3.0 preview above).
 	ModelIDBirdNETPlusV3 = "birdnet_plus_v3.0"
 	ModelIDPerchV2       = "perch_v2"

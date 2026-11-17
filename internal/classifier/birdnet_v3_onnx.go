@@ -16,7 +16,7 @@ import (
 )
 
 // BirdNETV3 represents a loaded BirdNET v3.0 acoustic classifier. The same type
-// serves the BirdNET+ V3.0 family, which shares the architecture: the registry
+// serves the BirdNET+ v3.0 family, which shares the architecture: the registry
 // entry chosen through BirdNETV3Config.RegistryID decides identity and names.
 // Implements ModelInstance. Goroutine-safe via internal mutex.
 type BirdNETV3 struct {
@@ -46,7 +46,7 @@ type BirdNETV3 struct {
 type BirdNETV3Config struct {
 	// RegistryID selects the registry entry the instance reports (identity, names,
 	// spec). Empty means RegistryIDBirdNETV3; RegistryIDBirdNETPlusV3 selects the
-	// BirdNET+ V3.0 family.
+	// BirdNET+ v3.0 family.
 	RegistryID      string
 	ModelPath       string // Path to the BirdNET v3.0 ONNX model file
 	LabelPath       string // Path to the BirdNET v3.0 label file
@@ -72,12 +72,12 @@ func (c *BirdNETV3Config) registryID() string {
 }
 
 // isBirdNETV3Architecture reports whether a registry ID names a model that runs on
-// the BirdNET v3.0 architecture: the developer preview or BirdNET+ V3.0.
+// the BirdNET v3.0 architecture: the developer preview or BirdNET+ v3.0.
 func isBirdNETV3Architecture(registryID string) bool {
 	return registryID == RegistryIDBirdNETV3 || registryID == RegistryIDBirdNETPlusV3
 }
 
-// NewBirdNETV3 creates a new BirdNET v3.0 (or BirdNET+ V3.0) model instance.
+// NewBirdNETV3 creates a new BirdNET v3.0 (or BirdNET+ v3.0) model instance.
 func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	log := GetLogger()
 
@@ -184,7 +184,7 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 }
 
 // tryBirdNETV3OpenVINO attempts to build an OpenVINO classifier for BirdNET v3.0
-// or BirdNET+ V3.0 (whichever cfg.RegistryID names; both are forced to f32).
+// or BirdNET+ v3.0 (whichever cfg.RegistryID names; both are forced to f32).
 // It returns (classifier, device, precision, true) on success or
 // (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
 // device the classifier bound to (inference.OVDeviceCPU/OVDeviceGPU) and precision is
