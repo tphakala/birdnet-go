@@ -83,6 +83,20 @@ yourself before touching code in that area.
   and older). No workarounds, version branches or tests for unsupported
   releases, no fixes for bugs that only show on them, and no end of life dates
   in code. The current list is in `internal/datastore/AGENTS.md`.
+- **HARD RULE: there are NO primary or secondary models.** Every classifier
+  model (BirdNET v2.4, BirdNET+ V3.0, Perch v2, the bat models and the rest)
+  is a peer. BirdNET v2.4 is the built-in model that cannot be uninstalled; it
+  is not a primary model, and no other model is secondary to it. Never call a
+  model primary, secondary or main, and never design for that hierarchy: no
+  "Primary" badge or label in the UI, no ordering that puts one model first
+  because of its rank, and no such wording in code, comments, logs, i18n keys
+  or docs. Some models use the `birdnet.threshold` value unless
+  their own threshold is switched on (`modelGlobalConfidenceThreshold` in
+  `internal/analysis/processor/processor.go`). Describe that as a shared
+  setting by its name ("uses the BirdNET v2.4 threshold"), not as one model
+  ranking above another. Older names that still say primary or secondary (such
+  as `ReloadSecondaryModels` or the `secondaryThreshold` i18n keys) are
+  leftovers to rename when you touch them, not a model hierarchy to follow.
 - **The frontend is for desktop and tablet only; mobile is out of scope.** Do
   not optimize, fix, test or file issues for phone viewports or phone layouts
   (about 640 px wide and below), and do not add phone-specific workarounds.
