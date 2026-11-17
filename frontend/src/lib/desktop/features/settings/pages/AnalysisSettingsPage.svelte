@@ -2306,9 +2306,21 @@
     // so this is currently unreachable, but it keeps the invariant explicit and
     // survives future refactors that might retry while an action is running.
     if (galleryActionInFlight) return;
-    const { modelId, modelName, variantId, kind, nextSteps, accepted = [] } = installError;
+    const { modelId, modelName, variantId, kind, nextSteps } = installError;
+    const accepted = stillOutstanding(modelId, installError.accepted ?? []);
     if (kind === 'install') startInstall(modelId, modelName, variantId, { nextSteps, accepted });
     else if (kind === 'reinstall') startReinstall(modelId, modelName, accepted);
+  }
+
+  // The agreements a Retry sends again: only those the catalog still lists as
+  // outstanding for the entry. One the server recorded when it accepted the failed
+  // start is marked agreed (noteAgreed), and one the catalog no longer lists would
+  // be refused with a 400.
+  function stillOutstanding(modelId: string, accepted: string[]): string[] {
+    const entry = catalog.find(e => e.id === modelId);
+    if (!entry || accepted.length === 0) return [];
+    const outstanding = new Set(splitEntryDocuments(entry).outstanding.map(d => d.sha256));
+    return accepted.filter(sha => outstanding.has(sha));
   }
 
   function dismissInstallError() {

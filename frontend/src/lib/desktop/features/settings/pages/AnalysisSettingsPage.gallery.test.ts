@@ -1892,6 +1892,32 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
     expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined, [POLICY_SHA]);
   });
 
+  it('does not resend agreements the server already recorded when a download is retried', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    // The server accepted the request, and its agreements, before the download failed.
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, _onProgress, _onComplete, onError) => {
+        onError('download failed');
+        return () => {};
+      }
+    );
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    await agreeToPolicy();
+
+    await fireEvent.click(await screen.findByRole('button', { name: /analysis\.gallery\.retry/ }));
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
+    expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined);
+  });
+
   it('drops agreed documents the server refused as invalid before a Retry', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [birdEntry({ documents: [policyDocument] })],
@@ -1946,8 +1972,16 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
   });
 
   it('keeps the agreed documents when a failed reinstall is retried', async () => {
+    // The catalog lists the entry's own documents, which the refusal names again.
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
-      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+      catalog: [
+        birdEntry({
+          id: 'inst',
+          name: 'Installed Model',
+          installed: true,
+          documents: [policyDocument],
+        }),
+      ],
     });
     vi.mocked(modelsApi.reinstallModel)
       .mockRejectedValueOnce(agreementRefusal())
