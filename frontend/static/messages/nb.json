@@ -5784,12 +5784,11 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Innstillinger",
       "models": "Modeller",
       "detection": "Detection",
-      "birds": "Birds",
       "bats": "Bats",
-      "inference": "Inference"
+      "inference": "Inference",
+      "filters": "Filters"
     },
     "detection": {
       "title": "Deteksjonsinnstillinger",
@@ -5865,7 +5864,6 @@
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Utvalgsfilter gjelder kun for fugleklassifikatorer. Flaggermusmodeller bruker egne artslister.",
       "status": {
         "title": "Utvalgsfilter-oversikt",
         "geomodelInfo": "BirdNET Geomodell {version} - {species} kjente arter",
@@ -6085,16 +6083,9 @@
         "licenseNote": "Byttet skjer innenfor samme modell, så lisensen endres ikke."
       }
     },
-    "bird": {
-      "title": "Fugledeteksjon",
-      "description": "Konfigurer sikkerhetsterskel, artsspråk og falsk positiv-filtrering for fugleklassifikatorer."
-    },
     "bat": {
       "title": "Flaggermusdeteksjon",
       "description": "Konfigurer terskel, planlegging og falsk positiv-filtrering for flaggermusklassifikatorer."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Dynamisk terskel gjelder kun for fugleklassifikatorer."
     },
     "perch": {
       "title": "Perch v2 Detection",
@@ -6159,6 +6150,18 @@
         "description": "The runtime and precision each enabled classifier runs with.",
         "unknown": "Not reported"
       }
+    },
+    "scope": {
+      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
+      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
+      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "rangeFilter": {
+        "appliesTo": "Applies to {models}.",
+        "notApplied": "Not range filtered: {models}.",
+        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
+        "needsLocation": "Works only when the station location is set."
+      },
+      "bat": "Applies to bat classifiers only."
     }
   },
   "restart": {

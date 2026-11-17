@@ -5784,12 +5784,11 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Paramètres",
       "models": "Modèles",
       "detection": "Detection",
-      "birds": "Birds",
       "bats": "Bats",
-      "inference": "Inference"
+      "inference": "Inference",
+      "filters": "Filters"
     },
     "detection": {
       "title": "Paramètres de détection",
@@ -5865,7 +5864,6 @@
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Le filtre de zone s'applique uniquement aux classificateurs d'oiseaux. Les modèles de chauves-souris utilisent leurs propres listes d'espèces.",
       "status": {
         "title": "Aperçu du filtre de zone",
         "geomodelInfo": "BirdNET Géomodèle {version} - {species} espèces connues",
@@ -6085,16 +6083,9 @@
         "licenseNote": "Le changement reste au sein du même modèle, sa licence ne change donc pas."
       }
     },
-    "bird": {
-      "title": "Détection des oiseaux",
-      "description": "Configurez le seuil de confiance, la langue des espèces et le filtrage des faux positifs pour les classificateurs d'oiseaux."
-    },
     "bat": {
       "title": "Détection des chauves-souris",
       "description": "Configurez le seuil, la planification et le filtrage des faux positifs pour les classificateurs de chauves-souris."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Le seuil dynamique s'applique uniquement aux classificateurs d'oiseaux."
     },
     "perch": {
       "title": "Perch v2 Detection",
@@ -6159,6 +6150,18 @@
         "description": "The runtime and precision each enabled classifier runs with.",
         "unknown": "Not reported"
       }
+    },
+    "scope": {
+      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
+      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
+      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "rangeFilter": {
+        "appliesTo": "Applies to {models}.",
+        "notApplied": "Not range filtered: {models}.",
+        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
+        "needsLocation": "Works only when the station location is set."
+      },
+      "bat": "Applies to bat classifiers only."
     }
   },
   "restart": {

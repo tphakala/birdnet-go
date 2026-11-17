@@ -4263,12 +4263,11 @@ export type TranslationKey =
   | 'wizard.steps.responsibleUse.outro'
   | 'wizard.steps.responsibleUse.acknowledge'
   | 'analysis.title'
-  | 'analysis.tabs.settings'
   | 'analysis.tabs.models'
   | 'analysis.tabs.detection'
-  | 'analysis.tabs.birds'
   | 'analysis.tabs.bats'
   | 'analysis.tabs.inference'
+  | 'analysis.tabs.filters'
   | 'analysis.detection.title'
   | 'analysis.detection.description'
   | 'analysis.detection.confidenceThreshold.label'
@@ -4308,7 +4307,6 @@ export type TranslationKey =
   | 'analysis.detection.perchThreshold.label'
   | 'analysis.detection.birdnetv3Threshold.label'
   | 'analysis.detection.birdnetplusThreshold.label'
-  | 'analysis.rangeFilter.birdOnlyNote'
   | 'analysis.rangeFilter.status.title'
   | 'analysis.rangeFilter.status.geomodelInfo' // params: version, species
   | 'analysis.rangeFilter.status.autoSelected'
@@ -4483,11 +4481,8 @@ export type TranslationKey =
   | 'analysis.gallery.optimize.applyFailed'
   | 'analysis.gallery.optimize.upToDate'
   | 'analysis.gallery.optimize.licenseNote'
-  | 'analysis.bird.title'
-  | 'analysis.bird.description'
   | 'analysis.bat.title'
   | 'analysis.bat.description'
-  | 'analysis.dynamicThreshold.birdOnlyNote'
   | 'analysis.perch.title'
   | 'analysis.perch.description'
   | 'analysis.birdnetv3.title'
@@ -4524,6 +4519,14 @@ export type TranslationKey =
   | 'analysis.inference.running.title'
   | 'analysis.inference.running.description'
   | 'analysis.inference.running.unknown'
+  | 'analysis.scope.dynamicThreshold'
+  | 'analysis.scope.speciesNames'
+  | 'analysis.scope.falsePositiveFilter'
+  | 'analysis.scope.rangeFilter.appliesTo' // params: models
+  | 'analysis.scope.rangeFilter.notApplied' // params: models
+  | 'analysis.scope.rangeFilter.generic'
+  | 'analysis.scope.rangeFilter.needsLocation'
+  | 'analysis.scope.bat'
   | 'restart.applicationRestart'
   | 'restart.containerRestart'
   | 'restart.confirmTitle'
@@ -5306,6 +5309,8 @@ export type TranslationParams = {
   'analysis.thresholds.sliderLabel': { name: string | number };
   'analysis.thresholds.usesThresholdOf': { name: string | number };
   'analysis.thresholds.matchModel': { name: string | number };
+  'analysis.scope.rangeFilter.appliesTo': { models: string | number };
+  'analysis.scope.rangeFilter.notApplied': { models: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };
 };
 

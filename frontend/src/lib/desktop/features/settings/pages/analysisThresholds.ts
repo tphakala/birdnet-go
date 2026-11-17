@@ -69,7 +69,7 @@ export interface ThresholdRow {
 }
 
 /** Bounds of birdnet.threshold. */
-const BIRDNET_BOUNDS = { min: 0, max: 1, step: 0.05 };
+const BIRDNET_BOUNDS = { min: 0, max: 1, step: 0.01 };
 /** Bounds of the thresholds in the other classifier sections. */
 const SECTION_BOUNDS = { min: 0.01, max: 0.99, step: 0.01 };
 

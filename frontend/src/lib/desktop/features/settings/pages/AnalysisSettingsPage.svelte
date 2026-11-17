@@ -6,19 +6,19 @@
   model gallery (install/uninstall additional classifier models).
 
   Features:
-  - Two main tabs: Settings and Models
-  - Settings tab: Detection settings, false positive filter, range filter,
-    dynamic threshold, and advanced options
-  - Models tab: Model gallery with Installed and Available tabs
-  - Settings tab groups: Confidence (thresholds, dynamic threshold), Filters (false
-    positive filter, range filter, bat detection) and General (species names, advanced)
+  - Tabs grouped by what a setting does and which classifiers it acts on:
+    Detection (thresholds, dynamic threshold, species names: every classifier),
+    Filters (false positive filter: every classifier except bats; range filter: the
+    classifiers the range model supports), Bats (bat-only settings, shown while a bat
+    model is installed), Inference (backend, device, threads) and Models (gallery,
+    region, download source, custom model paths)
   - Detection thresholds list: one row per enabled classifier, with a slider and a number
     field for its threshold and a switch for classifiers that can use the BirdNET v2.4 threshold
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
   - Dynamic threshold with enable/disable and parameter tuning
-  - Advanced section with processing threads and custom classifier paths
+  - Advanced section with custom classifier paths
   - License acceptance dialog for model installation
   - Remove confirmation dialog for model uninstallation
   - Real-time download progress via SSE
@@ -152,7 +152,7 @@
     XCircle,
     X,
     Sparkles,
-    Bird,
+    Filter,
     Cpu,
     Gauge,
     Moon,
@@ -177,7 +177,7 @@
   const BSG_BAT_STEP_SECONDS_DECIMALS = 2;
 
   // ── Page-level tab state ──────────────────────────────────────────────
-  type PageTab = 'detection' | 'birds' | 'bats' | 'inference' | 'models';
+  type PageTab = 'detection' | 'filters' | 'bats' | 'inference' | 'models';
   let pageTab = $state<PageTab>('detection');
 
   // ── Gallery (Models tab) state ────────────────────────────────────────
@@ -526,10 +526,10 @@
   // page's defaults differ from the saved values and would light the dot for good.
   const anyChanged = (pairs: ChangePair[]) =>
     pairs.some(c => hasSettingsChanged(c.original, c.current));
-  const detectionTabHasChanges = $derived(anyChanged([thresholdsChange, speciesNamesChange]));
-  const birdsTabHasChanges = $derived(
-    anyChanged([dynamicThresholdChange, falsePositiveChange, rangeFilterChange])
+  const detectionTabHasChanges = $derived(
+    anyChanged([thresholdsChange, dynamicThresholdChange, speciesNamesChange])
   );
+  const filtersTabHasChanges = $derived(anyChanged([falsePositiveChange, rangeFilterChange]));
   const batsTabHasChanges = $derived(hasBatModel && anyChanged([batChange]));
   const inferenceTabHasChanges = $derived(anyChanged([inferenceChange]));
   const modelsTabHasChanges = $derived(
@@ -984,6 +984,27 @@
   }
 
   let rangeFilterStatus = $state<RangeFilterStatus | null>(null);
+
+  // Which classifiers the range filter acts on, from the range filter's own participant list
+  // (GET /api/v2/range/status), and which enabled ones it skips. The backend decides
+  // participation per model, so this never names a classifier the filter does not reach.
+  const rangeFilterScope = $derived.by(() => {
+    const participants = rangeFilterStatus?.classifiers ?? [];
+    if (participants.length === 0) return t('analysis.scope.rangeFilter.generic');
+    const ids = new Set(participants.map(c => c.id));
+    const skipped = getAvailableModels()
+      .filter(m => m.registryId && !ids.has(m.registryId))
+      .map(m => m.name);
+    const lines = [
+      t('analysis.scope.rangeFilter.appliesTo', {
+        models: participants.map(c => c.name).join(', '),
+      }),
+    ];
+    if (skipped.length > 0)
+      lines.push(t('analysis.scope.rangeFilter.notApplied', { models: skipped.join(', ') }));
+    lines.push(t('analysis.scope.rangeFilter.needsLocation'));
+    return lines.join(' ');
+  });
 
   async function loadRangeFilterStatus() {
     try {
@@ -1536,11 +1557,11 @@
       hasChanges: detectionTabHasChanges,
     },
     {
-      id: 'birds',
-      label: t('analysis.tabs.birds'),
-      icon: Bird,
-      content: birdsTabContent,
-      hasChanges: birdsTabHasChanges,
+      id: 'filters',
+      label: t('analysis.tabs.filters'),
+      icon: Filter,
+      content: filtersTabContent,
+      hasChanges: filtersTabHasChanges,
     },
     ...(hasBatModel
       ? [
@@ -1894,6 +1915,11 @@
 </script>
 
 <!-- ── Detection Tab: settings that apply to every classifier ────────── -->
+<!-- One line stating which classifiers a card's settings act on. -->
+{#snippet scopeLine(text: string)}
+  <p class="mb-4 text-sm text-[var(--color-base-content)]/70">{text}</p>
+{/snippet}
+
 {#snippet detectionTabContent()}
   <div class="space-y-6">
     <!-- Detection thresholds: one row per enabled classifier -->
@@ -1948,7 +1974,7 @@
                   size="sm"
                   label={t('analysis.thresholds.matchModel', { name: birdnetRowName })}
                   value={follows}
-                  describedBy={nameId}
+                  contextLabelId={nameId}
                   disabled={store.isLoading || store.isSaving}
                   onUpdate={matches => updateRowOverride(section, !matches)}
                 />
@@ -2005,53 +2031,6 @@
       </ul>
     </SettingsSection>
 
-    <!-- Species names -->
-    <SettingsSection
-      title={t('analysis.speciesNames.title')}
-      description={t('analysis.speciesNames.description')}
-      originalData={speciesNamesChange.original}
-      currentData={speciesNamesChange.current}
-    >
-      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SelectDropdown
-          options={birdnetLocaleOptions}
-          value={birdnet?.locale ?? 'en'}
-          label={t('analysis.detection.locale.label')}
-          helpText={t('analysis.detection.locale.helpText')}
-          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          variant="select"
-          size="md"
-          groupBy={false}
-          searchable={true}
-          onChange={value => updateBirdnetSetting('locale', value as string)}
-        >
-          {#snippet renderOption(option)}
-            {@const localeOption = option as BirdnetLocaleOption}
-            <div class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
-            </div>
-          {/snippet}
-          {#snippet renderSelected(options)}
-            {#if options[0]}
-              {@const localeOption = options[0] as BirdnetLocaleOption}
-              <span class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </span>
-            {:else}
-              <span>{birdnet?.locale ?? 'en'}</span>
-            {/if}
-          {/snippet}
-        </SelectDropdown>
-      </div>
-    </SettingsSection>
-  </div>
-{/snippet}
-
-<!-- ── Birds Tab: settings that act on bird detections only ──────────── -->
-{#snippet birdsTabContent()}
-  <div class="space-y-6">
     <!-- Dynamic threshold -->
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
@@ -2059,6 +2038,7 @@
       originalData={dynamicThresholdChange.original}
       currentData={dynamicThresholdChange.current}
     >
+      {@render scopeLine(t('analysis.scope.dynamicThreshold'))}
       <ToggleField
         value={dynamicThreshold.enabled}
         label={t('settings.main.sections.dynamicThreshold.enable.label')}
@@ -2107,7 +2087,55 @@
       {/if}
     </SettingsSection>
 
-    <!-- Bird false positive filter -->
+    <!-- Species names -->
+    <SettingsSection
+      title={t('analysis.speciesNames.title')}
+      description={t('analysis.speciesNames.description')}
+      originalData={speciesNamesChange.original}
+      currentData={speciesNamesChange.current}
+    >
+      {@render scopeLine(t('analysis.scope.speciesNames'))}
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <SelectDropdown
+          options={birdnetLocaleOptions}
+          value={birdnet?.locale ?? 'en'}
+          label={t('analysis.detection.locale.label')}
+          helpText={t('analysis.detection.locale.helpText')}
+          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
+          variant="select"
+          size="md"
+          groupBy={false}
+          searchable={true}
+          onChange={value => updateBirdnetSetting('locale', value as string)}
+        >
+          {#snippet renderOption(option)}
+            {@const localeOption = option as BirdnetLocaleOption}
+            <div class="flex items-center gap-2">
+              <FlagIcon locale={localeOption.localeCode} className="size-4" />
+              <span>{localeOption.label}</span>
+            </div>
+          {/snippet}
+          {#snippet renderSelected(options)}
+            {#if options[0]}
+              {@const localeOption = options[0] as BirdnetLocaleOption}
+              <span class="flex items-center gap-2">
+                <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                <span>{localeOption.label}</span>
+              </span>
+            {:else}
+              <span>{birdnet?.locale ?? 'en'}</span>
+            {/if}
+          {/snippet}
+        </SelectDropdown>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+<!-- ── Filters Tab: settings that drop detections after scoring ─────────── -->
+{#snippet filtersTabContent()}
+  <div class="space-y-6">
+    <!-- False positive filter: every classifier except bats -->
     <SettingsSection
       title={t('settings.main.sections.falsePositiveFilter.title')}
       description={t('settings.main.sections.falsePositiveFilter.description')}
@@ -2115,7 +2143,7 @@
       originalData={falsePositiveChange.original}
       currentData={falsePositiveChange.current}
     >
-      <!-- Bird False Positive Filter -->
+      {@render scopeLine(t('analysis.scope.falsePositiveFilter'))}
       <div>
         <FalsePositiveFilterControl
           id="false-positive-filter-level"
@@ -2210,6 +2238,7 @@
       originalData={rangeFilterChange.original}
       currentData={rangeFilterChange.current}
     >
+      {@render scopeLine(rangeFilterScope)}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
           label={t('settings.main.sections.rangeFilter.threshold.label')}
@@ -2427,6 +2456,7 @@
       originalData={batChange.original}
       currentData={batChange.current}
     >
+      {@render scopeLine(t('analysis.scope.bat'))}
       <div class="divide-y divide-[var(--border-100)]">
         <ToggleField
           className="pb-4"
