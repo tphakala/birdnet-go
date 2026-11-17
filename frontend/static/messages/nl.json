@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Commercieel gebruik toegestaan",
         "nonCommercialOnly": "Alleen niet-commercieel gebruik",
         "nonCommercialWarning": "Dit model is gelicentieerd voor alleen niet-commercieel gebruik. Door te installeren gaat u akkoord met de licentievoorwaarden.",
-        "acceptAndInstall": "Accepteren en installeren"
+        "acceptAndInstall": "Accepteren en installeren",
+        "continue": "Doorgaan",
+        "agreementNext": "Voor dit model gelden voorwaarden waarmee u moet instemmen. Ze worden in de volgende stap getoond."
       },
       "removeDialog": {
         "title": "{name} verwijderen?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Ga naar Downloadbron",
         "dismiss": "Negeren",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} kan pas worden geïnstalleerd nadat u met de voorwaarden hebt ingestemd.",
+        "documentUnavailable": "De tekst van het document kon niet worden geladen en gecontroleerd. Controleer of BirdNET-Go de downloadbron van de modellen kan bereiken en probeer het opnieuw."
       },
       "regionLabel": "Regio",
       "speciesLabel": "Soorten",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Toepassen mislukt",
         "upToDate": "Al jouw modellen zijn al geoptimaliseerd voor deze hardware.",
         "licenseNote": "Het wisselen blijft binnen hetzelfde model, dus de licentie verandert niet."
+      },
+      "documents": {
+        "heading": "Documenten",
+        "kinds": {
+          "license": "Licentie",
+          "acceptable_use": "Beleid voor aanvaardbaar gebruik"
+        },
+        "genericKind": "Modelvoorwaarden",
+        "source": "Uit {repo}",
+        "textRegion": "Tekst: {document}",
+        "loading": "Documenttekst laden",
+        "view": "Weergeven: {document}",
+        "hide": "Verbergen: {document}"
+      },
+      "agreement": {
+        "title": "Lezen en instemmen",
+        "intro": "Lees de onderstaande voorwaarden en stem ermee in voordat {name} kan worden geïnstalleerd.",
+        "agree": "Ik heb gelezen en ga akkoord met: {document}",
+        "agreeAndContinue": "Akkoord en doorgaan",
+        "tickEach": "Vink het vakje onder elk document aan om door te gaan.",
+        "waitForText": "U kunt instemmen zodra alle documenten zijn geladen.",
+        "unavailableBlocked": "Een document kon niet worden geladen, dus u kunt er nog niet mee instemmen. Gebruik Opnieuw proberen om het opnieuw te laden."
       }
     },
     "bat": {

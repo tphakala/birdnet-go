@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Użycie komercyjne dozwolone",
         "nonCommercialOnly": "Tylko użycie niekomercyjne",
         "nonCommercialWarning": "Ten model jest licencjonowany wyłącznie do użytku niekomercyjnego. Instalując go, zgadzasz się na warunki licencji.",
-        "acceptAndInstall": "Akceptuj i zainstaluj"
+        "acceptAndInstall": "Akceptuj i zainstaluj",
+        "continue": "Dalej",
+        "agreementNext": "Ten model ma warunki, które musisz zaakceptować. Zostaną pokazane w następnym kroku."
       },
       "removeDialog": {
         "title": "Usunąć {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Przejdź do Źródło pobierania",
         "dismiss": "Odrzuć",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} wymaga akceptacji warunków przed instalacją.",
+        "documentUnavailable": "Nie udało się wczytać i zweryfikować tekstu dokumentu. Sprawdź, czy BirdNET-Go ma dostęp do źródła pobierania modeli, i spróbuj ponownie."
       },
       "regionLabel": "Region",
       "speciesLabel": "Gatunki",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Nie udało się zastosować",
         "upToDate": "Wszystkie twoje modele są już zoptymalizowane pod kątem tego sprzętu.",
         "licenseNote": "Zamiana odbywa się w ramach tego samego modelu, więc jego licencja nie ulega zmianie."
+      },
+      "documents": {
+        "heading": "Dokumenty",
+        "kinds": {
+          "license": "Licencja",
+          "acceptable_use": "Zasady dopuszczalnego użytkowania"
+        },
+        "genericKind": "Warunki modelu",
+        "source": "Z {repo}",
+        "textRegion": "Tekst: {document}",
+        "loading": "Wczytywanie tekstu dokumentu",
+        "view": "Pokaż: {document}",
+        "hide": "Ukryj: {document}"
+      },
+      "agreement": {
+        "title": "Przeczytaj i zaakceptuj",
+        "intro": "Przed instalacją {name} przeczytaj i zaakceptuj poniższe warunki.",
+        "agree": "Przeczytałem(-am) i akceptuję: {document}",
+        "agreeAndContinue": "Zaakceptuj i kontynuuj",
+        "tickEach": "Zaznacz pole pod każdym dokumentem, aby kontynuować.",
+        "waitForText": "Możesz zaakceptować po wczytaniu wszystkich dokumentów.",
+        "unavailableBlocked": "Nie udało się wczytać dokumentu, więc nie możesz go jeszcze zaakceptować. Użyj przycisku Ponów próbę, aby wczytać go ponownie."
       }
     },
     "bat": {

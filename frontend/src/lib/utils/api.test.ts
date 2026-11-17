@@ -232,7 +232,7 @@ describe('API utilities', () => {
       });
     });
 
-    it('exposes the error_key on ApiError', async () => {
+    it('exposes the error_key and error_params on ApiError', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 409,
@@ -249,6 +249,7 @@ describe('API utilities', () => {
       await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
         status: 409,
         errorKey: 'analysis.gallery.errors.operationInProgress',
+        errorParams: { name: 'Geomodel' },
       });
 
       mockFetch.mockResolvedValueOnce({
@@ -262,6 +263,21 @@ describe('API utilities', () => {
       const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).errorKey).toBeUndefined();
+      expect(err).toHaveProperty('errorParams', undefined);
+
+      // A key without params carries no params either.
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        headers: new Headers(),
+        json: () => Promise.resolve({ error_key: 'analysis.gallery.errors.operationInProgress' }),
+      });
+
+      const keyOnly = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
+      expect(keyOnly).toBeInstanceOf(ApiError);
+      expect(keyOnly).toMatchObject({ errorKey: 'analysis.gallery.errors.operationInProgress' });
+      expect(keyOnly).toHaveProperty('errorParams', undefined);
     });
 
     it('returns null for empty responses', async () => {

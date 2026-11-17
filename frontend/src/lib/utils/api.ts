@@ -72,6 +72,8 @@ export class ApiError extends Error {
   isNetworkError: boolean;
   /** The server's i18n error_key when the error body carried one. */
   errorKey?: string;
+  /** The server's error_params, set together with errorKey when the body carried them. */
+  errorParams?: Record<string, unknown>;
 
   constructor(message: string, status: number, response: Response, isNetworkError = false) {
     super(message);
@@ -223,6 +225,7 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
   if (!response.ok) {
     let serverMessage = '';
     let serverErrorKey: string | undefined;
+    let serverErrorParams: Record<string, unknown> | undefined;
 
     try {
       // SECURITY: Limit response size for error parsing
@@ -239,13 +242,13 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
         // Try i18n translation via error_key first
         if (errorData.error_key && typeof errorData.error_key === 'string') {
           serverErrorKey = errorData.error_key;
-          const params =
+          serverErrorParams =
             errorData.error_params &&
             typeof errorData.error_params === 'object' &&
             !Array.isArray(errorData.error_params)
               ? (errorData.error_params as Record<string, unknown>)
-              : {};
-          const translated = t(errorData.error_key, params);
+              : undefined;
+          const translated = t(errorData.error_key, serverErrorParams ?? {});
           if (translated !== errorData.error_key) {
             serverMessage = translated;
           }
@@ -269,6 +272,7 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
     const userMessage = serverMessage || getSecureErrorMessage(response.status);
     const apiError = new ApiError(userMessage, response.status, response);
     apiError.errorKey = serverErrorKey;
+    apiError.errorParams = serverErrorParams;
     throw apiError;
   }
 

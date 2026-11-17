@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Kaupallinen käyttö sallittu",
         "nonCommercialOnly": "Vain ei-kaupallinen käyttö",
         "nonCommercialWarning": "Tämä malli on lisensoitu vain ei-kaupalliseen käyttöön. Asentamalla hyväksyt lisenssiehdot.",
-        "acceptAndInstall": "Hyväksy ja asenna"
+        "acceptAndInstall": "Hyväksy ja asenna",
+        "continue": "Jatka",
+        "agreementNext": "Tällä mallilla on ehtoja, jotka sinun on hyväksyttävä. Ne näytetään seuraavassa vaiheessa."
       },
       "removeDialog": {
         "title": "Poista {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Siirry Latauslähteeseen",
         "dismiss": "Sulje",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} voidaan asentaa vasta, kun olet hyväksynyt sen ehdot.",
+        "documentUnavailable": "Asiakirjan tekstiä ei voitu ladata ja tarkistaa. Varmista, että BirdNET-Go saa yhteyden mallien latauslähteeseen, ja yritä uudelleen."
       },
       "regionLabel": "Alue",
       "speciesLabel": "Lajit",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Käyttö epäonnistui",
         "upToDate": "Kaikki mallisi on jo optimoitu tälle laitteistolle.",
         "licenseNote": "Vaihto tapahtuu saman mallin sisällä, joten sen lisenssi ei muutu."
+      },
+      "documents": {
+        "heading": "Asiakirjat",
+        "kinds": {
+          "license": "Lisenssi",
+          "acceptable_use": "Hyväksyttävän käytön käytäntö"
+        },
+        "genericKind": "Mallin ehdot",
+        "source": "Lähde: {repo}",
+        "textRegion": "Teksti: {document}",
+        "loading": "Ladataan asiakirjan tekstiä",
+        "view": "Näytä: {document}",
+        "hide": "Piilota: {document}"
+      },
+      "agreement": {
+        "title": "Lue ja hyväksy",
+        "intro": "Ennen kuin {name} voidaan asentaa, lue alla olevat ehdot ja hyväksy ne.",
+        "agree": "Olen lukenut ja hyväksyn: {document}",
+        "agreeAndContinue": "Hyväksy ja jatka",
+        "tickEach": "Jatka valitsemalla kunkin asiakirjan alla oleva valintaruutu.",
+        "waitForText": "Voit hyväksyä, kun kaikki asiakirjat on ladattu.",
+        "unavailableBlocked": "Asiakirjaa ei voitu ladata, joten et voi vielä hyväksyä sitä. Lataa se uudelleen valitsemalla Yritä uudelleen."
       }
     },
     "bat": {

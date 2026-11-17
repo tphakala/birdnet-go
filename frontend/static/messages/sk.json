@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Komerčné využitie povolené",
         "nonCommercialOnly": "Len nekomerčné využitie",
         "nonCommercialWarning": "Tento model je licencovaný len na nekomerčné použitie. Inštaláciou súhlasíte s licenčnými podmienkami.",
-        "acceptAndInstall": "Prijať a inštalovať"
+        "acceptAndInstall": "Prijať a inštalovať",
+        "continue": "Pokračovať",
+        "agreementNext": "Tento model má podmienky, s ktorými musíte súhlasiť. Zobrazia sa v ďalšom kroku."
       },
       "removeDialog": {
         "title": "Odstrániť {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Prejsť na Zdroj sťahovania",
         "dismiss": "Zavrieť",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} vyžaduje váš súhlas s podmienkami pred inštaláciou.",
+        "documentUnavailable": "Text dokumentu sa nepodarilo načítať a overiť. Skontrolujte, či BirdNET-Go dosiahne zdroj sťahovania modelov, a skúste to znova."
       },
       "regionLabel": "Región",
       "speciesLabel": "Druhy",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Použitie sa nepodarilo",
         "upToDate": "Všetky vaše modely sú už pre tento hardvér optimalizované.",
         "licenseNote": "Výmena prebieha v rámci rovnakého modelu, takže sa jeho licencia nemení."
+      },
+      "documents": {
+        "heading": "Dokumenty",
+        "kinds": {
+          "license": "Licencia",
+          "acceptable_use": "Zásady prijateľného používania"
+        },
+        "genericKind": "Podmienky modelu",
+        "source": "Z {repo}",
+        "textRegion": "Text: {document}",
+        "loading": "Načítava sa text dokumentu",
+        "view": "Zobraziť: {document}",
+        "hide": "Skryť: {document}"
+      },
+      "agreement": {
+        "title": "Prečítajte si a odsúhlaste",
+        "intro": "Pred inštaláciou modelu {name} si prečítajte nižšie uvedené podmienky a vyjadrite s nimi súhlas.",
+        "agree": "Prečítal(a) som a súhlasím: {document}",
+        "agreeAndContinue": "Súhlasiť a pokračovať",
+        "tickEach": "Pokračujte začiarknutím políčka pod každým dokumentom.",
+        "waitForText": "Súhlas môžete vyjadriť, keď sa načítajú všetky dokumenty.",
+        "unavailableBlocked": "Dokument sa nepodarilo načítať, preto s ním zatiaľ nemôžete súhlasiť. Načítajte ho znova tlačidlom Skúsiť znova."
       }
     },
     "bat": {

@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Kommerciel brug tilladt",
         "nonCommercialOnly": "Kun ikke-kommerciel brug",
         "nonCommercialWarning": "Denne model er licenseret kun til ikke-kommerciel brug. Ved at installere accepterer du at overholde licensbetingelserne.",
-        "acceptAndInstall": "Accepter og installer"
+        "acceptAndInstall": "Accepter og installer",
+        "continue": "Fortsæt",
+        "agreementNext": "Denne model har vilkår, du skal acceptere. De vises i næste trin."
       },
       "removeDialog": {
         "title": "Fjern {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Gå til Downloadkilde",
         "dismiss": "Afvis",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} kræver din accept af vilkårene, før den kan installeres.",
+        "documentUnavailable": "Dokumentets tekst kunne ikke indlæses og verificeres. Kontrollér, at BirdNET-Go kan nå modellernes downloadkilde, og prøv igen."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Kunne ikke anvende",
         "upToDate": "Alle dine modeller er allerede optimeret til denne hardware.",
         "licenseNote": "Udskiftning forbliver inden for den samme model, så licensen ændres ikke."
+      },
+      "documents": {
+        "heading": "Dokumenter",
+        "kinds": {
+          "license": "Licens",
+          "acceptable_use": "Politik for acceptabel brug"
+        },
+        "genericKind": "Modelvilkår",
+        "source": "Fra {repo}",
+        "textRegion": "Tekst: {document}",
+        "loading": "Indlæser dokumentets tekst",
+        "view": "Vis: {document}",
+        "hide": "Skjul: {document}"
+      },
+      "agreement": {
+        "title": "Læs og accepter",
+        "intro": "Før {name} kan installeres, skal du læse og acceptere vilkårene nedenfor.",
+        "agree": "Jeg har læst og accepterer: {document}",
+        "agreeAndContinue": "Accepter og fortsæt",
+        "tickEach": "Sæt flueben i feltet under hvert dokument for at fortsætte.",
+        "waitForText": "Du kan acceptere, når alle dokumenter er indlæst.",
+        "unavailableBlocked": "Et dokument kunne ikke indlæses, så du kan ikke acceptere det endnu. Brug Prøv igen for at indlæse det igen."
       }
     },
     "bat": {

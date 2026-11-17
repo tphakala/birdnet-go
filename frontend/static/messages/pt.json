@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Uso comercial permitido",
         "nonCommercialOnly": "Apenas uso não comercial",
         "nonCommercialWarning": "Este modelo é licenciado apenas para uso não comercial. Ao instalar, você concorda em cumprir os termos da licença.",
-        "acceptAndInstall": "Aceitar e instalar"
+        "acceptAndInstall": "Aceitar e instalar",
+        "continue": "Continuar",
+        "agreementNext": "Este modelo tem termos que tem de aceitar. São mostrados no passo seguinte."
       },
       "removeDialog": {
         "title": "Remover {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Ir para Origem de download",
         "dismiss": "Dispensar",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} requer que aceite os seus termos antes de poder ser instalado.",
+        "documentUnavailable": "Não foi possível carregar e verificar o texto do documento. Verifique se o BirdNET-Go consegue aceder à origem de transferência dos modelos e tente novamente."
       },
       "regionLabel": "Região",
       "speciesLabel": "Espécies",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Falha ao aplicar",
         "upToDate": "Todos os seus modelos já estão otimizados para este hardware.",
         "licenseNote": "A troca permanece dentro do mesmo modelo, pelo que a sua licença não é alterada."
+      },
+      "documents": {
+        "heading": "Documentos",
+        "kinds": {
+          "license": "Licença",
+          "acceptable_use": "Política de utilização aceitável"
+        },
+        "genericKind": "Termos do modelo",
+        "source": "De {repo}",
+        "textRegion": "Texto: {document}",
+        "loading": "A carregar o texto do documento",
+        "view": "Ver: {document}",
+        "hide": "Ocultar: {document}"
+      },
+      "agreement": {
+        "title": "Ler e aceitar",
+        "intro": "Antes de instalar {name}, leia e aceite os termos abaixo.",
+        "agree": "Li e aceito: {document}",
+        "agreeAndContinue": "Aceitar e continuar",
+        "tickEach": "Marque a caixa por baixo de cada documento para continuar.",
+        "waitForText": "Pode aceitar quando todos os documentos estiverem carregados.",
+        "unavailableBlocked": "Não foi possível carregar um documento, por isso ainda não o pode aceitar. Use Tentar novamente para o carregar outra vez."
       }
     },
     "bat": {

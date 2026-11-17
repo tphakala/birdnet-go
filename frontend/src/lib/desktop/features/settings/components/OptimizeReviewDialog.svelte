@@ -4,7 +4,8 @@
   // a from -> to variant summary, hardware chips, and the recommendation reasons,
   // and lets the user apply one or all of them. Apply is entirely within-model, so
   // the license never changes (see the license note); the swap reuses the same
-  // install/variant-swap flow as a normal install, so no new consent is needed.
+  // install/variant-swap flow as a normal install, including its agreement step when
+  // the server asks for an agreement to the model's documents.
 
   import type { OptimizeOffer } from '$lib/utils/variantSelection';
   import { variantLabel, variantHardwareLabel } from '$lib/utils/variantSelection';
