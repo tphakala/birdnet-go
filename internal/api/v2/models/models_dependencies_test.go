@@ -334,7 +334,9 @@ func TestGetModelCatalog_DocumentsWireShape(t *testing.T) {
 
 	byID := make(map[string]map[string]any, len(resp.Catalog))
 	for _, entry := range resp.Catalog {
-		byID[entry["id"].(string)] = entry //nolint:forcetypeassert // fixture ids are strings
+		id, isString := entry["id"].(string)
+		require.True(t, isString, "catalog entry id is a string")
+		byID[id] = entry
 	}
 	require.Contains(t, byID, externalID)
 	require.Contains(t, byID, hostedID)
@@ -343,7 +345,8 @@ func TestGetModelCatalog_DocumentsWireShape(t *testing.T) {
 	docs, ok := byID[externalID]["documents"].([]any)
 	require.True(t, ok, "an entry with a licence reports documents")
 	require.Len(t, docs, 1)
-	doc := docs[0].(map[string]any) //nolint:forcetypeassert // shape asserted by the next lines
+	doc, isObject := docs[0].(map[string]any)
+	require.True(t, isObject, "a document is a JSON object")
 	assert.Equal(t, "tphakala/Perch-v2-Models", doc["repo"])
 	assert.Equal(t, "license", doc["kind"])
 	assert.Equal(t, false, doc["requiresAgreement"])
@@ -354,7 +357,8 @@ func TestGetModelCatalog_DocumentsWireShape(t *testing.T) {
 	require.True(t, ok, "a hosted entry reports documents")
 	require.NotEmpty(t, hostedDocs)
 	for _, raw := range hostedDocs {
-		hosted := raw.(map[string]any) //nolint:forcetypeassert // shape asserted by the next lines
+		hosted, isHostedObject := raw.(map[string]any)
+		require.True(t, isHostedObject, "a document is a JSON object")
 		assert.NotEmpty(t, hosted["sha256"], "a hosted document carries its digest")
 		assert.NotContains(t, hosted, "url", "a hosted document has no external url")
 		assert.NotContains(t, hosted, "path", "the repo-relative path is not exposed")
