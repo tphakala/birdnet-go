@@ -302,3 +302,137 @@ func loadTestManifest(t *testing.T, pathname string) *testManifest {
 	require.NoErrorf(t, json.Unmarshal(data, &m), "parse vendored manifest %q", pathname)
 	return &m
 }
+
+// documentManifestFiles returns every vendored manifest that feeds the document
+// registry: the family manifests and the document-only ones.
+func documentManifestFiles(t *testing.T) []string {
+	t.Helper()
+	var files []string
+	for _, pattern := range []string{
+		filepath.Join("gen", "manifests", "*.models.json"),
+		filepath.Join("gen", "manifests", "documents", "*.models.json"),
+	} {
+		matches, err := filepath.Glob(pattern)
+		require.NoError(t, err)
+		files = append(files, matches...)
+	}
+	require.NotEmpty(t, files, "no vendored manifests found")
+	return files
+}
+
+// TestCatalogDocuments_MatchManifests checks the generated document registry
+// against the vendored manifests, so a hand edit of the generated file fails
+// here and not only in the CI drift gate.
+func TestCatalogDocuments_MatchManifests(t *testing.T) {
+	t.Parallel()
+
+	type manifestDoc struct {
+		Kind              string `json:"kind"`
+		RequiresAgreement bool   `json:"requires_agreement"`
+		Path              string `json:"path"`
+		Revision          string `json:"revision"`
+		SHA256            string `json:"sha256"`
+		URL               string `json:"url"`
+	}
+	type docManifest struct {
+		Repo       string `json:"repo"`
+		FamilyMeta struct {
+			Documents []manifestDoc `json:"documents"`
+		} `json:"family_meta"`
+	}
+
+	files := documentManifestFiles(t)
+	for _, f := range files {
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			t.Parallel()
+			data, err := os.ReadFile(f)
+			require.NoError(t, err)
+			var m docManifest
+			require.NoError(t, json.Unmarshal(data, &m))
+			require.NotEmpty(t, m.Repo)
+
+			want := make([]CatalogDocument, 0, len(m.FamilyMeta.Documents))
+			for _, d := range m.FamilyMeta.Documents {
+				want = append(want, CatalogDocument(d))
+			}
+			assert.ElementsMatch(t, want, catalogDocuments[m.Repo], "registry documents of %s", m.Repo)
+		})
+	}
+	assert.Len(t, catalogDocuments, len(files), "registry must hold exactly the vendored manifests' repos")
+}
+
+// TestCatalogEntryRepos_HaveDocuments catches a new gallery entry whose manifest
+// was never vendored: its repo would silently have no documents and no gate.
+func TestCatalogEntryRepos_HaveDocuments(t *testing.T) {
+	t.Parallel()
+
+	for _, e := range VisibleCatalog() {
+		t.Run(e.ID, func(t *testing.T) {
+			t.Parallel()
+			assert.NotEmptyf(t, EntryDocuments(&e), "repo %q of visible entry %q has no documents in the registry", e.HuggingFaceRepo, e.ID)
+		})
+	}
+}
+
+func TestEntryDocuments(t *testing.T) {
+	t.Parallel()
+
+	required := func(docs []RepoDocument) []RepoDocument {
+		var out []RepoDocument
+		for _, d := range docs {
+			if d.RequiresAgreement {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
+	lookup := func(t *testing.T, id string) *CatalogEntry {
+		t.Helper()
+		e, ok := GetCatalogEntry(id)
+		require.Truef(t, ok, "catalog entry %q", id)
+		return &e
+	}
+
+	tests := []struct {
+		name         string
+		entry        *CatalogEntry
+		wantRequired []string // repos of the agreement documents
+	}{
+		{name: "BirdNET+ V3.0 has its own policy and the inline Geomodel files add none", entry: lookup(t, "birdnet-plus-v3.0"), wantRequired: []string{"tphakala/BirdNET-Plus-V3.0"}},
+		{name: "Perch v2 has none though it downloads Geomodel files", entry: lookup(t, "perch-v2")},
+		{name: "BirdNET v3.0 has none though it downloads Geomodel files", entry: lookup(t, "birdnet-v3.0")},
+		{name: "standalone Geomodel has its own", entry: lookup(t, "birdnet-geomodel-v3"), wantRequired: []string{"tphakala/BirdNET-Geomodel"}},
+		{name: "an entry depending on a gated entry has none", entry: &CatalogEntry{ID: "fixture", HuggingFaceRepo: "example/ungated", DependsOn: []string{"birdnet-plus-v3.0", "birdnet-geomodel-v3"}}},
+		{name: "repo casing and a trailing slash still match", entry: &CatalogEntry{ID: "edited", HuggingFaceRepo: " TPHAKALA/birdnet-plus-v3.0/ "}, wantRequired: []string{"tphakala/BirdNET-Plus-V3.0"}},
+		{name: "an unknown repo gives nil", entry: &CatalogEntry{ID: "x", HuggingFaceRepo: "nobody/nothing"}},
+		{name: "an empty repo gives nil", entry: &CatalogEntry{ID: "x"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotRepos []string
+			for _, d := range required(EntryDocuments(tc.entry)) {
+				gotRepos = append(gotRepos, d.Repo)
+			}
+			assert.Equal(t, tc.wantRequired, gotRepos)
+		})
+	}
+
+	assert.Nil(t, EntryDocuments(nil))
+	assert.Nil(t, EntryDocuments(&CatalogEntry{HuggingFaceRepo: "nobody/nothing"}))
+}
+
+func TestDocumentBySHA256(t *testing.T) {
+	t.Parallel()
+
+	const geomodelPolicy = "acef17f7e6fc94463b2d9e4614d37f38448a332bbdb48e73a4a286941c492272"
+	got, ok := documentBySHA256(geomodelPolicy)
+	require.True(t, ok)
+	assert.Equal(t, "tphakala/BirdNET-Geomodel", got.Repo)
+	assert.Equal(t, DocumentKindAcceptableUse, got.Kind)
+
+	_, ok = documentBySHA256("")
+	assert.False(t, ok, "an empty digest must not match an external document")
+	_, ok = documentBySHA256("00")
+	assert.False(t, ok)
+}

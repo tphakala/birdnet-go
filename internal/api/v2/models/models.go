@@ -152,6 +152,21 @@ type ModelListItem struct {
 	State string `json:"state"`
 }
 
+// CatalogDocumentResponse is one licence or policy document of a catalog entry's
+// own repo. The repo-relative path and pinned revision are not exposed.
+type CatalogDocumentResponse struct {
+	// Repo is the HuggingFace repo that owns the document.
+	Repo string `json:"repo"`
+	// Kind is the document kind, for example "license" or "acceptable_use".
+	Kind string `json:"kind"`
+	// RequiresAgreement marks a document the user must agree to before installing.
+	RequiresAgreement bool `json:"requiresAgreement"`
+	// SHA256 identifies a hosted document; omitted for an external one.
+	SHA256 string `json:"sha256,omitempty"`
+	// URL is the location of an external document; omitted for a hosted one.
+	URL string `json:"url,omitempty"`
+}
+
 // CatalogEntryResponse represents a model in the catalog API response.
 type CatalogEntryResponse struct {
 	ID string `json:"id"`
@@ -211,6 +226,11 @@ type CatalogEntryResponse struct {
 	// InstalledVariantID is the id of the currently installed variant, or "" when
 	// the model is not installed or is a flat (pre-variant) entry.
 	InstalledVariantID string `json:"installedVariantId,omitempty"`
+	// Documents lists the licence and policy documents of this entry's own repo.
+	// It never lists the documents of files installed together with the entry (for
+	// example the geomodel files that arrive with a classifier). Omitted when the
+	// repo has none.
+	Documents []CatalogDocumentResponse `json:"documents,omitempty"`
 	// Variants lists the selectable hardware/regional variants of this model,
 	// omitted for flat single-variant entries.
 	Variants []CatalogVariantResponse `json:"variants,omitempty"`
@@ -503,7 +523,7 @@ func visibleSuccessor(visible []classifier.CatalogEntry, id string) *CatalogSucc
 
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information. An entry's successor is reported only when
-// the successor is itself visible.
+// the successor is itself visible, and its documents are those of its own repo only.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
@@ -575,6 +595,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			HasGeomodel:          classifier.ProvidesGeomodel(entry, ""),
 			DependsOn:            entry.DependsOn,
 			Permanent:            classifier.IsPermanentEntry(entry),
+			Documents:            buildDocumentResponses(entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID], hostArch),
@@ -600,6 +621,26 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"catalog": catalog,
 	})
+}
+
+// buildDocumentResponses maps the documents of the entry's own repo to their API
+// form, or nil when it has none so the field is omitted.
+func buildDocumentResponses(entry *classifier.CatalogEntry) []CatalogDocumentResponse {
+	docs := classifier.EntryDocuments(entry)
+	if len(docs) == 0 {
+		return nil
+	}
+	out := make([]CatalogDocumentResponse, 0, len(docs))
+	for i := range docs {
+		out = append(out, CatalogDocumentResponse{
+			Repo:              docs[i].Repo,
+			Kind:              docs[i].Kind,
+			RequiresAgreement: docs[i].RequiresAgreement,
+			SHA256:            docs[i].SHA256,
+			URL:               docs[i].URL,
+		})
+	}
+	return out
 }
 
 // buildVariantResponses maps a catalog entry's variants to their API form,

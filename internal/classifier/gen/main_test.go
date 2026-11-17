@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -224,5 +225,73 @@ func TestBuild_PerchWithdrawnVariantsFollowTheirReplacement(t *testing.T) {
 		assert.NotContains(t, out[i], "Legacy:")
 		assert.Contains(t, out[i+1], "Legacy:")
 		assert.Contains(t, out[i+1], fmt.Sprintf("SupersededBy: %q,", live[1]+"@"+live[2]))
+	}
+}
+
+func TestBuildDocuments_Validation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rev = "ba1c7529e785e9ec745dcbb3271853abfa3026d6"
+		sha = "3ede50997d96045d7753576547d615c0bc6a33a5d87bffce9d3c5888dec9ed86"
+	)
+	hosted := func(kind string) manifestDocument {
+		return manifestDocument{Kind: kind, Path: kind + ".md", Revision: rev, SHA256: sha}
+	}
+	lic := hosted("license")
+	external := manifestDocument{Kind: "license", URL: "https://example.org/license"}
+	mk := func(repo string, docs ...manifestDocument) namedManifest {
+		return namedManifest{name: repo + ".json", m: &manifest{Repo: repo, FamilyMeta: manifestFamilyMeta{Documents: docs}}}
+	}
+	with := func(nm namedManifest, mutate func(*manifestDocument)) namedManifest {
+		docs := slices.Clone(nm.m.FamilyMeta.Documents)
+		mutate(&docs[len(docs)-1])
+		return mk(nm.m.Repo, docs...)
+	}
+	release := func(docs *[]manifestDocument) namedManifest {
+		nm := mk("o/a", lic)
+		nm.m.FamilyMeta.Versions = map[string]manifestVersionDoc{"1.0": {Documents: docs}}
+		return nm
+	}
+
+	tests := []struct {
+		name    string
+		in      []namedManifest
+		wantErr string
+	}{
+		{name: "hosted license", in: []namedManifest{mk("o/a", lic)}},
+		{name: "external license", in: []namedManifest{mk("o/a", external)}},
+		{name: "unknown kind is kept", in: []namedManifest{mk("o/a", lic, hosted("future_kind"))}},
+		{name: "release without documents key", in: []namedManifest{release(nil)}},
+		{name: "release equal to family list", in: []namedManifest{release(&[]manifestDocument{lic})}},
+		{name: "missing repo", in: []namedManifest{mk("", lic)}, wantErr: "missing repo"},
+		{name: "no license", in: []namedManifest{mk("o/a", hosted("acceptable_use"))}, wantErr: "exactly one"},
+		{name: "two licenses", in: []namedManifest{mk("o/a", lic, external)}, wantErr: "repeated"},
+		{name: "repeated kind", in: []namedManifest{mk("o/a", lic, hosted("x"), hosted("x"))}, wantErr: "repeated"},
+		{name: "hosted without sha256", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.SHA256 = "" })}, wantErr: "hosted document needs"},
+		{name: "hosted with short revision", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.Revision = "abc" })}, wantErr: "hosted document needs"},
+		{name: "external requiring agreement", in: []namedManifest{with(mk("o/a", external), func(d *manifestDocument) { d.RequiresAgreement = true })}, wantErr: "cannot require agreement"},
+		{name: "external with http url", in: []namedManifest{with(mk("o/a", external), func(d *manifestDocument) { d.URL = "http://example.org" })}, wantErr: "not https"},
+		{name: "external with a path", in: []namedManifest{with(mk("o/a", external), func(d *manifestDocument) { d.Path = "x.md" })}, wantErr: "must not set"},
+		{name: "path with dot dot", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.Path = "a/../b.md" })}, wantErr: "inside the repo"},
+		{name: "absolute path", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.Path = "/etc/passwd" })}, wantErr: "inside the repo"},
+		{name: "release list differs", in: []namedManifest{release(&[]manifestDocument{lic, hosted("acceptable_use")})}, wantErr: "per-release"},
+		{name: "duplicate repo", in: []namedManifest{mk("o/a", lic), mk("o/a", lic)}, wantErr: "collides"},
+		{name: "repos differing only in case", in: []namedManifest{mk("o/a", lic), mk("O/A/", lic)}, wantErr: "collides"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := buildDocuments(tc.in)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, got, len(tc.in))
+			if tc.name == "unknown kind is kept" {
+				assert.Equal(t, "future_kind", got["o/a"][1].Kind)
+			}
+		})
 	}
 }

@@ -257,3 +257,45 @@ func TestGetModelCatalog_SupersededBy(t *testing.T) {
 	require.NotNil(t, p)
 	assert.Nil(t, p.SupersededBy)
 }
+
+// TestGetModelCatalog_Documents pins the wiring of the document registry: an
+// entry reports the documents of its own repo only, with the agreement flag, and
+// depending on a gated entry adds none.
+func TestGetModelCatalog_Documents(t *testing.T) {
+	const gatedID, dependentID = "gated", "dependent"
+	useCatalog(t, []classifier.CatalogEntry{
+		{
+			ID: gatedID, Name: "Gated geomodel", Version: "3.0", Category: classifier.CategoryGeomodel,
+			GeomodelVersion: "v3", HuggingFaceRepo: "tphakala/BirdNET-Geomodel",
+			Files: []classifier.CatalogFile{
+				apiFile(classifier.RoleGeomodelModel, "geo.onnx", apiSizeGeo),
+				apiFile(classifier.RoleGeomodelLabels, "geo.txt", apiSizeGeoLbl),
+			},
+		},
+		{
+			ID: dependentID, Name: "Dependent", Version: "1.0", Category: classifier.CategoryBird,
+			HuggingFaceRepo: "t/d", DependsOn: []string{gatedID},
+			Files: []classifier.CatalogFile{apiFile(classifier.RoleModel, "d.onnx", apiSizeModel)},
+		},
+	})
+	h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+	catalog := catalogRequest(t, h)
+
+	gated := findEntry(catalog, gatedID)
+	require.NotNil(t, gated)
+	require.Len(t, gated.Documents, 2)
+	var agreementKinds []string
+	for _, d := range gated.Documents {
+		assert.Equal(t, "tphakala/BirdNET-Geomodel", d.Repo)
+		assert.NotEmpty(t, d.SHA256, "a hosted document carries its digest")
+		if d.RequiresAgreement {
+			agreementKinds = append(agreementKinds, d.Kind)
+		}
+	}
+	assert.Equal(t, []string{classifier.DocumentKindAcceptableUse}, agreementKinds)
+
+	dependent := findEntry(catalog, dependentID)
+	require.NotNil(t, dependent)
+	assert.Empty(t, dependent.Documents, "a dependency's documents are not the entry's own")
+}

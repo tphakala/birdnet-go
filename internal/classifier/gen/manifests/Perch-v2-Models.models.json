@@ -2,13 +2,20 @@
   "schema": 2,
   "repo": "tphakala/Perch-v2-Models",
   "family": "perch",
-  "updated": "2026-11-15",
+  "updated": "2026-11-16",
   "family_meta": {
     "display_name": "Google Perch v2",
     "description": "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
     "author": "Google Research",
     "license": "Apache-2.0",
     "commercial_use": true,
+    "documents": [
+      {
+        "kind": "license",
+        "requires_agreement": false,
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      }
+    ],
     "channel": "stable",
     "upstream_url": "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
     "species_count": 14795
