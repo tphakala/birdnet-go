@@ -47,6 +47,25 @@ describe('NumberField', () => {
     expect(screen.getByRole('status').parentElement).toHaveClass('absolute');
   });
 
+  it('keeps the extra describedby ids beside the error id and marks the field invalid', () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 1,
+        onUpdate: vi.fn(),
+        helpText: 'Help',
+        describedByExtra: 'note-a',
+        error: 'Too high',
+      },
+    });
+
+    const input = screen.getByRole('spinbutton');
+    const ids = (input.getAttribute('aria-describedby') ?? '').split(' ');
+    expect(ids).toContain('note-a');
+    expect(ids).toContain(screen.getByText('Too high').id);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('passes extra describedby ids to the input after the help text id', () => {
     render(NumberField, {
       props: {
