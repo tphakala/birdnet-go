@@ -144,6 +144,42 @@ async function gotoAvailableTab(): Promise<void> {
 
 const installButtonName = /analysis\.gallery\.install.*Test Bird Model/;
 
+// A document that needs an agreement not yet recorded.
+const POLICY_SHA = 'a'.repeat(64);
+const policyDocument = {
+  repo: 'org/model',
+  kind: 'acceptable_use',
+  requiresAgreement: true,
+  agreed: false,
+  sha256: POLICY_SHA,
+};
+
+// The 409 a backend that enforces agreements answers for an outstanding document.
+function agreementRefusal(): ApiError {
+  const refusal = new ApiError('needs agreement', 409, new Response(null, { status: 409 }));
+  refusal.errorKey = MODEL_AGREEMENT_REQUIRED_KEY;
+  refusal.errorParams = {
+    name: 'Test Bird Model',
+    documents: [{ repo: 'org/model', kind: 'acceptable_use', sha256: POLICY_SHA }],
+  };
+  return refusal;
+}
+
+// A request that fails for a reason other than an agreement (a 5xx, a dropped
+// connection) after the user agreed.
+function serverError(): ApiError {
+  return new ApiError('server error', 500, new Response(null, { status: 500 }));
+}
+
+async function agreeToPolicy(): Promise<void> {
+  await fireEvent.click(
+    await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ })
+  );
+  await fireEvent.click(
+    screen.getByRole('button', { name: /analysis\.gallery\.agreement\.agreeAndContinue/ })
+  );
+}
+
 // jsdom does not implement <dialog> showModal/close; polyfill them once so the
 // license and remove dialogs' open/close paths do not throw. The prototype patch
 // is idempotent, so a single file-scope beforeAll covers both describe blocks.
@@ -1225,8 +1261,6 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
   });
 
   describe('with a document agreement', () => {
-    const POLICY_SHA = 'a'.repeat(64);
-
     beforeEach(() => {
       vi.mocked(modelsApi.fetchModelDocument).mockResolvedValue({
         repo: 'org/model',
@@ -1242,36 +1276,13 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     });
 
     function gatedEntry(): CatalogEntry {
-      return birdEntry({
-        registryId: 'Test_Bird',
-        documents: [
-          {
-            repo: 'org/model',
-            kind: 'acceptable_use',
-            requiresAgreement: true,
-            agreed: false,
-            sha256: POLICY_SHA,
-          },
-        ],
-      });
+      return birdEntry({ registryId: 'Test_Bird', documents: [policyDocument] });
     }
 
     async function openLicenseDialog(): Promise<void> {
       render(AnalysisSettingsPage);
-      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
-      await fireEvent.click(
-        await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
-      );
+      await gotoAvailableTab();
       await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
-    }
-
-    async function agree(): Promise<void> {
-      await fireEvent.click(
-        await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ })
-      );
-      await fireEvent.click(
-        screen.getByRole('button', { name: /analysis\.gallery\.agreement\.agreeAndContinue/ })
-      );
     }
 
     it('offers the next steps after an install that went through the agreement dialog', async () => {
@@ -1281,7 +1292,7 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
       await fireEvent.click(
         await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
       );
-      await agree();
+      await agreeToPolicy();
 
       await waitFor(() =>
         expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', undefined, [POLICY_SHA])
@@ -1292,12 +1303,7 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     });
 
     it('offers the next steps after a refused install is resumed with the agreement', async () => {
-      const refusal = new ApiError('needs agreement', 409, new Response(null, { status: 409 }));
-      refusal.errorKey = MODEL_AGREEMENT_REQUIRED_KEY;
-      refusal.errorParams = {
-        name: 'Test Bird Model',
-        documents: [{ repo: 'org/model', kind: 'acceptable_use', sha256: POLICY_SHA }],
-      };
+      const refusal = agreementRefusal();
       vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
         catalog: [birdEntry({ registryId: 'Test_Bird' })],
       });
@@ -1306,7 +1312,7 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
       await fireEvent.click(
         await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
       );
-      await agree();
+      await agreeToPolicy();
 
       await waitFor(() =>
         expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined, [
@@ -1321,15 +1327,13 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     it('keeps the next steps and the agreement when a failed agreed install is retried', async () => {
       vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [gatedEntry()] });
       vi.mocked(modelsApi.installModel)
-        .mockRejectedValueOnce(
-          new ApiError('server error', 500, new Response(null, { status: 500 }))
-        )
+        .mockRejectedValueOnce(serverError())
         .mockResolvedValue(undefined);
       await openLicenseDialog();
       await fireEvent.click(
         await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
       );
-      await agree();
+      await agreeToPolicy();
 
       await fireEvent.click(
         await screen.findByRole('button', { name: /analysis\.gallery\.retry/ })
@@ -1544,26 +1548,6 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
 });
 
 describe('AnalysisSettingsPage model gallery document agreements', () => {
-  const POLICY_SHA = 'a'.repeat(64);
-  const policyDocument = {
-    repo: 'org/model',
-    kind: 'acceptable_use',
-    requiresAgreement: true,
-    agreed: false,
-    sha256: POLICY_SHA,
-  };
-
-  // The 409 a backend that enforces agreements answers for an outstanding document.
-  function agreementRefusal(): ApiError {
-    const refusal = new ApiError('needs agreement', 409, new Response(null, { status: 409 }));
-    refusal.errorKey = MODEL_AGREEMENT_REQUIRED_KEY;
-    refusal.errorParams = {
-      name: 'Test Bird Model',
-      documents: [{ repo: 'org/model', kind: 'acceptable_use', sha256: POLICY_SHA }],
-    };
-    return refusal;
-  }
-
   // An installed model with a recommended variant other than the installed one, so it
   // carries an optimize offer.
   function swappable(id: string, name: string): CatalogEntry {
@@ -1608,15 +1592,6 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
     vi.mocked(modelsApi.installModel).mockReset();
     vi.mocked(modelsApi.reinstallModel).mockReset();
   });
-
-  async function agreeToPolicy(): Promise<void> {
-    await fireEvent.click(
-      await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ })
-    );
-    await fireEvent.click(
-      screen.getByRole('button', { name: /analysis\.gallery\.agreement\.agreeAndContinue/ })
-    );
-  }
 
   it('asks for an outstanding agreement before the first install request', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
@@ -1864,12 +1839,6 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
     await fireEvent.click(hide);
     expect(screen.queryByText('license text')).not.toBeInTheDocument();
   });
-
-  // A request that fails for a reason other than an agreement (a 5xx, a dropped
-  // connection) after the user agreed.
-  function serverError(): ApiError {
-    return new ApiError('server error', 500, new Response(null, { status: 500 }));
-  }
 
   it('keeps the agreed documents when a failed install is retried', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({

@@ -2055,12 +2055,13 @@
     installError = null;
     installingId = modelId;
     downloadProgress = null;
-    // A failed install keeps its next steps and its agreements, so Retry still offers
-    // the steps and sends the agreements
+    // A failed install keeps its next steps, so Retry still offers them. A request the
+    // server refused also keeps its agreements for Retry; once the server accepted
+    // the request it has recorded them, so a later download failure keeps none.
     const installFailed = (
       message: string,
       blocked = false,
-      agreed: string[] = accepted
+      agreed: string[] = []
     ): GalleryActionError => ({
       ...reportActionError(modelId, modelName, 'install', message, variantId, blocked),
       nextSteps,
@@ -2267,7 +2268,7 @@
           }, 2000);
         },
         (err: string) => {
-          installError = { ...reportActionError(modelId, modelName, 'reinstall', err), accepted };
+          installError = reportActionError(modelId, modelName, 'reinstall', err);
           reinstallingId = null;
           downloadProgress = null;
           progressCleanup = null;

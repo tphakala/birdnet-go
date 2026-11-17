@@ -42,6 +42,11 @@ function dialogElement(): HTMLDialogElement {
   return dialog;
 }
 
+// The server could not fetch and verify a document text.
+function textUnavailable(): ApiError {
+  return new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }));
+}
+
 const agreeButton = () =>
   screen.getByRole('button', { name: 'analysis.gallery.agreement.agreeAndContinue' });
 
@@ -80,12 +85,7 @@ describe('ModelAgreementDialog', () => {
   });
 
   it('offers Retry and no way to agree when a text cannot be verified', async () => {
-    const unavailable = new ApiError(
-      'the text could not be verified',
-      502,
-      new Response(null, { status: 502 })
-    );
-    vi.mocked(fetchModelDocument).mockRejectedValueOnce(unavailable).mockResolvedValueOnce({
+    vi.mocked(fetchModelDocument).mockRejectedValueOnce(textUnavailable()).mockResolvedValueOnce({
       repo: 'org/model',
       kind: 'acceptable_use',
       requiresAgreement: true,
@@ -172,9 +172,7 @@ describe('ModelAgreementDialog', () => {
   });
 
   it('opens with focus on Cancel when the text is unavailable', async () => {
-    vi.mocked(fetchModelDocument).mockRejectedValue(
-      new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }))
-    );
+    vi.mocked(fetchModelDocument).mockRejectedValue(textUnavailable());
     renderDialog([policy]);
 
     await screen.findByRole('button', { name: /common\.retry/ });
@@ -182,11 +180,9 @@ describe('ModelAgreementDialog', () => {
   });
 
   it('returns focus to Retry when a Retry fails again', async () => {
-    const unavailable = () =>
-      new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }));
     vi.mocked(fetchModelDocument)
-      .mockRejectedValueOnce(unavailable())
-      .mockRejectedValueOnce(unavailable());
+      .mockRejectedValueOnce(textUnavailable())
+      .mockRejectedValueOnce(textUnavailable());
     renderDialog([policy]);
     // The idle error state offers nothing focusable but its own controls
     await screen.findByRole('button', { name: /common\.retry/ });
@@ -204,9 +200,7 @@ describe('ModelAgreementDialog', () => {
 
   it('moves focus to the document text when a Retry succeeds', async () => {
     vi.mocked(fetchModelDocument)
-      .mockRejectedValueOnce(
-        new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }))
-      )
+      .mockRejectedValueOnce(textUnavailable())
       .mockResolvedValueOnce(loadedDocument('aaa', 'policy text'));
     renderDialog([policy]);
     const retry = await screen.findByRole('button', { name: /common\.retry/ });
@@ -223,9 +217,7 @@ describe('ModelAgreementDialog', () => {
 
   it('keeps focus in the dialog after Retry', async () => {
     vi.mocked(fetchModelDocument)
-      .mockRejectedValueOnce(
-        new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }))
-      )
+      .mockRejectedValueOnce(textUnavailable())
       .mockReturnValue(new Promise(() => {}));
     renderDialog([policy]);
     const retry = await screen.findByRole('button', { name: /common\.retry/ });

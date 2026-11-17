@@ -36,7 +36,8 @@
   // A plain binding: the native dialog is driven through showModal() and close().
   let dialogEl: HTMLDialogElement | null = null;
   // Initial focus goes to Cancel, the safe action, rather than whatever the browser
-  // finds first while the document texts are still loading.
+  // finds first while the document texts are still loading. It is set from the open
+  // effect, not with autofocus, so it holds in every browser and is testable.
   let cancelEl = $state<HTMLButtonElement | null>(null);
 
   const TITLE_ID = generateId('agreement-dialog-title');

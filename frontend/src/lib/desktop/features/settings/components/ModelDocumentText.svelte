@@ -67,21 +67,21 @@
       if (seq !== requestSeq) return;
       text = doc.text;
       setStatus('loaded');
-      await tick();
-      // A Retry that left focus on the root hands it to the text it loaded, before
-      // the root stops being focusable.
-      if (retrying && document.activeElement === rootEl) regionEl?.focus();
     } catch (e) {
       if (seq !== requestSeq) return;
       errorMessage =
         e instanceof ApiError ? e.userMessage : t('analysis.gallery.errors.documentUnavailable');
       setStatus('error');
-      await tick();
-      // A Retry that failed again hands focus back to the new Retry button.
-      if (retrying && document.activeElement === rootEl) retryButton?.focus();
-    } finally {
-      if (seq === requestSeq) retrying = false;
     }
+    if (!retrying) return;
+    // A Retry left focus on the root: hand it to the text it loaded, or back to the
+    // new Retry button when it failed again, before the root stops being focusable.
+    await tick();
+    if (seq !== requestSeq) return;
+    if (document.activeElement === rootEl) {
+      (status === 'loaded' ? regionEl : retryButton)?.focus();
+    }
+    retrying = false;
   }
 
   function retry(): Promise<void> {
