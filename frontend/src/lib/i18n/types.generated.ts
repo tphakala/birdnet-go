@@ -4265,6 +4265,10 @@ export type TranslationKey =
   | 'analysis.title'
   | 'analysis.tabs.settings'
   | 'analysis.tabs.models'
+  | 'analysis.tabs.detection'
+  | 'analysis.tabs.birds'
+  | 'analysis.tabs.bats'
+  | 'analysis.tabs.inference'
   | 'analysis.detection.title'
   | 'analysis.detection.description'
   | 'analysis.detection.confidenceThreshold.label'
@@ -4492,11 +4496,6 @@ export type TranslationKey =
   | 'analysis.birdnetplus.description'
   | 'analysis.thresholds.title'
   | 'analysis.thresholds.description'
-  | 'analysis.thresholds.columns.classifier'
-  | 'analysis.thresholds.columns.threshold'
-  | 'analysis.thresholds.columns.source'
-  | 'analysis.thresholds.useOwn'
-  | 'analysis.thresholds.ownAlways'
   | 'analysis.thresholds.category.bat'
   | 'analysis.thresholds.state.pending'
   | 'analysis.thresholds.state.failed'
@@ -4505,11 +4504,26 @@ export type TranslationKey =
   | 'analysis.thresholds.sliderLabel' // params: name
   | 'analysis.thresholds.usesThresholdOf' // params: name
   | 'analysis.thresholds.notEnabledNote'
-  | 'analysis.groups.confidence'
-  | 'analysis.groups.filters'
-  | 'analysis.groups.general'
+  | 'analysis.thresholds.matchModel' // params: name
   | 'analysis.speciesNames.title'
   | 'analysis.speciesNames.description'
+  | 'analysis.inference.runtime.title'
+  | 'analysis.inference.runtime.description'
+  | 'analysis.inference.backend.label'
+  | 'analysis.inference.backend.helpText'
+  | 'analysis.inference.backend.options.auto'
+  | 'analysis.inference.backend.options.onnx'
+  | 'analysis.inference.backend.options.openvino'
+  | 'analysis.inference.device.label'
+  | 'analysis.inference.device.helpText'
+  | 'analysis.inference.device.options.auto'
+  | 'analysis.inference.device.options.cpu'
+  | 'analysis.inference.device.options.gpu'
+  | 'analysis.inference.reloadNote'
+  | 'analysis.inference.backendsUnavailable'
+  | 'analysis.inference.running.title'
+  | 'analysis.inference.running.description'
+  | 'analysis.inference.running.unknown'
   | 'restart.applicationRestart'
   | 'restart.containerRestart'
   | 'restart.confirmTitle'
@@ -5291,6 +5305,7 @@ export type TranslationParams = {
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
   'analysis.thresholds.sliderLabel': { name: string | number };
   'analysis.thresholds.usesThresholdOf': { name: string | number };
+  'analysis.thresholds.matchModel': { name: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };
 };
 

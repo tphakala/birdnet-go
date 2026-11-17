@@ -92,6 +92,10 @@ export interface BirdNetSettings {
   overlap: number; // 0.0-2.9
   locale: string;
   threads: number;
+  /** Inference backend preference: 'auto' (default), 'onnx' or 'openvino'. '' and absent mean 'auto'. */
+  backend?: string;
+  /** OpenVINO device preference: 'auto' (default), 'cpu' or 'gpu'. '' and absent mean 'auto'. */
+  openVinoDevice?: string;
   latitude: number;
   longitude: number;
   locationConfigured: boolean; // true when location has been explicitly configured

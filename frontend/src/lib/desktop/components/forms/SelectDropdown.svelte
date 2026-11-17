@@ -171,7 +171,7 @@
           safeGet(sizeClasses, size, ''),
           // cn does not merge conflicting utilities, so the fill and border are chosen by state
           disabled
-            ? 'cursor-not-allowed pointer-events-none bg-[var(--field-bg-disabled)] border-[var(--field-border-disabled)] text-[var(--text-muted)]'
+            ? 'cursor-not-allowed pointer-events-none bg-[var(--field-bg-disabled)] border-[var(--field-border-disabled)] text-[var(--field-text-disabled)]'
             : 'bg-[var(--field-bg)] border-[var(--field-border)] hover:border-[var(--field-border-hover)] text-[var(--color-base-content)] shadow-[var(--field-shadow)]'
         )
       : cn(

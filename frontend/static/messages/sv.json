@@ -5785,7 +5785,11 @@
     "title": "Analys",
     "tabs": {
       "settings": "Inställningar",
-      "models": "Modeller"
+      "models": "Modeller",
+      "detection": "Detection",
+      "birds": "Birds",
+      "bats": "Bats",
+      "inference": "Inference"
     },
     "detection": {
       "title": "Detektionsinställningar",
@@ -6107,13 +6111,6 @@
     "thresholds": {
       "title": "Detection thresholds",
       "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
-      "columns": {
-        "classifier": "Classifier",
-        "threshold": "Threshold",
-        "source": "Applies"
-      },
-      "useOwn": "Use own threshold",
-      "ownAlways": "Own threshold",
       "category": {
         "bat": "Bat"
       },
@@ -6125,16 +6122,43 @@
       "empty": "No classifiers are enabled.",
       "sliderLabel": "{name} threshold",
       "usesThresholdOf": "Uses the {name} threshold",
-      "notEnabledNote": "This classifier is not enabled. Its threshold still applies to the classifiers that use it."
-    },
-    "groups": {
-      "confidence": "Confidence",
-      "filters": "Filters",
-      "general": "General"
+      "notEnabledNote": "This classifier is not enabled. Its threshold still applies to the classifiers that use it.",
+      "matchModel": "Match {name}"
     },
     "speciesNames": {
       "title": "Species names",
       "description": "How detected species are named in the interface."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inference runtime",
+        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "options": {
+          "auto": "Auto (recommended)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO device",
+        "helpText": "Used for models that run on OpenVINO.",
+        "options": {
+          "auto": "Auto",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
+      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "running": {
+        "title": "Running now",
+        "description": "The runtime and precision each enabled classifier runs with.",
+        "unknown": "Not reported"
+      }
     }
   },
   "restart": {

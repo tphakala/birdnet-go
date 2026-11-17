@@ -130,15 +130,21 @@
   --border-300: #94a3b8; /* slate-400 - hover borders, a step darker than --border-200 */
   --hover-overlay: rgba(0, 0, 0, 0.05);
 
-  /* Form fields (.input, .select, .textarea, SelectDropdown). The border reaches 3:1 on
-     base-100, base-200 and base-300 and on the field fill, so a field
-     reads as a control on a card and on the page. */
-  --field-bg: #ffffff;
-  --field-bg-disabled: #f1f5f9; /* slate-100 */
-  --field-border: #748299; /* between slate-400 and slate-500 */
-  --field-border-hover: #475569; /* slate-600 */
-  --field-border-disabled: #cbd5e1; /* slate-300 - a disabled field needs no 3:1 boundary */
-  --field-shadow: inset 0 1px 2px rgb(15 23 42 / 0.06);
+  /* Form fields (.input, .select, .textarea, SelectDropdown). A field is marked by its own
+     tinted fill, a step darker than the page shade (base-200), with a quiet border; it turns
+     white while it is being edited. A disabled field goes flat, a shade lighter than the
+     active fill, so it reads as inactive while its value stays readable. */
+  --field-bg: #eef2f7;
+  --field-bg-focus: #ffffff;
+  --field-bg-disabled: #f8fafc; /* slate-50 */
+  --field-border: #cbd5e1; /* slate-300 */
+  --field-border-hover: #94a3b8; /* slate-400 */
+  --field-border-disabled: #e2e8f0; /* slate-200 */
+  --field-text-disabled: #64748b; /* slate-500, 4.5:1 or more on the disabled fill */
+  --field-shadow: none;
+
+  /* Note panels (SettingsNote) inside cards. */
+  --note-bg: var(--color-base-200);
 
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
@@ -244,14 +250,20 @@
   --border-300: #475569; /* slate-600 - hover borders, a step lighter than --border-200 */
   --hover-overlay: rgba(255, 255, 255, 0.05);
 
-  /* Form fields, same rules as the light block. The fill is the page shade, a step darker
-     than the card, so a field reads as a well. */
-  --field-bg: #020617; /* slate-950 */
-  --field-bg-disabled: #1e293b; /* slate-800 */
-  --field-border: #6b7c93; /* between slate-500 and slate-400 */
-  --field-border-hover: #94a3b8; /* slate-400 */
-  --field-border-disabled: #334155; /* slate-700 */
-  --field-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4);
+  /* Form fields, same rules as the light block. The fill is base-300, a step lighter than the
+     card; a disabled field takes the card colour, so it sits flat. */
+  --field-bg: #1e293b; /* slate-800 */
+  --field-bg-focus: #172033;
+  --field-bg-disabled: #0f172a; /* slate-900, the card */
+  --field-border: #334155; /* slate-700 */
+  --field-border-hover: #475569; /* slate-600 */
+  --field-border-disabled: #1e293b; /* slate-800 */
+  --field-text-disabled: #94a3b8; /* slate-400, 4.5:1 or more on the disabled fill */
+  --field-shadow: none;
+
+  /* Note panels: base-200 is the darkest shade (the page) and reads as a hole in a card, so
+     notes use a shade between the card and base-300. */
+  --note-bg: #172033;
 
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
@@ -654,6 +666,7 @@
   .input:focus {
     outline: none;
     border-color: var(--color-primary);
+    background-color: var(--field-bg-focus);
   }
 
   .input:focus-visible {
@@ -668,7 +681,7 @@
     background-color: var(--field-bg-disabled);
     border-color: var(--field-border-disabled);
     box-shadow: none;
-    color: var(--text-muted);
+    color: var(--field-text-disabled);
   }
 
   .input::placeholder {
@@ -806,6 +819,7 @@
   .select:focus {
     outline: none;
     border-color: var(--color-primary);
+    background-color: var(--field-bg-focus);
   }
 
   .select:focus-visible {
@@ -820,7 +834,7 @@
     background-color: var(--field-bg-disabled);
     border-color: var(--field-border-disabled);
     box-shadow: none;
-    color: var(--text-muted);
+    color: var(--field-text-disabled);
   }
 
   .select-bordered {
@@ -893,6 +907,7 @@
   .textarea:focus {
     outline: none;
     border-color: var(--color-primary);
+    background-color: var(--field-bg-focus);
   }
 
   .textarea:focus-visible {
@@ -907,7 +922,7 @@
     background-color: var(--field-bg-disabled);
     border-color: var(--field-border-disabled);
     box-shadow: none;
-    color: var(--text-muted);
+    color: var(--field-text-disabled);
   }
 
   .textarea-bordered {
@@ -1172,7 +1187,9 @@
     appearance: none;
     width: 100%;
     height: 0.5rem;
-    background-color: var(--color-base-300);
+
+    /* --border-200, not base-300: base-300 is barely distinct from a white card. */
+    background-color: var(--border-200);
     border-radius: var(--radius-full);
     cursor: pointer;
   }
@@ -1188,7 +1205,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  .range::-webkit-slider-thumb:hover {
+  .range:not(:disabled)::-webkit-slider-thumb:hover {
     transform: scale(1.1);
   }
 
@@ -1203,7 +1220,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  .range::-moz-range-thumb:hover {
+  .range:not(:disabled)::-moz-range-thumb:hover {
     transform: scale(1.1);
   }
 
@@ -1212,8 +1229,22 @@
     outline-offset: 2px;
   }
 
+  /* Dimmed by colour, not opacity: a muted track and a neutral thumb, so a disabled slider
+     (for example a threshold that uses another classifier's value) still shows where it sits. */
   .range:disabled {
-    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--border-100);
+  }
+
+  .range:disabled::-webkit-slider-thumb {
+    background-color: var(--border-300);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  .range:disabled::-moz-range-thumb {
+    background-color: var(--border-300);
+    box-shadow: none;
     cursor: not-allowed;
   }
 
@@ -1247,11 +1278,21 @@
     height: 0.75rem;
   }
 
+  .range-xs::-moz-range-thumb {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
   .range-sm {
     height: 0.375rem;
   }
 
   .range-sm::-webkit-slider-thumb {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .range-sm::-moz-range-thumb {
     width: 1rem;
     height: 1rem;
   }
