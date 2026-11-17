@@ -206,6 +206,20 @@ func TestInstallAndReinstall_AcceptedDocuments(t *testing.T) {
 		})
 	}
 
+	t.Run("a repeated digest is recorded once and an empty list records nothing", func(t *testing.T) {
+		h, fake, _ := documentFixture(t, nil)
+		rec := guardRequest(t, h.InstallModel, http.MethodPost, apiDepN, body(docShaN, docShaN))
+		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+		h.Wait()
+		assert.Len(t, fake.recordedDocs(), 1, "the repeated digest is one agreement")
+
+		fake.recorded = nil
+		rec = guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, body())
+		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+		h.Wait()
+		assert.Empty(t, fake.recordedDocs())
+	})
+
 	t.Run("a request refused for another reason records nothing", func(t *testing.T) {
 		t.Run("install while another operation runs", func(t *testing.T) {
 			h, fake, mm := documentFixture(t, nil)

@@ -97,17 +97,19 @@ func TestModelDocuments_Text(t *testing.T) {
 		assert.Len(t, srv.requests(), 1, "the second read must come from the cache")
 	})
 
-	t.Run("bytes that do not match the pin are refused and not cached", func(t *testing.T) {
+	t.Run("bytes that do not match the pin are refused, not cached and not failed over", func(t *testing.T) {
 		t.Parallel()
 		srv := newDocServer(t, http.StatusOK, "something else entirely")
+		next := newDocServer(t, http.StatusOK, testDocText)
 		dir := t.TempDir()
-		svc, noted := newTestDocuments(t, dir, srv.URL)
+		svc, noted := newTestDocuments(t, dir, srv.URL, next.URL)
 		doc := testPolicyDoc(testDocRepo, testDocText)
 
 		_, err := svc.Text(t.Context(), &doc)
 		require.ErrorIs(t, err, ErrDocumentMismatch)
 		assert.NoFileExists(t, filepath.Join(dir, documentCacheDirName, doc.SHA256))
 		assert.Empty(t, *noted, "a host that served the wrong bytes is not a working endpoint")
+		assert.Empty(t, next.requests(), "a mismatch is a definite answer, not a reachability failure")
 
 		_, err = svc.Text(t.Context(), &doc)
 		require.ErrorIs(t, err, ErrDocumentMismatch)
@@ -133,14 +135,16 @@ func TestModelDocuments_Text(t *testing.T) {
 		assert.Equal(t, testDocText, string(onDisk))
 	})
 
-	t.Run("a body over the size cap is refused", func(t *testing.T) {
+	t.Run("a body over the size cap is refused and not failed over", func(t *testing.T) {
 		t.Parallel()
 		big := strings.Repeat("x", documentMaxBytes+1)
 		srv := newDocServer(t, http.StatusOK, big)
-		svc, _ := newTestDocuments(t, t.TempDir(), srv.URL)
+		next := newDocServer(t, http.StatusOK, testDocText)
+		svc, _ := newTestDocuments(t, t.TempDir(), srv.URL, next.URL)
 
 		_, err := svc.Text(t.Context(), new(testPolicyDoc(testDocRepo, big)))
 		require.ErrorIs(t, err, ErrDocumentUnavailable)
+		assert.Empty(t, next.requests())
 	})
 
 	t.Run("two repos pinning the same bytes share one cache file but each fetch goes to its own repo", func(t *testing.T) {
@@ -175,6 +179,18 @@ func TestModelDocuments_Text(t *testing.T) {
 		dead.Close()
 		live := newDocServer(t, http.StatusOK, testDocText)
 		svc, noted := newTestDocuments(t, t.TempDir(), deadURL, live.URL)
+
+		got, err := svc.Text(t.Context(), new(testPolicyDoc(testDocRepo, testDocText)))
+		require.NoError(t, err)
+		assert.Equal(t, testDocText, string(got))
+		assert.Equal(t, []string{live.URL}, *noted)
+	})
+
+	t.Run("a gateway status fails over to the next endpoint", func(t *testing.T) {
+		t.Parallel()
+		down := newDocServer(t, http.StatusBadGateway, "")
+		live := newDocServer(t, http.StatusOK, testDocText)
+		svc, noted := newTestDocuments(t, t.TempDir(), down.URL, live.URL)
 
 		got, err := svc.Text(t.Context(), new(testPolicyDoc(testDocRepo, testDocText)))
 		require.NoError(t, err)
