@@ -2544,12 +2544,12 @@
           "title": "Seuil dynamique",
           "description": "Ajuster automatiquement la sensibilité de détection en fonction des observations précédentes",
           "enable": {
-            "label": "Activer le seuil dynamique (fonctionnalité spécifique à BirdNET-Go)",
-            "helpText": "Active la fonctionnalité de seuil de confiance dynamique pour une détection des chants d'oiseaux plus adaptative."
+            "label": "Activer le seuil dynamique",
+            "helpText": "Abaisse le seuil de confiance pour une espèce après qu'elle a été détectée avec une confiance élevée."
           },
           "trigger": {
             "label": "Seuil de déclenchement",
-            "helpText": "Le niveau de confiance auquel le seuil dynamique est activé. Si un chant d'oiseau est détecté avec une confiance supérieure à cette valeur, le seuil pour les correspondances positives de cette espèce sera abaissé pour les chants suivants."
+            "helpText": "Le niveau de confiance auquel le seuil dynamique est activé. Si une espèce est détectée avec une confiance supérieure à cette valeur, le seuil pour les correspondances positives de cette espèce sera abaissé pour les détections suivantes."
           },
           "minimum": {
             "label": "Seuil dynamique minimum",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Cet appareil ne peut pas suivre l'analyse",
           "overloadedNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement. L'analyse peut prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide.",
           "unknownLatency": "Le temps de traitement n'a pas pu être mesuré pour {models}, il n'est donc pas pris en compte lors de la limitation du chevauchement. L'analyse peut tout de même prendre du retard.",
-          "cpuNote": "Une intensité plus élevée analyse plus souvent l'audio qui se chevauche, ce qui coûte du temps CPU pour chaque modèle et chaque source audio activés. BirdNET-Go limite automatiquement le chevauchement à ce que cet appareil peut traiter."
+          "cpuNote": "Une intensité plus élevée analyse plus souvent l'audio qui se chevauche, ce qui coûte du temps CPU pour chaque classificateur activé auquel ce filtre s'applique et chaque source audio. BirdNET-Go limite automatiquement le chevauchement à ce que cet appareil peut traiter."
         },
         "rangeFilter": {
           "title": "Filtre de portée",
@@ -5785,25 +5785,19 @@
     "title": "Analyse",
     "tabs": {
       "models": "Modèles",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Détection",
+      "bats": "Chauves-souris",
+      "inference": "Inférence",
+      "filters": "Filtres"
     },
     "detection": {
       "title": "Paramètres de détection",
       "description": "Configurer les seuils de confiance pour la classification des espèces.",
-      "confidenceThreshold": {
-        "label": "Seuil de confiance",
-        "helpText": "Score de confiance minimum (0.0 - 1.0) requis pour qu'une détection soit enregistrée."
-      },
       "batThreshold": {
-        "label": "Seuil de détection des chauves-souris (BattyBirdNET)",
-        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris de BattyBirdNET. BSG-BAT a son propre seuil."
+        "label": "Seuil de détection des chauves-souris (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Seuil de détection des chauves-souris (BSG-BAT)",
-        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris de BSG-BAT.",
         "sampleRateWarning": "Les captures à 192 kHz fonctionnent, mais les espèces qui émettent au-dessus de 96 kHz ne peuvent pas être identifiées et les scores sont moins fiables. Une fréquence de capture de 384 kHz est recommandée."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Langue des espèces",
         "helpText": "Langue utilisée pour les noms communs des espèces dans l'interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Seuil de confiance BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Aucun filtre de zone actif",
         "passUnmapped": {
           "label": "Autoriser les espèces sans données de zone",
-          "helpText": "Autoriser les détections d'espèces pour lesquelles le géomodèle n'a pas de données géographiques. Lorsque désactivé, ces espèces sont toujours filtrées."
+          "helpText": "Autoriser les détections d'espèces pour lesquelles le géomodèle n'a pas de données géographiques. Lorsque désactivé, ces espèces sont toujours filtrées. Cela n'affecte que les classificateurs auxquels le filtre de zone s'applique."
         }
       }
     },
     "advanced": {
       "title": "Avancé",
-      "description": "Configuration du traitement et des modèles personnalisés."
+      "description": "Fichiers de modèle et d'étiquettes personnalisés."
     },
     "downloadSource": {
       "title": "Source de téléchargement",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Galerie de modèles",
-      "description": "Gérer les modèles classificateurs pour la détection des oiseaux et des chauves-souris.",
+      "description": "Gérer les modèles classificateurs.",
       "region": {
         "title": "Région du modèle",
         "modeAuto": "Automatique",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Détection des chauves-souris",
-      "description": "Configurez le seuil, la planification et le filtrage des faux positifs pour les classificateurs de chauves-souris."
+      "description": "Planification, validation et filtrage des faux positifs pour les classificateurs de chauves-souris."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "Détection BirdNET+ V3.0",
-      "description": "Définissez un seuil de confiance dédié aux détections BirdNET+ V3.0, indépendant du seuil BirdNET principal."
+      "title": "Détection BirdNET+ V3.0"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Seuils de détection",
+      "description": "Confiance minimale requise pour enregistrer une détection, pour chaque classificateur activé.",
       "category": {
-        "bat": "Bat"
+        "bat": "Chauves-souris"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Chargement",
+        "failed": "Échec du chargement"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Aucun classificateur n'est activé.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Seuil partagé",
+        "usedBy": "Utilisé par chaque classificateur sans seuil personnalisé : {models}.",
+        "unused": "Utilisé par chaque classificateur sans seuil personnalisé. Aucun classificateur activé ne l'utilise actuellement."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Seuil personnalisé",
+      "usesShared": "Utilise le seuil partagé"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Noms des espèces",
+      "description": "Comment les espèces détectées sont nommées dans l'interface."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Moteur d'exécution d'inférence",
+        "description": "Quel moteur d'exécution et quel appareil exécutent les classificateurs, et combien de threads CPU ils utilisent."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automatique choisit le moteur d'exécution le plus rapide pris en charge par cet appareil pour chaque modèle.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automatique (recommandé)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "Appareil OpenVINO",
+        "helpText": "Utilisé pour les modèles exécutés sur OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automatique",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Changer le backend ou l'appareil recharge les modèles, ce qui met la détection en pause pendant quelques secondes.",
+      "backendsUnavailable": "Impossible de lire les moteurs d'exécution pris en charge par cet appareil. Le backend et l'appareil peuvent être modifiés après le chargement.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "En cours d'exécution",
+        "description": "Le moteur d'exécution et la précision utilisés par chaque classificateur activé.",
+        "unknown": "Non signalé"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "S'applique à tous les classificateurs, y compris ceux de chauves-souris. Une espèce ayant son propre seuil personnalisé n'est pas ajustée.",
+      "speciesNames": "S'applique à tous les classificateurs. Une espèce sans nom dans la langue choisie conserve le nom de son classificateur.",
+      "falsePositiveFilter": "S'applique à tous les classificateurs sauf ceux de chauves-souris, qui ont leur propre filtre de faux positifs.",
+      "falsePositiveFilterBatTab": "S'applique à tous les classificateurs sauf ceux de chauves-souris, qui ont leur propre filtre de faux positifs dans l'onglet Chauves-souris.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "S'applique à : {models}.",
+        "notApplied": "Non filtré par zone : {models}.",
+        "generic": "S'applique aux classificateurs pris en charge par le modèle de zone. Les classificateurs de chauves-souris ne sont jamais filtrés par zone.",
+        "needsLocation": "Fonctionne uniquement lorsque l'emplacement de la station est défini."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "S'applique uniquement aux classificateurs de chauves-souris."
     }
   },
   "restart": {

@@ -2544,12 +2544,12 @@
           "title": "Dynamisk terskel",
           "description": "Juster automatisk deteksjonsfølsomhet basert på tidligere observasjoner",
           "enable": {
-            "label": "Aktiver dynamisk terskel (BirdNET-Go-spesifikk funksjon)",
-            "helpText": "Aktiverer dynamisk sikkerhetsterskel for mer adaptiv fuglekalldeteksjon."
+            "label": "Aktiver dynamisk terskel",
+            "helpText": "Senker sikkerhetsterskelen for en art etter at den er oppdaget med høy sikkerhet."
           },
           "trigger": {
             "label": "Utløsningsterskel",
-            "helpText": "Sikkerhetsnivået som aktiverer den dynamiske terskelen. Hvis et fuglekall oppdages med sikkerhet over denne verdien, senkes terskelen for positive treff for den arten ved påfølgende kall."
+            "helpText": "Sikkerhetsnivået som aktiverer den dynamiske terskelen. Hvis en art oppdages med sikkerhet over denne verdien, senkes terskelen for positive treff for den arten ved påfølgende registreringer."
           },
           "minimum": {
             "label": "Minimum dynamisk terskel",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Denne enheten klarer ikke å holde tritt med analysen",
           "overloadedNotice": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp. Analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder, eller velg en raskere modellvariant.",
           "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den regnes ikke med når overlappen begrenses. Analysen kan likevel komme på etterskudd.",
-          "cpuNote": "En høyere styrke analyserer overlappende lyd oftere, noe som koster CPU-tid for hver aktiverte modell og lydkilde. BirdNET-Go begrenser overlappen automatisk til det denne enheten klarer å behandle."
+          "cpuNote": "En høyere styrke analyserer overlappende lyd oftere, noe som koster CPU-tid for hver aktiverte klassifikator dette filteret gjelder for, og for hver lydkilde. BirdNET-Go begrenser overlappen automatisk til det denne enheten klarer å behandle."
         },
         "rangeFilter": {
           "title": "Utvalgsfilter",
@@ -5785,25 +5785,19 @@
     "title": "Analyse",
     "tabs": {
       "models": "Modeller",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Deteksjon",
+      "bats": "Flaggermus",
+      "inference": "Inferens",
+      "filters": "Filtre"
     },
     "detection": {
       "title": "Deteksjonsinnstillinger",
       "description": "Konfigurer sikkerhetsterskler og språk for artsklassifisering.",
-      "confidenceThreshold": {
-        "label": "Sikkerhetsterskel",
-        "helpText": "Minimum sikkerhetscore (0,0-1,0) kreves for at en registrering skal lagres."
-      },
       "batThreshold": {
-        "label": "Flaggermusdeteksjonsterskel (BattyBirdNET)",
-        "helpText": "Minimum sikkerhetscore for BattyBirdNETs flaggermusartsregistreringer. BSG-BAT har sin egen terskel."
+        "label": "Flaggermusdeteksjonsterskel (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Flaggermusdeteksjonsterskel (BSG-BAT)",
-        "helpText": "Minimum sikkerhetscore for BSG-BATs flaggermusartsregistreringer.",
         "sampleRateWarning": "Opptak med 192 kHz fungerer, men arter som kaller over 96 kHz kan ikke identifiseres, og skårene er mindre pålitelige. En opptaksfrekvens på 384 kHz anbefales."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Artsspråk",
         "helpText": "Språk brukt for artsnavnene i grensesnittet."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Konfidensterskel for BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Ingen aktivt utvalgsfilter",
         "passUnmapped": {
           "label": "Tillat arter uten utvalgsdata",
-          "helpText": "Tillat registreringer av arter geomodellen ikke har geografiske data for. Når deaktivert, filtreres disse artene alltid ut."
+          "helpText": "Tillat registreringer av arter geomodellen ikke har geografiske data for. Når deaktivert, filtreres disse artene alltid ut. Dette påvirker bare klassifikatorene utvalgsfilteret gjelder for."
         }
       }
     },
     "advanced": {
       "title": "Avansert",
-      "description": "Behandling og egendefinert modellkonfigurasjon."
+      "description": "Egendefinerte modell- og etikettfiler."
     },
     "downloadSource": {
       "title": "Nedlastingskilde",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modellgalleri",
-      "description": "Administrer klassifikatormodeller for fugle- og flaggermusdeteksjon.",
+      "description": "Administrer klassifikatormodellene.",
       "region": {
         "title": "Modellregion",
         "modeAuto": "Automatisk",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Flaggermusdeteksjon",
-      "description": "Konfigurer terskel, planlegging og falsk positiv-filtrering for flaggermusklassifikatorer."
+      "description": "Planlegging, validering og falsk positiv-filtrering for flaggermusklassifikatorer."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0-gjenkjenning",
-      "description": "Angi en egen konfidensterskel for BirdNET+ V3.0-gjenkjenninger, uavhengig av hovedterskelen for BirdNET."
+      "title": "BirdNET+ V3.0-gjenkjenning"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Deteksjonsterskler",
+      "description": "Minimum sikkerhet en registrering trenger før den lagres, for hver aktiverte klassifikator.",
       "category": {
-        "bat": "Bat"
+        "bat": "Flaggermus"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Laster",
+        "failed": "Kunne ikke lastes"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Ingen klassifikatorer er aktivert.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Delt terskel",
+        "usedBy": "Brukes av alle klassifikatorer uten en egendefinert terskel: {models}.",
+        "unused": "Brukes av alle klassifikatorer uten en egendefinert terskel. Ingen aktivert klassifikator bruker den nå."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Egendefinert terskel",
+      "usesShared": "Bruker den delte terskelen"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Artsnavn",
+      "description": "Hvordan registrerte arter navngis i grensesnittet."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Inferens-kjøretid",
+        "description": "Hvilken kjøretid og enhet som kjører klassifikatorene, og hvor mange CPU-tråder de bruker."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automatisk velger den raskeste kjøretiden denne enheten støtter for hver modell.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automatisk (anbefalt)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "OpenVINO-enhet",
+        "helpText": "Brukes for modeller som kjører på OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automatisk",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Endring av backend eller enhet laster inn modellene på nytt, slik at deteksjonen tar en pause i noen sekunder.",
+      "backendsUnavailable": "Kunne ikke lese hvilke kjøretider denne enheten støtter. Backend og enhet kan endres når den er lastet inn.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Kjører nå",
+        "description": "Kjøretiden og presisjonen hver aktiverte klassifikator kjører med.",
+        "unknown": "Ikke rapportert"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Gjelder alle klassifikatorer, inkludert flaggermusklassifikatorer. En art med sin egen egendefinerte terskel justeres ikke.",
+      "speciesNames": "Gjelder alle klassifikatorer. En art uten navn på det valgte språket beholder navnet fra sin klassifikator.",
+      "falsePositiveFilter": "Gjelder alle klassifikatorer unntatt flaggermusklassifikatorer, som har sitt eget falsk positiv-filter.",
+      "falsePositiveFilterBatTab": "Gjelder alle klassifikatorer unntatt flaggermusklassifikatorer, som har sitt eget falsk positiv-filter på Flaggermus-fanen.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Gjelder {models}.",
+        "notApplied": "Ikke utvalgsfiltrert: {models}.",
+        "generic": "Gjelder klassifikatorene som utvalgsmodellen støtter. Flaggermusklassifikatorer utvalgsfiltreres aldri.",
+        "needsLocation": "Fungerer bare når stasjonsposisjonen er satt."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Gjelder bare flaggermusklassifikatorer."
     }
   },
   "restart": {

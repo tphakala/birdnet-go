@@ -5793,17 +5793,11 @@
     "detection": {
       "title": "Detection Settings",
       "description": "Configure confidence thresholds and language for species classification.",
-      "confidenceThreshold": {
-        "label": "Confidence Threshold",
-        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
-      },
       "batThreshold": {
-        "label": "Bat Detection Threshold (BattyBirdNET)",
-        "helpText": "Minimum confidence score for BattyBirdNET bat species detections. BSG-BAT has its own threshold."
+        "label": "Bat Detection Threshold (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Bat Detection Threshold (BSG-BAT)",
-        "helpText": "Minimum confidence score for BSG-BAT bat species detections.",
         "sampleRateWarning": "Captures at 192 kHz work, but species that call above 96 kHz cannot be identified and scores are less reliable. A capture rate of 384 kHz is recommended."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "BirdNET+ V3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -6088,16 +6065,13 @@
       "description": "Scheduling, validation and false positive filtering for bat classifiers."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET+ V3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET+ V3.0 Detection"
     },
     "thresholds": {
       "title": "Detection thresholds",

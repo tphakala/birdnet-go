@@ -2544,12 +2544,12 @@
           "title": "Próg Dynamiczny",
           "description": "Automatycznie dostosuj czułość detekcji na podstawie wcześniejszych obserwacji",
           "enable": {
-            "label": "Włącz Próg Dynamiczny (funkcja specyficzna dla BirdNET-Go)",
-            "helpText": "Włącza funkcję dynamicznego progu pewności dla bardziej adaptacyjnej detekcji odgłosów ptaków."
+            "label": "Włącz próg dynamiczny",
+            "helpText": "Obniża próg pewności dla gatunku po wykryciu go z wysoką pewnością."
           },
           "trigger": {
             "label": "Próg Wyzwalający",
-            "helpText": "Poziom pewności, przy którym aktywowany jest próg dynamiczny. Jeśli odgłos ptaka zostanie wykryty z pewnością powyżej tej wartości, próg dla pozytywnych dopasowań tego gatunku zostanie obniżony dla kolejnych wywołań."
+            "helpText": "Poziom pewności, przy którym aktywowany jest próg dynamiczny. Jeśli gatunek zostanie wykryty z pewnością powyżej tej wartości, próg dla pozytywnych dopasowań tego gatunku zostanie obniżony dla kolejnych detekcji."
           },
           "minimum": {
             "label": "Minimalny Próg Dynamiczny",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "To urządzenie nie nadąża z analizą",
           "overloadedNotice": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania. Analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku albo wybierz szybszy wariant modelu.",
           "unknownLatency": "Nie udało się zmierzyć czasu przetwarzania dla {models}, więc nie jest on uwzględniany przy ograniczaniu nakładania. Analiza nadal może się opóźniać.",
-          "cpuNote": "Wyższa siła częściej analizuje nakładający się dźwięk, co kosztuje czas CPU dla każdego włączonego modelu i źródła dźwięku. BirdNET-Go automatycznie ogranicza nakładanie do tego, co to urządzenie jest w stanie przetworzyć."
+          "cpuNote": "Wyższa siła częściej analizuje nakładający się dźwięk, co kosztuje czas CPU dla każdego włączonego klasyfikatora objętego tym filtrem i każdego źródła dźwięku. BirdNET-Go automatycznie ogranicza nakładanie do tego, co to urządzenie jest w stanie przetworzyć."
         },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
@@ -5785,25 +5785,19 @@
     "title": "Analiza",
     "tabs": {
       "models": "Modele",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Detekcja",
+      "bats": "Nietoperze",
+      "inference": "Wnioskowanie",
+      "filters": "Filtry"
     },
     "detection": {
       "title": "Ustawienia detekcji",
       "description": "Skonfiguruj progi pewności dla klasyfikacji gatunków.",
-      "confidenceThreshold": {
-        "label": "Próg pewności",
-        "helpText": "Minimalny wynik pewności (0.0 - 1.0) wymagany do zarejestrowania detekcji."
-      },
       "batThreshold": {
-        "label": "Próg wykrywania nietoperzy (BattyBirdNET)",
-        "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy przez BattyBirdNET. BSG-BAT ma własny próg."
+        "label": "Próg wykrywania nietoperzy (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Próg wykrywania nietoperzy (BSG-BAT)",
-        "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy przez BSG-BAT.",
         "sampleRateWarning": "Nagrania przy 192 kHz działają, ale gatunków wołających powyżej 96 kHz nie można zidentyfikować, a oceny są mniej wiarygodne. Zalecana częstotliwość nagrywania to 384 kHz."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Język gatunków",
         "helpText": "Język używany do nazw zwyczajowych gatunków w interfejsie."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Próg ufności BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Brak aktywnego filtra zasięgu",
         "passUnmapped": {
           "label": "Zezwalaj na gatunki bez danych zasięgu",
-          "helpText": "Zezwalaj na wykrywanie gatunków, dla których geomodel nie ma danych geograficznych. Po wyłączeniu te gatunki są zawsze odfiltrowywane."
+          "helpText": "Zezwalaj na wykrywanie gatunków, dla których geomodel nie ma danych geograficznych. Po wyłączeniu te gatunki są zawsze odfiltrowywane. Dotyczy to tylko klasyfikatorów, do których stosuje się filtr zasięgu."
         }
       }
     },
     "advanced": {
       "title": "Zaawansowane",
-      "description": "Konfiguracja przetwarzania i modeli niestandardowych."
+      "description": "Niestandardowe pliki modelu i etykiet."
     },
     "downloadSource": {
       "title": "Źródło pobierania",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Galeria modeli",
-      "description": "Zarządzaj modelami klasyfikatorów do detekcji ptaków i nietoperzy.",
+      "description": "Zarządzaj modelami klasyfikatorów.",
       "region": {
         "title": "Region modelu",
         "modeAuto": "Automatyczny",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Wykrywanie nietoperzy",
-      "description": "Skonfiguruj próg, harmonogram i filtrowanie fałszywych trafień dla klasyfikatorów nietoperzy."
+      "description": "Harmonogram, walidacja i filtrowanie fałszywych pozytywów dla klasyfikatorów nietoperzy."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "Wykrywanie BirdNET+ V3.0",
-      "description": "Ustaw osobny próg ufności dla wykryć BirdNET+ V3.0, niezależny od głównego progu BirdNET."
+      "title": "Wykrywanie BirdNET+ V3.0"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Progi detekcji",
+      "description": "Minimalna pewność wymagana do zapisania detekcji dla każdego włączonego klasyfikatora.",
       "category": {
-        "bat": "Bat"
+        "bat": "Nietoperze"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Ładowanie",
+        "failed": "Nie udało się załadować"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Żaden klasyfikator nie jest włączony.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Wspólny próg",
+        "usedBy": "Używany przez każdy klasyfikator bez własnego progu: {models}.",
+        "unused": "Używany przez każdy klasyfikator bez własnego progu. Żaden włączony klasyfikator go teraz nie używa."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Własny próg",
+      "usesShared": "Używa wspólnego progu"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Nazwy gatunków",
+      "description": "Jak wykryte gatunki są nazywane w interfejsie."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Środowisko wnioskowania",
+        "description": "Które środowisko uruchomieniowe i urządzenie uruchamiają klasyfikatory oraz ile wątków CPU używają."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automatyczny wybiera najszybsze środowisko uruchomieniowe obsługiwane przez to urządzenie dla każdego modelu.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automatyczny (zalecany)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "Urządzenie OpenVINO",
+        "helpText": "Używane dla modeli działających w OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automatyczny",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Zmiana backendu lub urządzenia powoduje przeładowanie modeli, więc detekcja wstrzymuje się na kilka sekund.",
+      "backendsUnavailable": "Nie udało się odczytać, jakie środowiska uruchomieniowe obsługuje to urządzenie. Backend i urządzenie można zmienić po załadowaniu.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Aktualnie uruchomione",
+        "description": "Środowisko uruchomieniowe i precyzja, z jakimi działa każdy włączony klasyfikator.",
+        "unknown": "Nie zgłoszono"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Dotyczy wszystkich klasyfikatorów, w tym klasyfikatorów nietoperzy. Gatunek z własnym progiem nie jest korygowany.",
+      "speciesNames": "Dotyczy wszystkich klasyfikatorów. Gatunek bez nazwy w wybranym języku zachowuje nazwę ze swojego klasyfikatora.",
+      "falsePositiveFilter": "Dotyczy wszystkich klasyfikatorów z wyjątkiem klasyfikatorów nietoperzy, które mają własny filtr fałszywych pozytywów.",
+      "falsePositiveFilterBatTab": "Dotyczy wszystkich klasyfikatorów z wyjątkiem klasyfikatorów nietoperzy, które mają własny filtr fałszywych pozytywów na karcie Nietoperze.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Dotyczy: {models}.",
+        "notApplied": "Bez filtra zasięgu: {models}.",
+        "generic": "Dotyczy klasyfikatorów obsługiwanych przez model zasięgu. Klasyfikatory nietoperzy nigdy nie podlegają filtrowaniu zasięgu.",
+        "needsLocation": "Działa tylko wtedy, gdy ustawiona jest lokalizacja stacji."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Dotyczy tylko klasyfikatorów nietoperzy."
     }
   },
   "restart": {

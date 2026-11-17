@@ -2544,12 +2544,12 @@
           "title": "Dinamikus küszöbérték",
           "description": "Automatikusan állítja az észlelési érzékenységet a korábbi megfigyelések alapján",
           "enable": {
-            "label": "Dinamikus küszöbérték engedélyezése (BirdNET-Go specifikus funkció)",
-            "helpText": "Engedélyezi a dinamikus megbízhatósági küszöbérték funkciót az adaptívabb madárhang észleléshez."
+            "label": "Dinamikus küszöbérték engedélyezése",
+            "helpText": "Csökkenti egy faj megbízhatósági küszöbértékét, miután nagy megbízhatósággal észlelték."
           },
           "trigger": {
             "label": "Trigger küszöbérték",
-            "helpText": "Az a megbízhatósági szint, amelyen a dinamikus küszöbérték aktiválódik. Ha egy madárhang ezen értéknél nagyobb megbízhatósággal észlelésre kerül, a pozitív egyezések küszöbértéke az azt követő hívásoknál csökkentésre kerül."
+            "helpText": "Az a megbízhatósági szint, amelyen a dinamikus küszöbérték aktiválódik. Ha egy fajt ezen értéknél nagyobb megbízhatósággal észlelnek, a faj pozitív egyezéseinek küszöbértéke csökken a későbbi észleléseknél."
           },
           "minimum": {
             "label": "Minimum dinamikus küszöbérték",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Az eszköz nem bírja az elemzést",
           "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és észlelések maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot.",
           "unknownLatency": "A feldolgozási időt nem sikerült megmérni a következőknél: {models}, ezért az átfedés korlátozásakor nem számít bele. Az elemzés így is lemaradhat.",
-          "cpuNote": "A nagyobb erősség gyakrabban elemzi az átfedő hangot, ami minden engedélyezett modellnél és hangforrásnál CPU-időt igényel. A BirdNET-Go automatikusan arra korlátozza az átfedést, amit ez az eszköz fel tud dolgozni."
+          "cpuNote": "A nagyobb erősség gyakrabban elemzi az átfedő hangot, ami CPU-időt igényel minden engedélyezett osztályozónál, amelyre ez a szűrő vonatkozik, és minden hangforrásnál. A BirdNET-Go automatikusan arra korlátozza az átfedést, amit ez az eszköz fel tud dolgozni."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",
@@ -5785,25 +5785,19 @@
     "title": "Elemzés",
     "tabs": {
       "models": "Modellek",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Észlelés",
+      "bats": "Denevérek",
+      "inference": "Következtetés",
+      "filters": "Szűrők"
     },
     "detection": {
       "title": "Észlelési beállítások",
       "description": "Megbízhatósági küszöbértékek és nyelv beállítása a fajok osztályozásához.",
-      "confidenceThreshold": {
-        "label": "Megbízhatósági küszöb",
-        "helpText": "Az észlelés rögzítéséhez szükséges minimális megbízhatósági pontszám (0.0 - 1.0)."
-      },
       "batThreshold": {
-        "label": "Denevér-észlelési küszöb (BattyBirdNET)",
-        "helpText": "Minimális megbízhatósági pontszám a BattyBirdNET denevérfaj-észleléseihez. A BSG-BAT saját küszöbértékkel rendelkezik."
+        "label": "Denevér-észlelési küszöb (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Denevér-észlelési küszöb (BSG-BAT)",
-        "helpText": "Minimális megbízhatósági pontszám a BSG-BAT denevérfaj-észleléseihez.",
         "sampleRateWarning": "A 192 kHz-es felvételek működnek, de a 96 kHz felett hívó fajok nem azonosíthatók, és a pontszámok kevésbé megbízhatók. 384 kHz-es mintavételi frekvencia ajánlott."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Fajok nyelve",
         "helpText": "A fajok köznapi neveihez használt nyelv a felületen."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Megbízhatósági küszöbérték felülírása",
-        "helpText": "Ha engedélyezve van, ez a modell az alábbi saját megbízhatósági küszöbértékét használja. Ha letiltva, a fő BirdNET megbízhatósági küszöbértékét követi."
-      },
-      "secondaryThreshold": {
-        "helpText": "Az ehhez a modellhez tartozó észlelés rögzítéséhez szükséges minimális megbízhatósági pontszám (0.01 - 0.99).",
-        "followsBirdnet": "Kapcsolja be a fenti felülírást egyéni érték beállításához. Ez a modell jelenleg a fő BirdNET megbízhatósági küszöbértékét követi."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 megbízhatósági küszöbérték"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 megbízhatósági küszöbérték"
-      },
-      "birdnetplusThreshold": {
-        "label": "BirdNET+ V3.0 megbízhatósági küszöbérték"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Nincs aktív területszűrő",
         "passUnmapped": {
           "label": "Területi adat nélküli fajok engedélyezése",
-          "helpText": "Engedélyezze azon fajok észlelését, amelyekhez a geomodellnek nincs földrajzi adata. Kikapcsolva ezek a fajok mindig kiszűrésre kerülnek."
+          "helpText": "Engedélyezze azon fajok észlelését, amelyekhez a geomodellnek nincs földrajzi adata. Kikapcsolva ezek a fajok mindig kiszűrésre kerülnek. Ez csak azokra az osztályozókra vonatkozik, amelyekre a területszűrő érvényes."
         }
       }
     },
     "advanced": {
       "title": "Haladó",
-      "description": "Feldolgozási és egyéni modell beállítások."
+      "description": "Egyéni modell- és címkefájlok."
     },
     "downloadSource": {
       "title": "Letöltési forrás",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modellgaléria",
-      "description": "Osztályozó modellek kezelése madár- és denevérészleléshez.",
+      "description": "Az osztályozó modellek kezelése.",
       "region": {
         "title": "Modellrégió",
         "modeAuto": "Automatikus",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Denevérészlelés",
-      "description": "Állítsa be a küszöböt, az ütemezést és a hamis pozitív szűrést a denevérosztályozókhoz."
+      "description": "Ütemezés, érvényesítés és hamis pozitív szűrés denevérosztályozókhoz."
     },
     "perch": {
-      "title": "Perch v2 észlelés",
-      "description": "Állítson be egy dedikált megbízhatósági küszöbértéket a Google Perch v2 észlelésekhez, a BirdNET küszöbértékétől függetlenül."
+      "title": "Perch v2 észlelés"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 észlelés",
-      "description": "Állítson be egy dedikált megbízhatósági küszöbértéket a BirdNET v3.0 észlelésekhez, a fő BirdNET küszöbértékétől függetlenül."
+      "title": "BirdNET v3.0 észlelés"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0 észlelés",
-      "description": "Állítson be egy dedikált megbízhatósági küszöbértéket a BirdNET+ V3.0 észlelésekhez, a fő BirdNET küszöbértékétől függetlenül."
+      "title": "BirdNET+ V3.0 észlelés"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Észlelési küszöbértékek",
+      "description": "A minimális megbízhatóság, amely a rögzítéshez szükséges minden engedélyezett osztályozónál.",
       "category": {
-        "bat": "Bat"
+        "bat": "Denevér"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Betöltés",
+        "failed": "A betöltés sikertelen"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Nincs engedélyezett osztályozó.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Megosztott küszöbérték",
+        "usedBy": "Minden egyéni küszöbérték nélküli osztályozó ezt használja: {models}.",
+        "unused": "Minden egyéni küszöbérték nélküli osztályozó ezt használja. Jelenleg egyetlen engedélyezett osztályozó sem használja."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Egyéni küszöbérték",
+      "usesShared": "A megosztott küszöbértéket használja"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Fajnevek",
+      "description": "Hogyan jelennek meg az észlelt fajok nevei a felületen."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Következtetési futtatókörnyezet",
+        "description": "Melyik futtatókörnyezet és eszköz futtatja az osztályozókat, és hány CPU-szálat használnak."
       },
       "backend": {
-        "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "label": "Háttérrendszer",
+        "helpText": "Az Automatikus minden modellhez kiválasztja az eszköz által támogatott leggyorsabb futtatókörnyezetet.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automatikus (ajánlott)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "OpenVINO eszköz",
+        "helpText": "Az OpenVINO-n futó modellekhez használatos.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automatikus",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "A háttérrendszer vagy az eszköz módosítása újratölti a modelleket, így az észlelés néhány másodpercre szünetel.",
+      "backendsUnavailable": "Nem sikerült kiolvasni, mely futtatókörnyezeteket támogatja ez az eszköz. A háttérrendszer és az eszköz betöltés után módosítható.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Jelenleg futó",
+        "description": "Az egyes engedélyezett osztályozók által használt futtatókörnyezet és pontosság.",
+        "unknown": "Nincs jelentve"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Minden osztályozóra érvényes, beleértve a denevérosztályozókat is. A saját egyéni küszöbértékkel rendelkező fajok értéke nem módosul.",
+      "speciesNames": "Minden osztályozóra érvényes. A választott nyelven névvel nem rendelkező faj megtartja az osztályozójából származó nevet.",
+      "falsePositiveFilter": "Minden osztályozóra érvényes a denevérosztályozók kivételével, amelyek saját hamis pozitív szűrővel rendelkeznek.",
+      "falsePositiveFilterBatTab": "Minden osztályozóra érvényes a denevérosztályozók kivételével, amelyek a Denevérek lapon saját hamis pozitív szűrővel rendelkeznek.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Érvényes ezekre: {models}.",
+        "notApplied": "Nincs területszűrés: {models}.",
+        "generic": "Azokra az osztályozókra érvényes, amelyeket a területi modell támogat. A denevérosztályozókon sosem fut területszűrés.",
+        "needsLocation": "Csak akkor működik, ha az állomás helyszíne be van állítva."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Csak a denevérosztályozókra érvényes."
     }
   },
   "restart": {

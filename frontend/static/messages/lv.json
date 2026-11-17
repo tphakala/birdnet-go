@@ -2544,12 +2544,12 @@
           "title": "Dinamiskais slieksnis",
           "description": "Automātiski pielāgot noteikšanas jutību, pamatojoties uz iepriekšējiem novērojumiem",
           "enable": {
-            "label": "Iespējot dinamisko slieksni (BirdNET-Go specifiska funkcija)",
-            "helpText": "Iespējo dinamiskā ticamības sliekšņa funkciju adaptīvākai putnu balsu noteikšanai."
+            "label": "Iespējot dinamisko slieksni",
+            "helpText": "Pazemina ticamības slieksni sugai pēc tam, kad tā noteikta ar augstu ticamību."
           },
           "trigger": {
             "label": "Aktivizēšanas slieksnis",
-            "helpText": "Ticamības līmenis, pie kura tiek aktivizēts dinamiskais slieksnis. Ja putna balss tiek noteikta ar ticamību virs šīs vērtības, pozitīvo atbilstību slieksnis šai sugai tiks pazemināts turpmākajām balsīm."
+            "helpText": "Ticamības līmenis, pie kura tiek aktivizēts dinamiskais slieksnis. Ja suga tiek noteikta ar ticamību virs šīs vērtības, pozitīvo atbilstību slieksnis šai sugai tiks pazemināts turpmākajām noteikšanām."
           },
           "minimum": {
             "label": "Minimālais dinamiskais slieksnis",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Šī ierīce netiek līdzi analīzei",
           "overloadedNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās. Analīze var atpalikt, un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu.",
           "unknownLatency": "Apstrādes laiku neizdevās izmērīt šiem modeļiem: {models}, tāpēc tas netiek ņemts vērā, ierobežojot pārklāšanos. Analīze joprojām var atpalikt.",
-          "cpuNote": "Lielāks stiprums biežāk analizē pārklājošos audio, kas patērē CPU laiku katram iespējotajam modelim un audio avotam. BirdNET-Go automātiski ierobežo pārklāšanos līdz tam, ko šī ierīce spēj apstrādāt."
+          "cpuNote": "Lielāks stiprums biežāk analizē pārklājošos audio, kas patērē CPU laiku katram iespējotajam klasifikatoram, uz kuru attiecas šis filtrs, un katram audio avotam. BirdNET-Go automātiski ierobežo pārklāšanos līdz tam, ko šī ierīce spēj apstrādāt."
         },
         "rangeFilter": {
           "title": "Areāla filtrs",
@@ -5785,25 +5785,19 @@
     "title": "Analīze",
     "tabs": {
       "models": "Modeļi",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Noteikšana",
+      "bats": "Sikspārņi",
+      "inference": "Secinājumi",
+      "filters": "Filtri"
     },
     "detection": {
       "title": "Noteikšanas iestatījumi",
       "description": "Konfigurējiet ticamības sliekšņus un valodu sugu klasifikācijai.",
-      "confidenceThreshold": {
-        "label": "Pārliecības slieksnis",
-        "helpText": "Minimālais pārliecības rezultāts (0.0 - 1.0), kas nepieciešams noteikšanas ierakstīšanai."
-      },
       "batThreshold": {
-        "label": "Sikspārņu noteikšanas slieksnis (BattyBirdNET)",
-        "helpText": "Minimālais ticamības rādītājs BattyBirdNET sikspārņu sugu noteikšanai. BSG-BAT ir savs slieksnis."
+        "label": "Sikspārņu noteikšanas slieksnis (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Sikspārņu noteikšanas slieksnis (BSG-BAT)",
-        "helpText": "Minimālais ticamības rādītājs BSG-BAT sikspārņu sugu noteikšanai.",
         "sampleRateWarning": "Ieraksti ar 192 kHz darbojas, taču sugas, kas izdod signālus virs 96 kHz, netiek noteiktas, un rādītāji ir mazāk ticami. Ieteicamā ierakstīšanas frekvence ir 384 kHz."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Sugu valoda",
         "helpText": "Valoda, kas tiek izmantota sugu nosaukumiem interfeisā."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "BirdNET+ V3.0 ticamības slieksnis"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Nav aktīva areāla filtra",
         "passUnmapped": {
           "label": "Atļaut sugas bez areāla datiem",
-          "helpText": "Atļaut sugu noteikšanu, kurām ģeomodelim nav ģeogrāfisko datu. Ja atspējots, šīs sugas vienmēr tiek izfiltrētas."
+          "helpText": "Atļaut sugu noteikšanu, kurām ģeomodelim nav ģeogrāfisko datu. Ja atspējots, šīs sugas vienmēr tiek izfiltrētas. Tas ietekmē tikai tos klasifikatorus, kuriem tiek piemērots diapazona filtrs."
         }
       }
     },
     "advanced": {
       "title": "Papildu",
-      "description": "Apstrādes un pielāgotu modeļu konfigurācija."
+      "description": "Pielāgota modeļa un etiķešu faili."
     },
     "downloadSource": {
       "title": "Lejupielādes avots",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modeļu galerija",
-      "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",
+      "description": "Pārvaldīt klasifikācijas modeļus.",
       "region": {
         "title": "Modeļa reģions",
         "modeAuto": "Automātiski",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Sikspārņu noteikšana",
-      "description": "Konfigurējiet slieksni, grafiku un viltus pozitīvo filtrēšanu sikspārņu klasifikatoriem."
+      "description": "Plānošana, validācija un viltus pozitīvo filtrēšana sikspārņu klasifikatoriem."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0 noteikšana",
-      "description": "Iestatiet atsevišķu ticamības slieksni BirdNET+ V3.0 noteikšanai, neatkarīgi no galvenā BirdNET sliekšņa."
+      "title": "BirdNET+ V3.0 noteikšana"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Noteikšanas sliekšņi",
+      "description": "Minimālā ticamība, kāda nepieciešama, lai noteikšana tiktu reģistrēta katram iespējotajam klasifikatoram.",
       "category": {
-        "bat": "Bat"
+        "bat": "Sikspārņi"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Ielādē",
+        "failed": "Neizdevās ielādēt"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Nav iespējots neviens klasifikators.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Koplietotais slieksnis",
+        "usedBy": "Izmanto visi klasifikatori bez pielāgota sliekšņa: {models}.",
+        "unused": "Izmanto visi klasifikatori bez pielāgota sliekšņa. Pašlaik to neizmanto neviens iespējots klasifikators."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Pielāgots slieksnis",
+      "usesShared": "Izmanto koplietoto slieksni"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Sugu nosaukumi",
+      "description": "Kā noteiktās sugas tiek nosauktas saskarnē."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Secinājumu izpildvide",
+        "description": "Kura izpildvide un ierīce darbina klasifikatorus un cik CPU pavedienus tie izmanto."
       },
       "backend": {
-        "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "label": "Aizmugursistēma",
+        "helpText": "Automātiski izvēlas ātrāko izpildvidi, ko šī ierīce atbalsta katram modelim.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automātiski (ieteicams)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "OpenVINO ierīce",
+        "helpText": "Izmanto modeļiem, kas darbojas ar OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automātiski",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Aizmugursistēmas vai ierīces maiņa pārlādē modeļus, tāpēc noteikšana tiek apturēta uz dažām sekundēm.",
+      "backendsUnavailable": "Neizdevās nolasīt, kuras izpildvides šī ierīce atbalsta. Aizmugursistēmu un ierīci var mainīt pēc ielādes.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Pašlaik darbojas",
+        "description": "Izpildvide un precizitāte, ar kādu darbojas katrs iespējotais klasifikators.",
+        "unknown": "Nav ziņots"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Attiecas uz visiem klasifikatoriem, ieskaitot sikspārņu klasifikatorus. Suga ar savu pielāgoto slieksni netiek pielāgota.",
+      "speciesNames": "Attiecas uz visiem klasifikatoriem. Suga bez nosaukuma izvēlētajā valodā saglabā sava klasifikatora nosaukumu.",
+      "falsePositiveFilter": "Attiecas uz visiem klasifikatoriem, izņemot sikspārņu klasifikatorus, kuriem ir savs viltus pozitīvo filtrs.",
+      "falsePositiveFilterBatTab": "Attiecas uz visiem klasifikatoriem, izņemot sikspārņu klasifikatorus, kuriem ir savs viltus pozitīvo filtrs cilnē Sikspārņi.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Attiecas uz: {models}.",
+        "notApplied": "Netiek filtrēts pēc areāla: {models}.",
+        "generic": "Attiecas uz klasifikatoriem, kurus atbalsta areāla modelis. Sikspārņu klasifikatori nekad netiek filtrēti pēc areāla.",
+        "needsLocation": "Darbojas tikai tad, kad ir iestatīta stacijas atrašanās vieta."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Attiecas tikai uz sikspārņu klasifikatoriem."
     }
   },
   "restart": {

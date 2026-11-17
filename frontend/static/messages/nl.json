@@ -2544,12 +2544,12 @@
           "title": "Dynamische Drempelwaarde",
           "description": "Pas de detectiegevoeligheid automatisch aan op basis van eerdere waarnemingen",
           "enable": {
-            "label": "Schakel Dynamische Drempelwaarde in (BirdNET-Go specifieke functie)",
-            "helpText": "Schakelt dynamische betrouwbaarheids drempelwaarde functie in voor meer adaptieve vogelroep herkenning."
+            "label": "Dynamische drempelwaarde inschakelen",
+            "helpText": "Verlaagt de betrouwbaarheidsdrempel voor een soort nadat deze met hoge betrouwbaarheid is gedetecteerd."
           },
           "trigger": {
             "label": "Trigger Drempelwaarde",
-            "helpText": "Het betrouwbaarheidsniveau waarbij de dynamische drempelwaarde wordt geactiveerd. Als een vogelroep wordt gedetecteerd met een betrouwbaarheid boven deze waarde, wordt de drempelwaarde voor positieve overeenkomsten van die soort verlaagd voor volgende roepen."
+            "helpText": "Het betrouwbaarheidsniveau waarbij de dynamische drempelwaarde wordt geactiveerd. Als een soort wordt gedetecteerd met een betrouwbaarheid boven deze waarde, wordt de drempelwaarde voor positieve overeenkomsten van die soort verlaagd voor volgende detecties."
           },
           "minimum": {
             "label": "Minimum Dynamische Drempelwaarde",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Dit apparaat kan de analyse niet bijhouden",
           "overloadedNotice": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} overschrijdt de gemeten capaciteit van dit apparaat, zelfs zonder overlap. De analyse kan achterlopen en detecties kunnen worden gemist. Schakel minder modellen of audiobronnen in, of kies een snellere modelvariant.",
           "unknownLatency": "De verwerkingstijd kon niet worden gemeten voor {models}, dus die telt niet mee bij het beperken van de overlap. De analyse kan nog steeds achterlopen.",
-          "cpuNote": "Een hogere sterkte analyseert overlappende audio vaker, wat CPU-tijd kost voor elk ingeschakeld model en elke audiobron. BirdNET-Go beperkt de overlap automatisch tot wat dit apparaat kan verwerken."
+          "cpuNote": "Een hogere sterkte analyseert overlappende audio vaker, wat CPU-tijd kost voor elke ingeschakelde classificator waarop dit filter van toepassing is en voor elke audiobron. BirdNET-Go beperkt de overlap automatisch tot wat dit apparaat kan verwerken."
         },
         "rangeFilter": {
           "title": "Bereik Filter",
@@ -5785,25 +5785,19 @@
     "title": "Analyse",
     "tabs": {
       "models": "Modellen",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
+      "detection": "Detectie",
+      "bats": "Vleermuizen",
+      "inference": "Inferentie",
       "filters": "Filters"
     },
     "detection": {
       "title": "Detectie-instellingen",
       "description": "Configureer betrouwbaarheidsdrempels voor soortclassificatie.",
-      "confidenceThreshold": {
-        "label": "Betrouwbaarheidsdrempel",
-        "helpText": "Minimale betrouwbaarheidsscore (0.0 - 1.0) vereist om een detectie vast te leggen."
-      },
       "batThreshold": {
-        "label": "Vleermuis-detectiedrempel (BattyBirdNET)",
-        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BattyBirdNET. BSG-BAT heeft een eigen drempel."
+        "label": "Vleermuis-detectiedrempel (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Vleermuis-detectiedrempel (BSG-BAT)",
-        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties van BSG-BAT.",
         "sampleRateWarning": "Opnamen op 192 kHz werken, maar soorten die boven 96 kHz roepen kunnen niet worden herkend en de scores zijn minder betrouwbaar. Een opnamefrequentie van 384 kHz wordt aanbevolen."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Soortentaal",
         "helpText": "Taal voor de gangbare soortnamen in de interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Betrouwbaarheidsdrempel BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Geen gebiedsfilter actief",
         "passUnmapped": {
           "label": "Soorten zonder gebiedsgegevens toestaan",
-          "helpText": "Detecties toestaan van soorten waarvoor het geomodel geen geografische gegevens heeft. Wanneer uitgeschakeld, worden deze soorten altijd uitgefilterd."
+          "helpText": "Detecties toestaan van soorten waarvoor het geomodel geen geografische gegevens heeft. Wanneer uitgeschakeld, worden deze soorten altijd uitgefilterd. Dit geldt alleen voor de classificatoren waarop het gebiedsfilter van toepassing is."
         }
       }
     },
     "advanced": {
       "title": "Geavanceerd",
-      "description": "Verwerking en aangepaste modelconfiguratie."
+      "description": "Aangepaste model- en labelbestanden."
     },
     "downloadSource": {
       "title": "Downloadbron",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modellengalerij",
-      "description": "Beheer classificatiemodellen voor vogel- en vleermuisdetectie.",
+      "description": "Beheer de classificatiemodellen.",
       "region": {
         "title": "Modelregio",
         "modeAuto": "Automatisch",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Vleermuisdetectie",
-      "description": "Configureer drempel, planning en vals-positief filtering voor vleermuisclassificatoren."
+      "description": "Planning, validatie en vals-positief filtering voor vleermuisclassificatoren."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0-detectie",
-      "description": "Stel een eigen betrouwbaarheidsdrempel in voor BirdNET+ V3.0-detecties, onafhankelijk van de hoofddrempel van BirdNET."
+      "title": "BirdNET+ V3.0-detectie"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Detectiedrempels",
+      "description": "Minimale betrouwbaarheid die een detectie nodig heeft om te worden opgeslagen, voor elke ingeschakelde classificator.",
       "category": {
-        "bat": "Bat"
+        "bat": "Vleermuis"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Laden",
+        "failed": "Laden mislukt"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Er zijn geen classificatoren ingeschakeld.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Gedeelde drempel",
+        "usedBy": "Gebruikt door elke classificator zonder aangepaste drempel: {models}.",
+        "unused": "Gebruikt door elke classificator zonder aangepaste drempel. Geen enkele ingeschakelde classificator gebruikt deze nu."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Aangepaste drempel",
+      "usesShared": "Gebruikt de gedeelde drempel"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Soortnamen",
+      "description": "Hoe gedetecteerde soorten worden benoemd in de interface."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Inferentie-runtime",
+        "description": "Welke runtime en welk apparaat de classificatoren uitvoeren, en hoeveel CPU-threads ze gebruiken."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automatisch kiest de snelste runtime die dit apparaat ondersteunt voor elk model.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automatisch (aanbevolen)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "OpenVINO-apparaat",
+        "helpText": "Gebruikt voor modellen die op OpenVINO draaien.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automatisch",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Het wijzigen van de backend of het apparaat laadt de modellen opnieuw, waardoor de detectie enkele seconden pauzeert.",
+      "backendsUnavailable": "Kon niet lezen welke runtimes dit apparaat ondersteunt. De backend en het apparaat kunnen worden gewijzigd zodra dit is geladen.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Nu actief",
+        "description": "De runtime en precisie waarmee elke ingeschakelde classificator draait.",
+        "unknown": "Niet gerapporteerd"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Geldt voor alle classificatoren, inclusief vleermuisclassificatoren. Een soort met een eigen aangepaste drempel wordt niet aangepast.",
+      "speciesNames": "Geldt voor alle classificatoren. Een soort zonder naam in de gekozen taal behoudt de naam van zijn classificator.",
+      "falsePositiveFilter": "Geldt voor alle classificatoren behalve vleermuisclassificatoren, die een eigen vals-positieffilter hebben.",
+      "falsePositiveFilterBatTab": "Geldt voor alle classificatoren behalve vleermuisclassificatoren, die een eigen vals-positieffilter hebben op het tabblad Vleermuizen.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Geldt voor {models}.",
+        "notApplied": "Niet gebiedsgefilterd: {models}.",
+        "generic": "Geldt voor de classificatoren die het gebiedsmodel ondersteunt. Vleermuisclassificatoren worden nooit gebiedsgefilterd.",
+        "needsLocation": "Werkt alleen als de stationlocatie is ingesteld."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Geldt alleen voor vleermuisclassificatoren."
     }
   },
   "restart": {

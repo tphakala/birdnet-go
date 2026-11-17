@@ -2544,12 +2544,12 @@
           "title": "Dynamický práh",
           "description": "Automaticky upravovat citlivost detekce na základě předchozích pozorování",
           "enable": {
-            "label": "Povolit dynamický práh (funkce specifická pro BirdNET-Go)",
-            "helpText": "Povolí funkci dynamického prahu spolehlivosti pro adaptivnější detekci ptačího zpěvu."
+            "label": "Povolit dynamický práh",
+            "helpText": "Sníží práh spolehlivosti pro druh poté, co byl detekován s vysokou spolehlivostí."
           },
           "trigger": {
             "label": "Spouštěcí práh",
-            "helpText": "Úroveň spolehlivosti, při které se aktivuje dynamický práh. Pokud je ptačí zpěv detekován se spolehlivostí nad touto hodnotou, práh pro pozitivní shody tohoto druhu se pro následující volání sníží."
+            "helpText": "Úroveň spolehlivosti, při které se aktivuje dynamický práh. Pokud je druh detekován se spolehlivostí nad touto hodnotou, práh pro pozitivní shody tohoto druhu se pro následující detekce sníží."
           },
           "minimum": {
             "label": "Minimální dynamický práh",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Toto zařízení nestíhá analýzu",
           "overloadedNotice": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu. Analýza se může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu.",
           "unknownLatency": "Dobu zpracování se nepodařilo změřit pro {models}, proto se při omezování překryvu nezapočítává. Analýza se přesto může zpožďovat.",
-          "cpuNote": "Vyšší síla analyzuje překrývající se zvuk častěji, což stojí čas CPU pro každý povolený model a zvukový zdroj. BirdNET-Go automaticky omezí překryv na to, co toto zařízení zvládne zpracovat."
+          "cpuNote": "Vyšší síla analyzuje překrývající se zvuk častěji, což stojí čas CPU pro každý povolený klasifikátor, na který se tento filtr vztahuje, a pro každý zvukový zdroj. BirdNET-Go automaticky omezí překryv na to, co toto zařízení zvládne zpracovat."
         },
         "rangeFilter": {
           "title": "Filtr výskytu",
@@ -5785,25 +5785,19 @@
     "title": "Analýza",
     "tabs": {
       "models": "Modely",
-      "detection": "Detection",
-      "bats": "Bats",
+      "detection": "Detekce",
+      "bats": "Netopýři",
       "inference": "Inference",
-      "filters": "Filters"
+      "filters": "Filtry"
     },
     "detection": {
       "title": "Nastavení detekce",
       "description": "Nakonfigurujte prahy spolehlivosti a jazyk klasifikace druhů.",
-      "confidenceThreshold": {
-        "label": "Práh spolehlivosti",
-        "helpText": "Minimální skóre spolehlivosti (0,0 - 1,0) potřebné pro zaznamenání detekce."
-      },
       "batThreshold": {
-        "label": "Práh detekce netopýrů (BattyBirdNET)",
-        "helpText": "Minimální skóre spolehlivosti pro detekce druhů netopýrů modelem BattyBirdNET. BSG-BAT má vlastní práh."
+        "label": "Práh detekce netopýrů (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Práh detekce netopýrů (BSG-BAT)",
-        "helpText": "Minimální skóre spolehlivosti pro detekce druhů netopýrů modelem BSG-BAT.",
         "sampleRateWarning": "Záznamy při 192 kHz fungují, ale druhy, které se ozývají nad 96 kHz, nelze určit a skóre jsou méně spolehlivá. Doporučená vzorkovací frekvence záznamu je 384 kHz."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Jazyk druhů",
         "helpText": "Jazyk používaný pro běžné názvy druhů v rozhraní."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Práh spolehlivosti BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Žádný aktivní filtr rozsahu",
         "passUnmapped": {
           "label": "Povolit druhy bez dat o rozsahu",
-          "helpText": "Povolit detekce druhů, pro které geomodel nemá geografická data. Pokud je vypnuto, tyto druhy jsou vždy odfiltrovány."
+          "helpText": "Povolit detekce druhů, pro které geomodel nemá geografická data. Pokud je vypnuto, tyto druhy jsou vždy odfiltrovány. Týká se pouze klasifikátorů, na které se filtr rozsahu vztahuje."
         }
       }
     },
     "advanced": {
       "title": "Pokročilé",
-      "description": "Konfigurace zpracování a vlastních modelů."
+      "description": "Vlastní soubory modelu a štítků."
     },
     "downloadSource": {
       "title": "Zdroj stahování",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Galerie modelů",
-      "description": "Správa klasifikačních modelů pro detekci ptáků a netopýrů.",
+      "description": "Správa klasifikačních modelů.",
       "region": {
         "title": "Oblast modelu",
         "modeAuto": "Automaticky",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Detekce netopýrů",
-      "description": "Nakonfigurujte práh, plánování a filtrování falešných detekcí pro klasifikátory netopýrů."
+      "description": "Plánování, validace a filtrování falešně pozitivních detekcí pro klasifikátory netopýrů."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "Detekce BirdNET+ V3.0",
-      "description": "Nastavte vyhrazený práh spolehlivosti pro detekce BirdNET+ V3.0, nezávislý na hlavním prahu BirdNET."
+      "title": "Detekce BirdNET+ V3.0"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Prahy detekce",
+      "description": "Minimální spolehlivost, kterou detekce potřebuje k zaznamenání, pro každý povolený klasifikátor.",
       "category": {
-        "bat": "Bat"
+        "bat": "Netopýři"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Načítá se",
+        "failed": "Načtení selhalo"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Nejsou povoleny žádné klasifikátory.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Sdílený práh",
+        "usedBy": "Používají všechny klasifikátory bez vlastního prahu: {models}.",
+        "unused": "Používají všechny klasifikátory bez vlastního prahu. Aktuálně jej nepoužívá žádný povolený klasifikátor."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Vlastní práh",
+      "usesShared": "Používá sdílený práh"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Názvy druhů",
+      "description": "Jak jsou detekované druhy pojmenovány v rozhraní."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Prostředí inference",
+        "description": "Které běhové prostředí a zařízení spouštějí klasifikátory a kolik CPU vláken používají."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automaticky vybere nejrychlejší běhové prostředí, které toto zařízení pro každý model podporuje.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automaticky (doporučeno)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "Zařízení OpenVINO",
+        "helpText": "Používá se pro modely běžící na OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automaticky",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Změna backendu nebo zařízení znovu načte modely, takže se detekce na několik sekund pozastaví.",
+      "backendsUnavailable": "Nepodařilo se zjistit, která běhová prostředí toto zařízení podporuje. Backend a zařízení lze změnit po jejich načtení.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Aktuálně spuštěno",
+        "description": "Běhové prostředí a přesnost, se kterými běží každý povolený klasifikátor.",
+        "unknown": "Neuvedeno"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Vztahuje se na všechny klasifikátory včetně klasifikátorů netopýrů. Druh s vlastním prahem se neupravuje.",
+      "speciesNames": "Vztahuje se na všechny klasifikátory. Druh bez názvu ve zvoleném jazyce si ponechá název ze svého klasifikátoru.",
+      "falsePositiveFilter": "Vztahuje se na všechny klasifikátory kromě klasifikátorů netopýrů, které mají vlastní filtr falešně pozitivních detekcí.",
+      "falsePositiveFilterBatTab": "Vztahuje se na všechny klasifikátory kromě klasifikátorů netopýrů, které mají vlastní filtr falešně pozitivních detekcí na kartě Netopýři.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Vztahuje se na: {models}.",
+        "notApplied": "Bez filtru rozsahu: {models}.",
+        "generic": "Vztahuje se na klasifikátory podporované modelem rozsahu. Klasifikátory netopýrů se filtrem rozsahu nikdy nefiltrují.",
+        "needsLocation": "Funguje pouze tehdy, když je nastavena poloha stanice."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Vztahuje se pouze na klasifikátory netopýrů."
     }
   },
   "restart": {

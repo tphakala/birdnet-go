@@ -2544,12 +2544,12 @@
           "title": "Limiar dinâmico",
           "description": "Ajusta automaticamente a sensibilidade de detecção com base em observações anteriores",
           "enable": {
-            "label": "Ativar limiar dinâmico (recurso específico do BirdNET-Go)",
-            "helpText": "Ativa o recurso de limiar de confiança dinâmico para detecção de canto de pássaros mais adaptativa."
+            "label": "Ativar limiar dinâmico",
+            "helpText": "Reduz o limiar de confiança de uma espécie após ela ter sido detetada com elevada confiança."
           },
           "trigger": {
             "label": "Limiar de ativação",
-            "helpText": "O nível de confiança no qual o limiar dinâmico é ativado. Se um canto de pássaro for detectado com confiança acima deste valor, o limiar para correspondências positivas dessa espécie será reduzido para cantos subsequentes."
+            "helpText": "O nível de confiança no qual o limiar dinâmico é ativado. Se uma espécie for detetada com confiança acima deste valor, o limiar para correspondências positivas dessa espécie será reduzido para deteções subsequentes."
           },
           "minimum": {
             "label": "Limiar dinâmico mínimo",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Este dispositivo não consegue acompanhar a análise",
           "overloadedNotice": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} excede a capacidade medida deste dispositivo mesmo sem sobreposição. A análise pode atrasar-se e podem perder-se deteções. Ative menos modelos ou fontes de áudio, ou escolha uma variante de modelo mais rápida.",
           "unknownLatency": "Não foi possível medir o tempo de processamento de {models}, pelo que não é contabilizado ao limitar a sobreposição. A análise ainda pode atrasar-se.",
-          "cpuNote": "Uma intensidade maior analisa o áudio sobreposto com mais frequência, o que custa tempo de CPU por cada modelo e fonte de áudio ativos. O BirdNET-Go limita automaticamente a sobreposição ao que este dispositivo consegue processar."
+          "cpuNote": "Uma intensidade maior analisa o áudio sobreposto com mais frequência, o que consome tempo de CPU para cada classificador ativo ao qual este filtro se aplica e para cada fonte de áudio. O BirdNET-Go limita automaticamente a sobreposição ao que este dispositivo consegue processar."
         },
         "rangeFilter": {
           "title": "Filtro de alcance",
@@ -5785,25 +5785,19 @@
     "title": "Análise",
     "tabs": {
       "models": "Modelos",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Deteção",
+      "bats": "Morcegos",
+      "inference": "Inferência",
+      "filters": "Filtros"
     },
     "detection": {
       "title": "Configurações de detecção",
       "description": "Configurar limiares de confiança para a classificação de espécies.",
-      "confidenceThreshold": {
-        "label": "Limiar de confiança",
-        "helpText": "Pontuação mínima de confiança (0.0 - 1.0) necessária para que uma detecção seja registrada."
-      },
       "batThreshold": {
-        "label": "Limiar de deteção de morcegos (BattyBirdNET)",
-        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos do BattyBirdNET. O BSG-BAT tem o seu próprio limiar."
+        "label": "Limiar de deteção de morcegos (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Limiar de deteção de morcegos (BSG-BAT)",
-        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos do BSG-BAT.",
         "sampleRateWarning": "As capturas a 192 kHz funcionam, mas as espécies que emitem acima de 96 kHz não podem ser identificadas e as pontuações são menos fiáveis. Recomenda-se uma taxa de captura de 384 kHz."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Idioma das espécies",
         "helpText": "Idioma utilizado para os nomes comuns das espécies na interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Limiar de confiança do BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Nenhum filtro de alcance ativo",
         "passUnmapped": {
           "label": "Permitir espécies sem dados de alcance",
-          "helpText": "Permitir deteções de espécies para as quais o geomodelo não tem dados geográficos. Quando desativado, estas espécies são sempre filtradas."
+          "helpText": "Permitir deteções de espécies para as quais o geomodelo não tem dados geográficos. Quando desativado, estas espécies são sempre filtradas. Isto afeta apenas os classificadores aos quais o filtro de alcance se aplica."
         }
       }
     },
     "advanced": {
       "title": "Avançado",
-      "description": "Configuração de processamento e modelos personalizados."
+      "description": "Ficheiros personalizados de modelo e etiquetas."
     },
     "downloadSource": {
       "title": "Origem de download",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Galeria de modelos",
-      "description": "Gerenciar modelos classificadores para detecção de aves e morcegos.",
+      "description": "Gerir os modelos classificadores.",
       "region": {
         "title": "Região do modelo",
         "modeAuto": "Automático",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Deteção de morcegos",
-      "description": "Configure o limiar, o agendamento e a filtragem de falsos positivos para classificadores de morcegos."
+      "description": "Agendamento, validação e filtragem de falsos positivos para classificadores de morcegos."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "Detecção BirdNET+ V3.0",
-      "description": "Defina um limiar de confiança dedicado para as detecções do BirdNET+ V3.0, independente do limiar principal do BirdNET."
+      "title": "Detecção BirdNET+ V3.0"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Limiares de deteção",
+      "description": "Confiança mínima que uma deteção precisa para ser registada, para cada classificador ativo.",
       "category": {
-        "bat": "Bat"
+        "bat": "Morcegos"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "A carregar",
+        "failed": "Falha ao carregar"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Nenhum classificador está ativo.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Limiar partilhado",
+        "usedBy": "Usado por todos os classificadores sem limiar personalizado: {models}.",
+        "unused": "Usado por todos os classificadores sem limiar personalizado. Nenhum classificador ativo o utiliza neste momento."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Limiar personalizado",
+      "usesShared": "Usa o limiar partilhado"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Nomes das espécies",
+      "description": "Como as espécies detetadas são nomeadas na interface."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Ambiente de inferência",
+        "description": "Que ambiente de execução e dispositivo executam os classificadores, e quantas threads de CPU utilizam."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automático escolhe o ambiente de execução mais rápido suportado por este dispositivo para cada modelo.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automático (recomendado)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "Dispositivo OpenVINO",
+        "helpText": "Usado para modelos executados no OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automático",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Alterar o backend ou o dispositivo recarrega os modelos, pelo que a deteção pausa durante alguns segundos.",
+      "backendsUnavailable": "Não foi possível ler que ambientes de execução este dispositivo suporta. O backend e o dispositivo podem ser alterados assim que carregar.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Em execução",
+        "description": "O ambiente de execução e a precisão com que cada classificador ativo é executado.",
+        "unknown": "Não reportado"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Aplica-se a todos os classificadores, incluindo classificadores de morcegos. Uma espécie com o seu próprio limiar personalizado não é ajustada.",
+      "speciesNames": "Aplica-se a todos os classificadores. Uma espécie sem nome no idioma escolhido mantém o nome do seu classificador.",
+      "falsePositiveFilter": "Aplica-se a todos os classificadores, exceto aos de morcegos, que têm o seu próprio filtro de falsos positivos.",
+      "falsePositiveFilterBatTab": "Aplica-se a todos os classificadores, exceto aos de morcegos, que têm o seu próprio filtro de falsos positivos no separador Morcegos.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Aplica-se a {models}.",
+        "notApplied": "Sem filtro de alcance: {models}.",
+        "generic": "Aplica-se aos classificadores suportados pelo modelo de alcance. Os classificadores de morcegos nunca são filtrados por alcance.",
+        "needsLocation": "Funciona apenas quando a localização da estação está definida."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Aplica-se apenas a classificadores de morcegos."
     }
   },
   "restart": {
