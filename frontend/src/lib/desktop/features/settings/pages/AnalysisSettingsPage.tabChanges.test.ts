@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
-import { render, screen, cleanup, waitFor, within } from '@testing-library/svelte';
+import { render, screen, cleanup, waitFor, within, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import type { CatalogEntry } from '$lib/types/models';
@@ -1060,6 +1060,34 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
     const message = await screen.findByText(MIN_ABOVE_TRIGGER);
 
     expect(message.closest('.absolute')).toBeNull();
+  });
+
+  it('hides the clamp notice box while the minimum error shows', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.9 });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+
+    // A change event without a blur: the blur would clear the notice.
+    await fireEvent.change(input, { target: { value: '1.5' } });
+
+    const notice = await screen.findByText(/Value was adjusted to maximum/);
+    expect(notice.closest('.label')).toHaveClass('hidden');
+  });
+
+  it('shows the clamp notice box while the minimum has no error', async () => {
+    seedDynamic({ trigger: 0.5, min: 0.4 });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.minimum.label',
+    });
+
+    // A change event without a blur: the blur would clear the notice.
+    await fireEvent.change(input, { target: { value: '1.5' } });
+
+    const notice = await screen.findByText(/Value was adjusted to maximum/);
+    expect(notice.closest('.label')).not.toHaveClass('hidden');
   });
 
   it('shows no error while the minimum does not exceed the trigger', async () => {
