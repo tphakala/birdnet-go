@@ -181,6 +181,27 @@ describe('ModelAgreementDialog', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
   });
 
+  it('returns focus to Retry when a Retry fails again', async () => {
+    const unavailable = () =>
+      new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }));
+    vi.mocked(fetchModelDocument)
+      .mockRejectedValueOnce(unavailable())
+      .mockRejectedValueOnce(unavailable());
+    renderDialog([policy]);
+    // The idle error state offers nothing focusable but its own controls
+    await screen.findByRole('button', { name: /common\.retry/ });
+    expect(dialogElement().querySelector('[tabindex="-1"]')).toBeNull();
+    screen.getByRole('button', { name: /common\.retry/ }).focus();
+
+    await fireEvent.click(screen.getByRole('button', { name: /common\.retry/ }));
+
+    await waitFor(() => expect(fetchModelDocument).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /common\.retry/ }))
+    );
+    expect(dialogElement().querySelector('[tabindex="-1"]')).toBeNull();
+  });
+
   it('moves focus to the document text when a Retry succeeds', async () => {
     vi.mocked(fetchModelDocument)
       .mockRejectedValueOnce(

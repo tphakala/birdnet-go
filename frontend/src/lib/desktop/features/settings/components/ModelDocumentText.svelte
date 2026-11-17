@@ -40,10 +40,11 @@
 
   // The root element: Retry replaces the alert holding focus with the skeleton, so
   // focus falls back here instead of dropping to the page body. It is focusable only
-  // in the error state and while a Retry runs, so a dialog that opens on this
-  // component never gives it initial focus.
+  // while a Retry runs, so a dialog that opens on this component never gives it
+  // initial focus and a click inside the alert never lands on it.
   let rootEl: HTMLDivElement | undefined;
   let regionEl = $state<HTMLDivElement | undefined>();
+  let retryButton = $state<HTMLButtonElement | undefined>();
   let retrying = $state(false);
 
   let status = $state<DocumentTextStatus>('loading');
@@ -75,6 +76,9 @@
       errorMessage =
         e instanceof ApiError ? e.userMessage : t('analysis.gallery.errors.documentUnavailable');
       setStatus('error');
+      await tick();
+      // A Retry that failed again hands focus back to the new Retry button.
+      if (retrying && document.activeElement === rootEl) retryButton?.focus();
     } finally {
       if (seq === requestSeq) retrying = false;
     }
@@ -97,13 +101,14 @@
 
 <!-- tabindex is -1 or absent: a focus target for Retry, never in the tab order. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-  bind:this={rootEl}
-  tabindex={status === 'error' || retrying ? -1 : undefined}
-  class={cn('outline-none', className)}
->
+<div bind:this={rootEl} tabindex={retrying ? -1 : undefined} class={cn('outline-none', className)}>
   {#if status === 'error'}
-    <ErrorAlert message={errorMessage} onRetry={retry} focusFallback={() => [rootEl]} />
+    <ErrorAlert
+      message={errorMessage}
+      onRetry={retry}
+      focusFallback={() => [rootEl]}
+      bind:retryButton
+    />
   {:else if status === 'loading'}
     <div
       class="flex h-64 flex-col gap-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 text-sm"
