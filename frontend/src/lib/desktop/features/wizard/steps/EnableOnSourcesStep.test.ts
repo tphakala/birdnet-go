@@ -324,4 +324,127 @@ describe('EnableOnSourcesStep', () => {
     await fireEvent.click(link);
     expect(wizardState.skip).toHaveBeenCalledTimes(1);
   });
+
+  describe('retry after a failed save', () => {
+    // Applies a saved section to the stored settings (the step sends whole
+    // arrays, so replacing the section is enough here), and rejects the stream
+    // save the first time
+    function saveLikeStoreFailingStreamsOnce() {
+      let streamsFailed = false;
+      vi.mocked(settingsActions.saveSection).mockImplementation(async (section, partial) => {
+        if (section === 'rtsp' && !streamsFailed) {
+          streamsFailed = true;
+          throw new Error('save rtsp failed');
+        }
+        // A new realtime object per save, as the real store's section merge produces
+        settingsStore.update(state => {
+          const realtime = { ...state.originalData.realtime, [section]: partial };
+          const originalData = { ...state.originalData, realtime };
+          return { ...state, originalData };
+        });
+      });
+    }
+
+    it('resends only the streams on Done after the stream save failed', async () => {
+      saveLikeStoreFailingStreamsOnce();
+      const { leave } = await renderLoaded();
+      await fireEvent.click(sourceSwitch(`${KEY}.allSources`));
+
+      await expect(leave()).rejects.toThrow('save rtsp failed');
+      vi.mocked(settingsActions.saveSection).mockClear();
+      vi.mocked(t).mockClear();
+      await leave();
+
+      expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+      expect(settingsActions.saveSection).toHaveBeenCalledWith('rtsp', {
+        streams: [stream('Feeder', ['birdnet', 'perch_v2'])],
+      });
+      // The retry reports the stream it turned on; the sound card was reported before
+      expect(t).toHaveBeenCalledWith(`${KEY}.enabledToast`, { name: 'Perch v2', count: 1 });
+    });
+  });
+
+  it('reports every source turned on in one toast', async () => {
+    const { leave } = await renderLoaded();
+
+    await fireEvent.click(sourceSwitch(`${KEY}.allSources`));
+    await leave();
+
+    expect(t).toHaveBeenCalledWith(`${KEY}.enabledToast`, { name: 'Perch v2', count: 2 });
+    expect(toastActions.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the bat stream warning once a stream is turned on for a bat model', async () => {
+    serveModels([BIRDNET, BAT]);
+    seed([card('Garden', ['birdnet'])], [stream('Feeder', ['birdnet'])]);
+    await renderLoaded(BAT_CONTEXT);
+
+    expect(screen.queryByText(`${KEY}.batStreamWarning`)).toBeNull();
+    await fireEvent.click(sourceSwitch('Garden'));
+    expect(screen.queryByText(`${KEY}.batStreamWarning`)).toBeNull();
+    await fireEvent.click(sourceSwitch('Feeder'));
+    expect(screen.getByText(`${KEY}.batStreamWarning`)).toBeInTheDocument();
+  });
+
+  it('saves nothing for a source switched on and off again', async () => {
+    const { leave } = await renderLoaded();
+
+    await fireEvent.click(sourceSwitch('Garden'));
+    await fireEvent.click(sourceSwitch('Garden'));
+    await fireEvent.click(sourceSwitch('Feeder'));
+    await leave();
+
+    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('rtsp', expect.anything());
+  });
+
+  it('turns every source off again with the all sources switch', async () => {
+    const { leave } = await renderLoaded();
+
+    await fireEvent.click(sourceSwitch(`${KEY}.allSources`));
+    await fireEvent.click(sourceSwitch(`${KEY}.allSources`));
+    await leave();
+
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
+  });
+
+  it('offers no all sources switch when one source can be switched', async () => {
+    seed([card('Garden', ['birdnet'])], [stream('Feeder', ['birdnet', 'perch_v2'])]);
+    await renderLoaded();
+
+    expect(screen.getAllByRole('switch')).toHaveLength(2);
+    expect(screen.queryByRole('switch', { name: `${KEY}.allSources` })).toBeNull();
+  });
+
+  it('offers Retry when the model list fails to load, and shows the sources after it', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
+    wizard.model = PERCH_CONTEXT;
+    renderStep(EnableOnSourcesStep);
+
+    const retry = await screen.findByRole('button', { name: 'common.retry' });
+    expect(screen.getByText('settings.audio.models.listFailed')).toBeInTheDocument();
+    await fireEvent.click(retry);
+
+    expect(await screen.findByRole('switch', { name: 'Garden' })).toBeInTheDocument();
+  });
+
+  it('offers no switches when the model is not in the enabled list', async () => {
+    serveModels([BIRDNET]);
+    wizard.model = PERCH_CONTEXT;
+    renderStep(EnableOnSourcesStep);
+
+    expect(await screen.findByText(`${KEY}.notListed`)).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).toBeNull();
+  });
+
+  it('offers no switches while the model is still loading', async () => {
+    serveModels([BIRDNET, { ...PERCH, state: 'pending' }]);
+    wizard.model = PERCH_CONTEXT;
+    const { leave } = renderStep(EnableOnSourcesStep);
+
+    expect(await screen.findByText(`${KEY}.notLoadedPending`)).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).toBeNull();
+    await leave();
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
+  });
 });
