@@ -6154,7 +6154,8 @@
     "scope": {
       "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
       "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter.",
+      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
       "rangeFilter": {
         "appliesTo": "Applies to {models}.",
         "notApplied": "Not range filtered: {models}.",

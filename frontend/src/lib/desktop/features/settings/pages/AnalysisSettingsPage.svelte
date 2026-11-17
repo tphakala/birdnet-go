@@ -972,6 +972,8 @@
     totalSpecies: number;
     withRangeData: number;
     withoutRangeData: number;
+    /** False when this classifier takes part but the active range backend does not filter it. */
+    coveredByBackend?: boolean;
   }
 
   interface RangeFilterStatus {
@@ -989,7 +991,11 @@
   // (GET /api/v2/range/status), and which enabled ones it skips. The backend decides
   // participation per model, so this never names a classifier the filter does not reach.
   const rangeFilterScope = $derived.by(() => {
-    const participants = rangeFilterStatus?.classifiers ?? [];
+    // A participant the active range backend does not cover is not filtered (for example
+    // Perch under the legacy BirdNET v2.4 range data), so it is listed as not range filtered.
+    const participants = (rangeFilterStatus?.classifiers ?? []).filter(
+      c => c.coveredByBackend !== false
+    );
     if (participants.length === 0) return t('analysis.scope.rangeFilter.generic');
     const ids = new Set(participants.map(c => c.id));
     const skipped = getAvailableModels()
@@ -1487,8 +1493,14 @@
   }
 
   // Threshold table handlers. Every edit saves to the row's own settings section.
-  function updateRowThreshold(section: ThresholdSection, value: number) {
-    settingsActions.updateSection(section, { threshold: value });
+  // A typed value is rounded to the row's step, so the field, the slider and the saved value
+  // agree (a value off the step would also mark the field invalid).
+  function updateRowThreshold(row: ThresholdRow, value: number) {
+    const { section, step } = row.descriptor;
+    if (!section || !Number.isFinite(value)) return;
+    const decimals = Math.max(0, Math.ceil(-Math.log10(step)));
+    const rounded = Number((Math.round(value / step) * step).toFixed(decimals));
+    settingsActions.updateSection(section, { threshold: rounded });
   }
 
   function updateRowOverride(section: ThresholdSection, value: boolean) {
@@ -2004,15 +2016,14 @@
                 step={row.descriptor.step}
                 {value}
                 disabled={controlsDisabled}
-                oninput={event =>
-                  section && updateRowThreshold(section, event.currentTarget.valueAsNumber)}
+                oninput={event => updateRowThreshold(row, event.currentTarget.valueAsNumber)}
               />
               <NumberField
                 label={row.model.name}
                 labelClassName="sr-only"
                 className="w-24 shrink-0"
                 {value}
-                onUpdate={newValue => section && updateRowThreshold(section, newValue)}
+                onUpdate={newValue => updateRowThreshold(row, newValue)}
                 min={row.descriptor.min}
                 max={row.descriptor.max}
                 step={row.descriptor.step}
@@ -2143,7 +2154,11 @@
       originalData={falsePositiveChange.original}
       currentData={falsePositiveChange.current}
     >
-      {@render scopeLine(t('analysis.scope.falsePositiveFilter'))}
+      {@render scopeLine(
+        hasBatModel
+          ? t('analysis.scope.falsePositiveFilterBatTab')
+          : t('analysis.scope.falsePositiveFilter')
+      )}
       <div>
         <FalsePositiveFilterControl
           id="false-positive-filter-level"

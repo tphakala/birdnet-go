@@ -4522,6 +4522,7 @@ export type TranslationKey =
   | 'analysis.scope.dynamicThreshold'
   | 'analysis.scope.speciesNames'
   | 'analysis.scope.falsePositiveFilter'
+  | 'analysis.scope.falsePositiveFilterBatTab'
   | 'analysis.scope.rangeFilter.appliesTo' // params: models
   | 'analysis.scope.rangeFilter.notApplied' // params: models
   | 'analysis.scope.rangeFilter.generic'
