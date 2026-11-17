@@ -61,6 +61,10 @@ type ModelManager struct {
 	modelsDir    string
 	orchestrator *Orchestrator
 
+	// documents serves verified licence and policy text and keeps the recorded
+	// agreements. Set once by NewModelManager; never touched by the install paths.
+	documents *ModelDocuments
+
 	// unloadFn, when non-nil, replaces the direct orchestrator UnloadModel call so
 	// tests can force the unload-failure rollback branches of Uninstall and
 	// Reinstall. Those branches are reachable in production only via a
@@ -178,7 +182,7 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 	if orchestrator != nil {
 		orchestrator.SetModelsDir(modelsDir)
 	}
-	return &ModelManager{
+	mm := &ModelManager{
 		modelsDir:    modelsDir,
 		orchestrator: orchestrator,
 		settings:     settings,
@@ -186,7 +190,16 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 		downloading:  make(map[string]*DownloadState),
 		freeSpaceFn:  diskmanager.GetAvailableSpace,
 	}
+	mm.documents = newModelDocuments(
+		func() []string { return mm.orderedDownloadEndpoints(mm.configuredHuggingFaceEndpoint()) },
+		mm.noteWorkingEndpoint,
+	)
+	return mm
 }
+
+// Documents returns the service that serves verified licence and policy text and
+// records agreements. It is never nil.
+func (mm *ModelManager) Documents() *ModelDocuments { return mm.documents }
 
 // ModelInfos returns ModelInfo for all currently loaded models.
 func (mm *ModelManager) ModelInfos() []ModelInfo {
@@ -2675,6 +2688,53 @@ func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, 
 		Build()
 }
 
+// getHuggingFace issues a GET for url and returns the response when the host
+// answers 200; the caller closes the body. A transport failure and a non-200
+// status come back as an endpointAttemptError that records whether another
+// endpoint might serve the file, so downloadFile and the document fetch fail
+// over the same way. The "HTTP request failed for" and "HTTP <status> for"
+// texts are matched by the frontend and must not change.
+func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, errors.Newf("failed to create request for %s: %v", url, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("url", url).
+			Build()
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		// A transport failure (unreachable host, reset, timeout) is retryable on
+		// the next endpoint; a cancelled context is not (IsUnreachable handles the
+		// distinction).
+		return nil, &endpointAttemptError{
+			retryable: conf.IsUnreachable(err),
+			err: errors.Newf("HTTP request failed for %s: %v", url, err).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("url", url).
+				Build(),
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		// A gateway status (502/503/504) means the origin is down and a mirror
+		// may still serve the file, so it is retryable; any other status (404,
+		// 403, 500, ...) means the host answered and failover would mask it.
+		return nil, &endpointAttemptError{
+			retryable: conf.IsGatewayStatus(resp.StatusCode),
+			err: errors.Newf("HTTP %d for %s", resp.StatusCode, url).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("url", url).
+				Context("status", fmt.Sprintf("%d", resp.StatusCode)).
+				Build(),
+		}
+	}
+	return resp, nil
+}
+
 // downloadFile downloads a file from url to destPath, verifying the SHA256
 // checksum. The catalogID is used to update shared download state for SSE
 // polling. completedBytes is the cumulative size of previously downloaded
@@ -2711,44 +2771,11 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 		}
 	}()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	resp, err := getHuggingFace(ctx, downloadHTTPClient, url)
 	if err != nil {
-		return errors.Newf("failed to create request for %s: %v", url, err).
-			Component("classifier.model_manager").
-			Category(errors.CategoryValidation).
-			Context("url", url).
-			Build()
-	}
-	resp, err := downloadHTTPClient.Do(req)
-	if err != nil {
-		// A transport failure (unreachable host, reset, timeout) is retryable on
-		// the next endpoint; a cancelled context is not (IsUnreachable handles the
-		// distinction).
-		return &endpointAttemptError{
-			retryable: conf.IsUnreachable(err),
-			err: errors.Newf("HTTP request failed for %s: %v", url, err).
-				Component("classifier.model_manager").
-				Category(errors.CategoryNetwork).
-				Context("url", url).
-				Build(),
-		}
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		// A gateway status (502/503/504) means the origin is down and a mirror
-		// may still serve the file, so it is retryable; any other status (404,
-		// 403, 500, ...) means the host answered and failover would mask it.
-		return &endpointAttemptError{
-			retryable: conf.IsGatewayStatus(resp.StatusCode),
-			err: errors.Newf("HTTP %d for %s", resp.StatusCode, url).
-				Component("classifier.model_manager").
-				Category(errors.CategoryNetwork).
-				Context("url", url).
-				Context("status", fmt.Sprintf("%d", resp.StatusCode)).
-				Build(),
-		}
-	}
 
 	var hasher hash.Hash
 	var reader io.Reader
@@ -2845,11 +2872,21 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 // repository's main revision, sitting between the repo id and the file path.
 const huggingFaceResolveMainPath = "/resolve/main/"
 
+// huggingFaceResolvePath is the file-resolve path segment that precedes a
+// revision, between the repo id and the revision.
+const huggingFaceResolvePath = "/resolve/"
+
 // buildHuggingFaceURL constructs the download URL for a file in a HuggingFace
 // repo. The endpoint is one host from the resolved download chain (see
 // orderedDownloadEndpoints / downloadModelFile) and must not end in a slash.
 func buildHuggingFaceURL(endpoint, repo, filePath string) string {
 	return endpoint + "/" + repo + huggingFaceResolveMainPath + filePath
+}
+
+// buildHuggingFaceRevisionURL constructs the URL of a file in a HuggingFace repo
+// at a pinned revision (a commit hash), for content that must not move with main.
+func buildHuggingFaceRevisionURL(endpoint, repo, revision, filePath string) string {
+	return endpoint + "/" + repo + huggingFaceResolvePath + revision + "/" + filePath
 }
 
 // huggingFaceEndpoint resolves the single primary HuggingFace host from the

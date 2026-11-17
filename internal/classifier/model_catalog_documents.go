@@ -77,10 +77,10 @@ func EntryDocuments(entry *CatalogEntry) []RepoDocument {
 	return nil
 }
 
-// documentBySHA256 finds a hosted document by its digest, in sorted repo order
+// DocumentBySHA256 finds a hosted document by its digest, in sorted repo order
 // when two repos pin the same bytes. Agreement code must not use it to decide
 // which repo a document belongs to.
-func documentBySHA256(sha string) (RepoDocument, bool) {
+func DocumentBySHA256(sha string) (RepoDocument, bool) {
 	if sha == "" {
 		return RepoDocument{}, false
 	}
