@@ -386,6 +386,15 @@ describe('ModelCard', () => {
         expect(screen.queryByText('analysis.gallery.newBadge')).not.toBeInTheDocument();
       }
     );
+
+    it('leaves the BirdNET v3.0 preview entry, a near id, unflagged', () => {
+      renderCard({
+        entry: entry({ id: 'birdnet-v3.0', channel: CHANNEL_PREVIEW }),
+        mode: 'available',
+      });
+
+      expect(screen.queryByText('analysis.gallery.newBadge')).not.toBeInTheDocument();
+    });
   });
 
   describe('superseded', () => {
