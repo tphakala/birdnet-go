@@ -30,6 +30,20 @@ describe('NumberField', () => {
     expect(screen.getByRole('spinbutton', { name: 'Shared threshold' })).toHaveValue(0.7);
   });
 
+  it('applies errorClassName to the box around the error message', () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 1,
+        onUpdate: vi.fn(),
+        error: 'Too high',
+        errorClassName: 'absolute',
+      },
+    });
+
+    expect(screen.getByText('Too high').parentElement).toHaveClass('absolute');
+  });
+
   it('applies errorClassName to the box around the clamp notice', async () => {
     render(NumberField, {
       props: {
