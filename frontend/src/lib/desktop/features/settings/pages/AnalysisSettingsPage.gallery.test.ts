@@ -1747,6 +1747,107 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
     expect(screen.queryByText('license text')).not.toBeInTheDocument();
   });
 
+  // A request that fails for a reason other than an agreement (a 5xx, a dropped
+  // connection) after the user agreed.
+  function serverError(): ApiError {
+    return new ApiError('server error', 500, new Response(null, { status: 500 }));
+  }
+
+  it('keeps the agreed documents when a failed install is retried', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    vi.mocked(modelsApi.installModel)
+      .mockRejectedValueOnce(serverError())
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    await agreeToPolicy();
+
+    await fireEvent.click(await screen.findByRole('button', { name: /analysis\.gallery\.retry/ }));
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
+    expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined, [POLICY_SHA]);
+  });
+
+  it('drops agreed documents the server refused as invalid before a Retry', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    vi.mocked(modelsApi.installModel)
+      .mockRejectedValueOnce(
+        new ApiError('not an agreement document', 400, new Response(null, { status: 400 }))
+      )
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    await agreeToPolicy();
+
+    await fireEvent.click(await screen.findByRole('button', { name: /analysis\.gallery\.retry/ }));
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
+    expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined);
+  });
+
+  it('resumes a second refusal with every agreed document', async () => {
+    const otherSha = 'b'.repeat(64);
+    const secondRefusal = agreementRefusal();
+    secondRefusal.errorParams = {
+      name: 'Test Bird Model',
+      documents: [{ repo: 'org/model', kind: 'license', sha256: otherSha }],
+    };
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    vi.mocked(modelsApi.installModel)
+      .mockRejectedValueOnce(secondRefusal)
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    await agreeToPolicy();
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(1));
+    await agreeToPolicy();
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
+    const resumed = vi.mocked(modelsApi.installModel).mock.lastCall;
+    expect(resumed?.slice(0, 2)).toEqual(['test-bird', undefined]);
+    // The server treats the accepted list as a set, so only its members matter.
+    expect([...(resumed?.[2] ?? [])].sort()).toEqual([POLICY_SHA, otherSha].sort());
+  });
+
+  it('keeps the agreed documents when a failed reinstall is retried', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.reinstallModel)
+      .mockRejectedValueOnce(agreementRefusal())
+      .mockRejectedValueOnce(serverError())
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+    await agreeToPolicy();
+
+    await fireEvent.click(await screen.findByRole('button', { name: /analysis\.gallery\.retry/ }));
+
+    await waitFor(() => expect(modelsApi.reinstallModel).toHaveBeenCalledTimes(3));
+    expect(modelsApi.reinstallModel).toHaveBeenLastCalledWith('inst', [POLICY_SHA]);
+  });
+
   it('moves the apply-all queue on when an agreement is cancelled', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [swappable('one', 'Model One'), swappable('two', 'Model Two')],

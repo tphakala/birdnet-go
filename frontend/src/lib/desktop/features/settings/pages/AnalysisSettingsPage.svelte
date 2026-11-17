@@ -214,6 +214,9 @@
   // HTTP status the models API returns when a remove is refused because
   // installed models still depend on the target.
   const HTTP_STATUS_CONFLICT = 409;
+  // HTTP status the models API returns when acceptedDocuments names a document that
+  // is not a current agreement document of the entry (a catalog older than the server).
+  const HTTP_STATUS_BAD_REQUEST = 400;
   interface GalleryActionError {
     modelId: string;
     modelName: string;
@@ -223,6 +226,7 @@
     network: boolean; // download could not reach the model host
     blocked: boolean; // the server refused the action and sent a translated reason (models still need it, or another model operation is running)
     nextSteps?: InstalledModelContext; // set for a fresh install, so its Retry still offers the next steps
+    accepted?: string[]; // documents the user agreed to for this start, sent again on Retry
   }
   let installError = $state<GalleryActionError | null>(null);
 
@@ -1945,6 +1949,19 @@
     return true;
   }
 
+  // The documents agreed to before a start was refused again, joined with those
+  // agreed to after the refusal, so the repeated start carries every agreement.
+  function withAgreed(earlier: string[], again: string[]): string[] {
+    return [...new Set([...earlier, ...again])];
+  }
+
+  // The agreements a Retry of a failed start sends again. A 400 is how the server
+  // rejects an accepted list it does not recognize (a catalog older than the server),
+  // so after one the Retry sends none and asks for the current documents instead.
+  function retryableAgreements(e: unknown, accepted: string[]): string[] {
+    return e instanceof ApiError && e.status === HTTP_STATUS_BAD_REQUEST ? [] : accepted;
+  }
+
   // Mark the documents the server accepted as agreed in the catalog, which is
   // reloaded only after an install completes, so the license dialog does not ask
   // again in the meantime.
@@ -2039,10 +2056,16 @@
     installError = null;
     installingId = modelId;
     downloadProgress = null;
-    // A failed install keeps its next steps, so Retry still offers them
-    const installFailed = (message: string, blocked = false): GalleryActionError => ({
+    // A failed install keeps its next steps and its agreements, so Retry still offers
+    // the steps and sends the agreements
+    const installFailed = (
+      message: string,
+      blocked = false,
+      agreed: string[] = accepted
+    ): GalleryActionError => ({
       ...reportActionError(modelId, modelName, 'install', message, variantId, blocked),
       nextSteps,
+      accepted: agreed,
     });
 
     try {
@@ -2096,13 +2119,20 @@
       installingId = null;
       if (
         handleAgreementRefusal(e, modelId, modelName, again =>
-          startInstall(modelId, modelName, variantId, { nextSteps, accepted: again })
+          startInstall(modelId, modelName, variantId, {
+            nextSteps,
+            accepted: withAgreed(accepted, again),
+          })
         )
       ) {
         return;
       }
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = installFailed(message, isOperationInProgress(e) || isAgreementRequired(e));
+      installError = installFailed(
+        message,
+        isOperationInProgress(e) || isAgreementRequired(e),
+        retryableAgreements(e, accepted)
+      );
     }
   }
 
@@ -2238,7 +2268,7 @@
           }, 2000);
         },
         (err: string) => {
-          installError = reportActionError(modelId, modelName, 'reinstall', err);
+          installError = { ...reportActionError(modelId, modelName, 'reinstall', err), accepted };
           reinstallingId = null;
           downloadProgress = null;
           progressCleanup = null;
@@ -2248,20 +2278,23 @@
       reinstallingId = null;
       if (
         handleAgreementRefusal(e, modelId, modelName, again =>
-          startReinstall(modelId, modelName, again)
+          startReinstall(modelId, modelName, withAgreed(accepted, again))
         )
       ) {
         return;
       }
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = reportActionError(
-        modelId,
-        modelName,
-        'reinstall',
-        message,
-        undefined,
-        isOperationInProgress(e) || isAgreementRequired(e)
-      );
+      installError = {
+        ...reportActionError(
+          modelId,
+          modelName,
+          'reinstall',
+          message,
+          undefined,
+          isOperationInProgress(e) || isAgreementRequired(e)
+        ),
+        accepted: retryableAgreements(e, accepted),
+      };
     }
   }
 
@@ -2274,9 +2307,9 @@
     // so this is currently unreachable, but it keeps the invariant explicit and
     // survives future refactors that might retry while an action is running.
     if (galleryActionInFlight) return;
-    const { modelId, modelName, variantId, kind, nextSteps } = installError;
-    if (kind === 'install') startInstall(modelId, modelName, variantId, { nextSteps });
-    else if (kind === 'reinstall') startReinstall(modelId, modelName);
+    const { modelId, modelName, variantId, kind, nextSteps, accepted = [] } = installError;
+    if (kind === 'install') startInstall(modelId, modelName, variantId, { nextSteps, accepted });
+    else if (kind === 'reinstall') startReinstall(modelId, modelName, accepted);
   }
 
   function dismissInstallError() {
