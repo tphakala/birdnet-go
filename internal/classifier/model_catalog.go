@@ -294,9 +294,9 @@ var EmbeddedCatalog = []CatalogEntry{
 		Region:        "",
 		SpeciesCount:  11560,
 		Version:       "3.0",
-		// Developer-preview build: the gallery shows a PREVIEW badge and a not-GA
-		// notice, and surfaces this tag (which otherwise lives only inside the
-		// preview3.1 file paths below) so users know it is not the final release.
+		// Developer-preview build: the gallery card shows a PREVIEW badge and
+		// surfaces this tag (which otherwise lives only inside the preview3.1
+		// file paths below); the install dialog adds a not-GA notice.
 		Channel:         ChannelPreview,
 		BuildLabel:      "preview3.1",
 		SupersededBy:    "birdnet-plus-v3.0",

@@ -6016,10 +6016,10 @@
       "reinstalling": "Reinstallazione...",
       "reinstallComplete": "File verificati con successo",
       "geomodelBadge": "Include il geomodel BirdNET v3.0",
+      "newBadge": "Nuovo",
       "preview": {
         "badge": "Anteprima",
         "buildLabel": "{version} · {build}",
-        "cardNotice": "Anteprima per sviluppatori, non è la versione finale. Questa è una versione preliminare per i test; i risultati potrebbero cambiare prima della versione stabile.",
         "dialogNotice": "Stai installando un'anteprima per sviluppatori ({build}). Va bene per provarla, ma non è ancora consigliata come unico classificatore."
       },
       "experimental": {

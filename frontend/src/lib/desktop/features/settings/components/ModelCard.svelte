@@ -67,6 +67,7 @@
   import {
     CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
+    NEW_MODEL_IDS,
     translateReason,
     variantHardwareLabel,
   } from '$lib/utils/variantSelection';
@@ -161,24 +162,19 @@
   }
 
   const logo = $derived(getModelLogo(entry.id));
+  const isNew = $derived(NEW_MODEL_IDS.includes(entry.id));
   const upstreamUrl = $derived(
     entry.upstreamUrl && validateProtocolURL(entry.upstreamUrl, LINK_PROTOCOLS)
       ? entry.upstreamUrl
       : null
   );
-  // The pill and the Available-tab notice that flag a non-stable release channel
-  const channelCopy = $derived.by(() => {
+  // The pill that flags a non-stable release channel
+  const channelBadge = $derived.by(() => {
     switch (entry.channel) {
       case CHANNEL_PREVIEW:
-        return {
-          badge: t('analysis.gallery.preview.badge'),
-          notice: t('analysis.gallery.preview.cardNotice'),
-        };
+        return t('analysis.gallery.preview.badge');
       case CHANNEL_EXPERIMENTAL:
-        return {
-          badge: t('analysis.gallery.experimental.badge'),
-          notice: t('analysis.gallery.experimental.cardNotice'),
-        };
+        return t('analysis.gallery.experimental.badge');
       default:
         return null;
     }
@@ -198,7 +194,12 @@
   const inFlight = $derived(actionInFlight || busy !== null);
   // Available cards dim the logo of an entry this host cannot run; the text keeps full contrast
   const unavailable = $derived(mode === 'available' && !entry.compatible);
-  const channelNoticeText = $derived(mode === 'available' ? (channelCopy?.notice ?? null) : null);
+  // Only the experimental channel adds a notice, on the Available tab
+  const channelNoticeText = $derived(
+    mode === 'available' && entry.channel === CHANNEL_EXPERIMENTAL
+      ? t('analysis.gallery.experimental.cardNotice')
+      : null
+  );
   // Unlike the channel notice, the successor note shows in both modes: an installed card is where the user acts on it
   const supersededNoticeText = $derived(
     entry.supersededBy
@@ -362,12 +363,21 @@
         <h4 id={titleId} class="text-sm font-semibold text-[var(--color-base-content)]">
           {entry.name}
         </h4>
-        {#if channelCopy}
+        {#if channelBadge}
           <StatusPill
             variant="warning"
             size="sm"
             showDot={false}
-            label={channelCopy.badge}
+            label={channelBadge}
+            className="whitespace-nowrap"
+          />
+        {/if}
+        {#if isNew}
+          <StatusPill
+            variant="info"
+            size="sm"
+            showDot={false}
+            label={t('analysis.gallery.newBadge')}
             className="whitespace-nowrap"
           />
         {/if}
