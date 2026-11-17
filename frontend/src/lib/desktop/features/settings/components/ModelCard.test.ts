@@ -5,7 +5,7 @@ import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
 import type { CatalogVariant } from '$lib/types/models';
-import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW, NEW_MODEL_IDS } from '$lib/utils/variantSelection';
+import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW, CHANNEL_STABLE } from '$lib/utils/variantSelection';
 import {
   catalogEntry as entry,
   downloadProgress as progress,
@@ -350,26 +350,42 @@ describe('ModelCard', () => {
   });
 
   describe('new badge', () => {
-    it.each(['available', 'installed'] as const)(
-      'flags a listed entry next to its channel pill on a %s card',
-      mode => {
-        renderCard({
-          entry: entry({ id: NEW_MODEL_IDS[0], channel: CHANNEL_PREVIEW, installed: true }),
-          mode,
-        });
+    // The catalog id of BirdNET+ v3.0, spelled out so a typo in the flagged list fails here
+    const BIRDNET_PLUS_ID = 'birdnet-plus-v3.0';
 
-        const header = screen.getByRole('heading').parentElement;
-        if (!header) throw new Error('the card title has no row');
-        expect(within(header).getByText('analysis.gallery.newBadge')).toBeInTheDocument();
-        expect(within(header).getByText('analysis.gallery.preview.badge')).toBeInTheDocument();
+    function titleRow(): HTMLElement {
+      const row = screen.getByRole('heading').parentElement;
+      if (!row) throw new Error('the card title has no row');
+      return row;
+    }
+
+    it.each(['available', 'installed'] as const)(
+      'flags the BirdNET+ entry in the title row on a %s card',
+      mode => {
+        renderCard({ entry: entry({ id: BIRDNET_PLUS_ID, installed: true }), mode });
+
+        expect(within(titleRow()).getByText('analysis.gallery.newBadge')).toBeInTheDocument();
       }
     );
 
-    it('leaves an unlisted entry unflagged', () => {
-      renderCard({ entry: entry(), mode: 'available' });
+    it('keeps the channel pill next to the new badge', () => {
+      renderCard({
+        entry: entry({ id: BIRDNET_PLUS_ID, channel: CHANNEL_PREVIEW }),
+        mode: 'available',
+      });
 
-      expect(screen.queryByText('analysis.gallery.newBadge')).not.toBeInTheDocument();
+      expect(within(titleRow()).getByText('analysis.gallery.newBadge')).toBeInTheDocument();
+      expect(within(titleRow()).getByText('analysis.gallery.preview.badge')).toBeInTheDocument();
     });
+
+    it.each([CHANNEL_STABLE, CHANNEL_PREVIEW, CHANNEL_EXPERIMENTAL])(
+      'leaves an unlisted %s entry unflagged',
+      channel => {
+        renderCard({ entry: entry({ channel }), mode: 'available' });
+
+        expect(screen.queryByText('analysis.gallery.newBadge')).not.toBeInTheDocument();
+      }
+    );
   });
 
   describe('superseded', () => {
