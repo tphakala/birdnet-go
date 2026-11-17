@@ -46,7 +46,9 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import type { AcousticModelAvailability } from '$lib/types/models';
   import type { BackendModel } from '$lib/stores/models.svelte';
+  import { effectiveSourceModels, sourceModelsWith } from '$lib/utils/defaultModelSelection';
   import ToggleField from './ToggleField.svelte';
+  import SampleRateBadge from './SampleRateBadge.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
 
@@ -82,7 +84,6 @@
     onRetry,
   }: Props = $props();
 
-  const KHZ = 1000;
   const listId = generateId('model-toggles');
 
   /** Number of skeleton rows shown while the list loads. */
@@ -99,7 +100,7 @@
 
   let followsDefaults = $derived(selectedModels.length === 0);
   // What the source runs: its own list, or the defaults while it has none.
-  let effective = $derived([...new Set(followsDefaults ? defaultModels : selectedModels)]);
+  let effective = $derived(effectiveSourceModels(selectedModels, defaultModels));
   let listedIds = $derived(new Set(models.map(m => m.id)));
   let listedOn = $derived(effective.filter(id => listedIds.has(id)));
   // Only an explicit list can name a model the server no longer lists.
@@ -144,7 +145,9 @@
   }
 
   function setModel(id: string, on: boolean) {
-    const next = on ? [...effective, id] : effective.filter(existing => existing !== id);
+    const next = on
+      ? sourceModelsWith(selectedModels, defaultModels, id)
+      : effective.filter(existing => existing !== id);
     onChange(next);
   }
 
@@ -203,11 +206,6 @@
         {@const isOn = effective.includes(model.id)}
         {@const reason = blockedReason(model, isOn)}
         {@const runtime = runtimeBadge(model)}
-        {@const minRate = model.minSampleRate ?? 0}
-        {@const recommendedRate = model.recommendedSampleRate ?? 0}
-        {@const belowMin = minRate > 0 && sourceSampleRate < minRate}
-        {@const belowRecommended =
-          !belowMin && recommendedRate > 0 && sourceSampleRate < recommendedRate}
         {@const badgesId = `${listId}-${model.id}-badges`}
         <li class="py-2 first:pt-0 last:pb-0">
           <ToggleField
@@ -249,28 +247,11 @@
                     {t('settings.audio.models.state.failed')}
                   </span>
                 {/if}
-                {#if belowMin}
-                  <span
-                    class={cn(BADGE_CLASS, 'bg-[var(--color-error)]/15 text-[var(--text-error)]')}
-                  >
-                    <AlertTriangle class="size-3" aria-hidden="true" />
-                    {t('settings.audio.soundCards.compatibility.minSampleRate', {
-                      rate: String(minRate / KHZ),
-                    })}
-                  </span>
-                {:else if belowRecommended}
-                  <span
-                    class={cn(
-                      BADGE_CLASS,
-                      'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-                    )}
-                  >
-                    <AlertTriangle class="size-3" aria-hidden="true" />
-                    {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
-                      rate: String(recommendedRate / KHZ),
-                    })}
-                  </span>
-                {/if}
+                <SampleRateBadge
+                  sampleRate={sourceSampleRate}
+                  minRate={model.minSampleRate}
+                  recommendedRate={model.recommendedSampleRate}
+                />
               </span>
             {/snippet}
           </ToggleField>

@@ -46,6 +46,12 @@ export interface CatalogVariant {
 /** A model entry in the catalog, enriched with install/compat status. */
 export interface CatalogEntry {
   id: string;
+  /**
+   * Classifier registry ID the entry loads as (e.g. "BirdNET_V2.4"), the join key
+   * against `registryId` on the GET /api/v2/models items. Absent for an entry that
+   * is not a classifier (the geomodel) and on a server that predates the field.
+   */
+  registryId?: string;
   name: string;
   description: string;
   author: string;

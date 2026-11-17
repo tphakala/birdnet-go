@@ -5660,6 +5660,7 @@
       "reloadPage": "Genindlæs siden"
     },
     "skip": "Spring over",
+    "notNow": "Ikke nu",
     "back": "Tilbage",
     "next": "Næste",
     "done": "Færdig",
@@ -5778,6 +5779,33 @@
         "citizenPoint3": "Brug AI-detekteringer som udgangspunkt for dine egne observationer",
         "outro": "Denne tilgang sikrer datakvalitet til videnskabelig forskning, samtidig med at den maksimerer din læring og glæde ved fugle.",
         "acknowledge": "Jeg forstår"
+      },
+      "enableOnSources": {
+        "title": "Slå til på lydkilder",
+        "intro": "{name} er installeret. Vælg de lydkilder, der skal analyseres med den.",
+        "saveHint": "Dit valg gemmes, når du vælger Færdig. Ikke nu lukker dette uden at gemme.",
+        "allSources": "Alle lydkilder",
+        "soundCardsHeading": "Lydkort",
+        "streamsHeading": "Lydstreams",
+        "alreadyOn": "Analyserer allerede med {name}.",
+        "followsDefaultsRuns": "Bruger standardmodellerne, som omfatter {name}.",
+        "followsDefaultsAdd": "Bruger standardmodellerne. Når du slår dette til, beholdes de, og {name} tilføjes.",
+        "followsDefaultsUnknown": "Følger standardmodellerne, som ikke kunne læses. Slå {name} til for denne kilde i lydindstillingerne.",
+        "batStreamWarning": "Flagermusmodeller kræver en stream med et tabsfrit codec (PCM) og en samplingsfrekvens på mindst 96 kHz; BSG-BAT kræver mindst 192 kHz. En almindelig kamerastream er ikke ultralyd, så test streamen i lydindstillingerne, før du stoler på den.",
+        "allRunning": "Alle lydkilder analyserer allerede med {name}. Der er intet at ændre.",
+        "notListed": "{name} er ikke på listen over aktiverede modeller, så den kan ikke slås til for en lydkilde her.",
+        "notLoadedPending": "{name} indlæses stadig, så den kan ikke slås til for en lydkilde endnu. Når den er indlæst, kan du slå den til i indstillingerne for lydkilder.",
+        "notLoadedFailed": "{name} kunne ikke indlæses, så den kan ikke slås til for en lydkilde.",
+        "noSources": "Der er endnu ikke konfigureret nogen lydkilde. Tilføj et lydkort eller en stream i lydindstillingerne, og slå {name} til der.",
+        "openAudioSettings": "Åbn lydindstillinger",
+        "enabledToast": "{name} slået til for {count, plural, one {# lydkilde} other {# lydkilder}}"
+      }
+    },
+    "modelNextSteps": {
+      "title": "Næste trin for {name}",
+      "errors": {
+        "saveFailed": "Kunne ikke gemme. Tjek forbindelsen og prøv igen, eller vælg Ikke nu og slå modellen til for dine kilder senere under Indstillinger > Lyd.",
+        "saveRejected": "Ændringen blev ikke accepteret. Prøv igen, eller vælg Ikke nu og slå modellen til for dine kilder senere under Indstillinger > Lyd."
       }
     }
   },
@@ -5931,6 +5959,8 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Vent på, at den aktuelle installation, geninstallation eller fjernelse af modellen fuldføres",
+      "installSuccess": "{name} er installeret",
+      "installedEnableOnSources": "{name} er installeret. Slå den til for dine kilder under Indstillinger > Lyd for at bruge den.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Kører på {backend}, den anbefalede backend til din hardware",

@@ -5660,6 +5660,7 @@
       "reloadPage": "Seite neu laden"
     },
     "skip": "Überspringen",
+    "notNow": "Nicht jetzt",
     "back": "Zurück",
     "next": "Weiter",
     "done": "Fertig",
@@ -5778,6 +5779,33 @@
         "citizenPoint3": "Verwenden Sie KI-Erkennungen als Ausgangspunkt für Ihre eigenen Beobachtungen",
         "outro": "Dieser Ansatz gewährleistet die Datenqualität für die wissenschaftliche Forschung und maximiert gleichzeitig Ihr Lernen und Ihre Freude an Vögeln.",
         "acknowledge": "Ich verstehe"
+      },
+      "enableOnSources": {
+        "title": "Für Audioquellen aktivieren",
+        "intro": "{name} ist installiert. Wählen Sie die Audioquellen, die damit analysiert werden sollen.",
+        "saveHint": "Ihre Auswahl wird gespeichert, wenn Sie Fertig wählen. Nicht jetzt schließt dies, ohne zu speichern.",
+        "allSources": "Alle Audioquellen",
+        "soundCardsHeading": "Soundkarten",
+        "streamsHeading": "Audiostreams",
+        "alreadyOn": "Analysiert bereits mit {name}.",
+        "followsDefaultsRuns": "Verwendet die Standardmodelle, zu denen {name} gehört.",
+        "followsDefaultsAdd": "Verwendet die Standardmodelle. Beim Einschalten bleiben sie erhalten und {name} kommt hinzu.",
+        "followsDefaultsUnknown": "Folgt den Standardmodellen, die nicht gelesen werden konnten. Aktivieren Sie {name} für diese Quelle in den Audioeinstellungen.",
+        "batStreamWarning": "Fledermausmodelle benötigen einen Stream mit verlustfreiem Codec (PCM) und einer Abtastrate von mindestens 96 kHz; BSG-BAT benötigt mindestens 192 kHz. Ein typischer Kamerastream enthält keinen Ultraschall, testen Sie den Stream daher in den Audioeinstellungen, bevor Sie sich darauf verlassen.",
+        "allRunning": "Alle Audioquellen analysieren bereits mit {name}. Es gibt nichts zu ändern.",
+        "notListed": "{name} steht nicht in der Liste der aktivierten Modelle und kann hier daher für keine Audioquelle eingeschaltet werden.",
+        "notLoadedPending": "{name} wird noch geladen und kann daher noch für keine Audioquelle eingeschaltet werden. Schalten Sie es nach dem Laden in den Einstellungen der Audioquellen ein.",
+        "notLoadedFailed": "{name} konnte nicht geladen werden und kann daher für keine Audioquelle eingeschaltet werden.",
+        "noSources": "Es ist noch keine Audioquelle eingerichtet. Fügen Sie in den Audioeinstellungen eine Soundkarte oder einen Stream hinzu und schalten Sie {name} dort ein.",
+        "openAudioSettings": "Audioeinstellungen öffnen",
+        "enabledToast": "{name} für {count, plural, one {# Audioquelle} other {# Audioquellen}} eingeschaltet"
+      }
+    },
+    "modelNextSteps": {
+      "title": "Nächste Schritte für {name}",
+      "errors": {
+        "saveFailed": "Speichern fehlgeschlagen. Prüfen Sie die Verbindung und versuchen Sie es erneut, oder wählen Sie Nicht jetzt und schalten Sie das Modell später unter Einstellungen > Audio für Ihre Quellen ein.",
+        "saveRejected": "Die Änderung wurde nicht angenommen. Versuchen Sie es erneut, oder wählen Sie Nicht jetzt und schalten Sie das Modell später unter Einstellungen > Audio für Ihre Quellen ein."
       }
     }
   },
@@ -5931,6 +5959,8 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Warten Sie, bis die aktuelle Modellinstallation, Neuinstallation oder Entfernung abgeschlossen ist",
+      "installSuccess": "{name} installiert",
+      "installedEnableOnSources": "{name} ist installiert. Um es zu nutzen, schalten Sie es unter Einstellungen > Audio für Ihre Quellen ein.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Läuft auf {backend}, dem empfohlenen Backend für Ihre Hardware",

@@ -60,11 +60,13 @@ export function isRtspUrl(url: string): boolean {
   }
 }
 
-function sourcesOf(audio: AudioSettings | undefined): AudioSourceConfig[] {
+/** The stored sound card sources, or none when the list is missing or malformed. */
+export function sourcesOf(audio: AudioSettings | undefined): AudioSourceConfig[] {
   return Array.isArray(audio?.sources) ? audio.sources : [];
 }
 
-function streamsOf(rtsp: RTSPSettings | undefined): StreamConfig[] {
+/** The stored streams, or none when the list is missing or malformed. */
+export function streamsOf(rtsp: RTSPSettings | undefined): StreamConfig[] {
   return Array.isArray(rtsp?.streams) ? rtsp.streams : [];
 }
 

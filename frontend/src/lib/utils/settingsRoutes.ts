@@ -2,6 +2,7 @@
 export const SETTINGS_ROUTES = {
   mainLocation: '/ui/settings/main?tab=location',
   analysisDetection: '/ui/settings/analysis?tab=detection',
+  audio: '/ui/settings/audio',
   analysisModels: '/ui/settings/analysis?tab=models',
   securityServer: '/ui/settings/security?tab=server',
   securityReverseProxy: '/ui/settings/security?tab=server#reverse-proxy',

@@ -60,6 +60,8 @@
     type ThresholdRow,
     type ThresholdSectionValues,
   } from './analysisThresholds';
+  import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
+  import type { InstalledModelContext } from '$lib/desktop/features/wizard/types';
   import {
     analysisCadence,
     invalidateAcousticModels,
@@ -205,6 +207,7 @@
     variantId?: string; // reused when retrying an install
     network: boolean; // download could not reach the model host
     blocked: boolean; // the server refused the action and sent a translated reason (models still need it, or another model operation is running)
+    nextSteps?: InstalledModelContext; // set for a fresh install, so its Retry still offers the next steps
   }
   let installError = $state<GalleryActionError | null>(null);
 
@@ -1771,6 +1774,8 @@
 
   // ── SSE cleanup handle ────────────────────────────────────────────────
   let progressCleanup: (() => void) | null = null;
+  // Set on unmount, so a settings refresh that resolves later opens no wizard
+  let unmounted = false;
 
   onMount(() => {
     loadCatalog();
@@ -1779,6 +1784,7 @@
     loadRangeFilterCount();
     loadRangeFilterStatus();
     return () => {
+      unmounted = true;
       if (progressCleanup) progressCleanup();
       clearTimeout(completionTimer);
     };
@@ -1842,28 +1848,77 @@
     // Only send a variantId when the entry actually offers variants; a flat entry
     // installs its single build with no variant.
     const variantId = licenseModel.variants?.length ? selectedVariantId : undefined;
+    // Only a fresh install offers the next steps; a variant swap keeps the model's
+    // place on the audio sources
+    const nextSteps = licenseModel.installed ? undefined : nextStepsContext(licenseModel);
     closeLicenseDialog();
-    startInstall(modelId, modelName, variantId);
+    startInstall(modelId, modelName, variantId, nextSteps);
   }
 
   // Rebase the settings store on the server after a gallery action changed model
   // config outside the form. Call it before the completion timer, which unmount
-  // cancels. A failure is only logged; the next save rebases again.
-  function refreshSettingsAfterGalleryChange() {
-    settingsActions.refreshKeepingEdits().catch((e: unknown) => {
-      logger.error('Failed to refresh settings after a model gallery change:', e);
-    });
+  // cancels. A failure is only logged; the next save rebases again. The returned
+  // promise never rejects: it resolves to whether the store now holds the server
+  // values (a refresh before the first settings load returns without loading).
+  function refreshSettingsAfterGalleryChange(): Promise<boolean> {
+    return settingsActions.refreshKeepingEdits().then(
+      () => store.dataLoaded,
+      (e: unknown) => {
+        logger.error('Failed to refresh settings after a model gallery change:', e);
+        return false;
+      }
+    );
+  }
+
+  function nextStepsContext(entry: CatalogEntry): InstalledModelContext {
+    return {
+      catalogId: entry.id,
+      name: entry.name,
+      category: entry.category,
+      registryId: entry.registryId,
+    };
+  }
+
+  // After a fresh install: the recommended next steps when one applies, else a
+  // success toast. The steps save whole source lists built from the settings
+  // store, so this runs once the settings refresh has finished, and only a
+  // refresh that succeeded opens them.
+  function offerNextSteps(model: InstalledModelContext, settingsFresh: boolean) {
+    if (unmounted) return;
+    // Without fresh settings, or with a model list that does not include the new
+    // model yet (its refresh failed or was already running), the steps cannot run,
+    // so the user is pointed to the audio settings, where a model is turned on for
+    // a source
+    const listed =
+      !model.registryId || getAvailableModels().some(m => m.registryId === model.registryId);
+    if (!settingsFresh || !listed) {
+      toastActions.info(t('analysis.gallery.installedEnableOnSources', { name: model.name }));
+      return;
+    }
+    if (wizardState.isActive || !wizardState.launch('model-next-steps', { model })) {
+      toastActions.success(t('analysis.gallery.installSuccess', { name: model.name }));
+    }
   }
 
   // The install body, extracted so a failed install's Retry can re-run it without
   // reopening the license dialog (the license was accepted this session).
-  async function startInstall(modelId: string, modelName: string, variantId: string | undefined) {
+  async function startInstall(
+    modelId: string,
+    modelName: string,
+    variantId: string | undefined,
+    nextSteps?: InstalledModelContext
+  ) {
     // Defensive boundary: callers already gate on galleryActionInFlight, but keep
     // the invariant here so a future caller cannot start an overlapping action.
     if (galleryActionInFlight) return;
     installError = null;
     installingId = modelId;
     downloadProgress = null;
+    // A failed install keeps its next steps, so Retry still offers them
+    const installFailed = (message: string, blocked = false): GalleryActionError => ({
+      ...reportActionError(modelId, modelName, 'install', message, variantId, blocked),
+      nextSteps,
+    });
 
     try {
       await installModel(modelId, variantId);
@@ -1884,19 +1939,25 @@
             totalFiles: 0,
           };
           progressCleanup = null;
-          refreshSettingsAfterGalleryChange();
+          const settingsRefreshed = refreshSettingsAfterGalleryChange();
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
             if (installingId === modelId) {
               installingId = null;
               downloadProgress = null;
             }
-            void refreshModels();
+            const modelsRefreshed = refreshModels();
             loadCatalog();
+            // After both refreshes, so the steps read the current sources and list the new model
+            if (nextSteps) {
+              void Promise.all([settingsRefreshed, modelsRefreshed]).then(([fresh]) =>
+                offerNextSteps(nextSteps, fresh)
+              );
+            }
           }, 2000);
         },
         (err: string) => {
-          installError = reportActionError(modelId, modelName, 'install', err, variantId);
+          installError = installFailed(err);
           installingId = null;
           downloadProgress = null;
           progressCleanup = null;
@@ -1904,14 +1965,7 @@
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = reportActionError(
-        modelId,
-        modelName,
-        'install',
-        message,
-        variantId,
-        isOperationInProgress(e)
-      );
+      installError = installFailed(message, isOperationInProgress(e));
       installingId = null;
     }
   }
@@ -2074,8 +2128,8 @@
     // so this is currently unreachable, but it keeps the invariant explicit and
     // survives future refactors that might retry while an action is running.
     if (galleryActionInFlight) return;
-    const { modelId, modelName, variantId, kind } = installError;
-    if (kind === 'install') startInstall(modelId, modelName, variantId);
+    const { modelId, modelName, variantId, kind, nextSteps } = installError;
+    if (kind === 'install') startInstall(modelId, modelName, variantId, nextSteps);
     else if (kind === 'reinstall') startReinstall(modelId, modelName);
   }
 

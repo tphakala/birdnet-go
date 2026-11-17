@@ -5660,6 +5660,7 @@
       "reloadPage": "Odśwież stronę"
     },
     "skip": "Pomiń",
+    "notNow": "Nie teraz",
     "back": "Wstecz",
     "next": "Dalej",
     "done": "Gotowe",
@@ -5778,6 +5779,33 @@
         "citizenPoint3": "Użyj detekcji AI jako punktu wyjścia dla własnych obserwacji",
         "outro": "To podejście zapewnia jakość danych dla badań naukowych, jednocześnie maksymalizując naukę i przyjemność z obserwacji ptaków.",
         "acknowledge": "Rozumiem"
+      },
+      "enableOnSources": {
+        "title": "Włącz dla źródeł dźwięku",
+        "intro": "Model {name} jest zainstalowany. Wybierz źródła dźwięku, które mają być nim analizowane.",
+        "saveHint": "Wybór zostanie zapisany po wybraniu Gotowe. Nie teraz zamyka to okno bez zapisywania.",
+        "allSources": "Wszystkie źródła dźwięku",
+        "soundCardsHeading": "Karty dźwiękowe",
+        "streamsHeading": "Strumienie",
+        "alreadyOn": "Już analizuje modelem {name}.",
+        "followsDefaultsRuns": "Korzysta z modeli domyślnych, wśród których jest {name}.",
+        "followsDefaultsAdd": "Korzysta z modeli domyślnych. Włączenie zachowa je i doda {name}.",
+        "followsDefaultsUnknown": "Używa modeli domyślnych, których nie udało się odczytać. Włącz {name} dla tego źródła w ustawieniach dźwięku.",
+        "batStreamWarning": "Modele nietoperzy wymagają strumienia z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz; BSG-BAT wymaga co najmniej 192 kHz. Typowy strumień z kamery nie zawiera ultradźwięków, więc przetestuj strumień w ustawieniach dźwięku, zanim na nim polegasz.",
+        "allRunning": "Wszystkie źródła dźwięku już analizują modelem {name}. Nie ma nic do zmiany.",
+        "notListed": "Modelu {name} nie ma na liście włączonych modeli, więc nie można go tu włączyć dla źródła dźwięku.",
+        "notLoadedPending": "Model {name} wciąż się wczytuje, więc nie można go jeszcze włączyć dla źródła dźwięku. Po wczytaniu włącz go w ustawieniach źródeł dźwięku.",
+        "notLoadedFailed": "Nie udało się wczytać modelu {name}, więc nie można go włączyć dla źródła dźwięku.",
+        "noSources": "Nie skonfigurowano jeszcze żadnego źródła dźwięku. Dodaj kartę dźwiękową lub strumień w ustawieniach dźwięku i tam włącz {name}.",
+        "openAudioSettings": "Otwórz ustawienia dźwięku",
+        "enabledToast": "Włączono {name} dla {count, plural, one {# źródła dźwięku} few {# źródeł dźwięku} many {# źródeł dźwięku} other {# źródeł dźwięku}}"
+      }
+    },
+    "modelNextSteps": {
+      "title": "Następne kroki dla {name}",
+      "errors": {
+        "saveFailed": "Nie udało się zapisać. Sprawdź połączenie i spróbuj ponownie albo wybierz Nie teraz i włącz model dla swoich źródeł później w Ustawienia > Dźwięk.",
+        "saveRejected": "Zmiana nie została przyjęta. Spróbuj ponownie albo wybierz Nie teraz i włącz model dla swoich źródeł później w Ustawienia > Dźwięk."
       }
     }
   },
@@ -5931,6 +5959,8 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Poczekaj na zakończenie bieżącej instalacji, ponownej instalacji lub usunięcia modelu",
+      "installSuccess": "Zainstalowano {name}",
+      "installedEnableOnSources": "Zainstalowano {name}. Aby go używać, włącz go dla swoich źródeł w Ustawienia > Dźwięk.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Działa na {backend}, zalecanym backendzie dla twojego sprzętu",

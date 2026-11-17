@@ -5660,6 +5660,7 @@
       "reloadPage": "Ricarica la pagina"
     },
     "skip": "Salta",
+    "notNow": "Non ora",
     "back": "Indietro",
     "next": "Avanti",
     "done": "Fine",
@@ -5778,6 +5779,33 @@
         "citizenPoint3": "Usa i rilevamenti IA come punto di partenza per le tue osservazioni",
         "outro": "Questo approccio garantisce la qualità dei dati per la ricerca scientifica massimizzando il tuo apprendimento e il piacere dell'osservazione degli uccelli.",
         "acknowledge": "Ho capito"
+      },
+      "enableOnSources": {
+        "title": "Attiva sulle sorgenti audio",
+        "intro": "{name} è installato. Scegli le sorgenti audio da analizzare con questo modello.",
+        "saveHint": "La scelta viene salvata quando selezioni Fine. Non ora chiude senza salvare.",
+        "allSources": "Tutte le sorgenti audio",
+        "soundCardsHeading": "Schede audio",
+        "streamsHeading": "Stream",
+        "alreadyOn": "Analizza già con {name}.",
+        "followsDefaultsRuns": "Usa i modelli predefiniti, che includono {name}.",
+        "followsDefaultsAdd": "Usa i modelli predefiniti. Attivandolo vengono mantenuti e si aggiunge {name}.",
+        "followsDefaultsUnknown": "Segue i modelli predefiniti, che non è stato possibile leggere. Attiva {name} per questa sorgente nelle impostazioni audio.",
+        "batStreamWarning": "I modelli per pipistrelli richiedono uno stream con codec senza perdita (PCM) e una frequenza di campionamento di almeno 96 kHz; BSG-BAT richiede almeno 192 kHz. Un normale stream di una telecamera non è ultrasonico, quindi prova lo stream nelle impostazioni audio prima di farci affidamento.",
+        "allRunning": "Tutte le sorgenti audio analizzano già con {name}. Non c’è nulla da cambiare.",
+        "notListed": "{name} non è nell’elenco dei modelli abilitati, quindi qui non può essere attivato per una sorgente audio.",
+        "notLoadedPending": "{name} è ancora in caricamento, quindi non può ancora essere attivato per una sorgente audio. Una volta caricato, attivalo nelle impostazioni delle sorgenti audio.",
+        "notLoadedFailed": "Impossibile caricare {name}, quindi non può essere attivato per una sorgente audio.",
+        "noSources": "Non è ancora configurata alcuna sorgente audio. Aggiungi una scheda audio o uno stream nelle impostazioni audio e attiva {name} lì.",
+        "openAudioSettings": "Apri le impostazioni audio",
+        "enabledToast": "{name} attivato su {count, plural, one {# sorgente audio} other {# sorgenti audio}}"
+      }
+    },
+    "modelNextSteps": {
+      "title": "Prossimi passi per {name}",
+      "errors": {
+        "saveFailed": "Impossibile salvare. Controlla la connessione e riprova, oppure scegli Non ora e attiva il modello per le tue sorgenti più tardi in Impostazioni > Audio.",
+        "saveRejected": "La modifica non è stata accettata. Riprova, oppure scegli Non ora e attiva il modello per le tue sorgenti più tardi in Impostazioni > Audio."
       }
     }
   },
@@ -5931,6 +5959,8 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Attendi il completamento dell'installazione, reinstallazione o rimozione del modello corrente",
+      "installSuccess": "{name} installato",
+      "installedEnableOnSources": "{name} è installato. Per usarlo, attivalo per le tue sorgenti in Impostazioni > Audio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Eseguito su {backend}, il backend consigliato per il tuo hardware",

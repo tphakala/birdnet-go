@@ -10,7 +10,8 @@
 
   let { currentStep, totalSteps, flow }: Props = $props();
 
-  let visible = $derived(flow === 'onboarding' && totalSteps > 1);
+  // Changelog entries are pages, not steps, so they show no dots
+  let visible = $derived(flow !== 'whats-new' && totalSteps > 1);
 </script>
 
 {#if visible}

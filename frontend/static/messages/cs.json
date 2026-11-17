@@ -5660,6 +5660,7 @@
       "reloadPage": "Obnovit stránku"
     },
     "skip": "Přeskočit",
+    "notNow": "Teď ne",
     "back": "Zpět",
     "next": "Další",
     "done": "Hotovo",
@@ -5778,6 +5779,33 @@
         "citizenPoint3": "AI detekce použijte jako výchozí bod pro vaše vlastní pozorování",
         "outro": "Tento přístup zajišťuje kvalitu dat pro vědecký výzkum a zároveň maximalizuje vaše poznávání a radost z ptactva.",
         "acknowledge": "Rozumím"
+      },
+      "enableOnSources": {
+        "title": "Zapnout na zvukových zdrojích",
+        "intro": "Model {name} je nainstalován. Vyberte zvukové zdroje, které jím mají analyzovat zvuk.",
+        "saveHint": "Volba se uloží, když vyberete Hotovo. Teď ne toto okno zavře bez uložení.",
+        "allSources": "Všechny zvukové zdroje",
+        "soundCardsHeading": "Zvukové karty",
+        "streamsHeading": "Streamy",
+        "alreadyOn": "Již analyzuje modelem {name}.",
+        "followsDefaultsRuns": "Používá výchozí modely, mezi které patří {name}.",
+        "followsDefaultsAdd": "Používá výchozí modely. Zapnutím se zachovají a přidá se {name}.",
+        "followsDefaultsUnknown": "Používá výchozí modely, které se nepodařilo načíst. Zapněte {name} pro tento zdroj v nastavení zvuku.",
+        "batStreamWarning": "Modely netopýrů potřebují stream s bezztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz; BSG-BAT potřebuje alespoň 192 kHz. Běžný stream z kamery není ultrazvukový, proto stream před použitím otestujte v nastavení zvuku.",
+        "allRunning": "Všechny zvukové zdroje již analyzují modelem {name}. Není co měnit.",
+        "notListed": "Model {name} není v seznamu povolených modelů, proto ho zde nelze zapnout pro zvukový zdroj.",
+        "notLoadedPending": "Model {name} se stále načítá, proto ho zatím nelze zapnout pro zvukový zdroj. Po načtení ho zapněte v nastavení zvukových zdrojů.",
+        "notLoadedFailed": "Model {name} se nepodařilo načíst, proto ho nelze zapnout pro zvukový zdroj.",
+        "noSources": "Zatím není nastaven žádný zvukový zdroj. Přidejte zvukovou kartu nebo stream v nastavení zvuku a tam zapněte {name}.",
+        "openAudioSettings": "Otevřít nastavení zvuku",
+        "enabledToast": "Model {name} zapnut pro {count, plural, one {# zvukový zdroj} few {# zvukové zdroje} many {# zvukových zdrojů} other {# zvukových zdrojů}}"
+      }
+    },
+    "modelNextSteps": {
+      "title": "Další kroky pro {name}",
+      "errors": {
+        "saveFailed": "Uložení se nezdařilo. Zkontrolujte připojení a zkuste to znovu, nebo zvolte Teď ne a zapněte model pro své zdroje později v Nastavení > Zvuk.",
+        "saveRejected": "Změna nebyla přijata. Zkuste to znovu, nebo zvolte Teď ne a zapněte model pro své zdroje později v Nastavení > Zvuk."
       }
     }
   },
@@ -5931,6 +5959,8 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Počkejte na dokončení probíhající instalace, přeinstalace nebo odstranění modelu",
+      "installSuccess": "Model {name} byl nainstalován",
+      "installedEnableOnSources": "Model {name} je nainstalován. Chcete-li ho používat, zapněte ho pro své zdroje v Nastavení > Zvuk.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Běží na {backend}, doporučeném backendu pro váš hardware",

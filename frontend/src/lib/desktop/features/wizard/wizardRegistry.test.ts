@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getStepsForFlow } from './wizardRegistry';
+import type { InstalledModelContext } from './types';
 
 describe('wizardRegistry: getStepsForFlow()', () => {
   describe('onboarding flow', () => {
@@ -80,6 +81,31 @@ describe('wizardRegistry: getStepsForFlow()', () => {
         currentVersion: undefined,
       });
       expect(steps).toEqual([]);
+    });
+  });
+
+  describe('model-next-steps flow', () => {
+    const classifier = {
+      catalogId: 'perch-v2',
+      name: 'Perch v2',
+      category: 'bird',
+      registryId: 'Perch_V2',
+    } satisfies InstalledModelContext;
+
+    it('offers the enable on sources step for a classifier', () => {
+      const steps = getStepsForFlow('model-next-steps', { model: classifier });
+      expect(steps.map(s => s.id)).toEqual(['enable-on-sources']);
+    });
+
+    it('offers nothing for an entry without a registry ID', () => {
+      const steps = getStepsForFlow('model-next-steps', {
+        model: { catalogId: 'birdnet-geomodel-v3', name: 'Geomodel', category: 'geomodel' },
+      });
+      expect(steps).toEqual([]);
+    });
+
+    it('offers nothing without a model', () => {
+      expect(getStepsForFlow('model-next-steps')).toEqual([]);
     });
   });
 });
