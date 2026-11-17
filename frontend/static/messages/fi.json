@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Odota, että nykyisen mallin asennus, uudelleenasennus tai poisto valmistuu",
       "installSuccess": "{name} asennettu",
+      "installedEnableOnSources": "{name} on asennettu. Ota se käyttöön lähteillesi kohdassa Asetukset > Ääni, niin voit käyttää sitä.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Käyttää taustajärjestelmää {backend}, joka on suositeltu laitteistollesi",

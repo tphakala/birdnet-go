@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Počkejte na dokončení probíhající instalace, přeinstalace nebo odstranění modelu",
       "installSuccess": "Model {name} byl nainstalován",
+      "installedEnableOnSources": "Model {name} je nainstalován. Chcete-li ho používat, zapněte ho pro své zdroje v Nastavení > Zvuk.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Běží na {backend}, doporučeném backendu pro váš hardware",

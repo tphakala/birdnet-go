@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Vent til den pågående installasjonen, reinstallasjonen eller fjerningen av modellen er ferdig",
       "installSuccess": "{name} er installert",
+      "installedEnableOnSources": "{name} er installert. Slå den på for kildene dine under Innstillinger > Lyd for å bruke den.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Kjører på {backend}, som er den anbefalte backenden for din maskinvare",

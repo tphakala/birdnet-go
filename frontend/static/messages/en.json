@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Wait for the current model install, reinstall, or remove to finish",
       "installSuccess": "Installed {name}",
+      "installedEnableOnSources": "{name} is installed. To use it, turn it on for your sources in Settings > Audio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Runs on {backend}, the recommended backend for your hardware",

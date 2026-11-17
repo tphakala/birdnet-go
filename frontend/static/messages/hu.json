@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Várd meg a modell jelenlegi telepítésének, újratelepítésének vagy eltávolításának befejezését",
       "installSuccess": "{name} telepítve",
+      "installedEnableOnSources": "A(z) {name} telepítve van. A használatához kapcsolja be a forrásaihoz a Beállítások > Hang menüben.",
       "removeSuccess": "{name} eltávolítva",
       "reasons": {
         "backendRecommended": "Ezen fut: {backend}, amely a hardveredhez ajánlott backend",

@@ -4388,6 +4388,7 @@ export type TranslationKey =
   | 'analysis.gallery.variants.precisionHelp'
   | 'analysis.gallery.actionInProgress'
   | 'analysis.gallery.installSuccess' // params: name
+  | 'analysis.gallery.installedEnableOnSources' // params: name
   | 'analysis.gallery.removeSuccess' // params: name
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
   | 'analysis.gallery.reasons.backendSupported' // params: backend
@@ -5308,6 +5309,7 @@ export type TranslationParams = {
   'analysis.gallery.variants.regionContext': { region: string | number };
   'analysis.gallery.variants.filterNoMatch': { query: string | number };
   'analysis.gallery.installSuccess': { name: string | number };
+  'analysis.gallery.installedEnableOnSources': { name: string | number };
   'analysis.gallery.removeSuccess': { name: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
   'analysis.gallery.reasons.backendSupported': { backend: string | number };

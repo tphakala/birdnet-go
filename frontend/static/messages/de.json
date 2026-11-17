@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Warten Sie, bis die aktuelle Modellinstallation, Neuinstallation oder Entfernung abgeschlossen ist",
       "installSuccess": "{name} installiert",
+      "installedEnableOnSources": "{name} ist installiert. Um es zu nutzen, schalten Sie es unter Einstellungen > Audio für Ihre Quellen ein.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Läuft auf {backend}, dem empfohlenen Backend für Ihre Hardware",

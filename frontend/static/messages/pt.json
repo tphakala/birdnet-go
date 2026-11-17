@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Aguarde a conclusão da instalação, reinstalação ou remoção do modelo atual",
       "installSuccess": "{name} instalado",
+      "installedEnableOnSources": "{name} está instalado. Para o usar, ative-o para as suas fontes em Configurações > Áudio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Roda em {backend}, o backend recomendado para o seu hardware",

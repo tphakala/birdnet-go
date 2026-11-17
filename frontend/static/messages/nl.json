@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Wacht tot de huidige installatie, herinstallatie of verwijdering van het model is voltooid",
       "installSuccess": "{name} geïnstalleerd",
+      "installedEnableOnSources": "{name} is geïnstalleerd. Schakel het in voor uw bronnen via Instellingen > Audio om het te gebruiken.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Draait op {backend}, de aanbevolen backend voor jouw hardware",

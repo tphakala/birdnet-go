@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Attendez la fin de l'installation, de la réinstallation ou de la suppression du modèle en cours",
       "installSuccess": "{name} installé",
+      "installedEnableOnSources": "{name} est installé. Pour l’utiliser, activez-le pour vos sources dans Paramètres > Audio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "S'exécute sur {backend}, le backend recommandé pour votre matériel",

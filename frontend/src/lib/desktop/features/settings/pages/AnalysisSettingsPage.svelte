@@ -1885,11 +1885,13 @@
   // refresh that succeeded opens them.
   function offerNextSteps(model: InstalledModelContext, settingsFresh: boolean) {
     if (unmounted) return;
-    if (
-      !settingsFresh ||
-      wizardState.isActive ||
-      !wizardState.launch('model-next-steps', { model })
-    ) {
+    // Without fresh settings the steps cannot run, so the user is pointed to the
+    // audio settings, where a new model is turned on for a source
+    if (!settingsFresh) {
+      toastActions.info(t('analysis.gallery.installedEnableOnSources', { name: model.name }));
+      return;
+    }
+    if (wizardState.isActive || !wizardState.launch('model-next-steps', { model })) {
       toastActions.success(t('analysis.gallery.installSuccess', { name: model.name }));
     }
   }

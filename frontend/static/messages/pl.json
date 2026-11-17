@@ -5955,6 +5955,7 @@
       },
       "actionInProgress": "Poczekaj na zakończenie bieżącej instalacji, ponownej instalacji lub usunięcia modelu",
       "installSuccess": "Zainstalowano {name}",
+      "installedEnableOnSources": "Zainstalowano {name}. Aby go używać, włącz go dla swoich źródeł w Ustawienia > Dźwięk.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Działa na {backend}, zalecanym backendzie dla twojego sprzętu",
