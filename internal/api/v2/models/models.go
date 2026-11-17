@@ -154,7 +154,13 @@ type ModelListItem struct {
 
 // CatalogEntryResponse represents a model in the catalog API response.
 type CatalogEntryResponse struct {
-	ID            string `json:"id"`
+	ID string `json:"id"`
+	// RegistryID is the classifier registry ID the entry loads as (e.g.
+	// "BirdNET_V2.4"). It is the join key against the registryId of the items
+	// served by GET /api/v2/models, which carry the config alias that audio
+	// source model lists use. Omitted for an entry that is not a classifier,
+	// such as the geomodel.
+	RegistryID    string `json:"registryId,omitempty"`
 	Name          string `json:"name"`
 	Description   string `json:"description"`
 	Author        string `json:"author"`
@@ -547,6 +553,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 
 		catalog = append(catalog, CatalogEntryResponse{
 			ID:                   entry.ID,
+			RegistryID:           entry.RegistryID,
 			Name:                 entry.Name,
 			Description:          entry.Description,
 			Author:               entry.Author,

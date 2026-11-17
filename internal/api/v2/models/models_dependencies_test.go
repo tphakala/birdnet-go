@@ -184,6 +184,7 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 
 	p := findEntry(catalog, apiDepP)
 	require.NotNil(t, p)
+	assert.Equal(t, classifier.RegistryIDBirdNETV24, p.RegistryID, "a classifier entry reports its registry ID")
 	assert.True(t, p.HasGeomodel, "the default variant brings the geomodel through the dependency")
 	builtin := findVariant(p, "builtin")
 	require.NotNil(t, builtin)
@@ -194,6 +195,7 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 
 	g := findEntry(catalog, apiDepG)
 	require.NotNil(t, g)
+	assert.Empty(t, g.RegistryID, "an entry that is not a classifier reports no registry ID")
 	assert.Empty(t, g.DependsOn)
 	assert.True(t, g.HasGeomodel, "the geomodel entry provides its own geomodel files")
 	assert.Equal(t, classifier.ChannelPreview, g.Channel, "a declared channel is passed through")
