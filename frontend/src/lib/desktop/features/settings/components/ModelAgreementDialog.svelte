@@ -11,6 +11,7 @@
   @component
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import type { AgreementDocument } from '$lib/types/models';
   import { documentKindLabel } from '$lib/utils/modelDocuments';
@@ -34,6 +35,9 @@
 
   // A plain binding: the native dialog is driven through showModal() and close().
   let dialogEl: HTMLDialogElement | null = null;
+  // Initial focus goes to Cancel, the safe action, rather than whatever the browser
+  // finds first while the document texts are still loading.
+  let cancelEl = $state<HTMLButtonElement | null>(null);
 
   const TITLE_ID = generateId('agreement-dialog-title');
   const REASON_ID = generateId('agreement-dialog-reason');
@@ -47,6 +51,7 @@
   $effect(() => {
     if (open) {
       dialogEl?.showModal();
+      untrack(() => cancelEl)?.focus();
     } else {
       dialogEl?.close();
       statuses = {};
@@ -138,6 +143,7 @@
       </p>
       <div class="mt-3 flex justify-end gap-3">
         <button
+          bind:this={cancelEl}
           type="button"
           onclick={onCancel}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"

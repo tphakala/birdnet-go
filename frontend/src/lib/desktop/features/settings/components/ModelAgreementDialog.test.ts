@@ -160,6 +160,46 @@ describe('ModelAgreementDialog', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
+  // Nothing in the dialog may hold focus without a name: initial focus goes to Cancel,
+  // the safe action, whatever state the document text is in.
+  it('opens with focus on Cancel and keeps it there when the text loads', async () => {
+    vi.mocked(fetchModelDocument).mockResolvedValue(loadedDocument('aaa', 'policy text'));
+    renderDialog([policy]);
+
+    expect(await screen.findByText('policy text')).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+    expect(dialogElement().querySelector('[tabindex="-1"]')).toBeNull();
+  });
+
+  it('opens with focus on Cancel when the text is unavailable', async () => {
+    vi.mocked(fetchModelDocument).mockRejectedValue(
+      new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }))
+    );
+    renderDialog([policy]);
+
+    await screen.findByRole('button', { name: /common\.retry/ });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('moves focus to the document text when a Retry succeeds', async () => {
+    vi.mocked(fetchModelDocument)
+      .mockRejectedValueOnce(
+        new ApiError('the text could not be verified', 502, new Response(null, { status: 502 }))
+      )
+      .mockResolvedValueOnce(loadedDocument('aaa', 'policy text'));
+    renderDialog([policy]);
+    const retry = await screen.findByRole('button', { name: /common\.retry/ });
+    retry.focus();
+
+    await fireEvent.click(retry);
+
+    const region = await screen.findByRole('region', {
+      name: 'analysis.gallery.documents.textRegion',
+    });
+    await waitFor(() => expect(document.activeElement).toBe(region));
+    expect(dialogElement().querySelector('[tabindex="-1"]')).toBeNull();
+  });
+
   it('keeps focus in the dialog after Retry', async () => {
     vi.mocked(fetchModelDocument)
       .mockRejectedValueOnce(
