@@ -762,6 +762,47 @@ describe('AnalysisSettingsPage inference runtime', () => {
     });
   });
 
+  it('restores the unset saved device when Auto is picked again', async () => {
+    mockRuntime(async () => runtimeStatus());
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    await waitFor(() => expect(device).toBeEnabled());
+    const user = userEvent.setup();
+
+    await user.click(device);
+    await user.click(screen.getByRole('option', { name: 'analysis.inference.device.options.cpu' }));
+    await user.click(device);
+    await user.click(
+      screen.getByRole('option', { name: 'analysis.inference.device.options.auto' })
+    );
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', {
+      openVinoDevice: undefined,
+    });
+  });
+
+  it('keeps an explicit saved auto backend when Auto is picked again', async () => {
+    seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto' });
+    mockRuntime(async () => runtimeStatus());
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+    await waitFor(() => expect(backend).toBeEnabled());
+    const user = userEvent.setup();
+
+    await user.click(backend);
+    await user.click(
+      screen.getByRole('option', { name: 'analysis.inference.backend.options.onnx' })
+    );
+    await user.click(backend);
+    await user.click(
+      screen.getByRole('option', { name: 'analysis.inference.backend.options.auto' })
+    );
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { backend: 'auto' });
+  });
+
   it('offers GPU only when the host has one or it is saved', async () => {
     mockRuntime(async () => runtimeStatus({ devices: ['CPU'] }));
     render(AnalysisSettingsPage);
