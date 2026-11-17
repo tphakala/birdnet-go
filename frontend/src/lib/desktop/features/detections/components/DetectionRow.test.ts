@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import DetectionRow from './DetectionRow.svelte';
 import type { Detection } from '$lib/types/detection.types';
 import { downloadDetectionAudio } from '$lib/utils/audioDownload';
+import { appState } from '$lib/stores/appState.svelte';
+import { installFakeMediaElement, settle } from '../../../../../test/fakeMediaElement';
 
 // DetectionRow is presentational for mutation actions: opening the action menu
 // and clicking one must invoke the callback the parent passed. Audio download
@@ -18,6 +20,19 @@ vi.mock('$lib/stores/navigation.svelte', () => ({
 
 vi.mock('$lib/utils/audioDownload', () => ({
   downloadDetectionAudio: vi.fn(),
+}));
+
+// The row player builds its Web Audio graph on the first play; the graph is not
+// under test here.
+vi.mock('$lib/utils/audioContextManager', () => ({
+  getAudioContext: vi.fn().mockResolvedValue({ state: 'running' }),
+  isAudioContextSupported: vi.fn().mockReturnValue(true),
+  releaseAudioContext: vi.fn(),
+}));
+
+vi.mock('$lib/utils/audioNodes', () => ({
+  attachAudioGraphWhenRunning: vi.fn(),
+  disconnectAudioNodes: vi.fn(),
 }));
 
 function createMockDetection(overrides: Partial<Detection> = {}): Detection {
@@ -224,5 +239,35 @@ describe('DetectionRow recording cell gating', () => {
     });
 
     expect(container.querySelector('.spectrogram-player')).not.toBeNull();
+  });
+});
+
+describe('DetectionRow playback denoise default', () => {
+  const PRESET = 'light-medium';
+  let ctl: ReturnType<typeof installFakeMediaElement>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    ctl = installFakeMediaElement();
+    appState.playbackDenoise = PRESET;
+  });
+
+  afterEach(() => {
+    appState.playbackDenoise = '';
+    ctl.restore();
+    vi.useRealTimers();
+  });
+
+  it('plays the denoised clip on the first play and loads the stored one before', async () => {
+    render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 700, clipName: 'clip_700.wav' }) },
+    });
+    expect(new URL(ctl.element.src).search).toBe('');
+
+    ctl.completeLoad();
+    await fireEvent.click(screen.getByRole('button', { name: /play/i }));
+    await settle();
+
+    expect(new URL(ctl.element.src).search).toBe(`?denoise=${PRESET}`);
   });
 });

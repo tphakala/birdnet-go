@@ -230,17 +230,15 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// (Sentry flagged this on PR #2775).
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+		Store: apicore.NewRateLimiterStore(
 			middleware.RateLimiterMemoryStoreConfig{
 				Rate:      rate.Limit(float64(rateLimitRequestsPerWindow) / rateLimitWindow.Seconds()),
 				Burst:     rateLimitBurst,  // Rate limit burst
 				ExpiresIn: rateLimitWindow, // Rate limit window
 			},
 		),
-		IdentifierExtractor: func(ctx echo.Context) (string, error) {
-			// Use client IP as identifier
-			return ctx.RealIP(), nil
-		},
+		// One bucket per client address (per /64 for IPv6)
+		IdentifierExtractor: c.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return c.HandleErrorWithKey(context, err, "Too many notification stream connection attempts, please wait before trying again", http.StatusTooManyRequests, notification.MsgErrNotifRateLimit, nil)
 		},

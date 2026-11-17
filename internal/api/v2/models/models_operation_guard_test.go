@@ -1,13 +1,17 @@
 package models
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -161,6 +165,121 @@ func TestUninstallModel_Returns409WhileAnotherOperationRuns(t *testing.T) {
 	requireOperationInProgress(t, rec, apiDepP, "Primary", "install")
 	assert.True(t, mm.IsInstalled(apiDepA), "a refused uninstall keeps the model")
 	assert.FileExists(t, filepath.Join(modelsDir, apiDepA, "a.onnx"))
+}
+
+// TestUninstallModel_AnnouncesListChange verifies that a successful uninstall
+// announces the list change, because the manager fires no topology event when
+// the removed model was not loaded, and that a refused uninstall announces
+// nothing.
+func TestUninstallModel_AnnouncesListChange(t *testing.T) {
+	useCatalog(t, guardCatalog())
+	mm, _ := guardInstalledManager(t)
+	h := dependencyHandler(t, mm)
+	var announced int
+	h.announceListChange = func() { announced++ }
+
+	lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepP)
+	require.NoError(t, err)
+	rec := guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	assert.Zero(t, announced, "a refused uninstall must not announce a change")
+	lease.Release()
+
+	rec = guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, 1, announced, "a successful uninstall announces the change once")
+}
+
+// TestUninstallModel_AnnouncesListChangeWhenFileCleanupFails verifies that an
+// uninstall whose file cleanup fails still announces the list change, since the
+// model already left the installed set before the files were removed.
+func TestUninstallModel_AnnouncesListChangeWhenFileCleanupFails(t *testing.T) {
+	useCatalog(t, guardCatalog())
+	mm, modelsDir := guardInstalledManager(t)
+	h := dependencyHandler(t, mm)
+	var announced int
+	h.announceListChange = func() { announced++ }
+
+	// A non-empty directory in place of the model file makes its removal fail
+	// for any user, root included.
+	modelFile := filepath.Join(modelsDir, apiDepA, "a.onnx")
+	require.NoError(t, os.Remove(modelFile))
+	writeFile(t, filepath.Join(modelFile, "keep"))
+
+	rec := guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
+	require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+	require.False(t, mm.IsInstalled(apiDepA), "the model left the installed set before cleanup failed")
+	assert.Equal(t, 1, announced, "a removed model is announced even when its file cleanup fails")
+
+	// A refusal changes nothing and announces nothing, though the model is not installed.
+	rec = guardRequest(t, h.UninstallModel, http.MethodDelete, apiDepA, "")
+	require.NotEqual(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, 1, announced, "an uninstall of a model that is not installed announces nothing")
+}
+
+// catalogFileHub serves each synthetic catalog file at its catalog size, or
+// answers 404 for every request when notFound is set.
+func catalogFileHub(t *testing.T, notFound bool) *httptest.Server {
+	t.Helper()
+	sizes := map[string]int{
+		"a.onnx": apiSizeModel, "a.txt": apiSizeLabels, "geo.onnx": apiSizeGeo,
+		"geo.txt": apiSizeGeoLbl, "taxonomy.csv": apiSizeTax,
+	}
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		size, ok := sizes[path.Base(r.URL.Path)]
+		if notFound || !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(bytes.Repeat([]byte("x"), size))
+	}))
+	t.Cleanup(hub.Close)
+	return hub
+}
+
+// TestInstallAndReinstall_AnnounceListChangeOnSuccessOnly verifies that a
+// finished install or reinstall announces the list change, and that an install
+// whose download fails announces nothing.
+func TestInstallAndReinstall_AnnounceListChangeOnSuccessOnly(t *testing.T) {
+	tests := []struct {
+		name         string
+		handler      func(h *Handler) echo.HandlerFunc
+		installed    bool
+		downloadFail bool
+		wantAnnounce int32
+	}{
+		{"install succeeds", func(h *Handler) echo.HandlerFunc { return h.InstallModel }, false, false, 1},
+		{"install download fails", func(h *Handler) echo.HandlerFunc { return h.InstallModel }, false, true, 0},
+		{"reinstall succeeds", func(h *Handler) echo.HandlerFunc { return h.ReinstallModel }, true, false, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			useCatalog(t, guardCatalog())
+			hub := catalogFileHub(t, tt.downloadFail)
+			core := apitest.NewCore(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
+				s.BirdNET.HuggingFaceEndpoint = hub.URL
+			}))
+			var mm *classifier.ModelManager
+			if tt.installed {
+				mm, _ = guardInstalledManager(t)
+			} else {
+				mm = classifier.NewModelManager(t.TempDir(), nil, nil)
+			}
+			core.ModelManager = mm
+			h := New(core, nil)
+			h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+				return hwprofile.Profile{Arch: "amd64", TotalRAMBytes: 16 << 30}
+			}
+			var announced atomic.Int32
+			h.announceListChange = func() { announced.Add(1) }
+
+			rec := guardRequest(t, tt.handler(h), http.MethodPost, apiDepA, "")
+			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+			h.Wait()
+
+			assert.Equal(t, tt.wantAnnounce, announced.Load())
+		})
+	}
 }
 
 // gatedHub is a download server that parks the first request until released and

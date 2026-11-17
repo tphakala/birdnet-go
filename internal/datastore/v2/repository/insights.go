@@ -54,6 +54,8 @@ type InsightsRepository interface {
 	// detection_model_contributions for detections whose detected_at lies in the
 	// half-open Unix-seconds range [start, end). Reviews of every verdict are
 	// included (false positives are not excluded), so outcomes can be counted per
-	// model. The result is never nil on success and its slices are never nil.
+	// model. Only contribution rows with a hit count above 0 are counted; rows
+	// recording a model that was active without a hit are ignored. The result is
+	// never nil on success and its slices are never nil.
 	GetModelContributionStats(ctx context.Context, start, end int64) (*ModelContributionStats, error)
 }

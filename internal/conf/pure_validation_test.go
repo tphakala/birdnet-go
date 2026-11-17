@@ -109,6 +109,20 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 			expectError: "threshold must be between 0 and 1",
 		},
 		{
+			name: "alternate min confidence too low",
+			config: BirdNETConfig{
+				AlternateMinConfidence: -0.1,
+			},
+			expectError: "alternateminconfidence must be between 0 and 1",
+		},
+		{
+			name: "alternate min confidence too high",
+			config: BirdNETConfig{
+				AlternateMinConfidence: 1.1,
+			},
+			expectError: "alternateminconfidence must be between 0 and 1",
+		},
+		{
 			name: "overlap too low",
 			config: BirdNETConfig{
 				Overlap: -0.1,

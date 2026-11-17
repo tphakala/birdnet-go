@@ -23,15 +23,17 @@ const (
 )
 
 // IsTransientDBError checks if an error (or any error in its unwrap chain) is a
-// transient database lock or deadlock error that is safe to retry. Covers both
-// SQLite (database is locked, SQLITE_BUSY) and MySQL (deadlock detected, lock
-// wait timeout). Wrapped errors (e.g. EnhancedError) are unwrapped so the
-// underlying message is inspected at every level.
+// transient database lock or deadlock error that is safe to retry. Driver errors
+// are recognised by SQLite result code (BUSY, LOCKED) and by MySQL/MariaDB error
+// number (1205, 1213), with the driver message text as the fallback for errors
+// whose type was lost. An error that only mentions the word "locked" is not
+// transient. Wrapped errors (e.g. EnhancedError) are unwrapped so every level is
+// inspected.
 func IsTransientDBError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Walk the error chain -- wrapped errors may hide the transient message.
+	// Walk the error chain: wrapped errors may hide the transient message.
 	for e := err; e != nil; e = errors.Unwrap(e) {
 		if isDatabaseLocked(e) || isDeadlock(e) {
 			return true
@@ -120,7 +122,7 @@ func RetryOnLock(ctx context.Context, operation string, fn func() error, metrics
 		}
 	}
 
-	// All retries exhausted -- record the critical exhaustion metric.
+	// All retries exhausted: record the critical exhaustion metric.
 	recordRetryExhaustion(metrics, operation, start)
 	return err
 }
@@ -130,7 +132,7 @@ func RetryOnLock(ctx context.Context, operation string, fn func() error, metrics
 // failed attempt's rolled-back state does not leak into the next try.
 //
 // The caller-supplied fn receives the open *gorm.DB transaction and should
-// execute its queries on it. It must NOT call Commit or Rollback -- that is
+// execute its queries on it. It must NOT call Commit or Rollback: that is
 // handled by this helper.
 //
 // The ctx parameter enables cancellation-aware backoff and is propagated to
@@ -198,7 +200,7 @@ func RetryTransactionOnLock(ctx context.Context, db *gorm.DB, operation string, 
 		}
 	}
 
-	// All retries exhausted -- record the critical exhaustion metric.
+	// All retries exhausted: record the critical exhaustion metric.
 	recordRetryExhaustion(metrics, operation, start)
 	return lastErr
 }

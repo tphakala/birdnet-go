@@ -24,6 +24,5 @@ components/
 ├── forms/      # form inputs and settings controls
 ├── media/      # audio playback and spectrograms
 ├── modals/     # dialogs
-├── review/     # detection review workflow
 └── ui/         # generic UI primitives (see ui/AGENTS.md)
 ```

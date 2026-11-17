@@ -33,6 +33,9 @@ func TestParticipatesInRangeFilter_MatchesLegacyGate(t *testing.T) {
 	for id := range ModelRegistry {
 		t.Run("registry/"+id, func(t *testing.T) {
 			t.Parallel()
+			if id == RegistryIDBirdNETPlusV3 {
+				t.Skip("BirdNET+ v3.0 postdates the legacy display-name gate (its detection name is not BirdNET); TestParticipatesInRangeFilter_ExpectedPerModel pins it")
+			}
 			assert.Equal(t, legacyShouldRangeFilter(id), ParticipatesInRangeFilter(id),
 				"capability gate must match the legacy display-name gate for registry ID %q", id)
 		})
@@ -74,11 +77,13 @@ func TestParticipatesInRangeFilter_ExpectedPerModel(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]bool{
-		"BirdNET_V2.4":      true, // MData range filter over the v2.4 label set
-		RegistryIDBirdNETV3: true, // mapped geomodel v3
-		RegistryIDPerchV2:   true, // mapped geomodel v3, scientific-name labels
-		RegistryIDBat:       false,
-		RegistryIDBSG:       false,
+		"BirdNET_V2.4":          true, // MData range filter over the v2.4 label set
+		RegistryIDBirdNETV3:     true, // mapped geomodel v3
+		RegistryIDBirdNETPlusV3: true, // mapped geomodel v3
+		RegistryIDPerchV2:       true, // mapped geomodel v3, scientific-name labels
+		RegistryIDBat:           false,
+		RegistryIDBSGBat:        false,
+		RegistryIDBSG:           false,
 	}
 	for id, expected := range want {
 		t.Run(id, func(t *testing.T) {

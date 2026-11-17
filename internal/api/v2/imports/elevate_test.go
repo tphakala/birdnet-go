@@ -46,12 +46,30 @@ func TestNewStagingDst_RefusesUntrustedBase(t *testing.T) {
 	require.ErrorIs(t, err, ErrStagingBaseUnavailable)
 }
 
-func TestPreflightDiskSpace_Insufficient(t *testing.T) {
-	h := New(testCore(t), nil)
-	require.ErrorIs(t, h.preflightDiskSpace(100, nil, 1000), ErrInsufficientSpace)
-}
+// TestPreflightDiskSpace verifies the staging disk check: one byte short fails,
+// exactly enough passes, and a probe error is passed through unchanged.
+func TestPreflightDiskSpace(t *testing.T) {
+	const required = 1000
+	tests := []struct {
+		name    string
+		free    uint64
+		freeErr error
+		wantErr error
+	}{
+		{name: "one byte short", free: required - 1, wantErr: ErrInsufficientSpace},
+		{name: "exactly enough", free: required},
+		{name: "probe error is passed through", freeErr: ErrDiskCheckUnsupported, wantErr: ErrDiskCheckUnsupported},
+	}
 
-func TestPreflightDiskSpace_Sufficient(t *testing.T) {
 	h := New(testCore(t), nil)
-	require.NoError(t, h.preflightDiskSpace(10_000, nil, 1000))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := h.preflightDiskSpace(tt.free, tt.freeErr, required)
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.wantErr)
+		})
+	}
 }

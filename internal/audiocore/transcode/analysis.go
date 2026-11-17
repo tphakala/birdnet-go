@@ -65,6 +65,32 @@ func DecodeMono(ctx context.Context, path string, toRate int) (*MonoSource, erro
 	if err != nil {
 		return nil, err
 	}
+	return monoFromDecoded(buf, toRate)
+}
+
+// DecodeMonoOpenFile is DecodeMono on a file the caller already opened: the
+// regular-file and size checks run on f itself, so no path is resolved again, and
+// the same decoded-size bound, sentinels and truncation check apply. name selects
+// the decoder by its extension only. It reads f from its current offset, so pass
+// a freshly opened file, and it does not close f.
+func DecodeMonoOpenFile(ctx context.Context, f *os.File, name string, toRate int) (*MonoSource, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	size, err := statSourceFile(f)
+	if err != nil {
+		return nil, err
+	}
+	buf, err := decodeOpenFile(ctx, f, size, name, nil, maxDecodedPCMBytes, 0, maxAnalysisChannels)
+	if err != nil {
+		return nil, err
+	}
+	return monoFromDecoded(buf, toRate)
+}
+
+// monoFromDecoded checks that a whole-file decode delivered every frame its header
+// declared and wraps it as a buffered source delivering toRate.
+func monoFromDecoded(buf *pcmBuffer, toRate int) (*MonoSource, error) {
 	if buf.declaredFrames >= 0 && int64(buf.Frames()) < buf.declaredFrames {
 		return nil, truncatedError(nil, "decode_mono_length", fmt.Sprintf("read %d of %d declared frames", buf.Frames(), buf.declaredFrames))
 	}

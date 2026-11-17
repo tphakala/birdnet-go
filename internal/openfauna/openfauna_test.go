@@ -69,10 +69,6 @@ func TestBuildIndex_AttachesMetadata_Embedded(t *testing.T) {
 	require.True(t, ok, "expected metadata for Turdus merula")
 	assert.NotEmpty(t, m.Class)
 	assert.NotEmpty(t, m.Family)
-	// The 7th metadata column (inaturalist_url) must flow through to the right
-	// field. Contains("inaturalist") weakly pins the column identity (catching a
-	// wikipedia/inaturalist column swap) while staying tolerant of URL drift.
-	assert.Contains(t, m.INaturalistURL, "inaturalist", "iNaturalist column must map to INaturalistURL")
 }
 
 func TestBuildIndex_CaseInsensitiveMatching_Embedded(t *testing.T) {
@@ -125,7 +121,6 @@ func TestLookupMeta_SingleSpecies_Embedded(t *testing.T) {
 	m, ok := LookupMeta("Turdus merula")
 	require.True(t, ok)
 	assert.NotEmpty(t, m.Family)
-	assert.NotEmpty(t, m.INaturalistURL)
 
 	_, ok = LookupMeta("Definitely notaspecies")
 	assert.False(t, ok)
@@ -194,63 +189,51 @@ func TestNilIndex_MethodsDoNotPanic(t *testing.T) {
 	assert.Empty(t, ix.Locale())
 }
 
-// TestDecodeMetadataRows_HeaderMappedAndExpansionTolerant proves the metadata
-// decoder maps columns by header name: it tolerates a different column order and
-// ignores unknown future columns (here a hypothetical thumbnail_url), which is the
-// whole point of header mapping for an expanding schema.
-func TestDecodeMetadataRows_HeaderMappedAndExpansionTolerant(t *testing.T) {
+// TestDecodeMetadataRows_MapsTaxonomyPerRecord proves the JSON Lines decoder maps
+// the nested taxonomy, ignores keys it does not read (links, media, and a
+// hypothetical future key), and does not leak one record's taxonomy into the next
+// record that has none.
+func TestDecodeMetadataRows_MapsTaxonomyPerRecord(t *testing.T) {
 	t.Parallel()
 
-	csv := "order,scientific_name,family,class,wikipedia_url,inaturalist_url,family_common,thumbnail_url\n" +
-		"Passeriformes,Turdus merula,Turdidae,Aves,https://w/x,https://i/1,Thrushes,https://t/x\n"
+	jsonl := `{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves","order":"Passeriformes","family":"Turdidae","family_common":"Thrushes"},"links":{"wikipedia":{"id":"Q25234"}},"media":[{"url":"https://m/1"}],"future_key":{"a":1}}` + "\n" +
+		`{"scientific_name":"Bare species"}` + "\n" +
+		`{"scientific_name":"Class only","taxonomy":{"class":"Mammalia"}}` + "\n"
 
+	var order []string
 	got := map[string]Meta{}
-	err := decodeMetadataRows(strings.NewReader(csv), func(sci string, m Meta) error {
+	err := decodeMetadataRows(strings.NewReader(jsonl), func(sci string, m Meta) error {
+		order = append(order, sci)
 		got[sci] = m
 		return nil
 	})
 	require.NoError(t, err)
 
-	m, ok := got["Turdus merula"]
-	require.True(t, ok)
-	assert.Equal(t, "Aves", m.Class)
-	assert.Equal(t, "Passeriformes", m.Order)
-	assert.Equal(t, "Turdidae", m.Family)
-	assert.Equal(t, "Thrushes", m.FamilyCommon)
-	assert.Equal(t, "https://w/x", m.WikipediaURL)
-	assert.Equal(t, "https://i/1", m.INaturalistURL)
+	assert.Equal(t, []string{"Turdus merula", "Bare species", "Class only"}, order)
+	assert.Equal(t, Meta{Class: "Aves", Order: "Passeriformes", Family: "Turdidae", FamilyCommon: "Thrushes"}, got["Turdus merula"])
+	assert.Equal(t, Meta{}, got["Bare species"], "a record without taxonomy must not inherit the previous record's")
+	assert.Equal(t, Meta{Class: "Mammalia"}, got["Class only"])
 }
 
-func TestDecodeMetadataRows_MissingScientificNameColumn(t *testing.T) {
+// TestDecodeMetadataRows_RejectsBadRecords proves a corrupt artifact is an error
+// rather than a silently shorter dataset.
+func TestDecodeMetadataRows_RejectsBadRecords(t *testing.T) {
 	t.Parallel()
 
-	csv := "class,order\nAves,Passeriformes\n"
-	err := decodeMetadataRows(strings.NewReader(csv), func(string, Meta) error { return nil })
-	require.Error(t, err, "missing scientific_name column must be an error")
-}
-
-// TestDecodeMetadataRows_MissingOptionalColumn proves backward compatibility the
-// other direction: a header that omits an optional known column (family_common)
-// still decodes, leaving that field empty rather than erroring or misaligning.
-func TestDecodeMetadataRows_MissingOptionalColumn(t *testing.T) {
-	t.Parallel()
-
-	csv := "scientific_name,class,order,family,wikipedia_url,inaturalist_url\n" +
-		"Turdus merula,Aves,Passeriformes,Turdidae,https://w/x,https://i/1\n"
-
-	got := map[string]Meta{}
-	err := decodeMetadataRows(strings.NewReader(csv), func(sci string, m Meta) error {
-		got[sci] = m
-		return nil
-	})
-	require.NoError(t, err)
-
-	m, ok := got["Turdus merula"]
-	require.True(t, ok)
-	assert.Equal(t, "Aves", m.Class)
-	assert.Equal(t, "Turdidae", m.Family)
-	assert.Equal(t, "https://i/1", m.INaturalistURL)
-	assert.Empty(t, m.FamilyCommon, "absent optional column must decode to empty, not misalign")
+	tests := []struct {
+		name  string
+		jsonl string
+	}{
+		{"missing scientific_name", `{"taxonomy":{"class":"Aves"}}` + "\n"},
+		{"truncated mid-record", `{"scientific_name":"Turdus merula","taxonomy":{"class":"Av`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := decodeMetadataRows(strings.NewReader(tt.jsonl), func(string, Meta) error { return nil })
+			require.Error(t, err)
+		})
+	}
 }
 
 // TestDecodeTranslationRows_FiltersSynthetic exercises the per-row callback over

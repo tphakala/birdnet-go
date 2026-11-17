@@ -61,10 +61,11 @@ func TestGetEqualizerConfig(t *testing.T) {
 	// Verify the cache header is set
 	assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"), "table changes between releases, so it must be revalidated")
 
-	// Response should be valid JSON
-	var response any
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err, "Response should be valid JSON")
+	// The body is the filter table the equalizer settings page offers.
+	var response map[string]conf.EqFilterTypeConfig
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Equal(t, conf.EqFilterConfig, response)
+	assert.NotEmpty(t, response, "the table must list the available filter types")
 }
 
 // TestGetActiveAudioDevice tests the GetActiveAudioDevice endpoint

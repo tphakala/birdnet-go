@@ -365,7 +365,7 @@ func (s *SQLiteStore) Open() (retErr error) {
 		// Monitoring intervals:
 		// - 30s for connection pool: Provides timely visibility into connection usage patterns
 		//   and potential exhaustion without overwhelming the metrics system
-		// - 5m for database stats: Table sizes and row counts change less frequently,
+		// - 5m for database stats: Database size changes less frequently,
 		//   so a longer interval reduces overhead while still capturing growth trends
 		s.StartMonitoring(30*time.Second, 5*time.Minute)
 	}

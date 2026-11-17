@@ -81,6 +81,7 @@ BirdNET configuration
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
 | `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |
 | `birdnet.modelregion` | string | regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto" |
+| `birdnet.alternateminconfidence` | number | AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which an alternate prediction of a detection is stored. Alternates below it are dropped when the detection is saved; the detected species itself is never affected. 0 stores every alternate. Rows already in the database are not changed. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the settings API; a config file edit applies at the next start. |
 
 ## perch
 
@@ -106,6 +107,18 @@ BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
 | `birdnetv3.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
 | `birdnetv3.locale` | string | locale for species label translation |
 
+## birdnetplus
+
+BirdNETPlusConfig holds configuration for the BirdNET+ v3.0 acoustic classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `birdnetplus.modelpath` | string | path to BirdNET+ v3.0 ONNX model file |
+| `birdnetplus.labelpath` | string | path to BirdNET+ v3.0 label file |
+| `birdnetplus.overridethreshold` | boolean | when true, gate BirdNET+ v3.0 detections on Threshold instead of following BirdNET.Threshold |
+| `birdnetplus.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
+| `birdnetplus.locale` | string | locale for species label translation |
+
 ## bat
 
 BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
@@ -120,10 +133,22 @@ BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 | `bat.nighttimeonly` | boolean | restrict bat detection to nighttime (civil dusk to civil dawn) |
 | `bat.falsepositivefilter.level` | integer | Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum |
 | `bat.ultrasonicfilter.enabled` | boolean | enable ultrasonic validation filter |
+| `bat.ultrasonicfilter.discardunlikely` | boolean | discard detections tagged unlikely instead of saving them; applies only while enabled |
 | `bat.ultrasonicfilter.cvthreshold` | number | detections with US frame CV below this are tagged unlikely |
 | `bat.ultrasonicfilter.fftsize` | integer | FFT window size in samples (a power of 2, at least 2) |
 | `bat.ultrasonicfilter.hopsize` | integer | STFT hop size in samples, 1 to fftsize |
 | `bat.ultrasonicfilter.frequencysplithz` | integer | boundary between audible and ultrasonic bands in Hz |
+
+## bsgbat
+
+BSGBatConfig holds configuration for the BSG-BAT bat classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `bsgbat.modelpath` | string | path to BSG-BAT ONNX model file |
+| `bsgbat.labelpath` | string | path to BSG-BAT label file |
+| `bsgbat.threshold` | number | confidence threshold for BSG-BAT detections |
+| `bsgbat.stepframes` | integer | StepFrames is the analysis step between successive BSG-BAT windows, in mel frames of 768 samples (2 ms at 384 kHz). Accepted values are 100 to 512; 0 uses the default of 250. The bat false positive filter count follows it as ceil(6 / step seconds * level fraction). A change restarts audio capture. |
 
 ## bsg
 
@@ -143,7 +168,7 @@ ModelsConfig holds global model enablement and management settings.
 |---------|------|-------------|
 | `models.enabled` | string[] | list of model IDs to load (e.g., "birdnet", "perch_v2") |
 | `models.directory` | string | base directory for downloaded model files |
-| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 2) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
+| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 3) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
 
 ## lowmemory
 
@@ -190,6 +215,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.normalization.targetlufs` | number | target integrated loudness in LUFS (default: -23) |
 | `realtime.audio.export.normalization.loudnessrange` | number | Deprecated: no longer applied; retained so existing configs keep loading. |
 | `realtime.audio.export.normalization.truepeak` | number | true peak limit in dBTP (default: -2) |
+| `realtime.audio.export.denoise.enabled` | boolean | true to apply the denoise |
+| `realtime.audio.export.denoise.strength` | string | preset name, see the DenoisePreset constants |
 | `realtime.audio.soundlevel.enabled` | boolean | true to enable sound level monitoring |
 | `realtime.audio.soundlevel.interval` | integer | measurement interval in seconds (default: 10) |
 | `realtime.audio.soundlevel.debug` | boolean | true to enable debug logging for sound level monitoring |
@@ -231,6 +258,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.layout.elements` | dashboard-element[] |  |
 | `realtime.dashboard.defaultaudiogain` | number | Default playback gain in dB (0-24) |
 | `realtime.dashboard.livespectrogram` | boolean | auto-start live spectrogram on dashboard |
+| `realtime.dashboard.playbackdenoise.enabled` | boolean | true to apply the denoise |
+| `realtime.dashboard.playbackdenoise.strength` | string | preset name, see the DenoisePreset constants |
 | `realtime.dynamicthreshold.enabled` | boolean | true to enable dynamic threshold |
 | `realtime.dynamicthreshold.debug` | boolean | true to enable debug mode |
 | `realtime.dynamicthreshold.trigger` | number | trigger threshold for dynamic threshold |
@@ -270,6 +299,12 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.daylightfilter.enabled` | boolean | true to enable daylight filter |
 | `realtime.daylightfilter.offset` | integer | hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict) |
 | `realtime.daylightfilter.species` | string[] | species, families, orders, or genera to filter during daylight |
+| `realtime.modelconsensus.allspecies` | boolean | true to require consensus for every species; takes precedence over listedspecies |
+| `realtime.modelconsensus.listedspecies` | boolean | true to require consensus for the species in species |
+| `realtime.modelconsensus.species` | string[] | species that need consensus when listedspecies is on; scientific names keep working after a locale change |
+| `realtime.modelconsensus.minmodels` | integer | agreeing models required, 2 to 4, capped at the number of eligible models |
+| `realtime.modelconsensus.alleligible` | boolean | true to require every eligible model instead of minmodels |
+| `realtime.modelconsensus.debug` | boolean | true to log each consensus discard at info level, with the agreeing and eligible models |
 | `realtime.rtsp.streams` | stream-config[] | Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB) |
 | `realtime.rtsp.urls` | string[] | Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries |
 | `realtime.rtsp.transport` | string | Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration |
@@ -375,7 +410,7 @@ SecurityConfig handles all security-related settings and validations for the app
 | `security.redirecttohttps` | boolean | true to redirect to HTTPS |
 | `security.allowsubnetbypass.enabled` | boolean | true to enable subnet bypass |
 | `security.allowsubnetbypass.subnet` | string | disable OAuth2 in subnet |
-| `security.trustedproxies` | string[] | TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose forwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always trusted in addition to these, so a default port-forwarded install and the common local cloudflared topology work without configuration. When the immediate peer is not trusted, forwarded headers are ignored and the real connection address is used, preventing source-IP spoofing on a directly exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset) expands to Cloudflare's published edge ranges. The same trust decides whether X-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme) is honored when deciding whether to send the HSTS header, so a proxy on a public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here for HSTS to be sent. Other HTTPS checks, such as the COOP header and the CSRF cookie Secure flag, do not consult this list. The subnet bypass (AllowSubnetBypass) is stricter: it honors a forwarded client address only from a proxy listed here, even one on a private or loopback address, and a request that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass. For the bypass, list each proxy's own address rather than a range that also holds clients: a client inside a listed range is trusted as a proxy, so its own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite X-Real-IP; the client-IP headers it forwards must all name the same client, and a Forwarded header is not accepted. Hot-reloadable. |
+| `security.trustedproxies` | string[] | TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose forwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always trusted in addition to these, so a default port-forwarded install and the common local cloudflared topology work without configuration. When the immediate peer is not trusted, forwarded headers are ignored and the real connection address is used, preventing source-IP spoofing on a directly exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset) expands to Cloudflare's published edge ranges. The same trust decides whether X-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme) is honored when deciding whether to send the HSTS header, so a proxy on a public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here for HSTS to be sent. Other HTTPS checks, such as the COOP header and the CSRF cookie Secure flag, do not consult this list. The subnet bypass (AllowSubnetBypass) is stricter: it honors a forwarded client address only from a proxy listed here, even one on a private or loopback address, and a request that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass. For the bypass, list each proxy's own address rather than a range that also holds clients: a client inside a listed range is trusted as a proxy, so its own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite X-Real-IP; the client-IP headers it forwards must all name the same client, and a Forwarded header is not accepted. The API rate limiters follow the same rule: listing a proxy by its own address gives each verified client its own limits, while all requests of a listed proxy whose headers do not verify share one bucket. On the login and import elevation routes, which also limit the connection peer as a whole, a proxy listed by its own address (a bare IP, a /32 or a /128, not inside a wider listed range) is exempt from that shared peer limit for the clients it verifies, unless a Cloudflare edge address is in the request's chain; the clients a listed range or a listed proxy behind a Cloudflare edge verifies, and the visitors an unlisted proxy names, keep it. A request that arrives directly has no shared peer limit and keeps its own per-address count. A proxy behind Cloudflare whose headers name a Cloudflare edge hop verifies only when the "cloudflare" preset is listed as well. An unlisted proxy on a loopback, link-local or private address gets per-client limits only while the headers it forwards agree on one client; a host that can reach that proxy directly can still name any of its clients, and an unlisted local host can name any client under its own address. An unlisted proxy on a public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address is treated as the client and its headers are ignored, so list it. The client address that logs and the tunnel label record comes from the same resolution as the rate limiters. Forwarded headers that disagree, or that a listed proxy cannot verify, are not recorded: the peer's own address is logged instead. A client that an unlisted loopback, link-local or private host names consistently is recorded as named, so such a host can choose the address that appears in logs. Hot-reloadable. |
 | `security.publicaccess.liveaudio` | boolean | allow unauthenticated users to start/listen to live audio streams |
 | `security.plainhttpsessionclients` | string[] | PlainHTTPSessionClients lists the IP addresses of clients that reach the app directly over plain HTTP, for example another container calling http://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session cookies issued to these clients omit the Secure attribute so the clients can send them back; every other client keeps Secure whenever HTTPS is configured. Only exact addresses are accepted, not ranges. The match uses the connection's peer address, never forwarded headers, and applies only to requests that arrive without TLS and without reverse-proxy headers. Never list the address a reverse proxy or tunnel (such as cloudflared) connects from. With host networking or a native install, a proxy on the same host connects from loopback (127.0.0.1, ::1) or the host's own address, so do not list those when one runs there; with bridge networking and the proxy on the host, do not list the container network gateway. Give listed clients a fixed address so it cannot be reassigned: browser sessions through a proxy that terminates TLS without sending forwarding headers would otherwise lose Secure. Not shown in the web UI. Empty by default. Hot-reloadable. |
 | `security.privatemode` | boolean | PrivateMode, when true, requires the user to authenticate before any UI data is shown. Enforcement lives at the v2 API data layer, which returns 401 to unauthenticated requests; the public SPA shell is still served so it can render a login form instead of the dashboard, detections, analytics, search, about, and notifications views. Settings and system routes are additionally auth-gated at the HTTP layer. PublicAccess.LiveAudio still applies independently. Default is false to preserve guest-friendly upstream behavior. |

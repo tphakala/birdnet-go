@@ -11,6 +11,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// Serve the OpenVINO probe child before anything else when this test binary
+	// is re-executed as one, then end any other process the probe hook test
+	// started (openvino builds only; see openvino_probe_child_test.go).
+	serveOVProbeChildIfRequested()
+	exitIfOVProbeHookTestChild()
+
 	// Isolate the process-global config path for the whole classifier test
 	// package so settings-mutating tests never overwrite the developer's real
 	// ~/.config/birdnet-go/config.yaml. Tests call conf.SaveSettings() (via

@@ -7,12 +7,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 )
 
-// TestRegisterRoutesRegistration verifies the notifications domain registers
-// exactly the routes (and the same method+path set) the monolithic
-// initNotificationRoutes/SetupNotificationRoutes pair did, in its own -race test
-// binary. The auth-protected mutation/probe group is mounted with the
-// AuthMiddleware promoted from the core; a pass-through is injected so the empty
-// service group and the auth group register the same way production wiring does.
+// TestRegisterRoutesRegistration verifies the notifications domain registers at
+// least the listed method+path pairs; extra routes are not detected. The
+// routes enumeration test lists only some routes of each domain, so this list
+// is what notices another route going missing. The auth-protected
+// mutation/probe group is mounted with the AuthMiddleware promoted from the core;
+// a pass-through is injected so the empty service group and the auth group
+// register the same way production wiring does, so this test does not check
+// which routes sit behind authentication.
 func TestRegisterRoutesRegistration(t *testing.T) {
 	e := echo.New()
 	core := apitest.NewCore(t, apitest.WithEcho(e))

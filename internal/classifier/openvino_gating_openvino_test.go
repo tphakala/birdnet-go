@@ -79,9 +79,8 @@ func TestOpenVINOPlan_ExplicitCPU(t *testing.T) {
 }
 
 // TestOpenVINOPlan_Bat_ForcesF32 verifies the bat embedding model's plan carries f32
-// precision on whatever device the gate selects (explicit CPU here), unlike BirdNET
-// v2.4 which is f32 only on the GPU (or for INT8 or unrecognized weights on an
-// explicit openvino backend). The explicit-CPU path never enumerates devices, so no libopenvino_c
+// precision on whatever device the gate selects (explicit CPU here), unlike Perch
+// v2 which is f32 only on the GPU. The explicit-CPU path never enumerates devices, so no libopenvino_c
 // is required. On a host where CPU is not allowed (ARM A72) the
 // plan is declined, which the else branch covers. This pins the bat-specific
 // "f32 everywhere" deviation at the plan level, where compilation actually reads it.
@@ -111,4 +110,31 @@ func TestOpenVINOPlan_ONNXOptOut(t *testing.T) {
 	_, ok, reason := openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceAuto, RegistryIDPerchV2, "", perchLogitsOutputIndex)
 	assert.False(t, ok, "Backend=onnx must opt out of OpenVINO for Perch too")
 	assert.Equal(t, ovReasonBackendONNX, reason)
+}
+
+// TestBirdNETV24BasePlan_ORTAnswerDecidesArm64Auto pins that the ONNX Runtime
+// answer a caller passes reaches the arm64 auto decision: with ONNX Runtime
+// available the plan declines, and without it an A76 keeps the OpenVINO CPU.
+// It needs an arm64 host with native f16, so it skips elsewhere.
+func TestBirdNETV24BasePlan_ORTAnswerDecidesArm64Auto(t *testing.T) {
+	t.Parallel()
+	if runtime.GOARCH != goarchARM64 || !cpuspec.HasNativeF16() {
+		t.Skip("needs an arm64 host with native f16")
+	}
+	const ortPath = "/custom/libonnxruntime.so"
+	cfg := &conf.BirdNETConfig{Backend: conf.BackendPrefAuto, OpenVINODevice: conf.OVDeviceAuto, ONNXRuntimePath: ortPath}
+	answer := func(available bool) func(string) bool {
+		return func(path string) bool {
+			assert.Equal(t, ortPath, path, "the configured ONNX Runtime path must reach the probe")
+			return available
+		}
+	}
+
+	_, ok, reason := birdnetV24BasePlan(cfg, answer(true))
+	assert.False(t, ok, "auto declines the OpenVINO CPU while ONNX Runtime is available")
+	assert.Equal(t, ovReasonORTPreferredARM64, reason)
+
+	plan, ok, reason := birdnetV24BasePlan(cfg, answer(false))
+	assert.True(t, ok, "auto keeps the OpenVINO CPU when ONNX Runtime is missing, got reason %q", reason)
+	assert.Equal(t, inference.OVDeviceCPU, plan.device)
 }

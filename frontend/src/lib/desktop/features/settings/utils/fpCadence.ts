@@ -43,8 +43,54 @@ const FLOAT_EPSILON = 1e-9;
 /** Tolerance when comparing overlaps given in seconds. */
 const OVERLAP_TOLERANCE_SECONDS = 0.001;
 
-/** Registry ID of the bat model, which has its own fixed cadence and filter. */
-export const BAT_MODEL_ID = 'Bat';
+/**
+ * BSG-BAT analysis step (bsgbat.stepframes), counted in mel frames of 768 samples at the
+ * model's 384 kHz rate (2 ms each). These mirror the backend constants
+ * conf.MinBSGBatStepFrames, conf.MaxBSGBatStepFrames and conf.DefaultBSGBatStepFrames
+ * (internal/conf/consts.go); a change there must be repeated here.
+ */
+export const BSG_BAT_STEP_MIN_FRAMES = 100;
+export const BSG_BAT_STEP_MAX_FRAMES = 512;
+export const BSG_BAT_STEP_DEFAULT_FRAMES = 250;
+/** Samples per mel frame (bsgbat.HopSize) and the model's sample rate (bsgbat.SampleRate). */
+const BSG_BAT_HOP_SAMPLES = 768;
+const BSG_BAT_SAMPLE_RATE_HZ = 384000;
+/** One frame in integer nanoseconds, so the step matches the backend's integer duration. */
+const BSG_BAT_FRAME_NS = (BSG_BAT_HOP_SAMPLES * NS_PER_SECOND) / BSG_BAT_SAMPLE_RATE_HZ;
+
+/**
+ * Step of BattyBirdNET in seconds: a fixed 50% overlap of its 3 s clip
+ * (classifier.ResolveModelOverlap).
+ */
+export const BATTYBIRDNET_STEP_SECONDS = BASE_CLIP_SECONDS / 2;
+
+/**
+ * The BSG-BAT step in frames the backend uses for a stored bsgbat.stepframes: the value when it
+ * is a whole number inside the accepted range, otherwise the default (classifier.BSGBatStepSamples;
+ * 0 means unset).
+ */
+export function resolveBsgBatStepFrames(stored: number | undefined): number {
+  if (
+    stored !== undefined &&
+    Number.isInteger(stored) &&
+    stored >= BSG_BAT_STEP_MIN_FRAMES &&
+    stored <= BSG_BAT_STEP_MAX_FRAMES
+  ) {
+    return stored;
+  }
+  return BSG_BAT_STEP_DEFAULT_FRAMES;
+}
+
+/** Seconds between BSG-BAT analysis windows for a step in frames. */
+export function bsgBatStepSeconds(frames: number): number {
+  return durationSeconds(frames * BSG_BAT_FRAME_NS);
+}
+
+/**
+ * Taxon group the backend reports for the bat-group models (BattyBirdNET and
+ * BSG-BAT), which have their own fixed cadence and filter (classifier.TaxonGroupBat).
+ */
+export const BAT_TAXON_GROUP = 'bat';
 
 /** Lowest filter level at which the backend caps the cadence (cadence.FilterActive). */
 export const FILTER_ACTIVE_MIN_LEVEL = 1;
@@ -111,9 +157,14 @@ export interface CadenceReadoutRow {
   stepSeconds: number;
 }
 
-/** Bird models the readout covers; the bat model has its own filter and section. */
+/** Bird models the readout covers; the bat-group models have their own filter and section. */
 function birdModels(cadence: AnalysisCadenceInfo): AnalysisCadenceModel[] {
-  return cadence.models.filter(m => m.id !== BAT_MODEL_ID);
+  return cadence.models.filter(m => m.taxonGroup !== BAT_TAXON_GROUP);
+}
+
+/** True when the plan holds at least one model the bird readout covers. */
+export function hasBirdCadenceModels(cadence: AnalysisCadenceInfo): boolean {
+  return birdModels(cadence).length > 0;
 }
 
 /** Readout of the running configuration, from the server's own counts. */

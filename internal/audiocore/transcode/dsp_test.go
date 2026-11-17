@@ -5,7 +5,9 @@ import (
 	"context"
 	"math"
 	"math/rand/v2"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +17,14 @@ import (
 	"github.com/tphakala/go-audio-dsp/loudnorm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// denoisePresetsGentlestFirst lists every denoise preset from the gentlest to
+// the strongest.
+var denoisePresetsGentlestFirst = []string{
+	conf.DenoisePresetLight, conf.DenoisePresetLightMedium, conf.DenoisePresetMedium, conf.DenoisePresetHeavy,
+}
 
 const (
 	// noiseOnlySeconds leads the denoise fixtures so the denoiser can learn the
@@ -87,6 +96,15 @@ func newPCM(samples []int16, rate, channels int) *pcmBuffer {
 	return &pcmBuffer{Data: int16Bytes(samples), SampleRate: rate, Channels: channels}
 }
 
+// applyFilters runs the denoise step and then the loudness and gain steps, the
+// order every pipeline job uses.
+func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
+	if err := applyDenoise(ctx, p, f); err != nil {
+		return err
+	}
+	return applyLoudnessAndGain(ctx, p, f)
+}
+
 func TestApplyFilters_NoFiltersLeaveBytesIdentical(t *testing.T) {
 	t.Parallel()
 
@@ -116,15 +134,15 @@ func TestApplyFilters_UnknownDenoisePresetIsRejected(t *testing.T) {
 	}
 }
 
-// The chunked, in-place denoise must equal denoiser.Denoise on the whole clip, and
-// the preset names must select the matching strengths.
+// The chunked, in-place denoise must equal denoiser.Denoise on the whole clip for
+// every preset. TestDenoiseStrengthsMatchConfPresets pins the strength each preset
+// name selects.
 func TestApplyFilters_ChunkedDenoiseMatchesOneShot(t *testing.T) {
 	t.Parallel()
 
-	presets := map[string]denoiser.Strength{"light": denoiser.Light, "medium": denoiser.Medium, "heavy": denoiser.Heavy}
 	const oddExtraFrames = 777 // not a multiple of the hop
 	for _, rate := range []int{48000, 44100} {
-		for preset, strength := range presets {
+		for preset, strength := range denoiseStrengths {
 			t.Run(preset+"_"+map[int]string{48000: "48k", 44100: "44k"}[rate], func(t *testing.T) {
 				t.Parallel()
 				src := noisyTone(rate)
@@ -194,7 +212,7 @@ func TestApplyFilters_DenoiseReducesNoiseMonotonically(t *testing.T) {
 	origAmp, origResidual := measure(src)
 
 	residuals := map[string]float64{}
-	for _, preset := range []string{"light", "medium", "heavy"} {
+	for _, preset := range denoisePresetsGentlestFirst {
 		p := newPCM(src, testRate, 1)
 		require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: preset}))
 		amp, residual := measure(bytesInt16(p.Data))
@@ -203,15 +221,17 @@ func TestApplyFilters_DenoiseReducesNoiseMonotonically(t *testing.T) {
 		assert.LessOrEqualf(t, drop, toneLevelToleranceDB, "%s keeps the tone within %v dB", preset, toneLevelToleranceDB)
 		assert.Lessf(t, residual, origResidual, "%s removes noise", preset)
 	}
-	assert.Greater(t, residuals["light"], residuals["medium"], "medium removes more noise than light")
-	assert.Greater(t, residuals["medium"], residuals["heavy"], "heavy removes more noise than medium")
+	for i := 1; i < len(denoisePresetsGentlestFirst); i++ {
+		gentler, stronger := denoisePresetsGentlestFirst[i-1], denoisePresetsGentlestFirst[i]
+		assert.Greaterf(t, residuals[gentler], residuals[stronger], "%s removes more noise than %s", stronger, gentler)
+	}
 }
 
 func TestApplyFilters_DenoiseShorterThanOneFrame(t *testing.T) {
 	t.Parallel()
 
 	const tinyFrames = 100
-	for _, preset := range []string{"light", "medium", "heavy"} {
+	for _, preset := range denoisePresetsGentlestFirst {
 		src := tone(testRate, 1, float64(tinyFrames)/testRate, testToneHz, testAmp)
 		require.Len(t, src, tinyFrames)
 		p := newPCM(src, testRate, 1)
@@ -433,4 +453,66 @@ func TestApplyFilters_NormalizeMeasuresTheDenoisedSamples(t *testing.T) {
 	p := newPCM(src, testRate, 1)
 	require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
 	assert.InDelta(t, normalizeTargetLUFS, lufsOf(t, p).IntegratedLUFS, normalizeToleranceLU)
+}
+
+// TestDenoisePCM16 pins the export entry point: it leaves its input untouched
+// and returns exactly the samples the playback pipeline produces for the same
+// PCM, at the analysis rate and at a bat capture rate, so an exported clip is
+// the denoise a user would hear from the player.
+func TestDenoisePCM16(t *testing.T) {
+	t.Parallel()
+	for _, rate := range []int{48000, 256000} {
+		t.Run(strconv.Itoa(rate), func(t *testing.T) {
+			t.Parallel()
+			samples := noisyTone(rate)
+			pcm := int16Bytes(samples)
+			before := bytes.Clone(pcm)
+
+			path := filepath.Join(t.TempDir(), "in.wav")
+			writeWAVFile(t, path, samples, rate)
+			wantWAV, err := ProcessToWAV(t.Context(), path, Filters{Denoise: conf.DenoisePresetLightMedium})
+			require.NoError(t, err)
+
+			got, err := DenoisePCM16(t.Context(), pcm, rate, 1, conf.DenoisePresetLightMedium)
+			require.NoError(t, err)
+
+			assert.Equal(t, before, pcm, "the input must not be modified")
+			assert.NotEqual(t, before, got, "denoise must change the samples")
+			assert.Equal(t, wantWAV[wavHeaderBytes:], got, "export must equal the playback denoise")
+		})
+	}
+}
+
+func TestDenoisePCM16_RejectsBadInput(t *testing.T) {
+	t.Parallel()
+	pcm := int16Bytes(noisyTone(48000))
+	tests := []struct {
+		name     string
+		pcm      []byte
+		rate     int
+		channels int
+		preset   string
+	}{
+		{"empty preset", pcm, 48000, 1, ""},
+		{"unknown preset", pcm, 48000, 1, "extreme"},
+		{"partial sample", pcm[:len(pcm)-1], 48000, 1, conf.DenoisePresetLight},
+		{"zero channels", pcm, 48000, 0, conf.DenoisePresetLight},
+		{"rate above the supported range", pcm, maxSourceSampleRate + 1, 1, conf.DenoisePresetLight},
+		{"rate below the supported range", pcm, minSourceSampleRate - 1, 1, conf.DenoisePresetLight},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := DenoisePCM16(t.Context(), tc.pcm, tc.rate, tc.channels, tc.preset)
+			require.ErrorIs(t, err, ErrInvalidRequest)
+		})
+	}
+}
+
+func TestDenoisePCM16_HonoursCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := DenoisePCM16(ctx, int16Bytes(noisyTone(48000)), 48000, 1, conf.DenoisePresetLight)
+	require.ErrorIs(t, err, context.Canceled)
 }

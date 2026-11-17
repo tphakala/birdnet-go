@@ -364,6 +364,7 @@
     enabled: boolean;
     issuerUrl: string;
     scopesText: string;
+    postLogoutRedirect: boolean;
   }>({
     clientId: '',
     clientSecret: '',
@@ -371,6 +372,7 @@
     enabled: true,
     issuerUrl: '',
     scopesText: '',
+    postLogoutRedirect: false,
   });
 
   // Available providers (filter out already configured ones)
@@ -405,6 +407,10 @@
   let exceptionsHasChanges = $derived(
     subnetBypassHasChanges || publicAccessHasChanges || privateModeHasChanges
   );
+
+  // Page the identity provider returns to after sign-out. The backend appends the
+  // same path to the OAuth origin (postLogoutReturnPath in internal/api/auth).
+  const POST_LOGOUT_RETURN_PATH = '/ui/';
 
   // Canonical base URL for redirect URIs (uses configured host/baseUrl)
   // This is what gets persisted to config.yaml for OAuth callbacks
@@ -498,6 +504,7 @@
       enabled: true,
       issuerUrl: '',
       scopesText: '',
+      postLogoutRedirect: false,
     };
     showProviderForm = true;
   }
@@ -516,6 +523,7 @@
       enabled: provider.enabled,
       issuerUrl: provider.issuerUrl ?? '',
       scopesText: provider.scopes?.join(', ') ?? '',
+      postLogoutRedirect: provider.postLogoutRedirect ?? false,
     };
     showProviderForm = true;
   }
@@ -561,6 +569,7 @@
       // OIDC-specific fields
       ...(selectedProvider === 'oidc' && {
         issuerUrl: providerFormData.issuerUrl.trim(),
+        postLogoutRedirect: providerFormData.postLogoutRedirect || undefined,
         scopes: (() => {
           const parsed = providerFormData.scopesText.split(',').map(s => s.trim()).filter(Boolean);
           return parsed.length > 0 ? parsed : undefined;
@@ -1231,7 +1240,7 @@
                     {#if hasExplicitBaseUrl}
                       <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getConfigRedirectURI(selectedProvider)}</code>
                     {:else}
-                      <p class="text-xs text-[var(--color-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
+                      <p class="text-xs text-[var(--text-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
                     {/if}
                   </div>
                   {#if getCredentialsUrl(selectedProvider)}
@@ -1239,7 +1248,7 @@
                       href={getCredentialsUrl(selectedProvider)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="text-sm text-[var(--color-primary)] hover:opacity-80 inline-flex items-center gap-1 mt-2"
+                      class="text-sm text-[var(--text-primary)] underline hover:decoration-2 inline-flex items-center gap-1 mt-2"
                     >
                       {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
                       <ExternalLink class="size-4" />
@@ -1260,7 +1269,7 @@
                     onchange={(value) => (providerFormData.issuerUrl = value)}
                   />
                   {#if oidcValidationError}
-                    <p class="text-xs text-[var(--color-error)] -mt-2">{oidcValidationError}</p>
+                    <p class="text-xs text-[var(--text-error)] -mt-2">{oidcValidationError}</p>
                   {/if}
                 {/if}
 
@@ -1298,6 +1307,18 @@
                     disabled={store.isLoading || store.isSaving}
                     onchange={(value) => (providerFormData.scopesText = value)}
                   />
+
+                  <Checkbox
+                    checked={providerFormData.postLogoutRedirect}
+                    label={t('settings.security.oauth.oidc.postLogoutRedirectLabel')}
+                    helpText={configuredBaseUrl
+                      ? t('settings.security.oauth.oidc.postLogoutRedirectHelpText', {
+                          url: `${configuredBaseUrl}${POST_LOGOUT_RETURN_PATH}`,
+                        })
+                      : t('settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl')}
+                    disabled={store.isLoading || store.isSaving}
+                    onchange={(enabled) => (providerFormData.postLogoutRedirect = enabled)}
+                  />
                 {/if}
 
                 <TextInput
@@ -1315,7 +1336,7 @@
                      match the providers-list badge and avoid noise for draft/disabled providers. -->
                 {#if providerFormData.enabled && hasNoAllowedUsers(providerFormData.userId)}
                   <p
-                    class="text-xs text-[var(--color-warning)] -mt-2 flex items-start gap-1.5"
+                    class="text-xs text-[var(--text-warning)] -mt-2 flex items-start gap-1.5"
                     role="status"
                   >
                     <TriangleAlert class="size-3.5 shrink-0 mt-0.5" />
@@ -1369,7 +1390,7 @@
         <!-- Providers List -->
         {#if oauthProviders.length > 0}
           <div class="space-y-2">
-            {#each oauthProviders as provider, index (provider.provider)}
+            {#each oauthProviders as provider, index (`${provider.provider}-${index}`)}
               {@const providerType = provider.provider as OAuthProviderType}
               {@const IconComponent = getProviderIcon(providerType)}
               <div
@@ -1405,7 +1426,7 @@
                                can log in with them (issue #3381). -->
                           {#if provider.enabled && hasNoAllowedUsers(provider.userId)}
                             <div
-                              class="text-xs text-[var(--color-warning)] flex items-center gap-1 mt-0.5"
+                              class="text-xs text-[var(--text-warning)] flex items-center gap-1 mt-0.5"
                               role="status"
                             >
                               <TriangleAlert class="size-3 shrink-0" />
@@ -1429,7 +1450,7 @@
                       </button>
                       <button
                         onclick={() => deleteProvider(index)}
-                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--text-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                         title={t('settings.security.oauth.providers.deleteButton')}
                         aria-label={t('settings.security.oauth.providers.deleteButton')}
                         disabled={showProviderForm}
@@ -1481,7 +1502,7 @@
             <a
               href={buildAppUrl(SETTINGS_ROUTES.securityReverseProxy)}
               onclick={handleAppLinkClick}
-              class="text-[var(--color-primary)] underline"
+              class="text-[var(--text-primary)] underline"
             >
               {t('settings.security.bypassProxyLink')}
             </a>

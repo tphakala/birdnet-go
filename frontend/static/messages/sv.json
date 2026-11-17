@@ -34,7 +34,6 @@
     "internalServerError": "Internt serverfel",
     "actions": {
       "download": "Ladda ner",
-      "review": "Granska",
       "play": "Spela upp",
       "view": "Visa"
     },
@@ -141,14 +140,14 @@
       "visitEbirdLink": "Öppna eBird.org i en ny flik",
       "learnEbirdTaxonomyLink": "Öppna eBird Taxonomy i en ny flik",
       "resizeHandle": "Dra för att ändra storlek",
-      "imageCredit": "Bildrättigheter: {name}"
+      "imageCredit": "Bildrättigheter: {name}",
+      "opensInNewTab": "öppnas i en ny flik"
     },
     "labels": {
       "confidence": "Konfidens",
       "github": "GitHub"
     },
     "values": {
-      "yes": "Ja",
       "no": "Nej",
       "unknown": "Okänd"
     },
@@ -181,12 +180,6 @@
         "hideComment": "Dölj kommentar",
         "commentPlaceholder": "Lägg till en kommentar om denna detektion...",
         "commentCount": "({chars} tecken)",
-        "chars": "tecken",
-        "commentsLabel": "Kommentarer",
-        "currentStatusTitle": "Nuvarande status",
-        "detectionStatusTitle": "Detektionsstatus",
-        "lockLabel": "Låsstatus",
-        "reviewLabel": "Granskningsstatus",
         "saveReview": "Spara granskning"
       },
       "errors": {
@@ -207,7 +200,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Inställningar - BirdNET-Go",
     "pageNotFound": "404 - Sidan hittades inte",
     "serverError": "500 - Internt serverfel",
     "componentError": "Komponentladdningsfel",
@@ -227,7 +219,8 @@
     "dashboard": "Instrumentpanel",
     "liveAudio": "Direktljud",
     "settingsMenu": "Inställningsmeny",
-    "theme": "Tema",
+    "switchToDarkTheme": "Byt till mörkt tema",
+    "switchToLightTheme": "Byt till ljust tema",
     "github": "GitHub",
     "detections": "Detektioner",
     "search": "Sök",
@@ -427,7 +420,7 @@
         "recalculatingThresholds": "Beräknar om dynamiska tröskelvärden för nytt basvärde",
         "reconfiguringDynamicThresholds": "Konfigurerar om dynamiska tröskelvärden...",
         "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
-        "oauthRestartRequired": "Autentiseringsleverantörsinställningar ändrade. Omstart krävs.",
+        "reconfiguringOauthProviders": "Uppdaterar autentiseringsleverantörer...",
         "databaseRestartRequired": "Databasinställningar har ändrats. Omstart krävs.",
         "loggingRestartRequired": "Logginställningar har ändrats. Omstart krävs.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
@@ -476,7 +469,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime inte tillgänglig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} krävs för {modelName} men hittades inte. Se installationsguiden: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} eller senare krävs för {modelName} men hittades inte. Se installationsguiden: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modellregionen kan vara föråldrad",
@@ -503,6 +496,10 @@
       "modelOptimize": {
         "title": "{count, plural, one {# modell har en bättre version för det här systemet} other {# modeller har bättre versioner för det här systemet}}",
         "message": "En version som passar bättre för systemets hårdvara eller plats finns tillgänglig för: {models}. Öppna Inställningar > Analys > Modeller och välj Optimera för att byta."
+      },
+      "modelSuperseded": {
+        "title": "{count, plural, one {En installerad modell har en nyare utgåva} other {# installerade modeller har nyare utgåvor}}",
+        "message": "En installerad modell är en förhandsversion, och dess slutliga utgåva finns nu tillgänglig: {models}. Öppna Inställningar > Analys > Modeller, installera den slutliga utgåvan och ta bort förhandsversionen."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -889,23 +886,190 @@
       "allDetections": "Alla detekteringar för {date}"
     },
     "detail": {
-      "species": "Art",
-      "observation": "Observation",
+      "species": {
+        "dialogTitle": "Byt art",
+        "current": "Nuvarande identifierad som",
+        "fromPredictions": "Modellens andra förutsägelser",
+        "search": "Sök arter",
+        "loadingList": "Laddar artlistan...",
+        "listFailed": "Det gick inte att ladda artlistan. Stäng denna dialogruta och försök igen.",
+        "noMatches": "Inga arter matchar.",
+        "effect": "Detekteringen markeras som korrekt, och modellens eget val sparas i historiken.",
+        "pickFirst": "Välj en art först.",
+        "confirm": "Byt till {species}",
+        "confirmEmpty": "Byt art",
+        "changed": "Art ändrad till {species}",
+        "changeFailed": "Det gick inte att byta art. Försök igen.",
+        "conflict": "Arten kan inte ändras nu: detekteringen är sparad (låst), eller så används det gamla databasformatet.",
+        "notKnownHere": "{species} har aldrig detekterats eller förutspåtts vid denna station och kan därför inte väljas ännu.",
+        "predictionsTitle": "Andra förutsägelser",
+        "noPredictions": "Modellen sparade inga andra förutsägelser för den här inspelningen.",
+        "allSpecies": "Alla arter",
+        "searchRangePlaceholder": "En art som förväntas på den här platsen",
+        "searchAllPlaceholder": "Vilken art som helst som modellerna känner till",
+        "searchHintRange": "Söker bland de {count} arter som områdesfiltret förväntar sig här. Slå på Alla arter för att söka bland allt.",
+        "searchHintAll": "Söker bland alla {count} arter som modellerna känner till.",
+        "noMatchesInRange": "Ingen träff bland de arter som förväntas här. Slå på Alla arter för att söka bland allt.",
+        "modelPick": "modellens val"
+      },
       "aria": {
-        "downloadAudioClip": "Ladda ner ljudklipp för {name}-detektion",
-        "audioRecordingFor": "Ljudinspelning och spektrogram för {name}",
         "scientificName": "Vetenskapligt namn",
         "classificationBadges": "Märken för artklassificering",
         "confidence": "Detekteringskonfidens {confidence}%",
-        "metadata": "Detekteringsmetadata",
-        "weatherConditions": "Väderförhållanden vid detekteringstillfället",
-        "comments": "Kommentarer till detekteringen",
-        "commentText": "Kommentarstext",
-        "commentTimestamp": "Tidsstämpel för kommentar",
-        "mainRegion": "Detekteringsinformation",
-        "tabsHeading": "Flikar med detekteringsinformation",
-        "tabList": "Flikar med detekteringsdetaljer",
         "speciesHeadingSuffix": "detekteringsinformation"
+      },
+      "nav": {
+        "label": "Detekteringsnavigering",
+        "back": "Detekteringar",
+        "allGroup": "Alla detekteringar",
+        "older": "Äldre detektering",
+        "noOlder": "Detta är den äldsta detekteringen",
+        "newer": "Nyare detektering",
+        "noNewer": "Detta är den nyaste detekteringen",
+        "speciesGroup": "Detekteringar av {species}",
+        "olderSpecies": "Äldre detektering av {species}",
+        "noOlderSpecies": "Ingen äldre detektering av {species}",
+        "newerSpecies": "Nyare detektering av {species}",
+        "noNewerSpecies": "Ingen nyare detektering av {species}",
+        "stepLoading": "{label}: söker efter intilliggande detekteringar",
+        "stepFailed": "{label}: kunde inte söka efter intilliggande detekteringar"
+      },
+      "identity": {
+        "date": "Datum",
+        "time": "Tid",
+        "beforeSunrise": "{hours} tim {minutes} min före soluppgången",
+        "afterSunrise": "{hours} tim {minutes} min efter soluppgången",
+        "beforeSunset": "{hours} tim {minutes} min före solnedgången",
+        "afterSunset": "{hours} tim {minutes} min efter solnedgången",
+        "setByReviewer": "Art vald av granskare",
+        "timeOfDay": "Tid på dygnet",
+        "minutesBeforeSunrise": "{minutes} min före soluppgången",
+        "minutesAfterSunrise": "{minutes} min efter soluppgången",
+        "minutesBeforeSunset": "{minutes} min före solnedgången",
+        "minutesAfterSunset": "{minutes} min efter solnedgången",
+        "predictionsUnknown": "Andra förutsägelser",
+        "predictionsNone": "Inga andra förutsägelser",
+        "predictionsCount": "{count, plural, one {# annan förutsägelse} other {# andra förutsägelser}}"
+      },
+      "conditions": {
+        "title": "Tid och förhållanden",
+        "skyLabel": "Dagstidslinje: detekterad kl. {time}, soluppgång {sunrise}, solnedgång {sunset}",
+        "activityLabel": "Detekteringar av {species} per timme på dygnet",
+        "sunrise": "Soluppgång",
+        "sunset": "Solnedgång",
+        "activityLegend": "Aktivitet för {species} per timme, totalt",
+        "feelsLike": "Känns som",
+        "moonLit": "{percent}% belyst",
+        "windFrom": "Vind från {direction}",
+        "cloudCover": "Molntäcke",
+        "precipitation": "Nederbörd",
+        "precipitationTypes": {
+          "rain": "regn",
+          "snow": "snö",
+          "sleet": "snöblandat regn"
+        },
+        "observedAt": "Väderobservation från {time}",
+        "notObserved": "Ingen väderobservation för denna tid"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNO",
+        "ne": "NO",
+        "ene": "ONO",
+        "e": "O",
+        "ese": "OSO",
+        "se": "SO",
+        "sse": "SSO",
+        "s": "S",
+        "ssw": "SSV",
+        "sw": "SV",
+        "wsw": "VSV",
+        "w": "V",
+        "wnw": "VNV",
+        "nw": "NV",
+        "nnw": "NNV"
+      },
+      "review": {
+        "title": "Granskning",
+        "autosave": "Sparas så snart du väljer",
+        "question": "Är detta {species}?",
+        "correct": "Korrekt",
+        "falsePositive": "Falskt positiv",
+        "saving": "Sparar...",
+        "savedCorrect": "Markerad som korrekt",
+        "savedFalsePositive": "Markerad som falskt positiv",
+        "loginRequired": "Logga in för att granska denna detektering.",
+        "lockedHelp": "Sparade detekteringar kan inte ändras. Slå av Behåll denna inspelning först.",
+        "keep": "Behåll denna inspelning",
+        "keepHelp": "Sparade detekteringar tas aldrig bort vid rensning.",
+        "reloadFailed": "Sparat, men detekteringen kunde inte laddas om. Uppdatera sidan för att se ändringen.",
+        "ignoredSpecies": "{species} ignoreras nu",
+        "wrongSpecies": "Fel art...",
+        "legacyHelp": "Att byta art kräver det aktuella databasformatet.",
+        "databaseChecking": "Kontrollerar om arten kan ändras.",
+        "databaseUnknown": "Arten kan inte ändras förrän databasformatet är känt.",
+        "ignoreShort": "Ignorera art",
+        "ignoredShort": "Art ignorerad"
+      },
+      "models": {
+        "title": "Modeller",
+        "summary": "{hit} av {total} detekterade den",
+        "empty": "Ingen modellspecifik post för denna detektering. Modelldeltagande sparas endast för nyare detekteringar.",
+        "hits": "{count, plural, one {# träff} other {# träffar}}",
+        "mean": "medel {value}",
+        "noHit": "Kördes på detta ljud, ingen träff"
+      },
+      "stats": {
+        "title": "Art vid denna station",
+        "rangeScore": "Områdesfiltrets poäng",
+        "rangeScoreNote": "Sannolikhet på den här platsen för {date}",
+        "rangeScoreNoteToday": "Sannolikhet på den här platsen idag",
+        "total": "Detekteringar, totalt",
+        "windowTotal": "Detekteringar, senaste {days} dagarna",
+        "firstHeard": "Först hörd",
+        "lastHeard": "Senast hörd",
+        "avgConfidence": "Genomsnittlig konfidens",
+        "maxConfidence": "Högsta konfidens",
+        "dailyTitle": "Detekteringar per dag, {days} dagar fram till denna detektering",
+        "dailyLabel": "{count} detekteringar under de {days} dagarna fram till denna detektering",
+        "allThisDay": "Alla detekteringar av {species} denna dag",
+        "reviewsTitle": "Granskade av användare",
+        "reviewsCount": "{count, plural, one {# granskning} other {# granskningar}}",
+        "reviewsCorrect": "{count} korrekta",
+        "reviewsFalse": "{count, plural, one {# falskt positiv} other {# falskt positiva}}",
+        "oftenRejected": "Ofta avvisad här: {percent}% av granskningarna var falskt positiva",
+        "reviewsNone": "Ingen detektering av denna art har granskats ännu."
+      },
+      "clip": {
+        "window": "Inspelningsfönster",
+        "length": "Längd",
+        "seconds": "{count} s",
+        "format": "Format",
+        "denoised": "Brusreducerad vid sparande",
+        "denoisedYes": "Ja",
+        "denoisedNo": "Nej",
+        "file": "Fil",
+        "audioRemoved": "Ljudet togs bort av lagringspolicyn; spektrogrambilden behölls.",
+        "noClip": "Ingen inspelning sparades för denna detektering."
+      },
+      "log": {
+        "title": "Aktivitetslogg",
+        "subtitle": "Vad som har hänt med denna detektering",
+        "detected": "Detekterade {species} med {confidence}% konfidens",
+        "captureWindow": "Inspelningsfönster {begin}-{end}",
+        "clipSaved": "Inspelning sparad",
+        "clipSavedDenoised": "Inspelning sparad, brusreducerad",
+        "firstReviewed": "Först granskad",
+        "reviewed": "Markerad som {status}",
+        "locked": "Sparad (låst)",
+        "noteAdded": "Anteckning tillagd",
+        "noteEdited": "Redigerad {time}",
+        "timeUnknown": "Tid ej registrerad",
+        "addNote": "Lägg till en anteckning",
+        "saveNote": "Lägg till anteckning",
+        "lockedHelp": "Anteckningar kan inte läggas till medan detekteringen är sparad (låst).",
+        "noteEmpty": "Skriv en anteckning innan du lägger till den.",
+        "speciesChanged": "Art ändrad från {from} till {to}"
       }
     },
     "headers": {
@@ -1041,12 +1205,6 @@
       "title": "Inspelning och spektrogram",
       "clipHint": "Klicka och dra på spektrogrammet för att välja ett intervall för klippexport"
     },
-    "tabs": {
-      "overview": "Översikt",
-      "taxonomy": "Taxonomi",
-      "history": "Historik",
-      "notes": "Anteckningar"
-    },
     "environmental": {
       "title": "Miljöförhållanden"
     },
@@ -1057,18 +1215,9 @@
       "status": "Status",
       "locked": "Låst"
     },
-    "history": {
-      "title": "Detekteringshistorik",
-      "comingSoon": "Historikspårning kommer snart..."
-    },
-    "notes": {
-      "title": "Anteckningar och kommentarer",
-      "noComments": "Inga kommentarer eller anteckningar för denna detektering."
-    },
     "aria": {
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
-      "error": "Fel vid laddning av detektering: {error}",
       "loadingResults": "Laddar {count} resultat...",
       "thumbnailLoading": "Laddar {species} miniatyrbild...",
       "thumbnailLoaded": "Miniatyrbild av {species} laddad",
@@ -1086,9 +1235,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Arternas sällsynthet",
       "score": "Poäng",
-      "basedOnLocation": "Baserat på plats: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Mycket vanlig",
         "common": "Vanlig",
@@ -1100,7 +1247,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomisk klassificering",
-      "subspecies": "Underart",
       "noData": "Inga taxonomidata tillgängliga.",
       "labels": {
         "kingdom": "Rike",
@@ -1126,11 +1272,9 @@
       }
     },
     "tracking": {
-      "title": "Artspårning",
       "newSpecies": "Ny art",
       "newThisYear": "Första i år",
-      "newThisSeason": "Första denna säsong",
-      "daysSinceFirst": "Dagar sedan först sedd"
+      "newThisSeason": "Första denna säsong"
     }
   },
   "spectrogram": {
@@ -1183,13 +1327,6 @@
     },
     "systemInfo": {
       "title": "Systeminformation",
-      "os": "Operativsystem",
-      "hostname": "Värdnamn",
-      "uptime": "Drifttid",
-      "cpus": "Processorer",
-      "model": "Systemmodell",
-      "timezone": "Tidszon",
-      "temperature": "CPU-temperatur",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperaturdata ej tillgänglig",
       "cpuCores": "CPU-kärnor",
@@ -1228,16 +1365,7 @@
         "uptime": "Drifttid",
         "process": "Process"
       },
-      "showAll": "Visa alla processer",
-      "showBirdnetOnly": "Visa endast BirdNET",
-      "table": {
-        "process": "Process",
-        "status": "Status",
-        "cpu": "CPU",
-        "memory": "Minne",
-        "uptime": "Drifttid",
-        "showAllProcesses": "Visa alla processer"
-      }
+      "showAll": "Visa alla processer"
     },
     "errors": {
       "systemInfo": "Kunde inte ladda systeminformation: {error}",
@@ -1545,6 +1673,8 @@
           "creating": "Skapar...",
           "createBackup": "Skapa säkerhetskopia",
           "noBackups": "Inga säkerhetskopior ännu",
+          "loadFailed": "Säkerhetskopieringshistoriken kunde inte läsas in",
+          "createFailed": "Säkerhetskopieringen kunde inte startas",
           "download": "Ladda ner",
           "failed": "Misslyckades",
           "columns": {
@@ -1572,6 +1702,8 @@
         "starting": "Startar migrering...",
         "status": {
           "idle": "Redo att starta",
+          "checking": "Kontrollerar förutsättningar",
+          "notReady": "Inte redo",
           "initializing": "Initierar",
           "dual_write": "Dubbelskrivning aktiv",
           "migrating": "Migrerar primär",
@@ -1603,6 +1735,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Storlek",
           "prerequisitesNotMet": "Förutsättningar ej uppfyllda - åtgärda kritiska problem nedan",
+          "prerequisitesUnavailable": "Kontrollerna före migrering slutfördes inte. Se Kontroller före migrering nedan.",
+          "prerequisitesFailedList": "Åtgärda först dessa kontroller: {checks}",
           "validatingTitle": "Validerar data",
           "validatingBody": "Jämför {count} äldre poster mot V2-databasen...",
           "dirtyRecordsCatchup": "{count} ändrade poster - försöker inhämtningsavstämning",
@@ -1704,6 +1838,9 @@
           "warningsCount": "{count} varning(ar)",
           "running": "Kör kontroller före migrering...",
           "checkingStep": "Steg {current} av {total}",
+          "currentCheck": "Kontrollerar {name} ({seconds} s)",
+          "slowHint": "Stora databaser kan ta flera minuter.",
+          "runFailed": "Kontrollerna före migreringen slutfördes inte: {error}",
           "passedCount": "{passed}/{total} godkända",
           "criticalCount": "{count} kritiska",
           "warningCount": "{count} varning(ar)",
@@ -1952,7 +2089,8 @@
     "detach": "Öppna i nytt fönster",
     "detached": "Terminalen är frikopplad",
     "detachedDescription": "Terminalen körs i ett separat fönster. Stäng det fönstret för att återställa den här.",
-    "reattach": "Återanslut"
+    "reattach": "Återanslut",
+    "keyboardExitHint": "Tryck på Esc och sedan Tab för att lämna terminalen"
   },
   "analytics": {
     "hub": {
@@ -2342,6 +2480,15 @@
       "validationBlocked": "Vissa fält behöver uppmärksammas innan du kan spara.",
       "noChangesToSave": "Inga ändringar att spara."
     },
+    "autoSave": {
+      "saved": "Sparat",
+      "failed": "Inte sparat. Det tidigare värdet återställdes.",
+      "changedElsewhere": "Den här inställningen ändrades någon annanstans. Det aktuella värdet visas; gör ändringen igen.",
+      "tabNote": "Ändringar på den här fliken sparas medan du gör dem.",
+      "failuresSummary": "{count, plural, one {# ändring sparades inte} other {# ändringar sparades inte}}",
+      "dismiss": "Stäng",
+      "otherTabsUnsaved": "Andra flikar har osparade ändringar. Öppna en för att spara eller återställa dem:"
+    },
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
       "saveFailed": "Kunde inte spara inställningar",
@@ -2397,12 +2544,12 @@
           "title": "Dynamiskt tröskelvärde",
           "description": "Justera detektionskänsligheten automatiskt baserat på tidigare observationer",
           "enable": {
-            "label": "Aktivera dynamiskt tröskelvärde (BirdNET-Go-specifik funktion)",
-            "helpText": "Aktiverar funktionen för dynamiskt konfidenströskelvärde för mer adaptiv fågellätedetektering."
+            "label": "Aktivera dynamiskt tröskelvärde",
+            "helpText": "Sänker konfidenströskeln för en art efter att den har detekterats med hög konfidens."
           },
           "trigger": {
             "label": "Utlösningströskelvärde",
-            "helpText": "Konfidensnivån vid vilken det dynamiska tröskelvärdet aktiveras. Om ett fågelläte detekteras med konfidens över detta värde sänks tröskelvärdet för positiva matchningar av den arten för efterföljande läten."
+            "helpText": "Konfidensnivån vid vilken det dynamiska tröskelvärdet aktiveras. Om en art detekteras med konfidens över detta värde sänks tröskelvärdet för positiva matchningar av den arten för efterföljande detekteringar."
           },
           "minimum": {
             "label": "Minsta dynamiskt tröskelvärde",
@@ -2451,7 +2598,7 @@
           "overloadedNoticeTitle": "Den här enheten hinner inte med analysen",
           "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant.",
           "unknownLatency": "Bearbetningstiden kunde inte mätas för {models}, så den räknas inte med när överlappningen begränsas. Analysen kan ändå hamna efter.",
-          "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad modell och ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
+          "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad klassificerare som detta filter gäller för och för varje ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -3562,7 +3709,7 @@
         "sampleRateExclusive": "Frekvenser över 48 kHz använder exklusiv enhetsåtkomst på Linux, vilket förhindrar andra program från att dela ljudkortet",
         "modelLabel": "Detektionsmodeller",
         "modelHelp": "Välj vilka AI-modeller som ska köras på denna ljudkälla",
-        "deleteConfirm": "Ta bort denna ljudkortskälla?",
+        "deleteConfirm": "Ta bort ljudkortskällan \"{name}\"?",
         "emptyState": {
           "title": "Inga ljudkortskällor konfigurerade",
           "description": "Lägg till en ljudkortskälla för att börja spela in ljud för fågeldetektering.",
@@ -3589,11 +3736,17 @@
           "minSampleRate": "Kräver minst {rate}kHz inspelningsfrekvens",
           "recommendedSampleRate": "{rate}kHz rekommenderat för bästa resultat",
           "atLeastOneModel": "Minst en modell måste väljas"
-        }
+        },
+        "captureTitle": "Inspelning",
+        "levelTitle": "Ingångsnivå",
+        "captureApplyHint": "Inspelningen startas om när du verkställer.",
+        "applyCapture": "Verkställ och starta om inspelningen",
+        "applying": "Verkställer...",
+        "adding": "Lägger till...",
+        "captureApplyFailed": "Inspelningen ändrades inte. Verkställ igen eller avbryt."
       },
       "audioCapture": {
         "title": "Ljudkortskonfiguration",
-        "description": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen.",
         "soundCardSource": "Ljudkortskälla",
         "audioSourceLabel": "Ljudkälla (kräver omstart av applikationen för att träda i kraft)",
         "audioSourceHelp": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen för att träda i kraft.",
@@ -3627,11 +3780,11 @@
         "fixedHint": "Inspelningen pausas mellan start- och sluttider dagligen. Nattliga fönster (t.ex. 22:00 till 06:00) stöds.",
         "solarHint": "Tider beräknas utifrån soluppgång/solnedgång vid din konfigurerade plats. Använd negativa förskjutningar för före händelsen, positiva för efter.",
         "badge": "Tyst",
-        "enabledBadge": "Tysta timmar aktiverade för denna ström"
+        "enabledBadge": "Tysta timmar aktiverade för denna ström",
+        "enableLabel": "Pausa inspelningen under tysta timmar"
       },
       "rtspStreams": {
         "title": "Konfiguration av ljudströmmar",
-        "description": "Konfigurera nätverksljudströmmar för fjärrinspelning av ljud. Stöder RTSP, HTTP, HLS, RTMP och UDP-protokoll.",
         "noStreamsConfigured": "Inga strömmar konfigurerade"
       },
       "streams": {
@@ -3660,7 +3813,7 @@
         "refresh": "Uppdatera",
         "addStream": "Lägg till ström",
         "testRequired": "Kör ett lyckat strömtest innan du sparar",
-        "deleteConfirm": "Ta bort denna ström?",
+        "deleteConfirm": "Ta bort strömmen \"{name}\"?",
         "restartCount": "Omstartad {count} gång(er)",
         "healthLoadError": "Kunde inte ladda strömmens hälsostatus",
         "status": {
@@ -3684,6 +3837,7 @@
         "errors": {
           "nameRequired": "Strömmens namn krävs",
           "duplicateName": "En ström med detta namn finns redan",
+          "nameTooLong": "Namnet på strömmen är för långt (högst {max} byte)",
           "urlRequired": "Strömmens URL krävs",
           "invalidUrl": "Ogiltigt format på strömmens URL",
           "duplicate": "Denna ström-URL finns redan"
@@ -3700,12 +3854,12 @@
           "eventAt": "Händelse vid {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Växla diagnostik",
           "processState": "Processtillstånd",
           "lastData": "Senaste data",
           "restartCount": "Antal omstarter",
           "connection": "Anslutning",
-          "stateErrorHistory": "Tillstånds- och felhistorik"
+          "stateErrorHistory": "Tillstånds- och felhistorik",
+          "title": "Diagnostik"
         },
         "connectionStatus": {
           "stable": "Stabil",
@@ -3719,9 +3873,10 @@
           "result": "Testresultat",
           "error": "Test misslyckades",
           "batCompatible": "Fladdermus-kompatibel",
-          "batIncompatible": "Inte fladdermus-kompatibel"
+          "batIncompatible": "Inte fladdermus-kompatibel",
+          "minRateWarning": "De valda modellerna kräver en inspelningsfrekvens på minst {rate} kHz. Den här strömmen ligger under."
         },
-        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. BSG-BAT kräver minst 192 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
         "codecWarning": {
           "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
         },
@@ -3751,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stereoström detekterad. Nedmixning av flera kanaler kan minska detektionsnoggrannheten på grund av fasskillnader mellan kanaler. Välj en specifik kanal (vänster/höger) eller använd kanaldetektorn för bästa resultat.",
-          "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal.",
-          "tooltip": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal."
+          "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Välj en specifik kanal under Anslutning."
+        },
+        "autoSaveHelp": "Ändringar sparas direkt. Ändringar av anslutningen ansluter strömmen på nytt och väntar därför tills du klickar på Verkställ.",
+        "connectionTitle": "Anslutning",
+        "connectionApplyHint": "Strömmen ansluts på nytt när du verkställer.",
+        "connectionApplyFailed": "Anslutningen ändrades inte. Verkställ igen eller avbryt.",
+        "applyConnection": "Verkställ och anslut på nytt",
+        "testBeforeApply": "Testa den nya URL:en innan du verkställer den.",
+        "statsLine": "Totalt: {total} · Hastighet: {rate} · Senast: {last}",
+        "ago": {
+          "seconds": "{count} s sedan",
+          "minutes": "{count} min sedan",
+          "hours": "{count} h sedan"
         }
       },
       "audioFilters": {
@@ -3898,6 +4064,22 @@
         "noteTitle": "EBU R128-standard",
         "noteDescription": "Ljudnormalisering följer EBU R128 sändningsstandard, vilket säkerställer konsekventa uppspelningsnivåer på olika enheter och förhindrar klippning."
       },
+      "exportDenoise": {
+        "title": "Brusreducering av sparade klipp",
+        "description": "Minskar bakgrundsbrus i klipp när de sparas.",
+        "enable": "Brusreducera klipp vid sparande",
+        "enableHelp": "Det inspelade ljudet brusreduceras i minnet innan klippfilen skrivs. Detektionen körs alltid på originalljudet.",
+        "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda brusreducering av klipp.",
+        "strengthLabel": "Brusreduceringens styrka",
+        "strengthHelp": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "strengthDisabledHelp": "Slå på brusreducering av klipp ovan för att välja en styrka.",
+        "warningTitle": "Sparade klipp kan inte återställas",
+        "warningPermanent": "Originalljudet sparas inte. Klipp brusreduceras permanent när de sparas, även fladdermusinspelningar.",
+        "warningBats": "Brusreducering kan göra svaga fladdermusläten svagare; kraftiga läten påverkas inte.",
+        "warningImported": "Importerade inspelningar påverkas inte.",
+        "lossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir.",
+        "warningPlayback": "Standardbrusreduceringen vid uppspelning tillämpas inte medan detta är på. Om du senare stänger av detta och slår på standarden för uppspelning brusreduceras dessa klipp en andra gång vid uppspelning."
+      },
       "audioClipRetention": {
         "title": "Lagring av ljudklipp",
         "description": "Konfigurera automatisk rensning av sparade ljudklipp",
@@ -3955,9 +4137,25 @@
         "noneAvailable": "Inga detektionsmodeller är aktiverade på den här servern.",
         "loadFailedWarning": "En detektionsmodell kunde inte läsas in, så den här källan analyseras inte förrän den återställs.",
         "loadFailedLink": "Visa status för AI-modeller",
+        "state": {
+          "pending": "Läser in",
+          "failed": "Det gick inte att läsa in",
+          "missing": "Inte installerad"
+        },
+        "notLoadedHelp": "Den här modellen är inte inläst och kan därför inte väljas.",
         "defaultBadge": "{models} (standard)",
         "defaultPendingBadge": "Standardmodeller",
-        "noneBadge": "Ingen modell inläst"
+        "noneBadge": "Ingen modell inläst",
+        "missingHelp": "Den här modellen är inte längre installerad. Den här källan ignorerar den.",
+        "removeMissing": "Ta bort",
+        "removeMissingAria": "Ta bort {model} från {source}",
+        "lastSelectedHelp": "Minst en klassificerare förblir vald.",
+        "followsDefaults": "Den här källan använder standardmodellerna.",
+        "listFailed": "Modellistan kunde inte läsas in.",
+        "warningBadge": "Kontrollera klassificerare"
+      },
+      "sources": {
+        "autoSaveHelp": "Ändringar sparas direkt. Ändringar av enhet och samplingsfrekvens startar om inspelningen och väntar därför tills du klickar på Verkställ."
       }
     },
     "security": {
@@ -4028,7 +4226,7 @@
         "clientSecretLabel": "Klienthemlighet",
         "clientSecretHelpText": "OAuth 2.0 Klienthemlighet från din leverantörs utvecklarkonsol",
         "userIdLabel": "Tillåtna användare",
-        "userIdHelpText": "Kommaseparerade e-postadresser eller användar-ID:n som får logga in med denna leverantör. Om fältet lämnas tomt kan ingen logga in.",
+        "userIdHelpText": "Kommaseparerade e-postadresser eller användar-ID:n som får logga in med denna leverantör. Ett användar-ID rekommenderas, eftersom en e-postadress kan ändras. Om fältet lämnas tomt kan ingen logga in.",
         "allowedUsersEmptyWarning": "Den här leverantören har inga tillåtna användare, så varje inloggningsförsök nekas. Lägg till minst en e-postadress eller ett användar-ID för att tillåta åtkomst.",
         "allowedUsersMissingBadge": "Inga tillåtna användare angivna - inloggningen misslyckas",
         "google": {
@@ -4097,13 +4295,16 @@
           "clientSecretHelpText": "Klienthemligheten från din OIDC-identitetsleverantör",
           "userIdLabel": "Tillåten användare (e-post eller sub-claim)",
           "issuerUrlLabel": "Utfärdar-URL",
-          "issuerUrlHelpText": "Utfärdar-URL:en för din OpenID Connect-identitetsleverantör (t.ex. https://auth.example.com)",
+          "issuerUrlHelpText": "Bas-URL för din OpenID Connect-leverantör. BirdNET-Go lägger själv till /.well-known/openid-configuration, så utelämna den delen. Exempel: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Utfärdar-URL krävs för OIDC-leverantörer",
           "issuerUrlInvalid": "Utfärdar-URL måste vara en giltig HTTP- eller HTTPS-URL",
           "scopesLabel": "Omfång",
           "scopesHelpText": "Kommaseparerad lista över OIDC-omfång (standard: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Återvänd till BirdNET-Go efter utloggning hos identitetsleverantören",
+          "postLogoutRedirectHelpText": "Efter utloggning skickas webbläsaren tillbaka till {url}. Registrera först den här URL:en som post-logout redirect URI hos din identitetsleverantör, annars kan leverantören visa ett fel.",
+          "postLogoutRedirectNoBaseUrl": "Ange först Base URL eller Host. Returadressen byggs upp utifrån dem."
         }
       },
       "bypassAuthentication": {
@@ -4326,7 +4527,24 @@
           "mappedZero": {
             "title": "Områdesfiltret matchade inga arter",
             "description": "Områdesfiltret med geomodell matchade inga av den aktiva modellens arter, så alla detektioner skulle filtreras bort. Kontrollera att områdesfiltrets etikettfil stämmer överens med den aktiva modellen."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel är inte installerad",
+            "description": "Dessa modeller behöver BirdNET Geomodel för att filtrera detekteringar efter plats: {models}. Installera BirdNET Geomodel v3.0 från fliken Modeller i Analysinställningarna."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel används inte",
+            "description": "BirdNET Geomodel är installerad, men områdesfiltret är inställt på en annan modell, så dessa modeller filtreras inte efter plats: {models}. Ta bort birdnet.rangefilter.model och birdnet.rangefilter.modelpath från konfigurationsfilen eller miljön för att använda den."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel kunde inte läsas in",
+            "description": "BirdNET Geomodel kunde inte läsas in, så dessa modeller filtreras inte efter plats: {models}. Kontrollera programloggen och installera eller installera om BirdNET Geomodel v3.0 från fliken Modeller i Analysinställningarna."
+          },
+          "reloadFailed": {
+            "title": "Omladdning av områdesfiltret misslyckades",
+            "description": "Den senaste omladdningen av områdesfiltret misslyckades, så det tidigare inlästa områdesfiltret används fortfarande. Kontrollera programloggen och starta om BirdNET-Go för att försöka igen."
+          },
+          "openModels": "Öppna Modeller"
         },
         "columns": {
           "commonName": "Vanligt namn",
@@ -4906,7 +5124,15 @@
         "description": "Standardinställningar för uppspelning av fågelinspelningar.",
         "defaultGain": "Standard volymförstärkning",
         "defaultGainHelpText": "Initial förstärkning vid uppspelning av inspelningar. Fågelljud är ofta svaga, så en förstärkning på 6-12 dB rekommenderas.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Brusreducera klipp vid uppspelning",
+        "denoiseHelpText": "Spelar upp och laddar ner en brusreducerad kopia av varje klipp. Sparade klipp förblir oförändrade. Nedladdningar blir WAV-filer och är större. Ett klipps ljudinställningar kan välja en annan styrka eller stänga av brusreducering.",
+        "denoiseStrengthLabel": "Brusreduceringens styrka",
+        "denoiseStrengthHelpText": "Lätt behåller mest av originalljudet och kraftig tar bort mest brus. Lätt-medel passar de flesta inspelningar.",
+        "denoiseStrengthDisabledHelp": "Slå på brusreducering vid uppspelning ovan för att välja en styrka.",
+        "denoiseExportPrecedence": "Tillämpas inte medan „Brusreducering av sparade klipp” är på (Ljudinställningar, fliken Bearbetning). Dessa klipp är redan brusreducerade.",
+        "denoiseRedenoiseNote": "Klipp som sparades medan „Brusreducering av sparade klipp” var på brusreduceras igen vid uppspelning. Välj Av i ett klipps ljudinställningar för att höra det som det sparades.",
+        "denoiseLossyNote": "Brusreducering fungerar bäst på FLAC- eller WAV-klipp. Under {minBitrate} kbps begränsar kodekartefakter hur rent resultatet blir."
       }
     },
     "restartRequired": "Vissa ändringar kräver en omstart av servern för att träda i kraft. Starta om BirdNET-Go."
@@ -4949,7 +5175,8 @@
       "noData": "Inga data tillgängliga",
       "loading": "Laddar data...",
       "error": "Kunde inte ladda data",
-      "sortBy": "Sortera efter {column}",
+      "sortedAscending": "Sorterat efter {column}, stigande",
+      "sortedDescending": "Sorterat efter {column}, fallande",
       "rowsPerPage": "Rader per sida",
       "pageInfo": "Visar {from} till {to} av {total} resultat"
     },
@@ -5098,9 +5325,11 @@
       "filterControl": "Filterkontroll",
       "highPassFilter": "Högpassfilter: {freq} Hz",
       "seekProgress": "Sök i ljudet: {current} / {total} sekunder",
+      "seek": "Uppspelningsposition",
+      "seekValueText": "{current} av {total}",
       "playbackSpeed": "Uppspelningshastighet",
       "speed": "Hastighet",
-      "loop": "Växla upprepning",
+      "loop": "Upprepning",
       "player": "Ljudspelare",
       "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
       "hlsLoadFailed": "Det gick inte att läsa in ljudspelaren, ladda om sidan och försök igen",
@@ -5238,6 +5467,7 @@
         "denoise": "Brusreducering",
         "denoiseOff": "Av",
         "denoiseLight": "Lätt",
+        "denoiseLightMedium": "Lätt-medel",
         "denoiseMedium": "Medel",
         "denoiseHeavy": "Kraftig",
         "normalize": "Normalisera ljud",
@@ -5362,7 +5592,8 @@
     },
     "migration": {
       "notConfigured": "Migrering är inte konfigurerad",
-      "preFlightFailed": "Förkontroller misslyckades",
+      "preFlightFailed": "Kontrollen före migreringen misslyckades: {check}",
+      "prerequisitesNotReady": "Kör kontrollerna före migreringen och vänta tills de godkänns innan du startar migreringen.",
       "invalidBody": "Ogiltigt förfrågningsinnehåll",
       "recordCountFailed": "Kunde inte bestämma totalt antal poster",
       "startFailed": "Kunde inte starta migrering",
@@ -5581,19 +5812,28 @@
   "analysis": {
     "title": "Analys",
     "tabs": {
-      "settings": "Inställningar",
-      "models": "Modeller"
+      "models": "Modeller",
+      "detection": "Detektion",
+      "bats": "Fladdermöss",
+      "inference": "Inferens",
+      "filters": "Filter"
     },
     "detection": {
       "title": "Detektionsinställningar",
       "description": "Konfigurera konfidenströsklar och språk för artklassificering.",
-      "confidenceThreshold": {
-        "label": "Konfidenströskel",
-        "helpText": "Lägsta konfidensvärde (0,0 - 1,0) som krävs för att en detektering ska registreras."
-      },
       "batThreshold": {
-        "label": "Tröskel för fladdermöss-detektion",
-        "helpText": "Minsta konfidenspoäng för detektering av fladdermusarter. Gäller endast för klassificeringsmodeller för fladdermöss."
+        "label": "Tröskel för fladdermöss-detektion (BattyBirdNET)"
+      },
+      "bsgBatThreshold": {
+        "label": "Tröskel för fladdermöss-detektion (BSG-BAT)",
+        "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
+      },
+      "bsgBatStep": {
+        "label": "Analyssteg för BSG-BAT (ramar)",
+        "helpText": "Ramar på 2 ms mellan BSG-BAT:s analysfönster, från 100 (0,2 s) till 512 (1,024 s, ingen överlappning). Standardvärdet 250 (0,5 s) är referenssteget. Med 375 (0,75 s) hittas ungefär 85 % av händelserna med två tredjedelar av CPU:n; med 512 ungefär 70-75 % med ungefär hälften av CPU:n, för enheter som inte hänger med.",
+        "readout": "Steg: {seconds} s mellan analysfönstren.",
+        "readoutWithFilter": "Steg: {seconds} s mellan analysfönstren. Fladdermusfilter, nivå {level}: {count} bekräftelser krävs.",
+        "restartNote": "När ett nytt steg sparas startas ljudinspelningen om."
       },
       "batFilter": {
         "label": "Högpassfilter för fladdermöss-ljud",
@@ -5607,6 +5847,10 @@
         "label": "Validering efter detektion",
         "helpText": "När aktiverat valideras fladdermusdetektioner genom att analysera ultraljudsenergi i källljudet. Detektioner utan ekolokationsegenskaper markeras som osannolika."
       },
+      "batDiscardUnlikely": {
+        "label": "Kassera osannolika detektioner",
+        "helpText": "När aktiverat kasseras fladdermusdetektioner som valideringen efter detektion markerar som osannolika: de sparas inte, får inget ljudklipp eller någon avisering och kan inte återskapas. När inaktiverat (standard) sparas de och markeras som osannolika. Detektioner som redan är sparade ändras inte."
+      },
       "batFalsePositiveFilter": {
         "label": "Fladdermus falskt-positiv filter",
         "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs.",
@@ -5616,29 +5860,15 @@
           "strict": "Maximal filtrering för högsta noggrannhet."
         },
         "detectionCount": "{count} bekräftelser krävs. {description}",
+        "detectionCountByModel": "{batty} bekräftelser krävs för BattyBirdNET, {bsgBat} för BSG-BAT. {description}",
         "warningOff": "Utan filtrering finns det hög sannolikhet för falska positiva. Att aktivera filtrering förbättrar noggrannheten avsevärt."
       },
       "locale": {
         "label": "Artspråk",
         "helpText": "Språk som används för arternas vardagliga namn i gränssnittet."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Områdesfilter gäller bara fågelklassificerare. Fladdermusmodeller använder egna artlistor.",
       "status": {
         "title": "Områdesfilter översikt",
         "geomodelInfo": "BirdNET Geomodell {version} - {species} kända arter",
@@ -5653,13 +5883,13 @@
         "noFilter": "Inget områdesfilter aktivt",
         "passUnmapped": {
           "label": "Tillåt arter utan områdesdata",
-          "helpText": "Tillåt detektioner av arter som geomodellen saknar geografiska data för. När inaktiverad filtreras dessa arter alltid bort."
+          "helpText": "Tillåt detektioner av arter som geomodellen saknar geografiska data för. När inaktiverad filtreras dessa arter alltid bort. Detta påverkar bara de klassificerare som områdesfiltret gäller för."
         }
       }
     },
     "advanced": {
       "title": "Avancerat",
-      "description": "Bearbetning och anpassad modellkonfiguration."
+      "description": "Anpassade modell- och etikettfiler."
     },
     "downloadSource": {
       "title": "Nedladdningskälla",
@@ -5673,7 +5903,7 @@
     },
     "gallery": {
       "title": "Modellgalleri",
-      "description": "Hantera klassificeringsmodeller för fågel- och fladdermusdetektion.",
+      "description": "Hantera klassificeringsmodellerna.",
       "region": {
         "title": "Modellregion",
         "modeAuto": "Automatisk",
@@ -5725,7 +5955,6 @@
         "filterPlaceholder": "Filtrera regioner",
         "filterAria": "Filtrera regionsanpassade byggen",
         "filterNoMatch": "Inga regioner matchar \"{query}\"",
-        "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
@@ -5749,7 +5978,8 @@
       },
       "tabs": {
         "installed": "Installerade",
-        "available": "Tillgängliga"
+        "available": "Tillgängliga",
+        "navigationAria": "Flikar i modellgalleriet"
       },
       "loading": "Laddar modeller...",
       "retry": "Försök igen",
@@ -5820,6 +6050,15 @@
         "cardNotice": "Förhandsvisning för utvecklare, inte den slutgiltiga versionen. Detta är ett tidigt bygge för testning; resultaten kan ändras före den stabila versionen.",
         "dialogNotice": "Du installerar en förhandsvisning för utvecklare ({build}). Fungerar bra för att prova på, men rekommenderas inte som din enda klassificerare ännu."
       },
+      "experimental": {
+        "badge": "Experimentell",
+        "cardNotice": "Experimentell i BirdNET-Go. Modellen är publicerad, men dess prestanda i BirdNET-Go är ännu inte bevisad, så resultaten kan vara mindre tillförlitliga.",
+        "dialogNotice": "Du installerar en modell som är experimentell i BirdNET-Go. Dess prestanda är ännu inte bevisad, så kontrollera dess detektioner innan du litar på den."
+      },
+      "superseded": {
+        "cardNotice": "Ersatt av {name}. Använd den nyare modellen i stället.",
+        "dialogNotice": "Den här modellen har ersatts av {name}. Överväg att installera {name} i stället."
+      },
       "entryIncompatible": "Den här modellen är inte tillgänglig på detta system.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hårdvara",
@@ -5849,24 +6088,89 @@
         "licenseNote": "Bytet sker inom samma modell, så dess licens ändras inte."
       }
     },
-    "bird": {
-      "title": "Fågeldetektering",
-      "description": "Konfigurera konfidenströskel, artspråk och filtrering av falska positiva för fågelklassificerare."
-    },
     "bat": {
       "title": "Fladdermusdetektering",
-      "description": "Konfigurera tröskel, schemaläggning och filtrering av falska positiva för fladdermusklassificerare."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Dynamiskt tröskelvärde gäller endast fågelklassificerare."
+      "description": "Schemaläggning, validering och filtrering av falska positiva för fladdermusklassificerare."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
+    },
+    "birdnetplus": {
+      "title": "BirdNET+ V3.0-detektering"
+    },
+    "thresholds": {
+      "title": "Detektionströsklar",
+      "description": "Minsta konfidens en detektering behöver innan den registreras, för varje aktiverad klassificerare.",
+      "category": {
+        "bat": "Fladdermöss"
+      },
+      "state": {
+        "pending": "Läser in",
+        "failed": "Det gick inte att läsa in"
+      },
+      "empty": "Inga klassificerare är aktiverade.",
+      "shared": {
+        "label": "Delat tröskelvärde",
+        "usedBy": "Används av varje klassificerare utan eget tröskelvärde: {models}.",
+        "unused": "Används av varje klassificerare utan eget tröskelvärde. Ingen aktiverad klassificerare använder det just nu."
+      },
+      "customSwitch": "Anpassat tröskelvärde",
+      "usesShared": "Använder det delade tröskelvärdet"
+    },
+    "speciesNames": {
+      "title": "Artnamn",
+      "description": "Hur detekterade arter namnges i gränssnittet."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inferenskörtid",
+        "description": "Vilken körtid och enhet som kör klassificerarna, och hur många CPU-trådar de använder."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Automatiskt väljer den snabbaste körtiden som den här enheten stöder för varje modell.",
+        "options": {
+          "auto": "Automatiskt (rekommenderat)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO-enhet",
+        "helpText": "Används för modeller som körs på OpenVINO.",
+        "options": {
+          "auto": "Automatiskt",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Byte av backend eller enhet laddar om modellerna, så detekteringen pausar i några sekunder.",
+      "backendsLoading": "Kontrollerar vilka körtider den här enheten stöder.",
+      "backendsUnavailable": "Kunde inte läsa vilka körtider den här enheten stöder. Backend och enhet kan ändras när den har lästs in.",
+      "running": {
+        "title": "Körs nu",
+        "description": "Körtiden och precisionen som varje aktiverad klassificerare körs med.",
+        "unknown": "Ej rapporterad"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Gäller alla klassificerare, inklusive fladdermusklassificerare. En art med eget anpassat tröskelvärde justeras inte.",
+      "speciesNames": "Gäller alla klassificerare. En art utan namn på det valda språket behåller namnet från sin klassificerare.",
+      "falsePositiveFilter": "Gäller alla klassificerare utom fladdermusklassificerare, som har sitt eget filter för falska positiva.",
+      "falsePositiveFilterBatTab": "Gäller alla klassificerare utom fladdermusklassificerare, som har sitt eget filter för falska positiva på fliken Fladdermöss.",
+      "rangeFilter": {
+        "appliesTo": "Gäller {models}.",
+        "notApplied": "Inte områdesfiltrerad: {models}.",
+        "generic": "Gäller de klassificerare som områdesmodellen stöder. Fladdermusklassificerare områdesfiltreras aldrig.",
+        "needsLocation": "Fungerar bara när stationsplatsen är inställd."
+      },
+      "bat": "Gäller bara fladdermusklassificerare."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "Minimum får inte vara högre än utlösningströskelvärdet."
     }
   },
   "restart": {
@@ -5882,7 +6186,6 @@
     "restartFailed": "Det gick inte att starta om",
     "reasons": {
       "webserver": "Webbserver / nätverksinställningar",
-      "oauth": "Inställningar för autentiseringsleverantör",
       "database": "Databasinställningar",
       "logging": "Logginställningar",
       "tlsCertificate": "TLS-certifikat"
@@ -5968,6 +6271,7 @@
     },
     "metricFooter": {
       "allPassing": "Allt OK",
+      "healthyOfTotal": "{healthy} av {total}",
       "needsAttention": "Kräver uppmärksamhet",
       "failing": "Misslyckas",
       "allClear": "Inga problem",

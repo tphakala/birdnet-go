@@ -4,6 +4,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // healthResponse mirrors the fields HealthCheck emits. CPUUsage is a pointer so
@@ -43,33 +45,62 @@ func TestHealthCheck(t *testing.T) {
 	const (
 		testVersion   = "1.2.3"
 		testBuildDate = "2023-05-15"
+		// leakHost is the sort of host and port a driver error carries; it must
+		// never reach the unauthenticated response body.
+		leakHost = "db.internal.example:3306"
+		// leakPath is a file path, which privacy.ScrubMessage redacts; it must
+		// not reach the log either.
+		leakPath = "/home/birder/birdnet.db"
+		leakErr  = "open " + leakPath + ": dial tcp " + leakHost + ": connect: connection refused"
+		// probeFailedLog is the Warn message logged when the database probe fails.
+		probeFailedLog = "Health check database probe failed"
 	)
 
 	tests := []struct {
-		name         string
-		setup        func(controller *Controller, mockDS *mocks.MockInterface)
-		wantDBStatus string
+		name            string
+		setup           func(controller *Controller, mockDS *mocks.MockInterface)
+		debug           bool
+		wantEnvironment string
+		wantDBStatus    string
+		forbiddenText   string
+		wantProbeLog    bool
 	}{
 		{
 			name: "database connected",
 			setup: func(_ *Controller, mockDS *mocks.MockInterface) {
 				mockDS.On("GetLastDetections", 1).Return([]datastore.Note{}, nil).Once()
 			},
-			wantDBStatus: "connected",
+			wantEnvironment: "production",
+			wantDBStatus:    "connected",
 		},
 		{
 			name: "database disconnected",
 			setup: func(_ *Controller, mockDS *mocks.MockInterface) {
-				mockDS.On("GetLastDetections", 1).Return([]datastore.Note(nil), errors.NewStd("connection refused")).Once()
+				mockDS.On("GetLastDetections", 1).Return([]datastore.Note(nil), errors.NewStd(leakErr)).Once()
 			},
-			wantDBStatus: "disconnected",
+			wantEnvironment: "production",
+			wantDBStatus:    "disconnected",
+			forbiddenText:   leakHost,
+			wantProbeLog:    true,
+		},
+		{
+			name: "database disconnected with debug enabled",
+			setup: func(_ *Controller, mockDS *mocks.MockInterface) {
+				mockDS.On("GetLastDetections", 1).Return([]datastore.Note(nil), errors.NewStd(leakErr)).Once()
+			},
+			debug:           true,
+			wantEnvironment: "development",
+			wantDBStatus:    "disconnected",
+			forbiddenText:   leakHost,
+			wantProbeLog:    true,
 		},
 		{
 			name: "datastore disabled",
 			setup: func(controller *Controller, _ *mocks.MockInterface) {
 				controller.DS = nil
 			},
-			wantDBStatus: "unavailable",
+			wantEnvironment: "production",
+			wantDBStatus:    "unavailable",
 		},
 	}
 
@@ -77,10 +108,12 @@ func TestHealthCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e, mockDS, controller := setupTestEnvironment(t)
 			tt.setup(controller, mockDS)
+			logBuf := logtest.CaptureBufferAt(t, slog.LevelWarn)
 
 			settings := controller.Settings.Load()
 			settings.Version = testVersion
 			settings.BuildDate = testBuildDate
+			settings.WebServer.Debug = tt.debug
 
 			req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/health", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -100,8 +133,26 @@ func TestHealthCheck(t *testing.T) {
 			assert.Equal(t, "healthy", resp.Status)
 			assert.Equal(t, testVersion, resp.Version)
 			assert.Equal(t, testBuildDate, resp.BuildDate)
-			assert.Equal(t, "production", resp.Environment)
+			assert.Equal(t, tt.wantEnvironment, resp.Environment)
 			assert.Equal(t, tt.wantDBStatus, resp.DatabaseStatus)
+
+			// The endpoint is reachable without credentials, so datastore error
+			// text must stay out of the body in every mode, Debug included.
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+			assert.NotContains(t, raw, "database_error")
+			if tt.forbiddenText != "" {
+				assert.NotContains(t, rec.Body.String(), tt.forbiddenText)
+			}
+
+			// A failed probe is logged server side with the error scrubbed.
+			assert.NotContains(t, rec.Body.String(), leakPath)
+			if tt.wantProbeLog {
+				assert.Contains(t, logBuf.String(), probeFailedLog)
+				assert.NotContains(t, logBuf.String(), leakPath)
+			} else {
+				assert.NotContains(t, logBuf.String(), probeFailedLog)
+			}
 			_, err := time.Parse(time.RFC3339, resp.Timestamp)
 			require.NoError(t, err, "timestamp should be RFC3339")
 

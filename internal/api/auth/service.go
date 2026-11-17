@@ -86,5 +86,5 @@ type Service interface {
 
 	// GetProviderLogoutURL returns the provider's end-session URL for RP-Initiated Logout.
 	// Returns empty string if the provider doesn't support it or no OIDC session exists.
-	GetProviderLogoutURL(c echo.Context, postLogoutRedirectURI string) string
+	GetProviderLogoutURL(c echo.Context) string
 }

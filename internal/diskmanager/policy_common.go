@@ -109,7 +109,7 @@ func buildSpeciesTotalCountMap(files []FileInfo) map[string]int {
 func checkLocked(file *FileInfo) bool {
 	if file.Locked {
 		log := GetLogger()
-		log.Debug("Skipping locked file",
+		log.Trace("Skipping locked file",
 			logger.String("path", file.Path),
 			logger.String("species", file.Species))
 		return true // Indicates the file should be skipped
@@ -128,7 +128,7 @@ func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[st
 	if speciesMap, ok := speciesCount[file.Species]; ok {
 		if count, ok := speciesMap[subDir]; ok {
 			if count <= minClipsPerSpecies {
-				log.Debug("Species count at minimum threshold, skipping deletion",
+				log.Trace("Species count at minimum threshold, skipping deletion",
 					logger.String("policy", policy),
 					logger.String("species", file.Species),
 					logger.String("subdirectory", subDir),
@@ -161,12 +161,6 @@ func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[st
 // deleteAudioFile removes a file from the filesystem with enhanced error handling and metrics.
 func deleteAudioFile(file *FileInfo, policy string) error {
 	log := GetLogger()
-
-	log.Debug("Deleting audio file",
-		logger.String("policy", policy),
-		logger.String("path", file.Path),
-		logger.Int64("size", file.Size),
-		logger.String("species", file.Species))
 
 	// Record metrics before attempting deletion
 	if m := getMetrics(); m != nil {
@@ -207,10 +201,6 @@ func deleteAudioFile(file *FileInfo, policy string) error {
 		return enhancedErr
 	}
 
-	log.Debug("Audio file deleted successfully",
-		logger.String("policy", policy),
-		logger.String("path", file.Path))
-
 	// Record successful deletion metrics
 	if m := getMetrics(); m != nil {
 		m.RecordFilesDeleted(policy, 1)
@@ -249,7 +239,7 @@ func tryDeleteSpectrogram(pngPath, variant, policy string, log logger.Logger) in
 		}
 		return 0
 	}
-	log.Debug("Deleted associated spectrogram",
+	log.Trace("Deleted associated spectrogram",
 		logger.String("policy", policy),
 		logger.String("variant", variant),
 		logger.String("path", pngPath))
@@ -350,11 +340,6 @@ func deleteUnsizedSpectrograms(basePath, policy string, log logger.Logger) int {
 	pngPathLower := basePath + ".png"
 	pngPathUpper := basePath + ".PNG"
 
-	log.Debug("Checking for associated spectrograms",
-		logger.String("policy", policy),
-		logger.String("lower_case", pngPathLower),
-		logger.String("upper_case", pngPathUpper))
-
 	deleted := tryDeleteSpectrogram(pngPathLower, spectrogramVariantLower, policy, log)
 
 	// Only try uppercase if lowercase didn't delete (handles case-insensitive FS)
@@ -375,11 +360,6 @@ func deleteUnsizedSpectrograms(basePath, policy string, log logger.Logger) int {
 func deleteClipRenders(audioPath, policy string, dirs *renderDirCache, log logger.Logger) int {
 	dir := filepath.Dir(audioPath)
 	clipBase := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
-
-	log.Debug("Checking for associated spectrograms",
-		logger.String("policy", policy),
-		logger.String("dir", dir),
-		logger.String("clip_base", clipBase))
 
 	entries, err := dirs.list(dir, policy)
 	if err != nil {
@@ -414,15 +394,6 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 
 	// Start timing the operation
 	startTime := time.Now()
-
-	// Log intent before deleting
-	log.Debug("Deleting file based on policy",
-		logger.String("policy", policy),
-		logger.String("reason", reason),
-		logger.String("path", file.Path),
-		logger.Int64("size", file.Size),
-		logger.String("species", file.Species),
-		logger.Bool("keep_spectrograms", keepSpectrograms))
 
 	// Delete the audio file (reuse common helper)
 	if err := deleteAudioFile(file, policy); err != nil {
@@ -460,6 +431,8 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 		logger.String("policy", policy),
 		logger.String("path", file.Path),
 		logger.String("reason", reason),
+		logger.Int64("size", file.Size),
+		logger.String("species", file.Species),
 		logger.Int("spectrograms_deleted", spectrogramsDeleted),
 		logger.Int64("duration_ms", time.Since(startTime).Milliseconds()))
 

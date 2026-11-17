@@ -19,13 +19,6 @@ func backendRecommendedReason(backend string) recommend.Reason {
 	}
 }
 
-func TestChannelOrDefault(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, classifier.ChannelStable, channelOrDefault(""), "an empty channel defaults to stable")
-	assert.Equal(t, classifier.ChannelStable, channelOrDefault(classifier.ChannelStable))
-	assert.Equal(t, classifier.ChannelPreview, channelOrDefault(classifier.ChannelPreview))
-}
-
 func TestVariantHardwareClass(t *testing.T) {
 	t.Parallel()
 

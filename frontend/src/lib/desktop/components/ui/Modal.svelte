@@ -1,4 +1,10 @@
 <script module lang="ts">
+  import {
+    canReturnFocus,
+    pickOpener,
+    TABBABLE_CANDIDATE_SELECTOR,
+  } from '$lib/utils/pressedElement';
+
   // Open Modal instances, oldest first. Only the last one (the topmost) acts on
   // Tab and Escape, so a dialog opened over another (the setup wizard and its
   // leave confirmation) does not have its keys handled twice.
@@ -13,11 +19,6 @@
     /** Moves focus to this dialog's first tabbable control, else its box */
     focusInto: () => void;
   }
-
-  // CSS selector for elements that may be keyboard focusable. getTabbable()
-  // narrows the matches to the ones the Tab key actually reaches.
-  const TABBABLE_CANDIDATE_SELECTOR =
-    'button, a[href], area[href], input, select, textarea, summary, [tabindex]';
 
   // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
   const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
@@ -450,8 +451,10 @@
     return stop;
   }
 
-  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
+  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus, and
+  // focus the user moved to another control of the page stays there
   function restoreFocus(target: HTMLElement | SVGElement | null) {
+    if (!canReturnFocus(stackEntry.dialog)) return;
     if (target?.isConnected && 'focus' in target) target.focus();
   }
 
@@ -521,14 +524,10 @@
 
   $effect(() => {
     if (isOpen) {
-      // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
-      const active = document.activeElement;
-      if (
-        (active instanceof HTMLElement || active instanceof SVGElement) &&
-        !untrack(() => dialogElement)?.contains(active)
-      ) {
-        stackEntry.opener = active;
-      }
+      // Focus inside this dialog (left there by a quick close and reopen) keeps the earlier opener;
+      // otherwise the opener is set afresh, to null when nothing usable was focused or pressed
+      const opener = pickOpener(untrack(() => dialogElement));
+      if (opener !== undefined) stackEntry.opener = opener;
       stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();

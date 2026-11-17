@@ -42,6 +42,7 @@
   import { navigation } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
+  import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.ui;
@@ -223,7 +224,7 @@
           <div
             class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md"
           >
-            <div class="loading loading-spinner loading-sm text-[var(--color-primary)]"></div>
+            <div class="loading loading-spinner loading-sm text-[var(--text-primary)]"></div>
           </div>
         {/if}
 
@@ -272,7 +273,7 @@
       <div class="sp-species-names">
         <button
           onclick={handleDetailsClick}
-          class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
+          class="sp-species-common-name transition-colors cursor-pointer text-left"
         >
           {displayName}
         </button>
@@ -303,6 +304,7 @@
         audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
         detectionId={detection.id.toString()}
         spectrogramSize="md"
+        denoisePreset={getPlaybackDenoiseDefault()}
       />
     {:else if detection.spectrogramOnly}
       <!-- Retention removed the audio but kept the image: no player, no download. -->

@@ -434,9 +434,13 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "publish_error")
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, "mqtt", "error")
 		}
+		// A failed publish is an MQTT publish failure, so telemetry classifies it
+		// by its broker cause. The explicit low priority keeps the user
+		// notification behaviour the sound-level category had.
 		return errors.New(err).
 			Component("analysis.soundlevel").
-			Category(errors.CategorySoundLevel).
+			Category(errors.CategoryMQTTPublish).
+			Priority(errors.PriorityLow).
 			Context("operation", "publish_mqtt").
 			Context("topic", topic).
 			Context("source", soundData.Source).

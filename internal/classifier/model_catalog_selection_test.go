@@ -1,6 +1,7 @@
 package classifier_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,8 +54,8 @@ func modelRemotePath(t *testing.T, entry *classifier.CatalogEntry, variantID str
 // TestRecommend_RegionalTiles is the golden test for the #1439 deliverable: that
 // the region-sliced variants win recommendation on the hosts they were sliced
 // for, and never hijack the global case. The expectations mirror the manifest
-// selection intent (Perch's "low-ram" template maps to the regional int8-arm
-// slice; a region-resolved CPU host prefers the region's slice over the global
+// selection intent (Perch's "low-ram" template maps to the regional no-dft-fp32
+// slice, the int8-arm builds being withdrawn; a region-resolved CPU host prefers the region's slice over the global
 // model on the +100 region.matched term).
 func TestRecommend_RegionalTiles(t *testing.T) {
 	t.Parallel()
@@ -72,16 +73,15 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			t.Parallel()
 
 			// Perch "low-ram" selection: a low-RAM aarch64 host in a region gets the
-			// region's int8-arm slice. 300 MiB is below every GLOBAL perch floor
-			// (int8-arm 350, fp32 700, no-dft-fp32 750), so all globals are blocked
-			// and a regional tile must win. Among the region's two tiles, int8-arm@slug
-			// outscores no-dft-fp32@slug regardless of their per-region RAM floors:
-			// region +100, backend.recommended +40, and low-ram+int8 ram.constrained_fit
-			// +25 = 165, versus no-dft-fp32's region +100 + backend.supported +10 = 110.
-			lowRAM := 300 * mib
+			// region's no-dft-fp32 slice (the withdrawn int8-arm slice is Legacy and
+			// never recommended). 400 MiB is below every GLOBAL perch floor (fp32 700,
+			// no-dft-fp32 750; the withdrawn int8-arm 350 is Legacy) and above the
+			// highest regional no-dft-fp32 floor (350, amazonia and andes), so a
+			// regional tile must win.
+			lowRAM := 400 * mib
 			gotPerch := recommendedVariantID(&perch, []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}, lowRAM, slug)
-			assert.Equalf(t, "int8-arm@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional int8-arm slice", slug)
-			assert.Equalf(t, "regional/"+slug+"/perch_v2_"+slug+"_int8_arm.onnx", modelRemotePath(t, &perch, gotPerch),
+			assert.Equalf(t, "no-dft-fp32@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional no-dft-fp32 slice", slug)
+			assert.Equalf(t, "regional/"+slug+"/perch_v2_"+slug+"_no_dft_fp32.onnx", modelRemotePath(t, &perch, gotPerch),
 				"recommended perch variant must own the manifest low-ram selection path")
 
 			// BirdNET v3.0: a plain CPU host in a region prefers the region's fp32
@@ -90,6 +90,54 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			// global model (which loses the fallback bonus once a slice matches).
 			gotV30 := recommendedVariantID(&v30, []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}, 8*1024*mib, slug)
 			assert.Equalf(t, "fp32@"+slug, gotV30, "CPU host in %q must get the regional fp32 slice", slug)
+		})
+	}
+
+	// A tile covers only its region's species, so a host whose own region's slice
+	// does not fit, or that has no resolved region, gets no recommendation rather
+	// than a foreign tile. The withdrawn int8 builds raised the Perch floor, which
+	// is what exposes this: amazonia's slice needs 350 MiB, and every global build
+	// needs 700 MiB or more (int8-arm is Legacy).
+	t.Run("no-foreign-tile-recommended", func(t *testing.T) {
+		t.Parallel()
+		caps := []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}
+
+		assert.Empty(t, recommendedVariantID(&perch, caps, 300*mib, "amazonia"), "own slice blocked at 300 MiB: nothing, not another region's slice")
+		assert.Equal(t, "no-dft-fp32@amazonia", recommendedVariantID(&perch, caps, 400*mib, "amazonia"), "own slice fits at 400 MiB")
+	})
+
+	// The same rule holds for every family shape: below the global floors, with
+	// regional slices that would fit, a host with no region or an unmatched
+	// region is recommended nothing.
+	for _, id := range []string{"perch-v2", "birdnet-v3.0", "birdnet-plus-v3.0"} {
+		t.Run("no-foreign-tile-"+id, func(t *testing.T) {
+			t.Parallel()
+			entry, ok := classifier.GetCatalogEntry(id)
+			require.True(t, ok)
+
+			// RAM just under the smallest live global floor, and a tile that fits it.
+			var floorMiB int64
+			for i := range entry.Variants {
+				v := &entry.Variants[i]
+				if v.Region == "" && !v.Legacy && (floorMiB == 0 || int64(v.Requirements.MinRAMMB) < floorMiB) {
+					floorMiB = int64(v.Requirements.MinRAMMB)
+				}
+			}
+			require.Positive(t, floorMiB)
+			ram := (floorMiB - 1) * mib
+			caps := []string{hwprofile.CapX86_64, hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU}
+
+			fitting := ""
+			for _, rec := range recommend.Rank(&recommend.Input{Capabilities: caps, TotalRAMBytes: ram, Entries: []classifier.CatalogEntry{entry}}) {
+				if rec.Compatible && strings.Contains(rec.VariantID, "@") {
+					fitting = rec.VariantID
+					break
+				}
+			}
+			require.NotEmptyf(t, fitting, "%s needs a regional slice that fits %d MiB for this test to bite", id, ram/mib)
+
+			assert.Emptyf(t, recommendedVariantID(&entry, caps, ram, ""), "%s: no region resolved must not recommend a tile", id)
+			assert.Emptyf(t, recommendedVariantID(&entry, caps, ram, "no-such-region"), "%s: an unmatched region must not recommend a tile", id)
 		})
 	}
 

@@ -31,6 +31,7 @@
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import {
@@ -62,6 +63,10 @@
   import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { getLocalDateString } from '$lib/utils/date';
+  import {
+    rangeFilterBanner,
+    type RangeFilterStatusSummary,
+  } from '$lib/desktop/features/settings/utils/rangeFilterBanner';
   import {
     compareActiveSpeciesForExport,
     resolveActiveSpeciesScores,
@@ -244,29 +249,16 @@
   // Range-filter health, fetched from /api/v2/range/status. Surfaces the silent
   // fail-open and fallback states from the range-filter robustness fixes so the user
   // is never unknowingly running unfiltered or with the wrong filter.
-  let rangeFilterHealth = $state<{
-    active: boolean;
-    fellBack: boolean;
-    geomodelActive: boolean;
-    mappedSpecies: number;
-    locationConfigured: boolean;
-  } | null>(null);
+  let rangeFilterHealth = $state<RangeFilterStatusSummary | null>(null);
 
   // Derived banner descriptor for the Active tab. Null when the range filter is healthy
-  // (or not applicable because no location is configured).
-  let rangeFilterWarning = $derived.by(() => {
-    const h = rangeFilterHealth;
-    if (!h || !h.locationConfigured) return null;
-    if (!h.active) {
-      return { level: 'error' as const, key: 'inactive' as const };
-    }
-    if (h.fellBack) {
-      return { level: 'warning' as const, key: 'fellBack' as const };
-    }
-    if (h.geomodelActive && h.mappedSpecies === 0) {
-      return { level: 'warning' as const, key: 'mappedZero' as const };
-    }
-    return null;
+  // (or not applicable); a missing BirdNET Geomodel is reported with or without a location.
+  let rangeFilterWarning = $derived(rangeFilterBanner(rangeFilterHealth));
+
+  // Link to the Models tab, where the BirdNET Geomodel is installed.
+  let modelsLinkAction = $derived({
+    href: buildAppUrl(SETTINGS_ROUTES.analysisModels),
+    label: t('settings.species.activeSpecies.rangeFilterHealth.openModels'),
   });
 
   // Search/filter/expand state is now handled inside SpeciesTable component
@@ -708,18 +700,17 @@
     activeSpeciesState.locationNotConfigured = !locationConfigured;
     activeSpeciesState.initialized = true;
 
+    // Fetch range-filter health alongside the species list so the Active tab can warn
+    // about a missing geomodel, fail-open or fallback state, with or without a location.
+    void loadRangeFilterStatus();
+
     // If location is not configured, don't call the API - show warning instead
     if (!locationConfigured) {
       activeSpeciesState.loading = false;
       activeSpeciesState.data = null;
-      rangeFilterHealth = null;
       isLoadingActiveSpecies = false;
       return;
     }
-
-    // Fetch range-filter health alongside the species list so the Active tab can warn
-    // about a fail-open or fallback state. Independent of the species fetch below.
-    void loadRangeFilterStatus();
 
     try {
       const response = await api.post<{
@@ -810,27 +801,20 @@
     }
   }
 
+  // Identity of the latest range-filter status request; an older response that resolves
+  // after a newer request is dropped so it cannot overwrite the newer status.
+  let rangeFilterStatusRequest = 0;
+
   // Fetch range-filter health from the status endpoint. Failures are non-fatal: the
   // banner simply does not render if the status cannot be read.
   async function loadRangeFilterStatus() {
+    const requestId = ++rangeFilterStatusRequest;
     try {
-      const status = await api.get<{
-        active: boolean;
-        fellBack: boolean;
-        mappedSpecies: number;
-        locationConfigured: boolean;
-        geomodel: { version: string } | null;
-      }>('/api/v2/range/status');
-      rangeFilterHealth = {
-        active: status.active,
-        fellBack: status.fellBack,
-        geomodelActive: status.geomodel != null,
-        mappedSpecies: status.mappedSpecies,
-        locationConfigured: status.locationConfigured,
-      };
+      const status = await api.get<RangeFilterStatusSummary>('/api/v2/range/status');
+      if (requestId === rangeFilterStatusRequest) rangeFilterHealth = status;
     } catch (error) {
       logger.error('Failed to load range filter status:', error);
-      rangeFilterHealth = null;
+      if (requestId === rangeFilterStatusRequest) rangeFilterHealth = null;
     }
   }
 
@@ -1335,7 +1319,12 @@
 </script>
 
 <!-- Range-filter health banner: surfaces fail-open / fallback / no-match states -->
-{#snippet rangeFilterHealthBanner(isError: boolean, title: string, description: string)}
+{#snippet rangeFilterHealthBanner(
+  isError: boolean,
+  title: string,
+  description: string,
+  action?: { href: string; label: string }
+)}
   <div
     role="alert"
     class="p-4 rounded-lg border {isError
@@ -1345,18 +1334,27 @@
     <div class="flex items-start gap-3">
       <TriangleAlert
         class="w-5 h-5 shrink-0 mt-0.5 {isError
-          ? 'text-[var(--color-error)]'
-          : 'text-[var(--color-warning)]'}"
+          ? 'text-[var(--text-error)]'
+          : 'text-[var(--text-warning)]'}"
       />
       <div>
         <p
-          class="font-medium {isError
-            ? 'text-[var(--color-error)]'
-            : 'text-[var(--color-warning)]'}"
+          class="font-medium {isError ? 'text-[var(--text-error)]' : 'text-[var(--text-warning)]'}"
         >
           {title}
         </p>
         <p class="text-sm text-muted mt-1">{description}</p>
+        {#if action}
+          <a
+            href={action.href}
+            onclick={handleAppLinkClick}
+            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg transition-colors mt-3 {isError
+              ? 'bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)]'
+              : 'bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)]'}"
+          >
+            {action.label}
+          </a>
+        {/if}
       </div>
     </div>
   </div>
@@ -1366,7 +1364,41 @@
 {#snippet activeTabContent()}
   <div class="space-y-4">
     <!-- Range filter health warning (fail-open, fallback, or no species matched) -->
-    {#if rangeFilterWarning?.key === 'inactive'}
+    {#if rangeFilterWarning?.key === 'geomodelNotInstalled'}
+      {@render rangeFilterHealthBanner(
+        rangeFilterWarning.level === 'error',
+        t('settings.species.activeSpecies.rangeFilterHealth.geomodelNotInstalled.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.geomodelNotInstalled.description', {
+          models: rangeFilterWarning.models,
+        }),
+        rangeFilterWarning.showModelsLink ? modelsLinkAction : undefined
+      )}
+    {:else if rangeFilterWarning?.key === 'geomodelNotSelected'}
+      {@render rangeFilterHealthBanner(
+        rangeFilterWarning.level === 'error',
+        t('settings.species.activeSpecies.rangeFilterHealth.geomodelNotSelected.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.geomodelNotSelected.description', {
+          models: rangeFilterWarning.models,
+        }),
+        rangeFilterWarning.showModelsLink ? modelsLinkAction : undefined
+      )}
+    {:else if rangeFilterWarning?.key === 'geomodelLoadFailed'}
+      {@render rangeFilterHealthBanner(
+        rangeFilterWarning.level === 'error',
+        t('settings.species.activeSpecies.rangeFilterHealth.geomodelLoadFailed.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.geomodelLoadFailed.description', {
+          models: rangeFilterWarning.models,
+        }),
+        rangeFilterWarning.showModelsLink ? modelsLinkAction : undefined
+      )}
+    {:else if rangeFilterWarning?.key === 'reloadFailed'}
+      {@render rangeFilterHealthBanner(
+        rangeFilterWarning.level === 'error',
+        t('settings.species.activeSpecies.rangeFilterHealth.reloadFailed.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.reloadFailed.description'),
+        rangeFilterWarning.showModelsLink ? modelsLinkAction : undefined
+      )}
+    {:else if rangeFilterWarning?.key === 'inactive'}
       {@render rangeFilterHealthBanner(
         true,
         t('settings.species.activeSpecies.rangeFilterHealth.inactive.title'),
@@ -1396,7 +1428,7 @@
             <div
               class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
             >
-              <Bird class="w-3.5 h-3.5 text-[var(--color-success)]" />
+              <Bird class="w-3.5 h-3.5 text-[var(--text-success)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.species')}</span
@@ -1412,7 +1444,7 @@
         >
           <div class="flex items-center gap-2 mb-1.5">
             <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
-              <MapPin class="w-3.5 h-3.5 text-[var(--color-info)]" />
+              <MapPin class="w-3.5 h-3.5 text-[var(--text-info)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.location')}</span
@@ -1448,7 +1480,7 @@
             <div
               class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]"
             >
-              <Clock class="w-3.5 h-3.5 text-[var(--color-warning)]" />
+              <Clock class="w-3.5 h-3.5 text-[var(--text-warning)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.updated')}</span
@@ -1475,12 +1507,11 @@
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm p-4"
       >
         <div
-          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
+          class="flex items-center gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
         >
-          <p class="text-sm text-[var(--color-error)]">{activeSpeciesState.error}</p>
-          <button
-            type="button"
-            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_30%,transparent)] text-[var(--color-error)] transition-colors"
+          <p class="text-sm text-[var(--text-error)]">{activeSpeciesState.error}</p>
+          <Button
+            size="md"
             onclick={() => {
               const birdnetData = store.formData?.birdnet;
               if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
@@ -1489,7 +1520,7 @@
             }}
           >
             {t('settings.species.activeSpecies.retry') || 'Retry'}
-          </button>
+          </Button>
         </div>
       </div>
     {:else if activeSpeciesState.locationNotConfigured}
@@ -1500,9 +1531,9 @@
           class="p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)]"
         >
           <div class="flex items-start gap-3">
-            <MapPin class="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
+            <MapPin class="w-5 h-5 text-[var(--text-warning)] shrink-0 mt-0.5" />
             <div>
-              <p class="font-medium text-[var(--color-warning)]">
+              <p class="font-medium text-[var(--text-warning)]">
                 {t('settings.species.activeSpecies.locationNotConfigured.title') ||
                   'Location Not Configured'}
               </p>
@@ -1699,7 +1730,7 @@
 
         <!-- Validation error -->
         {#if synonymError}
-          <p class="text-xs text-[var(--color-error)]" role="alert" aria-live="assertive">
+          <p class="text-xs text-[var(--text-error)]" role="alert" aria-live="assertive">
             {synonymError}
           </p>
         {/if}
@@ -1720,7 +1751,7 @@
                 </div>
                 <button
                   type="button"
-                  class="p-1 rounded-md text-muted hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                  class="p-1 rounded-md text-muted hover:text-[var(--text-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                   aria-label="{t('settings.species.remove')} {oldName}"
                   onclick={() => removeSynonym(oldName)}
                   disabled={store.isLoading || store.isSaving}

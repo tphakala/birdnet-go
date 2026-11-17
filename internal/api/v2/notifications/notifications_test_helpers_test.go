@@ -53,11 +53,11 @@ func newNotificationTestHandler(t *testing.T) (*Handler, *notification.Service) 
 
 // newToastTestHandler builds a Handler wired to an isolated, per-test
 // notification service for the toast SSE-formatting tests. The service is
-// stopped via tb.Cleanup so its cleanupLoop goroutine does not leak.
-func newToastTestHandler(tb testing.TB) (*Handler, *notification.Service) {
-	tb.Helper()
+// stopped via t.Cleanup so its cleanupLoop goroutine does not leak.
+func newToastTestHandler(t *testing.T) (*Handler, *notification.Service) {
+	t.Helper()
 	service := notification.NewService(notification.DefaultServiceConfig())
-	tb.Cleanup(service.Stop)
+	t.Cleanup(service.Stop)
 	h := mockHandler()
 	h.notificationService = service
 	return h, service

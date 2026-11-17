@@ -1,0 +1,429 @@
+{
+  "schema": 2,
+  "repo": "tphakala/BirdNET-Geomodel",
+  "family": "birdnet-geomodel",
+  "updated": "2026-11-16",
+  "family_meta": {
+    "display_name": "BirdNET Geomodel v3.0.4",
+    "description": "Spatiotemporal species occurrence prediction for post-filtering acoustic detections. Predicts which species are likely at a given location and week of the year.",
+    "author": "Stefan Kahl, Cornell Lab of Ornithology",
+    "license": "Apache-2.0",
+    "commercial_use": true,
+    "documents": [
+      {
+        "kind": "license",
+        "requires_agreement": false,
+        "path": "LICENSE-MODELS.md",
+        "revision": "abbab4817dd3e40c917d0ddd27d2912570a5f783",
+        "sha256": "c61a126ce3b9005b3ec0a74bd921f31214f0bec564f9067305d59e7c007796ca"
+      },
+      {
+        "kind": "acceptable_use",
+        "requires_agreement": true,
+        "path": "ACCEPTABLE_USE.md",
+        "revision": "abbab4817dd3e40c917d0ddd27d2912570a5f783",
+        "sha256": "acef17f7e6fc94463b2d9e4614d37f38448a332bbdb48e73a4a286941c492272"
+      }
+    ],
+    "channel": "stable",
+    "upstream_url": "https://github.com/birdnet-team/geomodel",
+    "species_count": 14082,
+    "current_version": "3.0.4",
+    "versions": {
+      "3.0.2": {
+        "display_name": "BirdNET Geomodel v3.0.2",
+        "species_count": 12012,
+        "released": "2026-04-02",
+        "channel": "stable",
+        "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.2"
+      },
+      "3.0.4": {
+        "display_name": "BirdNET Geomodel v3.0.4",
+        "species_count": 14082,
+        "released": "2026-08-12",
+        "channel": "stable",
+        "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.4"
+      }
+    }
+  },
+  "requirements_note": "requirements.min_ram_mb is a conservative, high-biased RAM floor: measured peak RSS + 15% where a benchmark exists, else a size-derived estimate biased high (a too-low floor risks OOM; a too-high floor only over-excludes on the smallest devices). Measured values will replace the estimates over time.",
+  "naming": "legacy names, frozen; new files follow <family>-<upstream>[-<region>]-<variant>-b<build>.<ext>",
+  "selection": {
+    "x86-64/onnxruntime": "birdnet-geomodel-v3.0.4-fp32-b1.onnx",
+    "x86-64/openvino-cpu": "birdnet-geomodel-v3.0.4-fp32-b1.onnx",
+    "aarch64/onnxruntime": "birdnet-geomodel-v3.0.4-fp32-b1.onnx"
+  },
+  "notes": "Upstream patch releases are hosted side by side: family_meta.versions describes each one and family_meta.current_version names the current one. An entry of an older release has superseded_by set to the same-variant file of the next release; follow the chain to the entry whose superseded_by is null to find the update for an installed file. Old files are never removed. VERSION MISMATCH, kept for backward compatibility: the files named birdnet-geomodel-v3.0-* actually contain BirdNET Geomodel V3.0.2 weights. The upstream_version field is authoritative (3.0.2); the filename is not. Under the current naming scheme these would be birdnet-geomodel-v3.0.2-<variant>-b1.onnx. The files are frozen because released clients pin their checksums.",
+  "models": [
+    {
+      "path": "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
+      "family": "birdnet-geomodel",
+      "role": "range-filter",
+      "upstream_version": "3.0.2",
+      "channel": "stable",
+      "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.2",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": null,
+      "classes": 12012,
+      "labels": "geomodel_v3.0.2_labels.txt",
+      "labels_sha256": "92cdca7ca95beb7ed16a0a39f4010fa9a8b468b854b6e8083f732647f136ee1c",
+      "labels_size_bytes": 479350,
+      "taxonomy": "taxonomy.csv",
+      "taxonomy_sha256": "74e4b31d2f9c56fbd1a45d980591654f508c73fc4a153cab52f11367a078ddfd",
+      "taxonomy_size_bytes": 9162669,
+      "input": {
+        "shape": [
+          "batch",
+          3
+        ],
+        "dtype": "float32",
+        "fields": [
+          "latitude",
+          "longitude",
+          "week"
+        ],
+        "note": "week is 1-48; output is a per-species occurrence probability (sigmoid)"
+      },
+      "outputs": [
+        {
+          "name": "probabilities",
+          "shape": [
+            "batch",
+            12012
+          ],
+          "activation": "sigmoid"
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017",
+      "size_bytes": 7483473,
+      "superseded_by": "birdnet-geomodel-v3.0.4-fp16-b1.onnx",
+      "notes": "upstream filename as published by the BirdNET team",
+      "requirements": {
+        "min_ram_mb": 200,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "birdnet-geomodel-v3.0-fp32.onnx",
+      "family": "birdnet-geomodel",
+      "role": "range-filter",
+      "upstream_version": "3.0.2",
+      "channel": "stable",
+      "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.2",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 12012,
+      "labels": "geomodel_v3.0.2_labels.txt",
+      "labels_sha256": "92cdca7ca95beb7ed16a0a39f4010fa9a8b468b854b6e8083f732647f136ee1c",
+      "labels_size_bytes": 479350,
+      "taxonomy": "taxonomy.csv",
+      "taxonomy_sha256": "74e4b31d2f9c56fbd1a45d980591654f508c73fc4a153cab52f11367a078ddfd",
+      "taxonomy_size_bytes": 9162669,
+      "input": {
+        "shape": [
+          "batch",
+          3
+        ],
+        "dtype": "float32",
+        "fields": [
+          "latitude",
+          "longitude",
+          "week"
+        ],
+        "note": "week is 1-48; output is a per-species occurrence probability (sigmoid)"
+      },
+      "outputs": [
+        {
+          "name": "probabilities",
+          "shape": [
+            "batch",
+            12012
+          ],
+          "activation": "sigmoid"
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b151f680a47de5371f39b3df129aea5946ac6baa039582274f833b42eaf992ea",
+      "size_bytes": 14700313,
+      "superseded_by": "birdnet-geomodel-v3.0.4-fp32-b1.onnx",
+      "requirements": {
+        "min_ram_mb": 200
+      }
+    },
+    {
+      "path": "birdnet-geomodel-v3.0-fp16.onnx",
+      "family": "birdnet-geomodel",
+      "role": "range-filter",
+      "upstream_version": "3.0.2",
+      "channel": "stable",
+      "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.2",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": null,
+      "classes": 12012,
+      "labels": "geomodel_v3.0.2_labels.txt",
+      "labels_sha256": "92cdca7ca95beb7ed16a0a39f4010fa9a8b468b854b6e8083f732647f136ee1c",
+      "labels_size_bytes": 479350,
+      "taxonomy": "taxonomy.csv",
+      "taxonomy_sha256": "74e4b31d2f9c56fbd1a45d980591654f508c73fc4a153cab52f11367a078ddfd",
+      "taxonomy_size_bytes": 9162669,
+      "input": {
+        "shape": [
+          "batch",
+          3
+        ],
+        "dtype": "float32",
+        "fields": [
+          "latitude",
+          "longitude",
+          "week"
+        ],
+        "note": "week is 1-48; output is a per-species occurrence probability (sigmoid)"
+      },
+      "outputs": [
+        {
+          "name": "probabilities",
+          "shape": [
+            "batch",
+            12012
+          ],
+          "activation": "sigmoid"
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017",
+      "size_bytes": 7483473,
+      "superseded_by": "birdnet-geomodel-v3.0.4-fp16-b1.onnx",
+      "requirements": {
+        "min_ram_mb": 200,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "birdnet-geomodel-v3.0.4-fp32-b1.onnx",
+      "family": "birdnet-geomodel",
+      "role": "range-filter",
+      "upstream_version": "3.0.4",
+      "channel": "stable",
+      "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.4",
+      "build": 1,
+      "legacy": false,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 14082,
+      "labels": "birdnet-geomodel-v3.0.4-labels-b1.txt",
+      "labels_sha256": "cf88066a8706af62faf44a71e1b42fd9daa98301892f63a25c018b954172c2b2",
+      "labels_size_bytes": 565372,
+      "taxonomy": "birdnet-geomodel-v3.0.4-taxonomy-b1.csv",
+      "taxonomy_sha256": "98b27fc4a77c5e321c7bbf96f924fc4b58170de9688e79ebf3ea8263d522580a",
+      "taxonomy_size_bytes": 11078402,
+      "input": {
+        "shape": [
+          "batch",
+          3
+        ],
+        "dtype": "float32",
+        "fields": [
+          "latitude",
+          "longitude",
+          "week"
+        ],
+        "note": "week is 1-48; output is a per-species occurrence probability (sigmoid)"
+      },
+      "outputs": [
+        {
+          "name": "probabilities",
+          "shape": [
+            "batch",
+            14082
+          ],
+          "activation": "sigmoid"
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "0de81d222c23dcb6fa428e958b4dac978783191357e01b7268a103fc6f08e61a",
+      "size_bytes": 15503473,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 200
+      }
+    },
+    {
+      "path": "birdnet-geomodel-v3.0.4-fp16-b1.onnx",
+      "family": "birdnet-geomodel",
+      "role": "range-filter",
+      "upstream_version": "3.0.4",
+      "channel": "stable",
+      "upstream_source": "https://github.com/birdnet-team/geomodel/releases/tag/v3.0.4",
+      "build": 1,
+      "legacy": false,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": null,
+      "classes": 14082,
+      "labels": "birdnet-geomodel-v3.0.4-labels-b1.txt",
+      "labels_sha256": "cf88066a8706af62faf44a71e1b42fd9daa98301892f63a25c018b954172c2b2",
+      "labels_size_bytes": 565372,
+      "taxonomy": "birdnet-geomodel-v3.0.4-taxonomy-b1.csv",
+      "taxonomy_sha256": "98b27fc4a77c5e321c7bbf96f924fc4b58170de9688e79ebf3ea8263d522580a",
+      "taxonomy_size_bytes": 11078402,
+      "input": {
+        "shape": [
+          "batch",
+          3
+        ],
+        "dtype": "float32",
+        "fields": [
+          "latitude",
+          "longitude",
+          "week"
+        ],
+        "note": "week is 1-48; output is a per-species occurrence probability (sigmoid)"
+      },
+      "outputs": [
+        {
+          "name": "probabilities",
+          "shape": [
+            "batch",
+            14082
+          ],
+          "activation": "sigmoid"
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "80e410f811bf4455e6cb1a2d48e394737d3828fe943a444646778495b67e7bab",
+      "size_bytes": 7885053,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 200,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    }
+  ]
+}

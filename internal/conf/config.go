@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"iter"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,15 @@ type ExportSettings struct {
 	PreCapture     int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`             // pre-capture in seconds
 	Gain           float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                               // gain in dB for audio capture
 	Normalization  NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"`    // audio normalization settings (EBU R128)
+	Denoise        DenoiseSettings       `yaml:"denoise" json:"denoise" mapstructure:"denoise"`                      // denoise the captured audio before it is saved
+}
+
+// DenoiseSettings is a denoise on/off switch with a strength preset. The tags
+// carry no omitempty on purpose: an Off value must stay visible in the settings
+// API so a client never reads a missing object as a different state.
+type DenoiseSettings struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`    // true to apply the denoise
+	Strength string `yaml:"strength" json:"strength" mapstructure:"strength"` // preset name, see the DenoisePreset constants
 }
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
@@ -179,6 +189,7 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
+	PlaybackDenoise  DenoiseSettings      `yaml:"playbackdenoise" json:"playbackDenoise"`               // denoise clips when they are played or downloaded; stored clips stay unchanged
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
@@ -537,6 +548,25 @@ type DaylightFilterSettings struct {
 	Offset  int      `yaml:"offset" json:"offset"`   // hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict)
 	Species []string `yaml:"species" json:"species"` // species, families, orders, or genera to filter during daylight
 }
+
+// ModelConsensusSettings configures the model consensus false positive filter. A
+// detection in scope is discarded unless enough distinct models of its taxon group
+// (bird or bat) detected it within the pending window. Only models that scored the
+// audio of the detection's hits, can classify the species and pass the range filter
+// for it are eligible, and the requirement is capped at the eligible count, so a
+// species that only one model can detect always passes.
+type ModelConsensusSettings struct {
+	AllSpecies    bool     `yaml:"allspecies" json:"allSpecies"`       // true to require consensus for every species; takes precedence over listedspecies
+	ListedSpecies bool     `yaml:"listedspecies" json:"listedSpecies"` // true to require consensus for the species in species
+	Species       []string `yaml:"species" json:"species"`             // species that need consensus when listedspecies is on; scientific names keep working after a locale change
+	MinModels     int      `yaml:"minmodels" json:"minModels"`         // agreeing models required, 2 to 4, capped at the number of eligible models
+	AllEligible   bool     `yaml:"alleligible" json:"allEligible"`     // true to require every eligible model instead of minmodels
+	Debug         bool     `yaml:"debug" json:"debug"`                 // true to log each consensus discard at info level, with the agreeing and eligible models
+}
+
+// Enabled reports whether the filter is switched on, for every species or for the
+// listed ones.
+func (m *ModelConsensusSettings) Enabled() bool { return m.AllSpecies || m.ListedSpecies }
 
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.
 type RTSPHealthSettings struct {
@@ -904,6 +934,7 @@ type RealtimeSettings struct {
 	PrivacyFilter    PrivacyFilterSettings    `yaml:"privacyfilter" json:"privacyFilter"`       // Privacy filter settings
 	DogBarkFilter    DogBarkFilterSettings    `yaml:"dogbarkfilter" json:"dogBarkFilter"`       // Dog bark filter settings
 	DaylightFilter   DaylightFilterSettings   `yaml:"daylightfilter" json:"daylightFilter"`     // Daylight filter settings
+	ModelConsensus   ModelConsensusSettings   `yaml:"modelconsensus" json:"modelConsensus"`     // Model consensus false positive filter settings
 	RTSP             RTSPSettings             `yaml:"rtsp" json:"rtsp"`                         // RTSP settings
 	MQTT             MQTTSettings             `yaml:"mqtt" json:"mqtt"`                         // MQTT settings
 	Telemetry        TelemetrySettings        `yaml:"telemetry" json:"telemetry"`               // Telemetry settings
@@ -1340,6 +1371,14 @@ type BirdNETConfig struct {
 	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
 	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
 	ModelRegion         string              `yaml:"modelregion,omitempty" json:"modelRegion,omitempty"`                 // regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto"
+
+	// AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which
+	// an alternate prediction of a detection is stored. Alternates below it are
+	// dropped when the detection is saved; the detected species itself is never
+	// affected. 0 stores every alternate. Rows already in the database are not
+	// changed. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the
+	// settings API; a config file edit applies at the next start.
+	AlternateMinConfidence float64 `yaml:"alternateminconfidence" json:"alternateMinConfidence"`
 }
 
 // Inference backend preferences for BirdNET.Backend.
@@ -1350,8 +1389,14 @@ const (
 )
 
 // OpenVINO device preferences for BirdNET.OpenVINODevice. "auto" picks the GPU
-// (Intel iGPU) when present for eligible models, else the f16 CPU path; "cpu"
-// and "gpu" force a device. An empty string is treated as "auto".
+// (Intel iGPU) when present for eligible models. On arm64 the auto backend keeps
+// models on ONNX Runtime unless birdnet.backend is openvino (or, for BirdNET
+// v2.4, ONNX Runtime is unavailable), and then uses the CPU device on an
+// ARMv8.2+ CPU with native f16 (the precision is per model; see
+// classifier.openVINOPrecisionFor); "cpu" and "gpu" force a device, and "cpu" is
+// also an opt-in to the OpenVINO CPU on arm64 under the auto backend (INT8 or
+// unrecognized weights additionally need birdnet.backend openvino). An empty
+// string is treated as "auto".
 const (
 	OVDeviceAuto = "auto"
 	OVDeviceCPU  = "cpu"
@@ -1408,6 +1453,15 @@ type BirdNETV3Config struct {
 	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
+// BirdNETPlusConfig holds configuration for the BirdNET+ v3.0 acoustic classifier.
+type BirdNETPlusConfig struct {
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET+ v3.0 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET+ v3.0 label file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate BirdNET+ v3.0 detections on Threshold instead of following BirdNET.Threshold
+	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
+	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+}
+
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 type BatConfig struct {
 	EmbeddingModel      string                      `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
@@ -1421,11 +1475,17 @@ type BatConfig struct {
 }
 
 // UltrasonicFilterConfig controls the post-detection ultrasonic validation filter for bat detections.
-// The filter measures temporal variability of ultrasonic energy (US frame CV) in the source audio.
+// The filter measures temporal variability of ultrasonic energy (US frame CV) in the audio window it is given, at the model's analysis rate.
 // Real bat echolocation produces bursts of ultrasonic energy (high CV), while false positives
 // from audible-range sounds show flat ultrasonic energy at the noise floor (low CV).
+// A window that passes the CV check is then examined in shorter sub-frames. Sub-frames where the band
+// from 0.6 to 0.8 of FrequencySplitHz jumps together with the ultrasonic band (clicks, rustling) do not count toward the CV,
+// and neither do sub-frames where every band of a twentieth of FrequencySplitHz, from 0.7 to 1.2 of it, is raised together
+// with the ultrasonic band (rain). The second check is skipped when FFTSize is so small that such a band is narrower than
+// one sub-frame bin.
 type UltrasonicFilterConfig struct {
 	Enabled          bool    `yaml:"enabled" json:"enabled"`                   // enable ultrasonic validation filter
+	DiscardUnlikely  bool    `yaml:"discardunlikely" json:"discardUnlikely"`   // discard detections tagged unlikely instead of saving them; applies only while enabled
 	CVThreshold      float64 `yaml:"cvthreshold" json:"cvThreshold"`           // detections with US frame CV below this are tagged unlikely
 	FFTSize          int     `yaml:"fftsize" json:"fftSize"`                   // FFT window size in samples (a power of 2, at least 2)
 	HopSize          int     `yaml:"hopsize" json:"hopSize"`                   // STFT hop size in samples, 1 to fftsize
@@ -1480,6 +1540,21 @@ func (c UltrasonicFilterConfig) validateSplit() error {
 	return nil
 }
 
+// BSGBatConfig holds configuration for the BSG-BAT bat classifier. The schedule,
+// false positive filter and ultrasonic filter are shared with the bat section
+// (BatConfig); only the model files, the confidence threshold and the analysis
+// step are its own.
+type BSGBatConfig struct {
+	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG-BAT ONNX model file
+	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BSG-BAT label file
+	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for BSG-BAT detections
+	// StepFrames is the analysis step between successive BSG-BAT windows, in mel
+	// frames of 768 samples (2 ms at 384 kHz). Accepted values are 100 to 512; 0
+	// uses the default of 250. The bat false positive filter count follows it as
+	// ceil(6 / step seconds * level fraction). A change restarts audio capture.
+	StepFrames int `yaml:"stepframes" json:"stepFrames"`
+}
+
 // BSGConfig holds configuration for BSG regional bird models.
 type BSGConfig struct {
 	ModelPath string `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG ONNX model file
@@ -1493,7 +1568,7 @@ type ModelsConfig struct {
 	Directory string   `yaml:"directory,omitempty" json:"directory,omitempty"` // base directory for downloaded model files
 	// AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy
 	// model auto-enable has run for this config file, so it never re-runs. Do not edit by hand;
-	// a managed read-only config may set it true (with configversion: 2) to keep an explicit
+	// a managed read-only config may set it true (with configversion: 3) to keep an explicit
 	// models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the
 	// companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go.
 	AutoEnableMigrated bool `yaml:"autoenablemigrated,omitempty" json:"-"`
@@ -1580,6 +1655,10 @@ type OAuthProviderConfig struct {
 	UserID       string   `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
 	IssuerURL    string   `yaml:"issuerUrl,omitempty" json:"issuerUrl"`     // OIDC issuer/discovery URL (required when provider is "oidc")
 	Scopes       []string `yaml:"scopes,omitempty" json:"scopes,omitempty"` // Custom OAuth scopes (OIDC default: openid, profile, email)
+
+	// PostLogoutRedirect sends the browser back to the instance after sign-out at
+	// the identity provider. OIDC only. The return URL must be registered there.
+	PostLogoutRedirect bool `yaml:"postLogoutRedirect,omitempty" json:"postLogoutRedirect,omitempty"`
 }
 
 // TLSMode represents the TLS certificate management mode.
@@ -1657,7 +1736,31 @@ type Security struct {
 	// holds clients: a client inside a listed range is trusted as a proxy, so its
 	// own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite
 	// X-Real-IP; the client-IP headers it forwards must all name the same client,
-	// and a Forwarded header is not accepted. Hot-reloadable.
+	// and a Forwarded header is not accepted. The API rate limiters follow the
+	// same rule: listing a proxy by its own address gives each verified client its
+	// own limits, while all requests of a listed proxy whose headers do not verify
+	// share one bucket. On the login and import elevation routes, which also
+	// limit the connection peer as a whole, a proxy listed by its own address (a
+	// bare IP, a /32 or a /128, not inside a wider listed range) is exempt from
+	// that shared peer limit for the clients it verifies, unless a Cloudflare edge
+	// address is in the request's chain; the clients a listed range or a listed
+	// proxy behind a Cloudflare edge verifies, and the visitors an unlisted proxy
+	// names, keep it. A request that arrives directly has no shared peer limit
+	// and keeps its own per-address count. A proxy behind Cloudflare whose
+	// headers name a Cloudflare edge hop verifies only when the "cloudflare"
+	// preset is listed as well. An unlisted proxy on a loopback, link-local or
+	// private address gets per-client limits only while the headers it forwards
+	// agree on one client; a host that can reach that proxy directly can still
+	// name any of its clients, and an unlisted local host can name any client
+	// under its own address. An unlisted proxy on a public or 100.64.0.0/10
+	// (CGNAT, Tailscale IPv4) address is treated as the client and its headers
+	// are ignored, so list it.
+	// The client address that logs and the tunnel label record comes from the same
+	// resolution as the rate limiters. Forwarded headers that disagree, or that a
+	// listed proxy cannot verify, are not recorded: the peer's own address is
+	// logged instead. A client that an unlisted loopback, link-local or private
+	// host names consistently is recorded as named, so such a host can choose the
+	// address that appears in logs. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 
@@ -1978,12 +2081,14 @@ type Settings struct {
 		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `yaml:"main" json:"main"`
 
-	BirdNET   BirdNETConfig   `yaml:"birdnet" json:"birdnet"`     // BirdNET configuration
-	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
-	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdnetv3"` // BirdNET v3.0 acoustic classifier configuration
-	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
-	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
-	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
+	BirdNET     BirdNETConfig     `yaml:"birdnet" json:"birdnet"`         // BirdNET configuration
+	Perch       PerchConfig       `yaml:"perch" json:"perch"`             // Perch v2 model configuration
+	BirdNETV3   BirdNETV3Config   `yaml:"birdnetv3" json:"birdnetv3"`     // BirdNET v3.0 acoustic classifier configuration
+	BirdNETPlus BirdNETPlusConfig `yaml:"birdnetplus" json:"birdnetplus"` // BirdNET+ v3.0 acoustic classifier configuration
+	Bat         BatConfig         `yaml:"bat" json:"bat"`                 // Bat detection configuration
+	BSGBat      BSGBatConfig      `yaml:"bsgbat" json:"bsgbat"`           // BSG-BAT bat classifier configuration
+	BSG         BSGConfig         `yaml:"bsg" json:"bsg"`                 // BSG regional bird model configuration
+	Models      ModelsConfig      `yaml:"models" json:"models"`           // Global model enablement and management
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
@@ -2034,6 +2139,21 @@ type Settings struct {
 	// stamped by UpdateSettings and CompareAndStoreSettings and is zero for a
 	// snapshot published by Load or StoreSettings. Read it through Revision.
 	revision uint64
+}
+
+// EffectivePlaybackDenoise returns the denoise preset the UI applies to clip
+// playback and downloads by default, or "" when none applies. The playback
+// default is off while export-stage denoise is on: the saved clips are already
+// denoised, and denoising them again when played would do it twice.
+func (s *Settings) EffectivePlaybackDenoise() string {
+	if s.Realtime.Audio.Export.Denoise.Enabled {
+		return ""
+	}
+	playback := s.Realtime.Dashboard.PlaybackDenoise
+	if !playback.Enabled || !IsValidDenoisePresetName(playback.Strength) {
+		return ""
+	}
+	return playback.Strength
 }
 
 // Revision identifies the client-writable state of this snapshot within one
@@ -2107,8 +2227,112 @@ type AlertSettings struct {
 	HistoryRetentionDays int `json:"historyRetentionDays" yaml:"history_retention_days" mapstructure:"history_retention_days"` // Days to retain alert history (0 = unlimited)
 }
 
-// GetOAuthProvider returns the OAuth provider configuration for the given provider ID.
-// Returns nil if the provider is not configured.
+// Canonical OAuth provider IDs, as stored in security.oauthProviders[].provider
+// and sent by the settings UI. internal/security dispatches on the same values
+// (its Config* constants derive from these), and it imports conf, so the list
+// lives here.
+const (
+	OAuthProviderGoogle    = "google"
+	OAuthProviderGitHub    = "github"
+	OAuthProviderMicrosoft = "microsoft"
+	OAuthProviderLine      = "line"
+	OAuthProviderKakao     = "kakao"
+	OAuthProviderOIDC      = "oidc"
+)
+
+// knownOAuthProviderIDs is the sorted list of every canonical provider ID.
+var knownOAuthProviderIDs = []string{
+	OAuthProviderGitHub,
+	OAuthProviderGoogle,
+	OAuthProviderKakao,
+	OAuthProviderLine,
+	OAuthProviderMicrosoft,
+	OAuthProviderOIDC,
+}
+
+// IsKnownOAuthProviderID reports whether id is a supported provider ID. It
+// expects the canonical form; run NormalizeOAuthProviderID first.
+func IsKnownOAuthProviderID(id string) bool {
+	return slices.Contains(knownOAuthProviderIDs, id)
+}
+
+// KnownOAuthProviderIDs returns a sorted copy of the supported provider IDs.
+func KnownOAuthProviderIDs() []string {
+	return slices.Clone(knownOAuthProviderIDs)
+}
+
+// NormalizeOAuthProviderID returns the canonical form of an OAuth provider ID:
+// trimmed and lower case. Provider IDs are compared exactly throughout the
+// settings code, so every ingestion point stores them in this form.
+func NormalizeOAuthProviderID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// NormalizeOAuthProviderIDs rewrites every Security.OAuthProviders[i].Provider
+// to its canonical form. It is idempotent and never drops or disables an entry.
+func (s *Settings) NormalizeOAuthProviderIDs() {
+	for i := range s.Security.OAuthProviders {
+		s.Security.OAuthProviders[i].Provider = NormalizeOAuthProviderID(s.Security.OAuthProviders[i].Provider)
+	}
+}
+
+// ReconcileOAuthProviderDuplicates collapses entries that share a canonical
+// provider ID into one: the first enabled entry that has credentials, else the
+// first entry that has credentials, else the first enabled entry, else the first
+// entry. Preferring credentials keeps a working or disabled-but-complete entry from
+// losing to an unfinished one that incomplete-feature normalisation would disable
+// afterwards. The others are dropped and one warning per dropped
+// entry names its index, provider ID and enabled state (never a secret). It
+// expects IDs already canonical (see NormalizeOAuthProviderIDs), and runs on
+// config load so that a hand-edited file with duplicates still starts. The settings
+// API rejects such duplicates instead (see validateOAuthProviderDuplicates).
+func (s *Settings) ReconcileOAuthProviderDuplicates() {
+	providers := s.Security.OAuthProviders
+	// Preference of an entry when several share a provider ID, highest first.
+	const (
+		rankOther = iota
+		rankEnabled
+		rankComplete
+		rankEnabledComplete
+	)
+	rank := func(p *OAuthProviderConfig) int {
+		complete := p.ClientID != "" && p.ClientSecret != ""
+		switch {
+		case p.Enabled && complete:
+			return rankEnabledComplete
+		case complete:
+			return rankComplete
+		case p.Enabled:
+			return rankEnabled
+		default:
+			return rankOther
+		}
+	}
+	keep := make(map[string]int, len(providers))
+	for i := range providers {
+		kept, seen := keep[providers[i].Provider]
+		if !seen || rank(&providers[i]) > rank(&providers[kept]) {
+			keep[providers[i].Provider] = i
+		}
+	}
+
+	reconciled := make([]OAuthProviderConfig, 0, len(keep))
+	for i := range providers {
+		if keep[providers[i].Provider] == i {
+			reconciled = append(reconciled, providers[i])
+			continue
+		}
+		GetLogger().Warn("Dropped duplicate OAuth provider entry; keeping the best entry for this provider ID",
+			logger.Int("index", i),
+			logger.String("provider", providers[i].Provider),
+			logger.Bool("enabled", providers[i].Enabled))
+	}
+	s.Security.OAuthProviders = reconciled
+}
+
+// GetOAuthProvider returns the OAuth provider configuration for the given provider
+// ID, or nil if the provider is not configured. Provider IDs are unique after load
+// and save.
 func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
 	for i := range s.Security.OAuthProviders {
 		if s.Security.OAuthProviders[i].Provider == providerID {

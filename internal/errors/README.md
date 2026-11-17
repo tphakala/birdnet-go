@@ -379,10 +379,10 @@ Result: "Imageprovider Image Fetch Error Parse Pages From Response"
 
 Errors are automatically assigned appropriate Sentry levels:
 
-- `CategoryValidation`, `CategoryDatabase`: Error level (connectivity failures excepted, see below)
+- `CategoryValidation`, `CategoryDatabase`: Error level
 - `CategoryNetwork`, `CategoryFileIO`: Warning level
 - `CategoryModelInit`, `CategoryModelLoad`: Error level (critical)
-- Connectivity failures (unreachable host, dropped connection) in the database, state, system and image-cache categories: Warning level with `error_origin=environment`; one event per process per hour is sent, shared across those categories, and the rest are dropped
+- Connectivity failures are not reported: dial, DNS and bad-connection errors (including the MySQL invalid connection error) in the database, state, system and image-cache categories unless a MySQL server error is attached, and transport failure texts (unreachable host, dropped connection, DNS, timeouts) in the network, HTTP, MQTT connection, MQTT publish and RTSP categories
 
 ### Context Data
 

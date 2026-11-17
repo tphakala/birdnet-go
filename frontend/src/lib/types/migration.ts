@@ -76,7 +76,26 @@ export interface PrerequisiteCheck {
 }
 
 /**
- * Full prerequisites response from the API
+ * State of the background prerequisites run. "failed" means the run itself did not
+ * finish (time limit, shutdown, internal error); failing checks still give "completed".
+ */
+export type PrerequisitesRunStatus = 'idle' | 'running' | 'completed' | 'failed';
+
+/**
+ * Progress of a running prerequisites run
+ */
+export interface PrerequisitesProgress {
+  completed_steps: number;
+  total_steps: number;
+  current_check_id?: string;
+  current_check_name?: string;
+  /** Computed by the server when the snapshot is taken */
+  current_check_elapsed_ms?: number;
+}
+
+/**
+ * Snapshot of the prerequisites run from the API. While a run is in progress
+ * `checks` holds the checks finished so far and `can_start_migration` is false.
  */
 export interface PrerequisitesResponse {
   all_passed: boolean;
@@ -84,7 +103,15 @@ export interface PrerequisitesResponse {
   checks: PrerequisiteCheck[];
   critical_failures: number;
   warnings: number;
-  checked_at: string;
+  /** Completion time of the run; absent until a run completes */
+  checked_at?: string;
+  status: PrerequisitesRunStatus;
+  run_id: number;
+  started_at?: string;
+  /** Present only while status is "running" */
+  progress?: PrerequisitesProgress;
+  /** Why a "failed" run did not finish */
+  error?: string;
 }
 
 /**

@@ -40,20 +40,6 @@ func Test_SetSSEHeaders(t *testing.T) {
 		"SetSSEHeaders must not hardcode Access-Control-Allow-Headers")
 }
 
-func Test_DisableProxyBuffering(t *testing.T) {
-	t.Parallel()
-
-	e := echo.New()
-	req := httptest.NewRequest("GET", "/test", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	DisableProxyBuffering(ctx)
-
-	assert.Equal(t, "no", rec.Header().Get("X-Accel-Buffering"),
-		"DisableProxyBuffering must set X-Accel-Buffering: no")
-}
-
 // deadlineRecorder is a ResponseWriter that records SetWriteDeadline calls so
 // tests can assert SetStreamWriteDeadline wired the deadline through.
 type deadlineRecorder struct {

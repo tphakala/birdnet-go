@@ -84,6 +84,33 @@ func TestPatchMissingSections(t *testing.T) {
 			},
 		},
 		{
+			name:    "birdnetplus section accepts valid update",
+			section: "birdnetplus",
+			body: map[string]any{
+				"overrideThreshold": true,
+				"threshold":         0.65,
+			},
+			verify: func(t *testing.T, settings *conf.Settings) {
+				t.Helper()
+				assert.True(t, settings.BirdNETPlus.OverrideThreshold)
+				assert.InDelta(t, 0.65, settings.BirdNETPlus.Threshold, 1e-9)
+				assert.False(t, settings.BirdNETV3.OverrideThreshold, "the BirdNET v3.0 section must stay untouched")
+			},
+		},
+		{
+			name:    "bsgbat section accepts valid update",
+			section: "bsgbat",
+			body: map[string]any{
+				"threshold":  0.7,
+				"stepFrames": 400,
+			},
+			verify: func(t *testing.T, settings *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 0.7, settings.BSGBat.Threshold, 1e-9)
+				assert.Equal(t, 400, settings.BSGBat.StepFrames)
+			},
+		},
+		{
 			name:    "models section accepts valid update",
 			section: "models",
 			body: map[string]any{
@@ -193,6 +220,28 @@ func TestPatchAlertingValidation(t *testing.T) {
 	var response map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	assert.Contains(t, response["error"], "historyRetentionDays must be non-negative")
+}
+
+// TestPatchBSGBatStepOutOfRange verifies that the settings API rejects a
+// bsgbat.stepframes above the model window and keeps the stored value.
+func TestPatchBSGBatStepOutOfRange(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+	controller.Settings.Load().BSGBat.StepFrames = conf.DefaultBSGBatStepFrames
+
+	body, err := json.Marshal(map[string]any{"stepFrames": conf.MaxBSGBatStepFrames + 1})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/bsgbat", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("bsgbat")
+
+	require.NoError(t, controller.UpdateSectionSettings(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, conf.DefaultBSGBatStepFrames, controller.Settings.Load().BSGBat.StepFrames)
 }
 
 // TestPatchAlertingZeroRetention verifies that zero is accepted as a valid
@@ -307,4 +356,59 @@ func TestPatchWebServerLiveStreamValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// patchSectionResponse sends a PATCH to /settings/:section and returns the
+// decoded JSON response.
+func patchSectionResponse(t *testing.T, controller *Controller, e *echo.Echo, section string, body map[string]any) map[string]any {
+	t.Helper()
+	rec := patchSection(t, e, controller, section, body)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+// TestPatchSectionReturnsStoredSection verifies that the PATCH response carries
+// the stored section in the server's shape and with secrets redacted, so a
+// client can record what the server holds rather than its own request.
+func TestPatchSectionReturnsStoredSection(t *testing.T) {
+	t.Run("audio returns sources with server-added keys", func(t *testing.T) {
+		e := echo.New()
+		controller := getTestController(t, e)
+
+		resp := patchSectionResponse(t, controller, e, "audio", map[string]any{
+			"sources": []map[string]any{{"name": "Garden", "device": "default", "gain": 3}},
+		})
+
+		stored, ok := resp["settings"].(map[string]any)
+		require.True(t, ok, "settings must be the audio section object")
+		sources, ok := stored["sources"].([]any)
+		require.True(t, ok, "settings.sources must be a list")
+		require.Len(t, sources, 1)
+		source, ok := sources[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Garden", source["name"])
+		assert.Contains(t, source, "quietHours", "the server's own keys are part of the stored shape")
+	})
+
+	t.Run("security returns the redacted secret, never the real one", func(t *testing.T) {
+		const realPassword = "hunter2-real-password"
+		e := echo.New()
+		controller := getTestController(t, e)
+		current := controller.Settings.Load()
+		current.Security.BasicAuth.Password = realPassword
+
+		resp := patchSectionResponse(t, controller, e, "security", map[string]any{
+			"debug": true,
+		})
+
+		stored, ok := resp["settings"].(map[string]any)
+		require.True(t, ok, "settings must be the security section object")
+		basicAuth, ok := stored["basicAuth"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, redactedValue, basicAuth["password"])
+		raw, err := json.Marshal(resp)
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), realPassword)
+	})
 }

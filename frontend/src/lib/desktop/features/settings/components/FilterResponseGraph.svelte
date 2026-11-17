@@ -674,9 +674,9 @@
           <div class="font-semibold">{tooltip.freq} Hz</div>
           <div
             class={tooltip.gain > 0
-              ? 'text-[var(--color-success)]'
+              ? 'text-[var(--text-success)]'
               : tooltip.gain < -12
-                ? 'text-[var(--color-error)]'
+                ? 'text-[var(--text-error)]'
                 : ''}
           >
             {tooltip.gain > 0 ? '+' : ''}{tooltip.gain} dB

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/labstack/echo/v4"
 )
@@ -21,6 +21,15 @@ func requestWithCancelCtx(t *testing.T, remoteAddr string) (*http.Request, conte
 	return req.WithContext(baseCtx), cancel
 }
 
+// recycledRequest builds the request a pooled echo.Context is rebound to after
+// its handler returns, with its own header map and remote address.
+func recycledRequest() *http.Request {
+	next := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	next.Header.Set(echo.HeaderXForwardedFor, "2.2.2.2")
+	next.RemoteAddr = "2.2.2.2:2222"
+	return next
+}
+
 // TestSetupNotificationDisconnectHandler_NoContextRaceAfterHandlerReturn is a
 // regression test for issue #4292 ("fatal error: concurrent map read and map
 // write"). The disconnect watcher goroutine outlives the SSE handler, and Echo
@@ -29,64 +38,47 @@ func requestWithCancelCtx(t *testing.T, remoteAddr string) (*http.Request, conte
 // ctx.RealIP()) from the watcher therefore races with the request the pooled
 // context is next bound to.
 //
-// This test simulates that recycle by swapping the context's request (and
-// writing its header map) from another goroutine while the watcher runs. Under
-// -race it fails if the watcher touches ctx after setup; it passes because the
-// watcher captures the request context and client IP up front and never reads
-// ctx afterwards.
+// The test simulates the recycle by rebinding the context's request, once from
+// another goroutine around the client disconnect and once from the test
+// goroutine after the watcher has signalled the disconnect. Nothing orders
+// either write against a read of ctx made by the watcher, so the test depends on
+// the race detector (run with -race): it fails if the watcher reads ctx at any
+// point after setup, and passes because the watcher captures the request context
+// and client IP up front and never reads ctx afterwards.
 func TestSetupNotificationDisconnectHandler_NoContextRaceAfterHandlerReturn(t *testing.T) {
 	t.Parallel()
 
+	// The handler is built outside the bubble.
 	c := mockHandler()
 
-	e := echo.New()
-	req, cancel := requestWithCancelCtx(t, "1.1.1.1:1111")
-	defer cancel()
-	ctx := e.NewContext(req, httptest.NewRecorder())
+	synctest.Test(t, func(t *testing.T) {
+		e := echo.New()
+		req, cancel := requestWithCancelCtx(t, "1.1.1.1:1111")
+		defer cancel()
+		ctx := e.NewContext(req, httptest.NewRecorder())
 
-	client := &NotificationClient{
-		ID:   "race-client",
-		Done: make(chan struct{}, 1),
-	}
-
-	c.setupNotificationDisconnectHandler(ctx, client)
-
-	// Simulate Echo recycling the pooled context onto new in-flight requests
-	// while the watcher goroutine is running. Only this goroutine touches ctx;
-	// a correctly-fixed watcher never does, so there is no race. A regressed
-	// watcher reading ctx here trips the race detector.
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			next := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			next.Header.Set(echo.HeaderXForwardedFor, "2.2.2.2")
-			next.RemoteAddr = "2.2.2.2:2222"
-			ctx.SetRequest(next)
+		client := &NotificationClient{
+			ID:   "race-client",
+			Done: make(chan struct{}, 1),
 		}
-	})
 
-	// Unblock the watcher (client disconnect) so its post-disconnect logging
-	// (the ctx access in the pre-fix code) overlaps with the swapping goroutine.
-	cancel()
+		c.setupNotificationDisconnectHandler(ctx, client)
 
-	select {
-	case <-client.Done:
-		// Watcher observed the disconnect and is about to log.
-	case <-time.After(2 * time.Second):
-		close(stop)
+		// Echo recycles the pooled context onto a new request while the watcher
+		// is waiting for the disconnect.
+		var wg sync.WaitGroup
+		wg.Go(func() { ctx.SetRequest(recycledRequest()) })
+
+		// Unblock the watcher (client disconnect); wait until it has signalled
+		// and the recycle has finished.
+		cancel()
+		<-client.Done
 		wg.Wait()
-		t.Fatal("disconnect watcher did not signal client.Done")
-	}
 
-	// Keep swapping briefly so the watcher's logging step overlaps the swaps,
-	// widening the window the race detector can observe if the bug regresses.
-	time.Sleep(10 * time.Millisecond)
-	close(stop)
-	wg.Wait()
+		// The context is recycled again while the watcher logs the disconnect.
+		ctx.SetRequest(recycledRequest())
+
+		// Wait for the watcher to finish.
+		synctest.Wait()
+	})
 }

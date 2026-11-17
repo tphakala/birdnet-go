@@ -51,6 +51,12 @@ type Perch struct {
 	// configured Perch.ModelPath). Set once at construction; reported via
 	// ResolvedModelPath().
 	modelPath string
+	// calibrated and restLogit carry the slice score calibration found at
+	// construction (see perchScoreCalibration). When calibrated is false (the full
+	// model, or a slice the catalog does not know) Predict uses the plain softmax.
+	// Both are set once and never mutated, so reads under p.mu need no extra sync.
+	calibrated bool
+	restLogit  float64
 }
 
 // PerchConfig holds configuration for creating a Perch model instance.
@@ -136,6 +142,8 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		precision = string(detectQuantization(cfg.ModelPath))
 	}
 
+	calibrated, restLogit := resolvePerchCalibration(labelData, labels, cfg.ModelPath)
+
 	info := ModelInfo{
 		ID:          RegistryIDPerchV2,
 		Name:        ModelNamePerchV2,
@@ -156,7 +164,37 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		backend:    backend,
 		precision:  precision,
 		modelPath:  cfg.ModelPath,
+		calibrated: calibrated,
+		restLogit:  restLogit,
 	}, nil
+}
+
+// resolvePerchCalibration looks up the score calibration for the labels a Perch
+// build parsed, logs the outcome once, and returns what the instance stores: whether
+// Predict applies the rest term, and its rest logit.
+func resolvePerchCalibration(labelData []byte, labels []string, modelPath string) (calibrated bool, restLogit float64) {
+	c := perchScoreCalibration(labelData, labels, modelPath)
+	logPerchCalibration(GetLogger(), c, len(labels))
+	return c.status == perchCalibrationApplied, c.calibration.RestLogit
+}
+
+// logPerchCalibration reports once per build how the loaded labels were scored:
+// the calibration that applies to a catalog regional slice, or a warning for a
+// slice-sized label set the catalog does not know. The full model logs nothing.
+func logPerchCalibration(log logger.Logger, c perchCalibrationLookup, labelCount int) {
+	switch c.status {
+	case perchCalibrationApplied:
+		log.Info("Perch v2 score calibration applied",
+			logger.String("variant", c.variantID),
+			logger.Float64("rest_logit", c.calibration.RestLogit),
+			logger.String("method", c.calibration.Method))
+	case perchCalibrationUnknownLabels:
+		log.Warn("Perch v2 labels match no catalog Perch model; scores are normalized over the loaded labels only and run higher than the full model's",
+			logger.Int("species", labelCount),
+			logger.String("labels_sha256", c.labelsSHA256))
+	case perchCalibrationFullModel:
+		// The full model needs no calibration.
+	}
 }
 
 // tryPerchOpenVINO attempts to build an OpenVINO classifier for Perch v2. It
@@ -220,8 +258,10 @@ func isPerchNoDFT(modelPath string) bool {
 	return strings.Contains(base, "no_dft") || strings.Contains(base, "no-dft")
 }
 
-// Predict runs inference on the given audio samples.
-// Implements ModelInstance.
+// Predict runs inference on the given audio samples and returns the top-K scored
+// labels. Scores are a softmax over the logits; for a catalog regional slice the
+// softmax includes the slice's rest term, which puts its scores on the full
+// model's scale (see perchSoftmaxWithRest). Implements ModelInstance.
 func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
 	span, _ := startPredictSpan(ctx, RegistryIDPerchV2, samples)
 	defer span.Finish()
@@ -273,7 +313,16 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 	// Apply softmax to normalize raw logits into probabilities (0.0-1.0).
 	// The inference.Classifier interface returns pre-activation logits;
 	// BirdNET applies sigmoid in its own Predict path, Perch needs softmax.
-	predictions := perchSoftmax(rawLogits)
+	// A regional slice only sees its own classes, so its plain softmax would score
+	// every class higher than the full model does; the rest term puts the dropped
+	// classes back into the denominator. The full model, and a slice the catalog
+	// does not know, keep the plain softmax.
+	var predictions []float32
+	if p.calibrated {
+		predictions = perchSoftmaxWithRest(rawLogits, p.restLogit)
+	} else {
+		predictions = perchSoftmax(rawLogits)
+	}
 
 	// Pair labels with predictions
 	results, err := pairLabelsAndConfidence(p.labels, predictions)
@@ -356,6 +405,33 @@ func perchSoftmax(logits []float32) []float32 {
 	}
 	for i := range result {
 		result[i] /= sum
+	}
+	return result
+}
+
+// perchSoftmaxWithRest is the softmax of a regional slice with one extra class, the
+// "rest", whose logit stands for the log-sum-exp of the classes the slice dropped:
+// score_i = exp(z_i) / (sum_kept exp(z_j) + exp(rest)). It puts a slice's scores on
+// the full model's scale, and since every score shares the denominator the ranking
+// is that of perchSoftmax. Sums are in float64 and shifted by max(max(logits), rest)
+// so neither a large logit nor a large rest can overflow. rest must be finite.
+func perchSoftmaxWithRest(logits []float32, rest float64) []float32 {
+	if len(logits) == 0 {
+		return []float32{}
+	}
+	shift := rest
+	for _, v := range logits {
+		shift = math.Max(shift, float64(v))
+	}
+	exps := make([]float64, len(logits))
+	sum := math.Exp(rest - shift)
+	for i, v := range logits {
+		exps[i] = math.Exp(float64(v) - shift)
+		sum += exps[i]
+	}
+	result := make([]float32, len(logits))
+	for i, e := range exps {
+		result[i] = float32(e / sum)
 	}
 	return result
 }

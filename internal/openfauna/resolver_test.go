@@ -157,13 +157,11 @@ func TestResolver_UntranslatedLocale_FallsBackToEnglish_Embedded(t *testing.T) {
 func TestResolver_EnglishLocale_PreseedsUntranslatedAsMiss_Embedded(t *testing.T) {
 	t.Parallel()
 
-	// A few species (some bats) exist in the dataset with no English translation.
-	// When the active locale resolves to English, such working-set species are
-	// pre-seeded as known misses at Rebuild so they skip the slow path entirely.
-	const sci = "Eptesicus nilssonii"
-	_, hasEn := Lookup(sci, "en")
-	require.False(t, hasEn,
-		"test premise: %q must have no English translation; pick another English-missing species if upstream added one", sci)
+	// A working-set species missing from the dataset has no English translation.
+	// When the active locale resolves to English, it is pre-seeded as a known miss
+	// at Rebuild so it skips the slow path entirely. A synthetic binomial keeps the
+	// test independent of dataset refreshes (upstream can backfill real species).
+	const sci = "Gibberish nonexistus"
 
 	r := NewResolver()
 	require.NoError(t, r.Rebuild([]string{sci}, "en")) // active locale resolves to English

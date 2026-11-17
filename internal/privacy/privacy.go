@@ -176,9 +176,16 @@ var (
 	// FFmpeg error prefix pattern - matches memory addresses like [rtsp @ 0x55d4a4808980]
 	ffmpegPrefixPattern = regexp.MustCompile(`\[\w+\s*@\s*0x[0-9a-fA-F]+\]\s*`)
 
-	// URL credential scrubbing patterns (for fallback when URL parsing fails)
-	urlCredPattern  = regexp.MustCompile(`(://)[^:@/]+:[^@/]+@`)
-	urlTokenPattern = regexp.MustCompile(`(://)[^:@/]+@`)
+	// urlUserinfoTextPattern matches the userinfo of a URL with a scheme inside
+	// free text. The URL ends at "/", "?", "#", white space or a double quote.
+	urlUserinfoTextPattern = regexp.MustCompile(`(://)[^/?#\s"]*@`)
+
+	// quotedSegmentPattern matches every double-quoted segment, left to right,
+	// honouring backslash escapes: Go quotes the URL of a failed request with
+	// %q, which escapes a double quote and leaves a space as is. Matching every
+	// segment, not only those holding an "@", keeps the quotes paired, so the
+	// text between two quoted segments is never taken for one.
+	quotedSegmentPattern = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 
 	// Notification URL token patterns (Telegram bot tokens, Discord webhooks, etc.)
 	botTokenPattern = regexp.MustCompile(`/bot[A-Za-z0-9:_-]{20,}/`)
@@ -836,7 +843,11 @@ func ScrubToken(token string) string {
 
 // ScrubCredentialURL sanitizes URLs that may contain embedded credentials.
 // Handles common notification service URL formats (telegram://, discord://, slack://, etc.)
-// and generic URLs with userinfo (user:pass@host).
+// and generic URLs with userinfo (user:pass@host). A value url.Parse rejects, and
+// an opaque, scheme-less or host-less value that it accepts without a User, or
+// a URL without a User that has an "@" in its path, is redacted with
+// RedactURLUserinfo instead. Token-like path and query values are scrubbed on
+// every path.
 func ScrubCredentialURL(rawURL string) string {
 	if rawURL == "" {
 		return ""
@@ -844,8 +855,23 @@ func ScrubCredentialURL(rawURL string) string {
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		// If parsing fails, do a simple credential pattern replacement
-		return scrubURLCredentialsSimple(rawURL)
+		// A value url.Parse rejects cannot be normalized by parsing it.
+		return scrubURLTokenPatterns(RedactURLUserinfo(rawURL))
+	}
+
+	// url.Parse accepts an opaque ("https:user:pw@host"), scheme-less
+	// ("user:pw@host") or host-less ("user@host") value without a User, so the
+	// structure cannot locate its userinfo.
+	if parsedURL.Host == "" && (strings.Contains(parsedURL.Opaque, "@") ||
+		(!strings.HasPrefix(parsedURL.Path, "/") && strings.Contains(parsedURL.Path, "@"))) {
+		return scrubURLTokenPatterns(RedactURLUserinfo(rawURL))
+	}
+
+	// A password with a numeric prefix and a "/" ("https://user:123/pw@host")
+	// parses as host "user:123" with the rest of the password in the path, so an
+	// "@" in the path of a URL without a User is treated as userinfo.
+	if parsedURL.User == nil && parsedURL.Host != "" && strings.Contains(parsedURL.Path, "@") {
+		return scrubURLTokenPatterns(RedactURLUserinfo(rawURL))
 	}
 
 	// Remove userinfo (credentials) from URL
@@ -862,17 +888,85 @@ func ScrubCredentialURL(rawURL string) string {
 	return result
 }
 
-// scrubURLCredentialsSimple performs simple regex-based credential scrubbing
-// for cases where URL parsing fails.
-// Uses pre-compiled patterns for performance (see issue #825).
-func scrubURLCredentialsSimple(rawURL string) string {
-	// Pattern: scheme://user:pass@host or scheme://token@host
-	result := urlCredPattern.ReplaceAllString(rawURL, "$1[REDACTED]@")
+// RedactURLUserinfo returns raw with any userinfo replaced by RedactedMarker.
+// It is meant for a value that was supposed to be a URL and may not parse (a
+// rejected endpoint, a malformed issuer), so it does not rely on url.Parse.
+//
+// The authority starts after a "://" that follows a scheme name, or after a
+// leading "//". Any other value, such as an opaque URL ("https:user:pw@host")
+// or a scheme-less one ("user:pw@host"), is treated as authority from its first
+// character, so its scheme-like prefix is replaced together with the userinfo.
+//
+// The userinfo runs from the start of the authority to the LAST "@" in the
+// value, so a password containing a raw "/", "?", "#" or "@" is still covered.
+// The cost is that a value with no credentials but an "@" in its path or query
+// is shown with the part before that "@" replaced; the function is used only on
+// values that are already being rejected. A value without "@" is returned
+// unchanged, and the result of a previous call is returned unchanged.
+func RedactURLUserinfo(raw string) string {
+	authorityStart := 0
+	if i := strings.Index(raw, "://"); i > 0 && isSchemeName(raw[:i]) {
+		authorityStart = i + len("://")
+	} else if strings.HasPrefix(raw, "//") {
+		// Scheme-relative.
+		authorityStart = len("//")
+	}
 
-	// Pattern: scheme://token@host (single value before @)
-	result = urlTokenPattern.ReplaceAllString(result, "$1[REDACTED]@")
+	at := strings.LastIndex(raw[authorityStart:], "@")
+	if at < 0 {
+		return raw
+	}
+	return raw[:authorityStart] + RedactedMarker + raw[authorityStart+at:]
+}
 
-	return result
+// isSchemeName reports whether s is shaped like a URL scheme, i.e. an ASCII
+// letter followed by letters, digits, "+", "-" or "." (RFC 3986 section 3.1).
+func isSchemeName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// ScrubURLUserinfoInText replaces the userinfo of every URL in free text, such
+// as an error message that may embed URLs.
+//
+// A double-quoted segment that contains an "@" and is not a structurally valid
+// URL with a host (it fails url.Parse, or parses as an opaque or scheme-less
+// value) is redacted with RedactURLUserinfo, which covers the quoted URLs of a
+// failed request, including ones with a raw "/" in the password. A quoted URL
+// that parses with a host and carries userinfo (including a scheme-relative
+// "//user:pw@host") or an "@" in its path (a password with a numeric prefix
+// and a "/", which parses as a port) is redacted the same way. A URL with a
+// scheme, quoted or not, then loses its userinfo up to the first "/", "?", "#",
+// white space or double quote, so an "@" in a query or in later text is not
+// treated as userinfo. Text without such a URL, and text already processed by
+// this function, is returned unchanged. A quoted value that is not a URL but
+// contains an "@" (an e-mail address) is redacted too.
+func ScrubURLUserinfoInText(text string) string {
+	text = quotedSegmentPattern.ReplaceAllStringFunc(text, func(quoted string) string {
+		inner := quoted[1 : len(quoted)-1]
+		if !strings.Contains(inner, "@") {
+			return quoted
+		}
+		// A URL with a host is left to the unquoted pattern only when it carries
+		// no userinfo and its path holds no "@": "https://user:123/pw@host" parses
+		// as host "user:123" with the rest of the password in the path.
+		if u, err := url.Parse(inner); err == nil && u.Host != "" && u.Opaque == "" && u.User == nil && !strings.Contains(u.Path, "@") {
+			return quoted
+		}
+		return `"` + RedactURLUserinfo(inner) + `"`
+	})
+	return urlUserinfoTextPattern.ReplaceAllString(text, "${1}"+RedactedMarker+"@")
 }
 
 // scrubURLTokenPatterns removes token-like patterns from URL paths and queries.

@@ -44,5 +44,6 @@ func TestFreshInstall_DefaultsToBirdNET(t *testing.T) {
 	// The stamp makes both one-shot migrations skip, so the fresh default is never rewritten.
 	assert.False(t, s.MigrateSourceTargetDefaults(), "M1 must not run on a freshly stamped config")
 	assert.False(t, s.MigrateModelsEnabledAuthoritative(), "M2 must not run on a freshly stamped config")
+	assert.False(t, s.MigrateLogDeduplicationDefaults(), "M3 must not run on a freshly stamped config")
 	assert.Equal(t, []string{ModelIDBirdNET}, s.Models.Enabled, "the fresh default survives the skipped migrations")
 }

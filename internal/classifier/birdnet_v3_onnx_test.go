@@ -115,6 +115,63 @@ func TestBirdNETV3_LoaderRegistered(t *testing.T) {
 
 	_, ok = openvinoCapableSecondaryBuilders[RegistryIDBirdNETV3]
 	assert.True(t, ok, "BirdNET v3.0 must have an OpenVINO-capable secondary builder")
+
+	_, ok = modelLoaders[RegistryIDBirdNETPlusV3]
+	assert.True(t, ok, "BirdNET+ v3.0 must have a modelLoaders entry")
+
+	_, ok = openvinoCapableSecondaryBuilders[RegistryIDBirdNETPlusV3]
+	assert.True(t, ok, "BirdNET+ v3.0 must have an OpenVINO-capable secondary builder")
+}
+
+// TestBirdNETV3_RegistryIDCarriesIdentity guards the parametrised registry ID: an
+// instance built for BirdNET+ v3.0 must report that ID and name and tag a failed
+// prediction with it, not with the BirdNET v3.0 preview's ID.
+func TestBirdNETV3_RegistryIDCarriesIdentity(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	info := ModelRegistry[RegistryIDBirdNETPlusV3]
+	boom := errors.Newf("backend inference failed").Category(errors.CategoryAudio).Build()
+	b := &BirdNETV3{
+		classifier: &predTelemetryClassifier{err: boom},
+		labels:     []string{"Aaa aaa_Alpha", "Bbb bbb_Beta"},
+		info:       info,
+	}
+
+	assert.Equal(t, RegistryIDBirdNETPlusV3, b.ModelID())
+	assert.Equal(t, ModelNameBirdNETPlusV30, b.ModelName())
+
+	_, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2}})
+	require.Error(t, err)
+	assert.InDelta(t, 1.0, predictionCount(t, m, RegistryIDBirdNETPlusV3, "error"), 0,
+		"the failure must be tagged with the BirdNET+ v3.0 registry ID")
+	assert.InDelta(t, 0.0, predictionCount(t, m, RegistryIDBirdNETV3, "error"), 0,
+		"the failure must not be tagged with the BirdNET v3.0 preview ID")
+}
+
+// TestNewBirdNETV3_UnknownRegistryID verifies the constructor refuses a registry
+// ID it has no entry for instead of building an instance with empty metadata.
+func TestNewBirdNETV3_UnknownRegistryID(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewBirdNETV3(&BirdNETV3Config{RegistryID: "No_Such_Model"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown model registry ID")
+}
+
+// TestNewBirdNETV3_RejectsOtherArchitecture verifies the constructor refuses a
+// registry ID that exists but belongs to another model architecture, so a Perch or
+// BirdNET v2.4 identity can never be attached to the BirdNET v3.0 loader.
+func TestNewBirdNETV3_RejectsOtherArchitecture(t *testing.T) {
+	t.Parallel()
+
+	for _, id := range []string{RegistryIDPerchV2, RegistryIDBirdNETV24} {
+		_, err := NewBirdNETV3(&BirdNETV3Config{RegistryID: id})
+		require.Error(t, err, id)
+		assert.Contains(t, err.Error(), "not a BirdNET v3.0 architecture model", id)
+	}
 }
 
 // TestBirdNETV3_CatalogEntry guards the catalog entry shape: correct repo, visible

@@ -23,19 +23,25 @@ func TestDebugTriggerError(t *testing.T) {
 	c.Settings.Store(&conf.Settings{Debug: true})
 
 	tests := []struct {
-		name     string
-		body     string
-		wantCode int
+		name          string
+		body          string
+		wantComponent string
+		wantCategory  string
+		wantMessage   string
 	}{
 		{
-			name:     "default values",
-			body:     `{}`,
-			wantCode: http.StatusOK,
+			name:          "default values",
+			body:          `{}`,
+			wantComponent: "debug",
+			wantCategory:  "test",
+			wantMessage:   "Test error triggered via debug endpoint",
 		},
 		{
-			name:     "custom values",
-			body:     `{"component":"test","category":"network","message":"custom error"}`,
-			wantCode: http.StatusOK,
+			name:          "custom values",
+			body:          `{"component":"test","category":"network","message":"custom error"}`,
+			wantComponent: "test",
+			wantCategory:  "network",
+			wantMessage:   "custom error",
 		},
 	}
 
@@ -51,12 +57,15 @@ func TestDebugTriggerError(t *testing.T) {
 
 			err := c.DebugTriggerError(ctx)
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantCode, rec.Code)
+			assert.Equal(t, http.StatusOK, rec.Code)
 
 			var resp DebugResponse
 			err = json.Unmarshal(rec.Body.Bytes(), &resp)
 			require.NoError(t, err)
 			assert.True(t, resp.Success)
+			assert.Equal(t, tt.wantComponent, resp.Details["component"])
+			assert.Equal(t, tt.wantCategory, resp.Details["category"])
+			assert.Equal(t, tt.wantMessage, resp.Details["message"])
 		})
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -185,9 +186,10 @@ func (c *Controller) persistsSettings() bool {
 // optional apply step (handleSettingsChanges for the HTTP handlers) and, for the
 // owner of the global snapshot unless DisableSaveSettings is set, the disk save.
 // When either fails the published snapshot is taken back by rollbackSettings, and
-// the profiling sampling rates are restored after a rolled-back save failure, and
-// reconfigure_sentry is queued again when the rolled-back write changed the Error
-// Tracking opt-in. It returns the client message that matches the outcome (a
+// the OAuth provider registration is restored after any rolled-back failure, the
+// profiling sampling rates after a rolled-back save failure, and
+// reconfigure_sentry is queued again when the rolled-back write changed the
+// Error Tracking opt-in. It returns the client message that matches the outcome (a
 // "not rolled back" variant when another writer published on top, see
 // rollbackMessage) together with the failure, or "", nil on success. Each
 // failure is logged through the API logger when it is enabled. Callers hold
@@ -199,10 +201,14 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 	if apply != nil {
 		if err := apply(); err != nil {
 			// Nothing to re-send here: handleSettingsChanges dispatches its async
-			// actions after its only error return, so none were queued.
+			// actions after its only error return, so none were queued. The OAuth
+			// provider pass runs before that return, so it is undone below.
 			// Take back our own snapshot so in-memory state matches what is on disk
 			// (which was never overwritten), unless another writer published on top.
 			rbErr := c.rollbackSettings(current, updated)
+			if rbErr == nil {
+				c.restoreOAuthProviders(current, updated)
+			}
 			c.LogErrorIfEnabled("Failed to apply settings changes, rolling back",
 				logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
 			return rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack), err
@@ -219,6 +225,7 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 			rbErr := c.rollbackSettings(current, updated)
 			if rbErr == nil {
 				restoreProfilingRates(current)
+				c.restoreOAuthProviders(current, updated)
 				c.resendSentryReconfigure(current, updated)
 			}
 			c.LogErrorIfEnabled("Failed to save settings to disk, rolling back",
@@ -227,6 +234,17 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 		}
 	}
 	return "", nil
+}
+
+// restoreOAuthProviders re-registers the OAuth providers from the restored
+// snapshot after a failure rolled back a write that changed them. The apply step
+// registered the providers of the snapshot that was taken back, so without this
+// the registry would stay ahead of the settings. Synchronous, like the apply
+// step. Callers hold c.settingsMutex.
+func (c *Controller) restoreOAuthProviders(current, updated *conf.Settings) {
+	if c.isGlobalOwner && oauthProvidersChanged(current, updated) {
+		security.ReloadOAuthProviders(current)
+	}
 }
 
 // resendSentryReconfigure queues reconfigure_sentry again after a save failure

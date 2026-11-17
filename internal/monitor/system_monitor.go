@@ -151,7 +151,7 @@ func (m *SystemMonitor) monitorLoop() {
 
 // checkAllResources checks all monitored resources
 func (m *SystemMonitor) checkAllResources() {
-	m.log.Debug("Starting resource checks",
+	m.log.Trace("Starting resource checks",
 		logger.Bool("cpu_enabled", m.config.Realtime.Monitoring.CPU.Enabled),
 		logger.Bool("memory_enabled", m.config.Realtime.Monitoring.Memory.Enabled),
 		logger.Bool("disk_enabled", m.config.Realtime.Monitoring.Disk.Enabled),
@@ -168,10 +168,10 @@ func (m *SystemMonitor) checkAllResources() {
 	if m.config.Realtime.Monitoring.Disk.Enabled {
 		m.checkDisk()
 	} else {
-		m.log.Debug("Disk monitoring is disabled")
+		m.log.Trace("Disk monitoring is disabled")
 	}
 
-	m.log.Debug("Completed resource checks")
+	m.log.Trace("Completed resource checks")
 }
 
 // checkCPU monitors CPU usage and publishes the metric
@@ -218,7 +218,7 @@ func (m *SystemMonitor) checkDisk() {
 		paths = []string{"/"}
 	}
 
-	m.log.Debug("Starting disk usage checks", logger.Any("paths", paths))
+	m.log.Trace("Starting disk usage checks", logger.Any("paths", paths))
 
 	// Group paths by mount point to avoid duplicate metrics
 	groups, err := groupPathsByMountPoint(paths)
@@ -231,7 +231,7 @@ func (m *SystemMonitor) checkDisk() {
 		return
 	}
 
-	m.log.Debug("Grouped paths by mount point",
+	m.log.Trace("Grouped paths by mount point",
 		logger.Int("original_paths", len(paths)),
 		logger.Int("mount_groups", len(groups)),
 	)
@@ -243,7 +243,7 @@ func (m *SystemMonitor) checkDisk() {
 
 // checkDiskGroup monitors disk usage for a group of paths sharing a mount point
 func (m *SystemMonitor) checkDiskGroup(group MountGroup) {
-	m.log.Debug("Checking disk group",
+	m.log.Trace("Checking disk group",
 		logger.String("mount_point", group.MountPoint),
 		logger.Any("paths", group.Paths),
 	)
@@ -284,7 +284,7 @@ func (m *SystemMonitor) publishDiskMetric(path string) {
 		return
 	}
 
-	m.log.Debug("Disk usage check completed",
+	m.log.Trace("Disk usage check completed",
 		logger.String("path", path),
 		logger.String("total_gb", fmt.Sprintf("%.2f", float64(usage.Total)/bytesPerGB)),
 		logger.String("used_gb", fmt.Sprintf("%.2f", float64(usage.Used)/bytesPerGB)),

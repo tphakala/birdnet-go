@@ -34,7 +34,6 @@
     "internalServerError": "Erro interno do servidor",
     "actions": {
       "download": "Baixar",
-      "review": "Revisar",
       "play": "Reproduzir",
       "view": "Ver"
     },
@@ -141,14 +140,14 @@
       "visitEbirdLink": "Abrir eBird.org em uma nova aba",
       "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "resizeHandle": "Arraste para redimensionar",
-      "imageCredit": "Crédito da imagem: {name}"
+      "imageCredit": "Crédito da imagem: {name}",
+      "opensInNewTab": "abre em uma nova aba"
     },
     "labels": {
       "confidence": "Confiança",
       "github": "GitHub"
     },
     "values": {
-      "yes": "Sim",
       "no": "Não",
       "unknown": "Desconhecido"
     },
@@ -181,12 +180,6 @@
         "hideComment": "Ocultar comentário",
         "commentPlaceholder": "Adicione um comentário sobre esta detecção...",
         "commentCount": "({chars} caracteres)",
-        "chars": "caracteres",
-        "commentsLabel": "Comentários",
-        "currentStatusTitle": "Status atual",
-        "detectionStatusTitle": "Status da detecção",
-        "lockLabel": "Status de bloqueio",
-        "reviewLabel": "Status de revisão",
         "saveReview": "Salvar revisão"
       },
       "errors": {
@@ -207,7 +200,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Configurações - BirdNET-Go",
     "pageNotFound": "404 - Página não encontrada",
     "serverError": "500 - Erro interno do servidor",
     "componentError": "Erro ao carregar componente",
@@ -227,7 +219,8 @@
     "dashboard": "Painel",
     "liveAudio": "Áudio ao vivo",
     "settingsMenu": "Menu de configurações",
-    "theme": "Tema",
+    "switchToDarkTheme": "Mudar para o tema escuro",
+    "switchToLightTheme": "Mudar para o tema claro",
     "github": "GitHub",
     "detections": "Detecções",
     "search": "Pesquisar",
@@ -427,7 +420,7 @@
         "recalculatingThresholds": "Recalculando limiares dinâmicos para novo valor base",
         "reconfiguringDynamicThresholds": "A reconfigurar limiares dinâmicos...",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
-        "oauthRestartRequired": "Definições do provedor de autenticação alteradas. Reinício necessário.",
+        "reconfiguringOauthProviders": "Atualizando os provedores de autenticação...",
         "databaseRestartRequired": "Configurações do banco de dados alteradas. Reinicialização necessária.",
         "loggingRestartRequired": "Configurações de registro alteradas. Reinicialização necessária.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
@@ -476,7 +469,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime não disponível",
-        "unavailableMessage": "O ONNX Runtime {requiredVersion} é necessário para {modelName}, mas não foi encontrado. Consulte o guia de instalação: {installGuideURL}"
+        "unavailableMessage": "O ONNX Runtime {requiredVersion} ou mais recente é necessário para {modelName}, mas não foi encontrado. Consulte o guia de instalação: {installGuideURL}"
       },
       "region": {
         "staleTitle": "A região do modelo pode estar desatualizada",
@@ -503,6 +496,10 @@
       "modelOptimize": {
         "title": "{count, plural, one {# modelo tem uma versão melhor para este sistema} other {# modelos têm versões melhores para este sistema}}",
         "message": "Está disponível uma versão mais adequada ao hardware ou à localização deste sistema para: {models}. Abra Configurações > Análise > Modelos e escolha Otimizar para mudar."
+      },
+      "modelSuperseded": {
+        "title": "{count, plural, one {Um modelo instalado tem uma versão mais recente} other {# modelos instalados têm versões mais recentes}}",
+        "message": "Um modelo instalado é uma versão de prévia, e a versão final já está disponível: {models}. Abra Configurações > Análise > Modelos, instale a versão final e remova a prévia."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -889,23 +886,190 @@
       "allDetections": "Todas as detecções em {date}"
     },
     "detail": {
-      "species": "Espécie",
-      "observation": "Observação",
+      "species": {
+        "dialogTitle": "Alterar espécie",
+        "current": "Atualmente identificado como",
+        "fromPredictions": "Outras previsões do modelo",
+        "search": "Pesquisar espécies",
+        "loadingList": "A carregar a lista de espécies...",
+        "listFailed": "Não foi possível carregar a lista de espécies. Feche esta janela e tente novamente.",
+        "noMatches": "Nenhuma espécie correspondente.",
+        "effect": "A detecção é marcada como correta, e a escolha original do modelo permanece registada.",
+        "pickFirst": "Escolha uma espécie primeiro.",
+        "confirm": "Alterar para {species}",
+        "confirmEmpty": "Alterar espécie",
+        "changed": "Espécie alterada para {species}",
+        "changeFailed": "Não foi possível alterar a espécie. Tente novamente.",
+        "conflict": "Não é possível alterar a espécie agora: a detecção está mantida (bloqueada) ou o formato antigo da base de dados está em uso.",
+        "notKnownHere": "{species} nunca foi detetada nem prevista nesta estação, pelo que ainda não pode ser escolhida.",
+        "predictionsTitle": "Outras previsões",
+        "noPredictions": "O modelo não guardou outras previsões para esta gravação.",
+        "allSpecies": "Todas as espécies",
+        "searchRangePlaceholder": "Uma espécie esperada neste local",
+        "searchAllPlaceholder": "Qualquer espécie que os modelos conheçam",
+        "searchHintRange": "A pesquisar nas {count} espécies esperadas aqui pelo filtro de alcance. Ative Todas as espécies para pesquisar tudo.",
+        "searchHintAll": "A pesquisar em todas as {count} espécies que os modelos conhecem.",
+        "noMatchesInRange": "Nenhuma correspondência entre as espécies esperadas aqui. Ative Todas as espécies para pesquisar tudo.",
+        "modelPick": "escolha do modelo"
+      },
       "aria": {
-        "downloadAudioClip": "Baixar clipe de áudio para a detecção de {name}",
-        "audioRecordingFor": "Gravação de áudio e espectrograma para {name}",
         "scientificName": "Nome científico",
         "classificationBadges": "Distintivos de classificação da espécie",
         "confidence": "Confiança da detecção {confidence}%",
-        "metadata": "Metadados da detecção",
-        "weatherConditions": "Condições meteorológicas no momento da detecção",
-        "comments": "Comentários da detecção",
-        "commentText": "Texto do comentário",
-        "commentTimestamp": "Data e hora do comentário",
-        "mainRegion": "Detalhes de detecção",
-        "tabsHeading": "Abas de informação da detecção",
-        "tabList": "Abas de detalhes da detecção",
         "speciesHeadingSuffix": "detalhes de detecção"
+      },
+      "nav": {
+        "label": "Navegação de detecções",
+        "back": "Detecções",
+        "allGroup": "Todas as detecções",
+        "older": "Detecção mais antiga",
+        "noOlder": "Esta é a detecção mais antiga",
+        "newer": "Detecção mais recente",
+        "noNewer": "Esta é a detecção mais recente",
+        "speciesGroup": "Detecções de {species}",
+        "olderSpecies": "Detecção mais antiga de {species}",
+        "noOlderSpecies": "Nenhuma detecção mais antiga de {species}",
+        "newerSpecies": "Detecção mais recente de {species}",
+        "noNewerSpecies": "Nenhuma detecção mais recente de {species}",
+        "stepLoading": "{label}: a verificar detecções vizinhas",
+        "stepFailed": "{label}: não foi possível verificar detecções vizinhas"
+      },
+      "identity": {
+        "date": "Data",
+        "time": "Hora",
+        "beforeSunrise": "{hours} h {minutes} min antes do nascer do sol",
+        "afterSunrise": "{hours} h {minutes} min após o nascer do sol",
+        "beforeSunset": "{hours} h {minutes} min antes do pôr do sol",
+        "afterSunset": "{hours} h {minutes} min após o pôr do sol",
+        "setByReviewer": "Espécie definida pelo revisor",
+        "timeOfDay": "Período do dia",
+        "minutesBeforeSunrise": "{minutes} min antes do nascer do sol",
+        "minutesAfterSunrise": "{minutes} min após o nascer do sol",
+        "minutesBeforeSunset": "{minutes} min antes do pôr do sol",
+        "minutesAfterSunset": "{minutes} min após o pôr do sol",
+        "predictionsUnknown": "Outras previsões",
+        "predictionsNone": "Sem outras previsões",
+        "predictionsCount": "{count, plural, one {# outra previsão} other {# outras previsões}}"
+      },
+      "conditions": {
+        "title": "Hora e condições",
+        "skyLabel": "Linha do dia: detetada às {time}, nascer do sol {sunrise}, pôr do sol {sunset}",
+        "activityLabel": "Detecções de {species} por hora do dia",
+        "sunrise": "Nascer do sol",
+        "sunset": "Pôr do sol",
+        "activityLegend": "Atividade de {species} por hora, todo o período",
+        "feelsLike": "Sensação",
+        "moonLit": "{percent}% iluminada",
+        "windFrom": "Vento de {direction}",
+        "cloudCover": "Nuvens",
+        "precipitation": "Precipitação",
+        "precipitationTypes": {
+          "rain": "chuva",
+          "snow": "neve",
+          "sleet": "chuva com neve"
+        },
+        "observedAt": "Observação meteorológica das {time}",
+        "notObserved": "Sem observação meteorológica para esta hora"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNE",
+        "ne": "NE",
+        "ene": "LNE",
+        "e": "L",
+        "ese": "LSE",
+        "se": "SE",
+        "sse": "SSE",
+        "s": "S",
+        "ssw": "SSO",
+        "sw": "SO",
+        "wsw": "OSO",
+        "w": "O",
+        "wnw": "ONO",
+        "nw": "NO",
+        "nnw": "NNO"
+      },
+      "review": {
+        "title": "Revisão",
+        "autosave": "Guardado assim que escolher",
+        "question": "É {species}?",
+        "correct": "Correto",
+        "falsePositive": "Falso positivo",
+        "saving": "A guardar...",
+        "savedCorrect": "Marcado como correto",
+        "savedFalsePositive": "Marcado como falso positivo",
+        "loginRequired": "Inicie sessão para revisar esta detecção.",
+        "lockedHelp": "As detecções mantidas não podem ser alteradas. Desative primeiro Manter esta gravação.",
+        "keep": "Manter esta gravação",
+        "keepHelp": "As detecções mantidas nunca são removidas pela limpeza.",
+        "reloadFailed": "Salvo, mas não foi possível recarregar a detecção. Atualize a página para ver a alteração.",
+        "ignoredSpecies": "{species} está agora ignorada",
+        "wrongSpecies": "Espécie errada...",
+        "legacyHelp": "Alterar a espécie requer o formato atual da base de dados.",
+        "databaseChecking": "A verificar se a espécie pode ser alterada.",
+        "databaseUnknown": "A espécie não pode ser alterada enquanto o formato da base de dados não for conhecido.",
+        "ignoreShort": "Ignorar espécie",
+        "ignoredShort": "Espécie ignorada"
+      },
+      "models": {
+        "title": "Modelos",
+        "summary": "{hit} de {total} detetaram",
+        "empty": "Sem registo por modelo para esta detecção. A participação dos modelos é guardada apenas para detecções mais recentes.",
+        "hits": "{count, plural, one {# ocorrência} other {# ocorrências}}",
+        "mean": "média {value}",
+        "noHit": "Executado neste áudio, sem ocorrência"
+      },
+      "stats": {
+        "title": "Espécie nesta estação",
+        "rangeScore": "Pontuação do filtro de alcance",
+        "rangeScoreNote": "Probabilidade neste local para {date}",
+        "rangeScoreNoteToday": "Probabilidade neste local hoje",
+        "total": "Detecções, todo o período",
+        "windowTotal": "Detecções, últimos {days} dias",
+        "firstHeard": "Ouvida pela primeira vez",
+        "lastHeard": "Ouvida pela última vez",
+        "avgConfidence": "Confiança média",
+        "maxConfidence": "Confiança mais alta",
+        "dailyTitle": "Detecções por dia, {days} dias até esta detecção",
+        "dailyLabel": "{count} detecções nos {days} dias até esta detecção",
+        "allThisDay": "Todas as detecções de {species} neste dia",
+        "reviewsTitle": "Revisado por pessoas",
+        "reviewsCount": "{count, plural, one {# revisão} other {# revisões}}",
+        "reviewsCorrect": "{count} corretas",
+        "reviewsFalse": "{count, plural, one {# falso positivo} other {# falsos positivos}}",
+        "oftenRejected": "Rejeitada frequentemente aqui: {percent}% das revisões foram falsos positivos",
+        "reviewsNone": "Nenhuma detecção desta espécie foi revisada ainda."
+      },
+      "clip": {
+        "window": "Janela de captura",
+        "length": "Duração",
+        "seconds": "{count} s",
+        "format": "Formato",
+        "denoised": "Ruído reduzido ao guardar",
+        "denoisedYes": "Sim",
+        "denoisedNo": "Não",
+        "file": "Ficheiro",
+        "audioRemoved": "O áudio foi removido pela política de retenção; a imagem do espectrograma foi mantida.",
+        "noClip": "Nenhuma gravação foi guardada para esta detecção."
+      },
+      "log": {
+        "title": "Registo de atividade",
+        "subtitle": "O que aconteceu com esta detecção",
+        "detected": "Detetado {species} com {confidence}% de confiança",
+        "captureWindow": "Janela de captura {begin}-{end}",
+        "clipSaved": "Gravação guardada",
+        "clipSavedDenoised": "Gravação guardada, ruído reduzido",
+        "firstReviewed": "Primeira revisão",
+        "reviewed": "Marcado como {status}",
+        "locked": "Mantido (bloqueado)",
+        "noteAdded": "Nota adicionada",
+        "noteEdited": "Editado {time}",
+        "timeUnknown": "Hora não registada",
+        "addNote": "Adicionar uma nota",
+        "saveNote": "Adicionar nota",
+        "lockedHelp": "Não é possível adicionar notas enquanto a detecção estiver mantida (bloqueada).",
+        "noteEmpty": "Escreva uma nota antes de a adicionar.",
+        "speciesChanged": "Espécie alterada de {from} para {to}"
       }
     },
     "headers": {
@@ -1041,12 +1205,6 @@
       "title": "Gravação e espectrograma",
       "clipHint": "Clique e arraste no espectrograma para selecionar um intervalo para exportação"
     },
-    "tabs": {
-      "overview": "Visão geral",
-      "taxonomy": "Taxonomia",
-      "history": "Histórico",
-      "notes": "Notas"
-    },
     "environmental": {
       "title": "Condições ambientais"
     },
@@ -1057,18 +1215,9 @@
       "status": "Estado",
       "locked": "Bloqueado"
     },
-    "history": {
-      "title": "Histórico de detecção",
-      "comingSoon": "Rastreamento de histórico em breve..."
-    },
-    "notes": {
-      "title": "Notas e comentários",
-      "noComments": "Sem comentários ou notas para esta detecção."
-    },
     "aria": {
       "loading": "Carregando detalhes da detecção...",
       "loaded": "Detalhes de detecção carregados para {species}",
-      "error": "Erro ao carregar detecção: {error}",
       "loadingResults": "Carregando {count} resultados...",
       "thumbnailLoading": "Carregando miniatura de {species}...",
       "thumbnailLoaded": "Miniatura de {species} carregada",
@@ -1086,9 +1235,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Raridade da espécie",
       "score": "Pontuação",
-      "basedOnLocation": "Baseado na localização: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Muito comum",
         "common": "Comum",
@@ -1100,7 +1247,6 @@
     },
     "taxonomy": {
       "hierarchy": "Classificação taxonômica",
-      "subspecies": "Subespécie",
       "noData": "Sem dados de taxonomia disponíveis.",
       "labels": {
         "kingdom": "Reino",
@@ -1126,11 +1272,9 @@
       }
     },
     "tracking": {
-      "title": "Rastreamento de espécies",
       "newSpecies": "Nova espécie",
       "newThisYear": "Primeira vez este ano",
-      "newThisSeason": "Primeira vez esta temporada",
-      "daysSinceFirst": "Dias desde a primeira detecção"
+      "newThisSeason": "Primeira vez esta temporada"
     }
   },
   "spectrogram": {
@@ -1183,13 +1327,6 @@
     },
     "systemInfo": {
       "title": "Informações do sistema",
-      "os": "Sistema operacional",
-      "hostname": "Nome do host",
-      "uptime": "Tempo de atividade",
-      "cpus": "Processadores",
-      "model": "Modelo do sistema",
-      "timezone": "Fuso horário",
-      "temperature": "Temperatura do CPU",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Dados de temperatura não disponíveis",
       "cpuCores": "Núcleos de CPU",
@@ -1228,16 +1365,7 @@
         "uptime": "Tempo ativo",
         "process": "Processo"
       },
-      "showAll": "Mostrar todos os processos",
-      "showBirdnetOnly": "Mostrar apenas BirdNET",
-      "table": {
-        "process": "Processo",
-        "status": "Estado",
-        "cpu": "CPU",
-        "memory": "Memória",
-        "uptime": "Tempo ativo",
-        "showAllProcesses": "Mostrar todos os processos"
-      }
+      "showAll": "Mostrar todos os processos"
     },
     "errors": {
       "systemInfo": "Falha ao carregar informações do sistema: {error}",
@@ -1545,6 +1673,8 @@
           "creating": "Criando...",
           "createBackup": "Criar backup",
           "noBackups": "Nenhum backup ainda",
+          "loadFailed": "Não foi possível carregar o histórico de backups",
+          "createFailed": "Não foi possível iniciar o backup",
           "download": "Baixar",
           "failed": "Falhou",
           "columns": {
@@ -1572,6 +1702,8 @@
         "starting": "A iniciar migração...",
         "status": {
           "idle": "Pronto para iniciar",
+          "checking": "A verificar pré-requisitos",
+          "notReady": "Não está pronto",
           "initializing": "A inicializar",
           "dual_write": "Escrita dupla ativa",
           "migrating": "A migrar dados primários",
@@ -1603,6 +1735,8 @@
           "recordsLabel": "Registos",
           "sizeLabel": "Tamanho",
           "prerequisitesNotMet": "Pré-requisitos não atendidos - resolva os problemas críticos abaixo",
+          "prerequisitesUnavailable": "As verificações pré-migração não foram concluídas. Consulte Verificações pré-migração abaixo.",
+          "prerequisitesFailedList": "Resolva primeiro estas verificações: {checks}",
           "validatingTitle": "Validando dados",
           "validatingBody": "Comparando {count} registos legados com o banco de dados V2...",
           "dirtyRecordsCatchup": "{count} registos pendentes - tentando reconciliação",
@@ -1704,6 +1838,9 @@
           "warningsCount": "{count} aviso(s)",
           "running": "A executar verificações pré-migração...",
           "checkingStep": "Passo {current} de {total}",
+          "currentCheck": "A verificar {name} ({seconds} s)",
+          "slowHint": "As bases de dados grandes podem demorar vários minutos.",
+          "runFailed": "As verificações antes da migração não terminaram: {error}",
           "passedCount": "{passed}/{total} aprovadas",
           "criticalCount": "{count} crítico(s)",
           "warningCount": "{count} aviso(s)",
@@ -1952,7 +2089,8 @@
     "detach": "Abrir em nova janela",
     "detached": "Terminal separado",
     "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui.",
-    "reattach": "Reconectar"
+    "reattach": "Reconectar",
+    "keyboardExitHint": "Prima Esc e depois Tab para sair do terminal"
   },
   "analytics": {
     "hub": {
@@ -2342,6 +2480,15 @@
       "validationBlocked": "Alguns campos precisam de atenção antes de você poder salvar.",
       "noChangesToSave": "Não há alterações para salvar."
     },
+    "autoSave": {
+      "saved": "Salvo",
+      "failed": "Não salvo. O valor anterior foi restaurado.",
+      "changedElsewhere": "Esta configuração foi alterada em outro lugar. O valor atual é mostrado; faça a alteração novamente.",
+      "tabNote": "As alterações nesta aba são salvas à medida que você as faz.",
+      "failuresSummary": "{count, plural, one {# alteração não foi salva} other {# alterações não foram salvas}}",
+      "dismiss": "Dispensar",
+      "otherTabsUnsaved": "Outras abas têm alterações não salvas. Abra uma para salvá-las ou redefini-las:"
+    },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
       "saveFailed": "Falha ao salvar as configurações",
@@ -2397,12 +2544,12 @@
           "title": "Limiar dinâmico",
           "description": "Ajusta automaticamente a sensibilidade de detecção com base em observações anteriores",
           "enable": {
-            "label": "Ativar limiar dinâmico (recurso específico do BirdNET-Go)",
-            "helpText": "Ativa o recurso de limiar de confiança dinâmico para detecção de canto de pássaros mais adaptativa."
+            "label": "Ativar limiar dinâmico",
+            "helpText": "Reduz o limiar de confiança de uma espécie após ela ter sido detetada com elevada confiança."
           },
           "trigger": {
             "label": "Limiar de ativação",
-            "helpText": "O nível de confiança no qual o limiar dinâmico é ativado. Se um canto de pássaro for detectado com confiança acima deste valor, o limiar para correspondências positivas dessa espécie será reduzido para cantos subsequentes."
+            "helpText": "O nível de confiança no qual o limiar dinâmico é ativado. Se uma espécie for detetada com confiança acima deste valor, o limiar para correspondências positivas dessa espécie será reduzido para deteções subsequentes."
           },
           "minimum": {
             "label": "Limiar dinâmico mínimo",
@@ -2451,7 +2598,7 @@
           "overloadedNoticeTitle": "Este dispositivo não consegue acompanhar a análise",
           "overloadedNotice": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} excede a capacidade medida deste dispositivo mesmo sem sobreposição. A análise pode atrasar-se e podem perder-se deteções. Ative menos modelos ou fontes de áudio, ou escolha uma variante de modelo mais rápida.",
           "unknownLatency": "Não foi possível medir o tempo de processamento de {models}, pelo que não é contabilizado ao limitar a sobreposição. A análise ainda pode atrasar-se.",
-          "cpuNote": "Uma intensidade maior analisa o áudio sobreposto com mais frequência, o que custa tempo de CPU por cada modelo e fonte de áudio ativos. O BirdNET-Go limita automaticamente a sobreposição ao que este dispositivo consegue processar."
+          "cpuNote": "Uma intensidade maior analisa o áudio sobreposto com mais frequência, o que consome tempo de CPU para cada classificador ativo ao qual este filtro se aplica e para cada fonte de áudio. O BirdNET-Go limita automaticamente a sobreposição ao que este dispositivo consegue processar."
         },
         "rangeFilter": {
           "title": "Filtro de alcance",
@@ -3562,7 +3709,7 @@
         "sampleRateExclusive": "Taxas acima de 48 kHz usam acesso exclusivo ao dispositivo no Linux, impedindo que outras aplicações compartilhem a placa de som",
         "modelLabel": "Modelos de deteção",
         "modelHelp": "Selecionar modelos de IA para esta fonte de áudio",
-        "deleteConfirm": "Remover esta fonte de placa de som?",
+        "deleteConfirm": "Remover a fonte de placa de som \"{name}\"?",
         "emptyState": {
           "title": "Nenhuma Fonte de Placa de Som Configurada",
           "description": "Adicione uma fonte de placa de som para começar a capturar áudio para detecção de pássaros.",
@@ -3589,11 +3736,17 @@
           "minSampleRate": "Requer pelo menos {rate}kHz de taxa de amostragem",
           "recommendedSampleRate": "{rate}kHz recomendado para melhores resultados",
           "atLeastOneModel": "Pelo menos um modelo deve ser selecionado"
-        }
+        },
+        "captureTitle": "Captura",
+        "levelTitle": "Nível de entrada",
+        "captureApplyHint": "A captura é reiniciada ao aplicar.",
+        "applyCapture": "Aplicar e reiniciar a captura",
+        "applying": "A aplicar...",
+        "adding": "A adicionar...",
+        "captureApplyFailed": "A captura não foi alterada. Aplique novamente ou cancele."
       },
       "audioCapture": {
         "title": "Captura de áudio",
-        "description": "Definir fonte de captura de áudio, placa de som ou fluxo RTSP",
         "soundCardSource": "Fonte da placa de som",
         "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação)",
         "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
@@ -3627,11 +3780,11 @@
         "fixedHint": "A captura é pausada diariamente entre as horas de início e fim. Janelas noturnas (por exemplo, 22:00 às 06:00) são suportadas.",
         "solarHint": "Os horários são calculados a partir do nascer/pôr do sol na sua localização configurada. Use deslocamentos negativos para antes do evento, positivos para depois.",
         "badge": "Silêncio",
-        "enabledBadge": "Horas silenciosas habilitadas para este fluxo"
+        "enabledBadge": "Horas silenciosas habilitadas para este fluxo",
+        "enableLabel": "Pausar a captura durante as horas de silêncio"
       },
       "rtspStreams": {
         "title": "Configuração de Fluxos de Áudio",
-        "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP.",
         "noStreamsConfigured": "Nenhum fluxo configurado"
       },
       "streams": {
@@ -3660,7 +3813,7 @@
         "refresh": "Atualizar",
         "addStream": "Adicionar Stream",
         "testRequired": "Execute um teste de stream bem-sucedido antes de guardar",
-        "deleteConfirm": "Remover este stream?",
+        "deleteConfirm": "Remover o stream \"{name}\"?",
         "restartCount": "Reiniciado {count} vez(es)",
         "healthLoadError": "Falha ao carregar status do stream",
         "status": {
@@ -3684,6 +3837,7 @@
         "errors": {
           "nameRequired": "Nome do stream é obrigatório",
           "duplicateName": "Já existe um stream com este nome",
+          "nameTooLong": "O nome do stream é muito longo (no máximo {max} bytes)",
           "urlRequired": "URL do stream é obrigatória",
           "invalidUrl": "Formato de URL de stream inválido",
           "duplicate": "Esta URL de stream já existe"
@@ -3700,12 +3854,12 @@
           "eventAt": "Evento em {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Alternar diagnósticos",
           "processState": "Estado do processo",
           "lastData": "Últimos dados",
           "restartCount": "Reinícios",
           "connection": "Conexão",
-          "stateErrorHistory": "Histórico de estados e erros"
+          "stateErrorHistory": "Histórico de estados e erros",
+          "title": "Diagnóstico"
         },
         "connectionStatus": {
           "stable": "Estável",
@@ -3719,9 +3873,10 @@
           "result": "Resultado do teste",
           "error": "Teste falhou",
           "batCompatible": "Compatível com morcegos",
-          "batIncompatible": "Não compatível com morcegos"
+          "batIncompatible": "Não compatível com morcegos",
+          "minRateWarning": "Os modelos selecionados precisam de uma taxa de captura de pelo menos {rate} kHz. Este stream está abaixo."
         },
-        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. O BSG-BAT requer pelo menos 192 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
         "codecWarning": {
           "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
         },
@@ -3751,8 +3906,19 @@
         },
         "stereoWarning": {
           "message": "Stream estéreo detectado. A mistura de múltiplos canais pode reduzir a precisão de detecção devido a diferenças de fase entre canais. Selecione um canal específico (esquerdo/direito) ou use o detector de canais para melhores resultados.",
-          "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico.",
-          "tooltip": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico."
+          "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Selecione um canal específico em Ligação."
+        },
+        "autoSaveHelp": "As alterações são guardadas de imediato. As alterações da ligação voltam a ligar o stream, por isso aguardam até clicar em Aplicar.",
+        "connectionTitle": "Ligação",
+        "connectionApplyHint": "O stream volta a ligar-se ao aplicar.",
+        "connectionApplyFailed": "A ligação não foi alterada. Aplique novamente ou cancele.",
+        "applyConnection": "Aplicar e voltar a ligar",
+        "testBeforeApply": "Teste o novo URL antes de o aplicar.",
+        "statsLine": "Total: {total} · Taxa: {rate} · Último: {last}",
+        "ago": {
+          "seconds": "há {count} s",
+          "minutes": "há {count} min",
+          "hours": "há {count} h"
         }
       },
       "audioFilters": {
@@ -3898,6 +4064,22 @@
         "noteTitle": "Padrão EBU R128",
         "noteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção."
       },
+      "exportDenoise": {
+        "title": "Redução de ruído dos clipes guardados",
+        "description": "Reduz o ruído de fundo nos clipes quando são guardados.",
+        "enable": "Reduzir o ruído dos clipes ao guardar",
+        "enableHelp": "O áudio capturado é limpo de ruído em memória antes de o ficheiro do clipe ser escrito. A deteção usa sempre o áudio original.",
+        "requiresRecording": "Ative a gravação de clipes na aba Gravação para usar a redução de ruído dos clipes.",
+        "strengthLabel": "Intensidade da redução de ruído",
+        "strengthHelp": "Ligeiro mantém mais do som original e forte remove mais ruído. Ligeiro-médio serve para a maioria das gravações.",
+        "strengthDisabledHelp": "Ative acima a redução de ruído dos clipes para escolher uma intensidade.",
+        "warningTitle": "Os clipes guardados não podem ser restaurados",
+        "warningPermanent": "O áudio original não é mantido. Os clipes são limpos de ruído de forma permanente ao serem guardados, incluindo gravações de morcegos.",
+        "warningBats": "A redução de ruído pode atenuar chamadas fracas de morcegos; as chamadas fortes não são afetadas.",
+        "warningImported": "As gravações importadas não são afetadas.",
+        "lossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado.",
+        "warningPlayback": "A redução de ruído predefinida na reprodução não é aplicada enquanto isto estiver ativo. Se o desativar mais tarde e ativar a predefinição de reprodução, estes clipes serão limpos de ruído uma segunda vez ao reproduzir."
+      },
       "audioClipRetention": {
         "title": "Retenção de clipes de áudio",
         "description": "Configurar limpeza de clipes de áudio",
@@ -3955,9 +4137,25 @@
         "noneAvailable": "Não há modelos de deteção ativados neste servidor.",
         "loadFailedWarning": "Não foi possível carregar um modelo de deteção, portanto esta fonte não será analisada até que se recupere.",
         "loadFailedLink": "Ver status de Modelos de IA",
+        "state": {
+          "pending": "A carregar",
+          "failed": "Falha ao carregar",
+          "missing": "Não instalado"
+        },
+        "notLoadedHelp": "Este modelo não está carregado, por isso não pode ser selecionado.",
         "defaultBadge": "{models} (padrão)",
         "defaultPendingBadge": "Modelos padrão",
-        "noneBadge": "Nenhum modelo carregado"
+        "noneBadge": "Nenhum modelo carregado",
+        "missingHelp": "Este modelo já não está instalado. Esta fonte ignora-o.",
+        "removeMissing": "Remover",
+        "removeMissingAria": "Remover {model} de {source}",
+        "lastSelectedHelp": "Pelo menos um classificador permanece selecionado.",
+        "followsDefaults": "Esta fonte usa os modelos predefinidos.",
+        "listFailed": "Não foi possível carregar a lista de modelos.",
+        "warningBadge": "Verificar classificadores"
+      },
+      "sources": {
+        "autoSaveHelp": "As alterações são guardadas de imediato. As alterações de dispositivo e taxa de amostragem reiniciam a captura, por isso aguardam até clicar em Aplicar."
       }
     },
     "security": {
@@ -4028,7 +4226,7 @@
         "clientSecretLabel": "Segredo do cliente",
         "clientSecretHelpText": "O segredo do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
         "userIdLabel": "Utilizadores permitidos",
-        "userIdHelpText": "E-mails ou IDs de utilizador separados por vírgulas autorizados a iniciar sessão com este fornecedor. Se vazio, ninguém pode iniciar sessão.",
+        "userIdHelpText": "E-mails ou IDs de utilizador separados por vírgulas autorizados a iniciar sessão com este fornecedor. Recomenda-se o ID de utilizador, pois um endereço de e-mail pode mudar. Se vazio, ninguém pode iniciar sessão.",
         "allowedUsersEmptyWarning": "Este fornecedor não tem utilizadores permitidos, por isso todas as tentativas de início de sessão serão recusadas. Adicione pelo menos um e-mail ou ID de utilizador para permitir o acesso.",
         "allowedUsersMissingBadge": "Nenhum utilizador permitido definido - o início de sessão falhará",
         "google": {
@@ -4097,13 +4295,16 @@
           "clientSecretHelpText": "O client secret do seu fornecedor de identidade OIDC",
           "userIdLabel": "Utilizador Permitido (email ou sub claim)",
           "issuerUrlLabel": "URL do Emissor",
-          "issuerUrlHelpText": "O URL do emissor do seu fornecedor de identidade OpenID Connect (ex: https://auth.example.com)",
+          "issuerUrlHelpText": "URL base do seu fornecedor OpenID Connect. O BirdNET-Go acrescenta /.well-known/openid-configuration sozinho, por isso omita essa parte. Exemplos: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "O URL do emissor é obrigatório para fornecedores OIDC",
           "issuerUrlInvalid": "O URL do emissor deve ser um URL HTTP ou HTTPS válido",
           "scopesLabel": "Scopes",
           "scopesHelpText": "Lista de scopes OIDC separados por vírgula (padrão: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Voltar ao BirdNET-Go após terminar a sessão no fornecedor de identidade",
+          "postLogoutRedirectHelpText": "Após terminar a sessão, o navegador regressa a {url}. Registe primeiro este URL como URI de redirecionamento pós-logout no seu fornecedor de identidade, caso contrário o fornecedor pode mostrar um erro.",
+          "postLogoutRedirectNoBaseUrl": "Defina primeiro o URL base ou o anfitrião. O URL de retorno é construído a partir deles."
         }
       },
       "bypassAuthentication": {
@@ -4326,7 +4527,24 @@
           "mappedZero": {
             "title": "O filtro de alcance não correspondeu a nenhuma espécie",
             "description": "O filtro de alcance do geomodelo não correspondeu a nenhuma das espécies do modelo ativo, pelo que todas as deteções seriam filtradas. Verifique se o ficheiro de etiquetas do filtro de alcance corresponde ao modelo ativo."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "O BirdNET Geomodel não está instalado",
+            "description": "Estes modelos precisam do BirdNET Geomodel para filtrar as deteções por localização: {models}. Instale o BirdNET Geomodel v3.0 no separador Modelos das definições de Análise."
+          },
+          "geomodelNotSelected": {
+            "title": "O BirdNET Geomodel não está em uso",
+            "description": "O BirdNET Geomodel está instalado, mas o filtro de alcance está configurado para usar outro modelo, por isso estes modelos não são filtrados por localização: {models}. Para o usar, remova birdnet.rangefilter.model e birdnet.rangefilter.modelpath do ficheiro de configuração ou do ambiente."
+          },
+          "geomodelLoadFailed": {
+            "title": "Não foi possível carregar o BirdNET Geomodel",
+            "description": "Não foi possível carregar o BirdNET Geomodel, por isso estes modelos não são filtrados por localização: {models}. Verifique o registo da aplicação e instale ou reinstale o BirdNET Geomodel v3.0 no separador Modelos das definições de Análise."
+          },
+          "reloadFailed": {
+            "title": "Falha ao recarregar o filtro de alcance",
+            "description": "O último recarregamento do filtro de alcance falhou, por isso continua em uso o filtro de alcance carregado anteriormente. Verifique o registo da aplicação e reinicie o BirdNET-Go para tentar novamente."
+          },
+          "openModels": "Abrir Modelos"
         },
         "columns": {
           "commonName": "Nome comum",
@@ -4906,7 +5124,15 @@
         "description": "Definições padrão para reprodução de gravações de aves.",
         "defaultGain": "Amplificação de Volume Padrão",
         "defaultGainHelpText": "Ganho inicial aplicado ao reproduzir gravações. Os sons de aves são frequentemente baixos, pelo que um reforço de 6-12 dB é recomendado.",
-        "defaultGainUnit": "dB"
+        "defaultGainUnit": "dB",
+        "denoiseLabel": "Reduzir o ruído dos clipes ao reproduzir",
+        "denoiseHelpText": "Reproduz e transfere uma cópia sem ruído de cada clipe. Os clipes guardados não mudam. As transferências passam a ser ficheiros WAV e são maiores. As definições de áudio de um clipe permitem escolher outra intensidade ou desativar a redução de ruído.",
+        "denoiseStrengthLabel": "Intensidade da redução de ruído",
+        "denoiseStrengthHelpText": "Ligeiro mantém mais do som original e forte remove mais ruído. Ligeiro-médio serve para a maioria das gravações.",
+        "denoiseStrengthDisabledHelp": "Ative acima a redução de ruído na reprodução para escolher uma intensidade.",
+        "denoiseExportPrecedence": "Não é aplicada enquanto «Redução de ruído dos clipes guardados» estiver ativa (Definições de áudio, separador Processamento). Esses clipes já estão sem ruído.",
+        "denoiseRedenoiseNote": "Os clipes guardados enquanto «Redução de ruído dos clipes guardados» estava ativa são limpos de ruído de novo ao reproduzir. Escolha Desativado nas definições de áudio de um clipe para o ouvir tal como foi guardado.",
+        "denoiseLossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado."
       }
     },
     "restartRequired": "Algumas alterações requerem um reinício do servidor para terem efeito. Por favor, reinicie o BirdNET-Go."
@@ -4949,7 +5175,8 @@
       "noData": "Nenhum dado disponível",
       "loading": "Carregando dados...",
       "error": "Falha ao carregar dados",
-      "sortBy": "Ordenar por {column}",
+      "sortedAscending": "Ordenado por {column}, ascendente",
+      "sortedDescending": "Ordenado por {column}, descendente",
       "rowsPerPage": "Linhas por página",
       "pageInfo": "Mostrando {from} a {to} de {total} resultados"
     },
@@ -5098,9 +5325,11 @@
       "filterControl": "Controle de filtro",
       "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",
       "seekProgress": "Progresso de busca de áudio: {current} / {total} segundos",
+      "seek": "Posição de reprodução",
+      "seekValueText": "{current} de {total}",
       "playbackSpeed": "Velocidade de reprodução",
       "speed": "Velocidade",
-      "loop": "Alternar repetição",
+      "loop": "Repetição",
       "player": "Reprodutor de áudio",
       "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
       "hlsLoadFailed": "Não foi possível carregar o reprodutor de áudio, recarregue a página e tente novamente",
@@ -5238,6 +5467,7 @@
         "denoise": "Remover ruído",
         "denoiseOff": "Desligado",
         "denoiseLight": "Ligeiro",
+        "denoiseLightMedium": "Ligeiro-médio",
         "denoiseMedium": "Médio",
         "denoiseHeavy": "Intenso",
         "normalize": "Normalizar áudio",
@@ -5362,7 +5592,8 @@
     },
     "migration": {
       "notConfigured": "A migração não está configurada",
-      "preFlightFailed": "As verificações prévias falharam",
+      "preFlightFailed": "A verificação antes da migração falhou: {check}",
+      "prerequisitesNotReady": "Execute as verificações antes da migração e aguarde que passem antes de iniciar a migração.",
       "invalidBody": "Corpo do pedido inválido",
       "recordCountFailed": "Não foi possível determinar o número total de registos",
       "startFailed": "Não foi possível iniciar a migração",
@@ -5581,19 +5812,28 @@
   "analysis": {
     "title": "Análise",
     "tabs": {
-      "settings": "Definições",
-      "models": "Modelos"
+      "models": "Modelos",
+      "detection": "Deteção",
+      "bats": "Morcegos",
+      "inference": "Inferência",
+      "filters": "Filtros"
     },
     "detection": {
       "title": "Configurações de detecção",
       "description": "Configurar limiares de confiança para a classificação de espécies.",
-      "confidenceThreshold": {
-        "label": "Limiar de confiança",
-        "helpText": "Pontuação mínima de confiança (0.0 - 1.0) necessária para que uma detecção seja registrada."
-      },
       "batThreshold": {
-        "label": "Limiar de deteção de morcegos",
-        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos. Aplica-se apenas a modelos classificadores de morcegos."
+        "label": "Limiar de deteção de morcegos (BattyBirdNET)"
+      },
+      "bsgBatThreshold": {
+        "label": "Limiar de deteção de morcegos (BSG-BAT)",
+        "sampleRateWarning": "As capturas a 192 kHz funcionam, mas as espécies que emitem acima de 96 kHz não podem ser identificadas e as pontuações são menos fiáveis. Recomenda-se uma taxa de captura de 384 kHz."
+      },
+      "bsgBatStep": {
+        "label": "Passo de análise do BSG-BAT (quadros)",
+        "helpText": "Quadros de 2 ms entre as janelas de análise do BSG-BAT, de 100 (0,2 s) a 512 (1,024 s, sem sobreposição). O valor predefinido de 250 (0,5 s) é o passo de referência. Com 375 (0,75 s) encontra-se cerca de 85% dos eventos com dois terços da CPU; com 512 cerca de 70-75% com cerca de metade da CPU, para dispositivos que não conseguem acompanhar.",
+        "readout": "Passo: {seconds} s entre as janelas de análise.",
+        "readoutWithFilter": "Passo: {seconds} s entre as janelas de análise. Nível do filtro de morcegos {level}: {count} confirmações necessárias.",
+        "restartNote": "Guardar um novo passo reinicia a captura de áudio."
       },
       "batFilter": {
         "label": "Filtro passa-altas para morcegos",
@@ -5607,6 +5847,10 @@
         "label": "Validação pós-deteção",
         "helpText": "Quando ativado, as deteções de morcegos são validadas pela análise dos padrões de energia ultrassónica no áudio de origem. Deteções sem características de ecolocalização são marcadas como improváveis."
       },
+      "batDiscardUnlikely": {
+        "label": "Descartar deteções improváveis",
+        "helpText": "Quando ativado, as deteções de morcegos que a validação pós-deteção marca como improváveis são descartadas: não são guardadas, não geram clipe de áudio nem notificação e não podem ser recuperadas. Quando desativado (predefinição), são guardadas e marcadas como improváveis. As deteções já guardadas não são alteradas."
+      },
       "batFalsePositiveFilter": {
         "label": "Filtro de falsos positivos de morcegos",
         "helpText": "Requer múltiplas confirmações de uma deteção de morcego dentro de uma janela deslizante antes de a aceitar. Níveis mais altos requerem mais confirmações, reduzindo falsos positivos. O modelo de morcegos usa uma sobreposição fixa de 50%, portanto não é necessário ajuste de sobreposição.",
@@ -5616,29 +5860,15 @@
           "strict": "Filtragem máxima para a maior precisão."
         },
         "detectionCount": "{count} confirmações necessárias. {description}",
+        "detectionCountByModel": "{batty} confirmações necessárias para o BattyBirdNET, {bsgBat} para o BSG-BAT. {description}",
         "warningOff": "Sem filtragem existe uma alta probabilidade de falsos positivos. Ativar a filtragem melhora significativamente a precisão."
       },
       "locale": {
         "label": "Idioma das espécies",
         "helpText": "Idioma utilizado para os nomes comuns das espécies na interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "O filtro de alcance aplica-se apenas a classificadores de aves. Os modelos de morcegos usam as suas próprias listas de espécies.",
       "status": {
         "title": "Resumo do filtro de alcance",
         "geomodelInfo": "BirdNET Geomodelo {version} - {species} espécies conhecidas",
@@ -5653,13 +5883,13 @@
         "noFilter": "Nenhum filtro de alcance ativo",
         "passUnmapped": {
           "label": "Permitir espécies sem dados de alcance",
-          "helpText": "Permitir deteções de espécies para as quais o geomodelo não tem dados geográficos. Quando desativado, estas espécies são sempre filtradas."
+          "helpText": "Permitir deteções de espécies para as quais o geomodelo não tem dados geográficos. Quando desativado, estas espécies são sempre filtradas. Isto afeta apenas os classificadores aos quais o filtro de alcance se aplica."
         }
       }
     },
     "advanced": {
       "title": "Avançado",
-      "description": "Configuração de processamento e modelos personalizados."
+      "description": "Ficheiros personalizados de modelo e etiquetas."
     },
     "downloadSource": {
       "title": "Origem de download",
@@ -5673,7 +5903,7 @@
     },
     "gallery": {
       "title": "Galeria de modelos",
-      "description": "Gerenciar modelos classificadores para detecção de aves e morcegos.",
+      "description": "Gerir os modelos classificadores.",
       "region": {
         "title": "Região do modelo",
         "modeAuto": "Automático",
@@ -5725,7 +5955,6 @@
         "filterPlaceholder": "Filtrar regiões",
         "filterAria": "Filtrar versões ajustadas por região",
         "filterNoMatch": "Nenhuma região corresponde a \"{query}\"",
-        "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
@@ -5749,7 +5978,8 @@
       },
       "tabs": {
         "installed": "Instalados",
-        "available": "Disponíveis"
+        "available": "Disponíveis",
+        "navigationAria": "Abas da galeria de modelos"
       },
       "loading": "Carregando modelos...",
       "retry": "Tentar novamente",
@@ -5820,6 +6050,15 @@
         "cardNotice": "Prévia para desenvolvedores, não é a versão final. Esta é uma versão inicial para testes; os resultados podem mudar antes da versão estável.",
         "dialogNotice": "Você está instalando uma prévia para desenvolvedores ({build}). É útil para testes, mas ainda não é recomendada como seu único classificador."
       },
+      "experimental": {
+        "badge": "Experimental",
+        "cardNotice": "Experimental no BirdNET-Go. O modelo está publicado, mas o seu desempenho no BirdNET-Go ainda não está comprovado, por isso os resultados podem ser menos fiáveis.",
+        "dialogNotice": "Está a instalar um modelo experimental no BirdNET-Go. O seu desempenho ainda não está comprovado, por isso verifique as suas deteções antes de confiar nele."
+      },
+      "superseded": {
+        "cardNotice": "Substituído por {name}. Use o modelo mais recente em vez deste.",
+        "dialogNotice": "Este modelo foi substituído por {name}. Considere instalar {name} em vez dele."
+      },
       "entryIncompatible": "Este modelo não está disponível neste sistema.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",
@@ -5849,24 +6088,89 @@
         "licenseNote": "A troca permanece dentro do mesmo modelo, pelo que a sua licença não é alterada."
       }
     },
-    "bird": {
-      "title": "Deteção de aves",
-      "description": "Configure o limiar de confiança, o idioma das espécies e a filtragem de falsos positivos para classificadores de aves."
-    },
     "bat": {
       "title": "Deteção de morcegos",
-      "description": "Configure o limiar, o agendamento e a filtragem de falsos positivos para classificadores de morcegos."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "O limiar dinâmico aplica-se apenas a classificadores de aves."
+      "description": "Agendamento, validação e filtragem de falsos positivos para classificadores de morcegos."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
+    },
+    "birdnetplus": {
+      "title": "Detecção BirdNET+ V3.0"
+    },
+    "thresholds": {
+      "title": "Limiares de deteção",
+      "description": "Confiança mínima que uma deteção precisa para ser registada, para cada classificador ativo.",
+      "category": {
+        "bat": "Morcegos"
+      },
+      "state": {
+        "pending": "A carregar",
+        "failed": "Falha ao carregar"
+      },
+      "empty": "Nenhum classificador está ativo.",
+      "shared": {
+        "label": "Limiar partilhado",
+        "usedBy": "Usado por todos os classificadores sem limiar personalizado: {models}.",
+        "unused": "Usado por todos os classificadores sem limiar personalizado. Nenhum classificador ativo o utiliza neste momento."
+      },
+      "customSwitch": "Limiar personalizado",
+      "usesShared": "Usa o limiar partilhado"
+    },
+    "speciesNames": {
+      "title": "Nomes das espécies",
+      "description": "Como as espécies detetadas são nomeadas na interface."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Ambiente de inferência",
+        "description": "Que ambiente de execução e dispositivo executam os classificadores, e quantas threads de CPU utilizam."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Automático escolhe o ambiente de execução mais rápido suportado por este dispositivo para cada modelo.",
+        "options": {
+          "auto": "Automático (recomendado)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "Dispositivo OpenVINO",
+        "helpText": "Usado para modelos executados no OpenVINO.",
+        "options": {
+          "auto": "Automático",
+          "cpu": "CPU",
+          "gpu": "GPU"
+        }
+      },
+      "reloadNote": "Alterar o backend ou o dispositivo recarrega os modelos, pelo que a deteção pausa durante alguns segundos.",
+      "backendsLoading": "A verificar que ambientes de execução este dispositivo suporta.",
+      "backendsUnavailable": "Não foi possível ler que ambientes de execução este dispositivo suporta. O backend e o dispositivo podem ser alterados assim que carregar.",
+      "running": {
+        "title": "Em execução",
+        "description": "O ambiente de execução e a precisão com que cada classificador ativo é executado.",
+        "unknown": "Não reportado"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Aplica-se a todos os classificadores, incluindo classificadores de morcegos. Uma espécie com o seu próprio limiar personalizado não é ajustada.",
+      "speciesNames": "Aplica-se a todos os classificadores. Uma espécie sem nome no idioma escolhido mantém o nome do seu classificador.",
+      "falsePositiveFilter": "Aplica-se a todos os classificadores, exceto aos de morcegos, que têm o seu próprio filtro de falsos positivos.",
+      "falsePositiveFilterBatTab": "Aplica-se a todos os classificadores, exceto aos de morcegos, que têm o seu próprio filtro de falsos positivos no separador Morcegos.",
+      "rangeFilter": {
+        "appliesTo": "Aplica-se a {models}.",
+        "notApplied": "Sem filtro de alcance: {models}.",
+        "generic": "Aplica-se aos classificadores suportados pelo modelo de alcance. Os classificadores de morcegos nunca são filtrados por alcance.",
+        "needsLocation": "Funciona apenas quando a localização da estação está definida."
+      },
+      "bat": "Aplica-se apenas a classificadores de morcegos."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "O mínimo não pode ser superior ao limiar de ativação."
     }
   },
   "restart": {
@@ -5882,7 +6186,6 @@
     "restartFailed": "Falha ao iniciar a reinicialização",
     "reasons": {
       "webserver": "Servidor web / configurações de rede",
-      "oauth": "Configurações do provedor de autenticação",
       "database": "Configurações do banco de dados",
       "logging": "Configurações de registro",
       "tlsCertificate": "Certificado TLS"
@@ -5968,6 +6271,7 @@
     },
     "metricFooter": {
       "allPassing": "Tudo OK",
+      "healthyOfTotal": "{healthy} de {total}",
       "needsAttention": "Requer atenção",
       "failing": "A falhar",
       "allClear": "Sem problemas",

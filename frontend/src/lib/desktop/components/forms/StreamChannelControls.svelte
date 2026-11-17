@@ -113,7 +113,7 @@
     <div
       class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
     >
-      <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--color-success)]" />
+      <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--text-success)]" />
       <span>{t('settings.audio.streams.channelMode.monoNoSelection')}</span>
     </div>
   {/if}
@@ -164,7 +164,7 @@
           </div>
         {/each}
         {#if analysisResult.recommended !== 'downmix'}
-          <p class="text-[var(--color-success)] font-medium">
+          <p class="text-[var(--text-success)] font-medium">
             {t('settings.audio.streams.channelMode.recommended', {
               channel:
                 analysisResult.recommended === 'left'
@@ -177,7 +177,7 @@
     {/if}
 
     {#if analysisError}
-      <p class="text-xs text-[var(--color-error)]" role="alert">
+      <p class="text-xs text-[var(--text-error)]" role="alert">
         {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
       </p>
     {/if}
@@ -186,14 +186,14 @@
       <div
         class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
       >
-        <AlertTriangle class="size-4 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+        <AlertTriangle class="size-4 shrink-0 mt-0.5 text-[var(--text-warning)]" />
         <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
       </div>
     {:else}
       <div
         class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
       >
-        <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--color-success)]" />
+        <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--text-success)]" />
         <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
       </div>
     {/if}

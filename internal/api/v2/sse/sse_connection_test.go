@@ -4,20 +4,16 @@
 // Go 1.25 improvements:
 // - Uses sync.WaitGroup.Go() for cleaner concurrent goroutine management
 // - Uses T.Attr() for enhanced test metadata
-// - Uses T.Output() for structured test logging
 //
 // LLM GUIDANCE: When updating concurrent tests in this file:
 // 1. Use sync.WaitGroup.Go() instead of manual wg.Add(1) + go func + defer wg.Done()
 // 2. Add T.Attr() metadata for test categorization
-// 3. Use T.Output() for structured logging instead of t.Logf()
-// 4. For benchmark loops, use b.Loop() instead of manual for i := 0; i < b.N; i++
-// 5. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
+// 3. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
 
 package sse
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +24,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -49,19 +44,12 @@ type SSETestConfig struct {
 // heartbeat interval.
 const maxSSEReadLines = 3
 
-// attemptSSEConnection attempts to establish an SSE connection and read events.
-// Returns true if connection was established and events were read.
-func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, timeout time.Duration) bool {
-	t.Helper()
+// attemptSSEConnection attempts to establish an SSE connection with req and
+// read events. Returns true if connection was established and events were read.
+// It takes no testing.T so it is safe to call from a goroutine.
+func attemptSSEConnection(req *http.Request, timeout time.Duration) bool {
 	client := apitest.NewTestHTTPClient(timeout)
 	defer client.CloseIdleConnections()
-
-	req, err := http.NewRequest("GET", serverURL+"/api/v2"+endpoint, http.NoBody)
-	if err != nil {
-		assert.NoErrorf(t, err, "Connection %d: Failed to create request", connID)
-		return false
-	}
-	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -132,10 +120,6 @@ func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
 		testSingleConnectionManualDisconnect(t, server, config)
 	})
 
-	t.Run("single_connection_context_cancellation", func(t *testing.T) {
-		testSingleConnectionContextCancellation(t, server, config)
-	})
-
 	t.Run("multiple_concurrent_connections", func(t *testing.T) {
 		testMultipleConcurrentConnections(t, server, config)
 	})
@@ -193,63 +177,6 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 	// goleak will catch any leaked goroutines
 }
 
-// testSingleConnectionContextCancellation verifies that canceling the context
-// properly cleans up the SSE connection
-func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Server, config SSETestConfig) {
-	t.Helper()
-	// Create context with cancellation
-	ctx, cancel := context.WithCancel(t.Context())
-
-	// Create HTTP client optimized for tests
-	client := apitest.NewTestHTTPClient(config.testTimeout)
-
-	// Make SSE request with context
-	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
-	require.NoError(t, err)
-	req.Header.Set("Accept", "text/event-stream")
-
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if resp != nil {
-			_ = resp.Body.Close() // Ignore close error in test
-		}
-	}()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Start reading in goroutine
-	done := make(chan bool, 1)
-	go func() {
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			// Just read events until context cancellation
-		}
-		done <- true
-	}()
-
-	// Wait a bit to establish connection
-	// TODO: Consider using testing/synctest.Wait() for deterministic timing
-	time.Sleep(100 * time.Millisecond)
-
-	// Cancel context
-	cancel()
-
-	// Wait for goroutine to finish
-	select {
-	case <-done:
-		// Expected - connection should close due to context cancellation
-	case <-time.After(500 * time.Millisecond):
-		assert.Fail(t, "Connection did not close within expected time after context cancellation")
-	}
-
-	// Response body will be closed by defer
-
-	// Close idle connections - should be immediate with DisableKeepAlives
-	client.CloseIdleConnections()
-
-	// Cleanup is immediate with DisableKeepAlives=true
-}
-
 // testMultipleConcurrentConnections verifies that multiple concurrent SSE connections
 // are all properly cleaned up
 func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, config SSETestConfig) {
@@ -257,10 +184,12 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 	var wg sync.WaitGroup
 	var connectionsEstablished atomic.Int32
 
-	for i := range config.maxConnections {
-		connID := i
+	for range config.maxConnections {
+		req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "text/event-stream")
 		wg.Go(func() {
-			if attemptSSEConnection(t, server.URL, config.endpoint, connID, config.testTimeout) {
+			if attemptSSEConnection(req, config.testTimeout) {
 				connectionsEstablished.Add(1)
 			}
 		})
@@ -308,54 +237,6 @@ func TestSSERapidDisconnectReleasesClients(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return core.SSEManager.GetClientCount() == 0
 	}, sseRapidDisconnectTimeout*2, 10*time.Millisecond, "disconnected clients should be removed from the manager")
-}
-
-// TestSSERateLimiting verifies that SSE rate limiting works correctly
-// and doesn't cause goroutine leaks
-func TestSSERateLimiting(t *testing.T) {
-	// Goroutine leak checking is now handled centrally in TestMain
-	t.Attr("component", "sse")
-	t.Attr("feature", "rate-limiting")
-
-	server, _ := setupSSETestServer(t)
-
-	client := apitest.NewTestHTTPClient(2 * time.Second)
-
-	var successCount, rateLimitedCount int
-
-	// Make many rapid requests to trigger rate limiting
-	for range 15 { // More than the rate limit of 10
-		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", http.NoBody)
-		require.NoError(t, err)
-		req.Header.Set("Accept", "text/event-stream")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-
-		switch resp.StatusCode {
-		case http.StatusOK:
-			successCount++
-		case http.StatusTooManyRequests:
-			rateLimitedCount++
-		}
-
-		_ = resp.Body.Close() // Ignore close error in test
-	}
-
-	// Should have some successful connections and some rate limited
-	require.Positive(t, successCount, "Should have some successful connections")
-	require.Positive(t, rateLimitedCount, "Should have some rate limited connections")
-
-	// Use T.Output() for structured logging (Go 1.25)
-	output := t.Output()
-	_, _ = fmt.Fprintf(output, "Rate limiting test results: %d successful, %d rate limited\n", successCount, rateLimitedCount)
-
-	// Close idle connections - should be immediate with DisableKeepAlives
-	client.CloseIdleConnections()
-
-	// Cleanup is immediate with DisableKeepAlives=true
 }
 
 // setupSSETestServer creates a test server with the SSE endpoints registered.

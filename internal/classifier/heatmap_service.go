@@ -11,7 +11,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -117,12 +116,6 @@ func createHeatmapSession(modelPath string, inputNames, outputNames []string) (*
 	}
 	if err := sessOpts.SetInterOpNumThreads(heatmapInterOpThreads); err != nil {
 		return nil, errors.Newf("heatmap service: failed to set inter-op threads: %v", err).
-			Component("classifier.heatmap_service").
-			Category(errors.CategoryModelInit).
-			Build()
-	}
-	if err := onnx.DisableKleidiAIIfNeeded(sessOpts); err != nil {
-		return nil, errors.Newf("heatmap service: %v", err).
 			Component("classifier.heatmap_service").
 			Category(errors.CategoryModelInit).
 			Build()

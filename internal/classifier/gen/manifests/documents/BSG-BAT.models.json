@@ -1,0 +1,797 @@
+{
+  "schema": 2,
+  "repo": "tphakala/BSG-BAT",
+  "family": "bsg-bat",
+  "updated": "2026-11-16",
+  "family_meta": {
+    "display_name": "BSG-BAT",
+    "description": "European bat species classifier for ultrasonic recordings: 21 species plus a Background class, from a log-mel spectrogram of 384 kHz audio. Six independently trained checkpoints are published for ensemble use; one also works on its own.",
+    "author": "bsg-bat team",
+    "license": "CC-BY-4.0",
+    "commercial_use": true,
+    "documents": [
+      {
+        "kind": "license",
+        "requires_agreement": false,
+        "url": "https://creativecommons.org/licenses/by/4.0/legalcode"
+      }
+    ],
+    "channel": "experimental",
+    "upstream_url": "https://doi.org/10.5281/zenodo.15495676",
+    "species_count": 21,
+    "region": "Europe"
+  },
+  "requirements_note": "requirements.min_ram_mb is a conservative, high-biased RAM floor: measured peak RSS + 15% where a benchmark exists, else a size-derived estimate biased high (a too-low floor risks OOM; a too-high floor only over-excludes on the smallest devices). Measured values will replace the estimates over time.",
+  "task": "bat-species-identification",
+  "model_type": "spectrogram-classifier",
+  "naming": "legacy names, frozen; new files follow <family>-<upstream>[-<region>]-<variant>-b<build>.<ext>",
+  "selection": {
+    "x86-64/onnxruntime": "bsgbat_v0.21_r1.onnx",
+    "aarch64/onnxruntime": "bsgbat_v0.21_r1.onnx"
+  },
+  "ensemble": {
+    "size": 6,
+    "members": [
+      "bsgbat_v0.21_r1.onnx",
+      "bsgbat_v0.21_r2.onnx",
+      "bsgbat_v0.21_r3.onnx",
+      "bsgbat_v0.21_r4.onnx",
+      "bsgbat_v0.21_r5.onnx",
+      "bsgbat_v0.21_r6.onnx"
+    ],
+    "combine": [
+      "mean",
+      "median",
+      "min",
+      "max"
+    ],
+    "note": "independently trained checkpoints with identical graph, I/O and labels; the upstream authors combine the per-class logits or probabilities with min, max, mean or median. A single checkpoint also works on its own. Six sessions in one process peak at about 700 to 730 MB RSS (one session 200 to 240 MB); set session.intra_op.allow_spinning to 0 or share a thread pool, otherwise per-session pools spin against each other at several threads (see docs/bsg-bat.md)."
+  },
+  "notes": "Faithful ONNX conversion of BSG-BAT v0.21 (CC-BY-4.0), PyTorch vs ONNX Runtime max absolute difference below 3e-6 per checkpoint. Not a waveform model: the caller builds the spectrogram described in `frontend`. Selection lists the single r1 checkpoint; the six-member ensemble takes about six times the time of one session (with intra-op spinning disabled when several threads are used) and about 700 to 730 MB RSS against 200 to 240 MB for one. Only the onnxruntime-cpu backend was tested, so no other backend is listed.",
+  "models": [
+    {
+      "path": "bsgbat_v0.21_r1.onnx",
+      "family": "bsg-bat",
+      "role": "classifier",
+      "ensemble_member": 1,
+      "upstream_version": "0.21",
+      "channel": "experimental",
+      "upstream_source": "https://doi.org/10.5281/zenodo.15495676",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 22,
+      "labels": "bsgbat_labels.txt",
+      "labels_sha256": "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517",
+      "labels_size_bytes": 438,
+      "opset": 17,
+      "ir_version": 10,
+      "input": {
+        "name": "spectrogram",
+        "shape": [
+          "batch",
+          1,
+          512,
+          128
+        ],
+        "dtype": "float32",
+        "note": "normalized log10 mel spectrogram of 384 kHz mono audio: 512 time frames (about 1.024 s) by 128 mel bins, 1 channel. Not a waveform."
+      },
+      "outputs": [
+        {
+          "name": "logits",
+          "shape": [
+            "batch",
+            22
+          ],
+          "dtype": "float32",
+          "activation": "sigmoid",
+          "note": "multi-label: probability = 1 / (1 + exp(-logit)) per class; class order is bsgbat_labels.txt (21 species, then Background as index 21)"
+        }
+      ],
+      "frontend": {
+        "sample_rate_hz": 384000,
+        "channels": 1,
+        "n_fft": 1024,
+        "hop_length": 768,
+        "n_mels": 128,
+        "fmin_hz": 9000,
+        "fmax_hz": 150000,
+        "mel": "librosa melspectrogram defaults (power 2, Slaney scale and norm)",
+        "log": "log10(S + 1e-6)",
+        "normalize": "per 512-frame segment: z-score over the whole segment (population std), subtract the per-mel-bin median, clip to [0, 6]",
+        "window_frames": 512,
+        "step_frames": 250,
+        "step_seconds": 0.5,
+        "segments": "for S mel frames (librosa centered framing) the reference makes max(ceil((S - 512) / 250), 1) segments, segment i starting at frame 250 * i; the frames after the last segment's end (up to 250) are not scored; a recording shorter than 512 frames is zero padded in the power spectrogram before the log and yields one segment",
+        "reference": "original_code/data384.py, wav2spectrograms (in the HF repo)",
+        "note": "content above the source Nyquist is absent after resampling, and the model reads 9-150 kHz, so the source must be ultrasonic (a 48 kHz recording cannot work). Lossy codecs discard the ultrasonic content."
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "backend_support_verified": true,
+      "benchmarks": [
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 111,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 45,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 372,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 141,
+          "rss_mb": 203
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 37,
+          "rss_mb": 242
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 18,
+          "rss_mb": 242
+        }
+      ],
+      "sha256": "42f209d0e023785df31c12a4af3ff9fb4470fde5e25d42cd8d2ecc0f2505e0e6",
+      "size_bytes": 83101506,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "bsgbat_v0.21_r2.onnx",
+      "family": "bsg-bat",
+      "role": "classifier",
+      "ensemble_member": 2,
+      "upstream_version": "0.21",
+      "channel": "experimental",
+      "upstream_source": "https://doi.org/10.5281/zenodo.15495676",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 22,
+      "labels": "bsgbat_labels.txt",
+      "labels_sha256": "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517",
+      "labels_size_bytes": 438,
+      "opset": 17,
+      "ir_version": 10,
+      "input": {
+        "name": "spectrogram",
+        "shape": [
+          "batch",
+          1,
+          512,
+          128
+        ],
+        "dtype": "float32",
+        "note": "normalized log10 mel spectrogram of 384 kHz mono audio: 512 time frames (about 1.024 s) by 128 mel bins, 1 channel. Not a waveform."
+      },
+      "outputs": [
+        {
+          "name": "logits",
+          "shape": [
+            "batch",
+            22
+          ],
+          "dtype": "float32",
+          "activation": "sigmoid",
+          "note": "multi-label: probability = 1 / (1 + exp(-logit)) per class; class order is bsgbat_labels.txt (21 species, then Background as index 21)"
+        }
+      ],
+      "frontend": {
+        "sample_rate_hz": 384000,
+        "channels": 1,
+        "n_fft": 1024,
+        "hop_length": 768,
+        "n_mels": 128,
+        "fmin_hz": 9000,
+        "fmax_hz": 150000,
+        "mel": "librosa melspectrogram defaults (power 2, Slaney scale and norm)",
+        "log": "log10(S + 1e-6)",
+        "normalize": "per 512-frame segment: z-score over the whole segment (population std), subtract the per-mel-bin median, clip to [0, 6]",
+        "window_frames": 512,
+        "step_frames": 250,
+        "step_seconds": 0.5,
+        "segments": "for S mel frames (librosa centered framing) the reference makes max(ceil((S - 512) / 250), 1) segments, segment i starting at frame 250 * i; the frames after the last segment's end (up to 250) are not scored; a recording shorter than 512 frames is zero padded in the power spectrogram before the log and yields one segment",
+        "reference": "original_code/data384.py, wav2spectrograms (in the HF repo)",
+        "note": "content above the source Nyquist is absent after resampling, and the model reads 9-150 kHz, so the source must be ultrasonic (a 48 kHz recording cannot work). Lossy codecs discard the ultrasonic content."
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "backend_support_verified": true,
+      "benchmarks": [
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 111,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 45,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 372,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 141,
+          "rss_mb": 203
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 37,
+          "rss_mb": 242
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 18,
+          "rss_mb": 242
+        }
+      ],
+      "sha256": "fd7f49af80a4f8cc929afb9fa03e791f730d1dc9912a008a17805b592124450c",
+      "size_bytes": 83101506,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "bsgbat_v0.21_r3.onnx",
+      "family": "bsg-bat",
+      "role": "classifier",
+      "ensemble_member": 3,
+      "upstream_version": "0.21",
+      "channel": "experimental",
+      "upstream_source": "https://doi.org/10.5281/zenodo.15495676",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 22,
+      "labels": "bsgbat_labels.txt",
+      "labels_sha256": "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517",
+      "labels_size_bytes": 438,
+      "opset": 17,
+      "ir_version": 10,
+      "input": {
+        "name": "spectrogram",
+        "shape": [
+          "batch",
+          1,
+          512,
+          128
+        ],
+        "dtype": "float32",
+        "note": "normalized log10 mel spectrogram of 384 kHz mono audio: 512 time frames (about 1.024 s) by 128 mel bins, 1 channel. Not a waveform."
+      },
+      "outputs": [
+        {
+          "name": "logits",
+          "shape": [
+            "batch",
+            22
+          ],
+          "dtype": "float32",
+          "activation": "sigmoid",
+          "note": "multi-label: probability = 1 / (1 + exp(-logit)) per class; class order is bsgbat_labels.txt (21 species, then Background as index 21)"
+        }
+      ],
+      "frontend": {
+        "sample_rate_hz": 384000,
+        "channels": 1,
+        "n_fft": 1024,
+        "hop_length": 768,
+        "n_mels": 128,
+        "fmin_hz": 9000,
+        "fmax_hz": 150000,
+        "mel": "librosa melspectrogram defaults (power 2, Slaney scale and norm)",
+        "log": "log10(S + 1e-6)",
+        "normalize": "per 512-frame segment: z-score over the whole segment (population std), subtract the per-mel-bin median, clip to [0, 6]",
+        "window_frames": 512,
+        "step_frames": 250,
+        "step_seconds": 0.5,
+        "segments": "for S mel frames (librosa centered framing) the reference makes max(ceil((S - 512) / 250), 1) segments, segment i starting at frame 250 * i; the frames after the last segment's end (up to 250) are not scored; a recording shorter than 512 frames is zero padded in the power spectrogram before the log and yields one segment",
+        "reference": "original_code/data384.py, wav2spectrograms (in the HF repo)",
+        "note": "content above the source Nyquist is absent after resampling, and the model reads 9-150 kHz, so the source must be ultrasonic (a 48 kHz recording cannot work). Lossy codecs discard the ultrasonic content."
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "backend_support_verified": true,
+      "benchmarks": [
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 111,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 45,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 372,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 141,
+          "rss_mb": 203
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 37,
+          "rss_mb": 242
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 18,
+          "rss_mb": 242
+        }
+      ],
+      "sha256": "6f03a2a52f8ada8b01e5232ca8b8550d71fd85441955a7183f5a0fec2cd90249",
+      "size_bytes": 83101506,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "bsgbat_v0.21_r4.onnx",
+      "family": "bsg-bat",
+      "role": "classifier",
+      "ensemble_member": 4,
+      "upstream_version": "0.21",
+      "channel": "experimental",
+      "upstream_source": "https://doi.org/10.5281/zenodo.15495676",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 22,
+      "labels": "bsgbat_labels.txt",
+      "labels_sha256": "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517",
+      "labels_size_bytes": 438,
+      "opset": 17,
+      "ir_version": 10,
+      "input": {
+        "name": "spectrogram",
+        "shape": [
+          "batch",
+          1,
+          512,
+          128
+        ],
+        "dtype": "float32",
+        "note": "normalized log10 mel spectrogram of 384 kHz mono audio: 512 time frames (about 1.024 s) by 128 mel bins, 1 channel. Not a waveform."
+      },
+      "outputs": [
+        {
+          "name": "logits",
+          "shape": [
+            "batch",
+            22
+          ],
+          "dtype": "float32",
+          "activation": "sigmoid",
+          "note": "multi-label: probability = 1 / (1 + exp(-logit)) per class; class order is bsgbat_labels.txt (21 species, then Background as index 21)"
+        }
+      ],
+      "frontend": {
+        "sample_rate_hz": 384000,
+        "channels": 1,
+        "n_fft": 1024,
+        "hop_length": 768,
+        "n_mels": 128,
+        "fmin_hz": 9000,
+        "fmax_hz": 150000,
+        "mel": "librosa melspectrogram defaults (power 2, Slaney scale and norm)",
+        "log": "log10(S + 1e-6)",
+        "normalize": "per 512-frame segment: z-score over the whole segment (population std), subtract the per-mel-bin median, clip to [0, 6]",
+        "window_frames": 512,
+        "step_frames": 250,
+        "step_seconds": 0.5,
+        "segments": "for S mel frames (librosa centered framing) the reference makes max(ceil((S - 512) / 250), 1) segments, segment i starting at frame 250 * i; the frames after the last segment's end (up to 250) are not scored; a recording shorter than 512 frames is zero padded in the power spectrogram before the log and yields one segment",
+        "reference": "original_code/data384.py, wav2spectrograms (in the HF repo)",
+        "note": "content above the source Nyquist is absent after resampling, and the model reads 9-150 kHz, so the source must be ultrasonic (a 48 kHz recording cannot work). Lossy codecs discard the ultrasonic content."
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "backend_support_verified": true,
+      "benchmarks": [
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 111,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 45,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 372,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 141,
+          "rss_mb": 203
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 37,
+          "rss_mb": 242
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 18,
+          "rss_mb": 242
+        }
+      ],
+      "sha256": "01d1ab49a85ae3e727fae2a0b0df55597648efeb0cce6cebb39c3b04483f22b6",
+      "size_bytes": 83101506,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "bsgbat_v0.21_r5.onnx",
+      "family": "bsg-bat",
+      "role": "classifier",
+      "ensemble_member": 5,
+      "upstream_version": "0.21",
+      "channel": "experimental",
+      "upstream_source": "https://doi.org/10.5281/zenodo.15495676",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 22,
+      "labels": "bsgbat_labels.txt",
+      "labels_sha256": "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517",
+      "labels_size_bytes": 438,
+      "opset": 17,
+      "ir_version": 10,
+      "input": {
+        "name": "spectrogram",
+        "shape": [
+          "batch",
+          1,
+          512,
+          128
+        ],
+        "dtype": "float32",
+        "note": "normalized log10 mel spectrogram of 384 kHz mono audio: 512 time frames (about 1.024 s) by 128 mel bins, 1 channel. Not a waveform."
+      },
+      "outputs": [
+        {
+          "name": "logits",
+          "shape": [
+            "batch",
+            22
+          ],
+          "dtype": "float32",
+          "activation": "sigmoid",
+          "note": "multi-label: probability = 1 / (1 + exp(-logit)) per class; class order is bsgbat_labels.txt (21 species, then Background as index 21)"
+        }
+      ],
+      "frontend": {
+        "sample_rate_hz": 384000,
+        "channels": 1,
+        "n_fft": 1024,
+        "hop_length": 768,
+        "n_mels": 128,
+        "fmin_hz": 9000,
+        "fmax_hz": 150000,
+        "mel": "librosa melspectrogram defaults (power 2, Slaney scale and norm)",
+        "log": "log10(S + 1e-6)",
+        "normalize": "per 512-frame segment: z-score over the whole segment (population std), subtract the per-mel-bin median, clip to [0, 6]",
+        "window_frames": 512,
+        "step_frames": 250,
+        "step_seconds": 0.5,
+        "segments": "for S mel frames (librosa centered framing) the reference makes max(ceil((S - 512) / 250), 1) segments, segment i starting at frame 250 * i; the frames after the last segment's end (up to 250) are not scored; a recording shorter than 512 frames is zero padded in the power spectrogram before the log and yields one segment",
+        "reference": "original_code/data384.py, wav2spectrograms (in the HF repo)",
+        "note": "content above the source Nyquist is absent after resampling, and the model reads 9-150 kHz, so the source must be ultrasonic (a 48 kHz recording cannot work). Lossy codecs discard the ultrasonic content."
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "backend_support_verified": true,
+      "benchmarks": [
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 111,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 45,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 372,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 141,
+          "rss_mb": 203
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 37,
+          "rss_mb": 242
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 18,
+          "rss_mb": 242
+        }
+      ],
+      "sha256": "9c551100e64d1a5c6d0458a1f5b12ad3f2bc8cf4c2c9ed497dab71f411ad12af",
+      "size_bytes": 83101506,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "bsgbat_v0.21_r6.onnx",
+      "family": "bsg-bat",
+      "role": "classifier",
+      "ensemble_member": 6,
+      "upstream_version": "0.21",
+      "channel": "experimental",
+      "upstream_source": "https://doi.org/10.5281/zenodo.15495676",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 22,
+      "labels": "bsgbat_labels.txt",
+      "labels_sha256": "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517",
+      "labels_size_bytes": 438,
+      "opset": 17,
+      "ir_version": 10,
+      "input": {
+        "name": "spectrogram",
+        "shape": [
+          "batch",
+          1,
+          512,
+          128
+        ],
+        "dtype": "float32",
+        "note": "normalized log10 mel spectrogram of 384 kHz mono audio: 512 time frames (about 1.024 s) by 128 mel bins, 1 channel. Not a waveform."
+      },
+      "outputs": [
+        {
+          "name": "logits",
+          "shape": [
+            "batch",
+            22
+          ],
+          "dtype": "float32",
+          "activation": "sigmoid",
+          "note": "multi-label: probability = 1 / (1 + exp(-logit)) per class; class order is bsgbat_labels.txt (21 species, then Background as index 21)"
+        }
+      ],
+      "frontend": {
+        "sample_rate_hz": 384000,
+        "channels": 1,
+        "n_fft": 1024,
+        "hop_length": 768,
+        "n_mels": 128,
+        "fmin_hz": 9000,
+        "fmax_hz": 150000,
+        "mel": "librosa melspectrogram defaults (power 2, Slaney scale and norm)",
+        "log": "log10(S + 1e-6)",
+        "normalize": "per 512-frame segment: z-score over the whole segment (population std), subtract the per-mel-bin median, clip to [0, 6]",
+        "window_frames": 512,
+        "step_frames": 250,
+        "step_seconds": 0.5,
+        "segments": "for S mel frames (librosa centered framing) the reference makes max(ceil((S - 512) / 250), 1) segments, segment i starting at frame 250 * i; the frames after the last segment's end (up to 250) are not scored; a recording shorter than 512 frames is zero padded in the power spectrogram before the log and yields one segment",
+        "reference": "original_code/data384.py, wav2spectrograms (in the HF repo)",
+        "note": "content above the source Nyquist is absent after resampling, and the model reads 9-150 kHz, so the source must be ultrasonic (a 48 kHz recording cannot work). Lossy codecs discard the ultrasonic content."
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "backend_support_verified": true,
+      "benchmarks": [
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 111,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi5-cortex-a76",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 45,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 372,
+          "rss_mb": 203
+        },
+        {
+          "device": "rpi4-cortex-a72",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 141,
+          "rss_mb": 203
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 1,
+          "batch": 1,
+          "latency_ms": 37,
+          "rss_mb": 242
+        },
+        {
+          "device": "x86-i5-7260u",
+          "backend": "onnxruntime-cpu",
+          "threads": 4,
+          "batch": 1,
+          "latency_ms": 18,
+          "rss_mb": 242
+        }
+      ],
+      "sha256": "4b7972c181311ecbd7e4f34646d6a0f3e3361009ecc5476c4603b436eaf1120b",
+      "size_bytes": 83101506,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    }
+  ]
+}

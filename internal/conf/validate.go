@@ -67,18 +67,22 @@ var (
 // ValidAudioModels contains recognized AI model identifiers.
 // Empty string is also valid (defaults to birdnet).
 var ValidAudioModels = map[string]bool{
-	"":               true, // default (birdnet)
-	ModelIDBirdNET:   true,
-	ModelIDBirdNETV3: true,
-	ModelIDPerchV2:   true,
-	ModelIDBat:       true,
-	ModelIDBSG:       true,
+	"":                   true, // default (birdnet)
+	ModelIDBirdNET:       true,
+	ModelIDBirdNETV3:     true,
+	ModelIDBirdNETPlusV3: true,
+	ModelIDPerchV2:       true,
+	ModelIDBat:           true,
+	ModelIDBSG:           true,
+	ModelIDBSGBat:        true,
 	// Catalog-style aliases (see consts.go) so a source model set to the
 	// hyphenated catalog ID validates rather than failing startup.
-	ModelIDBirdNETCatalog:   true,
-	ModelIDBirdNETV3Catalog: true,
-	ModelIDPerchV2Catalog:   true,
-	ModelIDBSGCatalog:       true,
+	ModelIDBirdNETCatalog:       true,
+	ModelIDBirdNETV3Catalog:     true,
+	ModelIDBirdNETPlusV3Catalog: true,
+	ModelIDPerchV2Catalog:       true,
+	ModelIDBSGCatalog:           true,
+	ModelIDBSGBatCatalog:        true,
 }
 
 // ValidationError is the set of fatal validation findings produced by
@@ -294,11 +298,15 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
-	// Validate per-model confidence thresholds (bat, perch, birdnetv3). An
+	// Validate per-model confidence thresholds (bat, perch, birdnetv3, birdnetplus). An
 	// out-of-range threshold changes detection gating (>= 1 drops everything,
 	// <= 0 drops nothing), so it is rejected on every write path and on load. The
 	// frontend already constrains these to 0.01-0.99; this closes the raw-API gap.
 	if err := validateModelThresholds(settings); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
+	if err := validateBSGBatStep(settings); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
@@ -336,7 +344,8 @@ func validateUltrasonicFilter(settings *Settings) error {
 // and the BirdNET/RangeFilter threshold checks in validate_services.go, which is
 // the same reason checkRange guards NaN: a NaN comparison is always false and
 // would otherwise slip past the bounds test. defaultModelThreshold is what an
-// out-of-range value is reset to on load (see normalizeModelThresholds).
+// out-of-range value is reset to on load (see normalizeModelThresholds). They
+// also bound birdnet.alternateminconfidence, the stored-alternate cutoff.
 const (
 	minModelThreshold     = 0.0
 	maxModelThreshold     = 1.0
@@ -367,6 +376,32 @@ func validateProfilingSettings(p *ProfilingConfig) error {
 	return nil
 }
 
+// ValidBSGBatStepFrames reports whether frames is within
+// [MinBSGBatStepFrames, MaxBSGBatStepFrames]. Zero (unset) is not in range; the
+// callers that accept it test for it themselves.
+func ValidBSGBatStepFrames(frames int) bool {
+	return frames >= MinBSGBatStepFrames && frames <= MaxBSGBatStepFrames
+}
+
+// validateBSGBatStep checks bsgbat.stepframes: 0 (unset, resolves to
+// DefaultBSGBatStepFrames) or a value within [MinBSGBatStepFrames,
+// MaxBSGBatStepFrames]. Zero must pass because settings built without a BSG-BAT
+// section carry it. On the Load path normalizeBSGBatStep has already repaired an
+// out-of-range value; on the API path this rejects it.
+func validateBSGBatStep(settings *Settings) error {
+	frames := settings.BSGBat.StepFrames
+	if frames == 0 || ValidBSGBatStepFrames(frames) {
+		return nil
+	}
+	return errors.Newf("bsgbat.stepframes must be 0 (default) or between %d and %d, got %d",
+		MinBSGBatStepFrames, MaxBSGBatStepFrames, frames).
+		Component("config").
+		Category(errors.CategoryValidation).
+		Context("operation", "validate_bsgbat_step").
+		Context("validation_type", "bsgbat-step").
+		Build()
+}
+
 // validateModelThresholds checks the per-model confidence thresholds are within
 // the inclusive 0..1 range. Validated unconditionally, even when a model's
 // OverrideThreshold is false, so an out-of-range value cannot lie dormant in
@@ -384,6 +419,8 @@ func validateModelThresholds(settings *Settings) error {
 		{"bat.threshold", settings.Bat.Threshold},
 		{"perch.threshold", settings.Perch.Threshold},
 		{"birdnetv3.threshold", settings.BirdNETV3.Threshold},
+		{"birdnetplus.threshold", settings.BirdNETPlus.Threshold},
+		{"bsgbat.threshold", settings.BSGBat.Threshold},
 	}
 	for _, c := range checks {
 		if math.IsNaN(c.value) || math.IsInf(c.value, 0) || c.value < minModelThreshold || c.value > maxModelThreshold {

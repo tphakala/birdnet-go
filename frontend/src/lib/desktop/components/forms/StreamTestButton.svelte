@@ -11,6 +11,8 @@
   import { Search, CircleCheck, CircleX, Loader2, AlertTriangle } from '@lucide/svelte';
   import { api } from '$lib/utils/api';
   import { t } from '$lib/i18n';
+  import { highestMinSampleRate } from '$lib/utils/audio/sampleRate';
+  import { HZ_PER_KHZ } from '$lib/utils/spectrogramAxis';
 
   interface ModelOption {
     id: string;
@@ -48,6 +50,18 @@
       const model = models.find(m => m.id === id);
       return model?.category === 'bat';
     })
+  );
+
+  // The probe verdict only knows the bat floor and the codec, since the backend has no model
+  // context. The highest minimum capture rate among the models enabled for this source is applied
+  // here, so a model that needs more than the bat floor (BSG-BAT) is judged by its own minimum.
+  let requiredRate = $derived(highestMinSampleRate(models, selectedModels));
+  let belowModelMinimum = $derived(
+    testResult !== null && requiredRate > 0 && testResult.sampleRate < requiredRate
+  );
+  // batCompatible already folds in the lossy codec check, so it stays the codec gate.
+  let isBatCompatible = $derived(
+    testResult !== null && testResult.batCompatible && !belowModelMinimum
   );
 
   async function testStream() {
@@ -91,6 +105,16 @@
   });
 </script>
 
+{#snippet warning(message: string)}
+  <div
+    class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+    role="status"
+  >
+    <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--text-warning)]" />
+    <span class="text-[var(--color-base-content)]">{message}</span>
+  </div>
+{/snippet}
+
 <div class="space-y-2">
   <div class="flex items-center gap-2">
     <button
@@ -114,16 +138,16 @@
           {testResult.sampleRate / 1000} kHz, {testResult.codec}, {testResult.channels}ch
         </span>
         {#if hasBatModel}
-          {#if testResult.batCompatible}
+          {#if isBatCompatible}
             <span
-              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-success)]/15 text-[var(--text-success)]"
             >
               <CircleCheck class="size-3" />
               {t('settings.audio.streams.test.batCompatible')}
             </span>
           {:else}
             <span
-              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-error)]/15 text-[var(--text-error)]"
             >
               <CircleX class="size-3" />
               {t('settings.audio.streams.test.batIncompatible')}
@@ -134,20 +158,20 @@
     {/if}
   </div>
 
+  {#if hasBatModel && belowModelMinimum}
+    {@render warning(
+      t('settings.audio.streams.test.minRateWarning', {
+        rate: String(requiredRate / HZ_PER_KHZ),
+      })
+    )}
+  {/if}
+
   {#if testResult && hasBatModel && !testResult.batCompatible && testResult.sampleRate >= 96000}
-    <div
-      class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-      role="status"
-    >
-      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-      <span class="text-[var(--color-base-content)]">
-        {t('settings.audio.streams.codecWarning.lossy')}
-      </span>
-    </div>
+    {@render warning(t('settings.audio.streams.codecWarning.lossy'))}
   {/if}
 
   {#if testError !== null}
-    <p class="text-xs text-[var(--color-error)]">
+    <p class="text-xs text-[var(--text-error)]">
       {t('settings.audio.streams.test.error')}{testError ? `: ${testError}` : ''}
     </p>
   {/if}

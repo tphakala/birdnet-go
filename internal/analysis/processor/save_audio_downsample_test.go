@@ -11,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // makeSilentPCM16 creates a zero-filled 16-bit PCM byte slice with the given
@@ -196,6 +197,21 @@ func TestResolveExportFormat(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestExportFormatForModel_BSGBatIsUltrasonic verifies that a BSG-BAT clip at its
+// 384 kHz analysis rate exports as the configured lossless ultrasonic format, while
+// a bird model at the same rate keeps the lossy Export.Type.
+func TestExportFormatForModel_BSGBatIsUltrasonic(t *testing.T) {
+	t.Parallel()
+
+	export := &conf.ExportSettings{Type: "mp3", UltrasonicType: "flac"}
+	const sourceRate = 384000
+
+	assert.Equal(t, "flac", exportFormatForModel(detection.ModelNameBSGBat, "0.21", sourceRate, export),
+		"a BSG-BAT capture above the analysis rate uses UltrasonicType")
+	assert.Equal(t, "mp3", exportFormatForModel("BirdNET", "2.4", sourceRate, export),
+		"a bird model keeps Export.Type whatever the rate")
 }
 
 // TestResolveExportFormat_Boundary pins the analysis-rate boundary with hardcoded

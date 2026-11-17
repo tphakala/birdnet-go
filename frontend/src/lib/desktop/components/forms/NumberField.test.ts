@@ -16,6 +16,96 @@ describe('NumberField', () => {
     expect(screen.getByRole('spinbutton')).toHaveValue(0);
   });
 
+  it('applies labelClassName to the label and keeps the field named by it', () => {
+    render(NumberField, {
+      props: {
+        label: 'Shared threshold',
+        labelClassName: 'sr-only',
+        value: 0.7,
+        onUpdate: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Shared threshold').closest('label')).toHaveClass('sr-only');
+    expect(screen.getByRole('spinbutton', { name: 'Shared threshold' })).toHaveValue(0.7);
+  });
+
+  it('applies errorClassName to the box around the error message', () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 1,
+        onUpdate: vi.fn(),
+        error: 'Too high',
+        errorClassName: 'absolute',
+      },
+    });
+
+    expect(screen.getByText('Too high').parentElement).toHaveClass('absolute');
+  });
+
+  it('applies errorClassName to the box around the clamp notice', async () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 5,
+        onUpdate: vi.fn(),
+        min: 0,
+        errorClassName: 'absolute',
+      },
+    });
+
+    await fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '-5' } });
+
+    // The box around the notice takes the classes, so an out-of-flow box adds no height.
+    expect(screen.getByRole('status').parentElement).toHaveClass('absolute');
+  });
+
+  it('keeps the extra describedby ids beside the error id and marks the field invalid', () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 1,
+        onUpdate: vi.fn(),
+        helpText: 'Help',
+        describedByExtra: 'note-a',
+        error: 'Too high',
+      },
+    });
+
+    const input = screen.getByRole('spinbutton');
+    const ids = (input.getAttribute('aria-describedby') ?? '').split(' ');
+    expect(ids).toContain('note-a');
+    expect(ids).toContain(screen.getByText('Too high').id);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('passes extra describedby ids to the input after the help text id', () => {
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 1,
+        onUpdate: vi.fn(),
+        helpText: 'Help',
+        describedByExtra: 'note-a',
+      },
+    });
+
+    const describedBy = screen.getByRole('spinbutton').getAttribute('aria-describedby') ?? '';
+    const [helpId, extraId] = describedBy.split(' ');
+    expect(document.getElementById(helpId)?.textContent).toBe('Help');
+    expect(extraId).toBe('note-a');
+  });
+
+  it('keeps the field label as the only first label child when a message row follows', () => {
+    const { container } = render(NumberField, {
+      props: { label: 'Test Number', value: 1, onUpdate: vi.fn(), error: 'Bad value' },
+    });
+
+    expect(container.querySelectorAll('.label')).toHaveLength(2);
+    expect(container.querySelectorAll('.form-control>.label:first-child')).toHaveLength(1);
+  });
+
   it('displays the current value', () => {
     render(NumberField, {
       props: {
@@ -518,5 +608,16 @@ describe('NumberField', () => {
     await fireEvent.change(input, { target: { value: '99999999999999999999' } });
 
     expect(onUpdate).toHaveBeenCalledWith(1); // Should clamp to max
+  });
+
+  it('shows the value onUpdate returns when the parent kept a different one', async () => {
+    render(NumberField, {
+      props: { label: 'Test Number', value: 3, onUpdate: () => 3, min: 0, max: 10 },
+    });
+
+    const input = screen.getByRole('spinbutton');
+    await fireEvent.change(input, { target: { value: '3.4' } });
+
+    expect(input).toHaveValue(3);
   });
 });

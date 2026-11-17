@@ -2,10 +2,13 @@
 // package (internal/classifier/model_catalog_regional_gen.go). It reads the
 // vendored acoustic-models manifests (gen/manifests/*.models.json), the embedded
 // region tables (region/data/*.regions.json), and a labels-checksum sidecar
-// (gen/manifests/labels-checksums.json), then emits one Go file with two
-// functions, birdnetV30RegionalVariants and perchV2RegionalVariants, each
-// returning the region-sliced CatalogVariant literals for its family
-// (expectedRegions slugs, variantsPerRegion precision builds each).
+// (gen/manifests/labels-checksums.json), then emits one Go file with one
+// function per family (birdnetV30RegionalVariants, perchV2RegionalVariants and
+// birdnetPlusV30RegionalVariants), each returning the region-sliced
+// CatalogVariant literals for its family (expectedRegions slugs, the family's
+// variantsPerRegion precision builds each; a build the manifest supersedes
+// stays in the list as a Legacy variant, so an existing install is still
+// recognised, and sorts after its region's live builds).
 //
 // The generator takes the per-region labels checksums from the sidecar rather
 // than from the manifests (older manifests hashed only the .onnx model files).
@@ -13,14 +16,25 @@
 // refresh that sidecar from HuggingFace; normal "go generate" is fully offline
 // so the CI drift gate needs no network.
 //
+// Perch v2 regional entries must carry a score_calibration block (the rest logit
+// the classifier adds to the slice softmax so slice scores match the full model's
+// scale); the generator hard-fails when it is missing, unknown or out of range,
+// and when a manifest labels_sha256 disagrees with the checksum sidecar, so a
+// constant can never be attached to a different labels file than it was fitted on.
+//
 // Determinism matters: the output is committed and guarded by a CI drift gate,
 // so the generator must produce byte-identical output for a given input. Entries
-// are sorted by (region slug, variant token), backend map keys are emitted
+// are sorted by (region slug, live before superseded, variant token), backend map keys are emitted
 // sorted, the field order is fixed, and the whole file is run through
 // go/format.Source before writing.
 //
 // Bootstrap safety: this program is package main and does NOT import
 // internal/classifier, so a broken generated file never blocks regenerating it.
+//
+// A second output, model_catalog_documents_gen.go, carries the licence and
+// policy documents of every vendored manifest (gen/manifests/*.models.json and
+// the document-only gen/manifests/documents/*.models.json) as a registry keyed
+// by repo; see documents.go.
 //
 // Run via: go generate ./internal/classifier
 package main
@@ -35,11 +49,13 @@ import (
 	"go/format"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -64,6 +80,7 @@ var families = []family{
 		labelsLocalName: func(slug string) string {
 			return fmt.Sprintf("birdnet_v3.0_%s_labels.txt", slug)
 		},
+		variantsPerRegion: 2,
 	},
 	{
 		key:          "perch-v2",
@@ -71,6 +88,8 @@ var families = []family{
 		repo:         "tphakala/Perch-v2-Models",
 		manifestFile: "gen/manifests/Perch-v2-Models.models.json",
 		regionsFile:  "region/data/Perch-v2-Models.regions.json",
+		// Softmax over the loaded labels: a slice needs its rest logit.
+		requireScoreCalibration: true,
 		// perch_v2_<slug>_<infix>.onnx, matching the global naming
 		// (perch_v2_no_dft.onnx, perch_v2_int8_arm.onnx).
 		modelLocalName: func(slug, token string) string {
@@ -79,6 +98,23 @@ var families = []family{
 		labelsLocalName: func(slug string) string {
 			return fmt.Sprintf("perch_v2_%s_labels.txt", slug)
 		},
+		variantsPerRegion: 2,
+	},
+	{
+		key:          "birdnet-plus-v3.0",
+		funcName:     "birdnetPlusV30RegionalVariants",
+		repo:         "tphakala/BirdNET-Plus-V3.0",
+		manifestFile: "gen/manifests/BirdNET-Plus-V3.0.models.json",
+		regionsFile:  "region/data/BirdNET-Plus-V3.0.regions.json",
+		// birdnet_plus_v3.0_<slug>_<token>.onnx for the model, one
+		// birdnet_plus_v3.0_<slug>_labels.txt per region. Only fp32 ships.
+		modelLocalName: func(slug, token string) string {
+			return fmt.Sprintf("birdnet_plus_v3.0_%s_%s.onnx", slug, token)
+		},
+		labelsLocalName: func(slug string) string {
+			return fmt.Sprintf("birdnet_plus_v3.0_%s_labels.txt", slug)
+		},
+		variantsPerRegion: 1,
 	},
 }
 
@@ -96,19 +132,54 @@ func perchInfix(token string) string {
 }
 
 type family struct {
-	key             string
-	funcName        string
-	repo            string
-	manifestFile    string
-	regionsFile     string
-	modelLocalName  func(slug, token string) string
-	labelsLocalName func(slug string) string
+	key          string
+	funcName     string
+	repo         string
+	manifestFile string
+	regionsFile  string
+	// requireScoreCalibration marks a family whose scores depend on the label set
+	// (Perch v2 softmax). A family with per-class sigmoid scores (BirdNET v3.0)
+	// must not carry the field.
+	requireScoreCalibration bool
+	// variantsPerRegion is the number of precision builds the family ships for
+	// each region (2 for fp32 plus fp16, 1 for fp32 only).
+	variantsPerRegion int
+	modelLocalName    func(slug, token string) string
+	labelsLocalName   func(slug string) string
 }
+
+// checkRegionCounts fails unless perRegion names exactly expectedRegions
+// regions and each one ships exactly the family's variantsPerRegion builds, so
+// a dropped, duplicated or extra tile cannot pass unnoticed, even when the
+// total still matches. A withdrawn (superseded) build still counts as shipped,
+// but every region must keep at least one build a new install can use.
+func (f *family) checkRegionCounts(perRegion map[string]regionTally) error {
+	if len(perRegion) != expectedRegions {
+		return fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(perRegion), expectedRegions)
+	}
+	for region, n := range perRegion {
+		if n.total != f.variantsPerRegion {
+			return fmt.Errorf("region %s has %d variants, want %d", region, n.total, f.variantsPerRegion)
+		}
+		if n.live == 0 {
+			return fmt.Errorf("region %s has no variant a new install can use (every build is superseded)", region)
+		}
+	}
+	return nil
+}
+
+// regionTally counts a region's manifest entries and how many of them are not
+// superseded.
+type regionTally struct{ total, live int }
 
 // manifest and its nested types mirror only the acoustic-models schema-2 fields
 // this generator consumes. Unknown fields are ignored.
 type manifest struct {
-	Models []manifestModel `json:"models"`
+	// Repo is the HuggingFace repository the manifest describes; the document
+	// registry is keyed by it.
+	Repo       string             `json:"repo"`
+	FamilyMeta manifestFamilyMeta `json:"family_meta"`
+	Models     []manifestModel    `json:"models"`
 }
 
 type manifestModel struct {
@@ -124,6 +195,18 @@ type manifestModel struct {
 	SizeBytes    int64                      `json:"size_bytes"`
 	SupersededBy *string                    `json:"superseded_by"`
 	Requirements *manifestRequirements      `json:"requirements"`
+	// LabelsSHA256 is the checksum of the entry's labels file; when set it must
+	// equal the sidecar checksum, and a family that requires a score calibration
+	// needs it set.
+	LabelsSHA256     string                    `json:"labels_sha256"`
+	ScoreCalibration *manifestScoreCalibration `json:"score_calibration"`
+}
+
+// manifestScoreCalibration mirrors the manifest's per-entry score_calibration block.
+// RestLogit is a pointer so a missing value is told apart from zero.
+type manifestScoreCalibration struct {
+	Method    string   `json:"method"`
+	RestLogit *float64 `json:"rest_logit"`
 }
 
 type manifestBackend struct {
@@ -159,15 +242,21 @@ type labelChecksum struct {
 }
 
 const (
+	// scoreCalibrationMethod, scoreCalibrationRestLogitMin and Max mirror
+	// ScoreCalibrationSoftmaxRestLogit and the bounds in model_catalog.go (this
+	// program cannot import the package it generates for) and the
+	// acoustic-models validator.
+	scoreCalibrationMethod       = "softmax-rest-logit"
+	scoreCalibrationRestLogitMin = 8.0
+	scoreCalibrationRestLogitMax = 12.0
+
 	labelsSidecar = "gen/manifests/labels-checksums.json"
 	outputFile    = "model_catalog_regional_gen.go"
 	// expectedRegions is hand-maintained on purpose: an upstream tile addition
 	// or removal must be acknowledged here at generate time, together with the
 	// golden tier snapshot in the region package. Do not derive it from the
 	// region table, which would make the count check vacuous.
-	expectedRegions   = 43
-	variantsPerRegion = 2 // each region ships two precision variants
-	regionalPerFam    = expectedRegions * variantsPerRegion
+	expectedRegions = 43
 )
 
 func main() {
@@ -193,15 +282,15 @@ func run() error {
 
 	var buf bytes.Buffer
 	buf.WriteString(fileHeader)
-	for _, fam := range families {
+	total := 0
+	for i := range families {
+		fam := &families[i]
 		variants, genErr := fam.build(labels)
 		if genErr != nil {
 			return fmt.Errorf("family %s: %w", fam.key, genErr)
 		}
-		if len(variants) != regionalPerFam {
-			return fmt.Errorf("family %s: got %d regional variants, want %d", fam.key, len(variants), regionalPerFam)
-		}
-		fmt.Fprintf(&buf, "\n// %s returns the %d region-sliced variants of the %s model,\n", fam.funcName, regionalPerFam, fam.key)
+		total += len(variants)
+		fmt.Fprintf(&buf, "\n// %s returns the %d region-sliced variants of the %s model,\n", fam.funcName, len(variants), fam.key)
 		fmt.Fprintf(&buf, "// generated from %s.\n", path.Base(fam.manifestFile))
 		fmt.Fprintf(&buf, "func %s() []CatalogVariant {\n\treturn []CatalogVariant{\n", fam.funcName)
 		for _, v := range variants {
@@ -217,12 +306,13 @@ func run() error {
 	if err := os.WriteFile(outputFile, formatted, 0o644); err != nil { //nolint:gosec // generated, non-secret source file
 		return fmt.Errorf("write %s: %w", outputFile, err)
 	}
-	fmt.Printf("wrote %s (%d variants across %d families)\n", outputFile, len(families)*regionalPerFam, len(families))
-	return nil
+	fmt.Printf("wrote %s (%d variants across %d families)\n", outputFile, total, len(families))
+	return runDocuments()
 }
 
 // build parses the family's manifest and region table and returns the rendered
-// Go source for each regional variant, sorted deterministically. It hard-fails on
+// Go source for each regional variant, sorted by region, then live builds before
+// superseded ones, and resolves each superseded_by path to a variant id. It hard-fails on
 // any data gap so a malformed manifest can never silently emit a broken catalog.
 func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	m, err := loadManifest(f.manifestFile)
@@ -234,7 +324,7 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 		return nil, err
 	}
 
-	regional := make([]manifestModel, 0, regionalPerFam)
+	regional := make([]manifestModel, 0, expectedRegions*f.variantsPerRegion)
 	for i := range m.Models {
 		if m.Models[i].Region != "" {
 			regional = append(regional, m.Models[i])
@@ -243,21 +333,39 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	if len(table.Regions) != expectedRegions {
 		return nil, fmt.Errorf("region table has %d slugs, want %d", len(table.Regions), expectedRegions)
 	}
-	distinctRegions := make(map[string]bool, expectedRegions)
+	perRegion := make(map[string]regionTally, expectedRegions)
 	for i := range regional {
-		distinctRegions[regional[i].Region] = true
+		n := perRegion[regional[i].Region]
+		n.total++
+		if regional[i].SupersededBy == nil {
+			n.live++
+		}
+		perRegion[regional[i].Region] = n
 	}
-	if len(distinctRegions) != expectedRegions {
-		return nil, fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(distinctRegions), expectedRegions)
+	if err := f.checkRegionCounts(perRegion); err != nil {
+		return nil, err
 	}
 
-	// Deterministic order: region slug, then variant token.
+	// Deterministic order: region slug, then live before superseded, then variant
+	// token. The two first-match walks over a catalog entry's variants when no
+	// model path is configured (the installed-model scan and the gallery path
+	// resolution) must find a live build before a withdrawn one when both files
+	// are on disk.
 	sort.Slice(regional, func(i, j int) bool {
 		if regional[i].Region != regional[j].Region {
 			return regional[i].Region < regional[j].Region
 		}
+		if li, lj := regional[i].SupersededBy == nil, regional[j].SupersededBy == nil; li != lj {
+			return li
+		}
 		return regional[i].Variant < regional[j].Variant
 	})
+
+	// Index after the sort: the pointers must address the final slice positions.
+	byPath := make(map[string]*manifestModel, len(regional))
+	for i := range regional {
+		byPath[regional[i].Path] = &regional[i]
+	}
 
 	seenID := make(map[string]bool, len(regional))
 	seenLocalName := make(map[string]bool, len(regional))
@@ -267,6 +375,11 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 		v, buildErr := f.variant(e, table, labels)
 		if buildErr != nil {
 			return nil, buildErr
+		}
+		if e.SupersededBy != nil {
+			if v.supersededBy, buildErr = supersededVariantID(e, byPath); buildErr != nil {
+				return nil, buildErr
+			}
 		}
 		if seenID[v.id] {
 			return nil, fmt.Errorf("duplicate variant id %q", v.id)
@@ -303,6 +416,10 @@ type genVariant struct {
 	labelsLocal    string
 	labelsSHA256   string
 	labelsSize     int64
+	// restLogit is the validated score calibration, meaningful only when
+	// hasCalibration is set.
+	restLogit      float64
+	hasCalibration bool
 }
 
 type backendRow struct {
@@ -351,6 +468,17 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		return genVariant{}, fmt.Errorf("variant %s@%s: labels line count %d != species count %d", e.Variant, e.Region, lc.Lines, species)
 	}
 
+	if e.LabelsSHA256 == "" && f.requireScoreCalibration {
+		return genVariant{}, fmt.Errorf("variant %s@%s: manifest labels_sha256 is missing, so its score_calibration cannot be tied to a labels file", e.Variant, e.Region)
+	}
+	if e.LabelsSHA256 != "" && e.LabelsSHA256 != lc.SHA256 {
+		return genVariant{}, fmt.Errorf("variant %s@%s: manifest labels_sha256 %s != labels checksum sidecar %s for %q", e.Variant, e.Region, e.LabelsSHA256, lc.SHA256, labelKey)
+	}
+	restLogit, hasCalibration, err := f.scoreCalibration(e)
+	if err != nil {
+		return genVariant{}, err
+	}
+
 	var arch []string
 	if e.Variant == "int8-arm" {
 		arch = []string{"aarch64"}
@@ -369,11 +497,6 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 	}
 	sort.Slice(backends, func(i, j int) bool { return backends[i].token < backends[j].token })
 
-	superseded := ""
-	if e.SupersededBy != nil {
-		superseded = *e.SupersededBy
-	}
-
 	return genVariant{
 		id:           e.Variant + "@" + e.Region,
 		region:       e.Region,
@@ -384,13 +507,13 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		excludes:     excludes,
 		backends:     backends,
 		benchmarks:   e.Benchmarks,
-		// Legacy is derived from supersededBy only. The manifest's own `legacy`
+		// Legacy is derived from superseded_by only; build fills supersededBy with
+		// the resolved variant id. The manifest's own `legacy`
 		// bool means "published before the current naming scheme" (frozen
 		// filename), NOT "superseded"; CatalogVariant.Legacy means the recommender
 		// hides and penalizes the variant, so passing the manifest flag through
 		// would wrongly bury every regional tile.
-		legacy:         superseded != "",
-		supersededBy:   superseded,
+		legacy:         e.SupersededBy != nil,
 		modelRemote:    e.Path,
 		modelLocalName: f.modelLocalName(e.Region, e.Variant),
 		modelSHA256:    e.SHA256,
@@ -399,7 +522,54 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		labelsLocal:    f.labelsLocalName(e.Region),
 		labelsSHA256:   lc.SHA256,
 		labelsSize:     lc.SizeBytes,
+		restLogit:      restLogit,
+		hasCalibration: hasCalibration,
 	}, nil
+}
+
+// supersededVariantID turns the entry's superseded_by manifest path into the id
+// of the variant that replaces it ("<variant>@<region>"), or "" when the entry
+// is not superseded. The target must be a regional entry of the same family and
+// region that is not itself superseded, so the pointer never dangles, crosses
+// regions or chains.
+func supersededVariantID(e *manifestModel, byPath map[string]*manifestModel) (string, error) {
+	if e.SupersededBy == nil {
+		return "", nil
+	}
+	target, ok := byPath[*e.SupersededBy]
+	switch {
+	case !ok:
+		return "", fmt.Errorf("variant %s@%s: superseded_by %q is not an entry of this family", e.Variant, e.Region, *e.SupersededBy)
+	case target.Region != e.Region:
+		return "", fmt.Errorf("variant %s@%s: superseded_by %q is in a different region (%s)", e.Variant, e.Region, *e.SupersededBy, target.Region)
+	case target.SupersededBy != nil:
+		return "", fmt.Errorf("variant %s@%s: superseded_by %q is itself superseded", e.Variant, e.Region, *e.SupersededBy)
+	}
+	return target.Variant + "@" + target.Region, nil
+}
+
+// scoreCalibration validates the entry's score_calibration block against the
+// family's rule. It returns the rest logit and true, or false when the family takes
+// no calibration (and the entry correctly carries none).
+func (f *family) scoreCalibration(e *manifestModel) (restLogit float64, has bool, err error) {
+	if !f.requireScoreCalibration {
+		if e.ScoreCalibration != nil {
+			return 0, false, fmt.Errorf("variant %s@%s: score_calibration is not allowed for family %s", e.Variant, e.Region, f.key)
+		}
+		return 0, false, nil
+	}
+	sc := e.ScoreCalibration
+	if sc == nil || sc.RestLogit == nil {
+		return 0, false, fmt.Errorf("variant %s@%s: missing score_calibration (publish the calibration in the manifest first)", e.Variant, e.Region)
+	}
+	if sc.Method != scoreCalibrationMethod {
+		return 0, false, fmt.Errorf("variant %s@%s: unknown score_calibration method %q", e.Variant, e.Region, sc.Method)
+	}
+	v := *sc.RestLogit
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < scoreCalibrationRestLogitMin || v > scoreCalibrationRestLogitMax {
+		return 0, false, fmt.Errorf("variant %s@%s: score_calibration rest_logit %v outside [%v, %v]", e.Variant, e.Region, v, scoreCalibrationRestLogitMin, scoreCalibrationRestLogitMax)
+	}
+	return v, true, nil
 }
 
 // normalizePrecision maps manifest precision tokens to the recommender's
@@ -411,8 +581,9 @@ func normalizePrecision(p string) string {
 	return p
 }
 
-// render emits the Go source for one CatalogVariant literal. gofmt fixes the
-// indentation afterwards, so this only needs valid syntax.
+// render emits the Go source for one CatalogVariant literal, including its
+// ScoreCalibration when the variant has one. gofmt fixes the indentation
+// afterwards, so this only needs valid syntax.
 func render(v *genVariant) string {
 	var b strings.Builder
 	b.WriteString("{\n")
@@ -466,6 +637,11 @@ func render(v *genVariant) string {
 	}
 	if v.supersededBy != "" {
 		fmt.Fprintf(&b, "SupersededBy: %q,\n", v.supersededBy)
+	}
+
+	if v.hasCalibration {
+		fmt.Fprintf(&b, "ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: %s},\n",
+			strconv.FormatFloat(v.restLogit, 'f', -1, 64))
 	}
 
 	b.WriteString("Files: slices.Concat([]CatalogFile{\n")

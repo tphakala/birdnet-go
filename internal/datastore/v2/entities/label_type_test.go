@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // TestDefaultLabelTypesDriftGuard asserts that DefaultLabelTypes() contains an
-// entry for every category exported by the nonbird package, plus the species
-// entry, and has no duplicate names. This test must fail if nonbird.Categories()
+// entry for every category exported by the soundevent package, plus the species
+// entry, and has no duplicate names. This test must fail if soundevent.Categories()
 // grows without a matching entry in DefaultLabelTypes().
 func TestDefaultLabelTypesDriftGuard(t *testing.T) {
 	t.Parallel()
@@ -28,10 +28,10 @@ func TestDefaultLabelTypesDriftGuard(t *testing.T) {
 		nameSet[lt.Name] = struct{}{}
 	}
 
-	// Every nonbird category must have a matching label-type entry.
-	for _, c := range nonbird.Categories() {
+	// Every soundevent category must have a matching label-type entry.
+	for _, c := range soundevent.Categories() {
 		_, ok := nameSet[string(c)]
-		assert.True(t, ok, "DefaultLabelTypes() missing entry for nonbird.Category %q", c)
+		assert.True(t, ok, "DefaultLabelTypes() missing entry for soundevent.Category %q", c)
 	}
 
 	// The species entry must also be present.

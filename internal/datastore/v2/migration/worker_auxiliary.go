@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // Auxiliary section names, shared by the result sections and the outcome summary.
@@ -635,8 +636,12 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 
 // migrateWeatherData migrates DailyEvents and HourlyWeather from legacy to v2.
 // Handles ID remapping since V2 may have different IDs for the same dates.
-// Hourly rows whose legacy parent does not exist are skipped as orphans; a legacy
-// date missing in v2 or a failed save or read is counted as failed.
+// An hourly row takes the date of its legacy parent; a row without one (builds before
+// 2025-01-05 saved most rows with no parent) takes the date of its own stored time,
+// the date the old writer keyed its daily event by. A row is skipped only when no
+// daily event exists for its date, and rows sharing an instant are copied once, the
+// lowest legacy id kept. A legacy date missing in v2 or a failed save or read is
+// counted as failed.
 func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.weatherRepo == nil {
 		m.logger.Debug("weather repo not configured, skipping")
@@ -662,7 +667,7 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	result.Weather.HourlyWeatherTotal = len(legacyWeather)
 
 	if len(legacyEvents) == 0 {
-		// Without daily events every hourly row is an orphan and cannot exist in v2.
+		// Legacy has no daily events, so no hourly row can be matched to a date.
 		result.Weather.Skipped = len(legacyWeather)
 		m.logger.Debug("no weather data to migrate")
 		return
@@ -670,8 +675,10 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 
 	// Step 2: Build Legacy ID -> Date mapping
 	legacyIDToDate := make(map[uint]string, len(legacyEvents))
+	legacyDates := make(map[string]struct{}, len(legacyEvents))
 	for _, event := range legacyEvents {
 		legacyIDToDate[event.ID] = event.Date
+		legacyDates[event.Date] = struct{}{}
 	}
 
 	// Step 3: Migrate DailyEvents to V2
@@ -702,10 +709,10 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	if err != nil {
 		m.logger.Warn("failed to get v2 daily events for ID mapping", logger.Error(err))
 		// Without the mapping no hourly row can be copied. The per-row loop below
-		// skips orphan rows, whose parent is absent from legacy; count them the same
-		// way here, so only rows with a known parent are failures.
+		// skips rows whose date has no legacy daily event; count them the same way
+		// here, so only rows with a legacy daily event are failures.
 		for i := range legacyWeather {
-			if _, known := legacyIDToDate[legacyWeather[i].DailyEventsID]; known {
+			if _, inLegacy := hourlyParentDate(&legacyWeather[i], legacyIDToDate, legacyDates); inLegacy {
 				result.Weather.HourlyWeatherFailed++
 			} else {
 				result.Weather.Skipped++
@@ -727,17 +734,58 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 		return
 	}
 
-	v2Weather := make([]entities.HourlyWeather, 0, len(legacyWeather))
+	v2Weather, duplicates := buildHourlyWeatherRows(legacyWeather, legacyIDToDate, legacyDates, dateToV2ID, result)
+
+	migratedWeather, err := m.weatherRepo.SaveAllHourlyWeather(ctx, v2Weather)
+	if err != nil {
+		m.logger.Warn("failed to migrate some hourly weather", logger.Error(err))
+		result.Weather.HourlyWeatherFailed += max(len(v2Weather)-migratedWeather, 0)
+		result.Weather.Error = firstAuxError(result.Weather.Error, err)
+	}
+	result.Weather.HourlyWeatherMigrated = migratedWeather
+
+	m.logger.Info("hourly weather migration completed",
+		logger.Int("total", result.Weather.HourlyWeatherTotal),
+		logger.Int("migrated", result.Weather.HourlyWeatherMigrated),
+		logger.Int("skipped", result.Weather.Skipped),
+		logger.Int("duplicates", duplicates),
+		logger.Int("failed", result.Weather.HourlyWeatherFailed))
+}
+
+// hourlyParentDate returns the daily event date of a legacy hourly row and whether
+// that date has a legacy daily event. A row whose legacy parent exists takes its
+// parent's date. Builds before 2025-01-05 saved most rows with daily_events_id 0;
+// such a row takes the date of its stored time read in the offset it was stored
+// with, the same date the writer keyed its daily event by. It is never converted
+// to another zone.
+func hourlyParentDate(w *datastore.HourlyWeather, legacyIDToDate map[uint]string, legacyDates map[string]struct{}) (date string, inLegacy bool) {
+	if date, ok := legacyIDToDate[w.DailyEventsID]; ok {
+		return date, true
+	}
+	date = wallclock.DateOf(w.Time).String()
+	_, inLegacy = legacyDates[date]
+	return date, inLegacy
+}
+
+// buildHourlyWeatherRows resolves the v2 daily event of every legacy hourly row and
+// returns the rows to save, one per instant. Among rows sharing an instant the
+// lowest legacy id is kept, whatever the read order; the others are counted as
+// skipped and returned as duplicates. Rows with no daily event for their date are
+// skipped, and rows whose legacy date is missing in v2 are failures. Zero times are
+// never treated as duplicates of each other.
+func buildHourlyWeatherRows(legacyWeather []datastore.HourlyWeather, legacyIDToDate map[uint]string, legacyDates map[string]struct{}, dateToV2ID map[string]uint, result *AuxiliaryMigrationResult) (rows []entities.HourlyWeather, duplicates int) {
+	rows = make([]entities.HourlyWeather, 0, len(legacyWeather))
+	rowIndexByInstant := make(map[time.Time]int, len(legacyWeather))
+	keptIDs := make([]uint, 0, len(legacyWeather))
 	for i := range legacyWeather {
 		w := &legacyWeather[i]
-		// Lookup: LegacyID -> Date -> V2ID
-		date, ok := legacyIDToDate[w.DailyEventsID]
-		if !ok {
-			result.Weather.Skipped++
-			continue // Orphan record: no such parent in legacy, cannot exist in v2
-		}
+		date, inLegacy := hourlyParentDate(w, legacyIDToDate, legacyDates)
 		v2ID, ok := dateToV2ID[date]
 		if !ok {
+			if !inLegacy {
+				result.Weather.Skipped++
+				continue // No daily event for this date in legacy or v2
+			}
 			// The daily event was saved with ON CONFLICT DO NOTHING, so a legacy
 			// date missing in v2 means its save or read failed.
 			result.Weather.HourlyWeatherFailed++
@@ -745,7 +793,7 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 			continue
 		}
 
-		v2Weather = append(v2Weather, entities.HourlyWeather{
+		row := entities.HourlyWeather{
 			DailyEventsID: v2ID, // Remapped ID!
 			Time:          w.Time,
 			Temperature:   w.Temperature,
@@ -762,22 +810,25 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 			WeatherMain:   w.WeatherMain,
 			WeatherDesc:   w.WeatherDesc,
 			WeatherIcon:   w.WeatherIcon,
-		})
-	}
+		}
 
-	migratedWeather, err := m.weatherRepo.SaveAllHourlyWeather(ctx, v2Weather)
-	if err != nil {
-		m.logger.Warn("failed to migrate some hourly weather", logger.Error(err))
-		result.Weather.HourlyWeatherFailed += max(len(v2Weather)-migratedWeather, 0)
-		result.Weather.Error = firstAuxError(result.Weather.Error, err)
+		if !w.Time.IsZero() {
+			instant := w.Time.UTC()
+			if idx, seen := rowIndexByInstant[instant]; seen {
+				duplicates++
+				result.Weather.Skipped++
+				if w.ID < keptIDs[idx] {
+					rows[idx] = row
+					keptIDs[idx] = w.ID
+				}
+				continue
+			}
+			rowIndexByInstant[instant] = len(rows)
+		}
+		rows = append(rows, row)
+		keptIDs = append(keptIDs, w.ID)
 	}
-	result.Weather.HourlyWeatherMigrated = migratedWeather
-
-	m.logger.Info("hourly weather migration completed",
-		logger.Int("total", result.Weather.HourlyWeatherTotal),
-		logger.Int("migrated", result.Weather.HourlyWeatherMigrated),
-		logger.Int("skipped", result.Weather.Skipped),
-		logger.Int("failed", result.Weather.HourlyWeatherFailed))
+	return rows, duplicates
 }
 
 // ValidateAuxiliaryTables validates that auxiliary tables have been migrated.

@@ -4,7 +4,7 @@
     "at-rule-no-unknown": [
       true,
       {
-        "ignoreAtRules": ["apply", "layer", "theme", "property", "utility"]
+        "ignoreAtRules": ["apply", "layer", "theme", "property", "utility", "custom-variant"]
       }
     ],
     "at-rule-empty-line-before": [

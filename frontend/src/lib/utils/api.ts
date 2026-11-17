@@ -26,6 +26,9 @@ const logger = loggers.api;
 // SECURITY: Define request limits to prevent DoS
 const MAX_REQUEST_SIZE = 10 * 1024 * 1024; // 10MB
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
+// Safari rejects a failed fetch with TypeError('Load failed'); Chrome and
+// Firefox use the "Failed to fetch" and "NetworkError" texts.
+const SAFARI_FETCH_FAILURE = 'Load failed';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
 // Guard: prevents multiple concurrent 401 redirects when parallel API calls
@@ -358,6 +361,10 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
  * Headers in options.headers are merged over the defaults (including the CSRF
  * token) for each request, and options is never modified, so the retry after a
  * 403 merges them again over the refreshed token.
+ *
+ * A fetch rejected by the browser (Chrome and Firefox "Failed to fetch" or
+ * "NetworkError", Safari "Load failed") and the client-side timeout throw an
+ * ApiError with isNetworkError set.
  */
 export async function fetchWithCSRF<T = unknown>(
   url: string,
@@ -562,7 +569,11 @@ export async function fetchWithCSRF<T = unknown>(
         }
         throw new ApiError(t('errors.api.requestTimeout'), 408, new Response(), true);
       }
-      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      if (
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('NetworkError') ||
+        (error instanceof TypeError && error.message.includes(SAFARI_FETCH_FAILURE))
+      ) {
         throw new ApiError(t('errors.api.networkError'), 0, new Response(), true);
       }
     }

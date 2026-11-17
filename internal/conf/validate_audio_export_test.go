@@ -251,3 +251,50 @@ func newMinimalAudioSettings() *AudioSettings {
 	s.Export.Retention.Policy = RetentionPolicyNone
 	return s
 }
+
+// TestValidateAudioSettings_ExportDenoiseStrength verifies the export denoise
+// strength heals an empty value to the default preset and rejects anything that
+// is not a preset, whether or not denoise is enabled (the toggle can be flipped
+// on later without re-triggering validation).
+func TestValidateAudioSettings_ExportDenoiseStrength(t *testing.T) {
+	t.Parallel()
+	ffmpegPath := fakeFFmpegPath(t)
+
+	cases := []struct {
+		name    string
+		enabled bool
+		in      string
+		wantErr bool
+		want    string
+	}{
+		{"empty heals when on", true, "", false, DefaultDenoisePreset},
+		{"empty heals when off", false, "", false, DefaultDenoisePreset},
+		{"light", true, DenoisePresetLight, false, DenoisePresetLight},
+		{"light-medium", true, DenoisePresetLightMedium, false, DenoisePresetLightMedium},
+		{"medium", false, DenoisePresetMedium, false, DenoisePresetMedium},
+		{"heavy", true, DenoisePresetHeavy, false, DenoisePresetHeavy},
+		{"unknown rejected when on", true, "extreme", true, ""},
+		{"unknown rejected when off", false, "extreme", true, ""},
+		{"whitespace-padded rejected", true, " light", true, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			settings := newMinimalAudioSettings()
+			settings.FfmpegPath = ffmpegPath
+			settings.Export.Denoise = DenoiseSettings{Enabled: tc.enabled, Strength: tc.in}
+
+			err := validateAudioSettings(settings)
+
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, settings.Export.Denoise.Strength)
+			assert.Equal(t, tc.enabled, settings.Export.Denoise.Enabled)
+		})
+	}
+}

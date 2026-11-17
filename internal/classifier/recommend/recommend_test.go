@@ -80,13 +80,15 @@ func TestRank_HardwareMatrix(t *testing.T) {
 			wantBlocked: [][2]string{{"perch-v2", "int8-arm"}},
 		},
 		{
+			// OpenVINO CPU is supported but no longer recommended for Perch, so the
+			// ONNX Runtime recommendation of the global fp32 build decides.
 			name:        "amd64 openvino cpu",
 			caps:        []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU},
 			ram:         ramHigh,
 			deviceClass: deviceClassX86,
 			entries:     []classifier.CatalogEntry{perch, v3},
 			wantRecommended: map[string]string{
-				"perch-v2":     "no-dft-fp32",
+				"perch-v2":     "fp32",
 				"birdnet-v3.0": "fp32",
 			},
 		},
@@ -102,16 +104,15 @@ func TestRank_HardwareMatrix(t *testing.T) {
 			},
 		},
 		{
-			// Pi5: no low-ram bonus, so int8-arm ties fp32 on score and wins on
-			// smaller size. This is the documented empty-data behavior; a catalog
-			// benchmark pass will rank fp32 higher on the A76.
+			// Pi5: the withdrawn int8-arm build is Legacy and never recommended, so
+			// the fp32 build wins.
 			name:        "aarch64 pi5",
 			caps:        []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapONNXRuntimeCPU, hwprofile.CapFP16Native},
 			ram:         8 * 1024 * 1024 * 1024,
 			deviceClass: deviceClassRPi5,
 			entries:     []classifier.CatalogEntry{perch},
 			wantRecommended: map[string]string{
-				"perch-v2": "int8-arm",
+				"perch-v2": "fp32",
 			},
 		},
 		{
@@ -121,7 +122,7 @@ func TestRank_HardwareMatrix(t *testing.T) {
 			deviceClass: deviceClassRPi4,
 			entries:     []classifier.CatalogEntry{perch},
 			wantRecommended: map[string]string{
-				"perch-v2": "int8-arm",
+				"perch-v2": "fp32",
 			},
 		},
 		{
@@ -753,10 +754,10 @@ func TestRank_FP16NativeBonus(t *testing.T) {
 
 // TestRank_FP16NativeBonus_BackendAware pins that the fp16 native-speed reward is
 // awarded only when the variant's selected backend actually runs the fp16 file at
-// f16. After #4289 BirdNET v3.0 is force-run at f32 on every OpenVINO device, so
-// the reward must not be given on an OpenVINO backend for v3.0, while it must
-// still be given on the ONNX Runtime path (which executes the fp16 file as
-// stored) and for a model whose OpenVINO path does keep f16.
+// f16. BirdNET v3.0 (#4289) and BirdNET v2.4 (#4986) are force-run at f32 on every
+// OpenVINO device, so the reward must not be given on an OpenVINO backend for them,
+// while it must still be given on the ONNX Runtime path (which executes the fp16
+// file as stored) and for a model whose OpenVINO CPU path does keep f16 (Perch v2).
 func TestRank_FP16NativeBonus_BackendAware(t *testing.T) {
 	t.Parallel()
 
@@ -813,14 +814,13 @@ func TestRank_FP16NativeBonus_BackendAware(t *testing.T) {
 			"fp16 stays the recommended build on the iGPU host")
 	})
 
-	t.Run("reward is policy-driven not blanket openvino", func(t *testing.T) {
-		t.Parallel()
-		// A model whose OpenVINO CPU path keeps f16 (registry ID BirdNET v2.4) must
-		// still earn the reward on an OpenVINO CPU host: the suppression follows the
-		// per-model precision policy, it is not "OpenVINO means no reward".
-		synthetic := classifier.CatalogEntry{
-			ID:         "synthetic-v24",
-			RegistryID: classifier.DefaultModelVersion,
+	// syntheticFP16Entry is a one-variant entry whose fp16 build is recommended
+	// on the OpenVINO CPU backend, so the registry ID alone decides whether the
+	// native-f16 reward applies there.
+	syntheticFP16Entry := func(id, registryID string) classifier.CatalogEntry {
+		return classifier.CatalogEntry{
+			ID:         id,
+			RegistryID: registryID,
 			Variants: []classifier.CatalogVariant{
 				{
 					ID:        "fp16",
@@ -830,15 +830,39 @@ func TestRank_FP16NativeBonus_BackendAware(t *testing.T) {
 				},
 			},
 		}
+	}
+	a76OpenVINOCPU := []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapOpenVINOCPU, hwprofile.CapFP16Native}
+
+	t.Run("openvino cpu host drops the reward for v2.4", func(t *testing.T) {
+		t.Parallel()
+		// BirdNET v2.4 is forced to f32 on the OpenVINO CPU (f16 zeroes its scores
+		// on low-frequency-heavy audio on the A76, GitHub #4986), so an fp16 v2.4
+		// variant would not run at f16 there and must not earn the reward.
 		recs := Rank(&Input{
-			Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapOpenVINOCPU, hwprofile.CapFP16Native},
+			Capabilities: a76OpenVINOCPU,
 			DeviceClass:  deviceClassRPi5,
-			Entries:      []classifier.CatalogEntry{synthetic},
+			Entries:      []classifier.CatalogEntry{syntheticFP16Entry("synthetic-v24", classifier.DefaultModelVersion)},
 		})
 		fp16, ok := variantRec(recs, "synthetic-v24", "fp16")
 		require.True(t, ok)
+		assert.False(t, hasReason(&fp16, ReasonPrecisionFP16Native),
+			"v2.4 is forced to f32 on the OpenVINO CPU, so the native-f16 reward must be suppressed (reasons: %+v)", fp16.Reasons)
+	})
+
+	t.Run("reward is policy-driven not blanket openvino", func(t *testing.T) {
+		t.Parallel()
+		// A model whose OpenVINO CPU path keeps f16 (registry ID Perch v2) must
+		// still earn the reward on an OpenVINO CPU host: the suppression follows the
+		// per-model precision policy, it is not "OpenVINO means no reward".
+		recs := Rank(&Input{
+			Capabilities: a76OpenVINOCPU,
+			DeviceClass:  deviceClassRPi5,
+			Entries:      []classifier.CatalogEntry{syntheticFP16Entry("synthetic-perch", classifier.RegistryIDPerchV2)},
+		})
+		fp16, ok := variantRec(recs, "synthetic-perch", "fp16")
+		require.True(t, ok)
 		assert.True(t, hasReason(&fp16, ReasonPrecisionFP16Native),
-			"v2.4 keeps f16 on the OpenVINO CPU path, so its fp16 variant still earns the reward (reasons: %+v)", fp16.Reasons)
+			"Perch v2 keeps f16 on the OpenVINO CPU path, so its fp16 variant still earns the reward (reasons: %+v)", fp16.Reasons)
 	})
 }
 

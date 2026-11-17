@@ -165,12 +165,12 @@ func TestStampConfigVersion(t *testing.T) {
 	assert.Contains(t, got, "configversion:")
 	assert.Greater(t, len(got), len("debug: false\n"), "the stamp is prefixed to the body")
 	// The stamp must reflect the newest version this build applies.
-	require.Equal(t, configVersionModelsEnabledAuthoritative, currentConfigVersion)
+	require.Equal(t, configVersionLogDeduplicationDefaults, currentConfigVersion)
 }
 
 // TestMigrateModelsEnabledAuthoritative_ThroughLoad is test (g): Part A exercised through the
 // full Load pipeline. A pre-v2 config has v2.4 moved (or prepended) to the front of
-// models.enabled, is stamped to version 2, and is rewritten to disk so a second load is a
+// models.enabled, is stamped to the current version, and is rewritten to disk so a second load is a
 // no-op; a config already at version 2 is left exactly as written, including an explicit
 // empty list (the supported N=0 state). Not parallel: Load publishes the global snapshot.
 func TestMigrateModelsEnabledAuthoritative_ThroughLoad(t *testing.T) {
@@ -178,12 +178,12 @@ func TestMigrateModelsEnabledAuthoritative_ThroughLoad(t *testing.T) {
 		cfg := "debug: false\nmodels:\n  enabled:\n    - perch_v2\n"
 		settings, configPath := loadConfigFromYAML(t, cfg)
 		assert.Equal(t, []string{"birdnet", "perch_v2"}, settings.Models.Enabled)
-		assert.Equal(t, configVersionModelsEnabledAuthoritative, settings.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, settings.ConfigVersion)
 
 		persisted := readPersistedSettings(t, configPath)
 		assert.Equal(t, []string{"birdnet", "perch_v2"}, persisted.Models.Enabled,
 			"the reordered list is written back so a second load is a no-op")
-		assert.Equal(t, configVersionModelsEnabledAuthoritative, persisted.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, persisted.ConfigVersion)
 	})
 
 	t.Run("pre-v2 config with v2.4 not first moves it to the front", func(t *testing.T) {
@@ -196,7 +196,7 @@ func TestMigrateModelsEnabledAuthoritative_ThroughLoad(t *testing.T) {
 		cfg := "configversion: 2\ndebug: false\nmodels:\n  enabled: []\n"
 		settings, _ := loadConfigFromYAML(t, cfg)
 		assert.Empty(t, settings.Models.Enabled, "an explicit N=0 config at version 2 is preserved")
-		assert.Equal(t, configVersionModelsEnabledAuthoritative, settings.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, settings.ConfigVersion)
 	})
 }
 

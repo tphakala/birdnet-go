@@ -348,6 +348,27 @@ export function getMoonPhaseEmoji(phaseName: string): string {
 }
 
 /**
+ * Maps moon phase names from API to weather icon names (WeatherSvgIcon).
+ */
+const MOON_PHASE_ICONS: Record<string, string> = {
+  'New Moon': 'moon-new',
+  'Waxing Crescent': 'moon-waxing-crescent',
+  'First Quarter': 'moon-first-quarter',
+  'Waxing Gibbous': 'moon-waxing-gibbous',
+  'Full Moon': 'moon-full',
+  'Waning Gibbous': 'moon-waning-gibbous',
+  'Last Quarter': 'moon-last-quarter',
+  'Waning Crescent': 'moon-waning-crescent',
+};
+
+/**
+ * Returns the weather icon name for a given moon phase name.
+ */
+export function getMoonPhaseIconName(phaseName: string): string {
+  return safeGet(MOON_PHASE_ICONS, phaseName) ?? 'moon-new';
+}
+
+/**
  * Maps moon phase names from API to i18n keys.
  */
 const MOON_PHASE_I18N_KEYS: Record<string, string> = {

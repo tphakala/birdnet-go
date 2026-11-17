@@ -534,7 +534,7 @@ func (eb *EventBus) processDetectionEvent(event DetectionEvent, log logger.Logge
 		return
 	}
 
-	log.Debug("dispatching detection event to consumers",
+	log.Trace("dispatching detection event to consumers",
 		logger.String("operation", "process_detection_event"),
 		logger.String("species", event.GetSpeciesName()),
 		logger.Float64("confidence", event.GetConfidence()),

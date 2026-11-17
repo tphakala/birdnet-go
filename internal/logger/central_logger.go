@@ -32,6 +32,10 @@ const (
 	// traceLevelValue is slog.Level for TRACE level (below Debug which is -4)
 	traceLevelValue = slog.Level(-8)
 
+	// traceLevelName is the name rendered for traceLevelValue; slog would
+	// otherwise print it as "DEBUG-4".
+	traceLevelName = "TRACE"
+
 	// floatPrecisionRatio rounds floats to 3 decimal places in log output
 	floatPrecisionRatio = 1000.0
 
@@ -260,7 +264,7 @@ func (cl *CentralLogger) createBaseHandler() error {
 		fileLevel := parseLogLevel(cl.config.FileOutput.Level)
 		opts := &slog.HandlerOptions{
 			Level:       fileLevel,
-			ReplaceAttr: timeZoneReplaceAttr(cl.timezone),
+			ReplaceAttr: replaceAttrFunc(cl.timezone),
 		}
 		handlers = append(handlers, slog.NewJSONHandler(writer, opts))
 	}
@@ -297,13 +301,10 @@ func (cl *CentralLogger) Module(name string) Logger {
 
 	// Get module-specific configuration
 	moduleConfig, hasModuleConfig := cl.config.ModuleOutputs[name]
+	// getModuleLevelLocked applies the precedence module_levels, then the module's
+	// output level, then the parent module, then default_level. The handler and the
+	// moduleLogger share this one level.
 	moduleLevel := cl.getModuleLevelLocked(name)
-
-	// Override module level if explicitly configured in ModuleOutputs
-	// This ensures both the handler and the moduleLogger use the same level
-	if hasModuleConfig && moduleConfig.Level != "" {
-		moduleLevel = parseLogLevel(moduleConfig.Level)
-	}
 
 	// Build handlers for this module
 	var handlers []slog.Handler
@@ -313,6 +314,8 @@ func (cl *CentralLogger) Module(name string) Logger {
 		if moduleWriter, ok := cl.moduleWriters[name]; ok {
 			opts := &slog.HandlerOptions{
 				Level: moduleLevel,
+				// nil time zone: module files keep their timestamps unconverted.
+				ReplaceAttr: replaceAttrFunc(nil),
 			}
 			handlers = append(handlers, slog.NewJSONHandler(moduleWriter, opts))
 		}
@@ -1147,14 +1150,34 @@ func isZeroValue(v reflect.Value) bool {
 	return v.IsZero()
 }
 
-func timeZoneReplaceAttr(tz *time.Location) func(groups []string, a slog.Attr) slog.Attr {
-	if tz == nil || tz == time.UTC {
-		return nil
+// levelName returns the display name of a log level. slog names only the four
+// standard levels, so the Trace level is mapped explicitly.
+func levelName(l slog.Level) string {
+	if l == traceLevelValue {
+		return traceLevelName
 	}
+	return l.String()
+}
+
+// replaceAttrFunc returns the ReplaceAttr function shared by every JSON
+// handler. It renders the top-level Trace level as traceLevelName and, when
+// tz is neither nil nor UTC, converts the top-level time attribute to tz.
+func replaceAttrFunc(tz *time.Location) func(groups []string, a slog.Attr) slog.Attr {
+	convertTime := tz != nil && tz != time.UTC
 	return func(groups []string, a slog.Attr) slog.Attr {
-		if a.Key == slog.TimeKey && len(groups) == 0 {
-			if t, ok := a.Value.Any().(time.Time); ok {
-				return slog.Time(a.Key, t.In(tz))
+		if len(groups) != 0 {
+			return a
+		}
+		switch a.Key {
+		case slog.LevelKey:
+			if l, ok := a.Value.Any().(slog.Level); ok && l == traceLevelValue {
+				return slog.String(a.Key, traceLevelName)
+			}
+		case slog.TimeKey:
+			if convertTime {
+				if t, ok := a.Value.Any().(time.Time); ok {
+					return slog.Time(a.Key, t.In(tz))
+				}
 			}
 		}
 		return a

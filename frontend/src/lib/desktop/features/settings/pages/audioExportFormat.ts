@@ -13,6 +13,9 @@ export function isExportFormat(value: unknown): value is ExportFormat {
   return typeof value === 'string' && (EXPORT_FORMATS as readonly string[]).includes(value);
 }
 
+// Below this bitrate, codec artefacts limit how clean a denoised lossy clip gets.
+export const DENOISE_LOSSY_MIN_BITRATE_KBPS = 64;
+
 // The two lossless containers valid for the ultrasonic export format. They carry
 // any sample rate natively (no FFmpeg), so a bat/ultrasonic capture above the
 // analysis rate can be stored losslessly at its full source rate.

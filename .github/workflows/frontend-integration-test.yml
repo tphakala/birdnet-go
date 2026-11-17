@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
+      - '!frontend/static/LICENSES.md'
       - 'internal/api/**'
       - '.github/workflows/frontend-integration-test.yml'
   pull_request:
     paths:
       - 'frontend/**'
+      - '!frontend/static/LICENSES.md'
       - 'internal/api/**'
       - '!internal/api/**/*_test.go'
       - '.github/workflows/frontend-integration-test.yml'

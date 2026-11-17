@@ -53,7 +53,7 @@ func TestHandleRequestContextError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
-			h := New(apitest.NewCore(t, apitest.WithEcho(e)))
+			h := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/test", http.NoBody).
 				WithContext(tt.requestCtx(t))
 			rec := httptest.NewRecorder()

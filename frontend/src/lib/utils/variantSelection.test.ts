@@ -131,6 +131,63 @@ describe('pickPreselectedVariant', () => {
     });
     expect(pickPreselectedVariant(e)).toBe('fp32');
   });
+
+  // A low-RAM host where the global build does not fit: the server recommends
+  // nothing, and only regional slices (smaller) are compatible.
+  const lowRamRegional = () =>
+    entry({
+      variants: [
+        variant({ id: 'fp32', default: true, compatible: false }),
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'fp32@nordic', region: 'nordic' }),
+      ],
+    });
+
+  it('never preselects a slice of another region when nothing is recommended', () => {
+    expect(pickPreselectedVariant(lowRamRegional(), 'nordic')).toBe('fp32@nordic');
+  });
+
+  it('preselects the blocked default rather than a slice when no region is active', () => {
+    expect(pickPreselectedVariant(lowRamRegional(), '')).toBe('fp32');
+  });
+
+  it('preselects the blocked default when the active region slice does not fit either', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32', default: true, compatible: false }),
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32');
+  });
+
+  it('keeps an installed slice of another region preselected', () => {
+    const e = lowRamRegional();
+    e.installedVariantId = 'fp32@africa';
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('falls back to the first variant of an entry made only of other regions slices', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa', compatible: false }),
+        variant({ id: 'fp32@iberia', region: 'iberia' }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('prefers the first global or active region variant over an earlier slice of another region when none of them runs', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'int8', compatible: false }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('int8');
+  });
 });
 
 describe('reasonKey', () => {
@@ -363,6 +420,23 @@ describe('optimizeOffers', () => {
   it('makes no offer for an entry that is not installed', () => {
     const e = v24Entry({ installed: false });
     expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('makes no offer for an entry superseded by a visible successor', () => {
+    // The superseded notice already tells the user to move to the successor, so the
+    // entry gets no prompt to switch builds of itself. The API omits supersededBy
+    // when the successor is hidden, so the field is the visibility signal.
+    const e = v24Entry({ supersededBy: { id: 'birdnet-plus', name: 'BirdNET+' } });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('keeps offering later entries after skipping a superseded one', () => {
+    const superseded = v24Entry({
+      id: 'old-model',
+      supersededBy: { id: 'birdnet-plus', name: 'BirdNET+' },
+    });
+    const offers = optimizeOffers([superseded, v24Entry()]);
+    expect(offers.map(o => o.entry.id)).toEqual(['birdnet-v2.4']);
   });
 
   it('still offers a swap when the installed variant was dropped from the catalog', () => {

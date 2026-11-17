@@ -45,7 +45,7 @@ func (c *DetectionNotificationConsumer) SupportsBatching() bool {
 }
 
 func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.DetectionEvent) error {
-	c.logger.Debug("processing detection event",
+	c.logger.Trace("processing detection event",
 		logger.String("operation", "process_detection_event"),
 		logger.String("species", event.GetSpeciesName()),
 		logger.Float64("confidence", event.GetConfidence()),
@@ -56,14 +56,14 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	// configurable rules. Skip the hardcoded new-species gate, confidence
 	// threshold, and cooldown logic to avoid duplicate notifications.
 	if IsAlertEngineActive() {
-		c.logger.Debug("skipping detection: alert engine is active, deferring to alert rules",
+		c.logger.Trace("skipping detection: alert engine is active, deferring to alert rules",
 			logger.String("operation", "process_detection_event"),
 			logger.String("species", event.GetSpeciesName()))
 		return nil
 	}
 
 	if !event.IsNewSpecies() {
-		c.logger.Debug("skipping detection: not a new species",
+		c.logger.Trace("skipping detection: not a new species",
 			logger.String("operation", "process_detection_event"),
 			logger.String("species", event.GetSpeciesName()),
 			logger.Int("days_since_first_seen", event.GetDaysSinceFirstSeen()))

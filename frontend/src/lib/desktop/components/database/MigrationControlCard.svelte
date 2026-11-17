@@ -20,16 +20,8 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import {
-    RefreshCw,
-    Play,
-    Pause,
-    Square,
-    CheckCircle2,
-    AlertCircle,
-    Loader2,
-    Info,
-  } from '@lucide/svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import { RefreshCw, Play, Pause, Square, CheckCircle2, Loader2, Info } from '@lucide/svelte';
   import PrerequisitesChecklist from './PrerequisitesChecklist.svelte';
   import type { MigrationStatus, PrerequisitesState } from '$lib/types/migration';
   import { formatNumber } from '$lib/utils/formatters';
@@ -73,14 +65,14 @@
   // State badge styling
   const stateStyles: Record<string, string> = {
     idle: 'bg-[var(--color-base-200)] text-[var(--color-base-content)]',
-    initializing: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-    dual_write: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
-    migrating: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-    paused: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
-    validating: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-    cutover: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
-    completed: 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
-    failed: 'bg-[var(--color-error)]/10 text-[var(--color-error)]',
+    initializing: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
+    dual_write: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
+    migrating: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
+    paused: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
+    validating: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
+    cutover: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
+    completed: 'bg-[var(--color-success)]/10 text-[var(--text-success)]',
+    failed: 'bg-[var(--color-error)]/10 text-[var(--text-error)]',
   };
 
   async function handlePause() {
@@ -155,20 +147,13 @@
         <div class="h-4 bg-[var(--color-base-200)] rounded animate-pulse w-1/2"></div>
       </div>
     {:else if error}
-      <div
-        class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-center gap-3"
-        role="alert"
-        aria-live="assertive"
-      >
-        <AlertCircle class="size-5 shrink-0" />
-        <span>{error}</span>
-      </div>
+      <ErrorAlert message={error} />
     {:else if status?.state === 'idle'}
       <!-- Idle State -->
       {#if isStarting}
         <!-- Starting indicator -->
         <div class="flex flex-col items-center justify-center py-6 gap-3">
-          <Loader2 class="size-8 animate-spin text-[var(--color-primary)]" />
+          <Loader2 class="size-8 animate-spin text-[var(--text-primary)]" />
           <span class="text-sm text-[var(--color-base-content)]/70">
             {t('system.database.migration.starting')}
           </span>
@@ -206,7 +191,7 @@
     {:else if status?.state === 'completed'}
       <!-- Completed State -->
       <div class="p-4 rounded-lg bg-[var(--color-success)]/10">
-        <div class="flex items-center gap-2 text-[var(--color-success)]">
+        <div class="flex items-center gap-2 text-[var(--text-success)]">
           <CheckCircle2 class="size-5" />
           <span class="font-medium">{t('system.database.migration.completedTitle')}</span>
         </div>
@@ -219,7 +204,7 @@
       <div class="space-y-4">
         <!-- Friendly status note -->
         <div class="p-3 rounded-lg bg-[var(--color-warning)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-warning)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-warning)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.paused')}
           </p>
@@ -260,7 +245,7 @@
           <button
             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
-                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   bg-[var(--color-error)]/10 text-[var(--text-error)]
                    hover:bg-[var(--color-error)]/20
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (showCancelConfirm = true)}
@@ -275,21 +260,10 @@
       <!-- Failed State (validation failure) -->
       <div class="space-y-4">
         <!-- Error indicator -->
-        <div
-          class="p-3 rounded-lg bg-[var(--color-error)]/10 flex items-start gap-3"
-          role="alert"
-          aria-live="assertive"
-        >
-          <AlertCircle class="size-5 shrink-0 text-[var(--color-error)] mt-0.5" />
-          <div class="text-sm text-[var(--color-base-content)]">
-            <p class="font-medium text-[var(--color-error)]">
-              {t('system.database.migration.status.failed')}
-            </p>
-            {#if status.error_message}
-              <p class="mt-1">{status.error_message}</p>
-            {/if}
-          </div>
-        </div>
+        <ErrorAlert
+          title={t('system.database.migration.status.failed')}
+          message={status.error_message ?? ''}
+        />
 
         <!-- Action buttons -->
         <div class="flex gap-2">
@@ -308,7 +282,7 @@
           <button
             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
-                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   bg-[var(--color-error)]/10 text-[var(--text-error)]
                    hover:bg-[var(--color-error)]/20
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (showCancelConfirm = true)}
@@ -324,7 +298,7 @@
       <div class="space-y-4">
         <!-- Info note -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.in_progress')}
           </p>
@@ -334,7 +308,7 @@
         <div
           class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
         >
-          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <Loader2 class="size-4 animate-spin" />
             <span>{t('system.database.migration.status.validating')}</span>
           </div>
@@ -356,7 +330,7 @@
           <button
             class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
-                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   bg-[var(--color-error)]/10 text-[var(--text-error)]
                    hover:bg-[var(--color-error)]/20
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (showCancelConfirm = true)}
@@ -372,7 +346,7 @@
       <div class="space-y-4">
         <!-- Info note at top -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.in_progress')}
           </p>
@@ -383,7 +357,7 @@
           <div
             class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
           >
-            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
               <Loader2 class="size-4 animate-spin" />
               <span>
                 {t('system.database.migration.phase.indicator', {
@@ -464,20 +438,14 @@
 
         <!-- Dirty IDs warning -->
         {#if status.dirty_id_count > 0}
-          <div class="text-sm text-[var(--color-warning)]">
+          <div class="text-sm text-[var(--text-warning)]">
             {t('system.database.migration.progress.dirtyIds', { count: status.dirty_id_count })}
           </div>
         {/if}
 
         <!-- Error message -->
         {#if status.error_message}
-          <div
-            class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
-            role="alert"
-            aria-live="assertive"
-          >
-            {status.error_message}
-          </div>
+          <ErrorAlert message={status.error_message} />
         {/if}
 
         <!-- Action buttons -->
@@ -501,7 +469,7 @@
             <button
               class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                      text-sm font-medium rounded-lg transition-colors
-                     bg-[var(--color-error)]/10 text-[var(--color-error)]
+                     bg-[var(--color-error)]/10 text-[var(--text-error)]
                      hover:bg-[var(--color-error)]/20
                      disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={() => (showCancelConfirm = true)}

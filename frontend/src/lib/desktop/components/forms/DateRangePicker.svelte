@@ -276,7 +276,7 @@
         {#if startDateObj || endDateObj}
           <button
             type="button"
-            class="btn btn-sm btn-ghost text-[var(--color-error)]"
+            class="btn btn-sm btn-ghost text-[var(--text-error)]"
             {disabled}
             onclick={clearDates}
           >

@@ -84,7 +84,8 @@ func storeFilterClasses(misses map[string]filterClass) {
 // present in top. The filters only need the strongest such prediction (they gate a
 // single map write on it), so at most two entries are added: a saved detection in
 // the same chunk therefore gains at most two low-confidence additional results, a
-// truthful record of what the model heard.
+// truthful record of what the model heard, stored only when they reach
+// birdnet.alternateminconfidence.
 //
 // A single pass over all looks each label up in filterClassCache, classifying it
 // with vocalization.Classify only the first time it is seen (this runs per

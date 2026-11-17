@@ -18,12 +18,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/csv"
+	"encoding/json"
 	"io"
 	"maps"
 	"slices"
 	"strings"
 
-	"github.com/tphakala/birdnet-go/internal/csvutil"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -40,19 +40,6 @@ const (
 	translationColumns = 3
 )
 
-// Column header names of the metadata CSV. Metadata is decoded by header name
-// rather than fixed position so that future columns added upstream do not break
-// this decoder or an already-shipped consumer.
-const (
-	metaColScientific   = "scientific_name"
-	metaColClass        = "class"
-	metaColOrder        = "order"
-	metaColFamily       = "family"
-	metaColFamilyCommon = "family_common"
-	metaColWikipedia    = "wikipedia_url"
-	metaColINaturalist  = "inaturalist_url"
-)
-
 // GetLogger returns the structured logger scoped to this package.
 func GetLogger() logger.Logger {
 	return logger.Global().Module(loggerModule)
@@ -66,20 +53,16 @@ func DataVersion() string {
 	return strings.TrimSpace(string(dataSource))
 }
 
-// Meta holds taxonomy and external-link metadata for a species, sourced from the
-// GBIF backbone taxonomy, Wikipedia, and the iNaturalist Open Data taxonomy.
+// Meta holds taxonomy metadata for a species, sourced from the GBIF backbone
+// taxonomy.
 //
-// The upstream metadata schema is designed to grow over time (for example with
-// thumbnails or conservation status). New columns are added to the embedded CSV
-// without breaking this package because metadata is decoded by column header
-// name; consuming a new column simply means adding a field here in a later update.
+// The embedded metadata.jsonl also carries link ids and media, which are not read
+// yet; see metaRecord for how to add a field.
 type Meta struct {
-	Class          string
-	Order          string
-	Family         string
-	FamilyCommon   string
-	WikipediaURL   string
-	INaturalistURL string
+	Class        string
+	Order        string
+	Family       string
+	FamilyCommon string
 }
 
 // Index is a sparse, immutable lookup table for a single locale, holding only the
@@ -143,10 +126,8 @@ func decodeTranslationRows(src io.Reader, fn translationRowFunc) error {
 // metaRowFunc receives one decoded metadata row.
 type metaRowFunc func(scientific string, m Meta) error
 
-// streamMetadata decodes the embedded metadata.csv.gz row by row. Columns are
-// resolved by header name so additional metadata columns can be appended to the
-// dataset without breaking this decoder or pinned consumers. It never holds more
-// than one row in memory.
+// streamMetadata decodes the embedded metadata.jsonl.gz record by record. It never
+// holds more than one record in memory.
 func streamMetadata(fn metaRowFunc) error {
 	zr, err := gzip.NewReader(bytes.NewReader(metadataGz))
 	if err != nil {
@@ -160,36 +141,31 @@ func streamMetadata(fn metaRowFunc) error {
 	return decodeMetadataRows(zr, fn)
 }
 
-// decodeMetadataRows reads the (uncompressed) metadata CSV from src and calls fn
-// for each data row. Columns are resolved by header name so additional metadata
-// columns can be appended upstream without breaking this decoder. Split out from
-// streamMetadata so the header-mapping behaviour can be tested with synthetic data.
-func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
-	r := csv.NewReader(src)
-	r.ReuseRecord = true
-	// FieldsPerRecord stays at its zero default: the reader infers the column
-	// count from the header and enforces it for every row, validating the schema
-	// width without hardcoding it (the metadata schema grows over time).
+// metaRecord is the subset of a metadata.jsonl line this package reads. Keys not
+// listed (links, media, and any added upstream) are skipped, so upstream additions
+// do not break this decoder or a shipped binary. To consume one, add a field here
+// and to Meta.
+type metaRecord struct {
+	ScientificName string `json:"scientific_name"`
+	Taxonomy       struct {
+		Class        string `json:"class"`
+		Order        string `json:"order"`
+		Family       string `json:"family"`
+		FamilyCommon string `json:"family_common"`
+	} `json:"taxonomy"`
+}
 
-	headerRow, err := r.Read()
-	if err != nil {
-		return errors.New(err).
-			Component(loggerModule).
-			Category(errors.CategoryFileParsing).
-			Context("operation", "read_metadata_header").
-			Build()
-	}
-	header := csvutil.NewHeader(headerRow)
-	sciIdx := header.Col(metaColScientific)
-	if sciIdx < 0 {
-		return errors.Newf("openfauna: metadata header missing %q column", metaColScientific).
-			Component(loggerModule).
-			Category(errors.CategoryFileParsing).
-			Context("operation", "validate_metadata_header").
-			Build()
-	}
+// decodeMetadataRows reads the (uncompressed) metadata JSON Lines from src and
+// calls fn for each record. Split out from streamMetadata so the field mapping can
+// be tested with synthetic data.
+func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
+	dec := json.NewDecoder(src)
 	for {
-		rec, err := r.Read()
+		// Declared per record: json.Decoder does not zero fields absent from the
+		// input, so a reused record would leak the previous taxonomy into a record
+		// that has none.
+		var rec metaRecord
+		err := dec.Decode(&rec)
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
@@ -197,21 +173,23 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 			return errors.New(err).
 				Component(loggerModule).
 				Category(errors.CategoryFileParsing).
-				Context("operation", "read_metadata_row").
+				Context("operation", "read_metadata_record").
 				Build()
 		}
-		if sciIdx >= len(rec) {
-			continue
+		if rec.ScientificName == "" {
+			return errors.Newf("openfauna: metadata record missing scientific_name").
+				Component(loggerModule).
+				Category(errors.CategoryFileParsing).
+				Context("operation", "validate_metadata_record").
+				Build()
 		}
 		m := Meta{
-			Class:          header.Field(rec, metaColClass),
-			Order:          header.Field(rec, metaColOrder),
-			Family:         header.Field(rec, metaColFamily),
-			FamilyCommon:   header.Field(rec, metaColFamilyCommon),
-			WikipediaURL:   header.Field(rec, metaColWikipedia),
-			INaturalistURL: header.Field(rec, metaColINaturalist),
+			Class:        rec.Taxonomy.Class,
+			Order:        rec.Taxonomy.Order,
+			Family:       rec.Taxonomy.Family,
+			FamilyCommon: rec.Taxonomy.FamilyCommon,
 		}
-		if cbErr := fn(rec[sciIdx], m); cbErr != nil {
+		if cbErr := fn(rec.ScientificName, m); cbErr != nil {
 			return cbErr
 		}
 	}
@@ -298,7 +276,7 @@ func (ix *Index) CommonName(scientific string) (string, bool) {
 	return v, ok
 }
 
-// Meta returns taxonomy/link metadata for a scientific name, if present. A nil
+// Meta returns taxonomy metadata for a scientific name, if present. A nil
 // Index reports not-found rather than panicking.
 func (ix *Index) Meta(scientific string) (Meta, bool) {
 	if ix == nil {
@@ -574,7 +552,7 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 	return out
 }
 
-// LookupMeta returns taxonomy/link metadata for one scientific name by scanning
+// LookupMeta returns taxonomy metadata for one scientific name by scanning
 // the embedded dataset. Same performance caveat as Lookup.
 func LookupMeta(scientific string) (Meta, bool) {
 	target := normalizeName(scientific)

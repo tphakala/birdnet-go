@@ -4,6 +4,7 @@
 package classifier
 
 import (
+	"math"
 	"slices"
 	"sync"
 
@@ -43,10 +44,12 @@ const (
 
 // Model release channels. An empty CatalogEntry.Channel means a stable (GA)
 // release; ChannelPreview marks a developer-preview build the gallery labels as
-// not the final GA build.
+// not the final GA build; ChannelExperimental marks a published model whose
+// performance in BirdNET-Go is not proven yet.
 const (
-	ChannelStable  = "stable"
-	ChannelPreview = "preview"
+	ChannelStable       = "stable"
+	ChannelPreview      = "preview"
+	ChannelExperimental = "experimental"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
@@ -69,12 +72,19 @@ type CatalogEntry struct {
 	Version       string `json:"version"`        // model version string
 	// Channel marks a non-stable release. "" (or "stable") is the normal GA build;
 	// "preview" marks a developer-preview build the gallery flags as not the GA
-	// build. omitempty keeps every stable entry's on-disk JSON byte-identical, so
-	// adding this field does not shift catalogChecksum or force a schema-version bump.
+	// build; "experimental" marks a published model whose performance in BirdNET-Go
+	// is not proven yet. omitempty keeps every stable entry's on-disk JSON
+	// byte-identical, so adding this field does not shift catalogChecksum or force
+	// a schema-version bump.
 	Channel string `json:"channel,omitempty"`
 	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
 	// channel (e.g. "preview3.1"). Empty for stable releases. omitempty as above.
-	BuildLabel      string        `json:"build_label,omitempty"`
+	BuildLabel string `json:"build_label,omitempty"`
+	// SupersededBy is the catalog id of the entry that replaces this one. The
+	// gallery shows a note on this entry and the entry stays installable. Empty
+	// when nothing replaces it. Not to be confused with CatalogVariant.SupersededBy,
+	// which names a replacement variant of the same entry. omitempty as above.
+	SupersededBy    string        `json:"superseded_by,omitempty"`
 	GeomodelVersion string        `json:"geomodel_version"`  // geomodel range filter version (e.g., "v3"); empty if no geomodel
 	RegistryID      string        `json:"registry_id"`       // maps to a ModelRegistry key; empty if loader not yet implemented
 	Hidden          bool          `json:"hidden"`            // if true, entry is excluded from the gallery UI
@@ -121,7 +131,7 @@ type CatalogVariant struct {
 	Backends     map[string]BackendSupport `json:"backends,omitempty"`      // per-backend support, keyed by backend token (e.g. "onnxruntime-cpu")
 	Benchmarks   []Benchmark               `json:"benchmarks,omitempty"`    // measured latency/memory per device
 	Files        []CatalogFile             `json:"files"`                   // files to download for this variant
-	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded build)
+	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded or withdrawn build)
 	SupersededBy string                    `json:"superseded_by,omitempty"` // id of the variant that replaces this one, if any
 	// BuiltIn marks the embedded baseline variant of a permanent model (the
 	// BirdNET v2.4 classifier shipped inside the binary). A BuiltIn variant carries
@@ -130,6 +140,44 @@ type CatalogVariant struct {
 	// variant per entry may set it. omitempty keeps the on-disk JSON of every other
 	// entry byte-identical, so adding this field does not shift catalogChecksum.
 	BuiltIn bool `json:"built_in,omitempty"`
+	// ScoreCalibration is the confidence calibration of a regional Perch v2
+	// slice, nil for every other variant. A pointer with omitempty keeps the
+	// on-disk JSON of every other entry byte-identical, so adding this field does
+	// not shift catalogChecksum or make a pristine model-catalog.json read as
+	// edited (the same reasoning as BuiltIn).
+	ScoreCalibration *ScoreCalibration `json:"score_calibration,omitempty"`
+}
+
+// ScoreCalibration describes how to turn a regional Perch v2 slice's logits into
+// scores on the full model's scale. A slice normalizes its softmax over its own
+// smaller label set, so every kept score would be higher than the full model's;
+// the method adds one "rest" term for the dropped classes to the denominator.
+type ScoreCalibration struct {
+	Method    string  `json:"method"`     // calibration method; only ScoreCalibrationSoftmaxRestLogit is defined
+	RestLogit float64 `json:"rest_logit"` // log-sum-exp (nats) of the dropped classes' logits, estimated per tile
+}
+
+const (
+	// ScoreCalibrationSoftmaxRestLogit is the method name: softmax over the kept
+	// logits plus one extra class whose logit is RestLogit.
+	ScoreCalibrationSoftmaxRestLogit = "softmax-rest-logit"
+
+	// scoreCalibrationRestLogitMin and scoreCalibrationRestLogitMax bound a usable
+	// RestLogit. They mirror the acoustic-models manifest validator and the
+	// generator (gen/main.go): the lower bound sits above the digital-silence floor
+	// of every tile (8.7 to 9.1) and the upper bound well above the fitted range
+	// (9.6 to 10.4).
+	scoreCalibrationRestLogitMin = 8.0
+	scoreCalibrationRestLogitMax = 12.0
+)
+
+// validScoreCalibration reports whether c is non-nil, of a known method and has
+// a finite rest logit within the accepted bounds.
+func validScoreCalibration(c *ScoreCalibration) bool {
+	return c != nil &&
+		c.Method == ScoreCalibrationSoftmaxRestLogit &&
+		!math.IsNaN(c.RestLogit) && !math.IsInf(c.RestLogit, 0) &&
+		c.RestLogit >= scoreCalibrationRestLogitMin && c.RestLogit <= scoreCalibrationRestLogitMax
 }
 
 // VariantRequirements declares the host capabilities a variant needs. Arch and
@@ -175,6 +223,53 @@ type CatalogFile struct {
 // information to drive the download process.
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
+	// BirdNET+ v3.0 acoustic classifier (GA, stable channel). Global GPU-native
+	// model (11,725 classes: 11,709 species plus 16 non-animal sound classes,
+	// 32kHz/5s) in its own HuggingFace repo, paired with the v3.0 geomodel range
+	// filter. Only fp32 is published: the graph computes the sigmoid itself and
+	// runs at f32 on OpenVINO (openVINOPrecisionFor). The regional tiles are
+	// appended from the generated birdnetPlusV30RegionalVariants. Backends,
+	// benchmarks, RAM floor and checksums are sourced from the BirdNET-Plus-V3.0
+	// models.json manifest, which TestGlobalVariants_MatchManifest checks.
+	{
+		ID:              "birdnet-plus-v3.0",
+		Name:            "BirdNET+ v3.0",
+		Description:     "BirdNET+ v3.0 global wildlife classifier (11,725 classes: 11,709 species, birds and other fauna, and 16 non-animal sound classes; scientific and common names).",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "Apache-2.0",
+		CommercialUse:   true,
+		Category:        CategoryWildlife,
+		SpeciesCount:    11725,
+		Version:         "3.0",
+		GeomodelVersion: "v3",
+		RegistryID:      RegistryIDBirdNETPlusV3,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://doi.org/10.5281/zenodo.24162518",
+		HuggingFaceRepo: "tphakala/BirdNET-Plus-V3.0",
+		Variants: slices.Concat([]CatalogVariant{
+			{
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: 11725,
+				Default:      true,
+				Requirements: VariantRequirements{MinRAMMB: 550},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true},
+					"openvino-gpu":    {Supported: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 284, RSSMB: 470},
+					{Device: "x86-i7-1260P", Backend: "onnxruntime-cpu", LatencyMs: 64},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/birdnet-plus-v3.0-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_fp32.onnx", Role: RoleModel, SHA256: "cf1a7a3ca29af818ee720131f800c4dd18354fc961317cc5e5e735e0b4a9c8ac", SizeBytes: 360869106},
+				}, birdnetPlusV30LabelsFile(), geomodelFiles(), taxonomyFiles()),
+			},
+		}, birdnetPlusV30RegionalVariants()),
+	},
 	// BirdNET v3.0 acoustic classifier (developer preview). Global GPU-native model
 	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
 	// geomodel range filter. The HuggingFace repo is public and the file
@@ -184,8 +279,9 @@ var EmbeddedCatalog = []CatalogEntry{
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
 	// builds off hosts that cannot run them. The two global variants plus the
 	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
-	// labelled a developer preview so users know it is not the GA build. The
-	// backend loader is fully functional and v3.0 can also be enabled via config
+	// labelled a developer preview and is superseded by the BirdNET+ v3.0 entry
+	// above (SupersededBy), which the gallery surfaces as a note. The backend
+	// loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
 	{
 		ID:            "birdnet-v3.0",
@@ -203,6 +299,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		// preview3.1 file paths below) so users know it is not the final release.
 		Channel:         ChannelPreview,
 		BuildLabel:      "preview3.1",
+		SupersededBy:    "birdnet-plus-v3.0",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          false,
@@ -296,8 +393,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		// Global builds under full/. fp32 (with in-graph DFT) is the default and is
 		// byte-identical to the previously flat entry, so existing installs stay
 		// detected with no re-download (ScanInstalled keys on LocalName, not repo or
-		// RemotePath). no-dft-fp32 is the OpenVINO/GPU build; int8-arm is the low-RAM
-		// ARM build. Regional tiles under regional/ are appended from the generated
+		// RemotePath). no-dft-fp32 is the build without the in-graph DFT (ONNX Runtime
+		// CPU recommended, OpenVINO CPU supported but not recommended); int8-arm is
+		// withdrawn (Legacy), kept only so an existing install stays recognised.
+		// Regional tiles under regional/ are appended from the generated
 		// perchV2RegionalVariants. Each variant's Files is self-contained (model + labels + geomodel +
 		// taxonomy) because resolveVariantDefaults does not merge companions.
 		Variants: slices.Concat([]CatalogVariant{
@@ -324,10 +423,10 @@ var EmbeddedCatalog = []CatalogEntry{
 				SpeciesCount: 14795,
 				Requirements: VariantRequirements{MinRAMMB: 750},
 				Backends: map[string]BackendSupport{
-					"openvino-cpu":    {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-gpu":    {Supported: true, Recommended: true},
 					"cuda":            {Supported: true, Recommended: true},
-					"onnxruntime-cpu": {Supported: true},
+					"openvino-cpu":    {Supported: true},
 					"tensorrt":        {Supported: true},
 				},
 				Files: slices.Concat([]CatalogFile{
@@ -339,8 +438,13 @@ var EmbeddedCatalog = []CatalogEntry{
 				Precision:    "int8",
 				SpeciesCount: 14795,
 				Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 350},
+				// Withdrawn: MatMul-only INT8 changes the result too often on real
+				// audio. Kept as a Legacy variant so an existing install is still
+				// recognised and keeps working; it is no longer offered to new installs.
+				Legacy:       true,
+				SupersededBy: "no-dft-fp32",
 				Backends: map[string]BackendSupport{
-					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true},
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/perch_v2_int8_arm.onnx", LocalName: "perch_v2_int8_arm.onnx", Role: RoleModel, SHA256: "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5", SizeBytes: 130856164},
@@ -485,7 +589,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		Files:           geomodelFiles(),
 	},
 
-	// Bat models (BattyBirdNET family by rdz-oss)
+	// Bat models (BSG-BAT, then the BattyBirdNET family by rdz-oss)
+	bsgBatCatalogEntry(),
 	batCatalogEntry("battybirdnet-bavaria", "BattyBirdNET Bavaria", "Bavaria", 32, "Bavaria", false,
 		batFileChecksums{"7ee3936621d180b9fe42f3732703339662b154135ce205f711797bca7daa44ea", 131827, "ff4a3f9a351f202c8712c807c6bb8b29df0b1c75ddab48e543ec76a88a42715c", 966}),
 	batCatalogEntry("battybirdnet-bavaria-high", "BattyBirdNET Bavaria (High)", "Bavaria", 24, "Bavaria", true,
@@ -524,7 +629,7 @@ const (
 	embeddingsSizeBytes int64 = 58763257
 )
 
-// Shared v3.0 geomodel, used as range filter companion by Perch v2 and BirdNET v3.0.
+// Shared v3.0 geomodel, used as range filter companion by Perch v2, BirdNET v3.0 and BirdNET+ v3.0.
 const (
 	geomodelHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
 	geomodelONNXSHA256            = "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017"
@@ -574,8 +679,17 @@ func birdnetV30LabelsFile() []CatalogFile {
 	}
 }
 
+// birdnetPlusV30LabelsFile returns the shared global BirdNET+ v3.0 labels file.
+// Every global BirdNET+ v3.0 variant shares one label set, so each variant's
+// Files includes it.
+func birdnetPlusV30LabelsFile() []CatalogFile {
+	return []CatalogFile{
+		{RemotePath: "full/birdnet-plus-v3.0-labels-b1.txt", LocalName: "birdnet_plus_v3.0_labels.txt", Role: RoleLabels, SHA256: "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3", SizeBytes: 470040},
+	}
+}
+
 // geomodelFiles returns the shared geomodel CatalogFile entries appended to
-// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0).
+// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0, BirdNET+ v3.0).
 func geomodelFiles() []CatalogFile {
 	return []CatalogFile{
 		{
@@ -696,6 +810,70 @@ type batFileChecksums struct {
 	modelSize    int64
 	labelsSHA256 string
 	labelsSize   int64
+}
+
+// BSG-BAT release files in the tphakala/BSG-BAT HuggingFace repo, pinned from the
+// acoustic-models BSG-BAT manifest. The repo holds six independently trained
+// checkpoints with identical graphs; the catalog ships the first (r1) and keeps its
+// files in a variant so a multi-checkpoint variant can be added beside it.
+const (
+	bsgBatModelFile       = "bsgbat_v0.21_r1.onnx"
+	bsgBatModelSHA256     = "42f209d0e023785df31c12a4af3ff9fb4470fde5e25d42cd8d2ecc0f2505e0e6"
+	bsgBatModelSizeBytes  = 83101506
+	bsgBatLabelsFile      = "bsgbat_labels.txt"
+	bsgBatLabelsSHA256    = "10690573f98a7088d26beb238b1e1a63e58c2a360bf12cabd2b0b494d2b43517"
+	bsgBatLabelsSizeBytes = 438
+	// bsgBatMinRAMMB is the manifest's RAM floor for one session (measured peak
+	// RSS 203 to 242 MB).
+	bsgBatMinRAMMB = 300
+)
+
+// bsgBatCatalogEntry constructs the CatalogEntry for the BSG-BAT bat classifier.
+func bsgBatCatalogEntry() CatalogEntry {
+	files := []CatalogFile{
+		{RemotePath: bsgBatModelFile, LocalName: bsgBatModelFile, Role: RoleModel, SHA256: bsgBatModelSHA256, SizeBytes: bsgBatModelSizeBytes},
+		{RemotePath: bsgBatLabelsFile, LocalName: bsgBatLabelsFile, Role: RoleLabels, SHA256: bsgBatLabelsSHA256, SizeBytes: bsgBatLabelsSizeBytes},
+	}
+	return CatalogEntry{
+		ID:   "bsg-bat",
+		Name: "BSG-BAT",
+		Description: "European bat species classifier for ultrasonic recordings (21 species), by the bsg-bat team " +
+			"(https://doi.org/10.5281/zenodo.15495676). It needs a capture rate of at least 192 kHz, and 384 kHz is " +
+			"recommended: 192 kHz captures work, but species calling above 96 kHz cannot be identified and scores are " +
+			"less reliable. It runs in real time on a Raspberry Pi 5 or an x86 host; " +
+			"a Raspberry Pi 4 needs 4 inference threads.",
+		Author:          "bsg-bat team",
+		License:         "CC-BY-4.0",
+		CommercialUse:   true,
+		Category:        CategoryBat,
+		Region:          "Europe",
+		Channel:         ChannelExperimental,
+		SpeciesCount:    bsgBatNumSpecies,
+		Version:         DetectionVersionBSGBat,
+		RegistryID:      RegistryIDBSGBat,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://doi.org/10.5281/zenodo.15495676",
+		HuggingFaceRepo: "tphakala/BSG-BAT",
+		// Files stays empty: the catalog layer resolves it from the default variant.
+		Variants: []CatalogVariant{
+			{
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: bsgBatNumSpecies,
+				Default:      true,
+				Requirements: VariantRequirements{MinRAMMB: bsgBatMinRAMMB},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 111, RSSMB: 203},
+					{Device: "rpi4b-a72", Backend: "onnxruntime-cpu", LatencyMs: 372, RSSMB: 203},
+					{Device: "x86-i5-7260u", Backend: "onnxruntime-cpu", LatencyMs: 37, RSSMB: 242},
+				},
+				Files: files,
+			},
+		},
+	}
 }
 
 // batCatalogEntry constructs a CatalogEntry for a BattyBirdNET regional model.

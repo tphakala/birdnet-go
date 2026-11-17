@@ -21,7 +21,7 @@
     class="flex items-center gap-3 px-4 py-3 text-sm bg-[var(--color-warning)]/10 border-b border-[var(--color-warning)]/30"
     role="alert"
   >
-    <AlertTriangle class="h-5 w-5 shrink-0 text-[var(--color-warning)]" />
+    <AlertTriangle class="h-5 w-5 shrink-0 text-[var(--text-warning)]" />
     <div class="flex-1">
       <span class="font-medium">{t('restart.bannerTitle')}:</span>
       {(restartState.restart_reasons ?? []).map(reason => t(reason)).join(', ')}
@@ -37,7 +37,7 @@
     class="flex items-center gap-3 px-4 py-3 text-sm bg-[var(--color-info)]/10 border-b border-[var(--color-info)]/30"
     role="status"
   >
-    <div class="loading loading-spinner loading-sm text-[var(--color-info)]"></div>
+    <div class="loading loading-spinner loading-sm text-[var(--text-info)]"></div>
     <span>{t('restart.inProgress')}</span>
   </div>
 {/if}

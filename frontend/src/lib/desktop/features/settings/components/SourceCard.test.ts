@@ -1,0 +1,179 @@
+/**
+ * SourceCard: the shell of one source. The header button opens and closes the
+ * body, and delete asks for confirmation in an overlay that takes focus, goes
+ * back on Cancel or Escape and deletes only when confirmed and not disabled.
+ */
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { createRawSnippet, type Snippet } from 'svelte';
+import { Mic } from '@lucide/svelte';
+import SourceCard from './SourceCard.svelte';
+
+const DELETE = /delete/i;
+const CANCEL = /cancel/i;
+
+/** The Delete button inside the confirmation overlay, not the one in the header. */
+function confirmButton(dialog: HTMLElement): HTMLElement {
+  const button = screen.getAllByRole('button', { name: DELETE }).find(b => dialog.contains(b));
+  if (!button) throw new Error('the overlay has no Delete button');
+  return button;
+}
+
+function textSnippet(text: string) {
+  return createRawSnippet(() => ({ render: () => `<span>${text}</span>` }));
+}
+
+interface CardExtras {
+  expanded: boolean;
+  disabled: boolean;
+  disabledReason: string;
+  iconClass: string;
+  nameAddon: Snippet;
+  badges: Snippet;
+  actions: Snippet;
+  details: Snippet;
+}
+
+function renderCard(extra: Partial<CardExtras> = {}) {
+  const onToggleExpanded = vi.fn();
+  const onDelete = vi.fn();
+  const view = render(SourceCard, {
+    props: {
+      name: 'Garden',
+      subtitle: 'hw:1',
+      icon: Mic,
+      expanded: false,
+      onToggleExpanded,
+      deleteConfirm: 'Delete source "Garden"?',
+      onDelete,
+      children: createRawSnippet(() => ({
+        render: () => '<div><p>body</p><button>Body action</button></div>',
+      })),
+      ...extra,
+    },
+  });
+  return { view, onToggleExpanded, onDelete };
+}
+
+/** Id of the body container, from the disclosure button that controls it. */
+function bodyId(): string {
+  return screen.getByRole('button', { name: /Garden/ }).getAttribute('aria-controls') ?? '';
+}
+
+describe('SourceCard', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('names the disclosure button after the source and reports its expanded state', async () => {
+    const { onToggleExpanded } = renderCard({ expanded: true });
+
+    const toggle = screen.getByRole('button', { name: /Garden/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('body')).toBeInTheDocument();
+
+    await fireEvent.click(toggle);
+    expect(onToggleExpanded).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the body out of the page while collapsed', () => {
+    renderCard({ expanded: false });
+
+    expect(screen.queryByText('body')).toBeNull();
+  });
+
+  it('asks for confirmation, moves focus to Cancel, and deletes only after Delete in the overlay', async () => {
+    const { onDelete } = renderCard();
+
+    await fireEvent.click(screen.getByRole('button', { name: DELETE }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveAccessibleDescription('Delete source "Garden"?');
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: CANCEL })).toHaveFocus());
+    expect(onDelete).not.toHaveBeenCalled();
+
+    await fireEvent.click(confirmButton(dialog));
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('closes the overlay on Cancel and on Escape and returns focus to the delete button', async () => {
+    const { onDelete } = renderCard();
+    const trigger = screen.getByRole('button', { name: DELETE });
+
+    await fireEvent.click(trigger);
+    await fireEvent.click(await screen.findByRole('button', { name: CANCEL }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await vi.waitFor(() => expect(trigger).toHaveFocus());
+
+    await fireEvent.click(trigger);
+    await fireEvent.keyDown(await screen.findByRole('alertdialog'), { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await vi.waitFor(() => expect(trigger).toHaveFocus());
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('opens no overlay while disabled, and deletes nothing if it became disabled while open', async () => {
+    const { view, onDelete } = renderCard({ disabled: true });
+    await fireEvent.click(screen.getByRole('button', { name: DELETE }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+
+    await view.rerender({ disabled: false });
+    await fireEvent.click(screen.getByRole('button', { name: DELETE }));
+    const dialog = await screen.findByRole('alertdialog');
+    await view.rerender({ disabled: true });
+    await fireEvent.click(confirmButton(dialog));
+
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: DELETE })).toHaveFocus());
+  });
+
+  it('makes the open body inert while the delete confirmation shows, and not after Cancel', async () => {
+    renderCard({ expanded: true });
+    // Svelte sets inert as a property, which jsdom does not reflect to the attribute.
+    const isBodyInert = () => document.getElementById(bodyId())?.inert === true;
+    expect(isBodyInert()).toBe(false);
+
+    await fireEvent.click(screen.getByRole('button', { name: DELETE }));
+    await screen.findByRole('alertdialog');
+    expect(isBodyInert()).toBe(true);
+
+    await fireEvent.click(screen.getByRole('button', { name: CANCEL }));
+    expect(isBodyInert()).toBe(false);
+  });
+
+  it('says why Delete is blocked while disabled, and only then', async () => {
+    const { view } = renderCard({ disabled: true, disabledReason: 'Loading settings' });
+
+    const trigger = screen.getByRole('button', { name: DELETE });
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    expect(trigger).toHaveAccessibleDescription('Loading settings');
+    expect(screen.getByText('Loading settings')).toBeVisible();
+
+    await view.rerender({ disabled: false });
+    expect(screen.queryByText('Loading settings')).toBeNull();
+    expect(screen.getByRole('button', { name: DELETE })).not.toHaveAccessibleDescription();
+  });
+
+  it('renders the optional slots: name addon, badges, details and an actions control beside the toggle', async () => {
+    const { onToggleExpanded } = renderCard({
+      nameAddon: textSnippet('Connected'),
+      badges: textSnippet('Badge text'),
+      details: textSnippet('Stats line'),
+      actions: createRawSnippet(() => ({ render: () => '<button type="button">Enabled</button>' })),
+      iconClass: 'custom-icon-tile',
+    });
+
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getByText('Badge text')).toBeInTheDocument();
+    expect(screen.getByText('Stats line')).toBeInTheDocument();
+    expect(document.querySelector('.custom-icon-tile')).not.toBeNull();
+
+    // The actions control is not inside the disclosure button, so it never toggles the body.
+    const toggle = screen.getByRole('button', { name: /Garden/ });
+    const action = screen.getByRole('button', { name: 'Enabled' });
+    expect(toggle.contains(action)).toBe(false);
+    await fireEvent.click(action);
+    expect(onToggleExpanded).not.toHaveBeenCalled();
+  });
+});

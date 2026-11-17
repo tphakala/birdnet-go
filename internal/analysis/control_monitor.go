@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	apicontrol "github.com/tphakala/birdnet-go/internal/api/v2/control"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
@@ -29,6 +30,10 @@ import (
 )
 
 const (
+	// signalRestartAudioCapture tears down and rebuilds the whole audio capture.
+	// The control API's restart_analysis signal runs the same restart.
+	signalRestartAudioCapture = "restart_audio_capture"
+
 	signalReconfigureLogDeduplication = "reconfigure_log_deduplication"
 	signalReconfigureRTSPHealth       = "reconfigure_rtsp_health"
 	signalReconfigureMonitoring       = "reconfigure_monitoring"
@@ -315,7 +320,7 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureAudioSources()
 	case "update_source_gains":
 		cm.handleUpdateSourceGains()
-	case "restart_audio_capture":
+	case signalRestartAudioCapture, apicontrol.SignalRestartAnalysis:
 		cm.handleRestartAudioCapture()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
@@ -477,7 +482,8 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 // valid). LoadModel/UnloadModel each rebuild the range filter and sync the acoustic-model
 // notice, so on any actual topology change this only needs to run the same SSE broadcast and
 // debounced audio-source reconfigure a gallery install does, so the newly loaded models start
-// receiving audio without a restart.
+// receiving audio without a restart. When nothing changed because every change failed, it
+// only broadcasts the SSE event, so model lists show the failed state.
 func (cm *ControlMonitor) handleReconcileModels() {
 	if cm.bn == nil {
 		GetLogger().Warn("Cannot reconcile enabled models: orchestrator not initialized")
@@ -492,6 +498,13 @@ func (cm *ControlMonitor) handleReconcileModels() {
 	if len(loaded) == 0 && len(unloaded) == 0 {
 		if err == nil {
 			GetLogger().Info("Enabled models already match the loaded set; nothing to reconcile")
+			return
+		}
+		// Nothing loaded or unloaded and at least one change failed. A failed load still
+		// changes what the model list reports (pending becomes failed), so tell open lists;
+		// no audio reconfigure is needed because the loaded set is unchanged.
+		if cm.apiController != nil {
+			cm.apiController.BroadcastInferenceTopologyChanged()
 		}
 		return
 	}
@@ -1117,13 +1130,15 @@ func (cm *ControlMonitor) handleReconfigureSentry() {
 	emitHotReload("sentry")
 }
 
-// handleRestartAudioCapture signals a full audio-capture restart. Used for a
-// setting that changes the analysis-buffer dimensions but is not a per-source
-// audio property (e.g. birdnet.overlap): the diff-based reconfigure cannot see
-// it, so the capture is torn down and rebuilt, which re-applies the primary
-// model dimensions and reallocates every analysis buffer with the new values.
+// handleRestartAudioCapture signals a full audio-capture restart. Used for the
+// restart_audio_capture signal, sent for a setting that changes the
+// analysis-buffer dimensions but is not a per-source audio property (e.g.
+// birdnet.overlap), and for the restart_analysis control API signal. The
+// diff-based reconfigure cannot see such a setting, so the capture is torn down
+// and rebuilt, which re-applies the primary model dimensions and reallocates
+// every analysis buffer with the new values.
 func (cm *ControlMonitor) handleRestartAudioCapture() {
-	GetLogger().Info("Restarting audio capture to apply analysis buffer changes")
+	GetLogger().Info("Restarting audio capture")
 	ResetOverrunTrackers()
 	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("audio capture restart signal sent")

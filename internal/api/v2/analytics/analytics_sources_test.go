@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -34,14 +32,6 @@ func sampleAudioSources() []datastore.AudioSourceSummary {
 	}
 }
 
-func newAnalyticsSourcesContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/sources")
-	return c, rec
-}
-
 func TestGetAnalyticsSources_ShapeAnonymizedWhenUnauthenticated(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
@@ -51,7 +41,7 @@ func TestGetAnalyticsSources_ShapeAnonymizedWhenUnauthenticated(t *testing.T) {
 	mockDS.On("GetAudioSources", mock.Anything, "2026-03-01", "2026-03-31").
 		Return(sampleAudioSources(), nil)
 
-	c, rec := newAnalyticsSourcesContext(e, "/api/v2/analytics/sources?start_date=2026-03-01&end_date=2026-03-31")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sources?start_date=2026-03-01&end_date=2026-03-31")
 	require.NoError(t, controller.GetAnalyticsSources(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -78,7 +68,7 @@ func TestGetAnalyticsSources_EmptyArrayNotNull(t *testing.T) {
 	mockDS.On("GetAudioSources", mock.Anything, "", "").
 		Return([]datastore.AudioSourceSummary{}, nil)
 
-	c, rec := newAnalyticsSourcesContext(e, "/api/v2/analytics/sources")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sources")
 	require.NoError(t, controller.GetAnalyticsSources(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -94,7 +84,7 @@ func TestGetAnalyticsSources_InvalidDateFormat(t *testing.T) {
 	t.Parallel()
 	e, _, controller := setupAnalyticsTestEnvironment(t)
 
-	c, rec := newAnalyticsSourcesContext(e, "/api/v2/analytics/sources?start_date=not-a-date")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sources?start_date=not-a-date")
 	err := controller.GetAnalyticsSources(c)
 	require.Error(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -104,7 +94,7 @@ func TestGetAnalyticsSources_ReversedRange(t *testing.T) {
 	t.Parallel()
 	e, _, controller := setupAnalyticsTestEnvironment(t)
 
-	c, rec := newAnalyticsSourcesContext(e,
+	c, rec := newAnalyticsContext(e,
 		"/api/v2/analytics/sources?start_date=2026-03-05&end_date=2026-03-01")
 	err := controller.GetAnalyticsSources(c)
 	require.Error(t, err)
@@ -118,7 +108,7 @@ func TestGetAnalyticsSources_QueryTimeout(t *testing.T) {
 	mockDS.On("GetAudioSources", mock.Anything, "", "").
 		Return([]datastore.AudioSourceSummary(nil), context.DeadlineExceeded)
 
-	c, rec := newAnalyticsSourcesContext(e, "/api/v2/analytics/sources")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/sources")
 	// handleAnalyticsQueryError writes the 408 response and returns nil.
 	require.NoError(t, controller.GetAnalyticsSources(c))
 	assert.Equal(t, http.StatusRequestTimeout, rec.Code)

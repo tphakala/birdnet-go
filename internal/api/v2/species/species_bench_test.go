@@ -28,7 +28,7 @@ const (
 // benchLabelCount so the resolver walks a production-scale union.
 func benchLabels(tb testing.TB) []string {
 	tb.Helper()
-	base := goldenCorpus(tb)
+	base := labelCorpus(tb)
 	labels := make([]string, 0, benchLabelCount)
 	labels = append(labels, base...)
 	for i := len(labels); i < benchLabelCount; i++ {
@@ -52,7 +52,7 @@ func benchUniversalContext() classifier.RarityContext {
 		},
 		Geomodel:     classifier.NewLabelVocabulary(vocab),
 		FilterActive: true,
-		Settings:     goldenSettings(),
+		Settings:     locatedSettings(),
 	}
 }
 
@@ -64,7 +64,7 @@ func benchLegacyContext(classifierLabels []string) classifier.RarityContext {
 		Geomodel:         nil,
 		ClassifierLabels: classifierLabels,
 		FilterActive:     true,
-		Settings:         goldenSettings(),
+		Settings:         locatedSettings(),
 	}
 }
 
@@ -77,9 +77,9 @@ func newSnapshotHandler(tb testing.TB, labels []string, rc classifier.RarityCont
 	h := &Handler{
 		Core:                   &apicore.Core{},
 		speciesSnapshot:        func() *speciesindex.Snapshot { return snap },
-		speciesBackendOverride: &goldenBackend{rc: rc},
+		speciesBackendOverride: &stubBackend{rc: rc},
 	}
-	h.Settings.Store(goldenSettings())
+	h.Settings.Store(locatedSettings())
 	return h
 }
 

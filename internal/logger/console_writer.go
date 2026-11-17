@@ -219,7 +219,7 @@ func (cl *CentralLogger) writeConsoleDropSummary(n int64) bool {
 	}
 	handler := slog.NewJSONHandler(cl.mainWriter, &slog.HandlerOptions{
 		Level:       parseLogLevel(cl.config.FileOutput.Level),
-		ReplaceAttr: timeZoneReplaceAttr(cl.timezone),
+		ReplaceAttr: replaceAttrFunc(cl.timezone),
 	})
 	ctx := context.Background()
 	if !handler.Enabled(ctx, slog.LevelWarn) {

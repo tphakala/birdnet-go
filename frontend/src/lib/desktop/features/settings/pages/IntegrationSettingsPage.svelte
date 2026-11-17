@@ -1356,7 +1356,7 @@
 
                       <button
                         type="button"
-                        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         onclick={handleMQTTCertDelete}
                         disabled={mqttDeleteLoading}
                       >
@@ -1514,7 +1514,7 @@
                 </div>
 
                 <div
-                  class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
+                  class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--text-info)]"
                 >
                   <Info class="size-5 shrink-0" />
                   <div>
@@ -1543,7 +1543,7 @@
                   </button>
 
                   {#if mqttHasChanges}
-                    <span class="text-sm text-[var(--color-warning)]">
+                    <span class="text-sm text-[var(--text-warning)]">
                       {t('settings.integration.mqtt.homeAssistant.discovery.saveFirst')}
                     </span>
                   {/if}

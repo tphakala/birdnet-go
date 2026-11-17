@@ -149,13 +149,13 @@
   {#if loading}
     <!-- Loading state -->
     <div class="py-4 flex justify-center" role="status" aria-live="polite">
-      <span class="loading loading-spinner loading-md text-[var(--color-primary)]"></span>
+      <span class="loading loading-spinner loading-md text-[var(--text-primary)]"></span>
       <span class="sr-only">{t('detections.weather.loading')}</span>
     </div>
   {:else if error}
     <!-- Error state -->
     <div class="py-4" role="alert">
-      <div class="text-[var(--color-error)] flex items-center">
+      <div class="text-[var(--text-error)] flex items-center">
         <XCircle class="size-5 mr-2" />
         <span>{error}</span>
       </div>

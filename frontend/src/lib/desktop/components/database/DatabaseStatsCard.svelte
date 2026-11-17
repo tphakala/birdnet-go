@@ -16,6 +16,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { getCsrfToken } from '$lib/utils/api';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
@@ -351,8 +352,8 @@
         <span
           class="px-2 py-1 text-xs font-medium rounded-full
                      {stats.connected
-            ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]'
-            : 'bg-[var(--color-error)]/10 text-[var(--color-error)]'}"
+            ? 'bg-[var(--color-success)]/10 text-[var(--text-success)]'
+            : 'bg-[var(--color-error)]/10 text-[var(--text-error)]'}"
         >
           {stats.connected
             ? t('system.database.stats.connected')
@@ -372,13 +373,7 @@
         <div class="h-4 bg-[var(--color-base-200)] rounded animate-pulse w-2/3"></div>
       </div>
     {:else if error}
-      <div
-        class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
-        role="alert"
-        aria-live="assertive"
-      >
-        {error}
-      </div>
+      <ErrorAlert message={error} />
     {:else if stats}
       <!-- Stats rows -->
       <div class="flex justify-between text-sm">
@@ -420,13 +415,7 @@
   <!-- Footer -->
   <div class="px-6 py-4 border-t border-[var(--color-base-200)]">
     {#if backupError}
-      <div
-        class="mb-3 p-2 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]"
-        role="alert"
-        aria-live="assertive"
-      >
-        {backupError}
-      </div>
+      <ErrorAlert className="mb-3" message={backupError} />
     {/if}
 
     {#if stats?.type === 'mysql'}
@@ -448,7 +437,7 @@
           </span>
           {#if backupStatus !== 'downloading'}
             <button
-              class="p-1 text-[var(--color-base-content)]/60 hover:text-[var(--color-error)] transition-colors"
+              class="p-1 text-[var(--color-base-content)]/60 hover:text-[var(--text-error)] transition-colors"
               onclick={cancelBackup}
               title={t('system.database.backup.cancel')}
             >
@@ -479,7 +468,7 @@
         class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
                text-sm font-medium rounded-lg transition-colors
                border border-[var(--color-error)]
-               text-[var(--color-error)]
+               text-[var(--text-error)]
                hover:bg-[var(--color-error)]/10"
         onclick={retryBackup}
       >

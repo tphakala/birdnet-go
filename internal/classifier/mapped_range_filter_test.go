@@ -70,6 +70,29 @@ func TestBuildSpeciesMapping_TaxonomicAlias(t *testing.T) {
 	assert.Equal(t, 0, mapping[0], "legacy classifier name should map to the geomodel's canonical synonym")
 }
 
+func TestBuildSpeciesMapping_RenamedModelLabels(t *testing.T) {
+	t.Parallel()
+
+	// BirdNET+ labels carry a newer name than the geomodel for some species; the
+	// alias map points them at the geomodel's name. The unrenamed forms (preview3.1
+	// labels and bare Perch binomials) must keep resolving to the same rows.
+	classifierLabels := []string{
+		"Nannus troglodytes_Eurasian Wren",
+		"Schoeniclus schoeniclus_Reed Bunting",
+		"Troglodytes troglodytes_Eurasian Wren",
+		"Troglodytes troglodytes",
+		"Emberiza schoeniclus",
+	}
+	geomodelLabels := []string{
+		"Troglodytes troglodytes_Eurasian Wren",
+		"Emberiza schoeniclus_Reed Bunting",
+	}
+
+	mapping := buildSpeciesMapping(classifierLabels, geomodelLabels)
+
+	assert.Equal(t, []int{0, 1, 0, 0, 1}, mapping)
+}
+
 func TestBuildSpeciesMapping_EmptyInputs(t *testing.T) {
 	t.Parallel()
 

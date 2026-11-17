@@ -16,6 +16,7 @@ import {
   type FakeMediaController,
 } from '../../../../test/fakeMediaElement';
 import { clearClipSampleRateCache } from '$lib/utils/clipSampleRateLookup';
+import { OVERLAY_ONLY } from '../../../../test/audioPlayerQueries';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -257,7 +258,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       // any render it has; no axis is drawn over it and no error is shown.
       expect(imageSrc()).not.toBeNull();
       expect(imageSrc()).not.toContain('sr=');
-      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE, OVERLAY_ONLY)).toBeNull();
       expect(await loadedLabels(container)).toEqual([]);
     });
 
@@ -273,7 +274,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
         await vi.advanceTimersByTimeAsync(PAST_RETRY_DELAY_MS);
       }
 
-      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE, OVERLAY_ONLY)).toBeInTheDocument();
       expect(imageSrc()).not.toContain('sr=');
       expect(labels(container)).toEqual([]);
     });
@@ -312,7 +313,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(probeCalls[0]).toContain(`sr=${RATE_384K}`);
       expect(imageSrc()).not.toContain('sr=');
       expect(imageSrc()).not.toContain('retry=');
-      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE, OVERLAY_ONLY)).toBeNull();
       // The fallback image has loaded: still no axis over it.
       expect(await loadedLabels(container)).toEqual([]);
     });
@@ -332,7 +333,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
         expect(imageSrc()).not.toContain('sr=');
         expect(imageSrc()).not.toContain('retry=');
-        expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+        expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE, OVERLAY_ONLY)).toBeNull();
       });
 
       it('keeps the rate and goes terminal at once for an unrenderable source', async () => {
@@ -346,7 +347,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
         // No render can exist for a clip that cannot be decoded: no rate-less attempt
         expect(imageSrc()).toContain('sr=');
-        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE, OVERLAY_ONLY)).toBeInTheDocument();
       });
 
       it('goes terminal when the image without sr fails too, with no retries', async () => {
@@ -360,7 +361,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
         await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
         await vi.advanceTimersByTimeAsync(PAST_RETRY_DELAY_MS);
 
-        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE, OVERLAY_ONLY)).toBeInTheDocument();
         expect(imageSrc()).not.toContain('retry=');
         expect(imageSrc()).not.toContain('sr=');
       });

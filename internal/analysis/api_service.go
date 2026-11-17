@@ -159,6 +159,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	// Create processor.
 	s.proc = processor.New(s.settings, dataStore, s.dbService.DetectionRepository(), bn, s.metrics, s.birdImageCache, GetLogger())
 	s.proc.SetSunCalc(s.sunCalc)
+	s.wireClipDenoiseRecorder()
 
 	// Initialize backup system (optional; failure is non-fatal).
 	backupLog := logger.Global().Module("backup")

@@ -8,7 +8,7 @@
  * `registryId` on each option (GET /api/v2/models); when a server predates that
  * field the case-insensitive alias match and then the legacy heuristic apply.
  */
-import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
+import { DEFAULT_MODEL_ID, type ModelLoadState } from '$lib/stores/models.svelte';
 import type { AcousticModelAvailability } from '$lib/types/models';
 
 /** The subset of a model list entry the selection logic needs. */
@@ -17,6 +17,8 @@ export interface ModelSelectionOption {
   id: string;
   /** Classifier registry ID; absent on an older server. */
   registryId?: string;
+  /** Load state; absent counts as loaded. A model that is not loaded is never pre-selected. */
+  state?: ModelLoadState;
 }
 
 /**
@@ -55,6 +57,7 @@ function mapDefaultTargets(
 
 /**
  * The model aliases to pre-select for a source that has no explicit list.
+ * Models that failed to load or are still loading are never pre-selected.
  * - ready: the mapped default targets (BirdNET v2.4 first); the legacy pick if
  *   none of them can be mapped onto the offered options.
  * - none: nothing. The source is saved with an empty list, which the backend
@@ -65,14 +68,15 @@ export function defaultModelSelection(
   availability: AcousticModelAvailability,
   options: readonly ModelSelectionOption[]
 ): string[] {
+  const loaded = options.filter(option => option.state !== 'failed' && option.state !== 'pending');
   switch (availability.kind) {
     case 'none':
       return [];
     case 'ready': {
-      const mapped = mapDefaultTargets(availability.defaultTargets, options);
-      return mapped.length > 0 ? mapped : legacyDefaultSelection(options);
+      const mapped = mapDefaultTargets(availability.defaultTargets, loaded);
+      return mapped.length > 0 ? mapped : legacyDefaultSelection(loaded);
     }
     case 'unknown':
-      return legacyDefaultSelection(options);
+      return legacyDefaultSelection(loaded);
   }
 }

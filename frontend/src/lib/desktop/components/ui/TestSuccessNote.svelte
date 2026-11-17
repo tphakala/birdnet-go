@@ -13,10 +13,10 @@
 
 {#if show}
   <div
-    class="mt-4 p-4 bg-[var(--color-success)]/10 border border-[var(--color-success)]/20 text-[var(--color-success)] rounded-lg {className}"
+    class="mt-4 p-4 bg-[var(--color-success)]/10 border border-[var(--color-success)]/20 text-[var(--text-success)] rounded-lg {className}"
   >
     <div class="flex items-start gap-3">
-      <div class="w-5 h-5 text-[var(--color-success)] shrink-0 mt-0.5">
+      <div class="w-5 h-5 text-[var(--text-success)] shrink-0 mt-0.5">
         <CircleCheck class="size-5" />
       </div>
       <div class="flex-1">

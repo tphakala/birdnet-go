@@ -226,7 +226,7 @@
         inputClassName={newNameError ? 'input-error' : ''}
       />
       {#if newNameError}
-        <div class="text-[var(--color-error)] text-sm">{newNameError}</div>
+        <div class="text-[var(--text-error)] text-sm">{newNameError}</div>
       {/if}
 
       <!-- RTSP URL -->
@@ -258,7 +258,7 @@
         </div>
       </div>
       {#if newUrlError}
-        <div class="text-[var(--color-error)] text-sm">{newUrlError}</div>
+        <div class="text-[var(--text-error)] text-sm">{newUrlError}</div>
       {/if}
     </div>
   </div>
@@ -296,7 +296,7 @@
               <div class="flex items-center gap-2">
                 <button
                   type="button"
-                  class="btn btn-ghost btn-sm btn-square text-[var(--color-error)]"
+                  class="btn btn-ghost btn-sm btn-square text-[var(--text-error)]"
                   onclick={() => removeUrl(rtspUrl.id)}
                   {disabled}
                   aria-label="Remove RTSP stream"
@@ -320,7 +320,7 @@
                   inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
                 />
                 {#if errors.get(`${rtspUrl.id}-name`)}
-                  <div class="text-[var(--color-error)] text-sm mt-1">
+                  <div class="text-[var(--text-error)] text-sm mt-1">
                     {errors.get(`${rtspUrl.id}-name`)}
                   </div>
                 {/if}
@@ -338,7 +338,7 @@
                   inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}
                 />
                 {#if errors.get(rtspUrl.id)}
-                  <div class="text-[var(--color-error)] text-sm mt-1">{errors.get(rtspUrl.id)}</div>
+                  <div class="text-[var(--text-error)] text-sm mt-1">{errors.get(rtspUrl.id)}</div>
                 {/if}
               </div>
             </div>
@@ -384,7 +384,7 @@
   <!-- Main error display -->
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
+      <span class="text-xs leading-4 text-[var(--text-error)]">{error}</span>
     </div>
   {/if}
 </div>

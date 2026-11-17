@@ -50,7 +50,7 @@ func (b *DetectionAlertBridge) SupportsBatching() bool {
 // detection.lifer is emitted, so the user gets a single, more-significant lifer
 // alert instead of a duplicate new-species alert with an identical body.
 func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent) error {
-	b.log.Debug("Detection event received at alert bridge",
+	b.log.Trace("Detection event received at alert bridge",
 		logger.String("component", "alerting.detection_bridge"),
 		logger.String("species", event.GetSpeciesName()),
 		logger.String("scientific_name", event.GetScientificName()),

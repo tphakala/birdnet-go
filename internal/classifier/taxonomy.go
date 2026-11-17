@@ -12,7 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 //go:embed data/eBird_taxonomy_codes_2021E.json
@@ -186,7 +186,7 @@ func SplitSpeciesName(speciesName string) (scientific, common string) {
 		return "", ""
 	}
 
-	if id, display, ok := nonbird.MultiWordLabelNames(speciesName); ok {
+	if id, display, ok := soundevent.MultiWordLabelNames(speciesName); ok {
 		return id, display
 	}
 

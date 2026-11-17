@@ -10,6 +10,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// findSettingsChangeCheck returns the detector row with the given name and fails
+// the test when the table has none.
+func findSettingsChangeCheck(t *testing.T, name string) *settingsChangeCheck {
+	t.Helper()
+	for i := range settingsChangeChecks {
+		if settingsChangeChecks[i].changed != nil && settingsChangeChecks[i].name == name {
+			return &settingsChangeChecks[i]
+		}
+	}
+	require.FailNowf(t, "missing detector", "settingsChangeChecks must contain the %q detector", name)
+	return nil
+}
+
 // TestAnalysisOverlapDispatchesRestart guards the actual hot-reload wiring: an
 // overlap change must resolve, through the settingsChangeChecks table, to the
 // restart_audio_capture action (a full teardown that reallocates the analysis
@@ -18,17 +31,7 @@ import (
 func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 	t.Parallel()
 
-	var entry *settingsChangeCheck
-	for i := range settingsChangeChecks {
-		if settingsChangeChecks[i].changed == nil {
-			continue
-		}
-		if settingsChangeChecks[i].name == "Analysis overlap" {
-			entry = &settingsChangeChecks[i]
-			break
-		}
-	}
-	require.NotNil(t, entry, "settingsChangeChecks must contain the Analysis overlap detector")
+	entry := findSettingsChangeCheck(t, "Analysis overlap")
 	assert.Equal(t, actionRestartAudioCapture, entry.action,
 		"an overlap change must trigger a full audio-capture restart, not the diff-based reconfigure")
 
@@ -38,6 +41,34 @@ func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 	changed.BirdNET.Overlap = 2.4
 	assert.True(t, entry.changed(base, changed), "overlap change must be detected by the table entry")
 	assert.False(t, entry.changed(base, conf.CloneSettings(base)), "identical settings must not fire")
+}
+
+// TestBSGBatStepDispatchesRestart pins the hot-reload wiring of bsgbat.stepframes:
+// a changed resolved step resolves to restart_audio_capture (the analysis buffers
+// must be reallocated), while a save that resolves to the same step does not,
+// including 0 over the default (0 means the default).
+func TestBSGBatStepDispatchesRestart(t *testing.T) {
+	t.Parallel()
+
+	entry := findSettingsChangeCheck(t, "BSG-BAT step")
+	assert.Equal(t, actionRestartAudioCapture, entry.action)
+
+	base := apitest.NewValidTestSettings()
+	base.BSGBat.StepFrames = conf.DefaultBSGBatStepFrames
+
+	changed := conf.CloneSettings(base)
+	changed.BSGBat.StepFrames = conf.MaxBSGBatStepFrames
+	assert.True(t, entry.changed(base, changed), "a step change must fire")
+	assert.False(t, entry.changed(base, conf.CloneSettings(base)), "identical settings must not fire")
+
+	unset := conf.CloneSettings(base)
+	unset.BSGBat.StepFrames = 0
+	assert.False(t, entry.changed(base, unset), "0 resolves to the default step and must not restart capture")
+	assert.False(t, entry.changed(unset, base), "the default over 0 must not restart capture")
+
+	threshold := conf.CloneSettings(base)
+	threshold.BSGBat.Threshold = base.BSGBat.Threshold + 0.1
+	assert.False(t, entry.changed(base, threshold), "a threshold-only change must not fire")
 }
 
 // TestAnalysisOverlapChangedIgnoresOtherBirdNETFields verifies that a save that

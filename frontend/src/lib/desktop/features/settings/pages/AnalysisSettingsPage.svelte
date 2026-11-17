@@ -6,17 +6,19 @@
   model gallery (install/uninstall additional classifier models).
 
   Features:
-  - Two main tabs: Settings and Models
-  - Settings tab: Detection settings, false positive filter, range filter,
-    dynamic threshold, and advanced options
-  - Models tab: Model gallery with Installed and Available tabs
-  - Confidence threshold slider for bird detection
-  - Bat detection threshold slider (visible when a bat model is installed)
+  - Tabs grouped by what a setting does and which classifiers it acts on:
+    Detection (thresholds, dynamic threshold, species names: every classifier),
+    Filters (false positive filter: every classifier except bats; range filter: the
+    classifiers the range model supports), Bats (bat-only settings, shown while a bat
+    model is installed), Inference (backend, device, threads) and Models (gallery,
+    region, download source, custom model paths)
+  - Detection thresholds list: one row per enabled classifier, with a slider and a number
+    field for its threshold and a switch for classifiers that can use the BirdNET v2.4 threshold
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
   - Dynamic threshold with enable/disable and parameter tuning
-  - Advanced section with processing threads and custom classifier paths
+  - Advanced section with custom classifier paths
   - License acceptance dialog for model installation
   - Remove confirmation dialog for model uninstallation
   - Real-time download progress via SSE
@@ -26,18 +28,12 @@
   @component
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
-  import type {
-    CatalogEntry,
-    CatalogVariant,
-    DownloadProgress,
-    InstalledModel,
-    ModelRegionsResponse,
-  } from '$lib/types/models';
+  import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
+  import type { CatalogEntry, DownloadProgress, ModelRegionsResponse } from '$lib/types/models';
   import {
     fetchCatalog,
-    fetchInstalled,
     fetchModelRegions,
     installModel,
     reinstallModel,
@@ -46,41 +42,74 @@
     isNetworkDownloadError,
     MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
-  import { invalidateModels } from '$lib/stores/models.svelte';
+  import {
+    getAvailableModels,
+    modelsLoading,
+    refreshModels,
+    watchModels,
+  } from '$lib/stores/models.svelte';
+  import {
+    SECTION_THRESHOLD_DEFAULT,
+    SHARED_BOUNDS,
+    SHARED_THRESHOLD_FALLBACK,
+    usesSharedThreshold,
+    type ClassifierThresholdSection,
+    type ThresholdBounds,
+    thresholdRows,
+    thresholdSnapshot,
+    type ThresholdRow,
+    type ThresholdSectionValues,
+  } from './analysisThresholds';
   import {
     analysisCadence,
     invalidateAcousticModels,
     watchAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
   import {
-    BAT_MODEL_ID,
+    BATTYBIRDNET_STEP_SECONDS,
+    BSG_BAT_STEP_MAX_FRAMES,
+    BSG_BAT_STEP_MIN_FRAMES,
     FILTER_ACTIVE_MIN_LEVEL,
     REFERENCE_WINDOW_SECONDS,
     baseClipMinDetections,
+    bsgBatStepSeconds,
+    hasBirdCadenceModels,
     minDetectionsForStep,
     planLagsSettings,
     previewReadout,
+    resolveBsgBatStepFrames,
     sameOverlap,
     savedReadout,
     type CadenceReadoutRow,
   } from '$lib/desktop/features/settings/utils/fpCadence';
+  import ModelCardGrid from '$lib/desktop/features/settings/components/ModelCardGrid.svelte';
+  import type {
+    ModelCardAction,
+    ModelCardMode,
+  } from '$lib/desktop/features/settings/components/ModelCard.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
   import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import FalsePositiveFilterControl, {
     type FilterLevel,
   } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
+  import type {
+    InferenceBackends,
+    InferenceStatusResponse,
+  } from '$lib/desktop/features/system/inference.types';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -88,8 +117,12 @@
     dynamicThresholdSettings,
     realtimeSettings,
     batSettings,
+    bsgBatSettings,
     perchSettings,
     birdNetV3Settings,
+    birdNetPlusSettings,
+    setValidationIssues,
+    type BSGBatSettings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -99,12 +132,11 @@
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import {
     pickPreselectedVariant,
-    translateReason,
     normalizeRegionMode,
     DEFAULT_REGION_MODE,
     GLOBAL_REGION_MODE,
     optimizeOffers,
-    variantHardwareLabel,
+    CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
     type OptimizeOffer,
   } from '$lib/utils/variantSelection';
@@ -119,23 +151,19 @@
     Shield,
     ShieldAlert,
     Package,
-    BrainCircuit,
     AlertTriangle,
     TriangleAlert,
     Loader2,
     RefreshCw,
-    Radar,
-    Globe,
     XCircle,
     X,
-    Check,
     Sparkles,
+    Filter,
+    Cpu,
+    Gauge,
+    Moon,
     Settings as SettingsIcon,
   } from '@lucide/svelte';
-
-  import logoBirdnet from '$lib/assets/logos/logo-birdnet.png';
-  import logoGoogle from '$lib/assets/logos/logo-google.png';
-  import logoJyu from '$lib/assets/logos/logo-jyu.jpeg';
 
   const logger = loggers.settings;
 
@@ -143,43 +171,19 @@
   // by hand; nothing enforces it, but it is only placeholder text, so drift
   // would be cosmetic.
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
-
-  const MODEL_LOGOS: Record<string, string> = {
-    birdnet: logoBirdnet,
-    perch: logoGoogle,
-    bsg: logoJyu,
-  };
-
-  function getModelLogo(id: string): string | null {
-    for (const [prefix, logo] of Object.entries(MODEL_LOGOS)) {
-      if (id.startsWith(prefix)) return logo;
-    }
-    return null;
-  }
-
-  // Render an entry-level incompatibility code (e.g. "backend.onnx_unavailable")
-  // through the same i18n reason path the variant picker uses, falling back to a
-  // generic localized line when the code is absent or has no translation, so a
-  // structured code never surfaces to the user as a raw dotted string. The
-  // fallback is cause-neutral on purpose: it is only reached when the code is
-  // missing or unmapped, which is exactly when the specific cause is not known.
-  // Entry-level codes carry no interpolation args (unlike variant reasons), so
-  // undefined args are passed; a future parameterized entry-level code would need
-  // an args field on CatalogEntryResponse.IncompatibleReason and a change here.
-  function entryIncompatibleText(code: string | undefined): string {
-    const fallback = t('analysis.gallery.entryIncompatible');
-    return code ? translateReason(code, undefined, fallback) : fallback;
-  }
+  /** Catalog ID of the BSG-BAT model (the other bat catalog entries are BattyBirdNET models). */
+  const BSG_BAT_CATALOG_ID = 'bsg-bat';
+  /** Frames are whole numbers. */
+  const BSG_BAT_STEP_INCREMENT = 1;
+  /** Decimals of the step shown in seconds (one frame is 2 ms, so 0.01 s is five frames). */
+  const BSG_BAT_STEP_SECONDS_DECIMALS = 2;
 
   // ── Page-level tab state ──────────────────────────────────────────────
-  type PageTab = 'settings' | 'models';
-  let pageTab = $state<PageTab>('settings');
+  type PageTab = 'detection' | 'filters' | 'bats' | 'inference' | 'models';
+  let pageTab = $state<PageTab>('detection');
 
   // ── Gallery (Models tab) state ────────────────────────────────────────
   let catalog = $state<CatalogEntry[]>([]);
-  // Installed models incl. hidden ones (drives the secondary-model threshold
-  // sections, which the visibility-filtered catalog cannot).
-  let installedModels = $state<InstalledModel[]>([]);
   let loading = $state(true);
   // Catalog loading failure: gates the two gallery tab bodies and drives the
   // banner whose Retry re-runs loadCatalog.
@@ -210,12 +214,31 @@
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // The one gallery action running, with the card it runs on. The three ids are never
+  // set together: every assignment sits behind a galleryActionInFlight guard.
+  const activeGalleryAction = $derived.by(
+    (): { entryId: string; action: ModelCardAction } | null => {
+      if (deletingId !== null) return { entryId: deletingId, action: 'remove' };
+      if (reinstallingId !== null) return { entryId: reinstallingId, action: 'reinstall' };
+      if (installingId !== null) return { entryId: installingId, action: 'install' };
+      return null;
+    }
+  );
+
   // One shared "any gallery action in flight" predicate. Install and reinstall
   // share the single downloadProgress state and progressCleanup subscription, so
   // starting a second action while one runs can strand the first's UI state; every
   // action gate uses this rather than an ad-hoc subset of the three ids.
-  const galleryActionInFlight = $derived(
-    installingId !== null || reinstallingId !== null || deletingId !== null
+  const galleryActionInFlight = $derived(activeGalleryAction !== null);
+  // The completion line of a finished install, reinstall or swap, announced by the live region
+  // in the Models tab. That region lives on the page, not on a card, so it still reaches a
+  // screen reader when the user switches gallery tabs and the running card is unmounted.
+  const galleryCompleteText = $derived(
+    downloadProgress?.status === 'complete'
+      ? reinstallingId !== null
+        ? t('analysis.gallery.reinstallComplete')
+        : t('analysis.gallery.progress.complete')
+      : ''
   );
 
   // Shared DOM id for the "actions paused" status line rendered while any gallery
@@ -242,9 +265,18 @@
   const HUGGINGFACE_ENDPOINT_ID = 'huggingface-endpoint';
 
   let licenseModel = $state<CatalogEntry | null>(null);
-  // The variant preselected in the license/install dialog: the server-recommended
-  // one by default, overridable by the user. Empty for flat (variant-less) entries.
-  let selectedVariantId = $state('');
+  // The variant the user picked in the license/install dialog, null until they pick
+  // one. Reset each time the dialog opens.
+  let chosenVariantId = $state<string | null>(null);
+  // The variant the dialog installs: the user's pick, else the smart default (the
+  // server-recommended one, falling back sensibly and skipping other regions'
+  // slices). The default follows activeRegionSlug, so it is recomputed when the
+  // regions load after the dialog opened. Empty for flat (variant-less) entries.
+  const selectedVariantId = $derived.by(
+    () =>
+      chosenVariantId ??
+      (licenseModel ? pickPreselectedVariant(licenseModel, activeRegionSlug) : '')
+  );
   // The download-size row and the install target follow the selected variant when
   // the entry has variants; otherwise they fall back to the whole-entry size.
   const licenseSelectedVariant = $derived(
@@ -253,15 +285,70 @@
   const licenseDownloadSize = $derived(
     licenseSelectedVariant?.sizeBytes ?? licenseModel?.totalSizeBytes ?? 0
   );
-  // Block install when the selected variant cannot run on this host (e.g. every
-  // variant is incompatible, so the preselected one is blocked). The default
-  // path preselects a compatible variant, so this only fires in the all-blocked case.
+  // The notice the license dialog shows for a non-stable release channel
+  const licenseChannelNotice = $derived.by(() => {
+    switch (licenseModel?.channel) {
+      case CHANNEL_PREVIEW:
+        return t('analysis.gallery.preview.dialogNotice', {
+          build: licenseModel.buildLabel ?? licenseModel.version,
+        });
+      case CHANNEL_EXPERIMENTAL:
+        return t('analysis.gallery.experimental.dialogNotice');
+      default:
+        return null;
+    }
+  });
+  // The notice the license dialog shows for a model that a newer catalog entry replaces
+  const licenseSupersededNotice = $derived(
+    licenseModel?.supersededBy
+      ? t('analysis.gallery.superseded.dialogNotice', { name: licenseModel.supersededBy.name })
+      : null
+  );
+  // Block install when the selected variant cannot run on this host. The
+  // preselection can be blocked while another variant would run, for example when
+  // the global build and the host's own slice do not fit but another region's
+  // slice does (pickPreselectedVariant skips other regions' slices).
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
+  const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
+  /** Bounds of the dynamic threshold fields (confidence values and a number of hours). */
+  const DYNAMIC_TRIGGER_BOUNDS = SHARED_BOUNDS;
+  const DYNAMIC_MIN_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
+  const DYNAMIC_HOURS_BOUNDS = { min: 0, max: 1000, step: 1 };
+  /** Bounds of the CPU threads field; 0 uses all available threads. */
+  const THREADS_BOUNDS = { min: 0, max: 32, step: 1 };
+  /** Ids linking the shared threshold and the dynamic threshold fields to their help text. */
+  const SHARED_THRESHOLD_HELP_ID = generateId('shared-threshold-help');
+  const RANGE_OVERVIEW_HEADING_ID = generateId('range-overview-heading');
+  const RANGE_THRESHOLD_HELP_ID = generateId('range-threshold-help');
+  /** Range filter threshold bounds, and the backend default shown until settings load. */
+  const RANGE_THRESHOLD_BOUNDS = DYNAMIC_MIN_BOUNDS;
+  const RANGE_THRESHOLD_FALLBACK = 0.01;
+  const DYNAMIC_TRIGGER_HELP_ID = generateId('dynamic-trigger-help');
+  const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
+  const DYNAMIC_MIN_ERROR_ID = generateId('dynamic-min-error');
+  const DYNAMIC_HOURS_HELP_ID = generateId('dynamic-hours-help');
+  const SPECIES_LANGUAGE_HELP_ID = generateId('species-language-help');
+  /** One setting row: label and help on the left, the control on the right from tablet width. */
+  const SETTING_ROW_CLASS =
+    'grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]';
+  /** Inference backend and OpenVINO device values ('' in the config also means auto). */
+  const INFERENCE_AUTO = 'auto';
+  const BACKEND_ONNX = 'onnx';
+  const BACKEND_OPENVINO = 'openvino';
+  const DEVICE_CPU = 'cpu';
+  const DEVICE_GPU = 'gpu';
+  const INFERENCE_STATUS_ENDPOINT = '/api/v2/system/inference';
+  // The line that says why the runtime selects are disabled: loading, or the failure warning.
+  const INFERENCE_STATUS_ID = generateId('inference-status');
+  // The Backend select, where focus goes when a successful Retry removes the warning.
+  const INFERENCE_BACKEND_ID = generateId('inference-backend');
+  /** Prefix of the element IDs inside one threshold row (its name and its source note). */
+  const THRESHOLD_ROW_ID_PREFIX = generateId('threshold-row');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -331,31 +418,72 @@
       validHours: 24,
     }
   );
+  // The server rejects a dynamic threshold whose minimum is above its trigger, so while that
+  // holds the save bar blocks Save and says why.
+  const DYNAMIC_MIN_ISSUE_KEY = 'analysis-dynamic-threshold-min-above-trigger';
+  const VALIDATION_ISSUE_KEYS = [DYNAMIC_MIN_ISSUE_KEY];
+  let dynamicMinError = $derived(
+    dynamicThreshold.enabled && dynamicThreshold.min > dynamicThreshold.trigger
+      ? t('analysis.dynamicThreshold.minAboveTrigger')
+      : undefined
+  );
+  $effect(() => {
+    setValidationIssues(
+      VALIDATION_ISSUE_KEYS,
+      new Map(dynamicMinError ? [[DYNAMIC_MIN_ISSUE_KEY, dynamicMinError]] : [])
+    );
+  });
+  onDestroy(() => setValidationIssues(VALIDATION_ISSUE_KEYS, new Map()));
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
   let bat = $derived(
     $batSettings ?? {
       enabled: false,
-      threshold: 0.5,
+      threshold: SECTION_THRESHOLD_DEFAULT,
       filterEnabled: false,
       nighttimeOnly: true,
       falsePositiveFilter: { level: 0 },
-      ultrasonicFilter: { enabled: true },
+      ultrasonicFilter: { enabled: true, discardUnlikely: false },
     }
   );
 
-  // Check if a bat model is installed
+  let bsgBat: BSGBatSettings = $derived(
+    $bsgBatSettings ?? { threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  // The step the form shows: the saved value, or the default for 0 or no value (the API can store
+  // a raw 0, which the backend resolves to the default).
+  const bsgBatStepFrames = $derived(resolveBsgBatStepFrames(bsgBat.stepFrames));
+  const savedBsgBatStepFrames = $derived(
+    resolveBsgBatStepFrames(store.originalData.bsgbat?.stepFrames)
+  );
+
+  // The bat card (schedule, ultrasonic and false positive filters) is shared by every bat model.
+  // Each bat model has its own threshold, shown only while that model is installed.
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
+  const hasBsgBatModel = $derived(catalog.some(e => e.installed && e.id === BSG_BAT_CATALOG_ID));
+  const hasBattyBirdNetModel = $derived(
+    catalog.some(e => e.installed && e.category === 'bat' && e.id !== BSG_BAT_CATALOG_ID)
+  );
   const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
-  // Secondary acoustic classifiers with a per-model threshold override. These are
-  // gated on the installed-models list (not the catalog): the catalog endpoint
-  // hides foundation/preview models such as BirdNET v3.0 via VisibleCatalog(), so
-  // a catalog-based check would never light up the v3.0 section. The installed
-  // endpoint returns every downloaded model, hidden or not, keyed by catalogId.
-  let perch = $derived($perchSettings ?? { overrideThreshold: false, threshold: 0.5 });
-  let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
-  const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
-  const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
+  // ── Detection thresholds table ────────────────────────────────────────
+  // One row per enabled classifier (GET /api/v2/models, refreshed on topology
+  // changes), so the table follows what is installed and running.
+  let perch = $derived(
+    $perchSettings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  let birdnetV3 = $derived(
+    $birdNetV3Settings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  let birdnetPlus = $derived(
+    $birdNetPlusSettings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  const thresholdTableRows = $derived(thresholdRows(getAvailableModels()));
+  // The shared threshold (birdnet.threshold) is a setting of its own: it applies to every
+  // classifier without a threshold of its own, whichever classifiers are installed.
+  const sharedThreshold = $derived(birdnet?.threshold ?? SHARED_THRESHOLD_FALLBACK);
+  const sharedThresholdUsers = $derived(
+    thresholdTableRows.filter(row => rowUsesShared(row)).map(row => row.model.name)
+  );
 
   // ── Change detection ──────────────────────────────────────────────────
   // The saved and the current value of each card, used by the card's unsaved-changes badge
@@ -365,44 +493,47 @@
     current: unknown;
   }
 
-  const birdDetectionChange: ChangePair = $derived({
-    original: {
-      threshold: store.originalData.birdnet?.threshold,
-      locale: store.originalData.birdnet?.locale,
-      fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
-    },
-    current: {
-      threshold: birdnet?.threshold,
-      locale: birdnet?.locale,
-      fpFilter: falsePositiveFilter.level,
-    },
+  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
+  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
+  const formOverlap = $derived(birdnet?.overlap ?? 0);
+  // Unsaved edits to the level or the overlap the level adjusts (picking the saved level again
+  // can leave the overlap moved). The card badge, the tab dot and the cadence readout share it.
+  const fpFilterEdited = $derived(
+    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
+  );
+  const falsePositiveChange: ChangePair = $derived({
+    original: { edited: false },
+    current: { edited: fpFilterEdited },
   });
-  const perchChange: ChangePair = $derived({
-    original: {
-      override: store.originalData.perch?.overrideThreshold ?? false,
-      threshold: store.originalData.perch?.threshold ?? 0.5,
-    },
-    current: { override: perch.overrideThreshold, threshold: perch.threshold },
+  const speciesNamesChange: ChangePair = $derived({
+    original: { locale: store.originalData.birdnet?.locale },
+    current: { locale: birdnet?.locale },
   });
-  const birdnetV3Change: ChangePair = $derived({
-    original: {
-      override: store.originalData.birdnetv3?.overrideThreshold ?? false,
-      threshold: store.originalData.birdnetv3?.threshold ?? 0.5,
-    },
-    current: { override: birdnetV3.overrideThreshold, threshold: birdnetV3.threshold },
+  const thresholdsChange: ChangePair = $derived({
+    original: thresholdSnapshot(thresholdTableRows, store.originalData),
+    current: thresholdSnapshot(thresholdTableRows, {
+      birdnet,
+      perch,
+      birdnetv3: birdnetV3,
+      birdnetplus: birdnetPlus,
+      bat,
+      bsgbat: bsgBat,
+    }),
   });
   const batChange: ChangePair = $derived({
     original: {
-      batThreshold: store.originalData.bat?.threshold,
       batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
+      batDiscardUnlikely: store.originalData.bat?.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
+      bsgBatStepFrames: hasBsgBatModel ? savedBsgBatStepFrames : undefined,
     },
     current: {
-      batThreshold: bat.threshold,
       batNighttimeOnly: bat.nighttimeOnly,
       batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
+      batDiscardUnlikely: bat.ultrasonicFilter?.discardUnlikely ?? false,
       batFPFilter: batFPLevel,
+      bsgBatStepFrames: hasBsgBatModel ? bsgBatStepFrames : undefined,
     },
   });
   const rangeFilterChange: ChangePair = $derived({
@@ -415,14 +546,28 @@
   });
   const advancedChange: ChangePair = $derived({
     original: {
-      threads: store.originalData.birdnet?.threads,
       modelPath: store.originalData.birdnet?.modelPath,
       labelPath: store.originalData.birdnet?.labelPath,
     },
     current: {
-      threads: birdnet?.threads,
       modelPath: birdnet?.modelPath,
       labelPath: birdnet?.labelPath,
+    },
+  });
+  const selectedBackend = $derived(birdnet?.backend || INFERENCE_AUTO);
+  const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
+  const savedBackend = $derived(store.originalData.birdnet?.backend || INFERENCE_AUTO);
+  const savedDevice = $derived(store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO);
+  const inferenceChange: ChangePair = $derived({
+    original: {
+      backend: savedBackend,
+      openVinoDevice: savedDevice,
+      threads: store.originalData.birdnet?.threads,
+    },
+    current: {
+      backend: selectedBackend,
+      openVinoDevice: selectedDevice,
+      threads: birdnet?.threads,
     },
   });
   const modelRegionChange: ChangePair = $derived({
@@ -434,24 +579,75 @@
     current: { huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' },
   });
 
-  // A tab shows the change dot when any card badge on it would. The Perch, BirdNET v3.0 and bat
-  // cards count only while they are shown, so the dot and the badges stay in step. For Perch and
-  // BirdNET v3.0 the gate changes nothing today, since the defaults equal the saved-side
-  // fallbacks. For bat it is load-bearing: with no bat section saved, the page's defaults differ
-  // from the saved values and would light the dot for good.
-  const settingsTabHasChanges = $derived(
-    [
-      birdDetectionChange,
-      rangeFilterChange,
-      dynamicThresholdChange,
-      advancedChange,
-      ...(hasPerchModel ? [perchChange] : []),
-      ...(hasBirdNetV3Model ? [birdnetV3Change] : []),
-      ...(hasBatModel ? [batChange] : []),
-    ].some(c => hasSettingsChanged(c.original, c.current))
+  // A tab shows the change dot when any card badge on it would. The thresholds card holds only
+  // the rows on screen, and the Bats tab exists only while a bat model is installed, so the dot
+  // and the badges stay in step. For bat the gate is load-bearing: with no bat section saved, the
+  // page's defaults differ from the saved values and would light the dot for good.
+  const anyChanged = (pairs: ChangePair[]) =>
+    pairs.some(c => hasSettingsChanged(c.original, c.current));
+  const detectionTabHasChanges = $derived(
+    anyChanged([thresholdsChange, dynamicThresholdChange, speciesNamesChange])
   );
+  const filtersTabHasChanges = $derived(anyChanged([falsePositiveChange, rangeFilterChange]));
+  const batsTabHasChanges = $derived(hasBatModel && anyChanged([batChange]));
+  const inferenceTabHasChanges = $derived(anyChanged([inferenceChange]));
   const modelsTabHasChanges = $derived(
-    [modelRegionChange, downloadSourceChange].some(c => hasSettingsChanged(c.original, c.current))
+    anyChanged([modelRegionChange, downloadSourceChange, advancedChange])
+  );
+
+  // ── Inference tab ─────────────────────────────────────────────────────
+  // The runtimes this host offers come from GET /api/v2/system/inference, so the backend and
+  // device lists only hold choices that can load here. A saved choice the host lacks stays in
+  // the list, so the field still shows what the config says.
+
+  let inferenceBackends = $state<InferenceBackends | null>(null);
+  let inferenceBackendsFailed = $state(false);
+
+  async function loadInferenceBackends() {
+    try {
+      const status = await api.get<InferenceStatusResponse>(INFERENCE_STATUS_ENDPOINT);
+      inferenceBackends = status.backends;
+      inferenceBackendsFailed = false;
+    } catch (e) {
+      logger.error('Failed to load inference backends:', e);
+      // A list that already loaded stays valid, so a later failure does not warn beside it.
+      if (!inferenceBackends) inferenceBackendsFailed = true;
+    }
+  }
+
+  $effect(() => {
+    if (pageTab === 'inference' && !inferenceBackends) untrack(() => void loadInferenceBackends());
+  });
+
+  // A choice the host lacks stays offered while it is selected or saved, so picking another
+  // one keeps the way back to the saved choice.
+  const keptBackends = $derived(new Set([selectedBackend, savedBackend]));
+  const keptDevices = $derived(new Set([selectedDevice, savedDevice]));
+  const openVinoSupported = $derived(inferenceBackends?.openvino.supported ?? false);
+  const hostHasGpu = $derived(
+    inferenceBackends?.openvino.devices?.some(d => d.toLowerCase().startsWith(DEVICE_GPU)) ?? false
+  );
+
+  const backendOptions: SelectOption[] = $derived([
+    { value: INFERENCE_AUTO, label: t('analysis.inference.backend.options.auto') },
+    ...(inferenceBackends?.onnx.available || keptBackends.has(BACKEND_ONNX)
+      ? [{ value: BACKEND_ONNX, label: t('analysis.inference.backend.options.onnx') }]
+      : []),
+    ...(openVinoSupported || keptBackends.has(BACKEND_OPENVINO)
+      ? [{ value: BACKEND_OPENVINO, label: t('analysis.inference.backend.options.openvino') }]
+      : []),
+  ]);
+  const deviceOptions: SelectOption[] = $derived([
+    { value: INFERENCE_AUTO, label: t('analysis.inference.device.options.auto') },
+    { value: DEVICE_CPU, label: t('analysis.inference.device.options.cpu') },
+    ...(hostHasGpu || keptDevices.has(DEVICE_GPU)
+      ? [{ value: DEVICE_GPU, label: t('analysis.inference.device.options.gpu') }]
+      : []),
+  ]);
+  // The device applies only to models that OpenVINO runs.
+  const showDeviceField = $derived(
+    (openVinoSupported || selectedDevice !== INFERENCE_AUTO || savedDevice !== INFERENCE_AUTO) &&
+      selectedBackend !== BACKEND_ONNX
   );
 
   // ── Derived catalog views ─────────────────────────────────────────────
@@ -467,6 +663,7 @@
   // host-recommended variant differs from the installed one and is compatible.
   const offers = $derived(optimizeOffers(catalog));
   const offerByEntry = $derived(new Map(offers.map(o => [o.entry.id, o])));
+  const optimizeEntryIds = $derived(new Set(offers.map(o => o.entry.id)));
 
   // Session-scoped banner dismissal, guarded so a private-window/blocked
   // sessionStorage never throws (see frontend/AGENTS.md).
@@ -564,31 +761,6 @@
     lastInstallingId = current;
   });
 
-  // Choose which variant a card should describe: the installed variant on the
-  // Installed tab, the host-recommended (else default) variant on the Available tab.
-  // Returns null for a flat (variant-less) entry.
-  function displayVariantFor(
-    entry: CatalogEntry,
-    mode: 'available' | 'installed'
-  ): CatalogVariant | null {
-    const variants = entry.variants ?? [];
-    if (variants.length === 0) return null;
-    if (mode === 'installed') {
-      return variants.find(v => v.id === entry.installedVariantId) ?? null;
-    }
-    return (
-      variants.find(v => v.id === entry.recommendedVariantId) ??
-      variants.find(v => v.default) ??
-      null
-    );
-  }
-
-  // The region display for a variant-bearing entry's card: the variant's region
-  // name (localized), or the "Global" label when the variant is global.
-  function displayRegionName(variant: CatalogVariant | null): string {
-    if (!variant?.region) return t('analysis.gallery.regionGlobal');
-    return regionNameMap.get(variant.region) ?? variant.region;
-  }
   const availableWildlife = $derived(
     catalog.filter(e => !e.installed && e.category === 'wildlife')
   );
@@ -620,6 +792,11 @@
       localeCode: locale.value as FlagLocale,
     }))
   );
+
+  // The species language option behind a dropdown option, which carries the flag's locale code.
+  function localeOptionFor(option: SelectOption): BirdnetLocaleOption | undefined {
+    return birdnetLocaleOptions.find(candidate => candidate.value === option.value);
+  }
 
   async function loadBirdnetLocales() {
     birdnetLocales.loading = true;
@@ -737,21 +914,14 @@
   // server or before the audio pipeline has published a plan; the control's
   // description then falls back to the count from the configured overlap.
   const cadence = $derived(analysisCadence());
-  const cadenceHasBirdModels = $derived(cadence?.models.some(m => m.id !== BAT_MODEL_ID) ?? false);
-  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
-  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
-  const formOverlap = $derived(birdnet?.overlap ?? 0);
+  const cadenceHasBirdModels = $derived(cadence ? hasBirdCadenceModels(cadence) : false);
   const fpFilterActive = $derived(falsePositiveFilter.level >= FILTER_ACTIVE_MIN_LEVEL);
-  // Unsaved edits to the level or the overlap the level adjusts.
-  const fpCadenceEdited = $derived(
-    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
-  );
   // The snapshot does not reflect the saved settings yet. Every consumer checks
-  // fpCadenceEdited first, so this need not exclude unsaved edits.
+  // fpFilterEdited first, so this need not exclude unsaved edits.
   const fpCadencePending = $derived(
     cadence !== null && planLagsSettings(cadence, savedOverlap, savedFpLevel)
   );
-  const fpReadoutIsEstimate = $derived(fpCadenceEdited || fpCadencePending);
+  const fpReadoutIsEstimate = $derived(fpFilterEdited || fpCadencePending);
   const fpReadoutRows = $derived.by<CadenceReadoutRow[]>(() => {
     if (!cadence || !fpFilterActive) return [];
     if (fpReadoutIsEstimate) {
@@ -818,15 +988,17 @@
   // Keep the cadence readout live while the page is open: the topology stream
   // announces each re-plan.
   $effect(() => watchAcousticModels());
+  $effect(() => watchModels());
 
   // A saved level change that stays on one side of the filter on/off line does
   // not re-plan, so no topology event follows; the per-model counts the server
-  // reports still change. Refetch when the saved level or overlap changes. The
-  // first observation after settings load is skipped (the watch already fetched).
+  // reports still change, as do the BSG-BAT step and its counts, for which the plan broadcast does
+  // not fire either. Refetch when the saved level, overlap or BSG-BAT step changes. The first
+  // observation after settings load is skipped (the watch already fetched).
   let fpSavedKey: string | null = null;
   $effect(() => {
     if (!store.originalData.realtime) return; // settings not loaded yet
-    const key = `${savedFpLevel}:${savedOverlap}`;
+    const key = `${savedFpLevel}:${savedOverlap}:${savedBsgBatStepFrames}`;
     if (fpSavedKey === null) {
       fpSavedKey = key;
       return;
@@ -856,6 +1028,8 @@
     totalSpecies: number;
     withRangeData: number;
     withoutRangeData: number;
+    /** False when this classifier takes part but the active range backend does not filter it. */
+    coveredByBackend?: boolean;
   }
 
   interface RangeFilterStatus {
@@ -869,6 +1043,34 @@
 
   let rangeFilterStatus = $state<RangeFilterStatus | null>(null);
 
+  // Which classifiers the range filter acts on, from the range filter's own participant list
+  // (GET /api/v2/range/status), and which enabled ones it skips. The backend decides
+  // participation per model, so this never names a classifier the filter does not reach.
+  // A participant the active range backend does not cover is not filtered (for example Perch
+  // under the legacy BirdNET v2.4 range data), so it is listed as not range filtered and the
+  // overview table leaves it out.
+  const rangeCoveredClassifiers = $derived(
+    (rangeFilterStatus?.classifiers ?? []).filter(c => c.coveredByBackend !== false)
+  );
+
+  const rangeFilterScope = $derived.by(() => {
+    const participants = rangeCoveredClassifiers;
+    if (participants.length === 0) return t('analysis.scope.rangeFilter.generic');
+    const ids = new Set(participants.map(c => c.id));
+    const skipped = getAvailableModels()
+      .filter(m => m.registryId && !ids.has(m.registryId))
+      .map(m => m.name);
+    const lines = [
+      t('analysis.scope.rangeFilter.appliesTo', {
+        models: participants.map(c => c.name).join(', '),
+      }),
+    ];
+    if (skipped.length > 0)
+      lines.push(t('analysis.scope.rangeFilter.notApplied', { models: skipped.join(', ') }));
+    lines.push(t('analysis.scope.rangeFilter.needsLocation'));
+    return lines.join(' ');
+  });
+
   async function loadRangeFilterStatus() {
     try {
       rangeFilterStatus = await api.get<RangeFilterStatus>('/api/v2/range/status');
@@ -879,6 +1081,8 @@
 
   let rangeFilterState = $state<{
     speciesCount: number | null;
+    // True once a count request has finished, so a missing count then means it failed
+    countSettled: boolean;
     loading: boolean;
     testing: boolean;
     downloading: boolean;
@@ -887,6 +1091,7 @@
     species: RangeFilterSpecies[];
   }>({
     speciesCount: null,
+    countSettled: false,
     loading: false,
     testing: false,
     downloading: false,
@@ -896,7 +1101,7 @@
   });
 
   // Focus management for modal accessibility
-  let previouslyFocusedElement: HTMLElement | null = null;
+  let previouslyFocusedElement: HTMLElement | SVGElement | null = null;
 
   function getFocusableElements(container: HTMLElement): HTMLElement[] {
     const focusableSelectors = [
@@ -946,7 +1151,9 @@
     let focusTimer: ReturnType<typeof setTimeout> | undefined;
 
     if (rangeFilterState.showModal) {
-      previouslyFocusedElement = document.activeElement as HTMLElement;
+      // untrack: the dialog element binds after this runs and must not re-run the effect and its cleanup
+      const opener = pickOpener(untrack(() => rangeDialogElement));
+      if (opener !== undefined) previouslyFocusedElement = opener;
 
       focusTimer = setTimeout(() => {
         const modal = rangeDialogElement;
@@ -964,8 +1171,11 @@
         }
       }, 0);
     } else if (previouslyFocusedElement) {
-      // The button may have been removed while the dialog was open
-      if (previouslyFocusedElement.isConnected) previouslyFocusedElement.focus();
+      // The button may have been removed while the dialog was open, and focus the user moved to
+      // another control stays there; the dialog is already gone from the page here
+      if (previouslyFocusedElement.isConnected && canReturnFocus(undefined)) {
+        previouslyFocusedElement.focus();
+      }
       previouslyFocusedElement = null;
     }
 
@@ -984,6 +1194,8 @@
   let rangeFilterAbortController: AbortController | null = null;
 
   function debouncedTestRangeFilter() {
+    // A new count is on its way: until it settles, a missing count reads as loading, not failed
+    rangeFilterState.countSettled = false;
     rangeFilterAbortController?.abort();
     rangeFilterAbortController = null;
     clearTimeout(debounceTimer);
@@ -993,6 +1205,7 @@
   }
 
   async function loadRangeFilterCount() {
+    rangeFilterState.countSettled = false;
     try {
       interface CountResponse {
         count: number;
@@ -1003,6 +1216,7 @@
       logger.error('Failed to load range filter count:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterCountFailed');
     }
+    rangeFilterState.countSettled = true;
   }
 
   async function testCurrentRangeFilter() {
@@ -1029,6 +1243,7 @@
       );
 
       rangeFilterState.speciesCount = data.count;
+      rangeFilterState.countSettled = true;
 
       if (rangeFilterState.showModal) {
         rangeFilterState.species = data.species || [];
@@ -1038,12 +1253,38 @@
       logger.error('Failed to test range filter:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       rangeFilterState.speciesCount = null;
+      rangeFilterState.countSettled = true;
     } finally {
       clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
       rangeFilterAbortController = null;
     }
   }
+
+  // Why the View Species button is blocked, or undefined when it works. The reason is shown next
+  // to the button and the button points at it.
+  let viewSpeciesBlockedReason = $derived.by(() => {
+    // The location reads as unset until the settings arrive
+    if (store.isLoading) return t('settings.loading');
+    if (!birdnet?.locationConfigured) {
+      return t('settings.species.activeSpecies.locationNotConfigured.title');
+    }
+    if (rangeFilterState.loading)
+      return t('settings.main.sections.rangeFilter.modal.loadingSpecies');
+    if (rangeFilterState.testing)
+      return t('settings.main.sections.rangeFilter.speciesCount.loading');
+    if (rangeFilterState.speciesCount === null) {
+      // Loading only while the first count is pending; after that a missing count is a failure
+      return rangeFilterState.countSettled
+        ? t('settings.main.errors.rangeFilterCountFailed')
+        : t('settings.main.sections.rangeFilter.speciesCount.loading');
+    }
+    if (rangeFilterState.speciesCount === 0) {
+      return t('settings.main.sections.rangeFilter.modal.noSpeciesFound');
+    }
+    return undefined;
+  });
+  let viewSpeciesBlocked = $derived(viewSpeciesBlockedReason !== undefined);
 
   async function loadRangeFilterSpecies() {
     if (rangeFilterState.loading || !birdnet?.locationConfigured) return;
@@ -1155,8 +1396,25 @@
   }
 
   // ── Update handlers ───────────────────────────────────────────────────
+  // The runtime takes a whole number of threads, so a fractional entry becomes one.
+  function updateThreads(value: number) {
+    const snapped = snapToStep(value, THREADS_BOUNDS);
+    updateBirdnetSetting('threads', snapped);
+    return snapped;
+  }
+
   function updateBirdnetSetting(key: string, value: string | number) {
     settingsActions.updateSection('birdnet', { [key]: value });
+  }
+
+  // The config stores an empty backend or device for auto. Picking the saved choice again writes
+  // the saved raw value back, so the form compares equal to the saved settings and the save bar
+  // does not stay active, as updateBsgBatStep does for the step.
+  function updateInferenceChoice(key: 'backend' | 'openVinoDevice', value: string) {
+    const saved = store.originalData.birdnet?.[key];
+    settingsActions.updateSection('birdnet', {
+      [key]: value === (saved || INFERENCE_AUTO) ? saved : value,
+    });
   }
 
   function updateDynamicThreshold(key: string, value: number | boolean) {
@@ -1165,8 +1423,32 @@
     });
   }
 
-  function updateBatThreshold(value: number) {
-    settingsActions.updateSection('bat', { threshold: value });
+  function updateRangeThreshold(value: number) {
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, RANGE_THRESHOLD_BOUNDS);
+    settingsActions.updateSection('birdnet', {
+      rangeFilter: { ...birdnet?.rangeFilter, threshold: snapped },
+    });
+    return snapped;
+  }
+
+  function updateDynamicValue(key: string, bounds: ThresholdBounds, value: number) {
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, bounds);
+    updateDynamicThreshold(key, snapped);
+    return snapped;
+  }
+
+  // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
+  // saved effective one restores the saved raw value (0 or none for the default), so the form
+  // compares equal to the saved settings again and the save bar does not stay active. It returns
+  // the whole frame count kept, so the field shows it when the prop does not change.
+  function updateBsgBatStep(value: number) {
+    const frames = Math.round(value);
+    const stepFrames =
+      frames === savedBsgBatStepFrames ? store.originalData.bsgbat?.stepFrames : frames;
+    settingsActions.updateSection('bsgbat', { stepFrames });
+    return frames;
   }
 
   function updateBatNighttimeOnly(value: boolean) {
@@ -1176,6 +1458,16 @@
   function updateBatUltrasonicFilter(value: boolean) {
     settingsActions.updateSection('bat', {
       ultrasonicFilter: { ...bat.ultrasonicFilter, enabled: value },
+    });
+  }
+
+  function updateBatDiscardUnlikely(value: boolean) {
+    settingsActions.updateSection('bat', {
+      ultrasonicFilter: {
+        ...bat.ultrasonicFilter,
+        enabled: bat.ultrasonicFilter?.enabled ?? true,
+        discardUnlikely: value,
+      },
     });
   }
 
@@ -1225,9 +1517,9 @@
     },
   ];
 
-  // Bat has only 3 meaningful levels (fixed 50% overlap, 4 detections in window):
-  // Off=bypass (1 det), Moderate=2 det, Strict=3 det.
-  // Lenient(1 det) is functionally identical to Off, so it's excluded.
+  // Bat has only 3 meaningful levels: Off=bypass (1 det), Moderate and Strict. How many
+  // confirmations they need depends on the model's step (BattyBirdNET 1.5 s, BSG-BAT its
+  // configured step). Lenient is functionally identical to Off for BattyBirdNET, so it's excluded.
   const BAT_FP_LEVELS: FilterLevel[] = [
     {
       value: 0,
@@ -1246,14 +1538,25 @@
     },
   ];
 
-  // Bat FP filter calculation helpers.
-  // The bat model uses a fixed 50% overlap (1.5s step for 3s clip),
-  // yielding 4 possible detections in a 6-second reference window.
-  const BAT_MAX_DETECTIONS_IN_WINDOW = 4;
-
-  function calculateBatMinDetections(level: number): number {
-    return minDetectionsForStep(REFERENCE_WINDOW_SECONDS / BAT_MAX_DETECTIONS_IN_WINDOW, level);
+  // Bat FP filter calculation helpers: the same confirmation formula as the backend, applied to
+  // the step each bat model runs at. BattyBirdNET has a fixed 1.5 s step; BSG-BAT uses the step in
+  // the form, so an unsaved step shows its count before saving.
+  function battyBirdNetMinDetections(level: number): number {
+    return minDetectionsForStep(BATTYBIRDNET_STEP_SECONDS, level);
   }
+
+  function bsgBatMinDetections(level: number): number {
+    return minDetectionsForStep(bsgBatStepSeconds(bsgBatStepFrames), level);
+  }
+
+  /** Translation key of a filter level's name (the bird level list holds every level). */
+  function fpLevelNameKey(level: number): string {
+    return BIRD_FP_LEVELS.find(l => l.value === level)?.nameKey ?? '';
+  }
+
+  const bsgBatStepSecondsText = $derived(
+    formatNumber(bsgBatStepSeconds(bsgBatStepFrames), BSG_BAT_STEP_SECONDS_DECIMALS)
+  );
 
   const BAT_FP_DESCRIPTION_KEYS: Record<number, string> = {
     0: 'analysis.detection.batFalsePositiveFilter.levels.off',
@@ -1269,49 +1572,142 @@
     const baseDescription = t(descKey);
     if (level === 0) return baseDescription;
 
-    const minDet = calculateBatMinDetections(level);
+    if (hasBattyBirdNetModel && hasBsgBatModel) {
+      return t('analysis.detection.batFalsePositiveFilter.detectionCountByModel', {
+        batty: battyBirdNetMinDetections(level).toString(),
+        bsgBat: bsgBatMinDetections(level).toString(),
+        description: baseDescription,
+      });
+    }
+    const minDet = hasBsgBatModel ? bsgBatMinDetections(level) : battyBirdNetMinDetections(level);
     return t('analysis.detection.batFalsePositiveFilter.detectionCount', {
       count: minDet.toString(),
       description: baseDescription,
     });
   }
 
-  function updateThreshold(value: number) {
-    settingsActions.updateSection('birdnet', { threshold: value });
+  // Rounds a value to a field's step and bounds, so the field, the slider and the saved value
+  // agree (a value off the step would also mark the field invalid).
+  function snapToStep(value: number, { min, max, step }: ThresholdBounds): number {
+    const decimals = Math.max(0, Math.ceil(-Math.log10(step)));
+    const snapped = Math.min(max, Math.max(min, Math.round(value / step) * step));
+    return Number(snapped.toFixed(decimals));
   }
 
-  // Config for the shared secondary-model threshold section snippet.
-  interface SecondaryModelThresholdConfig {
-    titleKey: string;
-    descKey: string;
-    thresholdLabelKey: string;
-    // The BirdNET threshold this model follows while the override is off; shown
-    // in the disabled field so the number on screen matches the effective value.
-    effectiveThreshold: number;
-    current: { overrideThreshold: boolean; threshold: number };
-    // Saved and current values for the section's unsaved-changes badge.
-    change: ChangePair;
-    onOverride: (_value: boolean) => void;
-    onThreshold: (_value: number) => void;
+  function updateSharedThreshold(value: number) {
+    if (!Number.isFinite(value)) return;
+    const snapped = snapToStep(value, SHARED_BOUNDS);
+    settingsActions.updateSection('birdnet', { threshold: snapped });
+    return snapped;
   }
 
-  // Secondary-model threshold override handlers. When the override is off, the
-  // model follows the BirdNET threshold (backend modelGlobalConfidenceThreshold),
-  // so the threshold field is disabled until the override is enabled.
-  function updatePerchOverride(value: boolean) {
-    settingsActions.updateSection('perch', { overrideThreshold: value });
+  function updateRowThreshold(row: ThresholdRow, value: number) {
+    const { section } = row.descriptor;
+    if (!section || !Number.isFinite(value)) return;
+    const snapped = snapToStep(value, row.descriptor);
+    settingsActions.updateSection(section, { threshold: snapped });
+    return snapped;
   }
 
-  function updatePerchThreshold(value: number) {
-    settingsActions.updateSection('perch', { threshold: value });
+  // Switching a row to a custom threshold keeps its saved value when that value is inside the
+  // row's bounds; otherwise (for example a saved 0) it starts from the shared threshold it
+  // showed. Switching it off again restores the value it replaced, while the seeded value is
+  // untouched and still unsaved, so the round trip leaves the section as it was.
+  const seededThresholds = new Map<
+    ClassifierThresholdSection,
+    { seeded: number; previous: number | undefined }
+  >();
+
+  function updateRowCustom(row: ThresholdRow, custom: boolean) {
+    const { section, min, max } = row.descriptor;
+    if (!section) return;
+    const own = classifierValues(section).threshold;
+    if (!custom) {
+      const seed = seededThresholds.get(section);
+      seededThresholds.delete(section);
+      // A saved seeded value (the section's saved threshold equals it) is the user's own now.
+      const restorable =
+        seed !== undefined &&
+        own === seed.seeded &&
+        savedClassifierThreshold(section) === seed.previous;
+      settingsActions.updateSection(
+        section,
+        restorable
+          ? { overrideThreshold: false, threshold: seed.previous }
+          : { overrideThreshold: false }
+      );
+      return;
+    }
+    if (own !== undefined && own >= min && own <= max) {
+      settingsActions.updateSection(section, { overrideThreshold: true });
+      return;
+    }
+    const seeded = snapToStep(sharedThreshold, row.descriptor);
+    seededThresholds.set(section, { seeded, previous: own });
+    settingsActions.updateSection(section, { overrideThreshold: true, threshold: seeded });
   }
 
-  function updateBirdNetV3Override(value: boolean) {
-    settingsActions.updateSection('birdnetv3', { overrideThreshold: value });
+  // The single value of a one-choice select, whichever shape its callback reports.
+  function firstValue(value: string | string[]): string {
+    return Array.isArray(value) ? (value[0] ?? '') : value;
   }
 
-  function updateBirdNetV3Threshold(value: number) {
-    settingsActions.updateSection('birdnetv3', { threshold: value });
+  // The threshold a classifier section had when settings were last loaded or saved.
+  function savedClassifierThreshold(section: ClassifierThresholdSection): number | undefined {
+    return store.originalData[section]?.threshold;
+  }
+
+  // The settings values behind a classifier's own threshold section.
+  function classifierValues(section: ClassifierThresholdSection): ThresholdSectionValues {
+    switch (section) {
+      case 'perch':
+        return perch;
+      case 'birdnetv3':
+        return birdnetV3;
+      case 'birdnetplus':
+        return birdnetPlus;
+      case 'bat':
+        return bat;
+      case 'bsgbat':
+        return bsgBat;
+    }
+  }
+
+  function rowUsesShared(row: ThresholdRow): boolean {
+    const { section } = row.descriptor;
+    return usesSharedThreshold(row.descriptor, section ? classifierValues(section) : undefined);
+  }
+
+  // The value a row shows: the threshold that applies to it.
+  function rowThresholdValue(row: ThresholdRow): number {
+    const { section } = row.descriptor;
+    if (!section || rowUsesShared(row)) return sharedThreshold;
+    return classifierValues(section).threshold ?? sharedThreshold;
+  }
+
+  // One slider plus number field (or a number field alone) in the control column of a
+  // setting row. The thresholds and the dynamic threshold cards both use it, so their rows
+  // look and behave the same.
+  interface ValueControl {
+    label: string;
+    value: number;
+    bounds: ThresholdBounds;
+    disabled: boolean;
+    describedBy?: string;
+    /** False for a value without a meaningful range to slide over (a number of hours). */
+    slider?: boolean;
+    /** Field-level error shown under the number field. */
+    error?: string;
+    /** Called with the typed or slid value; returns the value it kept, which the field shows. */
+    onChange: (_value: number) => void | number;
+    /** Id of the message the page renders below the control row when `error` is set. */
+    errorId?: string;
+  }
+
+  // The ids a control's inputs describe themselves with: its help text and, while it has one, its
+  // error message.
+  function describedByOf(c: ValueControl): string | undefined {
+    return [c.describedBy, c.error ? c.errorId : undefined].filter(Boolean).join(' ') || undefined;
   }
 
   // ── Gallery tab definitions ───────────────────────────────────────────
@@ -1333,11 +1729,36 @@
   // ── Page-level tab definitions ────────────────────────────────────────
   const pageTabs: TabDefinition[] = $derived([
     {
-      id: 'settings',
-      label: t('analysis.tabs.settings'),
-      icon: SettingsIcon,
-      content: settingsTabContent,
-      hasChanges: settingsTabHasChanges,
+      id: 'detection',
+      label: t('analysis.tabs.detection'),
+      icon: Gauge,
+      content: detectionTabContent,
+      hasChanges: detectionTabHasChanges,
+    },
+    {
+      id: 'filters',
+      label: t('analysis.tabs.filters'),
+      icon: Filter,
+      content: filtersTabContent,
+      hasChanges: filtersTabHasChanges,
+    },
+    ...(hasBatModel
+      ? [
+          {
+            id: 'bats',
+            label: t('analysis.tabs.bats'),
+            icon: Moon,
+            content: batsTabContent,
+            hasChanges: batsTabHasChanges,
+          },
+        ]
+      : []),
+    {
+      id: 'inference',
+      label: t('analysis.tabs.inference'),
+      icon: Cpu,
+      content: inferenceTabContent,
+      hasChanges: inferenceTabHasChanges,
     },
     {
       id: 'models',
@@ -1374,9 +1795,6 @@
       // response cannot overwrite the newer region's catalog.
       if (seq !== catalogRequestSeq) return;
       catalog = response.catalog;
-      // Refresh the installed list alongside the catalog so the secondary-model
-      // threshold sections track install/uninstall. Swallows its own errors.
-      await loadInstalledModels(seq);
     } catch (e) {
       if (seq !== catalogRequestSeq) return;
       catalogError =
@@ -1385,18 +1803,6 @@
       // Only the newest request owns the loading flag, so a superseded response
       // does not clear the spinner out from under the one still running.
       if (seq === catalogRequestSeq) loading = false;
-    }
-  }
-
-  // seq, when passed, is the owning loadCatalog request's sequence: a stale
-  // installed-list response is dropped rather than overwriting a newer one.
-  async function loadInstalledModels(seq?: number) {
-    try {
-      const installed = await fetchInstalled();
-      if (seq !== undefined && seq !== catalogRequestSeq) return;
-      installedModels = installed;
-    } catch (e) {
-      logger.error('Failed to load installed models:', e);
     }
   }
 
@@ -1413,9 +1819,7 @@
 
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
-    // Smart default: preselect the recommended variant (falls back sensibly when
-    // there is no recommendation). Empty string for flat entries.
-    selectedVariantId = pickPreselectedVariant(entry);
+    chosenVariantId = null;
     licenseDialogRef?.showModal();
   }
 
@@ -1487,7 +1891,7 @@
               installingId = null;
               downloadProgress = null;
             }
-            invalidateModels();
+            void refreshModels();
             loadCatalog();
           }, 2000);
         },
@@ -1565,7 +1969,7 @@
     try {
       await uninstallModel(modelId);
       refreshSettingsAfterGalleryChange();
-      invalidateModels();
+      void refreshModels();
       await loadCatalog();
       toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
@@ -1584,6 +1988,22 @@
   function handleReinstall(entry: CatalogEntry) {
     if (galleryActionInFlight) return;
     startReinstall(entry.id, entry.name);
+  }
+
+  // A card's action button was used. Install and the Optimize swap both go through the
+  // license dialog, which picks the variant.
+  function handleCardAction(action: ModelCardAction, entry: CatalogEntry) {
+    switch (action) {
+      case 'install':
+        openLicenseDialog(entry);
+        break;
+      case 'reinstall':
+        handleReinstall(entry);
+        break;
+      case 'remove':
+        openRemoveDialog(entry);
+        break;
+    }
   }
 
   // The reinstall body, extracted so a failed reinstall's Retry can re-run it.
@@ -1620,7 +2040,7 @@
               reinstallingId = null;
               downloadProgress = null;
             }
-            invalidateModels();
+            void refreshModels();
             loadCatalog();
           }, 2000);
         },
@@ -1671,122 +2091,316 @@
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el?.focus();
   }
-
-  /** Compute download percentage for progress bar */
-  function progressPercent(p: DownloadProgress): number {
-    if (p.totalBytes <= 0) return 0;
-    return Math.min(100, Math.round((p.downloadedBytes / p.totalBytes) * 100));
-  }
-
-  /** Human-readable status label */
-  function statusLabel(status: DownloadProgress['status']): string {
-    switch (status) {
-      case 'downloading':
-        return t('analysis.gallery.progress.downloading');
-      case 'verifying':
-        return t('analysis.gallery.progress.verifying');
-      case 'loading':
-        return t('analysis.gallery.progress.loading');
-      case 'complete':
-        return t('analysis.gallery.progress.complete');
-      case 'failed':
-        return t('analysis.gallery.progress.failed');
-      default:
-        return '';
-    }
-  }
 </script>
 
-<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0) ── -->
-{#snippet secondaryModelThreshold(cfg: SecondaryModelThresholdConfig)}
-  <SettingsSection
-    title={t(cfg.titleKey)}
-    description={t(cfg.descKey)}
-    defaultOpen={true}
-    originalData={cfg.change.original}
-    currentData={cfg.change.current}
-  >
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Checkbox
-        checked={cfg.current.overrideThreshold}
-        label={t('analysis.detection.secondaryThresholdOverride.label')}
-        helpText={t('analysis.detection.secondaryThresholdOverride.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={cfg.onOverride}
-      />
+<!-- ── Detection Tab: settings that apply to every classifier ────────── -->
+<!-- The control column of a setting row: a slider and a number field editing one value, or a
+     number field alone in the same column, so fields line up across rows and cards. An error
+     is rendered here, in flow below the row, so a wrapped message pushes the next row down
+     instead of covering it. The field's own message box carries the clamp notice, out of flow so
+     the rows do not jump, and is hidden while an error shows so the two never overlap. -->
+{#snippet valueControl(c: ValueControl)}
+  <div class="min-w-0">
+    <div class="flex min-w-0 items-center gap-4">
+      {#if c.slider === false}
+        <div class="min-w-0 flex-1"></div>
+      {:else}
+        <input
+          type="range"
+          class="range range-sm min-w-0 flex-1"
+          aria-label={c.label}
+          aria-describedby={describedByOf(c)}
+          aria-invalid={c.error ? 'true' : undefined}
+          min={c.bounds.min}
+          max={c.bounds.max}
+          step={c.bounds.step}
+          value={c.value}
+          disabled={c.disabled}
+          oninput={event => c.onChange(event.currentTarget.valueAsNumber)}
+        />
+      {/if}
       <NumberField
-        label={t(cfg.thresholdLabelKey)}
-        value={cfg.current.overrideThreshold ? cfg.current.threshold : cfg.effectiveThreshold}
-        onUpdate={cfg.onThreshold}
-        min={0.01}
-        max={0.99}
-        step={0.01}
-        disabled={store.isLoading || store.isSaving || !cfg.current.overrideThreshold}
-        helpText={cfg.current.overrideThreshold
-          ? t('analysis.detection.secondaryThreshold.helpText')
-          : t('analysis.detection.secondaryThreshold.followsBirdnet')}
+        label={c.label}
+        labelClassName="sr-only"
+        className="relative w-24 shrink-0"
+        errorClassName={c.error ? 'hidden' : 'absolute right-0 top-full w-max max-w-72 text-right'}
+        value={c.value}
+        onUpdate={c.onChange}
+        min={c.bounds.min}
+        max={c.bounds.max}
+        step={c.bounds.step}
+        describedByExtra={describedByOf(c)}
+        disabled={c.disabled}
+        invalid={!!c.error}
       />
     </div>
-  </SettingsSection>
+    {#if c.error}
+      <p id={c.errorId} class="mt-1 text-right text-xs leading-4 text-[var(--text-error)]">
+        {c.error}
+      </p>
+    {/if}
+  </div>
 {/snippet}
 
-<!-- ── Settings Tab Content ──────────────────────────────────────────── -->
-{#snippet settingsTabContent()}
+<!-- The label and help text on the left of a setting row. The label is a block so wrapped lines
+     keep the text-sm line height. -->
+{#snippet settingText(label: string, help: string, helpId?: string)}
+  <div class="min-w-0">
+    <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
+    <p id={helpId} class="help-text mt-1">{help}</p>
+  </div>
+{/snippet}
+
+<!-- A dynamic threshold setting row, laid out like a detection threshold row. -->
+{#snippet dynamicRow(label: string, help: string, helpId: string, control: ValueControl)}
+  <li class={SETTING_ROW_CLASS}>
+    {@render settingText(label, help, helpId)}
+    {@render valueControl(control)}
+  </li>
+{/snippet}
+
+<!-- One line stating which classifiers a card's settings act on. -->
+{#snippet scopeLine(text: string)}
+  <p class="mb-4 text-sm text-[var(--color-base-content)]/70">{text}</p>
+{/snippet}
+
+{#snippet detectionTabContent()}
   <div class="space-y-6">
-    <!-- 1. Bird Detection -->
+    <!-- Detection thresholds: one row per enabled classifier -->
     <SettingsSection
-      title={t('analysis.bird.title')}
-      description={t('analysis.bird.description')}
+      title={t('analysis.thresholds.title')}
+      description={t('analysis.thresholds.description')}
       defaultOpen={true}
-      originalData={birdDetectionChange.original}
-      currentData={birdDetectionChange.current}
+      originalData={thresholdsChange.original}
+      currentData={thresholdsChange.current}
     >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <NumberField
-          label={t('analysis.detection.confidenceThreshold.label')}
-          value={birdnet?.threshold ?? 0.3}
-          onUpdate={updateThreshold}
-          min={0}
-          max={1}
-          step={0.05}
-          disabled={store.isLoading || store.isSaving}
-          helpText={t('analysis.detection.confidenceThreshold.helpText')}
-        />
-
-        <SelectDropdown
-          options={birdnetLocaleOptions}
-          value={birdnet?.locale ?? 'en'}
-          label={t('analysis.detection.locale.label')}
-          helpText={t('analysis.detection.locale.helpText')}
-          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          variant="select"
-          groupBy={false}
-          searchable={true}
-          onChange={value => updateBirdnetSetting('locale', value as string)}
-        >
-          {#snippet renderOption(option)}
-            {@const localeOption = option as BirdnetLocaleOption}
-            <div class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
+      <ul class="divide-y divide-[var(--border-100)]" data-testid="threshold-list">
+        <!-- The shared threshold: a setting of its own, used by every classifier without a
+             threshold of its own, whichever classifiers are installed. -->
+        <li class={SETTING_ROW_CLASS} data-testid="threshold-row-shared">
+          {@render settingText(
+            t('analysis.thresholds.shared.label'),
+            sharedThresholdUsers.length > 0
+              ? t('analysis.thresholds.shared.usedBy', {
+                  models: sharedThresholdUsers.join(', '),
+                })
+              : modelsLoading()
+                ? t('common.loading')
+                : t('analysis.thresholds.shared.unused'),
+            SHARED_THRESHOLD_HELP_ID
+          )}
+          {@render valueControl({
+            label: t('analysis.thresholds.shared.label'),
+            value: sharedThreshold,
+            bounds: SHARED_BOUNDS,
+            disabled: store.isLoading || store.isSaving,
+            describedBy: SHARED_THRESHOLD_HELP_ID,
+            onChange: updateSharedThreshold,
+          })}
+        </li>
+        {#each thresholdTableRows as row (row.model.id)}
+          {@const section = row.descriptor.section}
+          {@const usesShared = rowUsesShared(row)}
+          {@const nameId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-name`}
+          {@const sourceId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-source`}
+          <li class={SETTING_ROW_CLASS} data-testid="threshold-row-{row.model.id}">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  id={nameId}
+                  class="block text-sm font-medium text-[var(--color-base-content)]"
+                >
+                  {row.model.name}
+                </span>
+                {#if row.model.category === 'bat'}
+                  <Badge variant="neutral" size="xs">
+                    {t('analysis.thresholds.category.bat')}
+                  </Badge>
+                {/if}
+                {#if row.model.state === 'pending'}
+                  <Badge variant="warning" size="xs">
+                    {t('analysis.thresholds.state.pending')}
+                  </Badge>
+                {:else if row.model.state === 'failed'}
+                  <Badge variant="error" size="xs">
+                    {t('analysis.thresholds.state.failed')}
+                  </Badge>
+                {/if}
+              </div>
+              {#if row.descriptor.kind === 'optional'}
+                <ToggleField
+                  className="mt-2"
+                  variant="inline"
+                  size="sm"
+                  label={t('analysis.thresholds.customSwitch')}
+                  value={!usesShared}
+                  contextLabelId={nameId}
+                  disabled={store.isLoading || store.isSaving}
+                  onUpdate={custom => updateRowCustom(row, custom)}
+                />
+              {/if}
+              {#if usesShared}
+                <p id={sourceId} class="help-text mt-1">{t('analysis.thresholds.usesShared')}</p>
+              {/if}
             </div>
-          {/snippet}
-          {#snippet renderSelected(options)}
-            {#if options[0]}
-              {@const localeOption = options[0] as BirdnetLocaleOption}
-              <span class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </span>
-            {:else}
-              <span>{birdnet?.locale ?? 'en'}</span>
-            {/if}
-          {/snippet}
-        </SelectDropdown>
-      </div>
+            {@render valueControl({
+              label: row.model.name,
+              value: rowThresholdValue(row),
+              bounds: usesShared ? SHARED_BOUNDS : row.descriptor,
+              disabled: store.isLoading || store.isSaving || usesShared || !section,
+              describedBy: usesShared ? sourceId : undefined,
+              onChange: value => updateRowThreshold(row, value),
+            })}
+          </li>
+        {:else}
+          {#if modelsLoading()}
+            <li class="py-3 text-sm text-[var(--color-base-content)]/70">
+              {t('common.loading')}
+            </li>
+          {/if}
+        {/each}
+      </ul>
+    </SettingsSection>
 
-      <!-- Bird False Positive Filter -->
-      <div class="mt-6">
+    <!-- Dynamic threshold -->
+    <SettingsSection
+      title={t('settings.main.sections.dynamicThreshold.title')}
+      description={t('settings.main.sections.dynamicThreshold.description')}
+      originalData={dynamicThresholdChange.original}
+      currentData={dynamicThresholdChange.current}
+    >
+      {@render scopeLine(t('analysis.scope.dynamicThreshold'))}
+      <ToggleField
+        value={dynamicThreshold.enabled}
+        label={t('settings.main.sections.dynamicThreshold.enable.label')}
+        description={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+        disabled={store.isLoading || store.isSaving}
+        onUpdate={enabled => updateDynamicThreshold('enabled', enabled)}
+      />
+
+      {#if dynamicThreshold.enabled}
+        <ul class="mt-4 divide-y divide-[var(--border-100)] border-t border-[var(--border-100)]">
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.trigger.label'),
+            t('settings.main.sections.dynamicThreshold.trigger.helpText'),
+            DYNAMIC_TRIGGER_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.trigger.label'),
+              value: dynamicThreshold.trigger,
+              bounds: DYNAMIC_TRIGGER_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_TRIGGER_HELP_ID,
+              onChange: value => updateDynamicValue('trigger', DYNAMIC_TRIGGER_BOUNDS, value),
+            }
+          )}
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.minimum.label'),
+            t('settings.main.sections.dynamicThreshold.minimum.helpText'),
+            DYNAMIC_MIN_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.minimum.label'),
+              value: dynamicThreshold.min,
+              bounds: DYNAMIC_MIN_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_MIN_HELP_ID,
+              errorId: DYNAMIC_MIN_ERROR_ID,
+              error: dynamicMinError,
+              onChange: value => updateDynamicValue('min', DYNAMIC_MIN_BOUNDS, value),
+            }
+          )}
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.expireTime.label'),
+            t('settings.main.sections.dynamicThreshold.expireTime.helpText'),
+            DYNAMIC_HOURS_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.expireTime.label'),
+              value: dynamicThreshold.validHours,
+              bounds: DYNAMIC_HOURS_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_HOURS_HELP_ID,
+              slider: false,
+              onChange: value => updateDynamicValue('validHours', DYNAMIC_HOURS_BOUNDS, value),
+            }
+          )}
+        </ul>
+      {/if}
+    </SettingsSection>
+
+    <!-- Species names -->
+    <SettingsSection
+      title={t('analysis.speciesNames.title')}
+      description={t('analysis.speciesNames.description')}
+      originalData={speciesNamesChange.original}
+      currentData={speciesNamesChange.current}
+    >
+      {@render scopeLine(t('analysis.scope.speciesNames'))}
+      <ul>
+        <li class={SETTING_ROW_CLASS}>
+          {@render settingText(
+            t('analysis.detection.locale.label'),
+            t('analysis.detection.locale.helpText'),
+            SPECIES_LANGUAGE_HELP_ID
+          )}
+          <div class="min-w-0">
+            <SelectDropdown
+              options={birdnetLocaleOptions}
+              value={birdnet?.locale ?? 'en'}
+              aria-label={t('analysis.detection.locale.label')}
+              aria-describedby={SPECIES_LANGUAGE_HELP_ID}
+              disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
+              variant="select"
+              size="md"
+              groupBy={false}
+              searchable={true}
+              onChange={value => updateBirdnetSetting('locale', firstValue(value))}
+            >
+              {#snippet renderOption(option)}
+                {@const localeOption = localeOptionFor(option)}
+                <div class="flex items-center gap-2">
+                  {#if localeOption}
+                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  {/if}
+                  <span>{option.label}</span>
+                </div>
+              {/snippet}
+              {#snippet renderSelected(options)}
+                {#if options[0]}
+                  {@const localeOption = localeOptionFor(options[0])}
+                  <span class="flex items-center gap-2">
+                    {#if localeOption}
+                      <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                    {/if}
+                    <span>{options[0].label}</span>
+                  </span>
+                {:else}
+                  <span>{birdnet?.locale ?? 'en'}</span>
+                {/if}
+              {/snippet}
+            </SelectDropdown>
+          </div>
+        </li>
+      </ul>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+<!-- ── Filters Tab: settings that drop detections after scoring ─────────── -->
+{#snippet filtersTabContent()}
+  <div class="space-y-6">
+    <!-- False positive filter: every classifier except bats -->
+    <SettingsSection
+      title={t('settings.main.sections.falsePositiveFilter.title')}
+      description={t('settings.main.sections.falsePositiveFilter.description')}
+      defaultOpen={true}
+      originalData={falsePositiveChange.original}
+      currentData={falsePositiveChange.current}
+    >
+      {@render scopeLine(
+        hasBatModel
+          ? t('analysis.scope.falsePositiveFilterBatTab')
+          : t('analysis.scope.falsePositiveFilter')
+      )}
+      <div>
         <FalsePositiveFilterControl
           id="false-positive-filter-level"
           level={falsePositiveFilter.level}
@@ -1799,7 +2413,7 @@
 
       {#if falsePositiveFilter.level === 0}
         <SettingsNote>
-          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
           <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
         </SettingsNote>
       {:else}
@@ -1848,7 +2462,7 @@
                 </ul>
                 {#if fpReadoutIsEstimate}
                   <p class="mt-2 text-xs text-[var(--color-base-content)]/80">
-                    {fpCadenceEdited
+                    {fpFilterEdited
                       ? t('settings.main.sections.falsePositiveFilter.readoutPreview')
                       : t('settings.main.sections.falsePositiveFilter.readoutPending')}
                   </p>
@@ -1873,187 +2487,119 @@
       {/if}
     </SettingsSection>
 
-    <!-- 2. Perch v2 threshold override (only when the Perch model is installed) -->
-    {#if hasPerchModel}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.perch.title',
-        descKey: 'analysis.perch.description',
-        thresholdLabelKey: 'analysis.detection.perchThreshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: perch,
-        change: perchChange,
-        onOverride: updatePerchOverride,
-        onThreshold: updatePerchThreshold,
-      })}
-    {/if}
-
-    <!-- 3. BirdNET v3.0 threshold override (only when the v3.0 model is installed) -->
-    {#if hasBirdNetV3Model}
-      {@render secondaryModelThreshold({
-        titleKey: 'analysis.birdnetv3.title',
-        descKey: 'analysis.birdnetv3.description',
-        thresholdLabelKey: 'analysis.detection.birdnetv3Threshold.label',
-        effectiveThreshold: birdnet?.threshold ?? 0.3,
-        current: birdnetV3,
-        change: birdnetV3Change,
-        onOverride: updateBirdNetV3Override,
-        onThreshold: updateBirdNetV3Threshold,
-      })}
-    {/if}
-
-    <!-- 4. Bat Detection (only when a bat model is installed) -->
-    {#if hasBatModel}
-      <SettingsSection
-        title={t('analysis.bat.title')}
-        description={t('analysis.bat.description')}
-        defaultOpen={true}
-        originalData={batChange.original}
-        currentData={batChange.current}
-      >
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <NumberField
-            label={t('analysis.detection.batThreshold.label')}
-            value={bat.threshold}
-            onUpdate={updateBatThreshold}
-            min={0.01}
-            max={0.99}
-            step={0.01}
-            disabled={store.isLoading || store.isSaving}
-            helpText={t('analysis.detection.batThreshold.helpText')}
-          />
-          <div></div>
-
-          <Checkbox
-            checked={bat.nighttimeOnly ?? true}
-            label={t('analysis.detection.batNighttimeOnly.label')}
-            helpText={t('analysis.detection.batNighttimeOnly.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateBatNighttimeOnly}
-          />
-          <Checkbox
-            checked={bat.ultrasonicFilter?.enabled ?? true}
-            label={t('analysis.detection.batUltrasonicFilter.label')}
-            helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateBatUltrasonicFilter}
-          />
-        </div>
-
-        <!-- Bat False Positive Filter -->
-        <div class="mt-6">
-          <FalsePositiveFilterControl
-            id="bat-false-positive-filter-level"
-            level={batFPLevel}
-            levels={BAT_FP_LEVELS}
-            onUpdate={updateBatFalsePositiveFilterLevel}
-            getDescription={level => getBatFalsePositiveFilterDescription(level)}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-
-        {#if batFPLevel === 0}
-          <SettingsNote>
-            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
-            <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
-          </SettingsNote>
-        {/if}
-      </SettingsSection>
-    {/if}
-
-    <!-- 5. Range Filter -->
+    <!-- Range filter -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
       originalData={rangeFilterChange.original}
       currentData={rangeFilterChange.current}
     >
-      <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
+      {@render scopeLine(rangeFilterScope)}
+      <ul class="divide-y divide-[var(--border-100)]">
+        <li class={SETTING_ROW_CLASS}>
+          {@render settingText(
+            t('settings.main.sections.rangeFilter.threshold.label'),
+            t('settings.main.sections.rangeFilter.threshold.helpText'),
+            RANGE_THRESHOLD_HELP_ID
+          )}
+          {@render valueControl({
+            label: t('settings.main.sections.rangeFilter.threshold.label'),
+            value: birdnet?.rangeFilter?.threshold ?? RANGE_THRESHOLD_FALLBACK,
+            bounds: RANGE_THRESHOLD_BOUNDS,
+            disabled: store.isLoading || store.isSaving,
+            describedBy: RANGE_THRESHOLD_HELP_ID,
+            onChange: updateRangeThreshold,
+          })}
+        </li>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-        <NumberField
-          label={t('settings.main.sections.rangeFilter.threshold.label')}
-          value={birdnet?.rangeFilter?.threshold ?? 0.01}
-          onUpdate={value =>
-            settingsActions.updateSection('birdnet', {
-              rangeFilter: { ...birdnet?.rangeFilter, threshold: value },
-            })}
-          min={0.0}
-          max={0.99}
-          step={0.01}
-          helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <div>
-          <div class="flex justify-start mb-1">
-            <span class="text-sm text-[var(--color-base-content)]"
-              >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-            >
-          </div>
-          <div class="flex items-center gap-3">
-            <div
-              class="text-2xl font-bold text-[var(--color-primary)] tabular-nums"
-              class:opacity-60={rangeFilterState.testing}
-            >
-              {rangeFilterState.speciesCount !== null
-                ? formatNumber(rangeFilterState.speciesCount)
-                : '-'}
+        <li class={SETTING_ROW_CLASS}>
+          {@render settingText(
+            t('settings.main.sections.rangeFilter.speciesCount.label'),
+            t('settings.main.sections.rangeFilter.speciesCount.helpText')
+          )}
+          <div class="min-w-0">
+            <div class="flex items-center gap-3">
+              <div
+                class={cn(
+                  'text-2xl font-bold tabular-nums',
+                  // Dimmed through the colour's alpha, which keeps the hue and dims in every
+                  // theme while staying above 3:1 for this large bold text.
+                  rangeFilterState.testing
+                    ? 'text-[var(--text-primary)]/70'
+                    : 'text-[var(--text-primary)]'
+                )}
+              >
+                {rangeFilterState.speciesCount !== null
+                  ? formatNumber(rangeFilterState.speciesCount)
+                  : '-'}
+              </div>
+              {#if rangeFilterState.testing}
+                <!-- Decorative: the status region below announces the state. -->
+                <LoadingSpinner size="sm" aria-hidden="true" />
+              {/if}
+              <!-- Always rendered so screen readers hear loading and the new count. -->
+              <span class="sr-only" role="status">
+                {rangeFilterState.testing
+                  ? t('settings.main.sections.rangeFilter.speciesCount.loading')
+                  : rangeFilterState.speciesCount !== null
+                    ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
+                    : ''}
+              </span>
             </div>
-            {#if rangeFilterState.testing}
-              <!-- Decorative: the status region below announces the state. -->
-              <LoadingSpinner size="sm" aria-hidden="true" />
-            {/if}
-            <!-- Always rendered so screen readers hear loading and the new count. -->
-            <span class="sr-only" role="status">
-              {rangeFilterState.testing
-                ? t('settings.main.sections.rangeFilter.speciesCount.loading')
-                : rangeFilterState.speciesCount !== null
-                  ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
-                  : ''}
-            </span>
+            <div class="flex flex-wrap items-center gap-2 mt-2">
+              <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
+                 natively disabled button would drop focus before the dialog could return it here -->
+              <button
+                type="button"
+                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
+                aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
+                aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
+                onclick={() => {
+                  if (viewSpeciesBlocked) return;
+                  rangeFilterState.showModal = true;
+                  loadRangeFilterSpecies();
+                }}
+              >
+                {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!rangeFilterState.speciesCount ||
+                  rangeFilterState.downloading ||
+                  !birdnet?.locationConfigured}
+                onclick={downloadSpeciesCSV}
+              >
+                <Download class="size-4" />
+                {t('analytics.filters.exportCsv')}
+              </button>
+              <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
+              {#if viewSpeciesBlockedReason}
+                <span
+                  id="range-species-blocked-reason"
+                  class="text-xs text-[var(--color-base-content)]/70"
+                >
+                  {viewSpeciesBlockedReason}
+                </span>
+              {/if}
+            </div>
           </div>
-          <div class="flex gap-2 mt-2">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.loading ||
-                !birdnet?.locationConfigured}
-              onclick={() => {
-                rangeFilterState.showModal = true;
-                loadRangeFilterSpecies();
-              }}
-            >
-              {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.downloading ||
-                !birdnet?.locationConfigured}
-              onclick={downloadSpeciesCSV}
-            >
-              <Download class="size-4" />
-              {t('analytics.filters.exportCsv')}
-            </button>
-          </div>
-          <span class="help-text mt-1">
-            {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-          </span>
-        </div>
-      </div>
+        </li>
+      </ul>
 
       {#if rangeFilterStatus && rangeFilterStatus.geomodel}
-        <details
-          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
+        <!-- Always shown: the Filters tab is short, so the overview needs no disclosure. -->
+        <section
+          class="mt-6 border-t border-[var(--border-100)] pt-5"
+          aria-labelledby={RANGE_OVERVIEW_HEADING_ID}
         >
-          <summary
-            class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
+          <h3
+            id={RANGE_OVERVIEW_HEADING_ID}
+            class="mb-3 text-sm font-medium text-[var(--color-base-content)]"
           >
             {t('analysis.rangeFilter.status.title')}
-          </summary>
-          <div class="px-4 pb-4">
+          </h3>
+          <div>
             <!-- Geomodel info line -->
             <div class="flex items-center gap-2 text-sm mb-3">
               <span class="font-medium">
@@ -2066,7 +2612,7 @@
                 class={cn(
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                   rangeFilterStatus.geomodel.autoSelected
-                    ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
+                    ? 'bg-[var(--color-success)]/15 text-[var(--text-success)]'
                     : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
                 )}
               >
@@ -2077,33 +2623,33 @@
             </div>
 
             <!-- Per-classifier coverage table -->
-            {#if rangeFilterStatus.classifiers.length > 0}
+            {#if rangeCoveredClassifiers.length > 0}
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="border-b border-[var(--color-base-300)]">
-                      <th
-                        class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                      <th scope="col" class="text-left py-2 pr-4 font-medium text-muted"
                         >{t('analysis.rangeFilter.status.classifier')}</th
                       >
-                      <th
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                      <th scope="col" class="text-right py-2 px-4 font-medium text-muted"
                         >{t('analysis.rangeFilter.status.totalSpecies')}</th
                       >
                       <th
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        scope="col"
+                        class="text-right py-2 px-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withRangeData')}</th
                       >
                       <th
-                        class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                        scope="col"
+                        class="text-right py-2 pl-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
                         >{t('analysis.rangeFilter.status.withoutRangeData')}</th
                       >
                     </tr>
                   </thead>
                   <tbody>
-                    {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                    {#each rangeCoveredClassifiers as classifier (classifier.id)}
                       <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
                         <td class="py-2 pr-4 font-medium">{classifier.name}</td>
                         <td class="py-2 px-4 text-right tabular-nums"
@@ -2122,26 +2668,26 @@
               </div>
             {/if}
           </div>
-        </details>
+        </section>
 
         <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
-        <div class="mt-3">
-          <Checkbox
+        <div class="mt-5 border-t border-[var(--border-100)] pt-5">
+          <ToggleField
             label={t('analysis.rangeFilter.status.passUnmapped.label')}
-            checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
-            onchange={value =>
-              settingsActions.updateSection('birdnet', {
-                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
-              })}
-            helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+            description={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+            value={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
             disabled={store.isLoading || store.isSaving}
+            onUpdate={enabled =>
+              settingsActions.updateSection('birdnet', {
+                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: enabled },
+              })}
           />
         </div>
       {/if}
 
       {#if rangeFilterState.error}
         <div
-          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
           role="alert"
         >
           <XCircle class="size-5 shrink-0" aria-hidden="true" />
@@ -2157,106 +2703,209 @@
         </div>
       {/if}
     </SettingsSection>
+  </div>
+{/snippet}
 
-    <!-- 6. Dynamic Threshold -->
+<!-- ── Bats Tab: shown while a bat model is installed ────────────────── -->
+{#snippet batsTabContent()}
+  <div class="space-y-6">
+    <!-- Bat detection -->
     <SettingsSection
-      title={t('settings.main.sections.dynamicThreshold.title')}
-      description={t('settings.main.sections.dynamicThreshold.description')}
-      originalData={dynamicThresholdChange.original}
-      currentData={dynamicThresholdChange.current}
+      title={t('analysis.bat.title')}
+      description={t('analysis.bat.description')}
+      defaultOpen={true}
+      originalData={batChange.original}
+      currentData={batChange.current}
     >
-      <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
-
-      <div class="mt-4">
-        <Checkbox
-          checked={dynamicThreshold.enabled}
-          label={t('settings.main.sections.dynamicThreshold.enable.label')}
-          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+      {@render scopeLine(t('analysis.scope.bat'))}
+      <div class="divide-y divide-[var(--border-100)]">
+        <ToggleField
+          className="pb-4"
+          value={bat.nighttimeOnly ?? true}
+          label={t('analysis.detection.batNighttimeOnly.label')}
+          description={t('analysis.detection.batNighttimeOnly.helpText')}
           disabled={store.isLoading || store.isSaving}
-          onchange={value => updateDynamicThreshold('enabled', value)}
+          onUpdate={updateBatNighttimeOnly}
+        />
+        <ToggleField
+          className="py-4"
+          value={bat.ultrasonicFilter?.enabled ?? true}
+          label={t('analysis.detection.batUltrasonicFilter.label')}
+          description={t('analysis.detection.batUltrasonicFilter.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onUpdate={updateBatUltrasonicFilter}
+        />
+        {#if bat.ultrasonicFilter?.enabled ?? true}
+          <!-- Indented under the filter it depends on -->
+          <ToggleField
+            className="py-4 pl-6"
+            value={bat.ultrasonicFilter?.discardUnlikely ?? false}
+            label={t('analysis.detection.batDiscardUnlikely.label')}
+            description={t('analysis.detection.batDiscardUnlikely.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updateBatDiscardUnlikely}
+          />
+        {/if}
+      </div>
+
+      <!-- Bat False Positive Filter -->
+      <div class="mt-2 border-t border-[var(--border-100)] pt-5">
+        <FalsePositiveFilterControl
+          id="bat-false-positive-filter-level"
+          level={batFPLevel}
+          levels={BAT_FP_LEVELS}
+          onUpdate={updateBatFalsePositiveFilterLevel}
+          getDescription={level => getBatFalsePositiveFilterDescription(level)}
+          disabled={store.isLoading || store.isSaving}
         />
       </div>
 
-      {#if dynamicThreshold.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.trigger.label')}
-            value={dynamicThreshold.trigger}
-            onUpdate={value => updateDynamicThreshold('trigger', value)}
-            min={0.0}
-            max={1.0}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+      {#if batFPLevel === 0}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+          <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
+        </SettingsNote>
+      {/if}
 
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.minimum.label')}
-            value={dynamicThreshold.min}
-            onUpdate={value => updateDynamicThreshold('min', value)}
-            min={0.0}
-            max={0.99}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+      {#if hasBsgBatModel}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+          <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
+        </SettingsNote>
 
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
-            value={dynamicThreshold.validHours}
-            onUpdate={value => updateDynamicThreshold('validHours', value)}
-            min={0}
-            max={1000}
-            step={1}
-            helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div>
+            <NumberField
+              label={t('analysis.detection.bsgBatStep.label')}
+              value={bsgBatStepFrames}
+              onUpdate={updateBsgBatStep}
+              min={BSG_BAT_STEP_MIN_FRAMES}
+              max={BSG_BAT_STEP_MAX_FRAMES}
+              step={BSG_BAT_STEP_INCREMENT}
+              disabled={store.isLoading || store.isSaving}
+              helpText={t('analysis.detection.bsgBatStep.helpText')}
+              describedByExtra={BSG_BAT_STEP_READOUT_ID}
+            />
+            <p
+              id={BSG_BAT_STEP_READOUT_ID}
+              class="mt-1 text-xs text-[var(--color-base-content)]/70"
+            >
+              {#if batFPLevel === 0}
+                {t('analysis.detection.bsgBatStep.readout', { seconds: bsgBatStepSecondsText })}
+              {:else}
+                {t('analysis.detection.bsgBatStep.readoutWithFilter', {
+                  seconds: bsgBatStepSecondsText,
+                  level: t(fpLevelNameKey(batFPLevel)),
+                  count: bsgBatMinDetections(batFPLevel).toString(),
+                })}
+              {/if}
+              {t('analysis.detection.bsgBatStep.restartNote')}
+            </p>
+          </div>
         </div>
       {/if}
     </SettingsSection>
+  </div>
+{/snippet}
 
-    <!-- 7. Advanced (collapsed by default) -->
+<!-- ── Inference Tab: where and how the models run ────────────────────── -->
+{#snippet inferenceTabContent()}
+  <div class="space-y-6">
     <SettingsSection
-      title={t('analysis.advanced.title')}
-      description={t('analysis.advanced.description')}
-      defaultOpen={false}
-      originalData={advancedChange.original}
-      currentData={advancedChange.current}
+      title={t('analysis.inference.runtime.title')}
+      description={t('analysis.inference.runtime.description')}
+      originalData={inferenceChange.original}
+      currentData={inferenceChange.current}
     >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {#if inferenceBackendsFailed}
+        <ErrorAlert
+          id={INFERENCE_STATUS_ID}
+          type="warning"
+          className="mb-6"
+          onRetry={loadInferenceBackends}
+          focusFallback={() => [document.getElementById(INFERENCE_BACKEND_ID)]}
+        >
+          {t('analysis.inference.backendsUnavailable')}
+        </ErrorAlert>
+      {:else if !inferenceBackends}
+        <p class="mb-6 text-sm">
+          <SkeletonStatus
+            id={INFERENCE_STATUS_ID}
+            label={t('analysis.inference.backendsLoading')}
+          />
+        </p>
+      {/if}
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <SelectDropdown
+          id={INFERENCE_BACKEND_ID}
+          options={backendOptions}
+          value={selectedBackend}
+          label={t('analysis.inference.backend.label')}
+          helpText={t('analysis.inference.backend.helpText')}
+          disabled={store.isLoading || store.isSaving || !inferenceBackends}
+          aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
+          variant="select"
+          size="md"
+          groupBy={false}
+          onChange={value => updateInferenceChoice('backend', firstValue(value))}
+        />
+        {#if showDeviceField}
+          <SelectDropdown
+            options={deviceOptions}
+            value={selectedDevice}
+            label={t('analysis.inference.device.label')}
+            helpText={t('analysis.inference.device.helpText')}
+            disabled={store.isLoading || store.isSaving || !inferenceBackends}
+            aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
+            variant="select"
+            size="md"
+            groupBy={false}
+            onChange={value => updateInferenceChoice('openVinoDevice', firstValue(value))}
+          />
+        {/if}
+      </div>
+      <div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <NumberField
           label={t('settings.main.fields.inferenceThreads.label')}
           value={birdnet?.threads ?? 0}
-          onUpdate={value => updateBirdnetSetting('threads', value)}
-          min={0}
-          max={32}
-          step={1}
+          onUpdate={updateThreads}
+          min={THREADS_BOUNDS.min}
+          max={THREADS_BOUNDS.max}
+          step={THREADS_BOUNDS.step}
           helpText={t('settings.main.fields.inferenceThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
       </div>
+      <SettingsNote><span>{t('analysis.inference.reloadNote')}</span></SettingsNote>
+    </SettingsSection>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-        <TextInput
-          id="model-path"
-          value={birdnet?.modelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.modelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('modelPath', value)}
-        />
-
-        <TextInput
-          id="label-path"
-          value={birdnet?.labelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.labelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('labelPath', value)}
-        />
-      </div>
+    <SettingsSection
+      title={t('analysis.inference.running.title')}
+      description={t('analysis.inference.running.description')}
+    >
+      <ul class="divide-y divide-[var(--border-100)]" data-testid="inference-running-list">
+        {#each getAvailableModels() as model (model.id)}
+          <li class="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
+            <span class="min-w-0 flex-1 text-sm font-medium text-[var(--color-base-content)]">
+              {model.name}
+            </span>
+            {#if model.state === 'pending'}
+              <Badge variant="warning" size="xs">{t('analysis.thresholds.state.pending')}</Badge>
+            {:else if model.state === 'failed'}
+              <Badge variant="error" size="xs">{t('analysis.thresholds.state.failed')}</Badge>
+            {:else}
+              <span class="text-sm tabular-nums text-[var(--text-subtle)]">
+                {[model.backend, model.precision].filter(Boolean).join(' · ') ||
+                  t('analysis.inference.running.unknown')}
+              </span>
+            {/if}
+          </li>
+        {:else}
+          <li class="py-3 text-sm text-[var(--text-subtle)]">
+            {modelsLoading() ? t('common.loading') : t('analysis.thresholds.empty')}
+          </li>
+        {/each}
+      </ul>
     </SettingsSection>
   </div>
 {/snippet}
@@ -2281,7 +2930,7 @@
           role="alert"
         >
           <div class="flex items-start gap-3">
-            <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+            <AlertTriangle class="size-5 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
             <div class="min-w-0 flex-1">
               <p class="font-medium text-[var(--color-base-content)]">
                 {t('analysis.gallery.errors.actionFailed', { name: installError.modelName })}
@@ -2358,6 +3007,11 @@
         </div>
       {/if}
 
+      <!-- Always rendered, so a screen reader hears its text change when an install completes;
+           a line mounted together with its text is often not announced (see frontend/AGENTS.md,
+           Accessibility). -->
+      <span class="sr-only" role="status">{galleryCompleteText}</span>
+
       {#if galleryActionInFlight}
         <!-- One shared, live status line naming why the other cards' actions are
              blocked. Touch users get no tooltip and aria-disabled buttons carry no
@@ -2380,7 +3034,7 @@
           class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-4 py-3 text-sm"
           role="status"
         >
-          <Sparkles class="size-5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+          <Sparkles class="size-5 shrink-0 text-[var(--text-primary)]" aria-hidden="true" />
           <p class="min-w-0 flex-1 font-medium text-[var(--color-base-content)]">
             {t('analysis.gallery.optimize.bannerTitle', { count: offers.length })}
           </p>
@@ -2407,6 +3061,7 @@
         queryParam="modelTab"
         defaultTab="installed"
         showActions={false}
+        ariaLabel={t('analysis.gallery.tabs.navigationAria')}
       />
     </SettingsSection>
 
@@ -2456,6 +3111,37 @@
         {t('analysis.downloadSource.note')}
       </SettingsNote>
     </SettingsSection>
+
+    <!-- Advanced -->
+    <SettingsSection
+      title={t('analysis.advanced.title')}
+      description={t('analysis.advanced.description')}
+      defaultOpen={false}
+      originalData={advancedChange.original}
+      currentData={advancedChange.current}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TextInput
+          id="model-path"
+          value={birdnet?.modelPath ?? ''}
+          label={t('settings.main.sections.customClassifier.modelPath.label')}
+          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
+          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('modelPath', value)}
+        />
+
+        <TextInput
+          id="label-path"
+          value={birdnet?.labelPath ?? ''}
+          label={t('settings.main.sections.customClassifier.labelPath.label')}
+          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
+          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('labelPath', value)}
+        />
+      </div>
+    </SettingsSection>
   </div>
 {/snippet}
 
@@ -2468,7 +3154,7 @@
     class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
     role="alert"
   >
-    <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+    <AlertTriangle class="size-5 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
     <span class="text-[var(--color-base-content)]">{catalogError}</span>
     <button
       type="button"
@@ -2481,48 +3167,28 @@
   </div>
 {/snippet}
 
-<!-- Variant-aware metadata rows for a gallery card: region, species count, and a
-     friendly hardware chip, all describing the RELEVANT variant (the installed one
-     on the Installed tab, the recommended one on the Available tab) rather than the
-     entry-level globals. Flat (variant-less) entries keep the entry region/species. -->
-{#snippet cardMetaRows(entry: CatalogEntry, mode: 'available' | 'installed')}
-  {@const dv = displayVariantFor(entry, mode)}
-  {#if entry.variants && entry.variants.length > 0}
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
-    <div class="text-[var(--color-base-content)]/80">{displayRegionName(dv)}</div>
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
-    <div class="text-[var(--color-base-content)]/80">
-      {t('analysis.gallery.species', { count: dv?.speciesCount ?? entry.speciesCount })}
-    </div>
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.hardwareLabel')}</div>
-    <div>
-      {#if dv}
-        <span
-          class="inline-flex items-center gap-1 rounded-full bg-[var(--color-base-300)] px-2 py-0.5 text-xs text-[var(--color-base-content)]"
-        >
-          {variantHardwareLabel(dv)}
-        </span>
-      {:else}
-        <span class="text-[var(--color-base-content)]/80">-</span>
-      {/if}
-    </div>
-  {:else}
-    {#if entry.region}
-      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
-      <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
-    {/if}
-    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
-    <div class="text-[var(--color-base-content)]/80">
-      {t('analysis.gallery.species', { count: entry.speciesCount })}
-    </div>
-  {/if}
+{#snippet galleryGrid(
+  entries: CatalogEntry[],
+  mode: ModelCardMode,
+  optimizeIds?: ReadonlySet<string>
+)}
+  <ModelCardGrid
+    {mode}
+    {entries}
+    regionNames={regionNameMap}
+    activeAction={activeGalleryAction}
+    progress={downloadProgress}
+    pausedReasonId={GALLERY_ACTION_STATUS_ID}
+    optimizeEntryIds={optimizeIds}
+    onAction={handleCardAction}
+  />
 {/snippet}
 
 {#snippet installedTabContent()}
   <div class="space-y-4">
     {#if loading}
       <div class="flex items-center justify-center py-12">
-        <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
+        <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
         <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
           >{t('analysis.gallery.loading')}</span
         >
@@ -2530,288 +3196,11 @@
     {:else if catalogError}
       {@render catalogErrorBanner()}
     {:else}
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <!-- Installed models. The permanent built-in classifier (BirdNET v2.4) sorts
-             first and renders a built-in badge instead of Remove/Reinstall; every
-             installed model with a better host-recommended variant shows an Optimize
-             action. -->
-        {#each installedEntries as entry (entry.id)}
-          {@const isDeleting = deletingId === entry.id}
-          {@const isReinstalling = reinstallingId === entry.id}
-          {@const reinstallProgress = isReinstalling ? downloadProgress : null}
-          <!-- "Paused" = another gallery action is running, so THIS button is
-               cross-disabled (vs its own in-progress spinner). aria-disabled keeps
-               it tab-focusable to read the reason; native disabled stays for the
-               button's own running state. -->
-          {@const reinstallPaused = galleryActionInFlight && !isReinstalling}
-          {@const removePaused = galleryActionInFlight && !isDeleting}
-          {@const offer = offerByEntry.get(entry.id)}
-          {@const isSwapping = installingId === entry.id}
-          {@const optimizePaused = galleryActionInFlight && !isSwapping}
-          {@const cardProgress = reinstallProgress ?? (isSwapping ? downloadProgress : null)}
-          {@const logo = getModelLogo(entry.id)}
-          <div
-            class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
-          >
-            <div class="flex items-start gap-3">
-              {#if logo}
-                <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
-              {:else}
-                <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                  {#if entry.category === 'geomodel'}
-                    <Globe size={24} class="text-[var(--color-primary)]" />
-                  {:else if entry.category === 'bat'}
-                    <Radar size={24} class="text-[var(--color-primary)]" />
-                  {:else}
-                    <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-                  {/if}
-                </div>
-              {/if}
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-                    {entry.name}
-                  </h4>
-                  {#if entry.channel === CHANNEL_PREVIEW}
-                    <span
-                      class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
-                    >
-                      {t('analysis.gallery.preview.badge')}
-                    </span>
-                  {/if}
-                  {#if entry.buildLabel}
-                    <span class="font-mono text-xs text-[var(--color-base-content)]/70">
-                      {t('analysis.gallery.preview.buildLabel', {
-                        version: entry.version,
-                        build: entry.buildLabel,
-                      })}
-                    </span>
-                  {/if}
-                </div>
-                <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
-                  {entry.description}
-                </p>
-                {#if entry.upstreamUrl}
-                  <a
-                    href={entry.upstreamUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
-                  >
-                    {entry.author}
-                  </a>
-                {:else}
-                  <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
-                {/if}
-              </div>
-            </div>
-            <!-- Progress bar (shown during reinstall, not for companion entries) -->
-            {#if cardProgress}
-              <div class="mt-3 space-y-1.5">
-                {#if cardProgress.status === 'complete'}
-                  <div
-                    class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]"
-                  >
-                    <Check class="h-4 w-4" />
-                    <span
-                      >{isSwapping
-                        ? t('analysis.gallery.progress.complete')
-                        : t('analysis.gallery.reinstallComplete')}</span
-                    >
-                  </div>
-                {:else}
-                  <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
-                    <div
-                      class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-                      style:width="{progressPercent(cardProgress)}%"
-                    ></div>
-                  </div>
-                  <div
-                    class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80"
-                  >
-                    <span>
-                      {statusLabel(
-                        cardProgress.status
-                      )}{#if cardProgress.status === 'downloading' && cardProgress.totalFiles > 1}
-                        ({cardProgress.currentFile}/{cardProgress.totalFiles})
-                      {/if}
-                    </span>
-                    {#if cardProgress.status === 'downloading' && cardProgress.totalBytes > 0}
-                      <span>
-                        {formatBytes(cardProgress.downloadedBytes)} / {formatBytes(
-                          cardProgress.totalBytes
-                        )}
-                      </span>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-            <!-- Incompatible warning for installed models -->
-            {#if !entry.compatible}
-              <div
-                class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm"
-                role="status"
-              >
-                <XCircle
-                  class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]"
-                  aria-hidden="true"
-                />
-                <span class="text-[var(--color-base-content)]"
-                  >{entryIncompatibleText(entry.incompatibleReason)}</span
-                >
-              </div>
-            {/if}
-            <!-- Metadata grid -->
-            <div
-              class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
-            >
-              {@render cardMetaRows(entry, 'installed')}
-              <div class="text-[var(--color-base-content)]/80">
-                {t('analysis.gallery.license.license')}
-              </div>
-              <div>
-                {#if entry.commercialUse}
-                  <span
-                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-                    title={t('analysis.gallery.license.commercialUseAllowed')}
-                  >
-                    <Shield class="size-3" />
-                    {entry.license}
-                  </span>
-                {:else}
-                  <span
-                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-                    title={t('analysis.gallery.license.nonCommercialOnly')}
-                  >
-                    <ShieldAlert class="size-3" />
-                    {entry.license}
-                  </span>
-                {/if}
-              </div>
-            </div>
-            <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
-            {#if entry.hasGeomodel && entry.category !== 'geomodel'}
-              <div class="mt-2">
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
-                >
-                  {t('analysis.gallery.geomodelBadge')}
-                </span>
-              </div>
-            {/if}
-            <!-- Optimize badge: a faster/better-matched build is available here. -->
-            {#if offer}
-              <div class="mt-2">
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
-                  title={t('analysis.gallery.optimize.badgeTitle')}
-                >
-                  <Sparkles class="size-3" aria-hidden="true" />
-                  {t('analysis.gallery.optimize.badgeTitle')}
-                </span>
-              </div>
-            {/if}
-            <!-- Action footer. The permanent built-in classifier shows a built-in
-                 badge instead of Remove and hides Reinstall; only its variant can be
-                 swapped (the Optimize action). -->
-            <div class="mt-3 flex items-center justify-end gap-2">
-              {#if offer}
-                <button
-                  type="button"
-                  onclick={e => {
-                    if (optimizePaused) {
-                      e.preventDefault();
-                      return;
-                    }
-                    openLicenseDialog(entry);
-                  }}
-                  disabled={isSwapping}
-                  aria-disabled={optimizePaused ? 'true' : undefined}
-                  aria-describedby={optimizePaused ? GALLERY_ACTION_STATUS_ID : undefined}
-                  title={optimizePaused ? t('analysis.gallery.actionInProgress') : undefined}
-                  class={cn(
-                    'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
-                    optimizePaused
-                      ? 'cursor-not-allowed opacity-50'
-                      : 'hover:not-disabled:bg-[var(--color-primary-hover)]'
-                  )}
-                  aria-label="{t('analysis.gallery.optimize.swap')} {entry.name}"
-                >
-                  <Sparkles class="size-3.5" aria-hidden="true" />
-                  {t('analysis.gallery.optimize.swap')}
-                </button>
-              {/if}
-              {#if entry.permanent}
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
-                >
-                  {t('analysis.gallery.builtIn')}
-                </span>
-              {:else}
-                <button
-                  type="button"
-                  onclick={e => {
-                    if (reinstallPaused) {
-                      e.preventDefault();
-                      return;
-                    }
-                    handleReinstall(entry);
-                  }}
-                  disabled={isReinstalling}
-                  aria-disabled={reinstallPaused ? 'true' : undefined}
-                  aria-describedby={reinstallPaused ? GALLERY_ACTION_STATUS_ID : undefined}
-                  title={reinstallPaused ? t('analysis.gallery.actionInProgress') : undefined}
-                  class={cn(
-                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 transition-colors',
-                    isReinstalling || reinstallPaused
-                      ? 'opacity-50'
-                      : 'hover:bg-[var(--color-base-300)]',
-                    reinstallPaused && 'cursor-not-allowed'
-                  )}
-                  aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
-                >
-                  {#if isReinstalling}
-                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-                    {t('analysis.gallery.reinstalling')}
-                  {:else}
-                    <RefreshCw class="size-3.5" />
-                    {t('analysis.gallery.reinstall')}
-                  {/if}
-                </button>
-                <button
-                  type="button"
-                  onclick={e => {
-                    if (removePaused) {
-                      e.preventDefault();
-                      return;
-                    }
-                    openRemoveDialog(entry);
-                  }}
-                  disabled={isDeleting}
-                  aria-disabled={removePaused ? 'true' : undefined}
-                  aria-describedby={removePaused ? GALLERY_ACTION_STATUS_ID : undefined}
-                  title={removePaused ? t('analysis.gallery.actionInProgress') : undefined}
-                  class={cn(
-                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] transition-colors',
-                    isDeleting || removePaused ? 'opacity-50' : 'hover:bg-[var(--color-error)]/10',
-                    removePaused && 'cursor-not-allowed'
-                  )}
-                  aria-label="{t('analysis.gallery.remove')} {entry.name}"
-                >
-                  {#if isDeleting}
-                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-                    {t('analysis.gallery.removing')}
-                  {:else}
-                    <Trash2 class="size-3.5" />
-                    {t('analysis.gallery.remove')}
-                  {/if}
-                </button>
-              {/if}
-            </div>
-          </div>
-        {/each}
-      </div>
+      <!-- Installed models. The permanent built-in classifier (BirdNET v2.4) sorts
+           first and renders a built-in badge instead of Remove/Reinstall; every
+           installed model with a better host-recommended variant shows an Optimize
+           action. -->
+      {@render galleryGrid(installedEntries, 'installed', optimizeEntryIds)}
 
       {#if installedEntries.length === 0}
         <p class="py-4 text-center text-sm text-[var(--color-base-content)]/80">
@@ -2822,222 +3211,11 @@
   </div>
 {/snippet}
 
-{#snippet modelCard(entry: CatalogEntry)}
-  {@const isInstalling = installingId === entry.id}
-  {@const progress = isInstalling ? downloadProgress : null}
-  <!-- Paused only when this Install would otherwise be available: another action
-       is running, this one is not, and the entry is compatible. Incompatible
-       entries keep their permanent native-disabled state (explained by the banner
-       above), never a transient "action in progress" reason. -->
-  {@const installPaused = galleryActionInFlight && !isInstalling && entry.compatible}
-  {@const logo = getModelLogo(entry.id)}
-  <div
-    class={cn(
-      'flex h-full flex-col rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4',
-      !entry.compatible && 'opacity-60'
-    )}
-  >
-    <!-- Header: logo + name/description/author -->
-    <div class="flex items-start gap-3">
-      {#if logo}
-        <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
-      {:else}
-        <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-          {#if entry.category === 'geomodel'}
-            <Globe size={24} class="text-[var(--color-primary)]" />
-          {:else if entry.category === 'bat'}
-            <Radar size={24} class="text-[var(--color-primary)]" />
-          {:else}
-            <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-          {/if}
-        </div>
-      {/if}
-      <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-            {entry.name}
-          </h4>
-          {#if entry.channel === CHANNEL_PREVIEW}
-            <span
-              class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
-            >
-              {t('analysis.gallery.preview.badge')}
-            </span>
-          {/if}
-          {#if entry.buildLabel}
-            <span class="font-mono text-xs text-[var(--color-base-content)]/70">
-              {t('analysis.gallery.preview.buildLabel', {
-                version: entry.version,
-                build: entry.buildLabel,
-              })}
-            </span>
-          {/if}
-        </div>
-        <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
-          {entry.description}
-        </p>
-        {#if entry.upstreamUrl}
-          <a
-            href={entry.upstreamUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
-          >
-            {entry.author}
-          </a>
-        {:else}
-          <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Developer-preview notice: v3.0 and any future preview build are flagged as
-         not the final GA release so users know what they are installing. -->
-    {#if entry.channel === CHANNEL_PREVIEW}
-      <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-xs"
-        role="note"
-      >
-        <TriangleAlert
-          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
-          aria-hidden="true"
-        />
-        <span class="text-[var(--color-base-content)]"
-          >{t('analysis.gallery.preview.cardNotice')}</span
-        >
-      </div>
-    {/if}
-
-    <!-- Progress bar (shown during install, not for companion entries) -->
-    {#if progress}
-      <div class="mt-3 space-y-1.5">
-        {#if progress.status === 'complete'}
-          <div class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]">
-            <Check class="h-4 w-4" />
-            <span>{t('analysis.gallery.progress.complete')}</span>
-          </div>
-        {:else}
-          <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
-            <div
-              class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-              style:width="{progressPercent(progress)}%"
-            ></div>
-          </div>
-          <div
-            class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80"
-          >
-            <span>
-              {statusLabel(
-                progress.status
-              )}{#if progress.status === 'downloading' && progress.totalFiles > 1}
-                ({progress.currentFile}/{progress.totalFiles})
-              {/if}
-            </span>
-            {#if progress.status === 'downloading' && progress.totalBytes > 0}
-              <span>
-                {formatBytes(progress.downloadedBytes)} / {formatBytes(progress.totalBytes)}
-              </span>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Incompatible warning banner -->
-    {#if !entry.compatible}
-      <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
-        role="status"
-      >
-        <TriangleAlert
-          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
-          aria-hidden="true"
-        />
-        <span class="text-[var(--color-base-content)]"
-          >{entryIncompatibleText(entry.incompatibleReason)}</span
-        >
-      </div>
-    {/if}
-
-    <!-- Metadata grid -->
-    <div
-      class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
-    >
-      {@render cardMetaRows(entry, 'available')}
-      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.license.license')}</div>
-      <div>
-        {#if entry.commercialUse}
-          <span
-            class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-            title={t('analysis.gallery.license.commercialUseAllowed')}
-          >
-            <Shield class="size-3" />
-            {entry.license}
-          </span>
-        {:else}
-          <span
-            class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-            title={t('analysis.gallery.license.nonCommercialOnly')}
-          >
-            <ShieldAlert class="size-3" />
-            {entry.license}
-          </span>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
-    {#if entry.hasGeomodel && entry.category !== 'geomodel'}
-      <div class="mt-2">
-        <span
-          class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
-        >
-          {t('analysis.gallery.geomodelBadge')}
-        </span>
-      </div>
-    {/if}
-
-    <!-- Action footer (pushed to bottom via mt-auto) -->
-    <div class="mt-auto flex items-center justify-end pt-3">
-      <button
-        type="button"
-        onclick={e => {
-          if (installPaused) {
-            e.preventDefault();
-            return;
-          }
-          openLicenseDialog(entry);
-        }}
-        disabled={!entry.compatible || isInstalling}
-        aria-disabled={installPaused ? 'true' : undefined}
-        aria-describedby={installPaused ? GALLERY_ACTION_STATUS_ID : undefined}
-        title={installPaused ? t('analysis.gallery.actionInProgress') : undefined}
-        class={cn(
-          'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
-          !entry.compatible || isInstalling || installPaused
-            ? 'opacity-50'
-            : 'hover:bg-[var(--color-primary-hover)]',
-          installPaused && 'cursor-not-allowed'
-        )}
-        aria-label="{t('analysis.gallery.install')} {entry.name}"
-      >
-        {#if isInstalling}
-          <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-          {t('analysis.gallery.installing')}
-        {:else}
-          <Download class="size-3.5" />
-          {t('analysis.gallery.install')}
-        {/if}
-      </button>
-    </div>
-  </div>
-{/snippet}
-
 {#snippet availableTabContent()}
   <div class="space-y-6">
     {#if loading}
       <div class="flex items-center justify-center py-12">
-        <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
+        <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
         <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
           >{t('analysis.gallery.loading')}</span
         >
@@ -3059,11 +3237,7 @@
               >
                 {t('analysis.gallery.categories.wildlife')}
               </h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {#each availableWildlife as entry (entry.id)}
-                  {@render modelCard(entry)}
-                {/each}
-              </div>
+              {@render galleryGrid(availableWildlife, 'available')}
             </div>
           {/if}
 
@@ -3074,11 +3248,7 @@
               >
                 {t('analysis.gallery.categories.bird')}
               </h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {#each availableBirds as entry (entry.id)}
-                  {@render modelCard(entry)}
-                {/each}
-              </div>
+              {@render galleryGrid(availableBirds, 'available')}
             </div>
           {/if}
 
@@ -3089,11 +3259,7 @@
               >
                 {t('analysis.gallery.categories.bat')}
               </h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {#each availableBats as entry (entry.id)}
-                  {@render modelCard(entry)}
-                {/each}
-              </div>
+              {@render galleryGrid(availableBats, 'available')}
             </div>
           {/if}
         </div>
@@ -3105,11 +3271,7 @@
           <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
             {t('analysis.gallery.sections.geomodel')}
           </h2>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableGeomodels as entry (entry.id)}
-              {@render modelCard(entry)}
-            {/each}
-          </div>
+          {@render galleryGrid(availableGeomodels, 'available')}
         </div>
       {/if}
 
@@ -3127,6 +3289,16 @@
   <SettingsTabs tabs={pageTabs} bind:activeTab={pageTab} />
 </main>
 
+{#snippet licenseNote(text: string)}
+  <div
+    class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
+    role="note"
+  >
+    <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5 text-[var(--text-warning)]" aria-hidden="true" />
+    <span class="text-[var(--color-base-content)]">{text}</span>
+  </div>
+{/snippet}
+
 <!-- License Acceptance Dialog -->
 <dialog
   bind:this={licenseDialogRef}
@@ -3138,21 +3310,11 @@
       <h3 id="license-dialog-title" class="text-lg font-semibold text-[var(--color-base-content)]">
         {t('analysis.gallery.license.title')}
       </h3>
-      {#if licenseModel.channel === CHANNEL_PREVIEW}
-        <div
-          class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
-          role="note"
-        >
-          <TriangleAlert
-            class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
-            aria-hidden="true"
-          />
-          <span class="text-[var(--color-base-content)]">
-            {t('analysis.gallery.preview.dialogNotice', {
-              build: licenseModel.buildLabel ?? licenseModel.version,
-            })}
-          </span>
-        </div>
+      {#if licenseChannelNotice}
+        {@render licenseNote(licenseChannelNotice)}
+      {/if}
+      {#if licenseSupersededNotice}
+        {@render licenseNote(licenseSupersededNotice)}
       {/if}
       <div class="mt-4 space-y-3">
         <table
@@ -3198,12 +3360,12 @@
               >
               <td class="px-4 py-1 text-right align-top">
                 {#if licenseModel.commercialUse}
-                  <span class="inline-flex items-center gap-1 text-[var(--color-success)]">
+                  <span class="inline-flex items-center gap-1 text-[var(--text-success)]">
                     <Shield class="size-3.5" />
                     {t('analysis.gallery.license.allowed')}
                   </span>
                 {:else}
-                  <span class="inline-flex items-center gap-1 text-[var(--color-warning)]">
+                  <span class="inline-flex items-center gap-1 text-[var(--text-warning)]">
                     <ShieldAlert class="size-3.5" />
                     {t('analysis.gallery.license.notAllowed')}
                   </span>
@@ -3230,7 +3392,7 @@
             {selectedVariantId}
             {activeRegionSlug}
             regionNames={regionNameMap}
-            onSelect={id => (selectedVariantId = id)}
+            onSelect={id => (chosenVariantId = id)}
             idPrefix="license-variant"
           />
           <!-- Plain-language help for the precision jargon (FP32/FP16/INT8) and the
@@ -3250,7 +3412,7 @@
             class="flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2.5 text-sm"
           >
             <ShieldAlert
-              class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]"
+              class="mt-0.5 size-4 shrink-0 text-[var(--text-warning)]"
               aria-hidden="true"
             />
             <p class="text-[var(--color-base-content)]">
@@ -3261,7 +3423,7 @@
       </div>
 
       {#if installBlocked}
-        <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--color-error)]" role="alert">
+        <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--text-error)]" role="alert">
           {t('analysis.gallery.variants.incompatible')}
         </p>
       {/if}
@@ -3299,7 +3461,7 @@
     <div class="w-full max-w-md p-6">
       <div class="flex items-start gap-3">
         <div class="shrink-0 rounded-full bg-[var(--color-error)]/10 p-2">
-          <AlertTriangle class="size-5 text-[var(--color-error)]" aria-hidden="true" />
+          <AlertTriangle class="size-5 text-[var(--text-error)]" aria-hidden="true" />
         </div>
         <div>
           <h3
@@ -3411,7 +3573,7 @@
 
       {#if rangeFilterState.error}
         <div
-          class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
           role="alert"
         >
           <XCircle class="size-5 shrink-0" aria-hidden="true" />

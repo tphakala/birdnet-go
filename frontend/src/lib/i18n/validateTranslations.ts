@@ -104,6 +104,7 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'wikipedia',
   'xeno-canto',
   'onnx',
+  'onnx runtime',
   'tflite',
   'openvino',
   'perch',

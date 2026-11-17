@@ -400,7 +400,7 @@
 
   .region-chip-core {
     background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-    color: var(--color-primary);
+    color: var(--color-base-content);
   }
 
   .region-chip-partial {

@@ -19,6 +19,9 @@ import (
 // this package exposes so consumers can collapse the variants to one canonical
 // name (range-filter species matching, detection de-duplication).
 //
+// Keys can also be a newer model label whose canonical name is the one the
+// geomodel uses (for example a renamed BirdNET+ genus), not only a legacy name.
+//
 // The map is small (a few hundred entries), so it is parsed once on first use and
 // kept in memory, unlike the large streaming translation/metadata artifacts.
 

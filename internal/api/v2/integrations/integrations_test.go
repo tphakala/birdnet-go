@@ -20,10 +20,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test constants for integration tests
 const testBirdNetName = "TestBirdNet"
+
+// testMQTTTopic is the topic the MQTT status tests configure and expect echoed back.
+const testMQTTTopic = "birdnet/detections"
 
 // connectionHandlerCase is one row of runIntegrationConnectionHandlerTest.
 // Every request is sent with an already-cancelled context, so a valid
@@ -103,13 +107,13 @@ func TestGetMQTTStatus(t *testing.T) {
 			name:           "MQTT Disabled",
 			mqttEnabled:    false,
 			mqttBroker:     refusingBroker,
-			mqttTopic:      "birdnet/detections",
+			mqttTopic:      testMQTTTopic,
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
 				assert.Equal(t, refusingBroker, result["broker"], "Broker should match configuration")
-				assert.Equal(t, "birdnet/detections", result["topic"], "Topic should match configuration")
+				assert.Equal(t, testMQTTTopic, result["topic"], "Topic should match configuration")
 				_, hasLastError := result["last_error"]
 				assert.False(t, hasLastError, "There should be no error when MQTT is disabled")
 			},
@@ -118,11 +122,13 @@ func TestGetMQTTStatus(t *testing.T) {
 			name:           "MQTT Enabled but Not Connected",
 			mqttEnabled:    true,
 			mqttBroker:     refusingBroker,
-			mqttTopic:      "birdnet/detections",
+			mqttTopic:      testMQTTTopic,
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT connection fails")
+				assert.Equal(t, refusingBroker, result["broker"], "Broker should match configuration")
+				assert.Equal(t, testMQTTTopic, result["topic"], "Topic should match configuration")
 				assert.Contains(t, result["last_error"], "error:connection:mqtt_broker", "Error should mention connection failure")
 			},
 		},
@@ -322,7 +328,6 @@ func TestTestEBirdConnection(t *testing.T) {
 		requestBody    string
 		expectedStatus int
 		expectedType   string
-		expectError    bool
 		validateResult func(*testing.T, string)
 	}{
 		{
@@ -349,10 +354,9 @@ func TestTestEBirdConnection(t *testing.T) {
 			name:           "Invalid Request Body",
 			requestBody:    `{invalid json`,
 			expectedStatus: http.StatusBadRequest,
-			expectError:    true,
 			validateResult: func(t *testing.T, body string) {
 				t.Helper()
-				assert.Contains(t, body, "error")
+				assert.Contains(t, body, "Invalid eBird test request")
 			},
 		},
 		{
@@ -383,15 +387,7 @@ func TestTestEBirdConnection(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			err := controller.TestEBirdConnection(c)
-
-			if tc.expectError {
-				if err != nil {
-					return
-				}
-			} else {
-				require.NoError(t, err)
-			}
+			require.NoError(t, controller.TestEBirdConnection(c))
 
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 			if tc.expectedType != "" {
@@ -403,86 +399,120 @@ func TestTestEBirdConnection(t *testing.T) {
 	}
 }
 
-// TestWriteJSONResponse tests the writeJSONResponse helper function
-func TestWriteJSONResponse(t *testing.T) {
-	// Setup
-	e, controller := newIntegrationsTestHandler(t)
-
-	// Create request context
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Set content type manually since this is a helper function
-	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	c.Response().WriteHeader(http.StatusOK)
-
-	// Test data
-	testData := map[string]any{
-		"key1": "value1",
-		"key2": 42,
-		"key3": true,
-		"nested": map[string]any{
-			"nested_key": "nested_value",
-		},
-	}
-
-	// Call the function
-	err := controller.writeJSONResponse(c, testData)
-	require.NoError(t, err)
-
-	// Parse the response
-	var result map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &result)
-	require.NoError(t, err)
-
-	// Verify the result
-	assert.Equal(t, "value1", result["key1"])
-	assert.InDelta(t, 42, result["key2"], 0.01)
-	assert.Equal(t, true, result["key3"])
-	assert.IsType(t, map[string]any{}, result["nested"])
-	nestedMap := result["nested"].(map[string]any)
-	assert.Equal(t, "nested_value", nestedMap["nested_key"])
-}
-
 // fakeStageResult is the result type streamed by fakeIntegrationClient.
 type fakeStageResult struct {
 	Stage string `json:"stage"`
 }
 
-// fakeIntegrationClient is an IntegrationTestClient that sends one result. When
-// cancelRequest is set it then cancels the HTTP request context, as a departing
-// client would, and waits for the test context to end before returning.
+// fakeIntegrationClient is an IntegrationTestClient that sends its results in
+// order. When cancelRequest is set it then cancels the HTTP request context, as
+// a departing client would; when holdUntilDone is set it does not return until
+// the test context ends (a test that runs into its timeout, or whose client has
+// gone). testDuration and cleanupDuration are
+// how long, on the synctest clock, the test and the cleanup take.
 type fakeIntegrationClient struct {
-	result        fakeStageResult
-	cancelRequest context.CancelFunc
-	cleanups      atomic.Int32
+	results         []fakeStageResult
+	cancelRequest   context.CancelFunc
+	holdUntilDone   bool
+	testDuration    time.Duration
+	cleanupDuration time.Duration
+	cleanups        atomic.Int32
+}
+
+// failingResponseWriter is a response writer whose body writes always fail, as
+// when the client connection has broken. It counts the attempts so a test can
+// tell a failed write from no write.
+type failingResponseWriter struct {
+	*httptest.ResponseRecorder
+	attempts *atomic.Int32
+}
+
+func (w failingResponseWriter) Write([]byte) (int, error) {
+	w.attempts.Add(1)
+	return 0, errors.NewStd("write failed")
 }
 
 func (f *fakeIntegrationClient) TestConnection(ctx context.Context, resultChan chan<- fakeStageResult) {
-	resultChan <- f.result
+	for _, r := range f.results {
+		resultChan <- r
+	}
 	if f.cancelRequest != nil {
 		f.cancelRequest()
+	}
+	if f.holdUntilDone {
 		<-ctx.Done()
 	}
+	time.Sleep(f.testDuration)
 }
 
-func (f *fakeIntegrationClient) Cleanup() { f.cleanups.Add(1) }
+func (f *fakeIntegrationClient) Cleanup() {
+	time.Sleep(f.cleanupDuration)
+	f.cleanups.Add(1)
+}
 
 // TestRunStreamingIntegrationTest verifies the shared streaming runner: it
-// streams client results, writes one final "completed" line when the test
-// finishes, writes nothing more once the HTTP client has gone, and cleans the
-// client up exactly once. Lines are checked without relying on their order.
+// streams client results in the order they are sent, then writes one final
+// "completed" line carrying the elapsed time of the test without its cleanup,
+// writes no completed line once the HTTP client has gone or the test has timed
+// out, returns no error when the completed line cannot be written, and cleans
+// the client up exactly once.
 func TestRunStreamingIntegrationTest(t *testing.T) {
-	const streamTimeout = 20 * time.Second
+	const (
+		streamTimeout   = 20 * time.Second
+		testDuration    = 3 * time.Second
+		cleanupDuration = 5 * time.Second
+	)
+
+	stages := func(names ...string) []fakeStageResult {
+		out := make([]fakeStageResult, 0, len(names))
+		for _, n := range names {
+			out = append(out, fakeStageResult{Stage: n})
+		}
+		return out
+	}
 
 	tests := []struct {
 		name          string
+		results       []fakeStageResult
+		instant       bool
 		clientGone    bool
-		wantCompleted int
+		timesOut      bool
+		failWrites    bool
+		wantStages    []string
+		wantCompleted bool
 	}{
-		{name: "completes", wantCompleted: 1},
-		{name: "client gone", clientGone: true, wantCompleted: 0},
+		{
+			name:          "completes",
+			results:       stages("connect", "publish", "disconnect"),
+			wantStages:    []string{"connect", "publish", "disconnect"},
+			wantCompleted: true,
+		},
+		{
+			// The worker finishes before the handler has written anything, as
+			// when the client reads slowly: the completed line must still wait
+			// for every stage line.
+			name:          "worker finishes first",
+			results:       stages("connect", "publish", "disconnect"),
+			instant:       true,
+			wantStages:    []string{"connect", "publish", "disconnect"},
+			wantCompleted: true,
+		},
+		{
+			name:       "completed line write fails",
+			failWrites: true,
+		},
+		{
+			name:       "client gone",
+			results:    stages("connect"),
+			clientGone: true,
+			wantStages: []string{"connect"},
+		},
+		{
+			name:       "timed out",
+			results:    stages("connect"),
+			timesOut:   true,
+			wantStages: []string{"connect"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -495,111 +525,65 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 				defer cancel()
 				req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/fake/test", http.NoBody).WithContext(reqCtx)
 				rec := httptest.NewRecorder()
+				var w http.ResponseWriter = rec
+				var writeAttempts atomic.Int32
+				if tt.failWrites {
+					w = failingResponseWriter{ResponseRecorder: rec, attempts: &writeAttempts}
+				}
 
-				client := &fakeIntegrationClient{result: fakeStageResult{Stage: "connect"}}
+				client := &fakeIntegrationClient{results: tt.results, holdUntilDone: tt.timesOut || tt.clientGone}
+				if tt.wantCompleted && !tt.instant {
+					// Only a row that reaches the completed line and does not
+					// finish instantly needs time to pass; a goroutine still
+					// sleeping when the handler has gone would be a deadlock in
+					// the bubble.
+					client.testDuration = testDuration
+					client.cleanupDuration = cleanupDuration
+				}
 				if tt.clientGone {
 					client.cancelRequest = cancel
 				}
 
-				err := runStreamingIntegrationTest(controller, e.NewContext(req, rec),
-					make(chan fakeStageResult), client, streamTimeout, "fake")
+				err := runStreamingIntegrationTest(controller, e.NewContext(req, w),
+					make(chan fakeStageResult, len(tt.results)), client, streamTimeout, "fake")
 				require.NoError(t, err)
 				synctest.Wait()
 
-				var results, completed int
+				var gotStages []string
+				var completed []map[string]any
 				for line := range strings.SplitSeq(strings.TrimSpace(rec.Body.String()), "\n") {
+					if line == "" {
+						continue
+					}
 					var decoded map[string]any
 					require.NoError(t, json.Unmarshal([]byte(line), &decoded), "line: %q", line)
 					switch {
-					case decoded["stage"] == "connect":
-						results++
-					case decoded["state"] == "completed":
-						completed++
+					case decoded["state"] == streamStateCompleted:
+						completed = append(completed, decoded)
+					case decoded["stage"] != nil:
+						assert.Empty(t, completed, "stage line after the completed line: %q", line)
+						stage, ok := decoded["stage"].(string)
+						require.True(t, ok, "stage is a string in %q", line)
+						gotStages = append(gotStages, stage)
 					default:
 						assert.Fail(t, "unexpected line", "line: %q", line)
 					}
 				}
-				assert.Equal(t, 1, results, "the client result is streamed once")
-				assert.Equal(t, tt.wantCompleted, completed, "completed lines in %q", rec.Body.String())
+				assert.Equal(t, tt.wantStages, gotStages, "stage lines in order")
+				if tt.wantCompleted {
+					require.Len(t, completed, 1, "one completed line in %q", rec.Body.String())
+					assert.InDelta(t, client.testDuration.Milliseconds(), completed[0]["elapsed_time_ms"], 0,
+						"elapsed time covers the test and not its cleanup")
+				} else {
+					assert.Empty(t, completed, "no completed line in %q", rec.Body.String())
+				}
 				assert.Equal(t, int32(1), client.cleanups.Load(), "client is cleaned up once")
+				if tt.failWrites {
+					assert.Positive(t, writeAttempts.Load(), "the completed line write is attempted")
+				}
 			})
 		})
 	}
-}
-
-// TestGetMQTTStatusEnabled exercises GetMQTTStatus with MQTT enabled and verifies
-// the broker/topic are reported back. The connection check runs against a local
-// broker that drops every connection, so connected stays false.
-func TestGetMQTTStatusEnabled(t *testing.T) {
-	refusingBroker := newRefusingMQTTBroker(t)
-
-	// Setup
-	e, controller := newIntegrationsTestHandler(t)
-
-	// Configure settings
-	controller.Settings.Load().Realtime.MQTT.Enabled = true
-	controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
-	controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
-	controller.Settings.Load().Main.Name = testBirdNetName
-
-	// Create request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Call handler
-	err := controller.GetMQTTStatus(c)
-	require.NoError(t, err)
-
-	// Check status code
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Parse response body
-	var result map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &result)
-	require.NoError(t, err)
-
-	// Basic validation since we can't mock the MQTT client creation directly
-	assert.Contains(t, result, "connected")
-	assert.Equal(t, refusingBroker, result["broker"])
-	assert.Equal(t, "birdnet/detections", result["topic"])
-}
-
-// TestErrorHandlingForIntegrations checks that GetMQTTStatus reports a failed broker connection in last_error.
-func TestErrorHandlingForIntegrations(t *testing.T) {
-	t.Run("MQTT Status Error Handling", func(t *testing.T) {
-		// Setup
-		e, controller := newIntegrationsTestHandler(t)
-		refusingBroker := newRefusingMQTTBroker(t)
-
-		// Configure settings to enable MQTT with a broker that drops the connection
-		controller.Settings.Load().Realtime.MQTT.Enabled = true
-		controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
-		controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
-		controller.Settings.Load().Main.Name = testBirdNetName
-
-		// Create request
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		// Call handler
-		err := controller.GetMQTTStatus(c)
-		require.NoError(t, err)
-
-		// Check status code
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Parse and validate response
-		var result MQTTStatus
-		err = json.Unmarshal(rec.Body.Bytes(), &result)
-		require.NoError(t, err)
-
-		// Connected should be false with a connection error
-		assert.False(t, result.Connected, "Connected should be false when MQTT connection fails")
-		assert.NotEmpty(t, result.LastError, "LastError should not be empty when connection fails")
-		assert.Contains(t, result.LastError, "error:connection:mqtt_broker", "Error should be properly formatted")
-	})
 }
 
 // redactedSecretPlaceholder is the sentinel the settings UI returns in place of
@@ -607,54 +591,6 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 // tests and the handlers agree on the exact value a client sends when the user
 // has not re-entered a secret.
 const redactedSecretPlaceholder = apicore.RedactedValue
-
-// TestRestoreRedactedSecret verifies the canonical single-field restore
-// primitive shared by the settings save flow and the integration
-// test-connection handlers.
-func TestRestoreRedactedSecret(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		current  string
-		incoming string
-		want     string
-	}{
-		{
-			name:     "placeholder is restored to current real secret",
-			current:  "real-saved-key",
-			incoming: redactedSecretPlaceholder,
-			want:     "real-saved-key",
-		},
-		{
-			name:     "real incoming value is left untouched",
-			current:  "real-saved-key",
-			incoming: "user-typed-new-key",
-			want:     "user-typed-new-key",
-		},
-		{
-			name:     "empty incoming stays empty (not a placeholder)",
-			current:  "real-saved-key",
-			incoming: "",
-			want:     "",
-		},
-		{
-			name:     "placeholder with empty current resolves to empty",
-			current:  "",
-			incoming: redactedSecretPlaceholder,
-			want:     "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			incoming := tt.incoming
-			apicore.RestoreRedactedSecret(tt.current, &incoming)
-			assert.Equal(t, tt.want, incoming)
-		})
-	}
-}
 
 // publishWeatherTestSettings sets the saved weather provider config the handler
 // reads via CurrentSettings() and returns the handler. It re-publishes the

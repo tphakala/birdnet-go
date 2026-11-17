@@ -74,7 +74,7 @@
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.connection_errors > 0
-            ? 'text-[var(--color-warning)]'
+            ? 'text-[var(--text-warning)]'
             : ''}">{details.connection_errors}</span
         >
       </div>

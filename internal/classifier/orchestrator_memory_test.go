@@ -269,3 +269,16 @@ func TestRunPendingWarmups_DoesNotHoldMapLockDuringWarmup(t *testing.T) {
 		t.Fatal("runPendingWarmups did not finish")
 	}
 }
+
+func TestSilentInput_UsesSampleCountWindow(t *testing.T) {
+	t.Parallel()
+
+	got := silentInput(sampleWindowSpec())
+	require.Len(t, got, 1)
+	assert.Len(t, got[0], sampleWindowClip, "the warm-up must feed the real window length, not a truncated ClipLength")
+
+	wholeSecond := silentInput(ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second})
+	require.Len(t, wholeSecond, 1)
+	assert.Len(t, wholeSecond[0], 144000)
+	assert.Nil(t, silentInput(ModelSpec{}))
+}

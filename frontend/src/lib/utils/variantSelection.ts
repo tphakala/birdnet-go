@@ -8,14 +8,22 @@ import { t } from '$lib/i18n';
 /**
  * Choose the variant the gallery preselects for an entry. This is the "smart by
  * default" decision: the server-recommended variant when present, else the
- * installed one, else the catalog default, else the first compatible one, else
- * the first variant. Returns '' when the entry has no variants.
+ * installed one, else a fallback that skips regional slices of other regions.
+ * Returns '' when the entry has no variants.
  *
  * Each id is checked against the actual variant list so a stale recommended or
  * installed id (e.g. a variant hidden because it is Legacy) falls through to the
  * next rule instead of selecting nothing.
+ *
+ * `activeRegionSlug` is the region the picker is scoped to ('' when none). The
+ * fallback ignores slices of other regions, since they cover only that region's
+ * species; an entry made only of such slices falls back to its first variant.
+ * This mirrors the server's foreign-region rule (recommend.go rankEntry). The
+ * recommended id is taken as is: the server resolves it from the saved region,
+ * even when the regions request failed here, so after an unsaved region change
+ * it can be a slice of a region other than this one.
  */
-export function pickPreselectedVariant(entry: CatalogEntry): string {
+export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = ''): string {
   const variants = entry.variants ?? [];
   if (variants.length === 0) return '';
 
@@ -25,14 +33,17 @@ export function pickPreselectedVariant(entry: CatalogEntry): string {
   if (has(entry.recommendedVariantId)) return entry.recommendedVariantId;
   if (has(entry.installedVariantId)) return entry.installedVariantId;
 
-  // Prefer a compatible variant so the dialog never opens with a blocked one
-  // preselected while a runnable variant exists: compatible default, else any
-  // compatible, else the default, else the first. When every variant is blocked
-  // the first is returned and the install control is disabled by the dialog.
+  // Among the global variants and the active region's slices, prefer a
+  // compatible one: compatible default, else any compatible, else the default,
+  // else the first. When none of them runs, a blocked one is returned (even if
+  // another region's slice would run) and the dialog disables install and shows
+  // why. An entry with neither falls back to its first variant.
+  const local = variants.filter(v => !v.region || v.region === activeRegionSlug);
   const preferred =
-    variants.find(v => v.default && v.compatible) ??
-    variants.find(v => v.compatible) ??
-    variants.find(v => v.default) ??
+    local.find(v => v.default && v.compatible) ??
+    local.find(v => v.compatible) ??
+    local.find(v => v.default) ??
+    local.at(0) ??
     variants[0];
   return preferred.id;
 }
@@ -232,13 +243,15 @@ export interface OptimizeOffer {
  * differs from the host-recommended variant, and that recommended variant is
  * compatible and present in the list. The permanent BirdNET v2.4 model participates
  * like any other installed model (its BuiltIn baseline is the installed variant when
- * no DFT build is active).
+ * no DFT build is active). An entry with `supersededBy` (the server sets it only when
+ * the successor is visible) gets no offer: the superseded notice tells the user to
+ * move to the successor instead of switching builds of the old model.
  */
 export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
   const offers: OptimizeOffer[] = [];
   for (const entry of catalog) {
     const variants = entry.variants ?? [];
-    if (variants.length === 0 || !entry.installed) continue;
+    if (variants.length === 0 || !entry.installed || entry.supersededBy) continue;
 
     const installedId = entry.installedVariantId;
     const recommendedId = entry.recommendedVariantId;
@@ -261,6 +274,14 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
  * Go `classifier.ChannelPreview` constant.
  */
 export const CHANNEL_PREVIEW = 'preview';
+
+/**
+ * The catalog release channel marking a published model whose performance in
+ * BirdNET-Go is not proven yet. The gallery flags an entry on this channel with an
+ * EXPERIMENTAL badge and a notice. Mirrors the Go `classifier.ChannelExperimental`
+ * constant.
+ */
+export const CHANNEL_EXPERIMENTAL = 'experimental';
 
 /**
  * The catalog release channel marking a stable (GA) build, the default an entry

@@ -46,7 +46,7 @@
     {#if onDelete}
       <button
         type="button"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         onclick={onDelete}
         disabled={saving}
       >

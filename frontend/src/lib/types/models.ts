@@ -30,7 +30,6 @@ export interface CatalogVariant {
   /** True for the embedded baseline variant (the built-in BirdNET v2.4 model); it carries no downloadable files. */
   builtIn?: boolean;
   sizeBytes: number;
-  headlineLatencyMs?: number;
   compatible: boolean;
   recommended: boolean;
   reasons?: VariantReason[];
@@ -56,10 +55,12 @@ export interface CatalogEntry {
   region: string;
   speciesCount: number;
   version: string;
-  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA. Always present. */
+  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA, 'experimental' for a published model whose performance in BirdNET-Go is not proven yet. Always present. */
   channel: string;
   /** Human-facing build tag shown next to the version for a non-stable channel (e.g. 'preview3.1'); absent for stable releases. */
   buildLabel?: string;
+  /** The visible catalog entry that replaces this one; absent when nothing does or the successor is hidden. */
+  supersededBy?: { id: string; name: string };
   upstreamUrl?: string;
   installed: boolean;
   compatible: boolean;

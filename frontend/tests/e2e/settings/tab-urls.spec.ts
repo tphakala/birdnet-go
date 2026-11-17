@@ -11,7 +11,7 @@ const settingsPages = [
     path: 'species',
     tabs: ['active', 'include', 'exclude', 'config', 'synonyms', 'tracking', 'dynamicThreshold'],
   },
-  { path: 'analysis', tabs: ['settings', 'models'] },
+  { path: 'analysis', tabs: ['detection', 'filters', 'inference', 'models'] },
   { path: 'integrations', tabs: ['birdweather', 'mqtt', 'ebird', 'prometheus'] },
   { path: 'security', tabs: ['server', 'basic-auth', 'oauth', 'exceptions', 'terminal'] },
   { path: 'detectionfilters', tabs: ['filters'] },
@@ -141,7 +141,7 @@ test.describe('Settings tab URLs', () => {
     await expectTab(page, 'available');
     await page.goForward();
     await expectTab(page, 'installed');
-    await page.locator('#settings-tab-settings').click();
+    await page.locator('#settings-tab-detection').click();
     await page.locator('#settings-tab-models').click();
     await expectTab(page, 'installed');
     await page.goto(`${SETTINGS_BASE}/analysis?tab=models&modelTab=removed`);

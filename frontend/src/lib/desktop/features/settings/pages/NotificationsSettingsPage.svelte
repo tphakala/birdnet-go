@@ -1356,20 +1356,20 @@
     const colors: Record<string, { bg: string; text: string }> = {
       detection: {
         bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
-        text: 'text-[var(--color-success)]',
+        text: 'text-[var(--text-success)]',
       },
       stream: {
         bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
-        text: 'text-[var(--color-info)]',
+        text: 'text-[var(--text-info)]',
       },
       device: { bg: 'bg-violet-500/10', text: 'text-violet-500' },
       system: {
         bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
-        text: 'text-[var(--color-error)]',
+        text: 'text-[var(--text-error)]',
       },
       integration: {
         bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
-        text: 'text-[var(--color-warning)]',
+        text: 'text-[var(--text-warning)]',
       },
     };
     return (
@@ -1422,7 +1422,7 @@
         {t('settings.alerts.v2Required')}
         <a
           href={buildAppUrl('/ui/system/database')}
-          class="underline font-medium ml-1 hover:opacity-80"
+          class="underline font-medium ml-1 hover:decoration-2"
           onclick={handleAppLinkClick}
         >
           {t('settings.alerts.v2RequiredLink')}
@@ -1492,7 +1492,7 @@
                   <a
                     href={buildAppUrl(SETTINGS_ROUTES.notificationsRules)}
                     onclick={openRulesTab}
-                    class="inline-block font-medium underline hover:opacity-80"
+                    class="inline-block font-medium underline hover:decoration-2"
                   >
                     {t('settings.notifications.push.rulesNotice.openRules')}
                   </a>
@@ -1705,23 +1705,23 @@
                           {t('settings.notifications.push.services.ntfy.testConnection')}
                         </button>
                         {#if serviceFormData.ntfyCheckStatus === 'https'}
-                          <span class="text-xs text-[var(--color-success)]"
+                          <span class="text-xs text-[var(--text-success)]"
                             >{t(
                               'settings.notifications.push.services.ntfy.connectionOk.https'
                             )}</span
                           >
                         {:else if serviceFormData.ntfyCheckStatus === 'http'}
-                          <span class="text-xs text-[var(--color-warning)]"
+                          <span class="text-xs text-[var(--text-warning)]"
                             >{t(
                               'settings.notifications.push.services.ntfy.connectionOk.http'
                             )}</span
                           >
                         {:else if serviceFormData.ntfyCheckStatus === 'unreachable'}
-                          <span class="text-xs text-[var(--color-error)]"
+                          <span class="text-xs text-[var(--text-error)]"
                             >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
                           >
                         {:else if serviceFormData.ntfyCheckStatus === 'checkError'}
-                          <span class="text-xs text-[var(--color-warning)]"
+                          <span class="text-xs text-[var(--text-warning)]"
                             >{t('settings.notifications.push.services.ntfy.checkError')}</span
                           >
                         {/if}
@@ -2014,7 +2014,7 @@
                           href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="inline-flex items-center gap-1 mt-2 text-[var(--color-primary)] hover:underline"
+                          class="inline-flex items-center gap-1 mt-2 text-[var(--text-primary)] underline hover:decoration-2"
                         >
                           {t('settings.notifications.push.form.urlFormats.moreServices')}
                           <ExternalLink class="size-3" />
@@ -2025,7 +2025,7 @@
 
                   <!-- Service Validation Error -->
                   {#if serviceValidationError}
-                    <p class="text-xs text-[var(--color-error)]">{serviceValidationError}</p>
+                    <p class="text-xs text-[var(--text-error)]">{serviceValidationError}</p>
                   {/if}
 
                   <!-- Provider Name -->
@@ -2183,7 +2183,7 @@
                           <button
                             type="button"
                             onclick={() => deleteProvider(index)}
-                            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={t('settings.notifications.push.providers.deleteButton')}
                             aria-label={t('settings.notifications.push.providers.deleteButton')}
                             disabled={showProviderForm}
@@ -2374,7 +2374,7 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
                 {#each templateFields as field (field.name)}
                   <div class="flex items-baseline gap-2">
-                    <code class="font-mono text-[var(--color-primary)] shrink-0"
+                    <code class="font-mono text-[var(--text-primary)] shrink-0"
                       >&#123;&#123;.{field.name}&#125;&#125;</code
                     >
                     <span class="text-[var(--color-base-content)]/70">{field.description}</span>
@@ -2415,7 +2415,7 @@
     stats={[
       {
         icon: Zap,
-        iconClass: 'text-[var(--color-primary)]',
+        iconClass: 'text-[var(--text-primary)]',
         count: activeCount,
         label: t('settings.notifications.rules.summary.active'),
       },
@@ -2570,7 +2570,7 @@
                   <span
                     class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {action.target ===
                     'bell'
-                      ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'
+                      ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--text-info)]'
                       : 'bg-violet-500/10 text-violet-500'}"
                   >
                     {#if action.target === 'bell'}

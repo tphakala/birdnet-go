@@ -13,6 +13,7 @@ type Results struct {
 	PCMdata         []byte                // Raw PCM audio data
 	Results         []datastore.Results   // Slice of analysis results
 	ElapsedTime     time.Duration         // Time taken for analysis
+	Inference       PredictTiming         // Lock wait and model time of the inference that produced Results; zero when unknown
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
 	ModelID         string                // identifies which model produced these results

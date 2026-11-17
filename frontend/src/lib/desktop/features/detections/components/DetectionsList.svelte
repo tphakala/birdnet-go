@@ -507,7 +507,7 @@
           disabled={!hasSelection}
           onclick={handleBulkMarkCorrect}
         >
-          <CircleCheck class="size-4 {hasSelection ? 'text-[var(--color-success)]' : ''}" />
+          <CircleCheck class="size-4 {hasSelection ? 'text-[var(--text-success)]' : ''}" />
           {t('dashboard.recentDetections.actions.markCorrect')}
         </Button>
         <Button
@@ -516,7 +516,7 @@
           disabled={!hasSelection}
           onclick={handleBulkMarkFalsePositive}
         >
-          <CircleX class="size-4 {hasSelection ? 'text-[var(--color-error)]' : ''}" />
+          <CircleX class="size-4 {hasSelection ? 'text-[var(--text-error)]' : ''}" />
           {t('dashboard.recentDetections.actions.markFalsePositive')}
         </Button>
         <Button variant="default" size="sm" disabled={!hasSelection} onclick={handleBulkLock}>
@@ -529,7 +529,7 @@
         </Button>
         <div class="w-px h-6 bg-[var(--color-base-300)] mx-1" role="separator"></div>
         <Button variant="default" size="sm" disabled={!hasSelection} onclick={handleBulkDelete}>
-          <Trash2 class="size-4 {hasSelection ? 'text-[var(--color-error)]' : ''}" />
+          <Trash2 class="size-4 {hasSelection ? 'text-[var(--text-error)]' : ''}" />
           {t('dashboard.recentDetections.actions.deleteDetection')}
         </Button>
       {/snippet}
@@ -569,7 +569,7 @@
       <div class="px-4 py-8">
         <div
           role="alert"
-          class="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] border border-[var(--color-error)]/20"
+          class="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--text-error)] border border-[var(--color-error)]/20"
         >
           <XCircle class="size-6 shrink-0" />
           <span>{error}</span>
@@ -585,7 +585,7 @@
       <!-- Desktop/tablet: table or card view -->
       <div class="hidden md:block">
         {#if viewMode === 'table'}
-          <table class="w-full">
+          <table class="detections-table w-full">
             <caption class="sr-only">{t('detections.table.caption')}</caption>
             <thead>
               <tr class="detection-header-list">

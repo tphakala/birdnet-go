@@ -1,6 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/svelte';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { api } from '$lib/utils/api';
+import { navigation } from '$lib/stores/navigation.svelte';
+import { theme } from '$lib/stores/theme';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 
 /**
@@ -17,7 +20,8 @@ import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 // flow through the same mock).
 const EDIT_LABEL = t('dashboard.editMode.editDashboard');
 const RESET_LABEL = t('dashboard.editMode.resetDashboard');
-const THEME_LABEL = t('navigation.theme');
+const SWITCH_TO_DARK_LABEL = t('navigation.switchToDarkTheme');
+const SWITCH_TO_LIGHT_LABEL = t('navigation.switchToLightTheme');
 const REPORT_BUG_LABEL = t('navigation.reportBug');
 const MENU_LABEL = t('navigation.settingsMenu');
 
@@ -39,14 +43,20 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
   it('hides Edit and Reset Dashboard from unauthenticated guests', async () => {
+    theme.set('light');
     const menu = await renderAndOpen({ securityEnabled: true, accessAllowed: false });
 
     expect(menu.queryByText(EDIT_LABEL)).toBeNull();
     expect(menu.queryByText(RESET_LABEL)).toBeNull();
 
     // Neutral, guest-safe items remain available.
-    expect(menu.getByText(THEME_LABEL)).toBeInTheDocument();
+    expect(menu.getByText(SWITCH_TO_DARK_LABEL)).toBeInTheDocument();
     expect(menu.getByText(REPORT_BUG_LABEL)).toBeInTheDocument();
   });
 
@@ -62,5 +72,73 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
 
     expect(menu.getByText(EDIT_LABEL)).toBeInTheDocument();
     expect(menu.getByText(RESET_LABEL)).toBeInTheDocument();
+  });
+
+  it('names the theme item by the theme it switches to', async () => {
+    theme.set('light');
+    const menu = await renderAndOpen({});
+    expect(menu.getByRole('button', { name: SWITCH_TO_DARK_LABEL })).toBeInTheDocument();
+    expect(menu.queryByRole('button', { name: SWITCH_TO_LIGHT_LABEL })).toBeNull();
+
+    await fireEvent.click(menu.getByRole('button', { name: SWITCH_TO_DARK_LABEL }));
+
+    expect(menu.getByRole('button', { name: SWITCH_TO_LIGHT_LABEL })).toBeInTheDocument();
+    expect(menu.queryByRole('button', { name: SWITCH_TO_DARK_LABEL })).toBeNull();
+  });
+
+  describe('focus after the Reset Dashboard confirmation closes', () => {
+    const CANCEL_LABEL = t('common.buttons.cancel');
+
+    async function pressWithKeyboard(item: HTMLElement) {
+      item.focus();
+      await fireEvent.click(item);
+    }
+
+    // Safari and iPadOS do not focus a pressed button
+    async function pressWithoutFocus(item: HTMLElement) {
+      await fireEvent.pointerDown(item);
+      await fireEvent.click(item);
+    }
+
+    async function dismissWithCancel() {
+      await fireEvent.click(await screen.findByRole('button', { name: CANCEL_LABEL }));
+    }
+
+    async function dismissWithEscape() {
+      await screen.findByRole('button', { name: CANCEL_LABEL });
+      await fireEvent.keyDown(document, { key: 'Escape' });
+    }
+
+    it('confirming resets the layout, goes to the dashboard and returns focus to the menu button', async () => {
+      const patch = vi.spyOn(api, 'patch').mockResolvedValue({});
+      const navigate = vi.spyOn(navigation, 'navigate').mockImplementation(() => {});
+      const menu = await renderAndOpen({ securityEnabled: false });
+      await pressWithKeyboard(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
+      const dialog = await screen.findByRole('dialog');
+
+      await fireEvent.click(within(dialog).getByRole('button', { name: RESET_LABEL }));
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/ui/dashboard'));
+      expect(patch).toHaveBeenCalledWith('/api/v2/settings/dashboard', expect.anything());
+      await waitFor(() => expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus());
+    });
+
+    it.each([
+      ['keyboard activation', 'Cancel', pressWithKeyboard, dismissWithCancel],
+      ['keyboard activation', 'Escape', pressWithKeyboard, dismissWithEscape],
+      ['a press that does not focus the item', 'Cancel', pressWithoutFocus, dismissWithCancel],
+      ['a press that does not focus the item', 'Escape', pressWithoutFocus, dismissWithEscape],
+    ])(
+      'returns to the settings menu button after %s and %s',
+      async (_pressName, _dismissName, press, dismiss) => {
+        const menu = await renderAndOpen({ securityEnabled: false });
+        await press(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
+        const trigger = screen.getByRole('button', { name: MENU_LABEL });
+
+        await dismiss();
+
+        await waitFor(() => expect(trigger).toHaveFocus());
+      }
+    );
   });
 });

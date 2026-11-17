@@ -152,6 +152,14 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "models enabled authoritative")
 	}
 
+	// Restore the log deduplication defaults over the zero pair (enabled false, interval 0)
+	// that builds without viper defaults for the section persisted, once per file, then stamp
+	// ConfigVersion 3. Runs after the version 1 and 2 steps, which gate on ConfigVersion and
+	// would be skipped by an earlier stamp.
+	if settings.MigrateLogDeduplicationDefaults() {
+		persistMigration(settings, "log deduplication defaults")
+	}
+
 	// Relocate stream URLs misconfigured under realtime.audio.sources (meant
 	// for local sound cards) into realtime.rtsp.streams so the runtime opens
 	// them with FFmpeg instead of failing to open them as ALSA devices.
@@ -230,6 +238,13 @@ func Load() (*Settings, error) {
 			persistMigration(settings, "profiling token")
 		}
 	}
+
+	// Canonicalize provider IDs and collapse entries that share one, so neither the
+	// incomplete-feature pass nor validation sees a duplicate. This runs after the
+	// last persistMigration on purpose: the file keeps what the user wrote, dropped
+	// entries and their credentials included, until the next save.
+	settings.NormalizeOAuthProviderIDs()
+	settings.ReconcileOAuthProviderDuplicates()
 
 	// Resolve features that are switched on but were never configured, before the
 	// validators get to see them. A config file can age into that state across

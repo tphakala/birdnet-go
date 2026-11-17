@@ -168,8 +168,8 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.EmbeddingExtractor, device, precision string, ok bool) {
 	log := GetLogger()
 
-	// openVINOPlanFor gates on the build tag, backend preference, and device
-	// availability without needing the output port, so run it first; only read the
+	// openVINOPlanFor gates on the build tag, backend preference, device
+	// availability and, on arm64 auto, ONNX Runtime preference without needing the output port, so run it first; only read the
 	// model metadata to resolve the embedding port once OpenVINO is actually in play.
 	// This avoids a wasted metadata read (and a misleading warning) on the common
 	// non-OpenVINO build. The output index passed here is a placeholder, overwritten
@@ -253,10 +253,6 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Build()
 	}
 
-	log.Debug("bat predict starting",
-		logger.Int("sample_len", len(samples[0])),
-		logger.Int("chunks", len(samples)))
-
 	embStart := time.Now()
 	_, embeddings, err := b.embeddingExtractor.PredictWithEmbeddings(samples[0])
 	embDuration := time.Since(embStart)
@@ -283,7 +279,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, err
 	}
 
-	log.Debug("bat embeddings extracted",
+	log.Trace("bat embeddings extracted",
 		logger.Int("embedding_dim", len(embeddings)),
 		logger.Duration("duration", embDuration))
 
@@ -303,7 +299,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, err
 	}
 
-	log.Debug("bat classification complete",
+	log.Trace("bat classification complete",
 		logger.Int("score_count", len(scores)),
 		logger.Duration("duration", classDuration))
 
@@ -344,7 +340,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			logger.Float64("top_confidence", float64(topResults[0].Confidence)),
 			logger.Duration("total_duration", embDuration+classDuration))
 	} else {
-		log.Debug("bat no detections above threshold",
+		log.Trace("bat no detections above threshold",
 			logger.Int("pre_filter", preFilterCount),
 			logger.Float64("threshold", threshold),
 			logger.Duration("total_duration", embDuration+classDuration))

@@ -227,7 +227,6 @@
 </script>
 
 <svelte:head>
-  <title>{t('pageTitle.pageNotFound')}</title>
   <style>
     /* Custom binoculars cursor - black outline for light theme */
     .cursor-binoculars {
@@ -409,7 +408,7 @@
 
     .timer {
       font-size: 0.875rem;
-      color: var(--color-primary);
+      color: var(--text-primary);
     }
 
     /* Spotting effect */

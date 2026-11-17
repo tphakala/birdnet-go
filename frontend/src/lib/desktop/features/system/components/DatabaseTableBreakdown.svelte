@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { ChevronDown, ChevronUp, ChevronsUpDown } from '@lucide/svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
   import type { TableStats } from '$lib/types/database';
 
@@ -37,6 +38,15 @@
     });
   });
 
+  // Clear the sort message when there are no tables, so a refill does not announce a sort the
+  // user did not just make
+  $effect(() => {
+    if (tables.length === 0) sortStatus = '';
+  });
+
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
   function toggleSort(col: string): void {
     if (sortColumn === col) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -44,6 +54,9 @@
       sortColumn = col;
       sortDirection = col === 'name' || col === 'engine' ? 'asc' : 'desc';
     }
+    const column = columns.find(c => c.key === col);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && tables.length > 0) sortStatus = sortAnnouncement(column.label, sortDirection);
   }
 
   type ColumnDef = { key: string; label: string };
@@ -76,41 +89,22 @@
     </span>
   </div>
 
+  <p role="status" class="sr-only">{sortStatus}</p>
+
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
+      <caption class="sr-only">{t('system.database.dashboard.tables.title')}</caption>
       <thead>
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
-            <th
-              scope="col"
-              tabindex="0"
-              aria-sort={sortColumn === col.key
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
-              onclick={() => toggleSort(col.key)}
-              onkeydown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort(col.key);
-                }
-              }}
-            >
-              <div class="flex items-center gap-1">
-                {col.label}
-                {#if sortColumn === col.key}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
-            </th>
+            <SortableHeader
+              label={col.label}
+              field={col.key}
+              activeField={sortColumn}
+              direction={sortDirection}
+              onSort={toggleSort}
+              className="py-2 px-3 text-xs font-medium text-muted select-none"
+            />
           {/each}
           <th scope="col" class="text-left py-2 px-3 text-xs font-medium text-muted">
             {t('system.database.dashboard.tables.usage')}

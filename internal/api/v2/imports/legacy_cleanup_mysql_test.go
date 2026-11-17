@@ -172,7 +172,7 @@ func newCleanupHandler(t *testing.T, mgr *datastoreV2.MySQLManager) *Handler {
 	settings.Output.MySQL.Database = cleanupTestDatabase
 	c := createLegacyTestHandler(t, echo.New(), settings)
 	c.V2Manager = mgr
-	enableV2OnlyMode(t)
+	setV2OnlyMode(t, true)
 	return c
 }
 
@@ -410,7 +410,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		require.False(t, hasGetDB, "the production repository must not offer a connection, or this test no longer covers the manager seam")
 		h := New(core, nil)
 		h.RegisterLegacyCleanupRoutes(core.Group)
-		enableV2OnlyMode(t)
+		setV2OnlyMode(t, true)
 
 		var status LegacyStatusResponse
 		serveJSON(t, core.Echo, http.MethodGet, legacyStatusPath, &status)

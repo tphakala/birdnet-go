@@ -221,11 +221,30 @@ func TestHeatmapLRU_PutRejectsStaleGeneration(t *testing.T) {
 	assert.Equal(t, []byte("fresh-data"), val)
 }
 
-func TestHeatmapCacheKey(t *testing.T) {
+// TestHeatmapCacheKey_DistinguishesInputs pins what the cache relies on: the same request
+// maps to one key, and changing any single input of the request by a small fraction changes
+// the key, so two such requests do not share a cache entry.
+func TestHeatmapCacheKey_DistinguishesInputs(t *testing.T) {
 	t.Parallel()
 
-	key := heatmapCacheKey("Turdus_merula_Eurasian_Blackbird", 59.5, 70.0, 19.0, 31.5, 0.5)
-	assert.Equal(t, "Turdus_merula_Eurasian_Blackbird|59.500000|70.000000|19.000000|31.500000|0.500000", key)
+	const species = "Turdus_merula_Eurasian_Blackbird"
+	base := heatmapCacheKey(species, 59.5, 70.0, 19.0, 31.5, 0.5)
+	assert.Equal(t, base, heatmapCacheKey(species, 59.5, 70.0, 19.0, 31.5, 0.5), "the same request must reuse its key")
+
+	// The viewport bounds and resolution are free floats from the query string, so each
+	// variant moves one by the smallest step the key is expected to keep.
+	const step = 0.000001
+	variants := map[string]string{
+		"species":    heatmapCacheKey("Parus_major_Great_Tit", 59.5, 70.0, 19.0, 31.5, 0.5),
+		"south":      heatmapCacheKey(species, 59.5+step, 70.0, 19.0, 31.5, 0.5),
+		"north":      heatmapCacheKey(species, 59.5, 70.0+step, 19.0, 31.5, 0.5),
+		"west":       heatmapCacheKey(species, 59.5, 70.0, 19.0+step, 31.5, 0.5),
+		"east":       heatmapCacheKey(species, 59.5, 70.0, 19.0, 31.5+step, 0.5),
+		"resolution": heatmapCacheKey(species, 59.5, 70.0, 19.0, 31.5, 0.5+step),
+	}
+	for input, key := range variants {
+		assert.NotEqual(t, base, key, "a different %s must not share a cache key", input)
+	}
 }
 
 func TestHeatmapLRU_InvalidationClearsEntries(t *testing.T) {

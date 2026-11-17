@@ -116,6 +116,30 @@ func normalizeAndValidateUltrasonicExportType(export *ExportSettings) error {
 	return nil
 }
 
+// normalizeAndValidateDenoiseStrength heals an empty denoise strength to the
+// default preset and rejects an unknown one. It runs whether or not the denoise
+// is enabled, because the switch can be flipped on without re-triggering
+// validation. Kept separate from validateAudioSettings to hold that function's
+// cyclomatic complexity down.
+func normalizeAndValidateDenoiseStrength(d *DenoiseSettings, field string) error {
+	if strings.TrimSpace(d.Strength) == "" {
+		GetLogger().Warn("denoise strength is empty, normalizing to the default preset",
+			logger.String("field", field),
+			logger.String("default", DefaultDenoisePreset),
+			logger.String("action", "normalize_denoise_strength"))
+		d.Strength = DefaultDenoisePreset
+	}
+	if !IsValidDenoisePresetName(d.Strength) {
+		return errors.Newf("unsupported denoise strength %q for %s", d.Strength, field).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "denoise-strength").
+			Context("field", field).
+			Context("strength", d.Strength).
+			Build()
+	}
+	return nil
+}
+
 // EBU R128 normalization limits
 const (
 	MinTargetLUFS    = -40.0 // Minimum target loudness in LUFS
@@ -599,6 +623,10 @@ func validateAudioSettings(settings *AudioSettings) error {
 	}
 
 	if err := normalizeAndValidateUltrasonicExportType(&settings.Export); err != nil {
+		return err
+	}
+
+	if err := normalizeAndValidateDenoiseStrength(&settings.Export.Denoise, "realtime.audio.export.denoise.strength"); err != nil {
 		return err
 	}
 

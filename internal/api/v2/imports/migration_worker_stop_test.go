@@ -50,9 +50,6 @@ type stopTestEnv struct {
 // A nil modelRepo uses the real repository.
 func newStopTestEnv(t *testing.T, modelRepo repository.ModelRepository) *stopTestEnv {
 	t.Helper()
-	migrationTestMu.Lock()
-	t.Cleanup(migrationTestMu.Unlock)
-
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{ConfiguredPath: filepath.Join(t.TempDir(), "v2.db")})
 	require.NoError(t, err)
 	require.NoError(t, mgr.Initialize())
@@ -76,9 +73,7 @@ func newStopTestEnv(t *testing.T, modelRepo repository.ModelRepository) *stopTes
 	})
 	require.NoError(t, err)
 
-	prevSM, prevW := stateManager, migrationWorker
-	stateManager, migrationWorker = sm, w
-	t.Cleanup(func() { stateManager, migrationWorker = prevSM, prevW })
+	setMigrationState(t, sm, w)
 
 	e := echo.New()
 	return &stopTestEnv{
@@ -240,11 +235,7 @@ func completedEnvWithBlockedDrain(t *testing.T) (env *stopTestEnv, release chan 
 	env.toCompleted(t, watermark)
 	env.startWorker(t)
 	synctest.Wait() // worker parked in tail sync
-	migrationMu.RLock()
-	prevCancel := migrationWorkerCancel
-	migrationMu.RUnlock()
-	SetMigrationWorkerCancel(env.cancelWorker)
-	t.Cleanup(func() { SetMigrationWorkerCancel(prevCancel) })
+	setMigrationWorkerCancel(t, env.cancelWorker)
 	return env, release
 }
 
@@ -291,8 +282,9 @@ func TestStopMigrationWorker_DrainsBeforeReturning(t *testing.T) {
 
 func TestCancelMigration_CompletedKeepsTailSync(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		const watermark = 5
 		env := newStopTestEnv(t, nil)
-		env.toCompleted(t, 5)
+		env.toCompleted(t, watermark)
 		env.startWorker(t)
 		synctest.Wait() // worker parked in tail sync
 
@@ -304,6 +296,16 @@ func TestCancelMigration_CompletedKeepsTailSync(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, entities.MigrationStatusCompleted, state.State)
 		assert.True(t, env.worker.IsRunning(), "a rejected cancel must leave tail sync running")
+
+		// Stopping a worker in the COMPLETED state runs one final drain from the
+		// watermark. Expect it here: left to the test cleanup, it races the
+		// database close and fails the test when it wins.
+		env.legacy.EXPECT().
+			Search(mock.Anything, mock.MatchedBy(func(f *datastore.DetectionFilters) bool { return f.MinID == watermark })).
+			Return(nil, int64(0), nil).Once()
+		env.cancelWorker()
+		synctest.Wait()
+		assert.False(t, env.worker.IsRunning(), "the worker must exit after its final drain")
 	})
 }
 

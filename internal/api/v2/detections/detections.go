@@ -56,6 +56,9 @@ const (
 	// (e.g. the legacy datastore does not track it). The UI maps this to the
 	// default bird spectrogram frequency range.
 	defaultModelType = "bird"
+
+	// detectionNotFoundMessage is the 404 message of the single-detection routes.
+	detectionNotFoundMessage = "Detection not found"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -142,6 +145,14 @@ type CommentResponse struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// OriginalSpeciesResponse is the species the model itself picked for a detection
+// whose species a reviewer changed.
+type OriginalSpeciesResponse struct {
+	ScientificName string `json:"scientificName"`
+	CommonName     string `json:"commonName"`
+	SpeciesCode    string `json:"speciesCode"`
+}
+
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
 	ID             uint        `json:"id"`
@@ -155,13 +166,17 @@ type DetectionResponse struct {
 	ScientificName string      `json:"scientificName"`
 	CommonName     string      `json:"commonName"`
 	Confidence     float64     `json:"confidence"`
-	ClipName       string      `json:"clipName,omitempty"` // Audio clip filename (basename only, no path); empty when no clip exists
+	// OriginalSpecies is the model's own pick, present once a reviewer has changed the species and also after it was changed back; its confidence is confidence. It is omitted on the legacy database and for a species that was never changed.
+	OriginalSpecies *OriginalSpeciesResponse `json:"originalSpecies,omitempty"`
+	ClipName        string                   `json:"clipName,omitempty"` // Audio clip filename (basename only, no path); empty when no clip exists
 	// SpectrogramOnly is true when the audio clip was removed by retention but a spectrogram image was kept; the frontend shows the image without playback
 	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
 	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip, omitted when unknown. Bat spectrograms span 0 to half of it. A spectrogram-only detection reports the original clip's rate.
 	ClipSampleRate int `json:"clipSampleRate,omitempty"`
-	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded.
+	// ClipDenoised is true when the export stage denoised the saved clip. It is omitted for a clip written as captured, for a clip saved before the marker existed, and on the legacy database.
+	ClipDenoised bool `json:"clipDenoised,omitempty"`
+	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded. An entry with hitCount 0 is a model that was active on the source without a hit.
 	ModelContributions []ModelContributionResponse `json:"modelContributions,omitempty"`
 	Verified           string                      `json:"verified"`
 	Locked             bool                        `json:"locked"`
@@ -171,6 +186,11 @@ type DetectionResponse struct {
 	TimeOfDay          string                      `json:"timeOfDay,omitempty"`
 	IsNewSpecies       bool                        `json:"isNewSpecies,omitempty"`       // First seen within tracking window
 	DaysSinceFirstSeen int                         `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+
+	// FirstReviewedAt, LastReviewedAt and LockedAt are RFC3339 times in the station zone, set only by GET /detections/:id on the enhanced database. FirstReviewedAt is when the review was first stored, LastReviewedAt when it was last saved (never earlier than FirstReviewedAt), LockedAt when the current lock was set. Each is omitted without a review or lock.
+	FirstReviewedAt string `json:"firstReviewedAt,omitempty"`
+	LastReviewedAt  string `json:"lastReviewedAt,omitempty"`
+	LockedAt        string `json:"lockedAt,omitempty"`
 
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
@@ -802,7 +822,8 @@ func (c *Handler) convertResultsToDetectionResponses(ctx context.Context, result
 // r.Timestamp is the stored instant, so the two detections of a repeated DST hour keep their
 // own UTC offsets even though their date and time text is identical. The legacy bridge can
 // only rebuild the instant from offset-free text, so it gives both the first occurrence's
-// offset. It never writes through r, which the page cache may share.
+// offset. OriginalSpecies is carried over when r has one. It never writes through r, which the
+// page cache may share.
 //
 // A legacy-store row whose date and time text does not parse never reaches here: the
 // legacy bridge fails the read (list: 500, detail: 404). That is accepted legacy
@@ -827,8 +848,17 @@ func (c *Handler) resultToDetectionResponse(r *detectionPkg.Result, includeWeath
 		// SpectrogramOnly never exposes the kept clip name, only that an image exists.
 		SpectrogramOnly: r.IsSpectrogramOnly(),
 		ClipSampleRate:  r.ClipSampleRate,
+		ClipDenoised:    r.ClipDenoised,
 		Locked:          r.Locked,
 		Unlikely:        r.Unlikely,
+	}
+
+	if r.OriginalSpecies.ScientificName != "" {
+		detection.OriginalSpecies = &OriginalSpeciesResponse{
+			ScientificName: r.OriginalSpecies.ScientificName,
+			CommonName:     r.OriginalSpecies.CommonName,
+			SpeciesCode:    r.OriginalSpecies.Code,
+		}
 	}
 
 	// populate source info if available
@@ -1268,6 +1298,8 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 // but no stored clip sample rate it reads that clip's header once, waiting at most
 // clipRateResponseBudget, stores the rate, and returns it as clipSampleRate; when
 // the wait is exceeded or the clip cannot be read the field is omitted.
+// It alone also returns the review and lock times (firstReviewedAt, lastReviewedAt,
+// lockedAt) the repository read set; no list, recent or search response carries them.
 func (c *Handler) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
 	reqCtx := ctx.Request().Context()
@@ -1279,7 +1311,7 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detection request ended before completion"); ended {
 			return respErr
 		}
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// An old bat row may have no clip sample rate yet; learn it from the clip
@@ -1290,11 +1322,23 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	resp := []DetectionResponse{c.resultToDetectionResponse(r, true, weatherCache)}
+	resp[0].FirstReviewedAt = formatOptionalTime(r.FirstReviewedAt)
+	resp[0].LastReviewedAt = formatOptionalTime(r.LastReviewedAt)
+	resp[0].LockedAt = formatOptionalTime(r.LockedAt)
 	c.attachModelContributions(reqCtx, resp)
 	if !c.isClientAuthenticated(ctx) {
 		resp[0].Source = nil
 	}
 	return ctx.JSON(http.StatusOK, resp[0])
+}
+
+// formatOptionalTime formats t as RFC3339, or returns an empty string for the zero
+// time so the response field is omitted.
+func formatOptionalTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // GetRecentDetections returns the most recent detections
@@ -1332,7 +1376,7 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// Check if the note is locked
@@ -1455,7 +1499,7 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 	// Get the note directly - allow reviewing locked detections
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// Parse request
@@ -1548,7 +1592,7 @@ func (c *Handler) LockDetection(ctx echo.Context) error {
 	// Get the note to verify it exists
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// Only check lock status when trying to LOCK (not unlock)
@@ -1842,7 +1886,7 @@ func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	// Get the detection through the repository: its Timestamp is the stored instant
 	r, err := c.Repo.Get(ctx.Request().Context(), id)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 	detectionTime := r.Timestamp
 

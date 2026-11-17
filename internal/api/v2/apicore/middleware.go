@@ -63,11 +63,12 @@ func (c *Core) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 			tunneled := false
 			provider := tunnelProviderUnknown
 
-			// Only classify the request as tunneled when the IP extractor actually
-			// honored a forwarded header, i.e. the resolved client IP differs from
-			// the immediate connection peer. That happens only for a trusted proxy,
-			// so a directly-connected client cannot spoof a "tunneled" label by
-			// sending forwarded headers from an untrusted address.
+			// Only classify the request as tunneled when the IP extractor resolved
+			// a client other than the immediate connection peer. That happens only
+			// when a trusted peer's forwarded headers were consistent or verified, so
+			// a directly connected client cannot spoof a "tunneled" label by sending
+			// forwarded headers from an untrusted address, and headers that disagree
+			// do not set it either.
 			if peerIP, _ := proxytrust.PeerAddr(req); peerIP != nil && peerIP.String() != ctx.RealIP() {
 				switch {
 				case req.Header.Get(proxytrust.HeaderCFConnectingIP) != "":

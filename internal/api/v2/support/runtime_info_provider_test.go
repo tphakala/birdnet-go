@@ -175,8 +175,6 @@ func TestRuntimeInfoProvider_NoSettings(t *testing.T) {
 // and a provider with no core reports no orchestrator instead of failing.
 func TestNewRuntimeInfoProviderWithoutCore(t *testing.T) {
 	p := newRuntimeInfoProvider(nil)
-	require.NotNil(t, p.ortSnap)
-	require.NotNil(t, p.ovSnap)
 	require.NotNil(t, p.env)
 	require.NotNil(t, p.mountTable)
 	require.NotNil(t, p.resolve)

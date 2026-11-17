@@ -12,7 +12,7 @@ import (
 
 const schedulerRefreshInterval = 60 * time.Second
 
-// nighttimeScheduler precomputes whether the bat model should be active
+// nighttimeScheduler precomputes whether the bat models should be active
 // based on civil dusk/dawn times. A background goroutine refreshes the
 // state every 60 seconds so the hot path is a single atomic load.
 type nighttimeScheduler struct {
@@ -26,7 +26,7 @@ type nighttimeScheduler struct {
 }
 
 // newNighttimeScheduler creates a scheduler. If sunCalc is nil, the
-// scheduler fails open (bat model always active).
+// scheduler fails open (bat models always active).
 func newNighttimeScheduler(sc *suncalc.SunCalc) *nighttimeScheduler {
 	s := &nighttimeScheduler{
 		sunCalc:  sc,

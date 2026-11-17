@@ -133,7 +133,8 @@ const translations: Record<string, string> = {
   'components.forms.species.noSuggestions': 'No species suggestions available',
   // Data display
   'dataDisplay.table.noData': 'No data available',
-  'dataDisplay.table.sortBy': 'Sort by',
+  'dataDisplay.table.sortedAscending': 'Sorted by {column}, ascending',
+  'dataDisplay.table.sortedDescending': 'Sorted by {column}, descending',
   'settings.species.customConfiguration.title': 'Custom Configuration',
   'settings.species.customConfiguration.description': 'Configure custom settings for species',
   'common.ui.loading': 'Loading...',
@@ -208,7 +209,6 @@ const translations: Record<string, string> = {
   'dashboard.recentDetections.actions.deleteDetection': 'Delete detection',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
-  'settings.audio.audioCapture.description': 'Configure audio capture settings',
   'settings.audio.audioCapture.rtspSource': 'RTSP Source',
   'settings.audio.audioCapture.rtspUrlsLabel': 'RTSP URLs',
   'settings.audio.audioCapture.rtspUrlsHelp': 'Enter RTSP stream URLs',
@@ -239,6 +239,9 @@ const translations: Record<string, string> = {
   'notifications.timeAgo.hoursAgo': '{hours}h ago',
   'notifications.timeAgo.daysAgo': '{days}d ago',
   'forms.networkAddressList.remove': 'Remove {address}',
+  'media.audio.seekValueText': '{current} of {total}',
+  'settings.audio.soundCards.deleteConfirm': 'Remove sound card source "{name}"?',
+  'settings.audio.streams.deleteConfirm': 'Remove stream "{name}"?',
 };
 
 vi.mock('$lib/i18n', () => ({

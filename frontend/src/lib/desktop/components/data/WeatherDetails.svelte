@@ -175,7 +175,7 @@
     </div>
     <!-- Error State -->
   {:else if error}
-    <div class="text-[var(--color-error)] text-sm">
+    <div class="text-[var(--text-error)] text-sm">
       {error}
     </div>
     <!-- Weather Condition with Icon and Description -->

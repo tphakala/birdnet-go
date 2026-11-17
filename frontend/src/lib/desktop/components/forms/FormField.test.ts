@@ -83,6 +83,107 @@ describe('FormField', () => {
     });
   });
 
+  describe('aria-describedby', () => {
+    const base = { type: 'text', name: 'rate', label: 'Rate', id: 'rate-field' } as const;
+    const describedBy = () => screen.getByLabelText('Rate').getAttribute('aria-describedby');
+
+    it('has no attribute without help text, error or extra ids', () => {
+      formFieldTest.render({ ...base });
+      expect(describedBy()).toBeNull();
+    });
+
+    it('points at the help text alone as before', () => {
+      formFieldTest.render({ ...base, helpText: 'Help' });
+      expect(describedBy()).toBe('rate-field-help');
+    });
+
+    it('uses the extra ids alone when there is no help text or error', () => {
+      formFieldTest.render({ ...base, describedByExtra: 'note-a note-b' });
+      expect(describedBy()).toBe('note-a note-b');
+    });
+
+    it('lists the help text before the extra ids', () => {
+      formFieldTest.render({ ...base, helpText: 'Help', describedByExtra: 'note-a' });
+      expect(describedBy()).toBe('rate-field-help note-a');
+    });
+
+    it('lists the error instead of the help text, before the extra ids', () => {
+      formFieldTest.render({
+        ...base,
+        helpText: 'Help',
+        error: 'Too low',
+        describedByExtra: 'note-a',
+      });
+      expect(describedBy()).toBe('rate-field-error note-a');
+    });
+
+    it('treats an empty extra string as no extra id', () => {
+      formFieldTest.render({ ...base, describedByExtra: '' });
+      expect(describedBy()).toBeNull();
+    });
+  });
+
+  describe('aria-invalid', () => {
+    it('marks the input invalid once a failed validator shows its message', async () => {
+      const user = userEvent.setup();
+      formFieldTest.render({
+        type: 'text',
+        name: 'username',
+        label: 'Username',
+        validators: [minLength(5)],
+      });
+      const input = screen.getByLabelText('Username');
+      expect(input).not.toHaveAttribute('aria-invalid');
+
+      await user.type(input, 'abc');
+      await user.tab();
+
+      await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'));
+    });
+
+    it('drops aria-invalid when an external error clears before the field is touched', async () => {
+      const props = { type: 'text', name: 'rate', label: 'Rate' } as const;
+      const { rerender } = formFieldTest.render({ ...props, error: 'Too low' });
+      const input = screen.getByLabelText('Rate');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+
+      await rerender({ ...props, error: undefined });
+
+      expect(screen.queryByText('Too low')).toBeNull();
+      expect(input).not.toHaveAttribute('aria-invalid');
+    });
+
+    it.each([
+      { type: 'textarea', role: 'textbox' },
+      { type: 'select', role: 'combobox' },
+      { type: 'checkbox', role: 'checkbox' },
+      { type: 'range', role: 'slider' },
+    ] as const)('marks a $type field invalid through the invalid prop', ({ type, role }) => {
+      formFieldTest.render({
+        type,
+        name: 'field',
+        label: 'Field',
+        options: [{ value: 'a', label: 'A' }],
+        invalid: true,
+      });
+      expect(screen.getByRole(role)).toHaveAttribute('aria-invalid', 'true');
+    });
+  });
+
+  describe('Generated ids', () => {
+    it('gives fields with the same name distinct ids and labels', () => {
+      formFieldTest.render({ type: 'number', name: 'threshold', label: 'First', helpText: 'A' });
+      formFieldTest.render({ type: 'number', name: 'threshold', label: 'Second', helpText: 'B' });
+
+      const first = screen.getByLabelText('First');
+      const second = screen.getByLabelText('Second');
+      expect(first.id).not.toBe(second.id);
+      expect(first.getAttribute('aria-describedby')).not.toBe(
+        second.getAttribute('aria-describedby')
+      );
+    });
+  });
+
   describe('Email Input', () => {
     it('validates email format', async () => {
       const user = userEvent.setup();

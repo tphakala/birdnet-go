@@ -46,7 +46,7 @@ func TestNormalizeOAuthProviders_DisablesProviderWithoutCredentials(t *testing.T
 		},
 		{
 			name:     "OIDC with neither credentials nor issuer",
-			provider: OAuthProviderConfig{Provider: providerOIDC, Enabled: true},
+			provider: OAuthProviderConfig{Provider: OAuthProviderOIDC, Enabled: true},
 		},
 	}
 
@@ -94,7 +94,7 @@ func TestNormalizeOAuthProviders_KeepsCredentialedProviderEnabled(t *testing.T) 
 		},
 		{
 			name:        "relative redirect URI, the shape a migrated legacy block carries",
-			provider:    OAuthProviderConfig{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
+			provider:    OAuthProviderConfig{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
 			expectFatal: "not an absolute http(s) URL",
 		},
 	}
@@ -138,54 +138,53 @@ func TestValidateOAuthRedirects_ScopedToLockOutShape(t *testing.T) {
 		{
 			name: "absolute redirectUri without host or baseUrl is accepted",
 			security: Security{OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://example.com/callback"},
+				{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://example.com/callback"},
 			}},
 		},
 		{
 			name: "host supplies the redirect source",
 			security: Security{Host: "example.com", OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGitHub, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+				{Provider: OAuthProviderGitHub, Enabled: true, ClientID: "id", ClientSecret: "secret"},
 			}},
 		},
 		{
 			name: "no credentials is inert, not fatal",
 			security: Security{OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGoogle, Enabled: true, RedirectURI: "/settings"},
+				{Provider: OAuthProviderGoogle, Enabled: true, RedirectURI: "/settings"},
 			}},
 		},
 		{
 			name: "disabled provider is never consulted",
 			security: Security{OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGoogle, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
+				{Provider: OAuthProviderGoogle, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
 			}},
 		},
 		{
 			name: "credentialed provider with no usable redirect is fatal",
 			security: Security{OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerMicrosoft, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
+				{Provider: OAuthProviderMicrosoft, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
 			}},
 			wantErr: true,
 		},
 		{
-			name: "bare host gains the https scheme computeBaseURL assumes",
+			name: "bare host gains the https scheme OAuthOrigin assumes",
 			security: Security{Host: "example.com", OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+				{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
 			}},
 		},
 		{
-			// computeBaseURL returns baseUrl verbatim and prefers it over host, so a
-			// malformed one yields a callback the identity provider rejects and a
-			// valid host cannot rescue it.
+			// OAuthOrigin prefers baseUrl over host, so a malformed one yields a
+			// callback the identity provider rejects and a valid host cannot rescue it.
 			name: "malformed baseUrl is not a usable origin",
 			security: Security{BaseURL: "example.com", Host: "https://real.example.com", OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+				{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
 			}},
 			wantErr: true,
 		},
 		{
 			name: "malformed baseUrl is tolerated when the provider carries its own redirectUri",
 			security: Security{BaseURL: "example.com", OAuthProviders: []OAuthProviderConfig{
-				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://example.com/callback"},
+				{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://example.com/callback"},
 			}},
 		},
 	}
@@ -248,8 +247,8 @@ func TestNormalizeOAuthProviders_LeavesDisabledProviderAlone(t *testing.T) {
 
 	s := &Settings{}
 	s.Security.OAuthProviders = []OAuthProviderConfig{
-		{Provider: providerGoogle, Enabled: false},
-		{Provider: providerOIDC, Enabled: false, ClientID: "id", ClientSecret: "secret"},
+		{Provider: OAuthProviderGoogle, Enabled: false},
+		{Provider: OAuthProviderOIDC, Enabled: false, ClientID: "id", ClientSecret: "secret"},
 	}
 
 	normalizeIncompleteFeatures(s)
@@ -267,13 +266,13 @@ func TestNormalizeOAuthProviders_AcceptsCompleteOIDC(t *testing.T) {
 	s := &Settings{}
 	s.Security.Host = "birdnet.example.com"
 	s.Security.OAuthProviders = []OAuthProviderConfig{
-		{Provider: providerOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: "https://idp.example.com"},
+		{Provider: OAuthProviderOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: "https://idp.example.com"},
 	}
 
 	normalizeIncompleteFeatures(s)
 
 	assert.Empty(t, s.ValidationWarnings)
-	assert.Equal(t, []string{providerOIDC}, s.GetEnabledOAuthProviders())
+	assert.Equal(t, []string{OAuthProviderOIDC}, s.GetEnabledOAuthProviders())
 	require.NoError(t, ValidateSettings(s))
 }
 
@@ -312,7 +311,7 @@ func TestNormalizeOAuthProviders_WarnsForEveryLegacyBlock(t *testing.T) {
 			apply: func(s *Settings) {
 				s.Security.GoogleAuth = SocialProvider{Enabled: true, ClientID: "id", ClientSecret: "secret"}
 				s.Security.OAuthProviders = []OAuthProviderConfig{
-					{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://app.example.com/cb"},
+					{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://app.example.com/cb"},
 				}
 			},
 			expectKey:  "security.googleauth",
@@ -351,7 +350,7 @@ func TestNormalizeOAuthProviders_LegacyCredentialedBlockStaysFatalAfterMigration
 
 	normalizeIncompleteFeatures(s)
 
-	assert.Equal(t, []string{providerGoogle}, s.GetEnabledOAuthProviders(),
+	assert.Equal(t, []string{OAuthProviderGoogle}, s.GetEnabledOAuthProviders(),
 		"a credentialed provider keeps requiring authentication")
 
 	err := ValidateSettings(s)
@@ -1215,4 +1214,167 @@ realtime:
 	assert.Contains(t, warnings, "quiet hours")
 	assert.Contains(t, warnings, "BirdWeather")
 	assert.Contains(t, warnings, "Q factor")
+}
+
+func TestNormalizeModelConsensus(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		cfg          ModelConsensusSettings
+		wantMin      int
+		wantWarnings int
+	}{
+		{"disabled zero defaulted silently", ModelConsensusSettings{MinModels: 0}, DefaultModelConsensusMinModels, 0},
+		{"enabled zero defaulted with warning", ModelConsensusSettings{AllSpecies: true, MinModels: 0}, DefaultModelConsensusMinModels, 1},
+		{"enabled below minimum defaulted with warning", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels - 1}, DefaultModelConsensusMinModels, 1},
+		{"enabled above maximum defaulted with warning", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels + 1}, DefaultModelConsensusMinModels, 1},
+		{"disabled above maximum defaulted with warning", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels + 1}, DefaultModelConsensusMinModels, 1},
+		{"enabled at minimum kept", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels}, MinModelConsensusMinModels, 0},
+		{"enabled at maximum kept", ModelConsensusSettings{AllSpecies: true, MinModels: MaxModelConsensusMinModels}, MaxModelConsensusMinModels, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Settings{}
+			s.Realtime.ModelConsensus = tt.cfg
+
+			s.normalizeModelConsensus()
+
+			assert.Equal(t, tt.wantMin, s.Realtime.ModelConsensus.MinModels)
+			assert.Len(t, s.ValidationWarnings, tt.wantWarnings)
+			require.NoError(t, validateModelConsensusSettings(&s.Realtime.ModelConsensus))
+		})
+	}
+}
+
+// TestNormalizeIncompleteFeatures_ModelConsensusWired pins that the load-time
+// normalization pass repairs the model consensus minimum, so a hand-edited value
+// cannot reach the fatal validation.
+func TestNormalizeIncompleteFeatures_ModelConsensusWired(t *testing.T) {
+	t.Parallel()
+	s := &Settings{}
+	s.Realtime.ModelConsensus = ModelConsensusSettings{AllSpecies: true, MinModels: MaxModelConsensusMinModels + 1}
+
+	normalizeIncompleteFeatures(s)
+
+	assert.Equal(t, DefaultModelConsensusMinModels, s.Realtime.ModelConsensus.MinModels)
+}
+
+// TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed pins that an entry
+// with a misspelled or blank provider ID is warned about and left exactly as it
+// is, enabled or not. While enabled with credentials it still counts as a
+// configured sign-in method: dropping it would turn authentication off on a server
+// the operator meant to protect.
+func TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		id       string
+		enabled  bool
+		wantText string
+	}{
+		{name: "misspelled", id: "gogle", enabled: true, wantText: `"gogle"`},
+		{name: "blank", id: "", enabled: true, wantText: `""`},
+		{name: "disabled", id: "gogle", enabled: false, wantText: `"gogle"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Settings{}
+			s.Security.OAuthProviders = []OAuthProviderConfig{
+				{Provider: tt.id, Enabled: tt.enabled, ClientID: "id", ClientSecret: "secret"},
+			}
+			require.Equal(t, tt.enabled, s.IsAuthProviderConfigured(), "precondition: only an enabled entry counts before load")
+
+			normalizeIncompleteFeatures(s)
+
+			assert.Equal(t, tt.enabled, s.Security.OAuthProviders[0].Enabled, "the entry must keep its enabled state")
+			assert.Equal(t, tt.enabled, s.IsAuthProviderConfigured(), "the entry must keep requiring sign-in only while enabled")
+			require.Len(t, s.ValidationWarnings, 1)
+			assert.Contains(t, s.ValidationWarnings[0], "security.oauthProviders[0]")
+			assert.Contains(t, s.ValidationWarnings[0], tt.wantText)
+
+			// Adding a valid provider changes nothing about the first entry.
+			s.Security.OAuthProviders = append(s.Security.OAuthProviders,
+				OAuthProviderConfig{Provider: OAuthProviderGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"})
+			normalizeIncompleteFeatures(s)
+			assert.Equal(t, tt.enabled, s.Security.OAuthProviders[0].Enabled)
+			assert.Len(t, s.ValidationWarnings, 1, "the valid entry adds no warning")
+		})
+	}
+}
+
+// TestValidateOAuthProviderIDs pins the save-time rule: every entry, enabled or
+// not, needs a known canonical provider ID, and the error names the field.
+func TestValidateOAuthProviderIDs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		ids     []string
+		wantErr string
+	}{
+		{name: "no entries"},
+		{name: "every known ID", ids: []string{"google", "github", "microsoft", "line", "kakao", "oidc"}},
+		{name: "case and space are canonicalised", ids: []string{" OIDC "}},
+		{name: "unknown", ids: []string{"google", "gogle"}, wantErr: "security.oauthProviders[1]"},
+		{name: "blank", ids: []string{""}, wantErr: "security.oauthProviders[0]"},
+		{name: "whitespace only", ids: []string{"  "}, wantErr: "security.oauthProviders[0]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sec := &Security{}
+			for _, id := range tt.ids {
+				sec.OAuthProviders = append(sec.OAuthProviders, OAuthProviderConfig{Provider: id})
+			}
+
+			err := ValidateOAuthProviderIDs(sec)
+
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Contains(t, err.Error(), "supported")
+		})
+	}
+}
+
+// TestNormalizeBaseURL pins the load-time policy for security.baseUrl: an unusable
+// value is warned about once and kept, never cleared and never fatal when no
+// credentialed provider depends on it, and the warning carries no credentials.
+func TestNormalizeBaseURL(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"birds.example.com", "ftp://user:hunter2@birds.example.com", "https://user:hunter2@birds.example.com"} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			s := &Settings{}
+			s.Security.BaseURL = value
+
+			normalizeIncompleteFeatures(s)
+			normalizeIncompleteFeatures(s)
+
+			require.NoError(t, ValidateSettings(s))
+			assert.Equal(t, value, s.Security.BaseURL, "the value stays so the settings page can show it for correction")
+			require.Len(t, s.ValidationWarnings, 1, "one warning, however often the pass runs")
+			assert.Contains(t, s.ValidationWarnings[0], "security.baseUrl")
+			assert.NotContains(t, s.ValidationWarnings[0], "hunter2")
+		})
+	}
+
+	t.Run("usable or unset values record nothing", func(t *testing.T) {
+		t.Parallel()
+		for _, value := range []string{"", "  ", " https://birds.example.com/ "} {
+			s := &Settings{}
+			s.Security.BaseURL = value
+			normalizeIncompleteFeatures(s)
+			assert.Empty(t, s.ValidationWarnings, "baseUrl %q", value)
+		}
+	})
 }

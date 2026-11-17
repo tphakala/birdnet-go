@@ -3,15 +3,20 @@
   import { max } from 'd3-array';
   import { t } from '$lib/i18n';
   import type { HourlyCount } from '$lib/types/database';
+  import { clampChartWidth, DETECTION_RATE_CHART_HEIGHT } from './detectionRateChartLayout';
 
   interface Props {
     data: HourlyCount[];
     color?: string;
-    width?: number;
-    height?: number;
   }
 
-  let { data = [], color = '#f59e0b', width = 280, height = 80 }: Props = $props();
+  let { data = [], color = '#f59e0b' }: Props = $props();
+
+  const height = DETECTION_RATE_CHART_HEIGHT;
+
+  // The chart fills its container; bind:clientWidth is measured in the browser only
+  let containerWidth = $state(0);
+  let width = $derived(clampChartWidth(containerWidth));
 
   const margin = { top: 4, right: 0, bottom: 16, left: 0 };
 
@@ -62,35 +67,37 @@
   }
 </script>
 
-<svg
-  {width}
-  {height}
-  viewBox="0 0 {width} {height}"
-  class="overflow-visible"
-  role="img"
-  aria-label={t('system.database.dashboard.detectionRate.chartLabel')}
->
-  <g transform="translate({margin.left},{margin.top})">
-    {#each chartData.bars as bar, i (i)}
-      <rect x={bar.x} y={bar.y} width={bar.w} height={bar.h} fill={color} opacity="0.7" rx="1">
-        <title
-          >{t('system.database.dashboard.detectionRate.detectionsTooltip', {
-            count: bar.count,
-          })}</title
-        >
-      </rect>
-      {#if showLabel(i)}
-        <text
-          x={bar.x + bar.w / 2}
-          y={chartData.innerH + 12}
-          text-anchor="middle"
-          fill="currentColor"
-          opacity="0.4"
-          font-size="8"
-        >
-          {bar.label}
-        </text>
-      {/if}
-    {/each}
-  </g>
-</svg>
+<div class="w-full" bind:clientWidth={containerWidth}>
+  <svg
+    {width}
+    {height}
+    viewBox="0 0 {width} {height}"
+    class="block overflow-visible"
+    role="img"
+    aria-label={t('system.database.dashboard.detectionRate.chartLabel')}
+  >
+    <g transform="translate({margin.left},{margin.top})">
+      {#each chartData.bars as bar, i (i)}
+        <rect x={bar.x} y={bar.y} width={bar.w} height={bar.h} fill={color} opacity="0.7" rx="1">
+          <title
+            >{t('system.database.dashboard.detectionRate.detectionsTooltip', {
+              count: bar.count,
+            })}</title
+          >
+        </rect>
+        {#if showLabel(i)}
+          <text
+            x={bar.x + bar.w / 2}
+            y={chartData.innerH + 12}
+            text-anchor="middle"
+            fill="currentColor"
+            opacity="0.4"
+            font-size="8"
+          >
+            {bar.label}
+          </text>
+        {/if}
+      {/each}
+    </g>
+  </svg>
+</div>

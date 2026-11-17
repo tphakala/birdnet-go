@@ -63,20 +63,32 @@ func samplePage(size int) DetectionPage {
 	return DetectionPage{Results: results, Total: int64(size)}
 }
 
+// heapMeasureAttempts bounds how often a heap measurement is repeated when a
+// collection between its two reads leaves the heap smaller than it started.
+const heapMeasureAttempts = 3
+
 // retainedHeapBytes returns the average live heap bytes retained by one page of
 // the given size, measured as the heap growth while sampleCopies pages are held.
+// A result of 0 means no usable measurement (the heap did not grow in any
+// attempt); a caller that relies on the value must reject it.
 func retainedHeapBytes(size int) uint64 {
-	var before, after runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-	pages := make([]DetectionPage, sampleCopies)
-	for i := range pages {
-		pages[i] = samplePage(size)
+	for range heapMeasureAttempts {
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		pages := make([]DetectionPage, sampleCopies)
+		for i := range pages {
+			pages[i] = samplePage(size)
+		}
+		runtime.GC()
+		runtime.ReadMemStats(&after)
+		runtime.KeepAlive(pages)
+		// Compare before subtracting: the unsigned difference would wrap.
+		if after.HeapAlloc > before.HeapAlloc {
+			return (after.HeapAlloc - before.HeapAlloc) / sampleCopies
+		}
 	}
-	runtime.GC()
-	runtime.ReadMemStats(&after)
-	runtime.KeepAlive(pages)
-	return (after.HeapAlloc - before.HeapAlloc) / sampleCopies
+	return 0
 }
 
 // TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget measures the heap

@@ -40,7 +40,10 @@ vi.mock('$lib/utils/modelsApi', async () => {
 });
 
 vi.mock('$lib/stores/models.svelte', () => ({
-  invalidateModels: vi.fn(),
+  getAvailableModels: vi.fn(() => []),
+  modelsLoading: vi.fn(() => false),
+  refreshModels: vi.fn(),
+  watchModels: vi.fn(() => () => {}),
 }));
 
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
@@ -54,6 +57,8 @@ vi.mock('$lib/stores/settings', async () => {
   stores.birdnetSettings = birdnetSettings;
   stores.realtimeSettings = realtimeSettings;
   return {
+    // The page reports a blocking dynamic threshold error here; these tests do not read it.
+    setValidationIssues: vi.fn(),
     settingsStore,
     settingsActions: {
       updateSection: vi.fn(),
@@ -64,8 +69,10 @@ vi.mock('$lib/stores/settings', async () => {
     dynamicThresholdSettings: writable({ enabled: false }),
     realtimeSettings,
     batSettings: writable({}),
+    bsgBatSettings: writable({}),
     perchSettings: writable({}),
     birdNetV3Settings: writable({}),
+    birdNetPlusSettings: writable({}),
   };
 });
 
@@ -103,6 +110,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'Bat',
         name: 'Bat',
+        taxonGroup: 'bat',
         clipMs: 3000,
         stepMs: 1500,
         confirmations: 2,
@@ -111,6 +119,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'BirdNET_V2.4',
         name: 'BirdNET v2.4',
+        taxonGroup: 'bird',
         clipMs: 3000,
         stepMs: 1200,
         probeLatencyMs: 166,
@@ -120,6 +129,7 @@ function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceI
       {
         id: 'BirdNET_V3.0',
         name: 'BirdNET v3.0',
+        taxonGroup: 'bird',
         clipMs: 5000,
         stepMs: 2000,
         probeLatencyMs: 874,
@@ -178,7 +188,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
       writable: true,
       configurable: true,
     });
-    navigation.redirect('/ui/settings/analysis');
+    navigation.redirect('/ui/settings/analysis?tab=filters');
     vi.mocked(t).mockClear();
     cadenceState.value = null;
   });
@@ -197,6 +207,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
         {
           id: 'BirdNET_V2.4',
           name: 'BirdNET v2.4',
+          taxonGroup: 'bird',
           clipMs: 3000,
           stepMs: 1500,
           confirmations: 3,
@@ -205,6 +216,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
         {
           id: 'BirdNET_V3.0',
           name: 'BirdNET v3.0',
+          taxonGroup: 'bird',
           clipMs: 5000,
           stepMs: 2500,
           confirmations: 2,
@@ -293,6 +305,27 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     expect(paramsFor(`${FP}.detectionCount`).at(-1)).toMatchObject({ count: '21' });
   });
 
+  it('keeps the count in the description when the plan has only BSG-BAT', () => {
+    cadenceState.value = cadence({
+      models: [
+        {
+          id: 'BSG_BAT',
+          name: 'BSG-BAT',
+          taxonGroup: 'bat',
+          clipMs: 1025,
+          stepMs: 500,
+          confirmations: 5,
+          windowsInReference: 12,
+        },
+      ],
+    });
+    setSettings({ level: 5, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.queryByTestId('fp-cadence-readout')).not.toBeInTheDocument();
+    expect(paramsFor(`${FP}.detectionCount`).at(-1)).toMatchObject({ count: '21' });
+  });
+
   it('shows only the filter-off warning when the filter is off', () => {
     cadenceState.value = cadence({ status: 'filterOff', configuredOverlapSec: 1.5 });
     setSettings({ level: 0, overlap: 1.5 });
@@ -363,6 +396,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
         {
           id: 'BirdNET_V2.4',
           name: 'BirdNET v2.4',
+          taxonGroup: 'bird',
           clipMs: 3000,
           stepMs: 600,
           confirmations: 7,
@@ -371,6 +405,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
         {
           id: 'BirdNET_V3.0',
           name: 'BirdNET v3.0',
+          taxonGroup: 'bird',
           clipMs: 5000,
           stepMs: 1000,
           confirmations: 5,

@@ -256,6 +256,26 @@ func TestTLSGenerateSelfSignedCertificate(t *testing.T) {
 	assert.Equal(t, conf.TLSModeSelfSigned, controller.Settings.Load().Security.TLSMode)
 }
 
+// TestTLSGenerateSelfSignedCertificate_SchemedHost verifies a security.host that
+// carries a scheme, port and path contributes its bare hostname to the SAN list.
+func TestTLSGenerateSelfSignedCertificate_SchemedHost(t *testing.T) {
+	e, controller, _ := setupTLSTestEnvironment(t)
+	const schemedHost = "https://birds.example.com:8443/birdnet"
+	controller.Settings.Load().Security.Host = schemedHost
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/tls/certificate/generate", strings.NewReader(`{"validity":"30d"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	require.NoError(t, controller.GenerateSelfSignedCertificate(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var info TLSCertificateInfo
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
+	assert.Contains(t, info.SANs, "birds.example.com")
+	assert.NotContains(t, info.SANs, schemedHost)
+}
+
 func TestTLSGenerateSelfSignedCertificate_DefaultValidity(t *testing.T) {
 	e, controller, _ := setupTLSTestEnvironment(t)
 

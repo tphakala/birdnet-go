@@ -72,6 +72,8 @@ interface AppConfigResponse {
   liveSpectrogram?: boolean;
   /** Whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI */
   audioExportEnabled?: boolean;
+  /** Denoise preset applied to playback and downloads by default; empty when none applies */
+  playbackDenoise?: string;
   layout?: {
     elements: {
       id?: string;
@@ -136,6 +138,8 @@ interface AppState {
   liveSpectrogram: boolean;
   /** Whether audio clip export is enabled; when false, per-detection spectrogram/audio UI is hidden */
   audioExportEnabled: boolean;
+  /** Denoise preset applied to playback and downloads by default; empty when none applies (guests read it here) */
+  playbackDenoise: string;
   /** Dataset version for the per-locale species-name dictionary. Empty string when unknown. */
   speciesDictVersion: string;
   /** Dashboard layout from public config (available before auth) */
@@ -186,6 +190,7 @@ const DEFAULT_STATE: AppState = {
   previousVersion: null,
   liveSpectrogram: false,
   audioExportEnabled: true,
+  playbackDenoise: '',
   speciesDictVersion: '',
   layout: null,
   projectLinks: DEFAULT_PROJECT_LINKS,
@@ -412,6 +417,7 @@ export async function initApp(): Promise<boolean> {
       appState.previousVersion = config.previousVersion ?? null;
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
       appState.audioExportEnabled = config.audioExportEnabled ?? true;
+      appState.playbackDenoise = config.playbackDenoise ?? '';
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;
       appState.projectLinks = config.projectLinks ?? DEFAULT_PROJECT_LINKS;

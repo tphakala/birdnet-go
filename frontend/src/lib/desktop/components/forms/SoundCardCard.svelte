@@ -1,59 +1,88 @@
 <!--
   Sound Card Card Component
 
-  Purpose: Display and manage a single sound card audio source with
-  device selection, gain control, model selection, equalizer, and quiet hours.
+  Purpose: One sound card audio source whose settings save as they change. The
+  header is always visible and toggles the body; the body holds the source's
+  settings in groups, each with its own save status.
 
-  Features:
-  - Card with view/edit modes
-  - Device dropdown from available audio devices
-  - Gain slider (-40 to +40 dB)
-  - Model selector (dynamically loaded from backend)
-  - Per-source equalizer (expandable, reuses AudioEqualizerSettings)
-  - Per-source quiet hours (reuses QuietHoursEditor)
-  - Delete confirmation overlay
-  - Keyboard shortcuts (Enter to save, Escape to cancel)
+  Saving:
+  - Name: a local draft, committed on blur or Enter; Escape restores it. An
+    empty or duplicate name is not committed and the field says why.
+  - Capture (device and sample rate): a local draft with a scoped "Apply and
+    restart capture", since a change restarts capture. A failed apply keeps the
+    draft.
+  - Gain, equalizer numbers, quiet hours times and offsets: committed after the
+    auto-save debounce. Toggles, selects and model switches: committed at once.
+
+  Props:
+  - source: The saved source
+  - index: Position of the source in sources
+  - sources: Every source, for the duplicate checks and the free devices
+  - rowId: UI-only id of the row, part of every field key
+  - audioDevices: Devices the server reports
+  - modelOptions: Labels of the listed models, for the header summary
+  - availableModels: Models the server lists for the source editors
+  - disabled: Blocks every change
+  - expanded: Whether the body is shown
+  - onToggleExpanded: Called by the header button
+  - onCommit: Receives the complete changed source and the auto-save options
+  - onDelete: Called after the delete was confirmed
 
   @component
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import {
     deviceValue,
     deviceMatches,
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import {
-    Settings,
-    Trash2,
-    Check,
-    X,
-    AlertCircle,
-    AlertTriangle,
-    Info,
-    Mic,
-    Moon,
-    ChevronDown,
-  } from '@lucide/svelte';
+  import { AlertTriangle, Info, Mic, Moon, ChevronDown } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { loggers } from '$lib/utils/logger';
+  import { generateId } from '$lib/utils/uuid';
   import {
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
   } from '$lib/utils/audio/sampleRate';
-  import { modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    modelsFailed,
+    modelsLoading,
+    refreshModels,
+    type BackendModel,
+  } from '$lib/stores/models.svelte';
   import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
+  import {
+    AUTOSAVE_DEBOUNCE_MS,
+    autoSaveStatus,
+    type CommitOptions,
+  } from '$lib/stores/settingsAutoSave.svelte';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
-  import ModelCheckboxList from './ModelCheckboxList.svelte';
+  import ModelToggleList from './ModelToggleList.svelte';
+  import SourceModelBadges from './SourceModelBadges.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
+  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
+  import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
+  import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
+  import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
+  import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
+  import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
+  import {
+    AUDIO_SOURCES_FIELD_PREFIX,
+    isContinuousEqualizerChange,
+    isContinuousQuietHoursChange,
+    savedEqualizer,
+    sourceField,
+    type SourceFieldPart,
+  } from './sourceFields';
   import type {
     AudioSourceConfig,
-    EqualizerFilterType,
+    EqualizerSettings,
     QuietHoursConfig,
   } from '$lib/stores/settings';
   import {
@@ -62,44 +91,18 @@
     AUDIO_GAIN_MAX_DB,
   } from '$lib/stores/settings';
 
-  // Local EqualizerSettings type matching AudioEqualizerSettings component's interface
-  interface LocalEqualizerSettings {
-    enabled: boolean;
-    filters: Array<{
-      type: EqualizerFilterType;
-      frequency: number;
-      q?: number;
-      width?: number;
-      gain?: number;
-      passes?: number;
-    }>;
-  }
-
-  const logger = loggers.audio;
-
-  // Pre-selection for a source without an explicit list: the classifier's
-  // default targets when known, nothing at N=0, the legacy BirdNET pick otherwise.
-  function getDefaultModels(): string[] {
-    return defaultModelSelection(acousticAvailability, availableModels);
-  }
-
   interface Props {
     source: AudioSourceConfig;
     index: number;
     sources: AudioSourceConfig[];
+    rowId: string;
     audioDevices: AudioDevice[];
     modelOptions: Array<{ value: string; label: string }>;
-    availableModels: Array<{
-      id: string;
-      /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
-      registryId?: string;
-      name: string;
-      category: string;
-      minSampleRate?: number;
-      recommendedSampleRate?: number;
-    }>;
+    availableModels: BackendModel[];
     disabled?: boolean;
-    onUpdate: (_source: AudioSourceConfig) => boolean;
+    expanded: boolean;
+    onToggleExpanded: () => void;
+    onCommit: (_source: AudioSourceConfig, _options: CommitOptions) => void;
     onDelete: () => void;
   }
 
@@ -107,77 +110,96 @@
     source,
     index,
     sources,
+    rowId,
     audioDevices,
     modelOptions,
     availableModels,
     disabled = false,
-    onUpdate,
+    expanded,
+    onToggleExpanded,
+    onCommit,
     onDelete,
   }: Props = $props();
 
-  // Local editing state
-  let isEditing = $state(false);
-  let editName = $state('');
-  let editDevice = $state('');
-  let editGain = $state(0);
-  let editModels = $state<string[]>([]);
-  let editEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
-  let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
-  let showDeleteConfirm = $state(false);
-  let showEqualizer = $state(false);
-  let editSampleRate = $state(48000);
-  let sampleRateOptions = $state<Array<{ value: string; label: string }>>([
-    { value: '48000', label: '48 kHz' },
-  ]);
-  let sampleRateVerified = $state(true);
-  let sampleRateLoading = $state(false);
-  // Plain (non-reactive) ref: the probe effect both reads (abort) and writes this
-  // controller in its synchronous prefix. As $state that read/write would register
-  // the controller as a dependency of the effect and immediately re-run it, whose
-  // cleanup then aborts the brand-new in-flight probe (issue #3593). It is only
-  // used imperatively for abort(), never in markup, so it must not be reactive.
-  let fetchController: AbortController | null = null;
+  /** Capture rate of a source that stores none (0 or absent). */
+  const DEFAULT_SAMPLE_RATE = 48000;
+  /** Highest rate that does not need exclusive device access on Linux. */
+  const SHARED_ACCESS_MAX_RATE = 48000;
+  /** Longest source name the field accepts. */
+  const NAME_MAX_LENGTH = 100;
+  const DEFAULT_RATE_OPTIONS = [{ value: '48000', label: '48 kHz' }];
 
-  // Device display name lookup (matches a saved stable token or legacy ALSA id)
+  const cardId = generateId('soundcard');
+  const nameInputId = `${cardId}-name`;
+  const captureHeadingId = `${cardId}-capture`;
+  const modelsHeadingId = `${cardId}-models`;
+  const equalizerHeadingId = `${cardId}-equalizer`;
+
+  function field(part: SourceFieldPart): string {
+    return sourceField(AUDIO_SOURCES_FIELD_PREFIX, rowId, part);
+  }
+
+  function statusId(part: SourceFieldPart): string {
+    return `${cardId}-${part}-status`;
+  }
+
+  function commit(change: Partial<AudioSourceConfig>, part: SourceFieldPart, debounce = false) {
+    onCommit(
+      { ...source, ...change },
+      debounce ? { field: field(part), debounceMs: AUTOSAVE_DEBOUNCE_MS } : { field: field(part) }
+    );
+  }
+
+  /** aria-describedby for a control: its status message while that shows an error. */
+  function errorDescription(part: SourceFieldPart): string | undefined {
+    return autoSaveStatus(field(part)).state === 'error' ? statusId(part) : undefined;
+  }
+
+  const acousticAvailability = $derived(acousticModelAvailability());
+  let defaultModels = $derived(defaultModelSelection(acousticAvailability, availableModels));
+  let selectedModels = $derived(source.models ?? []);
+  let listFailed = $derived(modelsFailed());
+  let listLoading = $derived(modelsLoading());
+
+  // ----- Header -----
+
   let deviceDisplayName = $derived(
     audioDevices.find(d => deviceMatches(d, source.device))?.name ?? source.device
   );
 
-  const acousticAvailability = $derived(acousticModelAvailability());
+  const BADGE_CLASS = 'px-2 py-0.5 rounded text-xs font-semibold';
 
-  let hasExplicitModels = $derived((source.models?.length ?? 0) > 0);
+  // ----- Name -----
 
-  function modelLabels(ids: readonly string[]): string {
-    return ids.map(id => modelOptions.find(m => m.value === id)?.label ?? id).join(', ');
+  function validateName(name: string): string | null {
+    if (!name) return t('settings.audio.soundCards.errors.nameRequired');
+    const lower = name.toLowerCase();
+    if (sources.some((s, i) => i !== index && s.name.toLowerCase() === lower)) {
+      return t('settings.audio.soundCards.errors.duplicateName');
+    }
+    return null;
   }
 
-  // Model display names (comma-separated for multiple). An empty list means
-  // "analyze with the server defaults": name them when the classifier reports
-  // them, say that no model is loaded when that is the verdict, hedge otherwise.
-  let modelDisplayName = $derived.by(() => {
-    if (hasExplicitModels) return modelLabels(source.models);
-    if (acousticAvailability.kind === 'none') return t('settings.audio.models.noneBadge');
-    const defaults = defaultModelSelection(acousticAvailability, availableModels);
-    if (acousticAvailability.kind === 'ready' && defaults.length > 0) {
-      return t('settings.audio.models.defaultBadge', { models: modelLabels(defaults) });
-    }
-    return t('settings.audio.models.defaultPendingBadge');
-  });
+  // ----- Capture (device and sample rate, applied together) -----
 
-  let modelBadgeIsWarning = $derived(!hasExplicitModels && acousticAvailability.kind === 'none');
+  // Device and sample rate restart capture, so they are a draft with a scoped Apply.
+  const capture = new ApplyDraft(
+    () => ({ device: source.device, sampleRate: source.sampleRate || DEFAULT_SAMPLE_RATE }),
+    untrack(() => field('capture'))
+  );
+  // The device alone, so the probe below reruns only when it changes, not on every draft edit.
+  let draftDevice = $derived(capture.draft.device);
+  let sampleRateOptions = $state<Array<{ value: string; label: string }>>(DEFAULT_RATE_OPTIONS);
+  let sampleRateVerified = $state(true);
+  let sampleRateLoading = $state(false);
+  // Plain (non-reactive) ref: the probe effect both reads (abort) and writes this
+  // controller in its synchronous prefix. As $state that would make the effect
+  // depend on it and rerun at once, aborting the new probe (issue #3593).
+  let fetchController: AbortController | null = null;
 
-  // Tooltip for the no-model pill, so the badge explains itself on hover.
-  let modelBadgeTitle = $derived.by(() => {
-    if (hasExplicitModels || acousticAvailability.kind !== 'none') return undefined;
-    return acousticAvailability.reason === 'load_failed'
-      ? t('settings.audio.models.loadFailedWarning')
-      : t('settings.audio.models.noneEnabledHelp');
-  });
-
-  // Device dropdown options: the current source's device plus devices not used by
-  // other sources. The currently-configured device keeps its saved value (which
-  // may be a legacy ALSA id) so the dropdown pre-selects it; other devices use the
-  // reboot-stable token so a new pick persists the stable form (GH #3651).
+  // The current source's device keeps its saved value (which may be a legacy ALSA
+  // id) so the dropdown preselects it; other devices use the reboot-stable token
+  // so a new pick persists the stable form (GH #3651).
   let deviceOptions = $derived(
     audioDevices
       .filter(
@@ -189,121 +211,46 @@
       }))
   );
 
-  // Edit mode functions
-  function startEdit() {
-    editName = source.name;
-    editDevice = source.device;
-    editSampleRate = source.sampleRate || 48000;
-    prevEditDevice = source.device;
-    fetchDeviceCapabilities(source.device);
-    editGain = source.gain;
-    editModels = (source.models?.length ?? 0) > 0 ? [...source.models] : getDefaultModels();
-    editEqualizer = source.equalizer
-      ? { ...source.equalizer, filters: [...source.equalizer.filters] }
-      : { enabled: false, filters: [] };
-    editQuietHours = source.quietHours ? { ...source.quietHours } : { ...defaultQuietHoursConfig };
-    showEqualizer = false;
-    isEditing = true;
+  function setDraftDevice(value: string | string[]) {
+    if (typeof value !== 'string') return;
+    // Back on the saved device the saved rate returns with it, so a rate the probe
+    // coerced for another device does not leave a change to apply.
+    capture.set(
+      value === source.device
+        ? { device: value, sampleRate: source.sampleRate || DEFAULT_SAMPLE_RATE }
+        : { device: value }
+    );
   }
 
-  function cancelEdit() {
-    isEditing = false;
-  }
-
-  function saveEdit() {
-    const trimmedName = editName.trim();
-    if (!trimmedName || !editDevice) return;
-
-    // Ensure at least one model is selected
-    if (editModels.length === 0) {
-      editModels = getDefaultModels();
-    }
-
-    // A disabled equalizer without filters is stored as undefined
-    const transformedEqualizer =
-      editEqualizer.enabled || editEqualizer.filters.length > 0
-        ? {
-            enabled: editEqualizer.enabled,
-            filters: editEqualizer.filters,
-          }
-        : undefined;
-
-    const updated: AudioSourceConfig = {
-      name: trimmedName,
-      device: editDevice,
-      sampleRate: editSampleRate,
-      gain: editGain,
-      models: editModels,
-      equalizer: transformedEqualizer,
-      quietHours: editQuietHours,
-    };
-
-    logger.debug('SoundCardCard saveEdit', {
-      component: 'SoundCardCard',
-      action: 'saveEdit',
-      sourceName: trimmedName,
-      eqEnabled: editEqualizer.enabled,
-      eqFilterCount: editEqualizer.filters.length,
-      transformedEqPresent: transformedEqualizer !== undefined,
-      transformedFilterCount: transformedEqualizer?.filters?.length ?? 0,
-    });
-
-    const success = onUpdate(updated);
-    if (success) {
-      isEditing = false;
-    }
-  }
-
-  function confirmDelete() {
-    showDeleteConfirm = true;
-  }
-
-  function cancelDelete() {
-    showDeleteConfirm = false;
-  }
-
-  function executeDelete() {
-    showDeleteConfirm = false;
-    onDelete();
-  }
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveEdit();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelEdit();
-    }
-  }
-
-  function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
-    editEqualizer = updated;
+  function setDraftRate(value: string | string[]) {
+    if (typeof value === 'string') capture.set({ sampleRate: Number(value) });
   }
 
   async function fetchDeviceCapabilities(deviceId: string) {
-    if (!deviceId) return;
     fetchController?.abort();
     const controller = new AbortController();
     fetchController = controller;
     sampleRateLoading = true;
     // Drop the previous device's probed rates so a slower probe cannot leave
     // stale, unverified options on screen while the new one is in flight.
-    sampleRateOptions = [{ value: '48000', label: '48 kHz' }];
+    sampleRateOptions = DEFAULT_RATE_OPTIONS;
     sampleRateVerified = true;
     try {
       const result = await fetchCapabilities(deviceId, controller.signal);
-      // Ignore a superseded probe: a newer device selection has replaced this
-      // controller, so applying these results (or clearing the loading flag)
-      // would clobber the newer probe's state.
+      // Ignore a superseded probe: a newer device selection replaced this controller.
       if (fetchController !== controller) return;
       sampleRateOptions = result.options;
       sampleRateVerified = result.verified;
-      // Coerce the selection to a rate the new device actually supports so an
-      // unsupported rate is never persisted.
-      editSampleRate = coerceSupportedRate(result.options, editSampleRate);
+      // A changed draft gets a rate the device supports. Only a draft that still
+      // equals the saved values is left alone, so opening a card never creates a
+      // change to apply.
+      const savedRate = source.sampleRate || DEFAULT_SAMPLE_RATE;
+      if (capture.draft.device !== source.device || capture.draft.sampleRate !== savedRate) {
+        const sampleRate = coerceSupportedRate(result.options, capture.draft.sampleRate);
+        if (sampleRate !== capture.draft.sampleRate) capture.set({ sampleRate });
+      }
     } catch {
-      // Only AbortError reaches here (utility handles all other failures internally)
+      // Only AbortError reaches here (the utility handles all other failures)
     } finally {
       if (fetchController === controller) {
         sampleRateLoading = false;
@@ -311,296 +258,265 @@
     }
   }
 
-  let prevEditDevice = '';
+  // Probes the draft device while the body is open.
   $effect(() => {
-    if (isEditing && editDevice && editDevice !== prevEditDevice) {
-      prevEditDevice = editDevice;
-      fetchDeviceCapabilities(editDevice);
-    }
-    // Capture the controller this run started so the cleanup only aborts that
-    // probe. startEdit() starts a probe directly and then flips isEditing, which
-    // re-runs this effect; without the capture the cleanup would abort that
-    // just-started probe and the edit form would open stuck at 48 kHz (issue #3593).
+    const device = draftDevice;
+    if (!expanded || !device) return;
+    untrack(() => void fetchDeviceCapabilities(device));
+    // Capture the controller this run started so the cleanup only aborts that probe.
     const controllerToAbort = fetchController;
     return () => {
       controllerToAbort?.abort();
     };
   });
+
+  // ----- Equalizer -----
+
+  let showEqualizer = $state(false);
+  let equalizer = $derived<EqualizerSettings>(source.equalizer ?? { enabled: false, filters: [] });
+
+  function commitEqualizer(updated: EqualizerSettings) {
+    commit(
+      { equalizer: savedEqualizer(updated) },
+      'equalizer',
+      isContinuousEqualizerChange(updated, equalizer)
+    );
+  }
+
+  // ----- Quiet hours -----
+
+  let quietHours = $derived<QuietHoursConfig>(source.quietHours ?? { ...defaultQuietHoursConfig });
+
+  function commitQuietHours(updated: QuietHoursConfig) {
+    commit(
+      { quietHours: updated },
+      'quietHours',
+      isContinuousQuietHoursChange(updated, quietHours)
+    );
+  }
 </script>
 
-<div
-  class={cn(
-    'relative rounded-lg border transition-all duration-200',
-    isEditing
-      ? 'border-[var(--color-primary)]/50 bg-[var(--color-base-100)] shadow-md'
-      : 'border-[var(--border-200)] bg-[var(--color-base-200)]',
-    disabled && 'opacity-60 pointer-events-none'
-  )}
+<SourceCard
+  name={source.name}
+  subtitle={deviceDisplayName}
+  icon={Mic}
+  {expanded}
+  {onToggleExpanded}
+  deleteConfirm={t('settings.audio.soundCards.deleteConfirm', { name: source.name })}
+  {onDelete}
+  {disabled}
+  disabledReason={t('common.loading')}
 >
-  {#if showDeleteConfirm}
-    <!-- Delete Confirmation Overlay -->
-    <div
-      role="alertdialog"
-      aria-labelledby="soundcard-delete-title-{index}"
-      aria-describedby="soundcard-delete-desc-{index}"
-      class="absolute inset-0 z-10 flex items-center rounded-lg bg-[var(--color-base-300)]/95 backdrop-blur-sm px-4"
+  {#snippet badges()}
+    {#if source.quietHours?.enabled}
+      <span
+        class={cn(
+          BADGE_CLASS,
+          'inline-flex items-center gap-1 bg-[var(--color-base-300)] text-[var(--color-base-content)]'
+        )}
+        title={t('settings.audio.quietHours.enabledBadge')}
+      >
+        <Moon class="size-3" aria-hidden="true" />
+        {t('settings.audio.quietHours.badge')}
+      </span>
+    {/if}
+    {#if source.gain !== 0}
+      <span class={cn(BADGE_CLASS, 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]')}>
+        {source.gain > 0 ? '+' : ''}{source.gain} dB
+      </span>
+    {/if}
+    <SourceModelBadges
+      {selectedModels}
+      {defaultModels}
+      {availableModels}
+      {modelOptions}
+      availability={acousticAvailability}
+      {listLoading}
+      {listFailed}
+    />
+  {/snippet}
+
+  <!-- Name and level -->
+  <div class="grid grid-cols-1 gap-x-8 gap-y-4 py-4 md:grid-cols-2">
+    <SettingsGroup
+      title={t('settings.audio.soundCards.nameLabel')}
+      labelFor={nameInputId}
+      required
+      field={field('name')}
+      statusId={statusId('name')}
+      class="space-y-1.5"
     >
-      <div class="flex items-center gap-3 w-full">
-        <AlertCircle class="size-6 text-[var(--color-error)] flex-shrink-0" />
-        <span id="soundcard-delete-title-{index}" class="sr-only">{t('common.delete')}</span>
-        <p
-          id="soundcard-delete-desc-{index}"
-          class="text-sm font-medium text-[var(--color-base-content)] flex-1"
-        >
-          {t('settings.audio.soundCards.deleteConfirm')}
-        </p>
-        <div class="flex gap-2 flex-shrink-0">
-          <button
-            type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors"
-            onclick={cancelDelete}
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors"
-            onclick={executeDelete}
-          >
-            {t('common.delete')}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
+      <CommitTextField
+        id={nameInputId}
+        value={source.name}
+        validate={validateName}
+        onCommit={name => commit({ name }, 'name')}
+        maxlength={NAME_MAX_LENGTH}
+        required
+        {disabled}
+        describedBy={errorDescription('name')}
+      />
+    </SettingsGroup>
 
-  <div class="p-3">
-    {#if isEditing}
-      <!-- Edit Mode -->
-      <div class="space-y-4">
-        <!-- Name Input -->
-        <div>
-          <label class="block py-1" for="soundcard-name-{index}">
-            <span class="text-xs font-medium text-[var(--color-base-content)]">
-              {t('settings.audio.soundCards.nameLabel')}
-              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
-            </span>
-          </label>
-          <input
-            id="soundcard-name-{index}"
-            type="text"
-            bind:value={editName}
-            onkeydown={handleKeydown}
-            required
-            class="w-full h-9 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-            placeholder={t('settings.audio.soundCards.namePlaceholder')}
-          />
-        </div>
+    <SettingsGroup
+      title={t('settings.audio.soundCards.levelTitle')}
+      headingId="{cardId}-level"
+      field={field('gain')}
+      statusId={statusId('gain')}
+      class="space-y-1.5"
+    >
+      <InlineSlider
+        label={t('settings.audio.soundCards.gainLabel')}
+        value={source.gain}
+        updateOn="change"
+        onUpdate={value => commit({ gain: value }, 'gain', true)}
+        min={AUDIO_GAIN_MIN_DB}
+        max={AUDIO_GAIN_MAX_DB}
+        step={1}
+        unit=" dB"
+        {disabled}
+      />
+    </SettingsGroup>
+  </div>
 
-        <!-- Device Selection -->
+  <!-- Capture: drafts with a scoped apply -->
+  <SettingsGroup
+    title={t('settings.audio.soundCards.captureTitle')}
+    headingId={captureHeadingId}
+    field={field('capture')}
+    statusId={statusId('capture')}
+    class="py-4"
+  >
+    <ScopedApplyGroup
+      draft={capture}
+      onApply={value => commit(value, 'capture')}
+      hint={t('settings.audio.soundCards.captureApplyHint')}
+      failedHint={t('settings.audio.soundCards.captureApplyFailed')}
+      applyLabel={t('settings.audio.soundCards.applyCapture')}
+      applyingLabel={t('settings.audio.soundCards.applying')}
+      statusId={statusId('capture')}
+      {disabled}
+    >
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <SelectDropdown
-          value={editDevice}
+          value={capture.draft.device}
           label={t('settings.audio.soundCards.deviceLabel')}
           options={deviceOptions}
           required
-          onChange={value => (editDevice = value as string)}
+          {disabled}
+          onChange={setDraftDevice}
           groupBy={false}
           menuSize="sm"
         />
-
-        <!-- Sample Rate -->
         <div>
           <SelectDropdown
-            value={String(editSampleRate)}
+            value={String(capture.draft.sampleRate)}
             label={t('settings.audio.soundCards.sampleRateLabel')}
             options={sampleRateOptions}
             {disabled}
-            onChange={value => (editSampleRate = Number(value))}
+            onChange={setDraftRate}
             groupBy={false}
             menuSize="sm"
           />
-          {#if !sampleRateVerified && !sampleRateLoading}
-            <p class="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1">
-              <AlertTriangle class="size-3" />
+          {#if sampleRateLoading}
+            <p class="mt-1 text-xs text-muted">
+              {t('settings.audio.soundCards.sampleRateProbing')}
+            </p>
+          {:else if !sampleRateVerified}
+            <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-warning)]">
+              <AlertTriangle class="size-3 shrink-0" aria-hidden="true" />
               {t('settings.audio.soundCards.sampleRateUnverified')}
             </p>
           {/if}
-          {#if sampleRateLoading}
-            <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
-              {t('settings.audio.soundCards.sampleRateProbing')}
-            </p>
-          {/if}
-          {#if editSampleRate > 48000}
-            <p class="flex items-center gap-1 text-xs text-[var(--color-info)] mt-1">
-              <Info class="size-3 shrink-0" />
+          {#if capture.draft.sampleRate > SHARED_ACCESS_MAX_RATE}
+            <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-info)]">
+              <Info class="size-3 shrink-0" aria-hidden="true" />
               {t('settings.audio.soundCards.sampleRateExclusive')}
             </p>
           {/if}
         </div>
-
-        <!-- Gain -->
-        <InlineSlider
-          label={t('settings.audio.soundCards.gainLabel')}
-          value={editGain}
-          onUpdate={value => (editGain = value)}
-          min={AUDIO_GAIN_MIN_DB}
-          max={AUDIO_GAIN_MAX_DB}
-          step={1}
-          unit=" dB"
-          {disabled}
-        />
-
-        <!-- Model Selection -->
-        <ModelCheckboxList
-          models={availableModels}
-          selectedModels={editModels}
-          sourceSampleRate={editSampleRate}
-          isStream={false}
-          loading={modelsLoading()}
-          availability={acousticAvailability}
-          {disabled}
-          onToggle={models => (editModels = models)}
-        />
-
-        <!-- Equalizer (expandable) -->
-        <div>
-          <button
-            type="button"
-            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
-            onclick={() => (showEqualizer = !showEqualizer)}
-          >
-            <ChevronDown
-              class={cn('size-4 transition-transform duration-200', showEqualizer && 'rotate-180')}
-            />
-            {t('settings.audio.audioFilters.title')}
-            {#if editEqualizer.enabled}
-              <span
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
-              >
-                {t('common.enabled')}
-              </span>
-            {/if}
-          </button>
-          {#if showEqualizer}
-            <div class="mt-3" transition:slide={{ duration: 200 }}>
-              <AudioEqualizerSettings
-                equalizerSettings={editEqualizer}
-                {disabled}
-                onUpdate={handleEqualizerUpdate}
-                sampleRate={editSampleRate}
-              />
-            </div>
-          {/if}
-        </div>
-
-        <!-- Quiet Hours -->
-        <QuietHoursEditor
-          config={editQuietHours}
-          onChange={qh => (editQuietHours = qh)}
-          {disabled}
-          idPrefix="soundcard-qh-{index}"
-        />
-
-        <!-- Action Buttons -->
-        <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-200)]">
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors"
-            onclick={cancelEdit}
-          >
-            <X class="size-4" />
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            onclick={saveEdit}
-            disabled={!editName.trim() || !editDevice}
-          >
-            <Check class="size-4" />
-            {t('common.save')}
-          </button>
-        </div>
       </div>
-    {:else}
-      <!-- View Mode -->
+    </ScopedApplyGroup>
+  </SettingsGroup>
+
+  <!-- Classifiers -->
+  <SettingsGroup
+    title={t('settings.audio.soundCards.modelLabel')}
+    headingId={modelsHeadingId}
+    field={field('models')}
+    statusId={statusId('models')}
+    class="py-4"
+  >
+    <ModelToggleList
+      models={availableModels}
+      {selectedModels}
+      {defaultModels}
+      sourceName={source.name}
+      sourceSampleRate={capture.draft.sampleRate}
+      loading={listLoading}
+      failed={listFailed}
+      availability={acousticAvailability}
+      labelledBy={modelsHeadingId}
+      {disabled}
+      onChange={models => commit({ models }, 'models')}
+      onRetry={() => void refreshModels()}
+    />
+  </SettingsGroup>
+
+  <!-- Audio filters (collapsed by default) -->
+  <SettingsGroup headingId={equalizerHeadingId} class="space-y-0 py-4">
+    {#snippet heading()}
+      <button
+        id={equalizerHeadingId}
+        type="button"
+        class="flex items-center gap-2 rounded text-sm font-semibold text-[var(--color-base-content)] transition-colors hover:text-[var(--text-primary)]"
+        aria-expanded={showEqualizer}
+        onclick={() => (showEqualizer = !showEqualizer)}
+      >
+        <ChevronDown
+          class={cn(
+            'size-4 transition-transform duration-200 motion-reduce:transition-none',
+            showEqualizer && 'rotate-180'
+          )}
+          aria-hidden="true"
+        />
+        {t('settings.audio.audioFilters.title')}
+      </button>
       <div class="flex items-center gap-3">
-        <!-- Sound Card Icon -->
-        <div
-          class="flex-shrink-0 size-10 rounded-lg flex items-center justify-center border bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--color-primary)] border-[color-mix(in_srgb,var(--color-primary)_25%,transparent)]"
-        >
-          <Mic class="size-5" />
-        </div>
-
-        <!-- Source Info -->
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-sm font-semibold text-[var(--color-base-content)]">
-              {source.name}
-            </span>
-            {#if source.quietHours?.enabled}
-              <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"
-                title={t('settings.audio.quietHours.enabledBadge')}
-              >
-                <Moon class="size-3" />
-                {t('settings.audio.quietHours.badge')}
-              </span>
-            {/if}
-          </div>
-
-          <p class="text-xs text-[var(--color-base-content)] opacity-70 mt-0.5">
-            {deviceDisplayName}
-          </p>
-        </div>
-
-        <!-- Right Side: Badges + Actions -->
-        <div class="flex-shrink-0 flex items-center gap-2">
-          <!-- Info Badges -->
-          <div class="hidden sm:flex items-center gap-1.5">
-            {#if source.gain !== 0}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
-              >
-                {source.gain > 0 ? '+' : ''}{source.gain} dB
-              </span>
-            {/if}
-            <span
-              class={cn(
-                'px-2 py-0.5 rounded text-xs font-semibold',
-                modelBadgeIsWarning
-                  ? 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]'
-                  : 'bg-[var(--color-info)]/15 text-[var(--color-info)]'
-              )}
-              title={modelBadgeTitle}
-            >
-              {modelDisplayName}
-            </span>
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="flex items-center gap-0.5">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center size-8 rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={startEdit}
-              {disabled}
-              aria-label={t('common.edit')}
-            >
-              <Settings class="size-4" />
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center size-8 rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={confirmDelete}
-              {disabled}
-              aria-label={t('common.delete')}
-            >
-              <Trash2 class="size-4" />
-            </button>
-          </div>
-        </div>
+        <AutoSaveStatus field={field('equalizer')} id={statusId('equalizer')} />
+        {#if equalizer.enabled}
+          <span class={cn(BADGE_CLASS, 'bg-[var(--color-primary)]/15 text-[var(--text-primary)]')}>
+            {t('common.enabled')}
+          </span>
+        {/if}
+      </div>
+    {/snippet}
+    {#if showEqualizer}
+      <div class="mt-3" transition:slide={{ duration: 150 }}>
+        <AudioEqualizerSettings
+          equalizerSettings={equalizer}
+          {disabled}
+          onUpdate={commitEqualizer}
+          sampleRate={capture.draft.sampleRate}
+        />
       </div>
     {/if}
-  </div>
-</div>
+  </SettingsGroup>
+
+  <!-- Quiet hours -->
+  <SettingsGroup
+    title={t('settings.audio.quietHours.title')}
+    headingId="{cardId}-quiet"
+    field={field('quietHours')}
+    statusId={statusId('quietHours')}
+    class="py-4"
+  >
+    <QuietHoursEditor
+      config={quietHours}
+      onChange={commitQuietHours}
+      {disabled}
+      idPrefix="{cardId}-qh"
+      enableLabel={t('settings.audio.quietHours.enableLabel')}
+    />
+  </SettingsGroup>
+</SourceCard>

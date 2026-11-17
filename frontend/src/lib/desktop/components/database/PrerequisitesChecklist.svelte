@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import {
     CheckCircle2,
     XCircle,
@@ -84,11 +85,11 @@
 
   // Status color classes
   const statusColors: Record<string, string> = {
-    passed: 'text-[var(--color-success)]',
-    failed: 'text-[var(--color-error)]',
-    warning: 'text-[var(--color-warning)]',
+    passed: 'text-[var(--text-success)]',
+    failed: 'text-[var(--text-error)]',
+    warning: 'text-[var(--text-warning)]',
     skipped: 'text-[var(--color-base-content)]/50',
-    error: 'text-[var(--color-error)]',
+    error: 'text-[var(--text-error)]',
   };
 
   // Background colors for status badges
@@ -137,7 +138,7 @@
   {#if isLoading && !prerequisites}
     <!-- Initial loading state with spinner and step progress -->
     <div class="flex flex-col items-center justify-center py-8 gap-4">
-      <Loader2 class="size-8 animate-spin text-[var(--color-primary)]" />
+      <Loader2 class="size-8 animate-spin text-[var(--text-primary)]" />
       <div class="text-center space-y-1">
         <p class="text-sm font-medium text-[var(--color-base-content)]">
           {t('system.database.migration.prerequisites.running')}
@@ -152,14 +153,7 @@
     </div>
   {:else if error}
     <!-- Error state -->
-    <div
-      class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-center gap-3"
-      role="alert"
-      aria-live="assertive"
-    >
-      <AlertCircle class="size-5 shrink-0" />
-      <span class="text-sm">{error}</span>
-    </div>
+    <ErrorAlert message={error} />
   {:else if prerequisites}
     <!-- Checks list -->
     <div class="space-y-2">
@@ -198,7 +192,7 @@
     <div class="pt-2 border-t border-[var(--color-base-200)]">
       {#if prerequisites.can_start_migration}
         <div
-          class="flex items-center gap-2 text-sm text-[var(--color-success)]"
+          class="flex items-center gap-2 text-sm text-[var(--text-success)]"
           role="status"
           aria-live="polite"
         >
@@ -207,7 +201,7 @@
         </div>
       {:else}
         <div
-          class="flex items-center gap-2 text-sm text-[var(--color-error)]"
+          class="flex items-center gap-2 text-sm text-[var(--text-error)]"
           role="alert"
           aria-live="assertive"
         >
@@ -221,7 +215,7 @@
       {/if}
       {#if prerequisites.warnings > 0}
         <div
-          class="flex items-center gap-2 text-sm text-[var(--color-warning)] mt-1"
+          class="flex items-center gap-2 text-sm text-[var(--text-warning)] mt-1"
           role="status"
           aria-live="polite"
         >
@@ -240,7 +234,7 @@
       <div
         class="absolute inset-0 bg-[var(--color-base-100)]/50 flex items-center justify-center rounded-lg"
       >
-        <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
+        <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
       </div>
     {/if}
   {/if}

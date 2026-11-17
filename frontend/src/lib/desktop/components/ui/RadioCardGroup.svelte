@@ -80,7 +80,7 @@
 
   function iconClass(option: RadioCardOption<T>, checked: boolean): string {
     const colour = checked
-      ? 'text-[var(--color-primary)]'
+      ? 'text-[var(--text-primary)]'
       : cn('text-[var(--color-base-content)]', option.disabled ? 'opacity-40' : 'opacity-70');
     return cn('size-5 shrink-0', hasDetails && 'mt-0.5', colour);
   }

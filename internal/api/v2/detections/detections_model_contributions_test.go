@@ -28,7 +28,7 @@ const (
 	contribTestNoRowsNote = 9999
 )
 
-// contribFixture is a v2 database with one detection that has two contributions.
+// contribFixture is a v2 database with one detection that has three contributions.
 type contribFixture struct {
 	mgr         datastoreV2.Manager
 	detectionID uint
@@ -37,9 +37,10 @@ type contribFixture struct {
 }
 
 // newContribFixture opens a real v2 SQLite manager and seeds a detection with
-// two model contributions: the seeded default model with full statistics (its
-// summed confidences exceed hit count times max, so the mean must be clamped)
-// and a second model without statistics.
+// three model contributions: the seeded default model with full statistics (its
+// summed confidences exceed hit count times max, so the mean must be clamped),
+// a second model without statistics and a third model that was active without
+// a hit (hit count 0).
 func newContribFixture(t *testing.T) *contribFixture {
 	t.Helper()
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
@@ -54,6 +55,9 @@ func newContribFixture(t *testing.T) *contribFixture {
 	require.NoError(t, db.First(&modelA).Error)
 	modelB := entities.AIModel{Name: "Perch", Version: "2", Variant: "default", ModelType: entities.ModelTypeMulti}
 	require.NoError(t, db.Create(&modelB).Error)
+
+	modelC := entities.AIModel{Name: "BatNET", Version: "1", Variant: "default", ModelType: entities.ModelTypeBat}
+	require.NoError(t, db.Create(&modelC).Error)
 
 	var labelType entities.LabelType
 	require.NoError(t, db.First(&labelType).Error)
@@ -76,6 +80,7 @@ func newContribFixture(t *testing.T) *contribFixture {
 		{ModelID: modelA.ID, HitCount: contribTestHitsA, MaxConfidence: contribTestMaxA,
 			FirstHitAt: &first, LastHitAt: &last, MinConfidence: &minConf, ConfidenceSum: &sum},
 		{ModelID: modelB.ID, HitCount: contribTestHitsB, MaxConfidence: contribTestMaxB},
+		{ModelID: modelC.ID},
 	}))
 	return f
 }
@@ -124,7 +129,7 @@ func TestGetDetection_ModelContributions(t *testing.T) {
 		payload := get(t)
 		raw, ok := payload["modelContributions"].([]any)
 		require.True(t, ok, "modelContributions must be present")
-		require.Len(t, raw, 2)
+		require.Len(t, raw, 3)
 
 		a, ok := raw[0].(map[string]any)
 		require.True(t, ok)
@@ -146,6 +151,14 @@ func TestGetDetection_ModelContributions(t *testing.T) {
 		assert.InDelta(t, contribTestMaxB, b["maxConfidence"], 1e-9)
 		for _, key := range []string{"minConfidence", "meanConfidence", "firstHitAt", "lastHitAt"} {
 			assert.NotContains(t, b, key, "unknown statistics must be absent, not zero")
+		}
+
+		c, ok := raw[2].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "BatNET", c["modelName"], "a model without a hit sorts after the hit models")
+		assert.InDelta(t, 0, c["hitCount"], 0)
+		for _, key := range []string{"maxConfidence", "minConfidence", "meanConfidence", "firstHitAt", "lastHitAt"} {
+			assert.NotContains(t, c, key, "a model without a hit carries no confidence or hit times")
 		}
 	})
 

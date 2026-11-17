@@ -14,7 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // repeatedHourZone names a zone and the two UTC instants at which its clock reads
@@ -163,7 +163,7 @@ func TestDetectionRepository_SaveMapsResultFields(t *testing.T) {
 	assert.Equal(t, "Garage", *det.Source.DisplayName)
 
 	// A dropped RawLabel falls back to the species label type.
-	wantMechanical := ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical]
+	wantMechanical := ds.nonBirdLabelTypeIDs[soundevent.CategoryMechanical]
 	require.NotZero(t, wantMechanical)
 	require.NotNil(t, det.Label)
 	assert.Equal(t, "power", det.Label.ScientificName)
@@ -175,7 +175,7 @@ func TestDetectionRepository_SaveMapsResultFields(t *testing.T) {
 	assert.InDelta(t, predConfidence, preds[0].Confidence, 1e-15, "prediction confidence must not be narrowed to float32")
 	require.NotNil(t, preds[0].Label)
 	assert.Equal(t, "speech", preds[0].Label.ScientificName)
-	wantHuman := ds.nonBirdLabelTypeIDs[nonbird.CategoryHuman]
+	wantHuman := ds.nonBirdLabelTypeIDs[soundevent.CategoryHuman]
 	require.NotZero(t, wantHuman)
 	assert.Equal(t, wantHuman, preds[0].Label.LabelTypeID, "prediction raw label must classify the label")
 }
@@ -403,6 +403,12 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 	}{
 		{"Get full", func(r datastore.DetectionRepository) readOutcome {
 			res, err := r.Get(ctx, id)
+			// Only the v2 Get fills the review and lock times, which this detection has;
+			// TestDetectionRepository_GetReadsReviewAndLockTimes pins them. Every other
+			// read, lists included, still compares whole.
+			if res != nil {
+				res.FirstReviewedAt, res.LastReviewedAt, res.LockedAt = time.Time{}, time.Time{}, time.Time{}
+			}
 			return outcome([]*detection.Result{res}, 0, err)
 		}},
 		{"Get bare", func(r datastore.DetectionRepository) readOutcome {
@@ -571,6 +577,10 @@ func TestDetectionRepository_ReadsHonourCancelledContext(t *testing.T) {
 	require.Error(t, err, "Get")
 	require.ErrorIs(t, err, context.Canceled, "Get")
 
+	_, err = repo.GetAdditionalResults(ctx, strconv.FormatUint(uint64(det.ID), 10))
+	require.Error(t, err, "GetAdditionalResults")
+	require.ErrorIs(t, err, context.Canceled, "GetAdditionalResults")
+
 	for _, rc := range listReadCalls("2026-06-01", "12") {
 		_, err := rc.call(ctx, repo)
 		require.Error(t, err, rc.name)
@@ -727,4 +737,375 @@ func TestDetectionRepository_GetBySpeciesDefaultLimit(t *testing.T) {
 			assert.Equal(t, int64(datastore.DefaultDetectionLimit+extraRows), total, "%s limit %d total", name, limit)
 		}
 	}
+}
+
+// TestDetectionRepository_GetAdditionalResultsResolvesNames verifies that the v2
+// repository resolves the alternates' common names and species codes like a
+// detection's own species, strips a stored "Scientific_Common" label to the bare
+// scientific name, and returns the full float64 confidence. The bridge it replaces
+// returns the scientific name as the common name, no code, and a float32. It also
+// checks that a label without a scientific name is skipped and a non-numeric id is
+// rejected.
+func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
+	t.Parallel()
+
+	const (
+		primarySci    = "Turdus merula"
+		ravenSci      = "Corvus corax"
+		ravenCommon   = "Common Raven"
+		ravenCode     = "comrav"
+		sparrowSci    = "Passer domesticus"
+		sparrowCommon = "House Sparrow"
+		sparrowCode   = "houspa"
+		// More digits than a float32 holds.
+		ravenConfidence = 0.123456789012345
+		sparrowConf     = 0.05
+		ghostConf       = 0.5
+		delta           = 1e-15
+	)
+	cfg, cfgCleanup := buildTestConfig(t, []string{
+		primarySci + "_Eurasian Blackbird",
+		ravenSci + "_" + ravenCommon,
+		sparrowSci + "_" + sparrowCommon,
+	})
+	cfg.SpeciesCodeMap = map[string]string{ravenSci: ravenCode, sparrowSci: sparrowCode}
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+
+	save := func(additional []detection.AdditionalResult) *detection.Result {
+		t.Helper()
+		result := &detection.Result{
+			Timestamp:   time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+			AudioSource: detection.AudioSource{SafeString: "rtsp_garage", DisplayName: "Garage"},
+			Species:     detection.Species{ScientificName: primarySci, CommonName: "Eurasian Blackbird"},
+			Confidence:  0.9,
+			Model:       birdModelInfo(),
+		}
+		require.NoError(t, repo.Save(ctx, result, additional))
+		require.NotZero(t, result.ID)
+		return result
+	}
+	idString := func(r *detection.Result) string { return strconv.FormatUint(uint64(r.ID), 10) }
+
+	withAlternates := save([]detection.AdditionalResult{{
+		Species:    detection.Species{ScientificName: ravenSci},
+		Confidence: ravenConfidence,
+	}})
+
+	// A stored "Scientific_Common" label. SavePredictionsBatch keeps the existing
+	// rows; SavePredictions would delete them first.
+	label, err := ds.label.GetOrCreate(ctx, sparrowSci+"_"+sparrowCommon, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	require.NoError(t, ds.detection.SavePredictionsBatch(ctx, []*entities.DetectionPrediction{{
+		DetectionID: withAlternates.ID, LabelID: label.ID, Confidence: sparrowConf, Rank: 2,
+	}}))
+
+	// A stored label with no scientific part names no species and is skipped.
+	ghost, err := ds.label.GetOrCreate(ctx, "_Unnamed", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	require.NoError(t, ds.detection.SavePredictionsBatch(ctx, []*entities.DetectionPrediction{{
+		DetectionID: withAlternates.ID, LabelID: ghost.ID, Confidence: ghostConf, Rank: 3,
+	}}))
+
+	got, err := repo.GetAdditionalResults(ctx, idString(withAlternates))
+	require.NoError(t, err)
+	require.Len(t, got, 2, "the label without a scientific name must not be returned")
+	bySci := make(map[string]detection.AdditionalResult, len(got))
+	for _, ar := range got {
+		bySci[ar.Species.ScientificName] = ar
+	}
+
+	raven, ok := bySci[ravenSci]
+	require.True(t, ok, "stored alternate must be returned")
+	assert.Equal(t, ravenCommon, raven.Species.CommonName)
+	assert.Equal(t, ravenCode, raven.Species.Code)
+	assert.InDelta(t, ravenConfidence, raven.Confidence, delta, "confidence must not be narrowed to float32")
+	assert.Empty(t, raven.RawLabel, "RawLabel is runtime only and stays empty on read")
+
+	sparrow, ok := bySci[sparrowSci]
+	require.True(t, ok, "a stored Scientific_Common label must be returned as the bare scientific name")
+	assert.Equal(t, sparrowCommon, sparrow.Species.CommonName)
+	assert.Equal(t, sparrowCode, sparrow.Species.Code)
+	assert.InDelta(t, sparrowConf, sparrow.Confidence, delta)
+
+	without := save(nil)
+	none, err := repo.GetAdditionalResults(ctx, idString(without))
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	_, err = repo.GetAdditionalResults(ctx, "not-an-id")
+	require.Error(t, err, "a non-numeric id must be rejected")
+}
+
+// TestDetectionRepository_ReadsCarryOriginalSpecies verifies that every read path
+// that builds a detection.Result from the v2 store fills OriginalSpecies for a
+// detection whose species a reviewer changed, keeps it after the species is changed
+// back, and leaves it zero for an untouched detection in the same result set.
+func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
+	t.Parallel()
+
+	const (
+		originalSci    = "Turdus merula"
+		originalCommon = "Eurasian Blackbird"
+		originalCode   = "eurbla"
+		currentSci     = "Parus major"
+		currentCommon  = "Great Tit"
+		ghostSci       = "Corvus corax"
+		date           = "2026-06-01"
+		hour           = "12"
+	)
+	cfg, cfgCleanup := buildTestConfig(t, []string{
+		originalSci + "_" + originalCommon,
+		currentSci + "_" + currentCommon,
+	})
+	cfg.SpeciesCodeMap = map[string]string{originalSci: originalCode}
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
+	ds.timezone = time.UTC
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+
+	at := func(minute int) time.Time { return time.Date(2026, 6, 1, 12, minute, 0, 0, time.UTC) }
+	changed := seedDetection(t, ds, originalSci, at(0))
+	untouched := seedDetection(t, ds, currentSci, at(10))
+	require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci))
+
+	want := detection.Species{ScientificName: originalSci, CommonName: originalCommon, Code: originalCode}
+	find := func(results []*detection.Result, id uint) *detection.Result {
+		for _, r := range results {
+			if r.ID == id {
+				return r
+			}
+		}
+		return nil
+	}
+	idString := func(id uint) string { return strconv.FormatUint(uint64(id), 10) }
+
+	checkLists := func(t *testing.T, wantOriginal detection.Species, skipSpeciesList bool) {
+		t.Helper()
+		for _, rc := range listReadCalls(date, hour) {
+			if skipSpeciesList && rc.name == "GetBySpecies" {
+				// The listed species is the one the detection no longer has.
+				continue
+			}
+			results, err := rc.call(ctx, repo)
+			require.NoError(t, err, rc.name)
+			got := find(results, changed.ID)
+			require.NotNil(t, got, "%s did not return the changed detection", rc.name)
+			assert.Equal(t, wantOriginal, got.OriginalSpecies, rc.name)
+			other := find(results, untouched.ID)
+			require.NotNil(t, other, "%s did not return the untouched detection", rc.name)
+			assert.Zero(t, other.OriginalSpecies, rc.name)
+		}
+	}
+
+	t.Run("after a change", func(t *testing.T) {
+		got, err := repo.Get(ctx, idString(changed.ID))
+		require.NoError(t, err)
+		assert.Equal(t, currentSci, got.Species.ScientificName)
+		assert.Equal(t, want, got.OriginalSpecies)
+		other, err := repo.Get(ctx, idString(untouched.ID))
+		require.NoError(t, err)
+		assert.Zero(t, other.OriginalSpecies)
+
+		checkLists(t, want, false)
+	})
+
+	t.Run("after a change back", func(t *testing.T) {
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, originalSci))
+
+		got, err := repo.Get(ctx, idString(changed.ID))
+		require.NoError(t, err)
+		assert.Equal(t, originalSci, got.Species.ScientificName)
+		assert.Equal(t, want, got.OriginalSpecies)
+
+		checkLists(t, want, true)
+	})
+
+	t.Run("original label row deleted", func(t *testing.T) {
+		ghost := seedDetection(t, ds, ghostSci, at(20))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, ghost.ID, currentSci))
+		ghostLabel, err := ds.label.GetOrCreate(ctx, ghostSci, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+		require.NoError(t, err)
+		require.NoError(t, ds.label.Delete(ctx, ghostLabel.ID))
+
+		got, err := repo.Get(ctx, idString(ghost.ID))
+		require.NoError(t, err)
+		assert.Equal(t, currentSci, got.Species.ScientificName)
+		assert.Zero(t, got.OriginalSpecies)
+
+		// The list reads batch the labels: a missing original row is no error there either.
+		for _, rc := range listReadCalls(date, hour) {
+			results, err := rc.call(ctx, repo)
+			require.NoError(t, err, rc.name)
+			listed := find(results, ghost.ID)
+			require.NotNil(t, listed, "%s did not return the detection with the deleted original label", rc.name)
+			assert.Equal(t, currentSci, listed.Species.ScientificName, rc.name)
+			assert.Zero(t, listed.OriginalSpecies, rc.name)
+		}
+	})
+}
+
+// TestDetectionRepository_OriginalSpeciesCommonNameFallback pins what the read
+// mapping puts in OriginalSpecies.CommonName: the resolved common name for a species
+// the name maps know, and the scientific name itself for a legacy alias they lack,
+// which the predictions merge treats as unresolved.
+func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		aliasSci     = "Streptopelia senegalensis" // legacy alias, not in the name maps
+		canonicalSci = "Spilopelia senegalensis"
+		canonicalCom = "Laughing Dove"
+		currentSci   = "Parus major"
+	)
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{canonicalSci + "_" + canonicalCom, currentSci + "_Great Tit"})
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+	seedDetection(t, ds, currentSci, time.Date(2026, 6, 1, 12, 20, 0, 0, time.UTC))
+
+	tests := []struct {
+		name string
+		sci  string
+		want detection.Species
+	}{
+		{"alias falls back to its scientific name", aliasSci, detection.Species{ScientificName: aliasSci, CommonName: aliasSci}},
+		{"canonical species resolves", canonicalSci, detection.Species{ScientificName: canonicalSci, CommonName: canonicalCom}},
+	}
+	for i, tt := range tests {
+		changed := seedDetection(t, ds, tt.sci, time.Date(2026, 6, 1, 12, i, 0, 0, time.UTC))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci), tt.name)
+
+		got, err := repo.Get(ctx, strconv.FormatUint(uint64(changed.ID), 10))
+		require.NoError(t, err, tt.name)
+		assert.Equal(t, tt.want, got.OriginalSpecies, tt.name)
+	}
+}
+
+// reviewLockTimeTolerance bounds how far a review or lock time read back may be from
+// the moment the test wrote it.
+const reviewLockTimeTolerance = time.Minute
+
+// assertNoReviewLockTimes checks that res carries none of the review and lock times.
+func assertNoReviewLockTimes(t *testing.T, res *detection.Result, what string) {
+	t.Helper()
+	assert.True(t, res.FirstReviewedAt.IsZero(), what)
+	assert.True(t, res.LastReviewedAt.IsZero(), what)
+	assert.True(t, res.LockedAt.IsZero(), what)
+}
+
+// assertGetReviewAndLockTimes drives one detection through review, lock, unlock and
+// relock with the methods the handlers call and checks the times Get returns after
+// each step. It is shared by the SQLite test and the MySQL/MariaDB integration test,
+// which runs it with a server time zone that differs from the process zone. It returns
+// the detection, left reviewed and locked.
+func assertGetReviewAndLockTimes(t *testing.T, ds *Datastore) *entities.Detection {
+	t.Helper()
+	ctx := t.Context()
+
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	ds.timezone = helsinki
+
+	det := seedDetection(t, ds, "Parus major", time.Now().Add(-time.Hour))
+	id := strconv.FormatUint(uint64(det.ID), 10)
+	repo := NewDetectionRepository(ds)
+	get := func() *detection.Result {
+		t.Helper()
+		res, err := repo.Get(ctx, id)
+		require.NoError(t, err)
+		return res
+	}
+	assertNear := func(got time.Time, what string) {
+		t.Helper()
+		assert.WithinDuration(t, time.Now(), got, reviewLockTimeTolerance, what)
+		assert.Same(t, helsinki, got.Location(), what+" must be in the station zone")
+	}
+	reviewColumns := func(created, updated time.Time) {
+		t.Helper()
+		// UpdateColumns bypasses GORM's update-time tracking, so the values stay as given.
+		require.NoError(t, ds.manager.DB().Model(&entities.DetectionReview{}).
+			Where("detection_id = ?", det.ID).
+			UpdateColumns(map[string]any{"created_at": created, "updated_at": updated}).Error)
+	}
+
+	// A fresh detection has no review and no lock.
+	res := get()
+	assertNoReviewLockTimes(t, res, "fresh detection")
+
+	// Reviewed once and locked: every time is now, and a review saved once has equal times.
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: det.ID, Verified: "correct"}))
+	require.NoError(t, ds.LockNote(id))
+	res = get()
+	assertNear(res.FirstReviewedAt, "firstReviewedAt")
+	assertNear(res.LastReviewedAt, "lastReviewedAt")
+	assertNear(res.LockedAt, "lockedAt")
+	assert.True(t, res.LastReviewedAt.Equal(res.FirstReviewedAt), "a review saved once has equal times")
+
+	// Saved again with the same status: the first time stays, the last moves.
+	fixed := time.Date(2025, 3, 3, 9, 30, 15, 0, time.UTC)
+	reviewColumns(fixed, fixed)
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: det.ID, Verified: "correct"}))
+	res = get()
+	assert.True(t, res.FirstReviewedAt.Equal(fixed), "firstReviewedAt must keep the first save, got %s", res.FirstReviewedAt)
+	assertNear(res.LastReviewedAt, "lastReviewedAt")
+
+	// A review stored with updated_at just before created_at (saved once by an earlier
+	// version) never reports the last time before the first.
+	reviewColumns(fixed, fixed.Add(-time.Second))
+	res = get()
+	assert.True(t, res.LastReviewedAt.Equal(res.FirstReviewedAt), "lastReviewedAt must not precede firstReviewedAt")
+
+	// Locking an already locked detection keeps the original lock time.
+	require.NoError(t, ds.manager.DB().Model(&entities.DetectionLock{}).
+		Where("detection_id = ?", det.ID).UpdateColumns(map[string]any{"locked_at": fixed}).Error)
+	require.NoError(t, ds.LockNote(id))
+	assert.True(t, get().LockedAt.Equal(fixed), "a second lock must keep the original lockedAt")
+
+	// Unlocking removes the lock time and keeps the review times; locking again sets it.
+	require.NoError(t, ds.UnlockNote(id))
+	res = get()
+	assert.True(t, res.LockedAt.IsZero())
+	assert.False(t, res.FirstReviewedAt.IsZero())
+	require.NoError(t, ds.LockNote(id))
+	assertNear(get().LockedAt, "lockedAt after relock")
+
+	return det
+}
+
+// TestDetectionRepository_GetReadsReviewAndLockTimes pins that Get returns the review
+// and lock times in the station zone, that no list read does, and that the legacy
+// bridge returns none.
+func TestDetectionRepository_GetReadsReviewAndLockTimes(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	det := assertGetReviewAndLockTimes(t, ds)
+	ctx := t.Context()
+
+	at := time.Unix(det.DetectedAt, 0).In(ds.timezone)
+	date, hour := at.Format(time.DateOnly), at.Format("15")
+	for _, call := range listReadCalls(date, hour) {
+		results, err := call.call(ctx, NewDetectionRepository(ds))
+		require.NoError(t, err, call.name)
+		var found *detection.Result
+		for _, r := range results {
+			if r.ID == det.ID {
+				found = r
+			}
+		}
+		require.NotNil(t, found, "%s must contain the detection", call.name)
+		assertNoReviewLockTimes(t, found, call.name)
+	}
+
+	bridged, err := datastore.NewDetectionRepository(ds, ds.timezone).Get(ctx, strconv.FormatUint(uint64(det.ID), 10))
+	require.NoError(t, err)
+	assertNoReviewLockTimes(t, bridged, "bridge Get")
 }

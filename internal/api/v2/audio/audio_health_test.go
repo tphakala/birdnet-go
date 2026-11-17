@@ -1,7 +1,6 @@
 package audio
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,44 +20,36 @@ func newAudioHealthTestHandler(t *testing.T, e *echo.Echo) *Handler {
 	return &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
 }
 
-func TestGetAudioHealth_NoWatchdog(t *testing.T) {
-	e := echo.New()
-	c := newAudioHealthTestHandler(t, e)
+// TestGetAudioHealth checks that the endpoint answers an empty sources array
+// both with no watchdog installed and with a watchdog that tracks no routes.
+func TestGetAudioHealth(t *testing.T) {
+	tests := []struct {
+		name         string
+		withWatchdog bool
+	}{
+		{name: "no watchdog"},
+		{name: "watchdog tracking no sources", withWatchdog: true},
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health/audio", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			c := newAudioHealthTestHandler(t, e)
 
-	err := c.GetAudioHealth(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
+			if tt.withWatchdog {
+				router := audiocore.NewAudioRouter(audiocore.GetLogger(), nil)
+				t.Cleanup(router.Close)
+				c.SetAudioWatchdog(audiocore.NewLivenessWatchdog(
+					audiocore.DefaultLivenessConfig(), router, audiocore.LivenessCallbacks{}))
+			}
 
-	var resp AudioHealthResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Empty(t, resp.Sources)
-}
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/health/audio", http.NoBody)
+			rec := httptest.NewRecorder()
 
-func TestGetAudioHealth_WithWatchdog(t *testing.T) {
-	e := echo.New()
-	c := newAudioHealthTestHandler(t, e)
-
-	router := audiocore.NewAudioRouter(audiocore.GetLogger(), nil)
-	defer router.Close()
-
-	cfg := audiocore.DefaultLivenessConfig()
-	callbacks := audiocore.LivenessCallbacks{}
-	watchdog := audiocore.NewLivenessWatchdog(cfg, router, callbacks)
-	c.SetAudioWatchdog(watchdog)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health/audio", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := c.GetAudioHealth(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp AudioHealthResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Empty(t, resp.Sources, "no sources tracked without active routes")
+			require.NoError(t, c.GetAudioHealth(e.NewContext(req, rec)))
+			assert.Equal(t, http.StatusOK, rec.Code)
+			// An empty array, not null: assert.Empty cannot tell the two apart.
+			assert.JSONEq(t, `{"sources":[]}`, rec.Body.String())
+		})
+	}
 }

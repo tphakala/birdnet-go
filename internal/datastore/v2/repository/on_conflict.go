@@ -32,3 +32,20 @@ func onConflictSkip(isMySQL bool, noopColumn string, target ...clause.Column) cl
 	c := clause.Column{Name: noopColumn}
 	return clause.OnConflict{DoUpdates: []clause.Assignment{{Column: c, Value: c}}}
 }
+
+// onConflictSkipSQL is onConflictSkip for a raw INSERT that GORM's builder
+// cannot express, such as INSERT ... SELECT. It returns the clause to append
+// to the statement: ON CONFLICT DO NOTHING on SQLite, and on MySQL and MariaDB
+// an assignment of noopColumn to itself. Only a duplicate key is absorbed;
+// unlike INSERT IGNORE, every other error is still returned. noopColumn must
+// be a plain column of the table, never the auto-increment column or a
+// generated column.
+//
+// On SQLite the SELECT of an INSERT ... SELECT must have a WHERE clause, or
+// the parser reads ON as the start of a join constraint.
+func onConflictSkipSQL(isMySQL bool, noopColumn string) string {
+	if !isMySQL {
+		return "ON CONFLICT DO NOTHING"
+	}
+	return "ON DUPLICATE KEY UPDATE " + noopColumn + " = " + noopColumn
+}

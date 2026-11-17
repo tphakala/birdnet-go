@@ -237,7 +237,9 @@ func (c *Handler) handleControlSignal(ctx echo.Context, signal, action, logMessa
 }
 
 // RestartAnalysis handles POST /api/v2/control/restart
-// Restarts the audio analysis process
+// Asks the analysis pipeline to restart audio capture: every source is torn down
+// and rebuilt and the analysis buffers are reallocated. The response confirms
+// only that the signal was queued, not that the restart has finished.
 func (c *Handler) RestartAnalysis(ctx echo.Context) error {
 	return c.handleControlSignal(ctx, SignalRestartAnalysis, ActionRestartAnalysis,
 		"Received request to restart analysis", "Analysis restart signal sent")

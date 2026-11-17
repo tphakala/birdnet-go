@@ -46,8 +46,9 @@ type job struct {
 	tempDir   string
 }
 
-// run is the shared pipeline: decode, time-expand, filter, encode, all under the
-// job's timeout.
+// run is the shared pipeline: decode, filter, optionally time-expand, encode, all
+// under the job's timeout. A job with an expansion denoises before it and applies
+// normalization and gain after it.
 func run(ctx context.Context, j *job) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, j.timeout)
 	defer cancel()
@@ -56,12 +57,17 @@ func run(ctx context.Context, j *job) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Denoise works in real time at the capture rate, so it runs before the
+	// expansion; loudness and gain measure what is played, so they run after it.
+	if err := applyDenoise(ctx, pcm, j.filters); err != nil {
+		return nil, err
+	}
 	if j.expansion > 0 {
 		if pcm, err = timeExpand(ctx, pcm, j.expansion, maxDecodedPCMBytes); err != nil {
 			return nil, err
 		}
 	}
-	if err := applyFilters(ctx, pcm, j.filters); err != nil {
+	if err := applyLoudnessAndGain(ctx, pcm, j.filters); err != nil {
 		return nil, err
 	}
 	return encode(ctx, pcm, j.format, j.tempDir)
@@ -118,14 +124,11 @@ func ProcessToWAV(ctx context.Context, inputPath string, f Filters) ([]byte, err
 	return run(ctx, &job{path: inputPath, timeout: processingTimeout, filters: f, format: audioformat.WAV})
 }
 
-// AudibleBats decodes the whole source, time-expands it by factor to 48 kHz, then
-// applies normalization and gain (f.Denoise must be empty) and returns a 16-bit
-// WAV. A source below audioformat.MinBatSampleRate is rejected from its header
+// AudibleBats decodes the whole source, denoises it at the source rate when
+// f.Denoise is set, time-expands it by factor to 48 kHz, then applies
+// normalization and gain and returns a 16-bit WAV. A source below audioformat.MinBatSampleRate is rejected from its header
 // with ErrBelowMinimumRate. The timeout is 120 s for the whole pipeline.
 func AudibleBats(ctx context.Context, inputPath string, factor int, f Filters) ([]byte, error) {
-	if f.Denoise != "" {
-		return nil, validationError(ErrInvalidRequest, "audible_bats", "denoise is not offered for audible bats")
-	}
 	if err := validateFilters(f); err != nil {
 		return nil, err
 	}

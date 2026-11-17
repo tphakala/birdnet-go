@@ -61,6 +61,10 @@ type ModelManager struct {
 	modelsDir    string
 	orchestrator *Orchestrator
 
+	// documents serves verified licence and policy text and keeps the recorded
+	// agreements. Set once by NewModelManager; never touched by the install paths.
+	documents *ModelDocuments
+
 	// unloadFn, when non-nil, replaces the direct orchestrator UnloadModel call so
 	// tests can force the unload-failure rollback branches of Uninstall and
 	// Reinstall. Those branches are reachable in production only via a
@@ -178,7 +182,7 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 	if orchestrator != nil {
 		orchestrator.SetModelsDir(modelsDir)
 	}
-	return &ModelManager{
+	mm := &ModelManager{
 		modelsDir:    modelsDir,
 		orchestrator: orchestrator,
 		settings:     settings,
@@ -186,7 +190,16 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 		downloading:  make(map[string]*DownloadState),
 		freeSpaceFn:  diskmanager.GetAvailableSpace,
 	}
+	mm.documents = newModelDocuments(
+		func() []string { return mm.orderedDownloadEndpoints(mm.configuredHuggingFaceEndpoint()) },
+		mm.noteWorkingEndpoint,
+	)
+	return mm
 }
+
+// Documents returns the service that serves verified licence and policy text and
+// records agreements. It is never nil.
+func (mm *ModelManager) Documents() *ModelDocuments { return mm.documents }
 
 // ModelInfos returns ModelInfo for all currently loaded models.
 func (mm *ModelManager) ModelInfos() []ModelInfo {
@@ -367,7 +380,7 @@ func (mm *ModelManager) ScanInstalled() {
 // auto-enabled every installed gallery model on each scan; models.enabled is now authoritative,
 // so this reproduces that behavior a single time, gated on the AutoEnableMigrated companion
 // marker. It is NOT gated on ConfigVersion: this runs after conf.Load(), where Part A
-// (MigrateModelsEnabledAuthoritative) already stamped ConfigVersion=2, so a ConfigVersion gate
+// (MigrateModelsEnabledAuthoritative) already raised ConfigVersion past 1, so a ConfigVersion gate
 // would be a permanent no-op. After the capture, a downloaded-but-disabled model is no longer
 // auto-loaded (loadInstalledModels honors the enabled set). On a read-only config the marker
 // never persists, so the capture re-runs in memory each start, reproducing the pre-Phase-4
@@ -545,6 +558,8 @@ type familyFieldSet struct {
 // into s so callers can read or write a family's fields without naming the conf
 // struct; a nil pointer means the family has no such field and it must NOT be
 // written. ok is false for a nil settings pointer or an unknown registry ID.
+// The BirdNET v3.0 preview and BirdNET+ v3.0 map to separate settings sections, so
+// one family never rewrites the other's paths or threshold.
 //
 // The primary's Labels pointer is &s.BirdNET.LabelPath like every other family:
 // the "a variant swap must not disturb a user-configured label path" rule lives in
@@ -580,11 +595,25 @@ func familyFields(s *conf.Settings, registryID string) (familyFieldSet, bool) {
 			OverrideThreshold: &s.BirdNETV3.OverrideThreshold,
 			Locale:            &s.BirdNETV3.Locale,
 		}, true
+	case RegistryIDBirdNETPlusV3:
+		return familyFieldSet{
+			Model:             &s.BirdNETPlus.ModelPath,
+			Labels:            &s.BirdNETPlus.LabelPath,
+			Threshold:         &s.BirdNETPlus.Threshold,
+			OverrideThreshold: &s.BirdNETPlus.OverrideThreshold,
+			Locale:            &s.BirdNETPlus.Locale,
+		}, true
 	case RegistryIDBSG:
 		return familyFieldSet{
 			Model:  &s.BSG.ModelPath,
 			Labels: &s.BSG.LabelPath,
 			Locale: &s.BSG.Locale,
+		}, true
+	case RegistryIDBSGBat:
+		return familyFieldSet{
+			Model:     &s.BSGBat.ModelPath,
+			Labels:    &s.BSGBat.LabelPath,
+			Threshold: &s.BSGBat.Threshold,
 		}, true
 	case RegistryIDBat:
 		return familyFieldSet{
@@ -1558,7 +1587,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		if reloadErr := mm.orchestrator.ReloadForVariantSwap(entry.RegistryID); reloadErr != nil {
 			return mm.rollbackVariant(log, entry, old, newVariantID, reloadErr, false, progress)
 		}
-		// A target that brings a geomodel (inline for Perch and BirdNET v3.0, or through a
+		// A target that brings a geomodel (inline for Perch, BirdNET v3.0 and BirdNET+ v3.0, or through a
 		// dependency) had its gallery-managed range filter re-pointed in step 3 (a custom one
 		// is kept); reload it, exactly as hotLoadAfterInstall does after an install. The v2.4
 		// anchor reloads its own range filter inside reloadEntry; that is separate from the
@@ -2659,6 +2688,56 @@ func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, 
 		Build()
 }
 
+// getHuggingFace issues a GET for url and returns the response when the host
+// answers 200; the caller closes the body. A transport failure and a non-200
+// status come back as an endpointAttemptError that records whether another
+// endpoint might serve the file, so downloadFile and the document fetch fail
+// over the same way. The "HTTP request failed for" and "HTTP <status> for"
+// texts are matched by the frontend and must not change.
+func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, errors.Newf("failed to create request for %s: %v", url, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_huggingface_request").
+			Context("url", url).
+			Build()
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		// A transport failure (unreachable host, reset, timeout) is retryable on
+		// the next endpoint; a cancelled context is not (IsUnreachable handles the
+		// distinction).
+		return nil, &endpointAttemptError{
+			retryable: conf.IsUnreachable(err),
+			err: errors.Newf("HTTP request failed for %s: %v", url, err).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("operation", "huggingface_request").
+				Context("url", url).
+				Build(),
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		// A gateway status (502/503/504) means the origin is down and a mirror
+		// may still serve the file, so it is retryable; any other status (404,
+		// 403, 500, ...) means the host answered and failover would mask it.
+		return nil, &endpointAttemptError{
+			retryable: conf.IsGatewayStatus(resp.StatusCode),
+			err: errors.Newf("HTTP %d for %s", resp.StatusCode, url).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("operation", "huggingface_status").
+				Context("url", url).
+				Context("status", fmt.Sprintf("%d", resp.StatusCode)).
+				Build(),
+		}
+	}
+	return resp, nil
+}
+
 // downloadFile downloads a file from url to destPath, verifying the SHA256
 // checksum. The catalogID is used to update shared download state for SSE
 // polling. completedBytes is the cumulative size of previously downloaded
@@ -2695,44 +2774,11 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 		}
 	}()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	resp, err := getHuggingFace(ctx, downloadHTTPClient, url)
 	if err != nil {
-		return errors.Newf("failed to create request for %s: %v", url, err).
-			Component("classifier.model_manager").
-			Category(errors.CategoryValidation).
-			Context("url", url).
-			Build()
-	}
-	resp, err := downloadHTTPClient.Do(req)
-	if err != nil {
-		// A transport failure (unreachable host, reset, timeout) is retryable on
-		// the next endpoint; a cancelled context is not (IsUnreachable handles the
-		// distinction).
-		return &endpointAttemptError{
-			retryable: conf.IsUnreachable(err),
-			err: errors.Newf("HTTP request failed for %s: %v", url, err).
-				Component("classifier.model_manager").
-				Category(errors.CategoryNetwork).
-				Context("url", url).
-				Build(),
-		}
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		// A gateway status (502/503/504) means the origin is down and a mirror
-		// may still serve the file, so it is retryable; any other status (404,
-		// 403, 500, ...) means the host answered and failover would mask it.
-		return &endpointAttemptError{
-			retryable: conf.IsGatewayStatus(resp.StatusCode),
-			err: errors.Newf("HTTP %d for %s", resp.StatusCode, url).
-				Component("classifier.model_manager").
-				Category(errors.CategoryNetwork).
-				Context("url", url).
-				Context("status", fmt.Sprintf("%d", resp.StatusCode)).
-				Build(),
-		}
-	}
 
 	var hasher hash.Hash
 	var reader io.Reader
@@ -2825,15 +2871,24 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 	return nil
 }
 
-// huggingFaceResolveMainPath is the HuggingFace file-resolve path segment for a
-// repository's main revision, sitting between the repo id and the file path.
-const huggingFaceResolveMainPath = "/resolve/main/"
+// huggingFaceResolvePath is the HuggingFace file-resolve path segment between the
+// repo id and the revision.
+const huggingFaceResolvePath = "/resolve/"
+
+// huggingFaceMainRevision is the revision model files are downloaded from.
+const huggingFaceMainRevision = "main"
 
 // buildHuggingFaceURL constructs the download URL for a file in a HuggingFace
 // repo. The endpoint is one host from the resolved download chain (see
 // orderedDownloadEndpoints / downloadModelFile) and must not end in a slash.
 func buildHuggingFaceURL(endpoint, repo, filePath string) string {
-	return endpoint + "/" + repo + huggingFaceResolveMainPath + filePath
+	return buildHuggingFaceRevisionURL(endpoint, repo, huggingFaceMainRevision, filePath)
+}
+
+// buildHuggingFaceRevisionURL constructs the URL of a file in a HuggingFace repo
+// at a pinned revision (a commit hash), for content that must not move with main.
+func buildHuggingFaceRevisionURL(endpoint, repo, revision, filePath string) string {
+	return endpoint + "/" + repo + huggingFaceResolvePath + revision + "/" + filePath
 }
 
 // huggingFaceEndpoint resolves the single primary HuggingFace host from the

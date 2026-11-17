@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+// Reasons returned by LogDeduplicator.ShouldLog and logged in the log_reason field.
+const (
+	logReasonDedupDisabled = "dedup_disabled" // deduplication is off, every window is logged
+	logReasonFirstLog      = "first_log"      // first window seen for a source
+	logReasonValuesChanged = "values_changed" // counts differ from the last logged window
+	logReasonHealthCheck   = "health_check"   // periodic heartbeat for unchanged counts
+)
+
 // LogState tracks the last logged state for a source to prevent duplicate logging
 type LogState struct {
 	LastRawCount      int       // Last logged raw results count
@@ -43,11 +51,12 @@ func NewLogDeduplicator(config DeduplicationConfig) *LogDeduplicator {
 
 // ShouldLog determines if a message should be logged based on deduplication rules.
 // It returns whether to log and the reason for logging.
-// Reasons include: "dedup_disabled", "first_log", "values_changed", "health_check"
+// Reasons are the logReason* constants: logReasonDedupDisabled, logReasonFirstLog,
+// logReasonValuesChanged and logReasonHealthCheck.
 func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) (shouldLog bool, reason string) {
 	// If deduplication is disabled, always log
 	if !d.config.Enabled {
-		return true, "dedup_disabled"
+		return true, logReasonDedupDisabled
 	}
 
 	d.mu.Lock()
@@ -63,7 +72,7 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 			LastFilteredCount: filteredCount,
 			LastLogTime:       now,
 		}
-		return true, "first_log"
+		return true, logReasonFirstLog
 	}
 
 	// Check if values changed
@@ -71,13 +80,13 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 		state.LastRawCount = rawCount
 		state.LastFilteredCount = filteredCount
 		state.LastLogTime = now
-		return true, "values_changed"
+		return true, logReasonValuesChanged
 	}
 
 	// Check if it's time for a health check
 	if now.Sub(state.LastLogTime) >= d.config.HealthCheckInterval {
 		state.LastLogTime = now
-		return true, "health_check"
+		return true, logReasonHealthCheck
 	}
 
 	// No need to log - it's a duplicate

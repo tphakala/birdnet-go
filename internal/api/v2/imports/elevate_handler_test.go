@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -37,46 +36,6 @@ func (failingRunner) Run(_ context.Context, _ []byte, _ string, _ ...string) err
 type notReadable struct{}
 
 func (notReadable) CanRead(string) bool { return false }
-
-func TestElevateImport_FallbackWhenNotSudoer(t *testing.T) {
-	// chmod 0o000 is a no-op on Windows, so the source stays readable and the
-	// handler never reaches the elevation path. Native elevation is unix-only.
-	if runtime.GOOS == osWindows {
-		t.Skip("chmod-forced unreadable source is unix-only; native elevation does not run on Windows")
-	}
-	src := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, src)
-	require.NoError(t, os.Chmod(src, 0o000)) // make unreadable so direct fails
-	t.Cleanup(func() { _ = os.Chmod(src, 0o600) })
-
-	h := New(testCore(t), nil)
-	h.isContainerEnv = func() bool { return false }
-	h.stagingBase = t.TempDir()
-	h.verifyTrustedBase = func(string) error { return nil }
-	h.freeBytesFn = func(string) (uint64, error) { return 1 << 30, nil }
-	// Ladder whose runner fails sudo -n and has no password -> fallback.
-	h.newLadder = func() (*elevation.Ladder, error) {
-		return &elevation.Ladder{
-			Runner:  failingRunner{},
-			Direct:  notReadable{},
-			SelfExe: "/bin/birdnet-go",
-			Log:     slog.Default(),
-		}, nil
-	}
-
-	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := echo.New().NewContext(req, rec)
-
-	require.NoError(t, h.ElevateImport(ctx))
-
-	var resp elevateResponse
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "fallback", resp.Method)
-	assert.NotEmpty(t, resp.FallbackCommands)
-}
 
 func TestElevateImport_RejectsContainer(t *testing.T) {
 	h := New(testCore(t), nil)
@@ -116,125 +75,90 @@ func TestElevateImport_InsufficientSpace(t *testing.T) {
 	assert.Equal(t, http.StatusInsufficientStorage, rec.Code)
 }
 
-// TestElevateImport_PasswordRequired_WhenAllowElevationAndNoPassword verifies
-// that when in-app elevation is enabled and no password was supplied, a fallback
-// from the ladder produces "password_required" instead of copy-paste commands.
-func TestElevateImport_PasswordRequired_WhenAllowElevationAndNoPassword(t *testing.T) {
-	src := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, src)
-
-	h := New(testCore(t), nil)
-	h.isContainerEnv = func() bool { return false }
-	h.stagingBase = t.TempDir()
-	h.verifyTrustedBase = func(string) error { return nil }
-	h.freeBytesFn = func(string) (uint64, error) { return 1 << 30, nil }
-	h.newLadder = func() (*elevation.Ladder, error) {
-		return &elevation.Ladder{
-			Runner:  failingRunner{},
-			Direct:  notReadable{},
-			SelfExe: "/bin/birdnet-go",
-			Log:     slog.Default(),
-		}, nil
+// TestElevateImport_LadderFallback verifies the response when the ladder falls
+// back because passwordless elevation does not work. With in-app elevation on
+// and no password yet, the handler asks for one ("password_required"); with a
+// password already supplied, or with in-app elevation off, it returns the
+// copy-paste commands. No row starts a job. The staged source rows use a regular
+// file that is not a BirdNET-Pi database: discovery.Probe reports it invalid
+// whatever the uid, so the handler takes the staging path (as root too) and
+// needs no chmod. Only that path asks the disk probe for free space, which is how
+// each row shows whether staging ran.
+func TestElevateImport_LadderFallback(t *testing.T) {
+	tests := []struct {
+		name           string
+		stagedSource   bool
+		allowElevation bool
+		password       string
+		wantMethod     string
+	}{
+		{name: "staged source with elevation off", stagedSource: true, wantMethod: responseMethodFallback},
+		{name: "staged source, elevation on, no password", stagedSource: true, allowElevation: true, wantMethod: responseMethodPasswordRequired},
+		{name: "valid database, elevation on, no password", allowElevation: true, wantMethod: responseMethodPasswordRequired},
+		{name: "valid database, elevation on, password supplied", allowElevation: true, password: "wrongpass", wantMethod: responseMethodFallback},
+		{name: "valid database, elevation off, no password", wantMethod: responseMethodFallback},
 	}
-	// Enable in-app elevation. Publish to the global snapshot too so
-	// CurrentSettings() (which prefers the global) observes AllowInAppElevation=true.
-	settings := apitest.NewValidTestSettings()
-	settings.Import.AllowInAppElevation = true
-	h.Settings.Store(settings)
-	apitest.PublishTestSettings(t, settings)
 
-	// No password supplied -> expect password_required.
-	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := echo.New().NewContext(req, rec)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := filepath.Join(t.TempDir(), "birds.db")
+			if tt.stagedSource {
+				require.NoError(t, os.WriteFile(src, []byte("not a BirdNET-Pi database"), 0o600))
+			} else {
+				writeMinimalBirdNetPiDB(t, src)
+			}
 
-	require.NoError(t, h.ElevateImport(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
+			h := New(testCore(t), nil)
+			h.isContainerEnv = func() bool { return false }
+			h.stagingBase = t.TempDir()
+			h.verifyTrustedBase = func(string) error { return nil }
+			freeProbes := 0
+			h.freeBytesFn = func(string) (uint64, error) {
+				freeProbes++
+				return 1 << 30, nil
+			}
+			h.newLadder = func() (*elevation.Ladder, error) {
+				return &elevation.Ladder{
+					Runner:  failingRunner{},
+					Direct:  notReadable{},
+					SelfExe: "/bin/birdnet-go",
+					Log:     slog.Default(),
+				}, nil
+			}
+			if tt.allowElevation {
+				// Publish to the global snapshot too so CurrentSettings(), which
+				// prefers the global, observes AllowInAppElevation=true.
+				settings := apitest.NewValidTestSettings()
+				settings.Import.AllowInAppElevation = true
+				h.Settings.Store(settings)
+				apitest.PublishTestSettings(t, settings)
+			}
 
-	var resp elevateResponse
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, responseMethodPasswordRequired, resp.Method)
-	assert.Empty(t, resp.JobID)
-	assert.Empty(t, resp.FallbackCommands)
-}
+			body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only","password":%q}`, src, tt.password)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := echo.New().NewContext(req, rec)
 
-// TestElevateImport_FallbackWhenPasswordSuppliedButStillFails verifies that when
-// a password was supplied but the ladder still returns fallback (e.g. wrong
-// password), the response is "fallback" not "password_required".
-func TestElevateImport_FallbackWhenPasswordSuppliedButStillFails(t *testing.T) {
-	src := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, src)
+			require.NoError(t, h.ElevateImport(ctx))
+			assert.Equal(t, http.StatusOK, rec.Code)
 
-	h := New(testCore(t), nil)
-	h.isContainerEnv = func() bool { return false }
-	h.stagingBase = t.TempDir()
-	h.verifyTrustedBase = func(string) error { return nil }
-	h.freeBytesFn = func(string) (uint64, error) { return 1 << 30, nil }
-	h.newLadder = func() (*elevation.Ladder, error) {
-		return &elevation.Ladder{
-			Runner:  failingRunner{},
-			Direct:  notReadable{},
-			SelfExe: "/bin/birdnet-go",
-			Log:     slog.Default(),
-		}, nil
+			var resp elevateResponse
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+			assert.Equal(t, tt.wantMethod, resp.Method)
+			assert.Empty(t, resp.JobID)
+			if tt.stagedSource {
+				assert.Equal(t, 1, freeProbes, "a source that is not a valid database must go through staging")
+			} else {
+				assert.Zero(t, freeProbes, "a valid database skips staging")
+			}
+			if tt.wantMethod == responseMethodPasswordRequired {
+				assert.Empty(t, resp.FallbackCommands, "asking for a password must not also hand out commands")
+			} else {
+				assert.NotEmpty(t, resp.FallbackCommands)
+			}
+		})
 	}
-	// Enable in-app elevation and publish globally so CurrentSettings() sees it.
-	settings := apitest.NewValidTestSettings()
-	settings.Import.AllowInAppElevation = true
-	h.Settings.Store(settings)
-	apitest.PublishTestSettings(t, settings)
-
-	// Password supplied -> must get fallback, not password_required.
-	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only","password":"wrongpass"}`, src)
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := echo.New().NewContext(req, rec)
-
-	require.NoError(t, h.ElevateImport(ctx))
-
-	var resp elevateResponse
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, responseMethodFallback, resp.Method)
-	assert.NotEmpty(t, resp.FallbackCommands)
-}
-
-// TestElevateImport_FallbackWhenAllowElevationDisabled verifies that when
-// AllowInAppElevation is false, the ladder result is always "fallback" even
-// when no password was supplied.
-func TestElevateImport_FallbackWhenAllowElevationDisabled(t *testing.T) {
-	src := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, src)
-
-	h := New(testCore(t), nil)
-	h.isContainerEnv = func() bool { return false }
-	h.stagingBase = t.TempDir()
-	h.verifyTrustedBase = func(string) error { return nil }
-	h.freeBytesFn = func(string) (uint64, error) { return 1 << 30, nil }
-	h.newLadder = func() (*elevation.Ladder, error) {
-		return &elevation.Ladder{
-			Runner:  failingRunner{},
-			Direct:  notReadable{},
-			SelfExe: "/bin/birdnet-go",
-			Log:     slog.Default(),
-		}, nil
-	}
-	// AllowInAppElevation is false by default; no settings override needed.
-
-	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := echo.New().NewContext(req, rec)
-
-	require.NoError(t, h.ElevateImport(ctx))
-
-	var resp elevateResponse
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, responseMethodFallback, resp.Method)
-	assert.NotEmpty(t, resp.FallbackCommands)
 }
 
 // TestElevateImport_Returns503WhenDatastoreUnavailable verifies the datastore

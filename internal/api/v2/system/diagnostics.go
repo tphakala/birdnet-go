@@ -188,21 +188,7 @@ func (c *Handler) registerHealthChecks() {
 			status := inference.CheckOpenVINOAvailability()
 			return status.Supported, status.Active
 		}),
-		checks.NewRangeFilterCheck(func() checks.RangeFilterStatusInfo {
-			orch, err := c.GetBirdNETInstance()
-			if err != nil || orch == nil {
-				return checks.RangeFilterStatusInfo{}
-			}
-			st := orch.RangeFilterStatus()
-			return checks.RangeFilterStatusInfo{
-				ParticipantsLoaded: st.ParticipantsLoaded,
-				LocationConfigured: st.LocationConfigured,
-				Active:             st.Active,
-				FellBack:           st.FellBack,
-				GeomodelActive:     st.Geomodel != nil,
-				MappedSpecies:      st.MappedSpecies,
-			}
-		}),
+		checks.NewRangeFilterCheck(c.buildRangeFilterStatusProvider()),
 
 		// Stream checks
 		checks.NewStreamConnectivityCheck(getStreamHealthInfos),
@@ -355,6 +341,59 @@ func (c *Handler) registerHealthChecks() {
 	)
 }
 
+// buildRangeFilterStatusProvider returns a closure that reads the orchestrator's range
+// filter status for the health check. It returns the zero value (Available false) when the
+// analysis engine is not reachable, which the check reports as skipped.
+func (c *Handler) buildRangeFilterStatusProvider() func() checks.RangeFilterStatusInfo {
+	return func() checks.RangeFilterStatusInfo {
+		orch, err := c.GetBirdNETInstance()
+		if err != nil || orch == nil {
+			return checks.RangeFilterStatusInfo{}
+		}
+		st := orch.RangeFilterStatus()
+		return rangeFilterStatusInfoFrom(&st)
+	}
+}
+
+// rangeFilterStatusInfoFrom maps the classifier's range filter status to the health
+// check's snapshot, listing the loaded models the active backend does not cover.
+func rangeFilterStatusInfoFrom(st *classifier.RangeFilterStatusResponse) checks.RangeFilterStatusInfo {
+	var uncovered []string
+	for i := range st.Classifiers {
+		if !st.Classifiers[i].CoveredByBackend {
+			uncovered = append(uncovered, st.Classifiers[i].Name)
+		}
+	}
+	return checks.RangeFilterStatusInfo{
+		Available:          true,
+		ParticipantsLoaded: st.ParticipantsLoaded,
+		LocationConfigured: st.LocationConfigured,
+		Active:             st.Active,
+		FellBack:           st.FellBack,
+		GeomodelActive:     st.Geomodel != nil,
+		MappedSpecies:      st.MappedSpecies,
+		GeomodelIssue:      healthGeomodelIssue(st.GeomodelIssue),
+		UncoveredModels:    uncovered,
+		ReloadFailed:       st.ReloadFailed,
+		Backend:            st.Backend,
+	}
+}
+
+// healthGeomodelIssue maps a classifier geomodel issue to the health package's type.
+// There is no default arm, so the exhaustive linter flags a future unmapped value.
+func healthGeomodelIssue(issue classifier.GeomodelIssue) checks.GeomodelIssue {
+	switch issue {
+	case classifier.GeomodelIssueNotInstalled:
+		return checks.GeomodelIssueNotInstalled
+	case classifier.GeomodelIssueNotSelected:
+		return checks.GeomodelIssueNotSelected
+	case classifier.GeomodelIssueLoadFailed:
+		return checks.GeomodelIssueLoadFailed
+	case classifier.GeomodelIssueNone:
+	}
+	return ""
+}
+
 // buildModelLoadInfoProvider returns a closure that queries the orchestrator for
 // all loaded models and converts them to the health check's ModelLoadInfo format.
 func (c *Handler) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
@@ -453,7 +492,8 @@ func (c *Handler) buildInferenceFailuresProvider() func() []checks.ModelInferenc
 // buildPerModelInferenceProvider returns a closure that queries per-model
 // inference counters and model specs to produce per-model latency stats.
 // Each model's analysis window is derived from its own BufferInterval
-// (ClipLength - resolved overlap; the bat model stays fixed at 50%).
+// (ClipLength - resolved overlap, or the spec's fixed StepSamples; the bat
+// model stays fixed at 50%).
 func (c *Handler) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
 	return func() []checks.ModelInferenceInfo {
 		p := c.Processor

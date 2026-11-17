@@ -529,3 +529,48 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 	_, higherPresent := scoreForLabel(scores, "Aratinga solstitialis_Sun Parakeet")
 	assert.False(t, higherPresent, "higher model ID label must be deduped away")
 }
+
+// TestGetAllProbableSpecies_AnyBatGroupModelAlwaysActive verifies that the
+// always-active pass covers every loaded bat-group model, not only the Bat ID, and
+// still skips a non-bat secondary.
+func TestGetAllProbableSpecies_AnyBatGroupModelAlwaysActive(t *testing.T) {
+	// Not parallel: mutates the package-global ModelRegistry.
+	const otherBatID = "test-other-bat-group"
+	ModelRegistry[otherBatID] = ModelInfo{ID: otherBatID, taxonGroup: TaxonGroupBat}
+	t.Cleanup(func() { delete(ModelRegistry, otherBatID) })
+
+	settings := universalSettings(t)
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: []string{"Turdus merula_Common Blackbird"},
+		scores:    []SpeciesScore{{Score: 0.9, Label: "Turdus merula_Common Blackbird"}},
+		rawScores: []float32{0.9},
+	}
+
+	const primaryID = RegistryIDBirdNETV24
+	bn := &BirdNET{Settings: settings}
+	bn.ModelInfo.ID = primaryID
+
+	o := &Orchestrator{
+		Settings:    settings,
+		rangeFilter: newTestRangeFilterService(rf),
+		models: map[string]*modelEntry{
+			primaryID:         {instance: bn},
+			RegistryIDBat:     {instance: &mockModelInstance{id: RegistryIDBat, labels: []string{"Myotis daubentonii"}}},
+			otherBatID:        {instance: &mockModelInstance{id: otherBatID, labels: []string{"Nyctalus noctula"}}},
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: []string{"Rana temporaria"}}},
+		},
+	}
+
+	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
+	require.NoError(t, err)
+
+	for _, label := range []string{"Myotis daubentonii", "Nyctalus noctula"} {
+		got, ok := scoreForLabel(scores, label)
+		require.True(t, ok, "bat-group species %q must be included as always-active", label)
+		assert.InDelta(t, 1.0, got.Score, 0.0001)
+	}
+	assert.False(t, hasScientificName(scores, "Rana temporaria"),
+		"a non-bat secondary must not be added by the bat always-active pass")
+}

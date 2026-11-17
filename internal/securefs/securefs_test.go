@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -726,4 +727,69 @@ func TestServeRelativeFile_FileNotFound_NoEnhancedError(t *testing.T) {
 		assert.False(t, isEnhErr,
 			"file-not-found should not produce EnhancedError in error chain")
 	}
+}
+
+// serveRelative serves relPath through sfs with the given request headers and
+// returns the recorded response.
+func serveRelative(t *testing.T, sfs *SecureFS, relPath string, reqHeaders, respHeaders map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/"+relPath, http.NoBody)
+	for k, v := range reqHeaders {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	for k, v := range respHeaders {
+		rec.Header().Set(k, v)
+	}
+	ctx := echo.New().NewContext(req, rec)
+	require.NoError(t, sfs.ServeRelativeFile(ctx, relPath))
+	return rec
+}
+
+// TestServeRelativeFile_ETag pins the validator contract of the file server: the
+// ETag changes when the size changes even if the modification time does not (a
+// browser holding a response cached under a different size must not get a 304),
+// a matching If-None-Match gets a 304, and an ETag set by the caller is kept.
+func TestServeRelativeFile_ETag(t *testing.T) {
+	t.Parallel()
+
+	sfs, dir := setupSecureFS(t)
+	const name = "clip.wav"
+	path := filepath.Join(dir, name)
+	modTime := time.Date(2024, time.March, 5, 10, 30, 0, 0, time.UTC)
+	writeAt := func(content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+		require.NoError(t, os.Chtimes(path, modTime, modTime))
+	}
+
+	writeAt("first version")
+	first := serveRelative(t, sfs, name, nil, nil)
+	require.Equal(t, http.StatusOK, first.Code)
+	etag := first.Header().Get("ETag")
+	require.NotEmpty(t, etag, "the server must set an ETag")
+
+	// The subtests share the served file and run in order: the last two replace
+	// or reuse the state the earlier ones leave behind.
+	t.Run("matching If-None-Match gets 304", func(t *testing.T) {
+		rec := serveRelative(t, sfs, name, map[string]string{"If-None-Match": etag}, nil)
+		assert.Equal(t, http.StatusNotModified, rec.Code)
+	})
+
+	t.Run("same modification time but different size gets fresh content", func(t *testing.T) {
+		writeAt("second, longer version")
+		rec := serveRelative(t, sfs, name, map[string]string{"If-None-Match": etag}, nil)
+		assert.Equal(t, http.StatusOK, rec.Code, "an ETag from a different size must not validate")
+		assert.Equal(t, "second, longer version", rec.Body.String())
+		newETag := rec.Header().Get("ETag")
+		require.NotEmpty(t, newETag, "the rewritten file needs its own ETag")
+		assert.NotEqual(t, etag, newETag)
+	})
+
+	t.Run("caller supplied ETag is kept", func(t *testing.T) {
+		const custom = `"caller-etag"`
+		rec := serveRelative(t, sfs, name, nil, map[string]string{"ETag": custom})
+		assert.Equal(t, custom, rec.Header().Get("ETag"))
+	})
 }

@@ -66,7 +66,7 @@
     {id}
     type="range"
     aria-describedby="{id}-help"
-    class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
+    class="range range-sm"
     min={0}
     max={levels.length - 1}
     step={1}
@@ -75,20 +75,21 @@
     {disabled}
   />
 
-  <!-- Stepped dots showing discrete levels -->
-  <div class="flex justify-between px-[2px] mt-1.5" aria-hidden="true">
+  <!-- Stepped dots under the stops. The thumb centre travels half a thumb (8 px for
+       range-sm) in from each end, so the inset is that minus half a dot (3 px). -->
+  <div class="flex justify-between px-[5px] mt-1.5" aria-hidden="true">
     {#each levels as _, i (i)}
       <div
         class={cn(
           'size-1.5 rounded-full transition-colors',
-          i <= sliderPosition ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-base-300)]'
+          i <= sliderPosition && !disabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--border-200)]'
         )}
       ></div>
     {/each}
   </div>
 
   <div class="mt-1">
-    <span id="{id}-help" class="text-xs text-[var(--color-base-content)] opacity-60">
+    <span id="{id}-help" class="help-text">
       {getDescription(level)}
     </span>
   </div>

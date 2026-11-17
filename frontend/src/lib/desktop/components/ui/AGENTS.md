@@ -11,9 +11,11 @@ prefer composition or a non-breaking extension over a near-duplicate.
 
 - Layout: `Card`, `CollapsibleCard`, `CollapsibleSection`
 - Forms: `Input`, `Select`, `DatePicker`, `RadioCardGroup` (settings controls live in `../forms/`)
-- Feedback: `Badge`, `ProgressBar`, `LoadingSpinner`, `ErrorAlert`, `EmptyState`
+- Feedback: `Badge`, `ProgressBar` (task progress), `Meter` (measurements),
+  `LoadingSpinner`, `Skeleton` and `SkeletonStatus` (loading skeletons), `ErrorAlert`,
+  `EmptyState`
 - Navigation and overlays: `Modal`, `Pagination`, `ActionMenu`
-- Data display: `ProcessTable`, `SystemInfoCard`
+- Data display: `StatusPill`
 - Media and status: `AudioLevelIndicator`, `ThemeToggle`, `TimeOfDayIcon`
 - Advanced: `MultiStageOperation`, `NotificationBell`, `SearchBox`
 
@@ -28,7 +30,8 @@ import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 - A `className` prop merged with `cn()` from `$lib/utils/cn`, plus `...rest`
   spread onto the root element for HTML attributes
 - A `children` snippet where the component wraps content
-- Tailwind utility classes only; accessibility attributes built in
+- Tailwind utility classes; component CSS only for what utilities cannot express (`Meter`:
+  hatching, segment gaps, forced-colors); accessibility attributes built in
 
 ## Adding a New Primitive
 

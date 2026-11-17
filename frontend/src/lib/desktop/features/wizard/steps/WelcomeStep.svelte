@@ -38,14 +38,14 @@
       href="https://github.com/birdnet-team/BirdNET-Analyzer"
       target="_blank"
       rel="noopener noreferrer"
-      class="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline"
+      class="inline-flex items-center gap-1 text-sm text-[var(--text-primary)] underline hover:decoration-2"
     >
       {t('wizard.steps.welcome.learnMore')}
       <span aria-hidden="true">&rarr;</span>
     </a>
   </div>
 
-  <p class="text-sm font-medium text-[var(--color-primary)]">
+  <p class="text-sm font-medium text-[var(--text-primary)]">
     {t('wizard.steps.welcome.cta')}
   </p>
 </div>

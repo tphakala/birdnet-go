@@ -45,6 +45,35 @@ security:
     redirecturi: "https://your.domain.com/auth/github/callback"
 ```
 
+#### Allowed users: prefer user IDs
+
+The allowed users list accepts user IDs and email addresses. Use the user ID the provider issues where you can (for an OIDC provider, the `sub` claim). An email address is not a stable identifier: a provider may let users change their address or reuse it for another account, and OpenID Connect Core 1.0 (section 5.7) advises against using it to identify a user. BirdNET-Go matches the address the provider sends and does not check whether the provider verified it. With Microsoft sign-in this matters most, because the address comes from an account attribute that the administrator of any Microsoft Entra tenant can set, so allow Microsoft users by user ID.
+
+### OIDC identity provider with a private certificate authority
+
+BirdNET-Go checks the certificate of an OIDC identity provider against the system certificate store, like other outgoing TLS connections that have no CA setting of their own. When the provider's certificate is signed by a private certificate authority, the console and `logs/security.log` show an `OIDC discovery failed` line with a certificate error. Each request to the identity provider times out after ten seconds.
+
+- **Docker:** mount the CA certificate (PEM) into the container, for example under `/config`, and set `SSL_CERT_FILE` to its path inside the container (`SSL_CERT_FILE=/config/my-ca.pem`). Public certificate authorities stay trusted, because the system certificate directories are still read. `SSL_CERT_DIR` replaces the directory list instead, so include `/etc/ssl/certs` when you use it. The variables are read once at startup, so restart the container after changing them. A path that does not exist is ignored without an error.
+- **Linux without Docker:** add the CA to the system store (`sudo update-ca-certificates` on Debian, Ubuntu and Raspberry Pi OS), or set `SSL_CERT_FILE` in the service environment.
+- **Windows and macOS:** add the CA to the system certificate store. Do not use the variables there, since they replace the system store.
+
+These settings apply to every outgoing TLS connection of BirdNET-Go that uses the system certificate store, not only to OIDC. A connection with its own CA setting, such as MQTT with a CA certificate configured, uses that certificate instead.
+
+### OIDC sign-out
+
+Signing out of BirdNET-Go also signs the user out at the identity provider when the provider publishes an end-session endpoint in its discovery document. The end-session URL must use HTTPS, except when the configured issuer URL itself uses `http://`, in which case an HTTP end-session URL is accepted.
+
+By default the user stays on the identity provider's page after that sign-out. To send the browser back to BirdNET-Go, enable the post-logout return option of the OIDC provider (`postLogoutRedirect: true` in its `oauthProviders` entry). The return URL is `<base URL>/ui/`, built from the Base URL or Host setting, and it is sent only when the session holds an ID token. Register that exact URL as a post-logout redirect URI at the identity provider first. A provider that does not know the URL may refuse the redirect or show an error page, which is why the option is off by default.
+
+```yaml
+security:
+  oauthProviders:
+    - provider: oidc
+      enabled: true
+      issuerUrl: "https://auth.example.com/application/o/birdnet-go/"
+      postLogoutRedirect: true
+```
+
 ## Authentication Bypass
 
 On a trusted network you can let clients from a given subnet skip authentication entirely.

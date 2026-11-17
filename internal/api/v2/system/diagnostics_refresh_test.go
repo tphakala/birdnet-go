@@ -26,25 +26,12 @@ func (d *refreshingDatastore) RefreshIntegrityCache() bool {
 	return true
 }
 
-// TestRefreshIntegrityCache covers the item-5 opt-in wiring helper: an explicit
-// refresh asks a caching datastore to refresh, while the default path and
-// datastores without the capability (or a nil one) are no-ops.
+// TestRefreshIntegrityCache covers the two inputs the handler test below cannot
+// reach: a datastore without the refresh capability and a nil one are no-ops.
+// The refreshing and non-refreshing paths run through the handler in
+// TestRunDiagnostics_RefreshIntegrity.
 func TestRefreshIntegrityCache(t *testing.T) {
 	t.Parallel()
-
-	t.Run("refresh true refreshes a caching datastore", func(t *testing.T) {
-		t.Parallel()
-		ds := &refreshingDatastore{MockInterface: mocks.NewMockInterface(t)}
-		refreshIntegrityCache(ds, true)
-		assert.Equal(t, 1, ds.refreshes, "an explicit refresh asks the datastore to refresh its integrity cache")
-	})
-
-	t.Run("refresh false leaves the cache alone", func(t *testing.T) {
-		t.Parallel()
-		ds := &refreshingDatastore{MockInterface: mocks.NewMockInterface(t)}
-		refreshIntegrityCache(ds, false)
-		assert.Zero(t, ds.refreshes, "without a refresh the cached result is preserved")
-	})
 
 	t.Run("datastore without refresh support is a no-op", func(t *testing.T) {
 		t.Parallel()

@@ -152,18 +152,28 @@ describe('SystemInference', () => {
     cleanup();
   });
 
-  it('shows a loading indicator while the snapshot request is pending', async () => {
+  it('shows a card skeleton, not a spinner, while the snapshot request is pending', async () => {
     // Never-resolving snapshot request keeps the view in its loading state.
     apiGet.mockImplementation(() => new Promise(() => {}));
 
     const { container } = inferenceTest.render({});
 
-    await waitFor(() => {
-      const status = container.querySelector('[role="status"]');
-      expect(status).not.toBeNull();
-    });
+    const skeleton = container.querySelector<HTMLElement>('[data-testid="inference-skeleton"]');
+    expect(skeleton).not.toBeNull();
+    expect(container.querySelector('.animate-spin')).toBeNull();
+
+    // Exactly one polite status region, and it is the visible label, not screen reader only.
     // The mocked i18n returns the key when no translation is registered.
-    expect(container.textContent).toContain('system.inference.loading');
+    const statuses = skeleton?.querySelectorAll('[role="status"]') ?? [];
+    expect(statuses).toHaveLength(1);
+    const label = statuses[0];
+    expect(label.textContent).toBe('system.inference.loading');
+    expect(label.closest('.sr-only')).toBeNull();
+    expect(label.closest('[aria-hidden="true"]')).toBeNull();
+
+    // The placeholder bars are the shared primitive, which hides them from assistive technology
+    expect(skeleton?.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
+    expect(skeleton?.querySelectorAll('[data-skeleton]:not([aria-hidden="true"])')).toHaveLength(0);
   });
 
   it('renders the empty state when the snapshot has no models', async () => {
@@ -173,6 +183,7 @@ describe('SystemInference', () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain('system.inference.noModels');
+      expect(container.querySelector('[data-testid="inference-skeleton"]')).toBeNull();
     });
     // No model cards: the empty-state message stands alone.
     expect(container.textContent).not.toContain('system.inference.invocations');

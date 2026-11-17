@@ -119,6 +119,22 @@ func shortenOVProbeTimeout(t *testing.T, d time.Duration) {
 	t.Cleanup(func() { ovProbeTimeout = orig })
 }
 
+// TestNewOVProbeCommandArgs pins the probe child invocation. The openvino-tagged
+// classifier test binary serves this exact argv itself (serveOVProbeChildIfRequested
+// in internal/classifier/openvino_probe_child_test.go), so a change here must be
+// made there as well; TestOpenVINOProbeChildHook_ServesProbe in that package fails
+// when the two drift apart.
+func TestNewOVProbeCommandArgs(t *testing.T) {
+	t.Parallel()
+
+	const (
+		exe         = "/path/to/binary"
+		libraryPath = "/opt/openvino/lib/libopenvino_c.so"
+	)
+	cmd := newOVProbeCommand(t.Context(), exe, libraryPath)
+	assert.Equal(t, []string{exe, "support", "openvino-probe", "--library-path", libraryPath}, cmd.Args)
+}
+
 func TestParseOVProbeOutput(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

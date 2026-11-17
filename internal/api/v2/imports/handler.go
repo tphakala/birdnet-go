@@ -19,6 +19,8 @@
 //   - cleanupStatus: the legacy-cleanup state tracker, initialized lazily in
 //     RegisterLegacyCleanupRoutes (the migration status handler reads it
 //     nil-guarded).
+//   - prereqRunnerVal: the per-process migration prerequisites run slot, created
+//     lazily by prereqRunner() so a zero-value Handler works.
 //   - notificationService: the facade-injected notification service (nil-guarded,
 //     falling back to the process-global singleton), used by the migration and
 //     legacy-cleanup completion notifications.
@@ -34,6 +36,8 @@ import (
 	"os"
 	"os/user"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
@@ -110,10 +114,20 @@ type Handler struct {
 	// connection; tests inject a fixed report.
 	charsetReportFn func(ctx context.Context) (dbserver.CharsetReport, error)
 
+	// startPreflightLimit bounds the checks a migration start re-runs. Zero means
+	// startPreflightTimeout; tests set a tiny value to reach the timeout branch.
+	startPreflightLimit time.Duration
+
 	// cleanupStatus tracks the state of legacy database cleanup. It is initialized
 	// lazily in RegisterLegacyCleanupRoutes; the migration status handler reads it
 	// nil-guarded.
 	cleanupStatus *CleanupStatus
+
+	// prereqRunnerOnce guards the lazy creation of prereqRunnerVal.
+	prereqRunnerOnce sync.Once
+	// prereqRunnerVal is the single background prerequisites run slot of this
+	// handler; use prereqRunner().
+	prereqRunnerVal *prereqRunner
 
 	// notificationService is the notification service injected from the facade. It
 	// is nil in production, where getNotificationService() falls back to the
@@ -180,6 +194,16 @@ func (c *Handler) getNotificationService() *notification.Service {
 		return c.notificationService
 	}
 	return notification.GetService()
+}
+
+// prereqRunner returns the prerequisites run slot, creating it on first use. Its
+// run goroutines are tracked by the Core so Controller.Shutdown waits for them,
+// and it logs the start and the outcome of each run.
+func (c *Handler) prereqRunner() *prereqRunner {
+	c.prereqRunnerOnce.Do(func() {
+		c.prereqRunnerVal = &prereqRunner{spawn: c.Go, onStart: c.logPrerequisitesStart, onEnd: c.logPrerequisitesEnd}
+	})
+	return c.prereqRunnerVal
 }
 
 // Shutdown stops the background singletons this domain owns. It stops the backup

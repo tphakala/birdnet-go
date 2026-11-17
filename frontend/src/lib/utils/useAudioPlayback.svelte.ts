@@ -38,6 +38,7 @@ import {
   pendingRetryDelayMs,
   probeAudioSource,
 } from '$lib/utils/audio';
+import { swapSourceKeepingPosition } from '$lib/utils/playbackDenoise';
 import { isSpectrogramSourceKnownMissing } from '$lib/utils/spectrogramStatus';
 import {
   getAudioContext,
@@ -58,6 +59,12 @@ const logger = loggers.audio;
 export interface AudioPlaybackOptions {
   /** Initial audio source URL */
   audioUrl: string;
+  /**
+   * URL played instead of audioUrl once the first play starts (the denoised
+   * clip when a playback denoise default is set). audioUrl is still what loads
+   * for metadata, so a row never triggers server processing just by rendering.
+   */
+  playUrl?: string;
   /** Unique detection ID for logging, element IDs and the known-missing check; read once, so it must not change for one instance */
   detectionId: string;
   /** Default gain in dB (default: 0) */
@@ -105,8 +112,8 @@ export interface AudioPlaybackState {
   updateFilter: (freq: number) => void;
   /** Change playback speed */
   setPlaybackSpeed: (speed: number) => void;
-  /** Update the audio source URL (e.g. when detection changes) */
-  setAudioUrl: (url: string) => void;
+  /** Update the audio source URL (e.g. when detection changes) and the URL its first play switches to */
+  setAudioUrl: (url: string, playUrl?: string) => void;
 }
 
 export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackState {
@@ -122,6 +129,13 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
   // --- Reactive state ---
   let audioUrl = $state(options.audioUrl);
+  // The URL the first play switches to ('' for none) and whether that switch has
+  // happened. Plain: the swap is made by hand in togglePlayPause.
+  let playUrl = options.playUrl ?? '';
+  let playSwapped = false;
+  // Set when the play URL failed for a reason a retry cannot fix: the stored clip
+  // plays instead until the row is given another clip.
+  let denoiseFailed = false;
   let audioElement = $state<HTMLAudioElement | null>(null);
   let isPlaying = $state(false);
   let currentTime = $state(0);
@@ -223,6 +237,28 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     }, PLAY_END_DELAY_MS);
   }
 
+  // Whether the element currently loads the play URL.
+  function onPlayUrl(): boolean {
+    return playSwapped && playUrl !== '' && !denoiseFailed;
+  }
+
+  // The clip a (re)load uses: the play URL once the first play switched to it.
+  function currentUrl(): string {
+    return onPlayUrl() ? playUrl : audioUrl;
+  }
+
+  // Switch from the stored clip to the play URL on the first play, keeping the
+  // position. Runs synchronously in the click, before any await, so the play
+  // call that follows keeps its user gesture.
+  function useDenoisedSource() {
+    if (playSwapped || denoiseFailed || !playUrl || !audioElement) return;
+    playSwapped = true;
+    // A retry of the stored clip must not reload or spend the play URL's budget.
+    clearRetryTimer();
+    audioRetryCount = 0;
+    swapSourceKeepingPosition(audioElement, playUrl);
+  }
+
   // A src assignment or load() pauses the element without a 'pause' event, so
   // mirror the pause listener when the flag still says playing.
   function markPlaybackStopped() {
@@ -246,7 +282,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       clearRetryTimer();
       if (audioElement) {
         markPlaybackStopped();
-        audioElement.src = audioUrl;
+        audioElement.src = currentUrl();
         audioElement.load();
       }
     }, delayMs);
@@ -268,16 +304,52 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   function probeFailedLoad() {
     const controller = new AbortController();
     audioProbeController = controller;
-    const probedUrl = audioUrl;
+    const probedUrl = currentUrl();
     void probeAudioSource(probedUrl, controller.signal).then(outcome => {
       // An answer for a clip that is no longer the current source says nothing about it
-      if (controller.signal.aborted || probedUrl !== audioUrl) return;
+      if (controller.signal.aborted || probedUrl !== currentUrl()) return;
       audioProbeController = undefined;
       if (outcome.kind === 'missing') {
         debugLog('Audio probe: clip is gone, not retrying');
         failLoadPermanently();
       } else if (outcome.kind === 'pending') {
         scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      }
+    });
+  }
+
+  // The play URL failed for a reason a retry cannot fix: play the stored clip from
+  // the same position instead, and do not ask for the play URL again.
+  function fallbackToStoredClip() {
+    if (!audioElement) return;
+    logger.warn('Play URL failed, playing the stored clip', { detectionId });
+    const resume = playRequestedAfterRetry || isPlaying;
+    denoiseFailed = true;
+    clearRetryTimer();
+    audioRetryCount = 0;
+    playRequestedAfterRetry = false;
+    markPlaybackStopped();
+    error = null;
+    swapSourceKeepingPosition(audioElement, audioUrl);
+    if (resume) void audioElement.play().catch(handlePlayRejection);
+  }
+
+  // On the first failure of the play URL, ask the server why beside the scheduled
+  // retry: a 503 moves that retry to its Retry-After, a 404 ends it, and anything
+  // else is a failure a retry cannot fix.
+  function probeDenoisedLoad() {
+    const controller = new AbortController();
+    audioProbeController = controller;
+    const probedUrl = currentUrl();
+    void probeAudioSource(probedUrl, controller.signal).then(outcome => {
+      if (controller.signal.aborted || probedUrl !== currentUrl()) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      } else {
+        fallbackToStoredClip();
       }
     });
   }
@@ -294,7 +366,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   // Handle a rejected play(). While a retry timer is pending the retry can
   // still succeed, so only remember the play intent.
   function handlePlayRejection(err: unknown) {
-    if (audioRetryTimer !== undefined) {
+    if (audioRetryTimer !== undefined || audioProbeController !== undefined) {
       playRequestedAfterRetry = true;
       return;
     }
@@ -322,7 +394,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     audioRetryCount = 0;
     playRequestedAfterRetry = false;
     markPlaybackStopped();
-    audioElement.src = audioUrl;
+    audioElement.src = currentUrl();
     audioElement.load();
   }
 
@@ -404,6 +476,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     }
 
     error = null;
+    useDenoisedSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
     // reload it now instead of swallowing the click.
     if (audioElement.error) reloadAfterFailure();
@@ -423,9 +496,25 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     progress = (clamped / duration) * 100;
   }
 
-  function setAudioUrl(url: string) {
-    if (url === audioUrl) return;
-    audioUrl = url;
+  function setAudioUrl(url: string, nextPlayUrl = '') {
+    if (url === audioUrl && nextPlayUrl === playUrl) return;
+    playUrl = nextPlayUrl;
+    playSwapped = false;
+    denoiseFailed = false;
+    if (url !== audioUrl) {
+      audioUrl = url;
+      return;
+    }
+    // Same clip, other play URL: back to the stored clip until the next first play.
+    if (audioElement && audioElement.src !== new URL(audioUrl, window.location.origin).href) {
+      untrack(() => markPlaybackStopped());
+      // The stored clip starts with a fresh retry budget and no stale error.
+      clearRetryTimer();
+      audioRetryCount = 0;
+      playRequestedAfterRetry = false;
+      error = null;
+      audioElement.src = audioUrl;
+    }
   }
 
   // --- Audio URL change effect ---
@@ -538,7 +627,16 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         audioRetryCount++;
         debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
         scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
-        if (isFirstFailure) probeFailedLoad();
+        // The probe runs beside the scheduled retry, so a slow answer never stalls recovery.
+        if (isFirstFailure) {
+          if (onPlayUrl()) probeDenoisedLoad();
+          else probeFailedLoad();
+        }
+        return;
+      }
+
+      if (onPlayUrl()) {
+        fallbackToStoredClip();
         return;
       }
 

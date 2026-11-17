@@ -85,6 +85,53 @@ on the server outside the form (the model gallery installs, reinstalls,
 swaps and removes models) calls `settingsActions.refreshKeepingEdits()`
 afterwards, so the form shows the server values without losing unsaved edits.
 
+## Immediate Save
+
+A tab marked `saveMode: 'immediate'` in `SettingsTabs` saves each change as it
+is made, so it has no save bar. The page shows a one line note and the state of
+the saves in its place. Every other tab keeps the bar. Use it for settings that
+take effect without a restart; the rest keep an explicit Apply.
+
+What saves when:
+
+| Class      | Controls                                                                   | Behaviour                                                                                         |
+| ---------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Discrete   | toggles, selects, add, delete                                              | Save on change, no delay. Edits made while a request runs are coalesced into the next one.        |
+| Continuous | sliders, number steppers, time inputs                                      | Stage on every input, save after `AUTOSAVE_DEBOUNCE_MS` of quiet.                                 |
+| Text       | names, paths                                                               | Local draft, commit on blur or Enter, Escape restores; validation blocks the commit and says why. |
+| Restarting | device, sample rate, stream URL, type, transport, media mode, channel mode | Local draft and a scoped Apply shown only while the draft differs, named for its effect.          |
+| Risky      | security, database, listener settings                                      | Scoped Apply per card.                                                                            |
+
+Controls call `commitSetting(section, partial, { field, debounceMs? })` from
+`$lib/stores/settingsAutoSave.svelte`:
+
+- `section` is the lowercase backend section name of `SettingsSectionPayloads`,
+  and the section must be listed in `SECTION_STORE_PATHS`.
+- Send whole arrays and complete nested objects: arrays are whole values on the
+  server, and a partial array would replace the stored one.
+- Use one `field` key per visible control (`audio:sources:<rowId>:gain`). Put an
+  `AutoSaveStatus` with the same key next to it and point the control's
+  `aria-describedby` at its `id` while an error shows.
+- List rows need a UI row id that is never persisted (`generateId()`), not the
+  array index, so a status and an expanded state follow the row.
+- Pass `debounceMs: AUTOSAVE_DEBOUNCE_MS` for a continuous control. A commit
+  without a delay saves at once and carries any debounced value with it.
+- A migrated tab passes neither `hasChanges` nor `originalData` and
+  `currentData` to its `SettingsSection`: it has no unsaved state to show.
+- Give the tab definition an `autoSaveScope`: a field key prefix that every key
+  of its controls starts with and no other tab's key does (`audio:sources:` for keys
+  such as `audio:sources:<rowId>:gain`), so the tab's save state counts only its own fields.
+  End the prefix with the separator, since a prefix of `audio:sources:1`
+  also matches `audio:sources:10:gain`. The tab names other tabs of the page with unsaved changes;
+  they are saved on their own tab.
+- `AutoSaveStatus` clears its field's error when it unmounts (a row deleted, a
+  tab switched), so a stale error never stays in the tab's count.
+- A refused value goes back to the stored one and the field shows why; a value
+  the server changed elsewhere is replaced by the server value and the field says
+  so. Keep the control controlled, so it follows the store.
+
+Boolean settings use `ToggleField`, not `Checkbox`.
+
 ## Form Controls
 
 Settings controls (in `$lib/desktop/components/forms/`) are used as controlled

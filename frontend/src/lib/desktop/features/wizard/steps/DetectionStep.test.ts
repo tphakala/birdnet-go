@@ -232,7 +232,7 @@ describe('DetectionStep Accessibility', () => {
 
     const badge = screen.getByText('wizard.steps.detection.balancedRecommended');
     expect(badge).toHaveClass('text-[var(--color-base-content)]');
-    expect(badge).not.toHaveClass('text-[var(--color-primary)]');
+    expect(badge).not.toHaveClass('text-[var(--text-primary)]');
   });
 
   it.each([

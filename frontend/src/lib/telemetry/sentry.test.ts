@@ -20,6 +20,14 @@ vi.mock('@sentry/browser', () => ({
 import * as Sentry from '@sentry/browser';
 import { initSentry, captureApiError, captureError } from './sentry';
 
+/** ApiError shapes the connectivity filter must skip (skipped) or keep reporting. */
+const CONNECTIVITY_API_ERROR_CASES = [
+  { status: 0, isNetworkError: true, skipped: true, label: 'client network failure' },
+  { status: 408, isNetworkError: true, skipped: true, label: 'client request timeout' },
+  { status: 408, isNetworkError: false, skipped: false, label: 'server-sent 408' },
+  { status: 0, isNetworkError: false, skipped: false, label: 'unknown error' },
+];
+
 describe('initSentry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -167,6 +175,16 @@ describe('beforeSend privacy filtering', () => {
     const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
+
+  it.each(CONNECTIVITY_API_ERROR_CASES)(
+    'skips connectivity ApiErrors and reports the rest: $label',
+    ({ status, isNetworkError, skipped }) => {
+      const error = Object.assign(new Error('api failure'), { status, isNetworkError });
+      const event: Sentry.ErrorEvent = { type: undefined };
+      const result = beforeSend?.(event, { originalException: error });
+      expect(result === null).toBe(skipped);
+    }
+  );
 
   it('drops Safari Load failed TypeErrors', () => {
     const error = new TypeError('Load failed');
@@ -429,6 +447,15 @@ describe('captureError', () => {
     captureError(error, { category: 'api' });
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
+
+  it.each(CONNECTIVITY_API_ERROR_CASES)(
+    'skips connectivity ApiErrors and reports the rest: $label',
+    ({ status, isNetworkError, skipped }) => {
+      const error = Object.assign(new Error('api failure'), { status, isNetworkError });
+      captureError(error, { category: 'api' });
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(skipped ? 0 : 1);
+    }
+  );
 
   it('captures Error with logger tag', () => {
     const error = new Error('test error');

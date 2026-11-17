@@ -191,6 +191,15 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(getBtn('analytics.hub.tabs.summary').getAttribute('aria-current')).toBeNull();
   });
 
+  it('underlines the version link on hover, since muted text barely changes on hover in the dark theme', () => {
+    sidebarTest.render({ currentRoute: '/ui/dashboard' });
+
+    expect(screen.getByLabelText('navigation.viewOnGithubAriaLabel')).toHaveClass(
+      'text-muted',
+      'hover:underline'
+    );
+  });
+
   it('collapsed mode: headers are sr-only, items keep an accessible name, and no analytics flyout is used', () => {
     sidebar.collapse();
     sidebarTest.render({ currentRoute: '/ui/dashboard' });

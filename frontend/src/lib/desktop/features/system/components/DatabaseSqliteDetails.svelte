@@ -46,8 +46,8 @@
         <span class="text-muted">{t('system.database.dashboard.details.integrity')}</span>
         <span
           class="font-medium {details.integrity_check === 'ok'
-            ? 'text-[var(--color-success)]'
-            : 'text-[var(--color-error)]'}">{details.integrity_check.toUpperCase()}</span
+            ? 'text-[var(--text-success)]'
+            : 'text-[var(--text-error)]'}">{details.integrity_check.toUpperCase()}</span
         >
       </div>
     </div>
@@ -56,7 +56,7 @@
       <div class="flex justify-between flex-1 text-sm">
         <span class="text-muted">{t('system.database.dashboard.details.lastVacuum')}</span>
         <span class="text-xs font-medium"
-          >{details.last_vacuum_at ? formatDateTime(details.last_vacuum_at) : '—'}</span
+          >{details.last_vacuum_at ? formatDateTime(details.last_vacuum_at) : '-'}</span
         >
       </div>
     </div>

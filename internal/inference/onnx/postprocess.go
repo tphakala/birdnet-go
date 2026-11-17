@@ -46,7 +46,15 @@ func softmax(logits []float32) []float32 {
 // BirdNET v2.4 applies sigmoid and Perch v2 applies softmax in post-processing,
 // while BirdNET v3.0 applies its per-class sigmoid in-graph: its "predictions"
 // output is already probabilities in [0,1], so it is passed through unchanged
-// (re-applying sigmoid would double-squash the scores). The returned slice is
+// (re-applying sigmoid would double-squash the scores). The Perch v2 softmax here
+// normalizes over every logit the loaded model has and applies no slice
+// calibration. That is correct for the full model and for cmd/perch-benchmark,
+// which discards the scores (cmd/perch-benchmark/main.go:301,310). The
+// application's Perch scores do not come from this function: classifier.Perch
+// takes raw logits and applies the regional slice calibration itself
+// (perchSoftmaxWithRest in internal/classifier/perch_onnx.go). A caller that
+// needs scores comparable with the full model for a regional slice must not use
+// this activation. The returned slice is
 // always newly allocated and never aliases logits, because the caller destroys
 // the backing ONNX output tensor after post-processing.
 func activationFor(mt ModelType, logits []float32) []float32 {

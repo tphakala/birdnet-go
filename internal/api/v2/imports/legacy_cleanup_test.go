@@ -198,7 +198,7 @@ func (f *sqliteCleanupFixture) handler(t *testing.T) *Handler {
 	t.Helper()
 	c := createLegacyTestHandler(t, echo.New(), createTestSettings(f.legacyPath))
 	c.V2Manager = f.mgr
-	enableV2OnlyMode(t)
+	setV2OnlyMode(t, true)
 	return c
 }
 
@@ -216,9 +216,7 @@ func TestGetLegacyStatus_V2OnlyMode_NoLegacy(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -254,9 +252,7 @@ func TestGetLegacyStatus_V2OnlyMode_WithLegacy(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -292,9 +288,7 @@ func TestGetLegacyStatus_NotV2OnlyMode(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// NOT in v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = false
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -329,9 +323,7 @@ func TestStartLegacyCleanup_NotV2OnlyMode(t *testing.T) {
 	controller := createLegacyTestHandler(t, e, settings)
 
 	// NOT in v2-only mode
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = false
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+	setV2OnlyMode(t, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -440,7 +432,7 @@ func TestStartLegacyCleanup_SQLite_RefusesTargetWithoutNotesTable(t *testing.T) 
 
 	settings := createTestSettings(legacyPath)
 	controller := createLegacyTestHandler(t, e, settings)
-	enableV2OnlyMode(t)
+	setV2OnlyMode(t, true)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -496,14 +488,6 @@ func createMySQLTestSettings() *conf.Settings {
 	settings.Output.MySQL.Enabled = true
 	settings.Output.MySQL.Database = "test_birdnet"
 	return settings
-}
-
-// enableV2OnlyMode switches the package-wide v2-only flag on for one test.
-func enableV2OnlyMode(t *testing.T) {
-	t.Helper()
-	prev := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prev })
 }
 
 // wantLegacyOnly spells out the legacy-only table names so a name dropped from
@@ -579,7 +563,7 @@ func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
 			if tt.mgr != nil {
 				controller.V2Manager = tt.mgr
 			}
-			enableV2OnlyMode(t)
+			setV2OnlyMode(t, true)
 
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody), rec)
@@ -642,7 +626,7 @@ func TestStartLegacyCleanup_MySQL_Refuses(t *testing.T) {
 			if tt.mgr != nil {
 				controller.V2Manager = tt.mgr
 			}
-			enableV2OnlyMode(t)
+			setV2OnlyMode(t, true)
 
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody), rec)
@@ -762,7 +746,7 @@ func TestLegacyCleanup_BackendFollowsOpenedDatabase(t *testing.T) {
 		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy"), 0o600))
 		c := createLegacyTestHandler(t, echo.New(), createTestSettings(legacyPath))
 		c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
-		enableV2OnlyMode(t)
+		setV2OnlyMode(t, true)
 
 		status, post, code := legacyCleanupCall(t, c)
 
@@ -782,7 +766,7 @@ func TestLegacyCleanup_BackendFollowsOpenedDatabase(t *testing.T) {
 		settings.Output.SQLite.Path = legacyPath
 		c := createLegacyTestHandler(t, echo.New(), settings)
 		c.V2Manager = fx.mgr
-		enableV2OnlyMode(t)
+		setV2OnlyMode(t, true)
 
 		status, post, code := legacyCleanupCall(t, c)
 
@@ -846,7 +830,7 @@ func TestLegacyCleanup_SQLiteTargetRefusals(t *testing.T) {
 			} else {
 				c.V2Manager = &fakeV2Manager{path: tt.managerPath(dir)}
 			}
-			enableV2OnlyMode(t)
+			setV2OnlyMode(t, true)
 
 			status, post, code := legacyCleanupCall(t, c)
 
@@ -1112,7 +1096,7 @@ func TestLegacyCleanup_MySQL_RequiresRecordedMigrationOutcome(t *testing.T) {
 			db := newV2StateDB(t, cfg)
 			c := createLegacyTestHandler(t, echo.New(), createMySQLTestSettings())
 			c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_", db: db}
-			enableV2OnlyMode(t)
+			setV2OnlyMode(t, true)
 
 			status, post, code := legacyCleanupCall(t, c)
 

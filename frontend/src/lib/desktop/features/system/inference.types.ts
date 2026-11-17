@@ -308,6 +308,11 @@ export interface AnalysisCadenceModel {
   id: string;
   /** Model display name. */
   name: string;
+  /**
+   * Broad group the model detects ('bird' or 'bat'); absent from a server that predates the
+   * field, and for a model the registry does not know.
+   */
+  taxonGroup?: string;
   /** Model clip length in milliseconds. */
   clipMs: number;
   /** How often a new analysis window is produced, in milliseconds. */

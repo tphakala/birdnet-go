@@ -9,14 +9,14 @@ import (
 )
 
 // TestTablesLoad confirms both embedded snapshots parse, validate, and describe
-// the two expected families.
+// the three expected families.
 func TestTablesLoad(t *testing.T) {
 	t.Parallel()
 	tables, err := Tables()
 	require.NoError(t, err, "embedded snapshots must load")
-	require.Len(t, tables, 2, "two families are embedded")
+	require.Len(t, tables, 3, "three families are embedded")
 
-	for _, repo := range []string{perchRepo, birdnetRepo} {
+	for _, repo := range []string{perchRepo, birdnetRepo, birdnetPlusRepo} {
 		tbl, ok := tables[repo]
 		require.True(t, ok, "table for %s must be embedded", repo)
 		assert.Equal(t, snapshotSchema, tbl.Schema, "schema version")
@@ -26,7 +26,7 @@ func TestTablesLoad(t *testing.T) {
 }
 
 // TestCrossFamilyGeometryIdentity documents the invariant the D8 shared setting
-// relies on today: both families publish identical geometry, tiers, and slug
+// relies on today: every family publishes identical geometry, tiers, and slug
 // sets, differing only in per-tile class counts. The resolver never assumes this
 // (it resolves per family), but a future divergence should be a conscious change
 // that trips this test.
@@ -34,22 +34,28 @@ func TestCrossFamilyGeometryIdentity(t *testing.T) {
 	t.Parallel()
 	perch, ok := TableForRepo(perchRepo)
 	require.True(t, ok)
-	birdnet, ok := TableForRepo(birdnetRepo)
-	require.True(t, ok)
 
-	require.Len(t, birdnet.Regions, len(perch.Regions), "same tile count")
-	for slug, pr := range perch.Regions {
-		br, ok := birdnet.Regions[slug]
-		require.True(t, ok, "slug %s present in both families", slug)
-		assert.Equal(t, pr.Tier, br.Tier, "tier for %s", slug)
-		assert.Equal(t, pr.BBoxes, br.BBoxes, "bboxes for %s", slug)
-		assert.Equal(t, pr.Centroid, br.Centroid, "centroid for %s", slug)
-		// Display fields must match too: the gallery dropdown dedupes a shared
-		// slug by taking one family's Name/Group/GroupDisplay, so a divergence
-		// here would make the dropdown label depend on family order.
-		assert.Equal(t, pr.Name, br.Name, "name for %s", slug)
-		assert.Equal(t, pr.Group, br.Group, "group for %s", slug)
-		assert.Equal(t, pr.GroupDisplay, br.GroupDisplay, "group display for %s", slug)
+	for _, repo := range []string{birdnetRepo, birdnetPlusRepo} {
+		t.Run(repo, func(t *testing.T) {
+			t.Parallel()
+			other, ok := TableForRepo(repo)
+			require.True(t, ok)
+
+			require.Len(t, other.Regions, len(perch.Regions), "same tile count")
+			for slug, pr := range perch.Regions {
+				or, ok := other.Regions[slug]
+				require.True(t, ok, "slug %s present in both families", slug)
+				assert.Equal(t, pr.Tier, or.Tier, "tier for %s", slug)
+				assert.Equal(t, pr.BBoxes, or.BBoxes, "bboxes for %s", slug)
+				assert.Equal(t, pr.Centroid, or.Centroid, "centroid for %s", slug)
+				// Display fields must match too: the gallery dropdown dedupes a shared
+				// slug by taking one family's Name/Group/GroupDisplay, so a divergence
+				// here would make the dropdown label depend on family order.
+				assert.Equal(t, pr.Name, or.Name, "name for %s", slug)
+				assert.Equal(t, pr.Group, or.Group, "group for %s", slug)
+				assert.Equal(t, pr.GroupDisplay, or.GroupDisplay, "group display for %s", slug)
+			}
+		})
 	}
 }
 

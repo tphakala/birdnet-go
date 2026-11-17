@@ -53,6 +53,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Component names used for the warnings recorded below. They become the prefix of
@@ -96,9 +97,11 @@ func (s *Settings) recordValidationWarning(component, format string, args ...any
 
 // normalizeIncompleteFeatures disables or defaults settings that are enabled but
 // not configured enough to have any effect, recording a warning for each. See the
-// file comment for the policy and its one security exception.
+// file comment for the policy and its one security exception. A security.baseUrl
+// that cannot be used is the one thing it warns about and keeps (normalizeBaseURL).
 func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeOAuthProviders()
+	s.normalizeBaseURL()
 	s.normalizeQuietHours()
 	s.normalizeEqualizers()
 	s.normalizeAudioExport()
@@ -110,7 +113,26 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeWebServer()
 	s.normalizeProfiling()
 	s.normalizeModelThresholds()
+	s.normalizeBSGBatStep()
+	s.normalizeAlternateMinConfidence()
+	s.normalizeModelConsensus()
 	s.normalizeUltrasonicFilter()
+}
+
+// normalizeBaseURL warns about a security.baseUrl that is set but not a usable
+// absolute http(s) URL with a host and no credentials. The value is kept: the settings page then shows it for
+// correction, and GetHostnameForCertificates still reads the AutoTLS hostname from
+// it, so clearing it could turn a scheme typo into a startup failure. Every origin
+// producer already treats it as unusable (see OAuthOrigin and GetBaseURL), and the
+// one fatal case, a credentialed OAuth provider that depends on it, stays with
+// validateOAuthRedirects.
+func (s *Settings) normalizeBaseURL() {
+	if !s.Security.hasUnusableBaseURL() {
+		return
+	}
+	s.recordValidationWarning(warnComponentSecurity,
+		"security.baseUrl %q is not an absolute http(s) URL with a host and without credentials, so links and OAuth callbacks cannot be built from it; it is ignored until corrected",
+		privacy.RedactURLUserinfo(s.Security.BaseURL))
 }
 
 // normalizeUltrasonicFilter resets invalid or unwritten ultrasonic STFT settings
@@ -156,7 +178,7 @@ func (s *Settings) normalizeUltrasonicFilter() {
 }
 
 // normalizeModelThresholds resets an out-of-range per-model confidence threshold
-// (bat, perch, birdnetv3) to the documented default on load, recording a warning.
+// (bat, perch, birdnetv3, birdnetplus, bsgbat) to the documented default on load, recording a warning.
 // Unlike a never-written zero, an out-of-range or NaN/Inf threshold changes
 // detection gating, so ValidateSettings rejects it. But ValidateSettings is fatal
 // on Load (storage.go), and refusing to boot over a threshold takes away the web
@@ -177,6 +199,78 @@ func (s *Settings) normalizeModelThresholds() {
 	reset("bat", &s.Bat.Threshold)
 	reset("perch", &s.Perch.Threshold)
 	reset("birdnetv3", &s.BirdNETV3.Threshold)
+	reset("birdnetplus", &s.BirdNETPlus.Threshold)
+	reset("bsgbat", &s.BSGBat.Threshold)
+}
+
+// normalizeBSGBatStep resolves an unset bsgbat.stepframes (0) to the default and
+// repairs an out-of-range value to it with a warning, for the same reason as
+// normalizeModelThresholds: ValidateSettings is fatal on Load, so a bad value
+// must not stop boot. The settings API path does not run this pass and rejects
+// the value instead.
+func (s *Settings) normalizeBSGBatStep() {
+	frames := s.BSGBat.StepFrames
+	switch {
+	case frames == 0:
+		s.BSGBat.StepFrames = DefaultBSGBatStepFrames
+	case !ValidBSGBatStepFrames(frames):
+		s.recordValidationWarning(warnComponentModels,
+			"bsgbat stepframes %d is outside [%d, %d]; using the default %d (set a value in range to use it)",
+			frames, MinBSGBatStepFrames, MaxBSGBatStepFrames, DefaultBSGBatStepFrames)
+		s.BSGBat.StepFrames = DefaultBSGBatStepFrames
+	}
+}
+
+// normalizeAlternateMinConfidence repairs an invalid birdnet.alternateminconfidence
+// on load, recording a warning, for the same reason as normalizeModelThresholds:
+// ValidateSettings is fatal on Load and the value is not editable in the web UI.
+// NaN and Inf revert to the default first (so -Inf does not read as "off"), a
+// finite negative becomes 0 (off, which is what the processor already treats it
+// as), and a value above 1 reverts to the default. The settings API path does not
+// run this pass; it rejects the value via ValidateBirdNETSettings.
+func (s *Settings) normalizeAlternateMinConfidence() {
+	v := &s.BirdNET.AlternateMinConfidence
+	switch {
+	case math.IsNaN(*v) || math.IsInf(*v, 0):
+		s.recordValidationWarning(warnComponentModels,
+			"birdnet alternateminconfidence %v is not a finite number; using the default %.2f", *v, DefaultAlternateMinConfidence)
+		*v = DefaultAlternateMinConfidence
+	case *v < minModelThreshold:
+		s.recordValidationWarning(warnComponentModels,
+			"birdnet alternateminconfidence %v is negative; using 0 (store every alternate)", *v)
+		*v = 0
+	case *v > maxModelThreshold:
+		s.recordValidationWarning(warnComponentModels,
+			"birdnet alternateminconfidence %v is above %.0f; using the default %.2f", *v, maxModelThreshold, DefaultAlternateMinConfidence)
+		*v = DefaultAlternateMinConfidence
+	}
+}
+
+// normalizeModelConsensus resets an unset or out-of-range
+// realtime.modelconsensus.minmodels to the default on load, recording a warning,
+// for the same reason as normalizeAlternateMinConfidence: ValidateSettings is
+// fatal on Load and the value is not editable in the web UI. It runs whether or not
+// the filter is on, because viper drops the nested default when the parent key is
+// present, and a later enable through the API must not fail on a field the operator
+// never saw. A zero value is unwritten, so it only warns when the filter is on. The
+// settings API path does not run this pass; it rejects the value via
+// validateModelConsensusSettings.
+func (s *Settings) normalizeModelConsensus() {
+	m := &s.Realtime.ModelConsensus
+	if m.MinModels == 0 {
+		if m.Enabled() {
+			s.recordValidationWarning(warnComponentRealtime,
+				"model consensus minmodels is not set; using the default %d", DefaultModelConsensusMinModels)
+		}
+		m.MinModels = DefaultModelConsensusMinModels
+		return
+	}
+	if !validModelConsensusMinModels(m.MinModels) {
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus minmodels %d is outside %d to %d; using the default %d",
+			m.MinModels, MinModelConsensusMinModels, MaxModelConsensusMinModels, DefaultModelConsensusMinModels)
+		m.MinModels = DefaultModelConsensusMinModels
+	}
 }
 
 // normalizeProfiling zeroes negative pprof sampling rates on load. A negative rate
@@ -214,11 +308,22 @@ func (s *Settings) normalizeProfiling() {
 // A provider that does have credentials is never disabled here, however broken the
 // rest of its configuration: it counts towards IsAuthenticationEnabled, so turning
 // it off would drop authentication from a server the operator meant to protect.
+//
+// That includes an entry whose provider ID is blank or unknown: it is kept as it
+// is and only warned about, because no sign-in can use it yet, while enabled with
+// credentials it still makes authentication required. The PUT and PATCH settings
+// handlers refuse to save such an entry (ValidateOAuthProviderIDs), so the warning
+// is the way to learn that the file needs fixing.
 func (s *Settings) normalizeOAuthProviders() {
 	sec := &s.Security
 
 	for i := range sec.OAuthProviders {
 		p := &sec.OAuthProviders[i]
+		if !IsKnownOAuthProviderID(NormalizeOAuthProviderID(p.Provider)) {
+			s.recordValidationWarning(warnComponentSecurity,
+				"security.oauthProviders[%d] has provider %q, which is not a supported provider (supported: %s); the entry is kept, and while it is enabled with credentials it still requires sign-in although nobody can sign in with it. Remove it or correct provider",
+				i, p.Provider, strings.Join(KnownOAuthProviderIDs(), ", "))
+		}
 		if !p.Enabled {
 			continue
 		}
@@ -250,9 +355,9 @@ func (s *Settings) normalizeOAuthProviders() {
 		name     string
 		provider SocialProvider
 	}{
-		{"security.googleauth", providerGoogle, sec.GoogleAuth},
-		{"security.githubauth", providerGitHub, sec.GithubAuth},
-		{"security.microsoftauth", providerMicrosoft, sec.MicrosoftAuth},
+		{"security.googleauth", OAuthProviderGoogle, sec.GoogleAuth},
+		{"security.githubauth", OAuthProviderGitHub, sec.GithubAuth},
+		{"security.microsoftauth", OAuthProviderMicrosoft, sec.MicrosoftAuth},
 	}
 	for _, l := range legacy {
 		if !l.provider.Enabled {

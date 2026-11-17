@@ -54,6 +54,9 @@ type pkceOIDCProvider struct {
 	*openidConnect.Provider
 }
 
+// A wrapper method set that hides EndSessionURL would silently disable provider sign-out.
+var _ goth.LogoutProvider = (*pkceOIDCProvider)(nil)
+
 // newPKCEOIDCProvider wraps an initialized OIDC provider with PKCE support.
 func newPKCEOIDCProvider(p *openidConnect.Provider) *pkceOIDCProvider {
 	return &pkceOIDCProvider{Provider: p}

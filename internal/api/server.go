@@ -458,6 +458,8 @@ func (s *Server) setupMiddleware() {
 	// Security middleware configuration: start from defaults, override server-specific values
 	securityConfig := mw.DefaultSecurityConfig()
 	securityConfig.AllowedOrigins = s.config.AllowedOrigins
+	// Credentials apply only to a list of literal origins; the default wildcard
+	// list is answered without them.
 	securityConfig.AllowCredentials = true
 	securityConfig.AllowEmbedding = s.config.AllowEmbedding
 
@@ -1046,31 +1048,33 @@ func (s *Server) registerOAuthRoutes() {
 	)
 }
 
-// handleOAuthBegin initiates the OAuth flow with the requested provider.
+// oauthProviderUnavailableMessage is the only text a visitor gets when an
+// enabled provider is not registered. The cause stays in the security log.
+const oauthProviderUnavailableMessage = "Sign-in with this provider is not available right now. The administrator can find the reason in the BirdNET-Go log."
+
+// handleOAuthBegin initiates the OAuth flow with the requested provider, once
+// it is enabled and registered.
 // GET /auth/:provider
 func (s *Server) handleOAuthBegin(c echo.Context) error {
-	provider := c.Param("provider")
+	pathProvider := c.Param("provider")
 	log := s.securityLog().With(
-		logger.String("provider", provider),
+		logger.String("provider", pathProvider),
 		logger.String("ip", c.RealIP()),
 	)
 
 	log.Info("OAuth login begin request")
 
-	// Validate provider is one we support
-	if !s.isValidOAuthProvider(provider) {
+	// Resolve the path name once. The path may differ in case from the goth
+	// name, which gothic and the session compare exactly, so everything below
+	// uses the canonical names.
+	configProvider, provider, ok := s.canonicalOAuthProvider(pathProvider)
+	if !ok {
 		log.Warn("OAuth login rejected: unsupported or unrecognized provider requested")
 		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
 	}
 
-	// Reject providers that are not currently enabled and fully configured before
-	// sending the user on the provider round-trip, so a disabled or half-configured
-	// provider fails fast with a clear security.log entry here instead of an opaque
-	// error after the redirect (issue #3381). The visitor only sees a generic message.
-	configProvider := s.configProviderFor(provider)
-	if settings := s.currentSettings(); settings == nil || configProvider == "" || !settings.IsOAuthProviderEnabled(configProvider) {
-		log.Warn("OAuth login rejected: provider is disabled or not fully configured")
-		return c.String(http.StatusBadRequest, "OAuth provider not available")
+	if handled, err := s.rejectUnusableOAuthProvider(c, log, "OAuth login", configProvider, provider); handled {
+		return err
 	}
 
 	// Add provider to request context for gothic
@@ -1091,16 +1095,56 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	return nil
 }
 
-// handleOAuthCallback handles the OAuth callback from the provider.
+// rejectUnusableOAuthProvider answers the request and reports true when the
+// provider cannot be used right now. Begin and callback share it so the two
+// cannot drift. stage names the step in the log lines.
+func (s *Server) rejectUnusableOAuthProvider(c echo.Context, log logger.Logger, stage, configProvider, provider string) (handled bool, err error) {
+	// Reject a provider that is not currently enabled and fully configured, so a
+	// disabled or half-configured provider fails fast with a clear security.log
+	// entry here instead of an opaque error from gothic (issue #3381). The visitor
+	// only sees a generic message.
+	if settings := s.currentSettings(); settings == nil || !settings.IsOAuthProviderEnabled(configProvider) {
+		log.Warn(stage + " rejected: provider is disabled or not fully configured")
+		return true, c.String(http.StatusBadRequest, "OAuth provider not available")
+	}
+
+	// Reject an enabled provider that goth does not know (OIDC discovery failed
+	// or has not finished) instead of letting gothic answer
+	// with its raw error. The cause is for the security log only; the visitor
+	// gets one fixed sentence.
+	// The registry matches goth names exactly, so look the provider up by its
+	// canonical name.
+	if regErr := security.ProviderRegistrationError(provider); regErr != nil {
+		log.Warn(stage+" rejected: provider is not registered", logger.Error(regErr))
+		return true, c.String(http.StatusServiceUnavailable, oauthProviderUnavailableMessage)
+	}
+	return false, nil
+}
+
+// handleOAuthCallback handles the OAuth callback from the provider. Like the
+// begin step it rejects a provider that is disabled or not registered, and it
+// completes authentication only with the provider named in the path.
 // GET /auth/:provider/callback
 func (s *Server) handleOAuthCallback(c echo.Context) error {
-	provider := c.Param("provider")
+	pathProvider := c.Param("provider")
 	log := s.securityLog().With(
-		logger.String("provider", provider),
+		logger.String("provider", pathProvider),
 		logger.String("ip", c.RealIP()),
 	)
 
 	log.Info("OAuth login callback received")
+
+	// Resolve the path name once so gothic and the session get the canonical
+	// goth name whatever casing the request used.
+	configProvider, provider, ok := s.canonicalOAuthProvider(pathProvider)
+	if !ok {
+		log.Warn("OAuth login callback rejected: unsupported or unrecognized provider requested")
+		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
+	}
+
+	if handled, err := s.rejectUnusableOAuthProvider(c, log, "OAuth login callback", configProvider, provider); handled {
+		return err
+	}
 
 	// Add provider to request context for gothic
 	req := gothic.GetContextWithProvider(c.Request(), provider)
@@ -1185,15 +1229,15 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 }
 
-// isValidOAuthProvider checks if the provider name is a valid goth provider name.
-// Uses the ConfigToGothProvider map to derive valid providers dynamically.
-func (s *Server) isValidOAuthProvider(provider string) bool {
-	for _, gothName := range security.ConfigToGothProvider {
-		if strings.EqualFold(provider, gothName) {
-			return true
-		}
+// canonicalOAuthProvider resolves the provider name from a URL path, matched
+// case-insensitively, to its config provider ID and its canonical goth name.
+// ok is false when the name is not a supported provider.
+func (s *Server) canonicalOAuthProvider(pathName string) (configProvider, gothProvider string, ok bool) {
+	configProvider = s.configProviderFor(pathName)
+	if configProvider == "" {
+		return "", "", false
 	}
-	return false
+	return configProvider, security.ConfigToGothProvider[configProvider], true
 }
 
 // configProviderFor maps a goth provider name back to its config provider ID

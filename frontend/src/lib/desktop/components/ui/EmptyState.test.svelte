@@ -17,7 +17,7 @@
     {#if showCustomIcon}
       <svg
         data-testid="custom-icon"
-        class="h-20 w-20 text-[var(--color-primary)]"
+        class="h-20 w-20 text-[var(--text-primary)]"
         fill="none"
         viewBox="0 0 24 24"
       >

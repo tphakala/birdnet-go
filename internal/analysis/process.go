@@ -348,7 +348,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 			Build()
 	}
 
-	log.Debug("ProcessData inference complete",
+	log.Trace("ProcessData inference complete",
 		logger.String("source", source),
 		logger.String("model_id", modelID),
 		logger.Int("result_count", len(results)),
@@ -391,7 +391,8 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 
 	// Derive the analysis buffer interval from the model's spec and the
 	// effective overlap, so the overrun threshold matches the real cadence
-	// (which follows the effective base overlap; the bat model stays fixed at 50%).
+	// (which follows the effective base overlap; the bat model stays fixed at 50%,
+	// and a spec with StepSamples keeps its own fixed step).
 	// If this window's own work exceeds this interval, the model cannot keep up on
 	// its own. Waiting for the shared inference lock is excluded: that is
 	// contention for the shared lock, which the keep-up monitor judges by lost audio.
@@ -444,6 +445,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		Source:          audioSource,
 		ModelID:         modelID,
 		Audio:           req.Audio,
+		Inference:       timing,
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy
@@ -451,10 +453,6 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	// must not mutate it after the send.
 	select {
 	case classifier.ResultsQueue <- resultsMessage:
-		log.Debug("ProcessData queued results",
-			logger.String("source", source),
-			logger.String("model_id", modelID),
-			logger.Int("result_count", len(results)))
 		if pm != nil {
 			pm.RecordAudioQueueOperation(source, "enqueue", "success")
 		}
@@ -561,7 +559,8 @@ func bufferIntervalFor(bn classifierBackend, modelID string) time.Duration {
 	spec, ok := bn.ModelSpecFor(modelID)
 	if !ok {
 		// Defensive fallback for an unregistered model: assume the BirdNET base
-		// clip. BufferInterval depends only on ClipLength and the overlap.
+		// clip. Without StepSamples, BufferInterval depends only on ClipLength
+		// and the overlap.
 		spec = classifier.ModelSpec{ClipLength: classifier.AnalysisBaseClipLength}
 	}
 	return spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, bn.EffectiveBaseOverlap()))

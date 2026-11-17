@@ -25,7 +25,8 @@ const (
 // Pairs come from the desired configs, not from AddSource successes, so a
 // persistently failing source cannot make the plan differ between planning sites.
 // Each pair's step uses the buffers' own step math, so a fixed-cadence model
-// (bat) keeps its fixed step whatever the base overlap.
+// (bat, or a spec with StepSamples) keeps its fixed step whatever the base
+// overlap.
 func buildCadencePairs(configs []sourceConfigWithModels, loaded map[string]classifier.ModelInfo, defaults []classifier.ModelInfo) []cadence.Pair {
 	var pairs []cadence.Pair
 	for _, scm := range configs {

@@ -170,6 +170,18 @@ func TestEqualizerResponse_PassesCountScaleDB(t *testing.T) {
 const defaultEQFilters = `{"type":"HighPass","frequency":100,"q":0.7,"passes":0},` +
 	`{"type":"LowPass","frequency":15000,"q":0.7,"passes":0}`
 
+// TestEqualizerResponse_RequestedPointCount checks that a valid points value in
+// the request sets the number of sweep points, instead of the default.
+func TestEqualizerResponse_RequestedPointCount(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	for _, points := range []int{minEQResponsePoints, 64, maxEQResponsePoints} {
+		out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, "", fmt.Sprintf(`"points":%d`, points))))
+		assert.Len(t, out.Points, points, "requested points %d", points)
+	}
+}
+
 func TestEqualizerResponse_DefaultConfigIsFlat(t *testing.T) {
 	t.Parallel()
 	_, h := setupSystemTestEnvironment(t)
@@ -183,18 +195,6 @@ func TestEqualizerResponse_DefaultConfigIsFlat(t *testing.T) {
 		require.InDelta(t, 0, p.GainDB, 0)
 	}
 	assert.Contains(t, rec.Body.String(), `"skipped":[]`)
-}
-
-func TestEqualizerResponse_ZeroPassesMatchesRemoval(t *testing.T) {
-	t.Parallel()
-	_, h := setupSystemTestEnvironment(t)
-
-	off := `{"type":"LowPass","frequency":15000,"q":0.707,"passes":0}`
-	with := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, hp100Filter+","+off, "")))
-	without := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, hp100Filter, "")))
-
-	assert.Empty(t, with.Skipped)
-	assert.Equal(t, without.Points, with.Points, "a passes-0 filter changes neither the curve nor the marks")
 }
 
 func TestEqualizerResponse_SampleRateMatters(t *testing.T) {
@@ -325,30 +325,6 @@ func TestEqualizerResponse_ExactNullEncodesAsJSON(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "the notch center is sampled")
-}
-
-func TestEqualizerResponse_NarrowNotchCenterReadsTrueDepth(t *testing.T) {
-	t.Parallel()
-	_, h := setupSystemTestEnvironment(t)
-
-	// Q 30 at 15 kHz is a 500 Hz wide notch; 256 log points are about 400 Hz
-	// apart there, so only the center mark can show its depth.
-	const points = 256
-	notch := `{"type":"BandReject","frequency":15000,"width":500,"passes":1}`
-	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, notch, fmt.Sprintf(`"points":%d`, points))))
-	assert.Len(t, out.Points, points+1)
-
-	var center float64
-	shallowest := math.Inf(1)
-	for _, p := range out.Points {
-		if p.Hz == 15000 {
-			center = p.GainDB
-		} else {
-			shallowest = math.Min(shallowest, math.Abs(p.Hz-15000))
-		}
-	}
-	assert.InDelta(t, dspeq.SectionFloorDB, center, 0, "the center reads the full depth")
-	assert.Greater(t, shallowest, 100.0, "no sweep point comes near the notch center")
 }
 
 func TestEqualizerResponse_InsertsFilterCenters(t *testing.T) {

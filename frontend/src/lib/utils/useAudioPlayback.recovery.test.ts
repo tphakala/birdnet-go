@@ -19,7 +19,7 @@ import {
   exhaustLoadRetries,
   runPlaySequence,
 } from '../../test/playSequences';
-import { AUDIO_RETRY_DELAY_MS, PLAY_END_DELAY_MS } from '$lib/utils/audio';
+import { AUDIO_RETRY_DELAY_MS, MAX_AUDIO_LOAD_RETRIES, PLAY_END_DELAY_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
 import {
   markSpectrogramSourceMissing,
@@ -60,7 +60,7 @@ describe('useAudioPlayback recovery', () => {
     return capturedState;
   }
 
-  async function renderAndWait(options: { onPlayEnd?: () => void } = {}) {
+  async function renderAndWait(options: { onPlayEnd?: () => void; playUrl?: string } = {}) {
     wrapperTest.render({
       options: { audioUrl: '/audio/test.mp3', detectionId: 'test-123', ...options },
       onState: (s: AudioPlaybackState) => {
@@ -440,6 +440,219 @@ describe('useAudioPlayback recovery', () => {
       ctl.completeLoad();
 
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+    });
+  });
+  describe('play URL (playback denoise default)', () => {
+    const STORED_URL = '/audio/test.mp3';
+    const DENOISED_URL = '/audio/test.mp3?denoise=light-medium';
+    const OTHER_DENOISED_URL = '/audio/other.mp3?denoise=light-medium';
+    const SEEK_POSITION_SECONDS = 12;
+
+    function elementPath(): string {
+      const url = new URL(ctl.element.src);
+      return `${url.pathname}${url.search}`;
+    }
+
+    it('loads the stored clip for metadata and switches to the play URL on the first play', async () => {
+      await renderAndWait({ playUrl: DENOISED_URL });
+      expect(elementPath()).toBe(STORED_URL);
+      ctl.completeLoad();
+      ctl.element.currentTime = SEEK_POSITION_SECONDS;
+
+      await toggle();
+
+      expect(elementPath()).toBe(DENOISED_URL);
+      expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
+      expect(ctl.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the stored clip without a play URL', async () => {
+      await renderAndWait();
+      ctl.completeLoad();
+
+      await toggle();
+
+      expect(elementPath()).toBe(STORED_URL);
+    });
+
+    describe('when the play URL fails', () => {
+      const SERVER_ERROR_STATUS = 500;
+      const PENDING_STATUS = 503;
+      const NOT_FOUND_STATUS = 404;
+      let restoreFetch: (() => void) | undefined;
+
+      afterEach(() => {
+        restoreFetch?.();
+        restoreFetch = undefined;
+      });
+
+      it('stays on the play URL and probes it while the server answers 503', async () => {
+        restoreFetch = mockAudioProbe({ status: PENDING_STATUS, headers: { 'Retry-After': '1' } });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+
+        ctl.failLoad();
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(String(probeCalls()[0]?.[0])).toContain('denoise=light-medium');
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(ctl.load).toHaveBeenCalled();
+      });
+
+      it('falls back to the stored clip at the same position and keeps playing', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        ctl.element.currentTime = SEEK_POSITION_SECONDS;
+        await toggle();
+        const playsBefore = ctl.play.mock.calls.length;
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(ctl.element.currentTime).toBe(SEEK_POSITION_SECONDS);
+        expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+        expect(getState().error).toBeNull();
+      });
+
+      it('ends with the load error when the play URL is gone (404)', async () => {
+        restoreFetch = mockAudioProbe({ status: NOT_FOUND_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(getState().error).not.toBeNull();
+      });
+
+      it('stays paused when the play URL fails after the user paused', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        await toggle();
+        expect(getState().isPlaying).toBe(false);
+        const playsBefore = ctl.play.mock.calls.length;
+
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(ctl.play.mock.calls.length).toBe(playsBefore);
+      });
+
+      it('does not switch back to the play URL on later plays', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        ctl.failLoad();
+        await settle();
+        ctl.completeLoad();
+        await settle();
+
+        await toggle();
+        await toggle();
+
+        expect(elementPath()).toBe(STORED_URL);
+      });
+
+      it('gives the play URL a fresh retry budget when the first play lands during a stored clip retry', async () => {
+        restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        // The stored clip fails its metadata load, leaving a retry pending.
+        ctl.failLoad();
+        await settle();
+        await toggle();
+        expect(elementPath()).toBe(DENOISED_URL);
+
+        ctl.failLoad();
+        await settle();
+
+        // The play URL's first failure is probed, so the 500 falls back at once.
+        expect(elementPath()).toBe(STORED_URL);
+      });
+
+      it('retries the play URL on schedule while its probe has not answered, then falls back', async () => {
+        restoreFetch = mockAudioProbe({
+          status: SERVER_ERROR_STATUS,
+          delayMs: AUDIO_RETRY_DELAY_MS * 10,
+        });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        const loadsBefore = ctl.load.mock.calls.length;
+
+        ctl.failLoad();
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+        expect(elementPath()).toBe(DENOISED_URL);
+        expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+
+        // The retry dropped the slow probe; the spent budget still falls back.
+        for (let i = 1; i < MAX_AUDIO_LOAD_RETRIES; i++) {
+          ctl.failLoad();
+          await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+        }
+        ctl.failLoad();
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(getState().error).toBeNull();
+      });
+
+      it('falls back once the retry budget of the play URL is spent', async () => {
+        restoreFetch = mockAudioProbe({ status: PENDING_STATUS });
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+
+        await exhaustLoadRetries(ctl);
+        await settle();
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(getState().error).toBeNull();
+      });
+    });
+
+    it('drops a pending retry of the denoised clip when the row gets another play URL', async () => {
+      // A 503 probe answer leaves a retry timer pending.
+      const restoreFetch = mockAudioProbe({ status: 503, headers: { 'Retry-After': '1' } });
+      try {
+        await renderAndWait({ playUrl: DENOISED_URL });
+        ctl.completeLoad();
+        await toggle();
+        ctl.failLoad();
+        await settle();
+        const loadsBefore = ctl.load.mock.calls.length;
+
+        getState().setAudioUrl(STORED_URL, OTHER_DENOISED_URL);
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+        expect(elementPath()).toBe(STORED_URL);
+        expect(ctl.load.mock.calls.length).toBe(loadsBefore);
+      } finally {
+        restoreFetch();
+      }
+    });
+
+    it('gives a recycled row the new play URL and starts from its stored clip again', async () => {
+      await renderAndWait({ playUrl: DENOISED_URL });
+      ctl.completeLoad();
+      await toggle();
+
+      getState().setAudioUrl(OTHER_AUDIO_URL, OTHER_DENOISED_URL);
+      await settle();
+      expect(elementPath()).toBe(OTHER_AUDIO_URL);
+
+      ctl.completeLoad();
+      await toggle();
+      expect(elementPath()).toBe(OTHER_DENOISED_URL);
     });
   });
 });

@@ -41,8 +41,8 @@ const (
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
 	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
+	MsgSettingsReconfiguringOauthProviders    = "notifications.content.settings.reconfiguringOauthProviders"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
-	MsgSettingsOauthRestart                   = "notifications.content.settings.oauthRestartRequired"
 	MsgSettingsDatabaseRestart                = "notifications.content.settings.databaseRestartRequired"
 	MsgSettingsLoggingRestart                 = "notifications.content.settings.loggingRestartRequired"
 
@@ -138,13 +138,14 @@ const (
 	MsgErrBackupV2NotInit         = "errors.backup.v2NotInitialized"
 
 	// Migration errors
-	MsgErrMigrationNotConfigured = "errors.migration.notConfigured"
-	MsgErrMigrationPreFlight     = "errors.migration.preFlightFailed"
-	MsgErrMigrationInvalidBody   = "errors.migration.invalidBody"
-	MsgErrMigrationRecordCount   = "errors.migration.recordCountFailed"
-	MsgErrMigrationStartFailed   = "errors.migration.startFailed"
-	MsgErrMigrationInitFailed    = "errors.migration.initFailed"
-	MsgErrMigrationResumeFailed  = "errors.migration.resumeFailed"
+	MsgErrMigrationNotConfigured  = "errors.migration.notConfigured"
+	MsgErrMigrationPreFlight      = "errors.migration.preFlightFailed"
+	MsgErrMigrationInvalidBody    = "errors.migration.invalidBody"
+	MsgErrMigrationPrereqNotReady = "errors.migration.prerequisitesNotReady"
+	MsgErrMigrationRecordCount    = "errors.migration.recordCountFailed"
+	MsgErrMigrationStartFailed    = "errors.migration.startFailed"
+	MsgErrMigrationInitFailed     = "errors.migration.initFailed"
+	MsgErrMigrationResumeFailed   = "errors.migration.resumeFailed"
 
 	// Legacy cleanup errors
 	MsgErrCleanupNoLegacyDB      = "errors.cleanup.noLegacyDB"
@@ -251,6 +252,11 @@ const (
 	// host in the model gallery; recommend-only, never swaps a model by itself)
 	MsgModelOptimizeTitle   = "notifications.content.modelOptimize.title"
 	MsgModelOptimizeMessage = "notifications.content.modelOptimize.message"
+
+	// Model superseded notifications (an installed model has a successor in the
+	// model gallery; recommend-only, never swaps a model by itself)
+	MsgModelSupersededTitle   = "notifications.content.modelSuperseded.title"
+	MsgModelSupersededMessage = "notifications.content.modelSuperseded.message"
 
 	// Inference failure notice: a loaded model failed its last analyses in a row.
 	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"

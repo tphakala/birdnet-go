@@ -9,238 +9,187 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// TestGetMQTTTLSCertificate_NoCerts verifies that when no certificates are installed,
-// all fields report as not installed.
-func TestGetMQTTTLSCertificate_NoCerts(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
+const (
+	// mqttTLSCertificatePath is the route of the MQTT TLS certificate endpoints.
+	mqttTLSCertificatePath = "/api/v2/integrations/mqtt/tls/certificate"
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+	// testCertSubject is the subject of the certificates generateTestCertKeyPair
+	// creates.
+	testCertSubject = "CN=BirdNET-Go"
 
-	err := controller.GetMQTTTLSCertificate(ctx)
+	// testCertFileMode is the permission of the certificate files the tests write.
+	testCertFileMode = 0o644
+)
+
+// postTLSUpload sends upload to the certificate upload handler and returns the
+// recorded response.
+func postTLSUpload(t *testing.T, e *echo.Echo, h *Handler, upload MQTTTLSCertificateUpload) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(upload)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
+	req := httptest.NewRequest(http.MethodPost, mqttTLSCertificatePath, strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	require.NoError(t, h.UploadMQTTTLSCertificate(e.NewContext(req, rec)))
+	return rec
+}
 
+// getTLSInfo calls the certificate status handler and decodes its answer.
+func getTLSInfo(t *testing.T, e *echo.Echo, h *Handler) MQTTTLSCertificateInfo {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, mqttTLSCertificatePath, http.NoBody)
+	rec := httptest.NewRecorder()
+	require.NoError(t, h.GetMQTTTLSCertificate(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+	return decodeTLSInfo(t, rec)
+}
+
+// decodeTLSInfo decodes the certificate status carried by rec and checks that
+// both certificate entries are present.
+func decodeTLSInfo(t *testing.T, rec *httptest.ResponseRecorder) MQTTTLSCertificateInfo {
+	t.Helper()
 	var info MQTTTLSCertificateInfo
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
 	require.NotNil(t, info.CA)
 	require.NotNil(t, info.Client)
-	assert.False(t, info.CA.Installed, "CA should not be installed")
-	assert.False(t, info.Client.Installed, "client should not be installed")
-	assert.False(t, info.HasKey, "key should not be present")
+	return info
 }
 
-// TestGetMQTTTLSCertificate_WithManualPaths verifies that manually configured
-// certificate paths in settings are recognized and parsed correctly.
-func TestGetMQTTTLSCertificate_WithManualPaths(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
+// TestGetMQTTTLSCertificate verifies the reported certificate state, both with
+// nothing installed and with a manually configured CA path.
+func TestGetMQTTTLSCertificate(t *testing.T) {
+	tests := []struct {
+		name        string
+		caFromFile  bool
+		wantCA      bool
+		wantSubject string
+	}{
+		{name: "no certificates installed"},
+		{name: "manual CA path", caFromFile: true, wantCA: true, wantSubject: testCertSubject},
+	}
 
-	certPEM, _ := generateTestCertKeyPair(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, _ := setupTLSTestEnvironment(t)
 
-	// Write cert to a temp file outside the managed dir
-	certFile := filepath.Join(t.TempDir(), "ca.crt")
-	require.NoError(t, os.WriteFile(certFile, []byte(certPEM), 0o644))
+			if tt.caFromFile {
+				// Write the certificate outside the managed dir and point settings at it.
+				certPEM, _ := generateTestCertKeyPair(t)
+				certFile := filepath.Join(t.TempDir(), "ca.crt")
+				require.NoError(t, os.WriteFile(certFile, []byte(certPEM), testCertFileMode))
+				controller.Settings.Load().Realtime.MQTT.TLS.CACert = certFile
+			}
 
-	// Point settings to this file
-	controller.Settings.Load().Realtime.MQTT.TLS.CACert = certFile
+			info := getTLSInfo(t, e, controller)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := controller.GetMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var info MQTTTLSCertificateInfo
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
-	require.NotNil(t, info.CA)
-	assert.True(t, info.CA.Installed, "CA should be installed")
-	assert.Equal(t, "CN=BirdNET-Go", info.CA.Subject)
-	assert.False(t, info.Client.Installed, "client should not be installed")
-	assert.False(t, info.HasKey, "key should not be present")
+			assert.Equal(t, tt.wantCA, info.CA.Installed, "CA installed")
+			assert.Equal(t, tt.wantSubject, info.CA.Subject)
+			assert.False(t, info.Client.Installed, "client should not be installed")
+			assert.False(t, info.HasKey, "key should not be present")
+		})
+	}
 }
 
-// TestUploadMQTTTLSCertificate_CAOnly verifies that uploading only a CA certificate
-// sets CA as installed while client cert remains uninstalled.
-func TestUploadMQTTTLSCertificate_CAOnly(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
+// TestUploadMQTTTLSCertificate_Installs verifies which entries each valid
+// upload installs.
+func TestUploadMQTTTLSCertificate_Installs(t *testing.T) {
+	tests := []struct {
+		name       string
+		withCA     bool
+		withClient bool
+		withKey    bool
+	}{
+		{name: "CA only", withCA: true},
+		{name: "client certificate and key", withClient: true, withKey: true},
+		{name: "CA, client certificate and key", withCA: true, withClient: true, withKey: true},
+	}
 
-	certPEM, _ := generateTestCertKeyPair(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, _ := setupTLSTestEnvironment(t)
+			certPEM, keyPEM := generateTestCertKeyPair(t)
 
-	caStr := certPEM
-	body, err := json.Marshal(MQTTTLSCertificateUpload{CACertificate: &caStr})
-	require.NoError(t, err)
+			var upload MQTTTLSCertificateUpload
+			if tt.withCA {
+				upload.CACertificate = &certPEM
+			}
+			if tt.withClient {
+				upload.ClientCertificate = &certPEM
+			}
+			if tt.withKey {
+				upload.ClientKey = &keyPEM
+			}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+			rec := postTLSUpload(t, e, controller, upload)
+			require.Equal(t, http.StatusOK, rec.Code)
 
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var info MQTTTLSCertificateInfo
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
-	require.NotNil(t, info.CA)
-	assert.True(t, info.CA.Installed, "CA should be installed")
-	assert.Equal(t, "CN=BirdNET-Go", info.CA.Subject)
-	assert.InDelta(t, 1, info.CA.DaysUntilExpiry, 1) // 24h cert ± 1 day
-	require.NotNil(t, info.Client)
-	assert.False(t, info.Client.Installed, "client should not be installed")
-	assert.False(t, info.HasKey, "key should not be present")
+			info := decodeTLSInfo(t, rec)
+			assert.Equal(t, tt.withCA, info.CA.Installed, "CA installed")
+			assert.Equal(t, tt.withClient, info.Client.Installed, "client certificate installed")
+			assert.Equal(t, tt.withKey, info.HasKey, "client key present")
+			if tt.withCA {
+				assert.Equal(t, testCertSubject, info.CA.Subject)
+				assert.InDelta(t, 1, info.CA.DaysUntilExpiry, 1) // 24h cert, plus or minus a day
+			}
+			if tt.withClient {
+				assert.Equal(t, testCertSubject, info.Client.Subject)
+			}
+		})
+	}
 }
 
-// TestUploadMQTTTLSCertificate_ClientCertAndKey verifies that uploading a client cert
-// and key pair results in both being installed.
-func TestUploadMQTTTLSCertificate_ClientCertAndKey(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
+// TestUploadMQTTTLSCertificate_Rejects verifies that incomplete or invalid
+// uploads are answered with 400.
+func TestUploadMQTTTLSCertificate_Rejects(t *testing.T) {
+	const invalidPEM = "not-valid-pem-content"
 
-	certPEM, keyPEM := generateTestCertKeyPair(t)
+	tests := []struct {
+		name   string
+		upload func(certPEM, keyPEM string) MQTTTLSCertificateUpload
+	}{
+		{
+			name: "client certificate without key",
+			upload: func(certPEM, _ string) MQTTTLSCertificateUpload {
+				return MQTTTLSCertificateUpload{ClientCertificate: &certPEM}
+			},
+		},
+		{
+			name: "client key without certificate",
+			upload: func(_, keyPEM string) MQTTTLSCertificateUpload {
+				return MQTTTLSCertificateUpload{ClientKey: &keyPEM}
+			},
+		},
+		{
+			name: "invalid PEM",
+			upload: func(_, _ string) MQTTTLSCertificateUpload {
+				pem := invalidPEM
+				return MQTTTLSCertificateUpload{CACertificate: &pem}
+			},
+		},
+		{
+			name: "empty request",
+			upload: func(_, _ string) MQTTTLSCertificateUpload {
+				return MQTTTLSCertificateUpload{}
+			},
+		},
+	}
 
-	clientStr := certPEM
-	keyStr := keyPEM
-	body, err := json.Marshal(MQTTTLSCertificateUpload{
-		ClientCertificate: &clientStr,
-		ClientKey:         &keyStr,
-	})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, _ := setupTLSTestEnvironment(t)
+			certPEM, keyPEM := generateTestCertKeyPair(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+			rec := postTLSUpload(t, e, controller, tt.upload(certPEM, keyPEM))
 
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var info MQTTTLSCertificateInfo
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
-	require.NotNil(t, info.CA)
-	assert.False(t, info.CA.Installed, "CA should not be installed")
-	require.NotNil(t, info.Client)
-	assert.True(t, info.Client.Installed, "client cert should be installed")
-	assert.Equal(t, "CN=BirdNET-Go", info.Client.Subject)
-	assert.True(t, info.HasKey, "client key should be present")
-}
-
-// TestUploadMQTTTLSCertificate_AllThree verifies that uploading CA, client cert, and key
-// results in all three being installed.
-func TestUploadMQTTTLSCertificate_AllThree(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
-
-	certPEM, keyPEM := generateTestCertKeyPair(t)
-
-	caStr := certPEM
-	clientStr := certPEM
-	keyStr := keyPEM
-	body, err := json.Marshal(MQTTTLSCertificateUpload{
-		CACertificate:     &caStr,
-		ClientCertificate: &clientStr,
-		ClientKey:         &keyStr,
-	})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var info MQTTTLSCertificateInfo
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
-	require.NotNil(t, info.CA)
-	assert.True(t, info.CA.Installed, "CA should be installed")
-	require.NotNil(t, info.Client)
-	assert.True(t, info.Client.Installed, "client cert should be installed")
-	assert.True(t, info.HasKey, "client key should be present")
-}
-
-// TestUploadMQTTTLSCertificate_CertWithoutKey verifies that providing a client cert
-// without a key returns 400.
-func TestUploadMQTTTLSCertificate_CertWithoutKey(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
-
-	certPEM, _ := generateTestCertKeyPair(t)
-
-	clientStr := certPEM
-	body, err := json.Marshal(MQTTTLSCertificateUpload{ClientCertificate: &clientStr})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-// TestUploadMQTTTLSCertificate_KeyWithoutCert verifies that providing a client key
-// without a cert returns 400.
-func TestUploadMQTTTLSCertificate_KeyWithoutCert(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
-
-	_, keyPEM := generateTestCertKeyPair(t)
-
-	keyStr := keyPEM
-	body, err := json.Marshal(MQTTTLSCertificateUpload{ClientKey: &keyStr})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-// TestUploadMQTTTLSCertificate_InvalidPEM verifies that invalid PEM content
-// is rejected by TLSManager's validation.
-func TestUploadMQTTTLSCertificate_InvalidPEM(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
-
-	invalidPEM := "not-valid-pem-content"
-	body, err := json.Marshal(MQTTTLSCertificateUpload{CACertificate: &invalidPEM})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-// TestUploadMQTTTLSCertificate_EmptyRequest verifies that an empty JSON object
-// (all nil pointer fields) returns 400.
-func TestUploadMQTTTLSCertificate_EmptyRequest(t *testing.T) {
-	e, controller, _ := setupTLSTestEnvironment(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
 }
 
 // TestUploadMQTTTLSCertificate_ClearCA verifies that after uploading all three certs,
@@ -251,44 +200,19 @@ func TestUploadMQTTTLSCertificate_ClearCA(t *testing.T) {
 	certPEM, keyPEM := generateTestCertKeyPair(t)
 
 	// First upload all three
-	caStr := certPEM
-	clientStr := certPEM
-	keyStr := keyPEM
-	allBody, err := json.Marshal(MQTTTLSCertificateUpload{
-		CACertificate:     &caStr,
-		ClientCertificate: &clientStr,
-		ClientKey:         &keyStr,
-	})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(allBody)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err = controller.UploadMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, postTLSUpload(t, e, controller, MQTTTLSCertificateUpload{
+		CACertificate:     &certPEM,
+		ClientCertificate: &certPEM,
+		ClientKey:         &keyPEM,
+	}).Code)
 
 	// Now clear only the CA
 	emptyStr := ""
-	clearBody, err := json.Marshal(MQTTTLSCertificateUpload{CACertificate: &emptyStr})
-	require.NoError(t, err)
+	rec := postTLSUpload(t, e, controller, MQTTTLSCertificateUpload{CACertificate: &emptyStr})
+	require.Equal(t, http.StatusOK, rec.Code)
 
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(clearBody)))
-	req2.Header.Set("Content-Type", "application/json")
-	rec2 := httptest.NewRecorder()
-	ctx2 := e.NewContext(req2, rec2)
-
-	err = controller.UploadMQTTTLSCertificate(ctx2)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec2.Code)
-
-	var info MQTTTLSCertificateInfo
-	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &info))
-	require.NotNil(t, info.CA)
+	info := decodeTLSInfo(t, rec)
 	assert.False(t, info.CA.Installed, "CA should be cleared")
-	require.NotNil(t, info.Client)
 	assert.True(t, info.Client.Installed, "client cert should still be installed")
 	assert.True(t, info.HasKey, "client key should still be present")
 }
@@ -313,12 +237,9 @@ func TestDeleteMQTTTLSCertificate(t *testing.T) {
 	controller.Settings.Load().Realtime.MQTT.TLS.ClientKey = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeKey)
 
 	// DELETE
-	req := httptest.NewRequest(http.MethodDelete, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, mqttTLSCertificatePath, http.NoBody)
 	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err = controller.DeleteMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
+	require.NoError(t, controller.DeleteMQTTTLSCertificate(e.NewContext(req, rec)))
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 
 	// Verify files are gone
@@ -332,16 +253,7 @@ func TestDeleteMQTTTLSCertificate(t *testing.T) {
 	assert.Empty(t, controller.Settings.Load().Realtime.MQTT.TLS.ClientKey)
 
 	// GET should show nothing installed
-	req2 := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
-	rec2 := httptest.NewRecorder()
-	ctx2 := e.NewContext(req2, rec2)
-
-	err = controller.GetMQTTTLSCertificate(ctx2)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec2.Code)
-
-	var info MQTTTLSCertificateInfo
-	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &info))
+	info := getTLSInfo(t, e, controller)
 	assert.False(t, info.CA.Installed, "CA should not be installed after DELETE")
 	assert.False(t, info.Client.Installed, "client should not be installed after DELETE")
 	assert.False(t, info.HasKey, "key should not be present after DELETE")
@@ -356,18 +268,15 @@ func TestDeleteMQTTTLSCertificate_ExternalPaths(t *testing.T) {
 	certPEM, _ := generateTestCertKeyPair(t)
 	externalDir := t.TempDir()
 	certFile := filepath.Join(externalDir, "ca.crt")
-	require.NoError(t, os.WriteFile(certFile, []byte(certPEM), 0o644))
+	require.NoError(t, os.WriteFile(certFile, []byte(certPEM), testCertFileMode))
 
 	// Point settings to this external file
 	controller.Settings.Load().Realtime.MQTT.TLS.CACert = certFile
 
 	// DELETE
-	req := httptest.NewRequest(http.MethodDelete, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, mqttTLSCertificatePath, http.NoBody)
 	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := controller.DeleteMQTTTLSCertificate(ctx)
-	require.NoError(t, err)
+	require.NoError(t, controller.DeleteMQTTTLSCertificate(e.NewContext(req, rec)))
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 
 	// External file must still exist (DELETE only removes managed files)

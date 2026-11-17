@@ -42,6 +42,12 @@
 
   const logger = getLogger('app');
 
+  // The brand is not translated, so it is not an i18n key.
+  const APP_NAME = 'BirdNET-Go';
+  const SETTINGS_TITLE_KEY = 'navigation.settings';
+  const LOGIN_TITLE_KEY = 'auth.loginTitle';
+  const TITLE_SEPARATOR = ' - ';
+
   /**
    * Client-side navigation function.
    * Updates URL via History API. Route handling is triggered reactively
@@ -138,6 +144,31 @@
   let appLoading = $derived(appState.loading);
   let appError = $derived(appState.error);
 
+  // The single writer of document.title: "<Page> - BirdNET-Go". The precedence mirrors the
+  // template: while loading only the app name shows, then the login screen, then an init error
+  // (app name only). A settings section adds Settings after the section and a generic error page
+  // puts its code in front. A title that equals its key has no translation, so it is dropped.
+  let documentTitle = $derived.by(() => {
+    if (appLoading || (!appInitialized && !appError)) return APP_NAME;
+    const showsLogin = requireLogin || loginRouteActive;
+    if (appError && !showsLogin) return APP_NAME;
+    const page = translated(showsLogin ? LOGIN_TITLE_KEY : pageTitleKey);
+    if (!page) return APP_NAME;
+    // The generic error page shows its code, so the tab carries it too.
+    const code = !showsLogin && currentRoute === 'error-generic' ? dynamicErrorCode : null;
+    // A settings section is named after the section only, so the tab says it is part of Settings.
+    const inSettings =
+      !showsLogin && currentRoute === 'settings' && pageTitleKey !== SETTINGS_TITLE_KEY;
+    const parts = [code, page, inSettings ? translated(SETTINGS_TITLE_KEY) : null, APP_NAME];
+    return parts.filter(Boolean).join(TITLE_SEPARATOR);
+  });
+
+  // The translation of a key, or null when it has none (the lookup returns the key itself).
+  function translated(key: string): string | null {
+    const value = t(key);
+    return value && value !== key ? value : null;
+  }
+
   // Route configuration for better maintainability
   interface RouteConfig {
     route: string;
@@ -147,7 +178,7 @@
   }
 
   const routeConfigs: RouteConfig[] = [
-    { route: 'login', page: 'login', titleKey: 'auth.loginTitle', component: '' },
+    { route: 'login', page: 'login', titleKey: LOGIN_TITLE_KEY, component: '' },
     { route: 'dashboard', page: 'dashboard', titleKey: 'navigation.dashboard', component: '' },
     {
       route: 'live-stream',
@@ -243,11 +274,12 @@
       titleKey: 'health.title',
       component: 'system-health',
     },
-    { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
+    { route: 'settings', page: 'settings', titleKey: SETTINGS_TITLE_KEY, component: 'settings' },
   ];
 
   // Settings subpage title keys
   const settingsSubpages: Record<string, string> = {
+    '/analysis': 'settings.sections.analysis',
     '/main': 'settings.sections.node',
     '/userinterface': 'settings.sections.userinterface',
     '/audio': 'settings.sections.audio',
@@ -776,6 +808,10 @@
   });
 </script>
 
+<svelte:head>
+  <title>{documentTitle}</title>
+</svelte:head>
+
 {#snippet renderRoute(component: Component | null)}
   {#if component}
     {@const Component = component}
@@ -790,7 +826,7 @@
       <LoadingSpinner size="lg" />
       <p class="text-[var(--color-base-content)]/70">{t('common.loading')}</p>
       {#if appState.retryCount > 0}
-        <p class="text-sm text-[var(--color-warning)]">
+        <p class="text-sm text-[var(--text-warning)]">
           {t('common.retrying')} ({appState.retryCount}/{MAX_RETRIES})...
         </p>
       {/if}
@@ -815,11 +851,11 @@
   >
     <div class="max-w-lg rounded-lg bg-[var(--color-base-100)] shadow-xl">
       <div class="flex flex-col items-center p-6 text-center">
-        <div class="mb-4 text-6xl text-[var(--color-error)]">500</div>
-        <h2 class="text-xl font-semibold text-[var(--color-error)]">{t('error.server.title')}</h2>
+        <div class="mb-4 text-6xl text-[var(--text-error)]">500</div>
+        <h2 class="text-xl font-semibold text-[var(--text-error)]">{t('error.server.title')}</h2>
         <p class="mt-1 text-[var(--color-base-content)]/70">{t('error.server.description')}</p>
         <div class="mt-4 w-full rounded-lg bg-[var(--color-base-200)] p-4 text-left">
-          <p class="font-mono text-sm text-[var(--color-error)]">{appError}</p>
+          <p class="font-mono text-sm text-[var(--text-error)]">{appError}</p>
         </div>
         <div class="mt-6">
           <Button variant="primary" size="md" onclick={() => window.location.reload()}>

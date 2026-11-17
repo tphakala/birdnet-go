@@ -4,13 +4,34 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
+)
+
+// BirdNET-Pi audio tree directory names.
+const (
+	// birdSongsDirName is the BirdNET-Pi audio output directory. It holds the
+	// "Extracted" clip tree next to the BirdNET-Pi installation.
+	birdSongsDirName = "BirdSongs"
+	// extractedDirName is the directory inside an audio root that holds the
+	// clips, organised as Extracted/By_Date/<date>/<common name>/<file>.
+	extractedDirName = "Extracted"
+	// byDateDirName is the directory that groups the clips by capture date. It
+	// sits inside "Extracted" in a live BirdNET-Pi install and directly in the
+	// audio root in a backup made with BirdNET-Pi's backup tool.
+	byDateDirName = "By_Date"
+	// audioRootSearchLevels is the number of directory levels that are searched
+	// for the audio tree: the database directory plus two parent levels.
+	// BirdNET-Pi keeps its database in ~/BirdNET-Pi/scripts and writes its
+	// clips to ~/BirdSongs, two levels above the database directory.
+	audioRootSearchLevels = 3
 )
 
 // audioDirNames are sibling directory names that indicate a BirdNET-Pi audio
 // tree next to a birds.db.
-var audioDirNames = []string{"BirdSongs", "Extracted"}
+var audioDirNames = []string{birdSongsDirName, extractedDirName, byDateDirName}
 
 // Probe inspects a single birds.db path and returns its candidate metadata. It
 // is the manual-entry counterpart to a Scan hit: the wizard's "validate this
@@ -86,7 +107,12 @@ func probeCandidate(ctx context.Context, dbPath string, kind Kind) SourceCandida
 	return c
 }
 
-// guessAudioDir returns the first sibling audio directory next to dbPath, or "".
+// guessAudioDir returns the first "BirdSongs", "Extracted" or "By_Date"
+// directory in the directory of dbPath, or "". The guess is the audio directory itself and is
+// only looked for beside the database: it becomes the --audio argument of
+// import-stage, which accepts only a sibling of the database. It is not the
+// audio root of an import. ResolveAudioRoot finds that: the directory that
+// holds the by-date clip tree, searched up to audioRootSearchLevels levels.
 func guessAudioDir(dbPath string) string {
 	parent := filepath.Dir(dbPath)
 	for _, name := range audioDirNames {
@@ -96,4 +122,99 @@ func guessAudioDir(dbPath string) string {
 		}
 	}
 	return ""
+}
+
+// ResolveAudioRoot returns the directory that holds the BirdNET-Pi audio tree
+// of the database at dbPath, and whether one was found. The result is the
+// directory that holds the by-date clip tree, because the importer looks a clip
+// up as "Extracted/By_Date/<date>/<common name>/<file>" or, in a backup,
+// "By_Date/<date>/<common name>/<file>" under it.
+//
+// The search covers audioRootSearchLevels levels, nearest first, starting at
+// the database directory. Each level contributes two candidates: its
+// "BirdSongs" child, then the level itself. The first candidate with a
+// non-empty "Extracted/By_Date" or "By_Date" directory wins (see hasAudioTree).
+//
+// bound, when not empty, is the directory the import may read from. A
+// candidate is skipped unless its symlink-resolved path lies inside the
+// symlink-resolved bound, and nothing is found when bound cannot be
+// resolved. An empty bound leaves the search unbounded.
+//
+// dbPath must be absolute; a relative path finds nothing. The result is the
+// candidate path as built, with its symlinks unresolved.
+func ResolveAudioRoot(dbPath, bound string) (string, bool) {
+	if !filepath.IsAbs(dbPath) {
+		return "", false
+	}
+	if bound != "" {
+		resolved, err := filepath.EvalSymlinks(bound)
+		if err != nil {
+			return "", false
+		}
+		bound = resolved
+	}
+	level := filepath.Dir(dbPath)
+	for range audioRootSearchLevels {
+		for _, candidate := range []string{filepath.Join(level, birdSongsDirName), level} {
+			if (bound == "" || resolvesWithin(bound, candidate)) && hasAudioTree(candidate) {
+				return candidate, true
+			}
+		}
+		// At the filesystem root Dir returns the root again, so the remaining
+		// levels repeat the same two candidates.
+		level = filepath.Dir(level)
+	}
+	return "", false
+}
+
+// resolvesWithin reports whether path, after its symlinks are resolved, lies
+// inside resolvedBound (which must already be symlink-resolved). A path that
+// does not exist or cannot be resolved is not inside.
+func resolvesWithin(resolvedBound, path string) bool {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(resolvedBound, resolved)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// hasAudioTree reports whether dir holds a non-empty by-date clip tree, in
+// either supported layout (see imports.AudioTreeLayouts). The lookup goes through an
+// os.Root, as the importer's clip lookups do, so a tree that is only reachable
+// through a symlink leaving dir does not count. One entry is read: an empty
+// skeleton must not win over a populated tree further up, and a large By_Date
+// is never listed. Whether the clips below are readable is left to the import,
+// which counts a clip it cannot read as a miss.
+func hasAudioTree(dir string) bool {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = root.Close() }()
+	for _, layout := range imports.AudioTreeLayouts {
+		if hasEntries(root, layout) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasEntries reports whether the directory at path inside root has at least
+// one entry.
+func hasEntries(root *os.Root, path string) bool {
+	// Opening a FIFO without a writer blocks, so only a directory is opened.
+	if info, err := root.Stat(path); err != nil || !info.IsDir() {
+		return false
+	}
+	dir, err := root.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = dir.Close() }()
+	names, err := dir.Readdirnames(1)
+	return err == nil && len(names) > 0
 }

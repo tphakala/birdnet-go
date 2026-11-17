@@ -290,26 +290,30 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 	}
 }
 
-// TestRegisterRoutesRegistration tests the registration of control-related API endpoints
-func TestRegisterRoutesRegistration(t *testing.T) {
-	// Build a handler whose apicore.Core exposes the /api/v2 group
-	e, h, _ := newControlTestHandler(t)
+// TestRegisterRoutesGatesEveryRoute tests that every control route is registered
+// and sits behind the auth middleware. The gate rejects every request, so no
+// handler runs and no restart is triggered.
+func TestRegisterRoutesGatesEveryRoute(t *testing.T) {
+	t.Parallel()
 
-	// Register the control routes on the shared group
-	h.RegisterRoutes(h.Group)
+	core := apitest.NewCore(t, apitest.WithoutSettingsPublish())
+	h := New(core, make(chan string, testControlChannelBuf))
 
-	// Verify expected control routes are registered
-	apitest.AssertRoutesRegistered(t, e, []string{
+	apitest.AssertRoutesRequireAuth(t, h.Core, h.RegisterRoutes, []string{
 		"GET /api/v2/control/actions",
 		"POST /api/v2/control/restart",
 		"POST /api/v2/control/reload",
 		"POST /api/v2/control/rebuild-filter",
 		"POST /api/v2/control/restart-server",
 		"POST /api/v2/control/restart-container",
+		"POST /api/v2/control/restart-source/:id",
 	})
 }
 
-// TestControlActionsConstants verifies that the action constants are properly defined
+// TestControlActionsConstants pins the action and signal wire strings. The
+// action values are API strings. The reload and rebuild signal values must match
+// the literals internal/analysis/control_monitor.go switches on, and that monitor
+// matches the restart analysis signal through SignalRestartAnalysis.
 func TestControlActionsConstants(t *testing.T) {
 	// Verify action constants have expected values
 	assert.Equal(t, "restart_analysis", ActionRestartAnalysis)
@@ -320,15 +324,6 @@ func TestControlActionsConstants(t *testing.T) {
 	assert.Equal(t, "restart_analysis", SignalRestartAnalysis)
 	assert.Equal(t, "reload_birdnet", SignalReloadModel)
 	assert.Equal(t, "rebuild_range_filter", SignalRebuildFilter)
-
-	// Verify constants relationship
-	// The API should send different signals than the action names in some cases
-	assert.Equal(t, ActionRestartAnalysis, SignalRestartAnalysis,
-		"Restart analysis action should match signal")
-	assert.NotEqual(t, ActionReloadModel, SignalReloadModel,
-		"Reload model action should have a different signal name")
-	assert.NotEqual(t, ActionRebuildFilter, SignalRebuildFilter,
-		"Rebuild filter action should have a different signal name")
 }
 
 // testFlushDelay is the flush delay the restart tests expect. It is a literal

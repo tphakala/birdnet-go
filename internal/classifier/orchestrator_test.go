@@ -152,6 +152,35 @@ func TestOrchestrator_DefaultTargets(t *testing.T) {
 	}
 }
 
+// TestOrchestrator_ModelInfos_Order pins the stable order ModelInfos returns: the
+// BirdNET v2.4 entry first, then registry-ID byte order. The models live in a map,
+// whose iteration order is randomized, so an unsorted implementation fails with
+// near certainty over repeated calls.
+func TestOrchestrator_ModelInfos_Order(t *testing.T) {
+	t.Parallel()
+
+	ids := []string{RegistryIDPerchV2, RegistryIDBSG, RegistryIDBirdNETV3, RegistryIDBirdNETV24, RegistryIDBat}
+	mocks := make([]*mockModelInstance, 0, len(ids))
+	for _, id := range ids {
+		mocks = append(mocks, &mockModelInstance{
+			id:   id,
+			spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		})
+	}
+	o := newTestOrchestrator(t, mocks...)
+
+	want := []string{RegistryIDBirdNETV24, RegistryIDBSG, RegistryIDBat, RegistryIDBirdNETV3, RegistryIDPerchV2}
+	const calls = 20
+	for range calls {
+		infos := o.ModelInfos()
+		got := make([]string, len(infos))
+		for i := range infos {
+			got[i] = infos[i].ID
+		}
+		require.Equal(t, want, got)
+	}
+}
+
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	t.Parallel()
 

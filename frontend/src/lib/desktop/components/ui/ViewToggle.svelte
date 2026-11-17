@@ -7,11 +7,14 @@
   - view: 'table' | 'cards' - Current view mode
   - onViewChange: (view: 'table' | 'cards') => void - View change callback
   - className?: string - Additional CSS classes
+
+  Keyboard: one Tab stop on the checked view, arrow keys move between the views.
 -->
 <script lang="ts">
   import { LayoutList, LayoutGrid } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { radioGroupKeys } from '$lib/utils/radioGroupKeys';
 
   interface Props {
     view: 'table' | 'cards';
@@ -26,12 +29,14 @@
   class={cn('view-toggle', className)}
   role="radiogroup"
   aria-label={t('detections.viewToggle.label')}
+  use:radioGroupKeys
 >
   <button
     type="button"
-    class={cn('view-toggle-btn', view === 'table' && 'view-toggle-btn-active')}
+    class={cn('view-toggle-btn focus-ring-inset', view === 'table' && 'view-toggle-btn-active')}
     role="radio"
     aria-checked={view === 'table'}
+    tabindex={view === 'table' ? 0 : -1}
     aria-label={t('detections.viewToggle.table')}
     onclick={() => onViewChange('table')}
   >
@@ -39,9 +44,10 @@
   </button>
   <button
     type="button"
-    class={cn('view-toggle-btn', view === 'cards' && 'view-toggle-btn-active')}
+    class={cn('view-toggle-btn focus-ring-inset', view === 'cards' && 'view-toggle-btn-active')}
     role="radio"
     aria-checked={view === 'cards'}
+    tabindex={view === 'cards' ? 0 : -1}
     aria-label={t('detections.viewToggle.cards')}
     onclick={() => onViewChange('cards')}
   >
@@ -77,6 +83,21 @@
   .view-toggle-btn-active {
     background-color: var(--color-primary);
     color: var(--color-primary-content);
+  }
+
+  /* Forced colours drop the checked fill: paint it in the system selection pair. Without
+     forced-color-adjust the browser draws a page-coloured plate behind the icon. */
+  @media (forced-colors: active) {
+    .view-toggle-btn-active {
+      forced-color-adjust: none;
+      background-color: Highlight;
+      color: HighlightText;
+    }
+
+    .view-toggle-btn-active:focus-visible {
+      outline-color: HighlightText;
+      box-shadow: none;
+    }
   }
 
   .view-toggle-btn + .view-toggle-btn {

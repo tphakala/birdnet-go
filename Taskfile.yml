@@ -4,7 +4,7 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
-  ONNXRUNTIME_VERSION: '1.25.1'
+  ONNXRUNTIME_VERSION: '1.32.0'
   # golangci-lint version .golangci.yaml is written for; keep in sync with
   # .github/workflows/golangci-lint.yml, .husky/pre-commit and
   # .devcontainer/postCreateCommand.sh;
@@ -200,12 +200,13 @@ tasks:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
   sync-region-snapshots:
-    desc: Refresh the embedded region snapshots, coverage maps, and vendored model manifests from a sibling acoustic-models checkout
+    desc: Refresh the embedded region snapshots, coverage maps, vendored model manifests, and document-only manifests from a sibling acoustic-models checkout
     vars:
       ACOUSTIC_MODELS_DIR: '{{.ACOUSTIC_MODELS_DIR | default "../acoustic-models"}}'
       REGION_DATA_DIR: internal/classifier/region/data
       MAPS_DIR: internal/classifier/region/data/maps
       GEN_MANIFESTS_DIR: internal/classifier/gen/manifests
+      GEN_DOCUMENT_MANIFESTS_DIR: internal/classifier/gen/manifests/documents
     cmds:
       - |
         SRC="{{.ACOUSTIC_MODELS_DIR}}/models/manifests"
@@ -215,7 +216,7 @@ tasks:
           exit 1
         fi
         # Embedded region tables (bbox / tier / countries) read at runtime.
-        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json; do
+        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json BirdNET-Plus-V3.0.regions.json; do
           cp "$SRC/$f" "{{.REGION_DATA_DIR}}/$f"
           echo "synced $f"
         done
@@ -224,11 +225,22 @@ tasks:
         # ./internal/classifier" joins models.json against regions.json, so a
         # stale models.json here silently regenerates the catalog against the old
         # region set (the two inputs disagree on which tiles exist).
-        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json; do
+        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json BirdNET-Plus-V3.0.models.json; do
           cp "$SRC/$f" "{{.GEN_MANIFESTS_DIR}}/$f"
           echo "synced $f"
         done
-        echo "Refreshed region snapshots and model manifests. Next: run"
+        # Document-only manifests: families the catalog lists but does not generate
+        # regional variants for. The generator reads only their repo and
+        # family_meta.documents, so a new gallery entry's licence and policy
+        # documents reach the binary. They stay apart from the manifests above
+        # because the catalog consistency test compares every manifest in that
+        # directory with the catalog's models.
+        mkdir -p "{{.GEN_DOCUMENT_MANIFESTS_DIR}}"
+        for f in BirdNET-Geomodel.models.json BirdNET-v2.4.models.json BattyBirdNET-onnx.models.json BSG-BAT.models.json; do
+          cp "$SRC/$f" "{{.GEN_DOCUMENT_MANIFESTS_DIR}}/$f"
+          echo "synced $f (documents)"
+        done
+        echo "Refreshed region snapshots, model manifests and document manifests. Next: run"
         echo "  go run ./gen -update-labels-checksums   (from internal/classifier; networked)"
         echo "  go generate ./internal/classifier"
         echo "and if tiers changed, update golden_tier_test.go."
@@ -826,7 +838,11 @@ tasks:
           Linux_*) ONNX_LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
           *) echo "⚠️  ONNX Runtime: unsupported platform $(uname -s)_$(uname -m), skipping check";;
         esac
-        if [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1; then
+        onnx_target=""
+        if [ -n "${ONNX_LIB_DIR}" ]; then
+          onnx_target=$(readlink -f "${ONNX_LIB_DIR}"/libonnxruntime.{{if eq .UNAME_S "Darwin"}}dylib{{else}}so{{end}} 2>/dev/null || true)
+        fi
+        if [ -n "${onnx_target}" ] && [ -e "${onnx_target}" ] && printf '%s\n' "${onnx_target}" | grep -qF -- '{{.ONNXRUNTIME_VERSION}}'; then
           echo "✅ ONNX Runtime: {{.ONNXRUNTIME_VERSION}} installed in ${ONNX_LIB_DIR}"
         elif [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.* >/dev/null 2>&1; then
           echo "⚠️  ONNX Runtime: installed in ${ONNX_LIB_DIR} but version {{.ONNXRUNTIME_VERSION}} not found"
@@ -1630,7 +1646,7 @@ tasks:
   download-onnxruntime:
     desc: Download and install ONNX Runtime library for the current platform
     status:
-      - 'ls {{.ONNX_LIB_DIR}}/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1'
+      - 'target=$(readlink -f "{{.ONNX_LIB_DIR}}/{{.ONNX_LIB_NAME}}" 2>/dev/null) && [ -e "$target" ] && printf "%s\n" "$target" | grep -qF -- ''{{.ONNXRUNTIME_VERSION}}'''
     vars:
       ONNX_LIB_DIR:
         sh: |
@@ -1656,6 +1672,16 @@ tasks:
             Darwin) echo "libonnxruntime.dylib";;
             *) echo "unsupported: {{.UNAME_S}}" >&2; exit 1;;
           esac
+      # Files to install: the library link and the versioned file it points to.
+      # The macOS archive holds libonnxruntime.dylib -> libonnxruntime.<ver>.dylib,
+      # so the pattern must match both names; the Linux pattern already does.
+      ONNX_LIB_GLOB:
+        sh: |
+          case "{{.UNAME_S}}" in
+            Linux) echo "libonnxruntime.so*";;
+            Darwin) echo "libonnxruntime.*dylib";;
+            *) echo "unsupported: {{.UNAME_S}}" >&2; exit 1;;
+          esac
     cmds:
       - |
         echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
@@ -1675,11 +1701,14 @@ tasks:
           fi
         fi
 
-        # Install library files
+        # Install library files. -P copies the archive's symlinks as symlinks. A
+        # plain cp writes through an existing libonnxruntime.so -> .so.1 ->
+        # .so.1.<old> chain into the old versioned file, and BirdNET-Go reads the
+        # version from that file name.
         if [ -w "{{.ONNX_LIB_DIR}}" ]; then
-          cp /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
+          cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
         else
-          sudo cp /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
+          sudo cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
         fi
 
         rm -rf /tmp/onnxruntime

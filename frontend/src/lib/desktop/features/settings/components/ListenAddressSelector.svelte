@@ -200,7 +200,7 @@
       <div
         class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-[var(--color-primary)]/10"
       >
-        <SelectedIcon class="h-3 w-3 text-[var(--color-primary)]" />
+        <SelectedIcon class="h-3 w-3 text-[var(--text-primary)]" />
       </div>
       <span class="min-w-0 flex-1 truncate text-[var(--color-base-content)]">
         {host}
@@ -233,7 +233,7 @@
             <div
               class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/10"
             >
-              <Icon class="h-3.5 w-3.5 text-[var(--color-primary)]" />
+              <Icon class="h-3.5 w-3.5 text-[var(--text-primary)]" />
             </div>
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium text-[var(--color-base-content)]">
@@ -246,7 +246,7 @@
               </div>
             </div>
             {#if host === iface.address}
-              <Check class="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-primary)]" />
+              <Check class="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-primary)]" />
             {/if}
           </button>
         {/each}

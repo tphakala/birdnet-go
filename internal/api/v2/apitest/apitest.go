@@ -69,11 +69,19 @@ func NewValidTestSettings() *conf.Settings {
 // the previous snapshot on cleanup so the publish does not leak into sibling
 // tests.
 //
-// IMPORTANT: tests using this helper must NOT call t.Parallel(). It mutates the
+// IMPORTANT: tests using this helper must NOT be parallel. It mutates the
 // process-global settings snapshot, so parallel tests in the same binary would
-// observe each other's settings and flake. Cross-binary isolation is automatic:
-// each api/v2 package compiles to its own test binary (its own OS process), so
-// the global snapshot is never shared across domains.
+// observe each other's settings and flake. A parallel test, or a test with a
+// parallel ancestor, fails with a message naming WithoutSettingsPublish and
+// publishes nothing. Cross-binary isolation is automatic: each api/v2 package
+// compiles to its own test binary (its own OS process), so the global snapshot
+// is never shared across domains.
+//
+// Not caught: t.Parallel() after publishing in the same test (it panics with
+// the standard testing message, which does not name this helper); a serial
+// parent that publishes and then starts a parallel subtest; benchmarks
+// (*testing.B); and code that calls conftest.SetTestSettings or
+// conf.StoreSettings directly.
 //
 // CurrentSettings() prefers the process-global snapshot over a core-cached
 // Settings field, so tests that inject a per-core *conf.Settings must publish it
@@ -81,9 +89,52 @@ func NewValidTestSettings() *conf.Settings {
 // nil-settings fallback path).
 func PublishTestSettings(tb testing.TB, settings *conf.Settings) {
 	tb.Helper()
+	if refuseParallelPublish(tb) {
+		return
+	}
 	prev := conf.GetSettings()
 	conftest.SetTestSettings(settings)
 	tb.Cleanup(func() { conftest.SetTestSettings(prev) })
+}
+
+const (
+	// settingsPublishGuardEnvKey names the variable the publish guard sets. Its
+	// value does not matter: tb.Setenv checks that the test and its ancestors are
+	// not parallel and marks the test so a later t.Parallel() panics. The key sits
+	// outside the BIRDNET_ prefix so it never reads as a configuration variable.
+	settingsPublishGuardEnvKey = "APITEST_SETTINGS_PUBLISHED"
+
+	// settingsPublishGuardEnvValue is the placeholder value the guard stores.
+	settingsPublishGuardEnvValue = "1"
+
+	// parallelPublishFatalFormat is the failure message for a parallel test that
+	// publishes settings. Its one verb receives the recovered testing panic.
+	parallelPublishFatalFormat = "apitest: PublishTestSettings mutates the process-global settings snapshot, " +
+		"so the calling test and its ancestors must not be parallel (%v); " +
+		"build the core with apitest.WithoutSettingsPublish() or remove t.Parallel()"
+)
+
+// refuseParallelPublish fails tb and reports true when tb is parallel or has a
+// parallel ancestor. A real test ends in Fatalf; a recording testing.TB returns,
+// so callers must stop on true before they publish.
+func refuseParallelPublish(tb testing.TB) bool {
+	tb.Helper()
+	conflict := denyParallelPublish(tb)
+	if conflict == nil {
+		return false
+	}
+	tb.Fatalf(parallelPublishFatalFormat, conflict)
+	return true
+}
+
+// denyParallelPublish returns the panic tb.Setenv raised because the test or an
+// ancestor is parallel, or nil when tb may publish. Any other panic also comes
+// back, so its text reaches the failure message.
+func denyParallelPublish(tb testing.TB) (conflict any) {
+	tb.Helper()
+	defer func() { conflict = recover() }()
+	tb.Setenv(settingsPublishGuardEnvKey, settingsPublishGuardEnvValue)
+	return nil
 }
 
 // NewTestMetrics creates a new observability.Metrics instance for testing.

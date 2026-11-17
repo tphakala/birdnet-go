@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"testing"
 
+	gomysql "github.com/go-sql-driver/mysql"
+	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -218,6 +221,20 @@ func TestIsTransientDBError(t *testing.T) {
 		{name: "wrapped database locked", err: fmt.Errorf("tx failed: %w", fmt.Errorf("database is locked")), expected: true},
 		{name: "double wrapped SQLITE_BUSY", err: fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", fmt.Errorf("SQLITE_BUSY"))), expected: true},
 		{name: "wrapped non-transient", err: fmt.Errorf("outer: %w", fmt.Errorf("connection refused")), expected: false},
+		{name: "sqlite3 BUSY code", err: sqlite3.Error{Code: sqlite3.ErrBusy}, expected: true},
+		{name: "sqlite3 LOCKED code", err: sqlite3.Error{Code: sqlite3.ErrLocked}, expected: true},
+		{name: "sqlite3 extended BUSY_SNAPSHOT code", err: sqlite3.Error{Code: sqlite3.ErrNo(sqliteBusySnapshot)}, expected: true},
+		{name: "sqlite3 extended LOCKED_SHAREDCACHE code", err: sqlite3.Error{Code: sqlite3.ErrNo(sqliteLockedSharedCache)}, expected: true},
+		{name: "sqlite3 constraint code", err: sqlite3.Error{Code: sqlite3.ErrConstraint}, expected: false},
+		{name: "mysql 1205 with non-English message", err: &gomysql.MySQLError{Number: mysqlErrLockWaitTimeout, Message: "Aikakatkaisu lukon odotuksessa"}, expected: true},
+		{name: "wrapped mysql 1213 with non-English message", err: fmt.Errorf("save: %w", &gomysql.MySQLError{Number: mysqlErrLockDeadlock, Message: "Umpikuja havaittu"}), expected: true},
+		{name: "mysql duplicate entry", err: &gomysql.MySQLError{Number: 1062, Message: "Duplicate entry"}, expected: false},
+		{name: "mysql 1100 LOCK TABLES message", err: &gomysql.MySQLError{Number: 1100, Message: "Table 'notes' was not locked with LOCK TABLES"}, expected: false},
+		{name: "database table is locked", err: fmt.Errorf("database table is locked: notes"), expected: true},
+		{name: "database schema is locked", err: fmt.Errorf("database schema is locked: main"), expected: true},
+		{name: "SQLITE_LOCKED", err: fmt.Errorf("SQLITE_LOCKED"), expected: true},
+		{name: "domain error that says locked", err: fmt.Errorf("detection is locked"), expected: false},
+		{name: "wrapper text with lock wait timeout", err: fmt.Errorf("read lock wait timeout: access denied"), expected: false},
 	}
 
 	for _, tc := range tests {
@@ -226,6 +243,64 @@ func TestIsTransientDBError(t *testing.T) {
 			assert.Equal(t, tc.expected, IsTransientDBError(tc.err))
 		})
 	}
+}
+
+// errDomainLocked mirrors repository.ErrDetectionLocked, a domain outcome whose
+// text contains the word "locked". Package datastore cannot import
+// v2/repository, which imports datastore.
+var errDomainLocked = errors.NewStd("detection is locked")
+
+func TestRetryHelpers_DomainLockedErrorIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "sentinel", err: errDomainLocked},
+		{name: "wrapped sentinel", err: fmt.Errorf("change species: %w", errDomainLocked)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			calls := 0
+			err := RetryOnLock(t.Context(), "test_domain_locked", func() error {
+				calls++
+				return tc.err
+			}, nil)
+			require.ErrorIs(t, err, errDomainLocked)
+			assert.Equal(t, 1, calls, "RetryOnLock must not retry a domain error")
+
+			db := openRetryTestDB(t)
+			calls = 0
+			err = RetryTransactionOnLock(t.Context(), db, "test_domain_locked_tx", func(_ *gorm.DB) error {
+				calls++
+				return tc.err
+			}, nil)
+			require.ErrorIs(t, err, errDomainLocked)
+			assert.Equal(t, 1, calls, "RetryTransactionOnLock must not retry a domain error")
+		})
+	}
+}
+
+// Extended SQLite result codes (primary code in the low byte), used to check
+// that the classifier masks them down to BUSY and LOCKED.
+const (
+	sqliteBusySnapshot      = 517 // SQLITE_BUSY_SNAPSHOT
+	sqliteLockedSharedCache = 262 // SQLITE_LOCKED_SHAREDCACHE
+)
+
+func TestStateError_EscalatesTypedDeadlockWithoutEnglishText(t *testing.T) {
+	t.Parallel()
+
+	cause := &gomysql.MySQLError{Number: mysqlErrLockDeadlock, Message: "Umpikuja havaittu"}
+	err := stateError(cause, "test_op", "transaction")
+
+	var enhanced *errors.EnhancedError
+	require.ErrorAs(t, err, &enhanced)
+	assert.Equal(t, errors.PriorityHigh, enhanced.GetPriority())
 }
 
 func TestRetryOnLock_RecordsMetricsOnRetry(t *testing.T) {

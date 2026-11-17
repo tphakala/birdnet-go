@@ -22,6 +22,23 @@ import (
 // audioWorkerLimit is the maximum number of concurrent clip-copy goroutines per batch.
 const audioWorkerLimit = 4
 
+// Directory names of a BirdNET-Pi audio tree.
+const (
+	// extractedDirName is the directory that holds the by-date tree in a live install.
+	extractedDirName = "Extracted"
+	// byDateDirName is the directory that groups the clips by capture date.
+	byDateDirName = "By_Date"
+)
+
+// AudioTreeLayouts lists where the by-date clip tree sits inside a BirdNET-Pi audio
+// root: nested in "Extracted" in a live install, directly in the root in a backup
+// made with BirdNET-Pi's backup tool. Clips are looked up as
+// <layout>/<date>/<common name>/<file>, and audio root discovery uses the same list.
+var AudioTreeLayouts = []string{
+	filepath.Join(extractedDirName, byDateDirName),
+	byDateDirName,
+}
+
 // sanitizePathComponent validates that s is a single safe path component.
 // Returns the component and true if safe, or ("", false) if s contains a path separator,
 // is ".", is "..", or is empty. A crafted DB value containing ".." is treated as "not found".
@@ -50,10 +67,25 @@ func isWithinDir(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// findClipInLayouts returns the path of a clip relative to root in the first supported
+// layout that holds it. root.Stat enforces containment within the audio source
+// directory; an escaping path (or escaping symlink) yields an error and is treated as
+// not found.
+func findClipInLayouts(root *os.Root, date, comName, fileName string) (string, bool) {
+	for _, layout := range AudioTreeLayouts {
+		rel := filepath.Join(layout, date, comName, fileName)
+		if _, err := root.Stat(rel); err == nil {
+			return rel, true
+		}
+	}
+	return "", false
+}
+
 // resolveSourceClipRel resolves the path of a source audio clip within the BirdNET-Pi
 // audio tree, relative to root (a sandboxed *os.Root handle on the audio source directory).
 // It tries the exact CommonName first, then a fallback form with spaces replaced by
-// underscores and apostrophes stripped.
+// underscores and apostrophes stripped, each in every layout of AudioTreeLayouts in
+// order, so a clip under Extracted/By_Date wins over the same clip under By_Date.
 // Returns the path relative to root and true if found, or ("", false) if neither form
 // exists or if any DB-derived component contains path traversal sequences.
 //
@@ -79,12 +111,9 @@ func resolveSourceClipRel(root *os.Root, date, comName, fileName string) (string
 		return "", false
 	}
 
-	// Try exact common name first. root.Stat enforces containment within the audio source
-	// directory; an escaping path (or escaping symlink) yields an error and is treated as
-	// not found.
-	exact := filepath.Join("Extracted", "By_Date", safeDate, safeComName, safeFileName)
-	if _, err := root.Stat(exact); err == nil {
-		return exact, true
+	// Try the exact common name first.
+	if rel, found := findClipInLayouts(root, safeDate, safeComName, safeFileName); found {
+		return rel, true
 	}
 
 	// Fallback: replace spaces with underscores, strip apostrophes.
@@ -98,12 +127,7 @@ func resolveSourceClipRel(root *os.Root, date, comName, fileName string) (string
 	if !ok {
 		return "", false
 	}
-	fallbackPath := filepath.Join("Extracted", "By_Date", safeDate, safeFallback, safeFileName)
-	if _, err := root.Stat(fallbackPath); err == nil {
-		return fallbackPath, true
-	}
-
-	return "", false
+	return findClipInLayouts(root, safeDate, safeFallback, safeFileName)
 }
 
 // targetClipRelPath constructs the relative clip path used in the export store,

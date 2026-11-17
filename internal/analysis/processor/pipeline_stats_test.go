@@ -2,9 +2,12 @@ package processor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
@@ -18,9 +21,9 @@ func TestPipelineStats_RecordAndReset(t *testing.T) {
 		return id
 	})
 
-	ps.RecordInference("src-1", "birdnet-v2.4", 10, 2, 0.85, 0.70)
-	ps.RecordInference("src-1", "birdnet-v2.4", 8, 0, 0.55, 0.70)
-	ps.RecordInference("src-1", "perch-v2", 5, 1, 0.42, 0.70)
+	ps.RecordInference("src-1", "birdnet-v2.4", 10, 2, 0.85, 0.70, classifier.PredictTiming{})
+	ps.RecordInference("src-1", "birdnet-v2.4", 8, 0, 0.55, 0.70, classifier.PredictTiming{})
+	ps.RecordInference("src-1", "perch-v2", 5, 1, 0.42, 0.70, classifier.PredictTiming{})
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -50,9 +53,9 @@ func TestPipelineStats_MaxConfidenceTracksHighest(t *testing.T) {
 
 	ps := NewPipelineStats(nil)
 
-	ps.RecordInference("src-1", "model-a", 3, 0, 0.30, 0.50)
-	ps.RecordInference("src-1", "model-a", 3, 0, 0.90, 0.50)
-	ps.RecordInference("src-1", "model-a", 3, 0, 0.60, 0.50)
+	ps.RecordInference("src-1", "model-a", 3, 0, 0.30, 0.50, classifier.PredictTiming{})
+	ps.RecordInference("src-1", "model-a", 3, 0, 0.90, 0.50, classifier.PredictTiming{})
+	ps.RecordInference("src-1", "model-a", 3, 0, 0.60, 0.50, classifier.PredictTiming{})
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -96,6 +99,7 @@ func TestPipelineStats_RecordDaylightDiscard(t *testing.T) {
 		require.Contains(t, out, "pipeline stats", "a discard-only window must still emit a summary")
 		assert.Contains(t, out, "daylight_discards=2")
 		assert.Contains(t, out, "inferences=0")
+		assert.Contains(t, out, "inference_ms_avg=0", "a window with no inferences must report zero timing, not divide by zero")
 	})
 
 	t.Run("window is suppressed after its discards were reported", func(t *testing.T) {
@@ -116,7 +120,7 @@ func TestPipelineStats_InferencesAndDiscards(t *testing.T) {
 	buf := logtest.CaptureBuffer(t)
 	ps := NewPipelineStats(nil)
 
-	ps.RecordInference("src-2", "perch_v2", 5, 1, 0.8, 0.5)
+	ps.RecordInference("src-2", "perch_v2", 5, 1, 0.8, 0.5, classifier.PredictTiming{})
 	ps.RecordDaylightDiscard("src-2", "perch_v2")
 	ps.logAndReset(GetLogger())
 
@@ -124,4 +128,82 @@ func TestPipelineStats_InferencesAndDiscards(t *testing.T) {
 	require.Contains(t, out, "pipeline stats")
 	assert.Contains(t, out, "inferences=1")
 	assert.Contains(t, out, "daylight_discards=1")
+}
+
+// TestPipelineStats_InferenceTimingSummary verifies the min/avg/max inference
+// and lock wait fields of the periodic summary, and that each window starts
+// from scratch. Not parallel: logtest swaps the process-global logger.
+func TestPipelineStats_InferenceTimingSummary(t *testing.T) {
+	type sample struct{ predict, lockWait time.Duration }
+
+	tests := []struct {
+		name    string
+		windows [][]sample
+		want    []string // fields expected in the last window's line
+	}{
+		{
+			name: "min avg max over one window, minimum not first",
+			windows: [][]sample{{
+				{predict: 20 * time.Millisecond, lockWait: 5 * time.Millisecond},
+				{predict: 10 * time.Millisecond, lockWait: 250 * time.Microsecond},
+				{predict: 60 * time.Millisecond, lockWait: time.Millisecond},
+			}},
+			want: []string{
+				"inference_ms_min=10", "inference_ms_avg=30", "inference_ms_max=60",
+				"lock_wait_ms_min=0.25", "lock_wait_ms_avg=2.08", "lock_wait_ms_max=5",
+			},
+		},
+		{
+			name: "second window does not inherit the first window's extremes",
+			windows: [][]sample{
+				{{predict: 5 * time.Millisecond}, {predict: 90 * time.Millisecond}},
+				{{predict: 40 * time.Millisecond}},
+			},
+			want: []string{"inference_ms_min=40", "inference_ms_avg=40", "inference_ms_max=40"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := logtest.CaptureBuffer(t)
+			ps := NewPipelineStats(nil)
+
+			for _, window := range tt.windows {
+				buf.Reset()
+				for _, smp := range window {
+					ps.RecordInference("src-1", "BirdNET_v2.4", 1, 0, 0.5, 0.7,
+						classifier.PredictTiming{Predict: smp.predict, LockWait: smp.lockWait})
+				}
+				ps.logAndReset(GetLogger())
+			}
+
+			out := buf.String()
+			require.Contains(t, out, "pipeline stats")
+			for _, field := range tt.want {
+				assert.Contains(t, out, field)
+			}
+		})
+	}
+}
+
+// TestProcessDetections_RecordsQueuedInferenceTiming verifies the consumer hands
+// the timing carried by a queued result to the pipeline statistics, so the
+// periodic summary does not report zeros.
+func TestProcessDetections_RecordsQueuedInferenceTiming(t *testing.T) {
+	p := mergeTestProcessor(t)
+	p.pipelineStats = NewPipelineStats(nil)
+
+	p.processDetections(classifier.Results{
+		Source:    datastore.AudioSource{ID: mergeTestSource},
+		ModelID:   "BirdNET_v2.4",
+		StartTime: time.Now(),
+		Inference: classifier.PredictTiming{Predict: 40 * time.Millisecond, LockWait: 7 * time.Millisecond},
+	})
+
+	p.pipelineStats.mu.Lock()
+	defer p.pipelineStats.mu.Unlock()
+	s := p.pipelineStats.stats[sourceModelKey{sourceID: mergeTestSource, modelID: "BirdNET_v2.4"}]
+	require.NotNil(t, s)
+	assert.Equal(t, 40*time.Millisecond, s.predict.max)
+	assert.Equal(t, 7*time.Millisecond, s.lockWait.max)
 }

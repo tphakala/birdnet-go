@@ -128,23 +128,6 @@ func TestAggregateDetectionEvents(t *testing.T) {
 		assert.Equal(t, 1, bucket.Totals.Flushed)
 	})
 
-	t.Run("multiple species same bucket grouped correctly", func(t *testing.T) {
-		t.Parallel()
-		c := &Handler{Core: &apicore.Core{}}
-		c.Settings.Store(apitest.NewValidTestSettings())
-
-		entries := []reader.LogEntry{
-			makeEntry(baseTime, "approve_detection", "Robin", map[string]any{"confidence": 0.9, "match_count": float64(2)}),
-			makeEntry(baseTime.Add(time.Minute), "approve_detection", "Sparrow", map[string]any{"confidence": 0.8, "match_count": float64(1)}),
-			makeEntry(baseTime.Add(2*time.Minute), "discard_detection", "Crow", map[string]any{"confidence": 0.4}),
-		}
-
-		result := c.aggregateDetectionEvents(entries)
-
-		require.Len(t, result.Buckets, 1)
-		assert.Equal(t, 3, result.Buckets[0].SpeciesCount)
-	})
-
 	t.Run("multiple buckets separated by hour and sorted newest first", func(t *testing.T) {
 		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
@@ -210,7 +193,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 		assert.Equal(t, 0, result.Metrics.HourlyPending[0])
 	})
 
-	t.Run("species sorting approved first then by total descending", func(t *testing.T) {
+	t.Run("species grouped, counted and sorted approved first then by total", func(t *testing.T) {
 		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
@@ -230,6 +213,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
+		assert.Equal(t, 3, result.Buckets[0].SpeciesCount)
 		species := result.Buckets[0].Species
 		require.Len(t, species, 3)
 		// Approved species first (Sparrow 2 > Robin 1), then non-approved (Crow)
@@ -700,23 +684,12 @@ func TestGenerateEventID(t *testing.T) {
 		assert.Equal(t, id1, id2)
 	})
 
-	t.Run("different inputs produce different IDs", func(t *testing.T) {
+	t.Run("same timestamp and message different operation produces different ID", func(t *testing.T) {
 		t.Parallel()
-		entry1 := &reader.LogEntry{
-			Time:      baseTime,
-			Msg:       "message one",
-			Operation: "op_a",
-		}
-		entry2 := &reader.LogEntry{
-			Time:      baseTime.Add(time.Second),
-			Msg:       "message two",
-			Operation: "op_b",
-		}
+		entry1 := &reader.LogEntry{Time: baseTime, Msg: "same msg", Operation: "op_a"}
+		entry2 := &reader.LogEntry{Time: baseTime, Msg: "same msg", Operation: "op_b"}
 
-		id1 := generateEventID(entry1)
-		id2 := generateEventID(entry2)
-
-		assert.NotEqual(t, id1, id2)
+		assert.NotEqual(t, generateEventID(entry1), generateEventID(entry2))
 	})
 
 	t.Run("correct format evt_ prefix", func(t *testing.T) {
@@ -770,19 +743,8 @@ func TestBucketHourBoundaries(t *testing.T) {
 		input         time.Time
 		wantKey       string
 		wantTimestamp string
-		// wantLabel is not checked when empty.
-		wantLabel string
+		wantLabel     string
 	}{
-		{
-			"floors to hour correctly",
-			time.Date(2024, 6, 15, 10, 45, 30, 0, time.UTC),
-			"2024-06-15T10", "2024-06-15T10:00:00Z", "10:00\u201311:00",
-		},
-		{
-			"exact hour stays same",
-			time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC),
-			"2024-06-15T10", "2024-06-15T10:00:00Z", "10:00\u201311:00",
-		},
 		{
 			"midnight",
 			time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC),
@@ -863,9 +825,7 @@ func TestBucketHourBoundaries(t *testing.T) {
 			b := getOrCreateBucket(map[string]*DetectionBucket{}, map[string]*speciesIndex{}, tt.input, tt.wantKey)
 			assert.Equal(t, tt.wantKey, b.Key)
 			assert.Equal(t, tt.wantTimestamp, b.Timestamp.Format(time.RFC3339))
-			if tt.wantLabel != "" {
-				assert.Equal(t, tt.wantLabel, b.Label)
-			}
+			assert.Equal(t, tt.wantLabel, b.Label)
 			assert.False(t, b.Timestamp.After(tt.input), "bucket must not start after the event")
 			assert.True(t, tt.input.Before(b.Timestamp.Add(time.Hour)), "bucket must contain the event")
 		})

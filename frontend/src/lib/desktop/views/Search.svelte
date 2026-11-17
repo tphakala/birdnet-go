@@ -636,7 +636,7 @@
               </div>
               <!-- Confidence error message -->
               {#if hasConfidenceError}
-                <div class="text-[var(--color-error)] text-sm mt-1" role="alert">
+                <div class="text-[var(--text-error)] text-sm mt-1" role="alert">
                   {t('search.errors.minMaxConfidence')}
                 </div>
               {/if}
@@ -838,7 +838,7 @@
           aria-busy="true"
         >
           <span
-            class="loading loading-spinner loading-lg text-[var(--color-primary)]"
+            class="loading loading-spinner loading-lg text-[var(--text-primary)]"
             aria-hidden="true"
           ></span>
           <p class="text-[var(--color-base-content)] opacity-50 text-center mt-4">
@@ -1542,7 +1542,7 @@
 
   .review-dropdown-item.correct:hover {
     background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .review-dropdown-item.false-positive:hover {

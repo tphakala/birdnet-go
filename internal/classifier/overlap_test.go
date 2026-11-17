@@ -65,6 +65,16 @@ func TestResolveModelOverlap_BatIsFixedHalf(t *testing.T) {
 	assert.Equal(t, 1500*time.Millisecond, ResolveModelOverlap(RegistryIDBat, spec, ConfiguredBaseOverlap(s)))
 }
 
+func TestResolveModelOverlap_FixedStepSpec(t *testing.T) {
+	t.Parallel()
+	spec := sampleWindowSpec()
+	want := spec.ClipLength - 500*time.Millisecond
+	assert.Equal(t, want, ResolveModelOverlap("any_model", spec, 0))
+	assert.Equal(t, want, ResolveModelOverlap("any_model", spec, 2400*time.Millisecond))
+	assert.Equal(t, 500*time.Millisecond, spec.BufferInterval(ResolveModelOverlap("any_model", spec, time.Second)),
+		"diagnostics derive the interval from the resolved overlap")
+}
+
 func TestResolveModelOverlap_BirdNET3sHonorsOverlap(t *testing.T) {
 	t.Parallel()
 	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}

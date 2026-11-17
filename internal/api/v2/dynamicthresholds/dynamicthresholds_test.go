@@ -172,8 +172,8 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 // to 500. The v2only datastore used to return the bare ErrDynamicThresholdNotFound
 // sentinel, so a missing threshold fell through to 500 while the legacy backend
 // returned 404; the datastore fix wraps the sentinel as CategoryNotFound. The first
-// subtest pins the fixed behavior; the second pins the bare-sentinel regression so a
-// future unwrapped return is caught here too.
+// subtest pins the fixed behavior; the second pins the handler's mapping of an
+// unclassified error to 500; the datastore classifying its own miss is a datastore test.
 func TestGetDynamicThreshold_NotFoundStatus(t *testing.T) {
 	const species = "Nonexistent species"
 
@@ -193,9 +193,9 @@ func TestGetDynamicThreshold_NotFoundStatus(t *testing.T) {
 
 	t.Run("BareSentinelMapsTo500", func(t *testing.T) {
 		e, mockDS, handler := newThresholdsTestHandler(t)
-		// The pre-fix v2only behavior: a bare, unclassified sentinel. The handler
-		// cannot tell it is a benign not-found, so it falls through to 500. This is
-		// the #1068 bug, pinned so a future unwrapped return is caught at the handler.
+		// A bare, unclassified sentinel carries no not-found category, so the handler
+		// cannot tell it is a benign miss and answers 500. This pins the handler's
+		// mapping only; that the datastore classifies its own miss is a datastore test.
 		mockDS.EXPECT().GetDynamicThreshold(species).
 			Return(nil, errors.NewStd("dynamic threshold not found"))
 

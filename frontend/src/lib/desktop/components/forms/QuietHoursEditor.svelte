@@ -19,7 +19,7 @@
   import { t } from '$lib/i18n';
   import SelectDropdown from './SelectDropdown.svelte';
   import NumberField from './NumberField.svelte';
-  import Checkbox from './Checkbox.svelte';
+  import ToggleField from './ToggleField.svelte';
   import type { QuietHoursConfig } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
@@ -29,9 +29,11 @@
     disabled?: boolean;
     /** Unique identifier prefix for form element IDs */
     idPrefix?: string;
+    /** Label of the enable switch; defaults to the quiet hours title */
+    enableLabel?: string;
   }
 
-  let { config, onChange, disabled = false, idPrefix = 'qh' }: Props = $props();
+  let { config, onChange, disabled = false, idPrefix = 'qh', enableLabel }: Props = $props();
 
   /** Maximum offset in minutes from a solar event (3 hours) */
   const MAX_SOLAR_OFFSET_MINUTES = 180;
@@ -96,11 +98,11 @@
 
 <div class="space-y-3">
   <!-- Enable Quiet Hours -->
-  <Checkbox
-    checked={safeConfig.enabled}
-    label={t('settings.audio.quietHours.title')}
+  <ToggleField
+    value={safeConfig.enabled}
+    label={enableLabel ?? t('settings.audio.quietHours.title')}
     {disabled}
-    onchange={handleEnabledToggle}
+    onUpdate={handleEnabledToggle}
   />
 
   {#if safeConfig.enabled}

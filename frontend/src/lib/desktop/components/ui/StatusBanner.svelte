@@ -20,10 +20,10 @@
   let { message, type = 'info', class: className = '' }: Props = $props();
 
   const styleMap: Record<StatusType, string> = {
-    success: 'bg-[var(--color-success)]/15 text-[var(--color-success)]',
-    error: 'bg-[var(--color-error)]/15 text-[var(--color-error)]',
-    info: 'bg-[var(--color-info)]/15 text-[var(--color-info)]',
-    warning: 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]',
+    success: 'bg-[var(--color-success)]/15 text-[var(--text-success)]',
+    error: 'bg-[var(--color-error)]/15 text-[var(--text-error)]',
+    info: 'bg-[var(--color-info)]/15 text-[var(--text-info)]',
+    warning: 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]',
   };
 
   // eslint-disable-next-line security/detect-object-injection -- type is typed as StatusType

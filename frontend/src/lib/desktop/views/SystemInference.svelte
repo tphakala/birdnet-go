@@ -31,6 +31,7 @@
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
+  import InferenceSkeleton from '$lib/desktop/features/system/components/InferenceSkeleton.svelte';
   import {
     Brain,
     Binary,
@@ -541,22 +542,9 @@
 
 <div class="space-y-4">
   {#if loading}
-    <div
-      class="flex items-center gap-3 p-4 text-sm text-base-content/70"
-      role="status"
-      aria-live="polite"
-    >
-      <span
-        class="animate-spin motion-reduce:animate-none h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
-        aria-hidden="true"
-      ></span>
-      <span>{t('system.inference.loading')}</span>
-    </div>
+    <InferenceSkeleton />
   {:else if error && !snapshot}
-    <div
-      role="alert"
-      class="p-4 rounded-lg bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-    >
+    <div role="alert" class="p-4 rounded-lg bg-red-100 dark:bg-red-900/30 text-[var(--text-error)]">
       {error}
     </div>
   {:else if snapshot}
@@ -878,16 +866,19 @@
                 <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
                 <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
               {:else if !vad.available}
-                <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                <span class="text-xs text-amber-700 dark:text-amber-400"
+                <TriangleAlert
+                  class="w-3 h-3 shrink-0 text-[var(--text-warning)]"
+                  aria-hidden="true"
+                />
+                <span class="text-xs text-[var(--text-warning)]"
                   >{t('system.inference.vad.unavailable')}</span
                 >
               {:else if vad.loaded}
                 <Activity
-                  class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
+                  class="w-3 h-3 shrink-0 text-[var(--text-success)] animate-pulse motion-reduce:animate-none"
                   aria-hidden="true"
                 />
-                <span class="text-xs text-green-600 dark:text-green-400"
+                <span class="text-xs text-[var(--text-success)]"
                   >{t('system.inference.vad.active')}</span
                 >
               {:else}
@@ -964,13 +955,13 @@
               <table class="w-full text-xs table-fixed">
                 <thead class="text-muted">
                   <tr>
-                    <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
+                    <th scope="col" class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
                       >{t('system.inference.vad.colWhen')}</th
                     >
-                    <th class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
+                    <th scope="col" class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
                       >{t('system.inference.vad.colProbability')}</th
                     >
-                    <th class="text-left font-normal py-0.5"
+                    <th scope="col" class="text-left font-normal py-0.5"
                       >{t('system.inference.vad.colSource')}</th
                     >
                   </tr>
@@ -1068,8 +1059,11 @@
                     role="status"
                     title={t('system.inference.sourcesDegradedTooltip')}
                   >
-                    <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                    <span class="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <TriangleAlert
+                      class="w-3 h-3 shrink-0 text-[var(--text-warning)]"
+                      aria-hidden="true"
+                    />
+                    <span class="text-xs font-medium text-[var(--text-warning)]">
                       {t('system.inference.sourcesDegraded', {
                         count: downCount,
                         total: model.sources.length,
@@ -1089,8 +1083,8 @@
                     title={failingHelp}
                     aria-describedby={`model-failing-help-${model.id}`}
                   >
-                    <CircleX class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
-                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                    <CircleX class="w-3 h-3 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
+                    <span class="text-xs font-medium text-[var(--text-error)]"
                       >{t('system.inference.modelFailing')}</span
                     >
                   </span>
@@ -1103,8 +1097,8 @@
                     aria-label={t('system.inference.activityPaused')}
                     title={t('system.inference.pausedScheduleHelp')}
                   >
-                    <Pause class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                    <span class="text-xs text-amber-700 dark:text-amber-400">
+                    <Pause class="w-3 h-3 shrink-0 text-[var(--text-warning)]" aria-hidden="true" />
+                    <span class="text-xs text-[var(--text-warning)]">
                       {t('system.inference.paused')}{#if model.scheduleLabel}<span
                           class="text-muted">&nbsp;({model.scheduleLabel})</span
                         >{/if}
@@ -1125,8 +1119,11 @@
                     aria-label={t('system.inference.modelNotAnalyzingTooltip')}
                     title={t('system.inference.modelNotAnalyzingTooltip')}
                   >
-                    <TriangleAlert class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
-                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                    <TriangleAlert
+                      class="w-3 h-3 shrink-0 text-[var(--text-error)]"
+                      aria-hidden="true"
+                    />
+                    <span class="text-xs font-medium text-[var(--text-error)]"
                       >{t('system.inference.sourceNotRunning')}</span
                     >
                   </span>
@@ -1143,10 +1140,10 @@
                   >
                     {#if isActive}
                       <Activity
-                        class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
+                        class="w-3 h-3 shrink-0 text-[var(--text-success)] animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
-                      <span class="text-xs text-green-600 dark:text-green-400"
+                      <span class="text-xs text-[var(--text-success)]"
                         >{t('system.inference.active')}</span
                       >
                     {:else}
@@ -1162,7 +1159,7 @@
                      a touch device, so the reason and the next step are spelled out. -->
                 <p
                   id={`model-failing-help-${model.id}`}
-                  class="text-xs text-red-600 dark:text-red-400"
+                  class="text-xs text-[var(--text-error)]"
                   data-testid="model-failing-help"
                 >
                   {failingHelp}
@@ -1299,20 +1296,22 @@
                   <table class="w-full text-xs table-fixed">
                     <thead class="text-muted">
                       <tr>
-                        <th class="text-left font-normal py-0.5 pr-2">
+                        <th scope="col" class="text-left font-normal py-0.5 pr-2">
                           {t('system.inference.species')}
                         </th>
                         <th
+                          scope="col"
                           class="text-left font-normal py-0.5 w-12 whitespace-nowrap"
                           title={t('common.labels.confidence')}
                           aria-label={t('common.labels.confidence')}
                         >
                           {t('system.inference.confidenceColumn')}
                         </th>
-                        <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
+                        <th scope="col" class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
                           {t('system.inference.heardWhen')}
                         </th>
                         <th
+                          scope="col"
                           class="text-left font-normal py-0.5 pl-2 w-20 whitespace-nowrap"
                           title={t('system.inference.coDetectedHelp', {
                             seconds: CO_DETECTION_TOLERANCE_SEC,
@@ -1466,7 +1465,7 @@
                   {#if anySourceDown}
                     <p
                       id={notAnalyzingHelpId}
-                      class="text-xs text-red-600 dark:text-red-400 mt-1.5 leading-snug"
+                      class="text-xs text-[var(--text-error)] mt-1.5 leading-snug"
                     >
                       {t('system.inference.sourceNotRunningTooltip')}
                     </p>

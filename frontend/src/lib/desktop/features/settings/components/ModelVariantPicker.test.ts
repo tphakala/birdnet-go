@@ -233,7 +233,7 @@ describe('ModelVariantPicker', () => {
     // Exactly one reason item renders; a length>1 -> length>=1 regression would
     // render a stray empty second list item. Count the <li> reasons, not the
     // heading, so the assertion tracks the actual reason list.
-    const reasonItems = container.querySelectorAll('[class*="text-primary/90"] li');
+    const reasonItems = container.querySelectorAll('[class*="text-[var(--text-primary)]"] li');
     expect(reasonItems).toHaveLength(1);
     expect(reasonItems[0].textContent).toContain('region.global_fallback');
   });
@@ -261,7 +261,7 @@ describe('ModelVariantPicker', () => {
     // Two reasons must render as two distinct <li> items (not one concatenated
     // line, and not just the first): a "render only reasons[0]" regression drops
     // to one item, and a "join into one li" regression also fails the count.
-    const reasonItems = container.querySelectorAll('[class*="text-primary/90"] li');
+    const reasonItems = container.querySelectorAll('[class*="text-[var(--text-primary)]"] li');
     expect(reasonItems).toHaveLength(2);
     expect(reasonItems[0].textContent).toContain('backend.recommended');
     expect(reasonItems[1].textContent).toContain('region.matched');

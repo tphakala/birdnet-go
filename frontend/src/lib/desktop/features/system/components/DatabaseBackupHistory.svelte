@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
+  import { Download, Clock, Loader2 } from '@lucide/svelte';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
 
   interface BackupJob {
     job_id: string;
@@ -21,9 +24,31 @@
     onCreateBackup: () => void;
     isCreating?: boolean;
     disabled?: boolean;
+    /** Why the backup list could not be loaded; shown with a Retry when onRetryLoad is set. */
+    loadError?: string | null;
+    /** Reloads the backup list from the alert's Retry button. */
+    onRetryLoad?: () => Promise<void>;
+    /** Why the last backup could not be started; dismissible through onDismissCreateError. */
+    createError?: string | null;
+    onDismissCreateError?: () => void;
   }
 
-  let { backups = [], onCreateBackup, isCreating = false, disabled = false }: Props = $props();
+  let {
+    backups = [],
+    onCreateBackup,
+    isCreating = false,
+    disabled = false,
+    loadError = null,
+    onRetryLoad,
+    createError = null,
+    onDismissCreateError,
+  }: Props = $props();
+
+  let createButton = $state<HTMLButtonElement>();
+  let panel = $state<HTMLDivElement>();
+  // An alert that goes away while focused hands focus to Create Backup, or to the panel
+  // while that button is disabled (a backup or a migration is running)
+  const focusPanel = () => [createButton, panel];
 
   let sortColumn = $state<string>('date');
   let sortDirection = $state<'asc' | 'desc'>('desc');
@@ -66,12 +91,26 @@
     });
   });
 
+  // Clear the sort message when the list is empty or failed to load, so a refill does not
+  // announce a sort the user did not just make
+  $effect(() => {
+    if (safeBackups.length === 0 || loadError) sortStatus = '';
+  });
+
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
   function toggleSort(col: string): void {
     if (sortColumn === col) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = col;
       sortDirection = col === 'type' ? 'asc' : 'desc';
+    }
+    const column = columns.find(c => c.key === col);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && safeBackups.length > 0) {
+      sortStatus = sortAnnouncement(t(column.labelKey), sortDirection);
     }
   }
 
@@ -103,7 +142,11 @@
   }
 </script>
 
-<div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+<div
+  bind:this={panel}
+  tabindex="-1"
+  class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+>
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
       <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
@@ -116,6 +159,7 @@
       </span>
     </div>
     <button
+      bind:this={createButton}
       class="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
       style:border-color="var(--border-100)"
       style:color="var(--text-secondary, var(--slate-400))"
@@ -132,46 +176,47 @@
     </button>
   </div>
 
-  {#if safeBackups.length === 0}
+  <p role="status" class="sr-only">{sortStatus}</p>
+
+  {#if createError}
+    <ErrorAlert
+      className="mb-3"
+      title={t('system.database.backup.history.createFailed')}
+      message={createError}
+      focusFallback={focusPanel}
+      dismissible
+      onDismiss={onDismissCreateError}
+    />
+  {/if}
+  {#if loadError}
+    <ErrorAlert
+      className="mb-3"
+      title={t('system.database.backup.history.loadFailed')}
+      message={loadError}
+      onRetry={onRetryLoad}
+      focusFallback={focusPanel}
+    />
+  {/if}
+
+  {#if safeBackups.length === 0 && !loadError}
     <div class="py-8 text-center text-sm text-muted">
       {t('system.database.backup.history.noBackups')}
     </div>
-  {:else}
+  {:else if safeBackups.length > 0}
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
+        <caption class="sr-only">{t('system.database.backup.history.title')}</caption>
         <thead>
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                scope="col"
-                tabindex="0"
-                aria-sort={sortColumn === col.key
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => toggleSort(col.key)}
-                onkeydown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    toggleSort(col.key);
-                  }
-                }}
-              >
-                <div class="flex items-center gap-1">
-                  {t(col.labelKey)}
-                  {#if sortColumn === col.key}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
+              <SortableHeader
+                label={t(col.labelKey)}
+                field={col.key}
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={toggleSort}
+                className="py-2 px-3 text-xs font-medium select-none text-muted"
+              />
             {/each}
             <th scope="col" class="text-right py-2 px-3 text-xs font-medium text-muted">
               {t('system.database.backup.history.columns.actions')}
@@ -213,7 +258,7 @@
                   {#if backup.status === 'completed' && backup.download_url}
                     <a
                       href={backup.download_url}
-                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-info)]"
+                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--text-info)]"
                       download
                     >
                       <Download class="w-3 h-3" />
@@ -221,13 +266,13 @@
                     </a>
                   {:else if backup.status === 'in_progress'}
                     <span
-                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--color-info)]"
+                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--text-info)]"
                     >
                       <Loader2 class="w-3 h-3 animate-spin" />
                       {backup.progress}%
                     </span>
                   {:else if backup.status === 'failed'}
-                    <span class="text-xs text-[var(--color-error)]" title={backup.error ?? ''}>
+                    <span class="text-xs text-[var(--text-error)]" title={backup.error ?? ''}>
                       {t('system.database.backup.history.failed')}
                     </span>
                   {:else}

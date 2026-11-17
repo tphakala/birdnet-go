@@ -381,7 +381,7 @@ func setupMediaTestEnvironment(t *testing.T, opts ...apitest.CoreOption) (*echo.
 	// without a real auth service.
 	core.AuthMiddleware = passthroughMiddleware()
 
-	h := New(core)
+	h := New(core, nil)
 	h.RegisterRoutes(core.Group)
 
 	// The media SecureFS is rooted at the per-test export path apitest.NewCore
@@ -1005,7 +1005,7 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 
 	// Setup test environment - the default mock provider returns images for any species
 	e := echo.New()
-	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 
 	// Replace the mock provider with one that returns ErrImageNotFound for unknown species
 	notFoundProvider := &apitest.TestImageProvider{
@@ -1086,7 +1086,7 @@ func TestSpeciesImageColdMiss_ReturnsPendingNot500(t *testing.T) {
 	t.Attr("component", "media")
 
 	e := echo.New()
-	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 
 	// A provider that never returns lets the assertion prove the handler did not wait
 	// for it: if the fetch were still on the request path, this test would hang.
@@ -1126,7 +1126,7 @@ func TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly(t *testing.T) 
 	t.Attr("component", "media")
 
 	e := echo.New()
-	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 
 	blocked := make(chan struct{})
 	t.Cleanup(func() { close(blocked) })
@@ -1179,7 +1179,7 @@ func TestServeSpeciesImageProxy_NeverRedirects(t *testing.T) {
 	t.Attr("component", "media")
 
 	e := echo.New()
-	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
 			return imageprovider.BirdImage{
@@ -1221,7 +1221,7 @@ func TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON(t *testing.T) {
 	t.Attr("component", "media")
 
 	e := echo.New()
-	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 
 	blocked := make(chan struct{})
 	t.Cleanup(func() { close(blocked) })

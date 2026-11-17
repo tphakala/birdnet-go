@@ -474,7 +474,7 @@
         {@render zoomControls('inline')}
       </div>
     {/if}
-    <p class="text-xs text-[var(--color-info)] mt-2">
+    <p class="text-xs text-[var(--text-info)] mt-2">
       {t('common.ui.mapZoomHelp')}
     </p>
   {/if}

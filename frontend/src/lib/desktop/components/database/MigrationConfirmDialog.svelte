@@ -61,7 +61,7 @@
   {#snippet header({ titleId })}
     <div class="flex items-center gap-4 mb-6">
       <div class="p-3 rounded-full bg-[var(--color-warning)]/10">
-        <AlertTriangle class="size-7 text-[var(--color-warning)]" />
+        <AlertTriangle class="size-7 text-[var(--text-warning)]" />
       </div>
       <h3 id={titleId} class="text-xl font-semibold text-[var(--color-base-content)]">
         {t('system.database.migration.confirmDialog.title')}
@@ -80,8 +80,7 @@
       <input
         type="checkbox"
         bind:checked={confirmed}
-        class="mt-1 size-5 rounded border-[var(--color-base-300)]
-               text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+        class="mt-1 size-5 rounded border-[var(--color-base-300)] focus:ring-[var(--color-primary)]"
       />
       <span class="text-base text-[var(--color-base-content)]">
         {t('system.database.migration.confirmDialog.checkbox')}

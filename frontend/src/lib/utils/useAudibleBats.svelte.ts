@@ -22,6 +22,11 @@ const logger = loggers.audio;
 interface UseAudibleBatsOptions {
   /** Returns the current detection ID (read lazily so it tracks card recycling). */
   getDetectionId: () => string | number;
+  /**
+   * Returns the denoise preset ('' off) for the derived copy, read when the
+   * request is made. The server denoises at the source rate before time expansion.
+   */
+  getDenoise?: () => string;
   /** Called once the derived audio URL is ready, so the player can swap to it. */
   onActivate?: (_url: string) => void;
   /** Called before the derived URL is revoked, so the player can swap away first. */
@@ -80,6 +85,7 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
           signal: controller.signal,
           body: JSON.stringify({
             expansion: settings.expansion,
+            denoise: options.getDenoise?.() ?? '',
             normalize: AUDIBLE_BATS_NORMALIZE,
             gain_db: AUDIBLE_BATS_GAIN_DB,
           }),
@@ -110,7 +116,7 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
       options.onActivate?.(url);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        return; // Superseded — leave state to the newer request/disable
+        return; // Superseded, leave state to the newer request/disable
       }
       if (abortController !== controller) return;
       active = false;
@@ -151,7 +157,7 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
   }
 
   // Clear all derived-playback state without invoking the swap callbacks (used
-  // when the detection itself changes — the player resets its own source).
+  // when the detection itself changes; the player resets its own source).
   function reset() {
     if (abortController) {
       abortController.abort();

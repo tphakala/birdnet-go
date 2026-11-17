@@ -263,3 +263,40 @@ type NewSpeciesData struct {
 	// Confidence is the confidence score of the first detection.
 	Confidence float64
 }
+
+// DetectionNeighbors holds the IDs of the detections next to one detection in
+// record ID order. A zero ID means there is no such detection (IDs start at 1).
+type DetectionNeighbors struct {
+	// Previous is the greatest detection ID below the detection's.
+	Previous uint
+	// Next is the smallest detection ID above the detection's.
+	Next uint
+	// PreviousSameSpecies is the greatest ID below the detection's among
+	// detections of the same species.
+	PreviousSameSpecies uint
+	// NextSameSpecies is the smallest ID above the detection's among detections
+	// of the same species.
+	NextSameSpecies uint
+}
+
+// SpeciesStats holds the all-time statistics of one species across every model's
+// labels. Detections reviewed as false positives are left out of Detections,
+// FirstDetectedAt, LastDetectedAt, AvgConfidence and MaxConfidence; the two review
+// counts cover every reviewed detection of the species. With Detections == 0 the
+// times and confidences are 0 and carry no meaning.
+type SpeciesStats struct {
+	// Detections is the number of detections not reviewed as false positive.
+	Detections int64
+	// FirstDetectedAt is the Unix seconds of the earliest such detection.
+	FirstDetectedAt int64
+	// LastDetectedAt is the Unix seconds of the latest such detection.
+	LastDetectedAt int64
+	// AvgConfidence is the mean confidence of such detections, 0 to 1.
+	AvgConfidence float64
+	// MaxConfidence is the highest confidence of such detections, 0 to 1.
+	MaxConfidence float64
+	// CorrectReviews is the number of detections reviewed as correct.
+	CorrectReviews int64
+	// FalsePositiveReviews is the number of detections reviewed as false positive.
+	FalsePositiveReviews int64
+}

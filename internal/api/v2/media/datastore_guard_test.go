@@ -30,7 +30,7 @@ func TestGetSpectrogramStatusReturns503WhenDatastoreDisabled(t *testing.T) {
 	// datastore, so the test exercises the nil-DS guard rather than tripping over an
 	// otherwise-unrelated nil dependency in the 5xx error path.
 	e := echo.New()
-	h := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	h := New(apitest.NewCore(t, apitest.WithEcho(e)), nil)
 	h.DS = nil // datastore disabled
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/spectrogram/123/status", http.NoBody)

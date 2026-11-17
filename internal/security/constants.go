@@ -1,17 +1,22 @@
 package security
 
-import "time"
+import (
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
 
 // Security-related constants
 const (
 	// Config provider IDs (used in OAuthProviderConfig.Provider)
-	// These match what the frontend sends and what's stored in config
-	ConfigGoogle    = "google"
-	ConfigGitHub    = "github"
-	ConfigMicrosoft = "microsoft"
-	ConfigLine      = "line"
-	ConfigKakao     = "kakao"
-	ConfigOIDC      = "oidc"
+	// These match what the frontend sends and what's stored in config; conf owns
+	// the list so that settings validation uses the same one.
+	ConfigGoogle    = conf.OAuthProviderGoogle
+	ConfigGitHub    = conf.OAuthProviderGitHub
+	ConfigMicrosoft = conf.OAuthProviderMicrosoft
+	ConfigLine      = conf.OAuthProviderLine
+	ConfigKakao     = conf.OAuthProviderKakao
+	ConfigOIDC      = conf.OAuthProviderOIDC
 
 	// Goth provider names (used for session keys and goth registration)
 	// These match the goth library provider names
@@ -64,6 +69,10 @@ const (
 	OIDCRetryMaxBackoff     = 60 * time.Second
 	OIDCRetryMaxDuration    = 5 * time.Minute
 	OIDCRetryBackoffFactor  = 2
+
+	// OIDCHTTPTimeout bounds each request to the identity provider (discovery,
+	// token exchange, userinfo and token refresh).
+	OIDCHTTPTimeout = 10 * time.Second
 )
 
 // ConfigToGothProvider maps config provider IDs to goth provider names.

@@ -53,20 +53,6 @@ func serve(e *echo.Echo, method, path string, authed bool) *httptest.ResponseRec
 	return rec
 }
 
-func TestRangeRoutesRegistered(t *testing.T) {
-	// NOT parallel: apitest.NewCore publishes to the process-global settings snapshot.
-	e := newRangeRouteServer(t, false)
-	apitest.AssertRoutesRegistered(t, e, []string{
-		"GET /api/v2/range/status",
-		"GET /api/v2/range/species/scores",
-		"GET /api/v2/range/species/count",
-		"GET /api/v2/range/species/list",
-		"GET /api/v2/range/species/csv",
-		"POST /api/v2/range/species/test",
-		"POST /api/v2/range/rebuild",
-	})
-}
-
 // TestRangeMutatingRoutesRequireAuth verifies the mutating range routes reject
 // anonymous callers with or without PrivateMode, and reach the handler once
 // authenticated. With no BirdNET instance wired in the test core, a handler that
@@ -94,9 +80,9 @@ func TestRangeMutatingRoutesRequireAuth(t *testing.T) {
 	}
 }
 
-// TestRangeReadRoutesStayPublic verifies the GET range routes are not newly
-// gated: anonymous callers reach the handler when PrivateMode is off and are
-// rejected by PrivateModeAuth when it is on.
+// TestRangeReadRoutesStayPublic verifies the GET range routes are registered and not
+// newly gated: anonymous callers reach the handler when PrivateMode is off (an
+// unregistered route would answer 404) and are rejected by PrivateModeAuth when it is on.
 func TestRangeReadRoutesStayPublic(t *testing.T) {
 	// NOT parallel: apitest.NewCore publishes to the process-global settings snapshot.
 	paths := []string{
@@ -110,6 +96,7 @@ func TestRangeReadRoutesStayPublic(t *testing.T) {
 		t.Run(path+" public", func(t *testing.T) {
 			e := newRangeRouteServer(t, false)
 			rec := serve(e, http.MethodGet, path, false)
+			assert.NotEqual(t, http.StatusNotFound, rec.Code)
 			assert.NotEqual(t, http.StatusUnauthorized, rec.Code)
 			assert.NotEqual(t, http.StatusForbidden, rec.Code)
 		})

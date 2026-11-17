@@ -70,7 +70,7 @@ func (ds *DataStore) startConnectionPoolMonitoring(ctx context.Context, interval
 }
 
 // startDatabaseMonitoring starts a goroutine that periodically monitors
-// database size and table statistics
+// database size
 func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	ds.monitoringWg.Go(func() {
@@ -81,41 +81,25 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 				GetLogger().Info("Database monitoring stopped due to context cancellation")
 				return
 			case <-ticker.C:
-				// Get metrics reference once to avoid multiple lock acquisitions
-				ds.metricsMu.RLock()
-				metrics := ds.metrics
-				ds.metricsMu.RUnlock()
-
-				// Update database size metrics
-				if dbSize, err := ds.getDatabaseSize(ctx); err == nil && metrics != nil {
-					metrics.UpdateDatabaseSize(dbSize)
-				} else if err != nil {
-					GetLogger().Error("Failed to get database size",
-						logger.Error(err))
-				}
-
-				// Update table row counts
-				tables := []string{"notes", "results", "image_caches", "note_reviews", "note_locks"}
-				for _, table := range tables {
-					if count, err := ds.getTableRowCount(ctx, table); err == nil && metrics != nil {
-						metrics.UpdateTableRowCount(table, count)
-					} else if err != nil {
-						GetLogger().Error("Failed to get table row count",
-							logger.String("table", table),
-							logger.Error(err))
-					}
-				}
-
-				// Update active lock count
-				if lockCount, err := ds.getActiveLockCount(ctx); err == nil && metrics != nil {
-					metrics.UpdateActiveLockCount(lockCount)
-				} else if err != nil {
-					GetLogger().Error("Failed to get active lock count",
-						logger.Error(err))
-				}
+				ds.collectDatabaseStats(ctx)
 			}
 		}
 	})
+}
+
+// collectDatabaseStats runs one stats tick: it updates the database size gauge.
+// It must not scan tables, because on SQLite it would hold the only pooled
+// connection and stall saves.
+func (ds *DataStore) collectDatabaseStats(ctx context.Context) {
+	dbSize, err := ds.getDatabaseSize(ctx)
+	if err != nil {
+		GetLogger().Error("Failed to get database size",
+			logger.Error(err))
+		return
+	}
+	if metrics := ds.getMetrics(); metrics != nil {
+		metrics.UpdateDatabaseSize(dbSize)
+	}
 }
 
 // getDatabaseSize returns the total size of the database in bytes
@@ -160,16 +144,6 @@ func (ds *DataStore) getTableRowCount(ctx context.Context, table string) (int64,
 		return 0, fmt.Errorf("failed to count rows in table %s: %w", table, err)
 	}
 	return count, nil
-}
-
-// getActiveLockCount returns the number of active note locks
-func (ds *DataStore) getActiveLockCount(ctx context.Context) (int, error) {
-	var count int64
-	err := ds.DB.WithContext(ctx).Model(&NoteLock{}).Count(&count).Error
-	if err != nil {
-		return 0, fmt.Errorf("failed to count active locks: %w", err)
-	}
-	return int(count), nil
 }
 
 // StartMonitoring initializes all monitoring routines for the datastore

@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // mockErrorEvent implements ErrorEvent for testing
@@ -482,3 +484,32 @@ func (b *blockingConsumer) ProcessBatch(events []ErrorEvent) error {
 }
 
 func (b *blockingConsumer) SupportsBatching() bool { return false }
+
+// mockDetectionConsumer is a mockConsumer that also receives detection events.
+type mockDetectionConsumer struct {
+	mockConsumer
+}
+
+func (m *mockDetectionConsumer) ProcessDetectionEvent(_ DetectionEvent) error {
+	m.processedCount.Add(1)
+	return nil
+}
+
+// The per-event dispatch receipt is a Trace line, so a Debug capture must not
+// see it while the consumer still receives the event.
+func TestProcessDetectionEvent_DispatchReceiptIsNotDebug(t *testing.T) {
+	// Not parallel: logtest.CaptureBufferAt swaps the process-global logger.
+	buf := logtest.CaptureBufferAt(t, slog.LevelDebug)
+
+	eb := createTestEventBus(t, 10, 1)
+	consumer := &mockDetectionConsumer{mockConsumer{name: "detection-test"}}
+	eb.detectionConsumers = append(eb.detectionConsumers, consumer)
+
+	event, err := NewDetectionEvent("American Robin", "Turdus migratorius", 0.9, "backyard", true, 0)
+	require.NoError(t, err)
+
+	eb.processDetectionEvent(event, logger.Global().Module("events"))
+
+	assert.Equal(t, int32(1), consumer.GetProcessedCount())
+	assert.NotContains(t, buf.String(), "dispatching detection event to consumers")
+}

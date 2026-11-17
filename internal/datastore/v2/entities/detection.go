@@ -28,12 +28,16 @@ type Detection struct {
 	SpectrogramClipName *string `gorm:"type:varchar(500)"`
 	// ClipSampleRate is the sample rate in Hz of the saved audio clip file. It is NULL when unknown (rows written before the column existed that were never probed, and rows with no clip). It describes the original capture, so it survives retention.
 	ClipSampleRate *int
+	// ClipDenoised records whether the export stage denoised the saved clip: true when it did, false when it wrote the captured audio. It is NULL for a clip saved before this column existed and for a row with no clip, and NULL is treated as not denoised. The exporter sets it after the clip is written. It describes the file, so it survives retention.
+	ClipDenoised *bool
+	// OriginalLabelID is the label the model picked, recorded the first time a reviewer changes the species and never changed afterwards. NULL means the species was never changed, so LabelID is still the model's pick. The original pick's confidence is Confidence. Deliberately no index, default or relationship: a relationship would make AutoMigrate rebuild the table on SQLite.
+	OriginalLabelID *uint
 
 	// Processing metadata
 	ProcessingTimeMs *int64 // Milliseconds
 
 	// Validation flags
-	Unlikely bool `gorm:"default:false"` // Tagged by ultrasonic validation filter
+	Unlikely bool `gorm:"default:false"` // Tagged by a validator as unlikely to hold a call of the detected species
 
 	// Migration reference (preserves legacy ID for lookups and related data migration)
 	LegacyID *uint `gorm:"index"`
@@ -53,4 +57,8 @@ type Detection struct {
 	Review   *DetectionReview    `gorm:"-"`
 	Lock     *DetectionLock      `gorm:"-"`
 	Comments []*DetectionComment `gorm:"-"`
+	// OriginalLabel is the label behind OriginalLabelID, loaded with the other
+	// relations. It carries no foreignKey tag: a relationship would make AutoMigrate
+	// rebuild the table on SQLite.
+	OriginalLabel *Label `gorm:"-"`
 }

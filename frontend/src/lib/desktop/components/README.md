@@ -23,8 +23,13 @@ This folder contains **shared components** used across the application. Feature-
 ## Data
 
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
-- `DataTable.svelte` - Generic data table with controlled (parent-driven) sorting
-- `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, and EmptyState
+- `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, EmptyState, and LoadingSpinner
+  - Loading: a spinner with a visible label (`loadingLabel`, default "Loading") inside a `role="status"` region that stays in the document, so the label is announced when loading starts
+  - Body: resizable box by default; with `resizable={false}`, `bodyMaxHeight` (a CSS length such as `min(70vh, 40rem)`) caps the body so long lists scroll under the sticky header
+  - A body with no sortable column is a tab stop so the arrow keys can scroll it; with a `title` it is also a region named by it
+  - `notice` snippet renders between the header bar and the body in every state (an `ErrorAlert` above rows that stay visible); `empty` snippet replaces the default `EmptyState`
+  - Columns with `align: 'right'` right-align header and cells and use tabular figures; a `sortable` column without `sortValue` sorts by its raw field value
+  - `SortableHeader.svelte` (in `ui/`) is the sortable `<th>` it uses; standalone tables can use it too. The button is named by the column label, `aria-sort` is set on the active column only, and the button's hit area and focus ring cover the whole header cell. Its `align` prop puts the indicator before the label for right-aligned columns
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
 - `WeatherDetails.svelte` - Detailed weather display for modals (vertical layout, icons always visible)
@@ -63,6 +68,7 @@ This folder contains **shared components** used across the application. Feature-
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
 - `LocationMap.svelte` - Map for picking a station location (click or drag the pin, coordinates rounded to 3 decimals), with zoom buttons, Ctrl/Cmd+wheel zoom and an expand button opening a full screen map in a dialog portalled into the surrounding dialog or the page body. `onLocationChange` fires only for a click, a pin drag or a chosen searched place, never for prop changes. Required props: `latitude`, `longitude`, `locationSet` (pin shown), `onLocationChange`, `title` (expanded dialog heading). Optional props (defaults reproduce the settings page map): `ready=true` (build the map once true), `mapClass='h-[350px]'`, `controls='below'|'overlay'` (button placement), `pinchZoom=false` (two-finger zoom, rotation stays off), `doubleTapZoomKeepsPin=false` (a pick waits 300 ms and is dropped when a double click, double tap or zoom gesture follows), `startView='region'|'world'` (the start zoom is chosen when the inline map is created and depends on whether the coordinates are set (not 0,0): 11 when set, else 5 for `region` or 1 for `world`; the expanded map starts at the inline map's current zoom; `world` also raises the zoom to at least 11 when a first location arrives through the `latitude` and `longitude` props with `locationSet` true and no pin yet, a click does not), `placeSearch=false` (show `PlaceSearch` above the map and in the expanded dialog; choosing a place reports its rounded coordinates through `onLocationChange` like a click and flies both maps there at zoom 11), `className`. Map logic lives in `locationMapController.ts`
+- `ModelToggleList.svelte` - Classifier switches of an audio source: one `ToggleField` per listed model with its live backend and precision, load state and sample rate badges; a selected alias the server no longer lists shows as a missing row with Remove; an empty selection follows the default models; the last selected model stays on with its reason; skeleton, fetch-failed (Retry) and no-model states. `onChange(models)` receives the complete new list
 - `NetworkAddressListInput.svelte` - Generic list editor for IP addresses and CIDR ranges, rows with remove buttons. Props: `values`, `onUpdate(values)`, `accept` (`'ip'`, `'cidr'` or `'ip-or-cidr'`, validated as Go's `net.ParseIP` and `net.ParseCIDR` read them), `label`, optional `id`, `helpText`, `placeholder`, `emptyStateMessage`, `disabled`, `maxItems`, `rowAnnotation` (snippet receiving `{ value, index, valid }`, for example a badge) and a bindable `draft` (text typed but not added; bind it to keep it across a remount and to block saving while it is not empty). Add takes several values separated by commas, spaces or line breaks; valid ones are added, duplicates (same network) are dropped and reported, invalid ones stay in the input with a message. Values passed in are never changed by rendering: invalid and duplicated rows are flagged until removed. No store access
 - `NumberField.svelte` - Number input field
 - `PasswordField.svelte` - Password input with show/hide
@@ -73,13 +79,14 @@ This folder contains **shared components** used across the application. Feature-
 - `SelectField.svelte` - Select field wrapper
 - `SliderField.svelte` - Slider input field
 - `SpeciesInput.svelte` - Species selection input
-- `SoundCardCard.svelte` - Individual sound card source card with device, gain, model, equalizer, quiet hours
-- `SoundCardManager.svelte` - Manage multiple sound card audio sources
-- `StreamCard.svelte` - Individual stream card for stream management
+- `SoundCardCard.svelte` - One sound card source that saves as it changes, composed from `SourceCard`, `SettingsGroup`, `CommitTextField` and `ScopedApplyGroup` (`features/settings/components/`): a header (name, device, badges, delete) that opens and closes the body, and body groups for name (committed on blur or Enter, Escape restores), capture (device and sample rate as a draft with a scoped "Apply and restart capture"), gain, classifiers (`ModelToggleList`), equalizer and quiet hours, each with its `AutoSaveStatus`. Controlled: `expanded` and `onToggleExpanded`; every change goes out through `onCommit(source, { field, debounceMs? })`
+- `SourceModelBadges.svelte` - Classifier badges of a source card header: a warning badge when a selected model is missing or not loaded, and a summary of the selected or default models. Used by `SoundCardCard` and `StreamCard`
+- `SoundCardManager.svelte` - Manage the sound card sources of the immediately saved tab: keeps a UI-only row id per source (cards, field keys, open state), opens a single source by default, saves add and delete at once under `audio:sources:list`; `onUpdateSources(sources, options)` receives the whole array
+- `StreamCard.svelte` - One audio stream that saves as it changes, composed from the same shared pieces as `SoundCardCard`: a header (status pill, masked URL, badges, an inline enabled `ToggleField` that saves at once, delete) with the live stats and warnings below it, and body groups for name, gain, connection (URL, type, transport, media mode and channel mode as a draft with a scoped "Apply and reconnect"; a changed URL must be valid, unused and tested first), classifiers (`ModelToggleList` with `isStream`), equalizer, quiet hours and diagnostics. Controlled: `expanded` and `onToggleExpanded`; every change goes out through `onCommit(stream, { field, debounceMs? })`
 - `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
-- `StreamManager.svelte` - Manage multiple video/audio streams
+- `StreamManager.svelte` - Manage the streams of the immediately saved tab: live health over SSE, a UI-only row id per stream (cards, field keys, open state), one stream open by default, add (tested first) and delete saved at once under `rtsp:streams:list`; `onUpdateStreams(streams, options)` receives the whole array
 - `TextInput.svelte` - Text input field; `error` shows an alert and marks the input invalid, `reserveErrorSpace` keeps two lines for that alert so nothing below moves
-- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on)
+- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on); `variant="inline"` is a compact label-then-switch control for toolbars and table header bars, where the label text toggles too; its hit area reaches 0.375rem above and below the label, so keep that space free of other controls; `disabled` keeps the switch focusable (`aria-disabled`) in every variant, so a screen reader can still read why it is off; the default variant takes an optional `badges` snippet shown on the label line, outside the accessible name
 
 ## Media
 
@@ -95,40 +102,37 @@ This folder contains **shared components** used across the application. Feature-
 - `SpeciesBadges.svelte` - Reusable species status and lock badges for modals
 - `SpeciesThumbnail.svelte` - Reusable species thumbnail image component
 
-## Review
-
-- `ReviewCard.svelte` - Detection review card component
-
 ## UI
 
 - `ActionMenu.svelte` - Dropdown action menu
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
 - `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support, a bindable `ref` to the `<button>`, aria-disabled styling that keeps the button focusable, and a shared keyboard focus ring
-- `Card.svelte` - Generic card container
+- `Card.svelte` - Generic card container; `variant="panel"` is the dense bordered panel for data views, with `headerActions` and `bodyClassName`
 - `CollapsibleCard.svelte` - Collapsible card container
 - `CollapsibleSection.svelte` - Collapsible content section
 - `DatePicker.svelte` - Date picker input
 - `EmptyState.svelte` - Empty state display
 - `ErrorAlert.svelte` - Error message display
+- `ExpandableText.svelte` - Text clamped to a few lines with a Show more / Show less toggle that appears only when the text is cut off
 - `Input.svelte` - Generic input field
 - `LanguageSelector.svelte` - Language selection dropdown
 - `LoadingSpinner.svelte` - Loading animation
+- `Meter.svelte` - Static measurement bar (disk, CPU, table size) on the `--viz-*` tokens
 - `Modal.svelte` - Generic modal container
 - `MultiStageOperation.svelte` - Multi-step operation UI
 - `NotificationBell.svelte` - Notification bell icon
 - `NotificationToast.svelte` - Toast notification
 - `Pagination.svelte` - Pagination controls
-- `ProcessTable.svelte` - Process status table
-- `ProgressBar.svelte` - Progress bar indicator
-- `ProgressCard.svelte` - Progress display card
+- `ProgressBar.svelte` - Progress bar indicator for running tasks
 - `RadioCardGroup.svelte` - Card-style radio group with one Tab stop and arrow-key selection (WAI-ARIA radio pattern)
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
 - `SelectionToolbar.svelte` - Sticky toolbar for multiselect list views (selection count, select-all banner, action slot)
+- `Skeleton.svelte` - One decorative placeholder bar of a loading skeleton
 - `SkeletonDailySummary.svelte` - Loading skeleton for daily summary cards
+- `SkeletonStatus.svelte` - The one visible `role="status"` loading label of a skeleton
 - `StatusPill.svelte` - Status pill indicator
-- `SystemInfoCard.svelte` - System information display
 - `TestSuccessNote.svelte` - Test success notification component
 - `ThemeToggle.svelte` - Theme switching toggle
 - `TimeOfDayIcon.svelte` - Time-based icons (day/night)
@@ -181,6 +185,13 @@ The following components are located in their feature directories:
 
 ### Settings (`features/settings/components/`)
 
+- `AutoSaveStatus.svelte` - Inline feedback of one immediately saved setting, driven by the field key given to `commitSetting` (`$lib/stores/settingsAutoSave.svelte`): a persistent visually hidden `role="status"` region announces "Saving...", "Saved" and the failure reason; the visible text shows the same, and the reason comes with a dismiss button (focus moves to the component's wrapper on dismissal). Props: `field`, optional `id` (of the visible error message), `class`
+- `SettingsGroup.svelte` - One group of settings on an immediately saved tab: a title row (a heading, a `<label>` with `labelFor`, or a `heading` snippet such as a disclosure button) with the group's `AutoSaveStatus` on the right, then the controls. Props: `title`, `field`, `statusId`, `headingId`, `labelFor`, `required`, `heading`, `class`, `children`
+- `CommitTextField.svelte` - Text setting that commits on blur or Enter and restores on Escape; `validate(value)` returns the reason a trimmed value is refused, shown at the field with `aria-invalid`. Props: `id`, `value` (saved), `validate`, `onCommit`, `placeholder`, `maxlength`, `required`, `disabled`, `describedBy`
+- `ScopedApplyGroup.svelte` - Controls whose change restarts something, saved with a scoped Apply: renders the controls and, while the draft differs or an apply runs, a row with the hint, Cancel and the Apply button named for its effect (busy label while saving, failure hint after a failed apply, draft kept). Driven by an `ApplyDraft` (`applyDraft.svelte.ts`: the draft follows the saved values until edited; `set`, `cancel`, `apply(commit)`, `dirty`, `applying`, `failed`, `visible`). A blocked apply (`disabled`) shows the hint in place of the failure hint and describes the Apply button by it, so the caller's hint should name the reason. Props: `draft`, `onApply`, `hint`, `failedHint`, `applyLabel`, `applyingLabel`, `disabled`, `statusId`, `children`
+- `SourceCard.svelte` - Shell of one audio source (sound card, stream) on an immediately saved tab: header with a disclosure button (icon, name, subtitle; `aria-expanded`, `aria-controls`), a `badges` snippet, an `actions` snippet before delete (an enable switch) and delete with a confirm overlay; an optional `nameAddon` after the name (a status pill), `details` lines under the header that stay visible (stats, warnings) and `iconClass` for the icon tile colours; the body shows while `expanded`. Props: `name`, `subtitle`, `icon`, `iconClass`, `expanded`, `onToggleExpanded`, `deleteConfirm`, `onDelete`, `disabled`, `nameAddon`, `badges`, `actions`, `details`, `children`
+- `ModelCard.svelte` - Model gallery card (installed or available) whose regions line up across a row through subgrid
+- `ModelCardGrid.svelte` - Model gallery grid with columns sized by its own width
 - `SettingsCard.svelte` - Settings display card
 - `SettingsSection.svelte` - Settings section wrapper
 

@@ -10,7 +10,7 @@
  */
 
 import type { Detection } from '$lib/types/detection.types';
-import { buildAppUrl } from '$lib/utils/urlHelpers';
+import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
 
 /** Fallback base name when a detection has no common name. */
 const DEFAULT_DOWNLOAD_NAME = 'detection';
@@ -37,11 +37,12 @@ export function buildDetectionAudioFilename(detection: Detection): string {
 
 /**
  * Trigger a browser download of the detection's audio clip via a temporary
- * anchor element.
+ * anchor element. The download follows the playback denoise default: with it on
+ * the saved file is the denoised WAV, with it off the stored clip.
  */
 export function downloadDetectionAudio(detection: Detection): void {
   const link = document.createElement('a');
-  link.href = buildAppUrl(`/api/v2/audio/${detection.id}`);
+  link.href = audioUrlFor(detection.id, getPlaybackDenoiseDefault());
   link.download = buildDetectionAudioFilename(detection);
   document.body.appendChild(link);
   link.click();

@@ -46,7 +46,8 @@ func isUnixSocketPeer(remoteAddr string) bool {
 // and Security.TrustedProxies (including the cloudflare preset), read per request
 // from getSettings so changes hot-reload. Apart from unix-socket peers, which
 // only matter for the scheme, it must trust exactly the peers that
-// newTrustedProxyIPExtractor trusts, so one list governs client IP and scheme.
+// Core.attributionIP trusts (proxytrust.Checker.TrustsPeer), so one list governs
+// client IP and scheme.
 func newTrustedProxySchemeExtractor(getSettings func() *conf.Settings) echo.SchemeExtractor {
 	var cache proxytrust.Cache
 	fromHeaders := echo.LegacySchemeExtractor()

@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
+	"github.com/tphakala/birdnet-go/internal/imports/discovery"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 
@@ -220,8 +221,73 @@ func isContained(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// Elevation endpoint rate limit: POST /import/elevate feeds a submitted sudo
+// password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
+// (clearing the timestamp cache), so without an app-level limit an authenticated
+// LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
+// it to a small burst per client with slow refill, and to a multiple of that per
+// connection peer; legitimate use needs only a couple of attempts.
+const (
+	elevateRateLimitBurst  = 10
+	elevateRateLimitWindow = 5 * time.Minute
+)
+
+// elevatePeerRateLimitMultiplier is how many clients' elevation budgets the
+// connection peer as a whole may spend. The client limiter keys a client an
+// unlisted proxy names under that proxy and shares one bucket among the requests
+// it cannot verify, but a proxy can still name many such clients, so the peer's
+// own budget bounds the attempts a caller can make by naming a new client in
+// every request. Ten leaves a household behind one proxy each its own attempts.
+// The budget is shared by every client behind the peer, so once it is spent the
+// peer refuses all of them until it refills. It is skipped for the requests
+// Core.SkipPeerRateLimit names: a direct request, whose client limiter already
+// keys on the peer, and a client a proxy listed by its own address verified
+// without a Cloudflare edge in the chain.
+const elevatePeerRateLimitMultiplier = 10
+
+// elevateRateLimiterStoreConfig returns the per-client limiter settings for the
+// elevation endpoint.
+func elevateRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	return middleware.RateLimiterMemoryStoreConfig{
+		Rate:      rate.Limit(float64(elevateRateLimitBurst) / elevateRateLimitWindow.Seconds()),
+		Burst:     elevateRateLimitBurst,
+		ExpiresIn: elevateRateLimitWindow,
+	}
+}
+
+// elevatePeerRateLimiterStoreConfig returns the limiter settings for the
+// elevation endpoint keyed on the connection peer: the per-client attempts and
+// burst multiplied by elevatePeerRateLimitMultiplier, over the same window.
+func elevatePeerRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	cfg := elevateRateLimiterStoreConfig()
+	cfg.Rate *= elevatePeerRateLimitMultiplier
+	cfg.Burst *= elevatePeerRateLimitMultiplier
+	return cfg
+}
+
+// elevateLimiter returns the rate limiting middleware for the elevation route,
+// with one bucket per identifier, for the requests skipper does not skip. A
+// refused attempt is answered and logged the same way whichever limiter refuses
+// it.
+func (c *Handler) elevateLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor, skipper middleware.Skipper) echo.MiddlewareFunc {
+	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper:             skipper,
+		Store:               apicore.NewRateLimiterStore(storeConfig),
+		IdentifierExtractor: identifier,
+		ErrorHandler: func(ctx echo.Context, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+		DenyHandler: func(ctx echo.Context, _ string, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation attempt denied by rate limit", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+	})
+}
+
 // RegisterImportRoutes registers all import-related API routes on the supplied
-// v2 group.
+// v2 group. The elevation route is rate limited per client and per connection
+// peer; the peer limit is skipped for the requests Core.SkipPeerRateLimit names.
 //
 // These endpoints start, cancel, and inspect a database import, so the group
 // must fail closed. c.AuthMiddleware is non-nil in every real deployment: the
@@ -230,17 +296,6 @@ func isContained(root, target string) bool {
 // in unit tests or a misconfiguration; in that case install a middleware that
 // denies access with 401 rather than registering the routes unprotected (Echo's
 // applyMiddleware would also panic on a literal nil entry).
-// Elevation endpoint rate limit: POST /import/elevate feeds a submitted sudo
-// password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
-// (clearing the timestamp cache), so without an app-level limit an authenticated
-// LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
-// it to a small burst per client IP with slow refill; legitimate use needs only a
-// couple of attempts.
-const (
-	elevateRateLimitBurst  = 10
-	elevateRateLimitWindow = 5 * time.Minute
-)
-
 func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 	authMiddleware := c.AuthMiddleware
 	if authMiddleware == nil {
@@ -251,31 +306,16 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 		}
 	}
 
-	// Per-client-IP rate limiter applied only to the elevation endpoint.
-	elevateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Skipper: middleware.DefaultSkipper,
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      rate.Limit(float64(elevateRateLimitBurst) / elevateRateLimitWindow.Seconds()),
-				Burst:     elevateRateLimitBurst,
-				ExpiresIn: elevateRateLimitWindow,
-			},
-		),
-		IdentifierExtractor: func(ctx echo.Context) (string, error) { return ctx.RealIP(), nil },
-		ErrorHandler: func(ctx echo.Context, err error) error {
-			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
-			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
-		},
-		DenyHandler: func(ctx echo.Context, _ string, err error) error {
-			c.LogSecurityWarnIfEnabled("import: elevation attempt denied by rate limit", logger.String("ip", ctx.RealIP()))
-			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
-		},
-	})
+	// The client limiter (keyed by Core.RateLimitKey) runs first, so a client that
+	// is out of its own attempts is refused without spending the peer budget. The
+	// peer limiter skips the requests Core.SkipPeerRateLimit names.
+	elevateClientLimiter := c.elevateLimiter(elevateRateLimiterStoreConfig(), c.RateLimitKey, middleware.DefaultSkipper)
+	elevatePeerLimiter := c.elevateLimiter(elevatePeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey, c.SkipPeerRateLimit)
 
 	importGroup := g.Group("/import", authMiddleware)
 	importGroup.GET("/sources", c.GetImportSources)
 	importGroup.POST("/validate", c.ValidateImportSource)
-	importGroup.POST("/elevate", c.ElevateImport, elevateLimiter)
+	importGroup.POST("/elevate", c.ElevateImport, elevateClientLimiter, elevatePeerLimiter)
 	importGroup.POST("/birdnet-pi", c.StartBirdNETPiImport)
 	importGroup.GET("/jobs/:jobId/progress", c.StreamImportProgress)
 	importGroup.POST("/jobs/:jobId/cancel", c.CancelImport)
@@ -317,11 +357,7 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		err          error
 	)
 	if c.isContainerEnv == nil || c.isContainerEnv() {
-		root := c.importSourceRoot
-		if root == "" {
-			root = sysinfo.DefaultExternalMountPath
-		}
-		resolvedPath, err = resolveImportSourcePath(root, req.SourcePath)
+		resolvedPath, err = resolveImportSourcePath(c.containerImportRoot(), req.SourcePath)
 		if err != nil {
 			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
 		}
@@ -430,7 +466,7 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 	}
 	if mode == importModeDBaudio {
 		opts.IncludeAudio = true
-		opts.AudioSourceDir = filepath.Dir(resolvedPath)
+		opts.AudioSourceDir = c.resolveAudioSourceDir(resolvedPath, c.audioSearchBound(stagingCleanupDir))
 		opts.ClipExportPath = clipExportPath
 	}
 	eng := imports.NewEngine(c.Repo)
@@ -457,6 +493,60 @@ func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc 
 	})
 
 	return id, nil
+}
+
+// resolveAudioSourceDir returns the directory a db-audio import looks its
+// clips up under, as "Extracted/By_Date/<date>/<common name>/<file>" or, in a
+// BirdNET-Pi backup, "By_Date/<date>/<common name>/<file>".
+//
+// BirdNET-Pi keeps its database in ~/BirdNET-Pi/scripts and its clips in
+// ~/BirdSongs, so discovery.ResolveAudioRoot searches the database directory
+// and two levels above it, inside bound (see audioSearchBound). When no audio
+// tree is found the database directory is returned, which is inside bound:
+// the import then reports each clip as "source clip not found" and still
+// imports the detections.
+func (c *Handler) resolveAudioSourceDir(dbPath, bound string) string {
+	dbDir := filepath.Dir(dbPath)
+	audioRoot, found := discovery.ResolveAudioRoot(dbPath, bound)
+	if !found {
+		c.LogWarnIfEnabled("import: no BirdNET-Pi audio tree found for the source database, its clips will be missing",
+			logger.String("source_db", dbPath),
+			logger.String("audio_source_dir", dbDir))
+		return dbDir
+	}
+	c.LogInfoIfEnabled("import: using the BirdNET-Pi audio tree of the source database",
+		logger.String("source_db", dbPath),
+		logger.String("audio_source_dir", audioRoot))
+	return audioRoot
+}
+
+// containerImportRoot returns the directory a container install accepts import
+// source paths under: the configured import source root, or the default
+// external mount path when none is set.
+func (c *Handler) containerImportRoot() string {
+	if c.importSourceRoot != "" {
+		return c.importSourceRoot
+	}
+	return sysinfo.DefaultExternalMountPath
+}
+
+// audioSearchBound returns the directory the BirdNET-Pi audio-root search of an
+// import must stay inside, so a db-audio import never copies clips from outside
+// the source the user was allowed to import:
+//   - a staged import (stagingDir != "") is bounded by its staging directory, so
+//     the search does not climb into the shared staging parent;
+//   - a container install is bounded by the import source root, the same root
+//     resolveImportSourcePath contains the database path in;
+//   - a native install returns "" (unbounded), because a native source path is
+//     any absolute path the service user can read.
+func (c *Handler) audioSearchBound(stagingDir string) string {
+	if stagingDir != "" {
+		return stagingDir
+	}
+	if c.isContainerEnv == nil || c.isContainerEnv() {
+		return c.containerImportRoot()
+	}
+	return ""
 }
 
 // cleanupStagingDir best-effort removes a per-import staging directory. It only

@@ -56,6 +56,7 @@ type AppConfigResponse struct {
 	LogoStyle          string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
 	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
 	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
+	PlaybackDenoise    string                `json:"playbackDenoise"`           // denoise preset applied to playback and downloads by default, "" when none applies (off, or export-stage denoise is on)
 	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
 	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
 	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
@@ -222,6 +223,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		LogoStyle:          settings.Realtime.Dashboard.LogoStyle,
 		LiveSpectrogram:    settings.Realtime.Dashboard.LiveSpectrogram,
 		AudioExportEnabled: settings.Realtime.Audio.Export.Enabled,
+		PlaybackDenoise:    settings.EffectivePlaybackDenoise(),
 		FreshInstall:       freshInstall,
 		NewVersion:         newVersion,
 		PreviousVersion:    previousVersion,

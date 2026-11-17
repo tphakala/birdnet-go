@@ -7,8 +7,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { CirclePlus } from '@lucide/svelte';
+import { t } from '$lib/i18n';
 import SpeciesListCard from './SpeciesListCard.svelte';
 import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
 import { OPTION_HIGHLIGHT_OUTLINE_CLASS } from '$lib/desktop/components/forms/SelectDropdown.styles';
@@ -491,5 +492,95 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     await fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onAdd).toHaveBeenCalledWith('American Crow');
+  });
+});
+
+describe('SpeciesListCard sorting', () => {
+  it('sorts from a header button, marks only that column and announces it', async () => {
+    renderCard({ species: ['Blue Jay', 'American Robin'] });
+    const label = t('settings.species.activeSpecies.columns.commonName');
+
+    const button = screen.getByRole('button', { name: label });
+    const header = screen.getByRole('columnheader', { name: label });
+    expect(header).toContainElement(button);
+    expect(screen.getByRole('status').textContent).toBe('');
+
+    await fireEvent.click(button);
+
+    const sorted = screen.getAllByRole('columnheader').filter(th => th.hasAttribute('aria-sort'));
+    expect(sorted).toEqual([header]);
+    expect(header).toHaveAttribute('aria-sort', 'ascending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: label })
+    );
+  });
+
+  it('names the table by its title', () => {
+    renderCard({ species: ['Blue Jay'] });
+
+    expect(screen.getByRole('table', { name: 'Always Include' })).toBeInTheDocument();
+  });
+
+  it('drops the sort announcement when the list empties', async () => {
+    const view = render(SpeciesListCard, {
+      props: {
+        title: 'Always Include',
+        species: ['Blue Jay', 'American Robin'],
+        icon: CirclePlus,
+        predictions: [],
+        inputValue: '',
+        inputLabel: 'Add species',
+        inputPlaceholder: 'Type a species name',
+        emptyMessage: 'No species',
+        localizeLabel,
+        onAdd: vi.fn(),
+        onRemove: vi.fn(),
+        onInput: vi.fn(),
+      },
+    });
+    const label = t('settings.species.activeSpecies.columns.commonName');
+
+    await fireEvent.click(screen.getByRole('button', { name: label }));
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: label })
+    );
+
+    await view.rerender({ species: [] });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+  });
+
+  it('drops the sort announcement when a search matches no species', async () => {
+    const MANY = 9;
+    renderCard({ species: Array.from({ length: MANY }, (_, i) => `Bird ${i}`) });
+    await fireEvent.click(
+      screen.getByRole('button', { name: t('settings.species.activeSpecies.columns.commonName') })
+    );
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await fireEvent.input(
+      screen.getByPlaceholderText(t('settings.species.activeSpecies.search.placeholder')),
+      { target: { value: 'zzzz' } }
+    );
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+  });
+
+  it('does not announce a sort while a search leaves no rows', async () => {
+    const MANY = 9;
+    renderCard({ species: Array.from({ length: MANY }, (_, i) => `Bird ${i}`) });
+    await fireEvent.input(
+      screen.getByPlaceholderText(t('settings.species.activeSpecies.search.placeholder')),
+      { target: { value: 'zzzz' } }
+    );
+    const header = screen.getByRole('button', {
+      name: t('settings.species.activeSpecies.columns.commonName'),
+    });
+
+    // The first click picks the column, the second only flips the direction, which an empty
+    // sort never reads
+    await fireEvent.click(header);
+    await fireEvent.click(header);
+
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 });
