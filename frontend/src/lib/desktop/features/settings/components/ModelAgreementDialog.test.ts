@@ -97,6 +97,20 @@ describe('ModelAgreementDialog', () => {
     expect(screen.getByRole('checkbox')).toBeInTheDocument();
   });
 
+  // A close event from the dialog's previous closing is delivered as a task, so it
+  // can arrive after the parent already showed the dialog again for a new request.
+  it('ignores a close event that arrives after the dialog opened again', async () => {
+    vi.mocked(fetchModelDocument).mockReturnValue(new Promise(() => {}));
+    const { onCancel } = renderDialog([policy]);
+    const dialog = document.querySelector('dialog');
+    if (!dialog) throw new Error('no dialog');
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(new Event('close'));
+
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
   it('names a document kind it does not know generically', async () => {
     vi.mocked(fetchModelDocument).mockResolvedValue({
       repo: 'org/model',

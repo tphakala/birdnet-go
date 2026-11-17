@@ -81,7 +81,10 @@
 <dialog
   bind:this={dialogEl}
   onclose={() => {
-    if (open) onCancel();
+    // The close event is delivered as a task, so one left over from an earlier
+    // closing can arrive after the dialog was shown again for a new request; only a
+    // close of the dialog that is showing now (Escape) cancels.
+    if (open && !dialogEl?.open) onCancel();
   }}
   class="m-auto w-full max-w-3xl rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
   aria-labelledby={TITLE_ID}
