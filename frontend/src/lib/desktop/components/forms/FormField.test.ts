@@ -123,6 +123,53 @@ describe('FormField', () => {
     });
   });
 
+  describe('aria-invalid', () => {
+    it('marks the input invalid once a failed validator shows its message', async () => {
+      const user = userEvent.setup();
+      formFieldTest.render({
+        type: 'text',
+        name: 'username',
+        label: 'Username',
+        validators: [minLength(5)],
+      });
+      const input = screen.getByLabelText('Username');
+      expect(input).not.toHaveAttribute('aria-invalid');
+
+      await user.type(input, 'abc');
+      await user.tab();
+
+      await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'));
+    });
+
+    it('drops aria-invalid when an external error clears before the field is touched', async () => {
+      const props = { type: 'text', name: 'rate', label: 'Rate' } as const;
+      const { rerender } = formFieldTest.render({ ...props, error: 'Too low' });
+      const input = screen.getByLabelText('Rate');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+
+      await rerender({ ...props, error: undefined });
+
+      expect(screen.queryByText('Too low')).toBeNull();
+      expect(input).not.toHaveAttribute('aria-invalid');
+    });
+
+    it.each([
+      { type: 'textarea', role: 'textbox' },
+      { type: 'select', role: 'combobox' },
+      { type: 'checkbox', role: 'checkbox' },
+      { type: 'range', role: 'slider' },
+    ] as const)('marks a $type field invalid through the invalid prop', ({ type, role }) => {
+      formFieldTest.render({
+        type,
+        name: 'field',
+        label: 'Field',
+        options: [{ value: 'a', label: 'A' }],
+        invalid: true,
+      });
+      expect(screen.getByRole(role)).toHaveAttribute('aria-invalid', 'true');
+    });
+  });
+
   describe('Generated ids', () => {
     it('gives fields with the same name distinct ids and labels', () => {
       formFieldTest.render({ type: 'number', name: 'threshold', label: 'First', helpText: 'A' });

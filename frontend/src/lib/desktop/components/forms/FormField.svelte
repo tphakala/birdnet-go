@@ -35,7 +35,10 @@
      * Ignored when a `children` snippet is rendered, like `helpText`: the snippet owns its own input.
      */
     describedByExtra?: string;
-    /** Marks the input aria-invalid when the caller shows the error itself. */
+    /**
+     * Marks the input aria-invalid when the caller shows the error itself. Not used with
+     * `children` or a radio, whose role does not take aria-invalid.
+     */
     invalid?: boolean;
     required?: boolean;
     disabled?: boolean;
@@ -129,6 +132,12 @@
     ]
       .filter(Boolean)
       .join(' ') || undefined
+  );
+
+  // aria-invalid follows the visible error message (or the caller's own error), so a stale
+  // error that no longer shows does not set aria-invalid.
+  let ariaInvalid = $derived<'true' | undefined>(
+    (error && (touched || externalError)) || invalid ? 'true' : undefined
   );
 
   // Update error when external error changes
@@ -291,6 +300,7 @@
         {rows}
         {cols}
         aria-describedby={describedBy}
+        aria-invalid={ariaInvalid}
         class={cn('textarea  textarea-sm w-full', error && 'textarea-error', inputClassName)}
         onchange={handleChange}
         oninput={handleInput}
@@ -307,6 +317,7 @@
           {disabled}
           multiple
           aria-describedby={describedBy}
+          aria-invalid={ariaInvalid}
           class={cn('select  select-sm w-full', error && 'select-error', inputClassName)}
           onchange={handleChange}
           onblur={handleBlur}
@@ -327,6 +338,7 @@
           {required}
           {disabled}
           aria-describedby={describedBy}
+          aria-invalid={ariaInvalid}
           class={cn('select  select-sm w-full', error && 'select-error', inputClassName)}
           onchange={handleChange}
           onblur={handleBlur}
@@ -354,6 +366,7 @@
           {disabled}
           {readonly}
           aria-describedby={describedBy}
+          aria-invalid={ariaInvalid}
           class={cn('checkbox', error && 'checkbox-error', inputClassName)}
           onchange={handleChange}
           onblur={handleBlur}
@@ -402,6 +415,7 @@
           {disabled}
           {readonly}
           aria-describedby={describedBy}
+          aria-invalid={ariaInvalid}
           class={cn('range', error && 'range-error', inputClassName)}
           onchange={handleChange}
           oninput={handleInput}
@@ -434,7 +448,7 @@
         {pattern}
         {autocomplete}
         aria-describedby={describedBy}
-        aria-invalid={error || invalid ? 'true' : undefined}
+        aria-invalid={ariaInvalid}
         class={getInputClasses()}
         onchange={handleChange}
         oninput={handleInput}
