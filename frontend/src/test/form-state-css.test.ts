@@ -54,4 +54,10 @@ describe('form state borders on hover', () => {
       'border-color: var(--field-border-hover)'
     );
   });
+
+  it('dims the placeholder through a colour token, not opacity, so it differs from typed text', () => {
+    const body = findRule('.input::placeholder')?.body ?? '';
+    expect(body).toContain('color: var(--text-subtle)');
+    expect(body).toContain('opacity: 1');
+  });
 });

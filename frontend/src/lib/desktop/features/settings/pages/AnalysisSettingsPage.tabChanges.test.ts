@@ -577,6 +577,25 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     });
   });
 
+  it('removes a seeded threshold again when none was saved', async () => {
+    modelsList.current = [MODEL.birdnetv3];
+    seedSection('birdnetv3', { overrideThreshold: false });
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.birdnetv3.name) });
+    const user = userEvent.setup();
+
+    await user.click(toggle);
+    await user.click(toggle);
+    await tick();
+
+    expect(dottedTabs()).toEqual([]);
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
+      overrideThreshold: false,
+      threshold: undefined,
+    });
+  });
+
   it('leaves a saved custom threshold alone when the switch goes off after a save', async () => {
     modelsList.current = [MODEL.birdnetv3];
     seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
@@ -748,13 +767,16 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
 describe('AnalysisSettingsPage species language', () => {
   beforeEach(() => resetPage());
 
-  it('renders every setting row label as a block, so wrapped lines keep the text-sm line height', async () => {
+  it('renders the shared, classifier and language row labels as blocks, so wrapped lines keep the text-sm line height', async () => {
+    modelsList.current = [MODEL.perch];
     render(AnalysisSettingsPage);
     await screen.findByRole('combobox', { name: 'analysis.detection.locale.label' });
 
-    const labels = ['analysis.thresholds.shared.label', 'analysis.detection.locale.label'].map(
-      text => screen.getAllByText(text).find(el => el.tagName === 'SPAN')
-    );
+    const labels = [
+      'analysis.thresholds.shared.label',
+      'analysis.detection.locale.label',
+      MODEL.perch.name,
+    ].map(text => screen.getAllByText(text).find(el => el.tagName === 'SPAN'));
     for (const label of labels) expect(label).toHaveClass('block', 'text-sm');
   });
 
