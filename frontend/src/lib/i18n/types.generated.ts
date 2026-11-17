@@ -4504,6 +4504,12 @@ export type TranslationKey =
   | 'analysis.thresholds.state.pending'
   | 'analysis.thresholds.state.failed'
   | 'analysis.thresholds.empty'
+  | 'analysis.thresholds.sliderLabel' // params: name
+  | 'analysis.groups.confidence'
+  | 'analysis.groups.filters'
+  | 'analysis.groups.general'
+  | 'analysis.speciesNames.title'
+  | 'analysis.speciesNames.description'
   | 'restart.applicationRestart'
   | 'restart.containerRestart'
   | 'restart.confirmTitle'
@@ -5283,6 +5289,7 @@ export type TranslationParams = {
   'analysis.gallery.superseded.dialogNotice': { name: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
+  'analysis.thresholds.sliderLabel': { name: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };
 };
 

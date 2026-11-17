@@ -10,7 +10,10 @@
   - Settings tab: Detection settings, false positive filter, range filter,
     dynamic threshold, and advanced options
   - Models tab: Model gallery with Installed and Available tabs
-  - Detection thresholds table: one row per enabled classifier, each with its threshold
+  - Settings tab groups: Confidence (thresholds, dynamic threshold), Filters (false
+    positive filter, range filter, bat detection) and General (species names, advanced)
+  - Detection thresholds list: one row per enabled classifier, with a slider and a number
+    field for its threshold and a switch for classifiers that can follow BirdNET
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
@@ -91,7 +94,7 @@
   import FalsePositiveFilterControl, {
     type FilterLevel,
   } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
@@ -302,6 +305,14 @@
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
   const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
+  // Headings of the Settings tab groups, each naming its section landmark.
+  const GROUP_CONFIDENCE_ID = generateId('analysis-group-confidence');
+  const GROUP_FILTERS_ID = generateId('analysis-group-filters');
+  const GROUP_GENERAL_ID = generateId('analysis-group-general');
+  /** Prefix of the element IDs inside one threshold row (its name and its source note). */
+  const THRESHOLD_ROW_ID_PREFIX = generateId('threshold-row');
+  /** Slider fill, in percent of the track. */
+  const PERCENT = 100;
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -421,15 +432,13 @@
     current: unknown;
   }
 
-  const birdDetectionChange: ChangePair = $derived({
-    original: {
-      locale: store.originalData.birdnet?.locale,
-      fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
-    },
-    current: {
-      locale: birdnet?.locale,
-      fpFilter: falsePositiveFilter.level,
-    },
+  const falsePositiveChange: ChangePair = $derived({
+    original: { fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0 },
+    current: { fpFilter: falsePositiveFilter.level },
+  });
+  const speciesNamesChange: ChangePair = $derived({
+    original: { locale: store.originalData.birdnet?.locale },
+    current: { locale: birdnet?.locale },
   });
   const thresholdsChange: ChangePair = $derived({
     original: thresholdSnapshot(thresholdTableRows, store.originalData),
@@ -494,7 +503,8 @@
   const settingsTabHasChanges = $derived(
     [
       thresholdsChange,
-      birdDetectionChange,
+      falsePositiveChange,
+      speciesNamesChange,
       rangeFilterChange,
       dynamicThresholdChange,
       advancedChange,
@@ -1423,6 +1433,13 @@
     return sectionValues(section).threshold ?? birdnetThreshold;
   }
 
+  // How far along its track a row's slider is, for the filled part of the track.
+  function thresholdFillPercent(row: ThresholdRow, value: number): number {
+    const { min, max } = row.descriptor;
+    if (max <= min) return 0;
+    return Math.min(PERCENT, Math.max(0, ((value - min) / (max - min)) * PERCENT));
+  }
+
   // ── Gallery tab definitions ───────────────────────────────────────────
   const galleryTabs: TabDefinition[] = $derived([
     {
@@ -1782,659 +1799,683 @@
 </script>
 
 <!-- ── Settings Tab Content ──────────────────────────────────────────── -->
+{#snippet groupHeading(id: string, label: string)}
+  <h2 {id} class="px-1 text-xs font-semibold uppercase tracking-wider text-muted">{label}</h2>
+{/snippet}
+
 {#snippet settingsTabContent()}
-  <div class="space-y-6">
-    <!-- 1. Detection thresholds: one row per enabled classifier -->
-    <SettingsSection
-      title={t('analysis.thresholds.title')}
-      description={t('analysis.thresholds.description')}
-      defaultOpen={true}
-      originalData={thresholdsChange.original}
-      currentData={thresholdsChange.current}
-    >
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm" data-testid="threshold-table">
-          <caption class="sr-only">{t('analysis.thresholds.title')}</caption>
-          <thead>
-            <tr
-              class="border-b border-[var(--border-100)] text-left text-xs font-medium text-[var(--color-base-content)]/70"
-            >
-              <th scope="col" class="py-2 pr-4 font-medium">
-                {t('analysis.thresholds.columns.classifier')}
-              </th>
-              <th scope="col" class="py-2 pr-4 font-medium">
-                {t('analysis.thresholds.columns.threshold')}
-              </th>
-              <th scope="col" class="py-2 font-medium">
-                {t('analysis.thresholds.columns.source')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each thresholdTableRows as row (row.model.id)}
-              {@const section = row.descriptor.section}
-              {@const follows = rowFollowsBirdnet(row)}
-              <tr
-                class="border-b border-[var(--border-100)] last:border-b-0"
-                data-testid="threshold-row-{row.model.id}"
-              >
-                <th scope="row" class="py-3 pr-4 text-left align-middle font-normal">
-                  <span class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium text-[var(--color-base-content)]">
-                      {row.model.name}
-                    </span>
-                    {#if row.descriptor.kind === 'primary'}
-                      <Badge variant="primary" size="xs">
-                        {t('analysis.thresholds.primary')}
-                      </Badge>
-                    {/if}
-                    {#if row.model.category === 'bat'}
-                      <Badge variant="neutral" size="xs">
-                        {t('analysis.thresholds.category.bat')}
-                      </Badge>
-                    {/if}
-                    {#if row.model.state === 'pending'}
-                      <Badge variant="warning" size="xs">
-                        {t('analysis.thresholds.state.pending')}
-                      </Badge>
-                    {:else if row.model.state === 'failed'}
-                      <Badge variant="error" size="xs">
-                        {t('analysis.thresholds.state.failed')}
-                      </Badge>
-                    {/if}
-                  </span>
-                </th>
-                <td class="py-3 pr-4 align-middle">
-                  <NumberField
-                    label={row.model.name}
-                    labelClassName="sr-only"
-                    className="w-28"
-                    value={rowThresholdValue(row)}
-                    onUpdate={value => section && updateRowThreshold(section, value)}
-                    min={row.descriptor.min}
-                    max={row.descriptor.max}
-                    step={row.descriptor.step}
-                    disabled={store.isLoading || store.isSaving || follows}
-                  />
-                </td>
-                <td class="py-3 align-middle">
-                  {#if row.descriptor.kind === 'override' && section}
-                    <Checkbox
-                      checked={!follows}
-                      size="sm"
-                      disabled={store.isLoading || store.isSaving}
-                      onchange={value => updateRowOverride(section, value)}
-                    >
-                      {t('analysis.thresholds.useOwn')}<span class="sr-only">
-                        ({row.model.name})</span
-                      >
-                    </Checkbox>
-                  {:else if row.descriptor.kind === 'follows'}
-                    <span class="text-[var(--color-base-content)]/70">
-                      {t('analysis.thresholds.followsBirdnet')}
-                    </span>
-                  {:else if row.descriptor.kind === 'primary'}
-                    <span class="text-[var(--color-base-content)]/70">
-                      {t('analysis.thresholds.primaryNote')}
-                    </span>
-                  {:else}
-                    <span class="text-[var(--color-base-content)]/70">
-                      {t('analysis.thresholds.ownAlways')}
-                    </span>
-                  {/if}
-                </td>
-              </tr>
-            {:else}
-              <tr>
-                <td colspan="3" class="py-3 text-[var(--color-base-content)]/70">
-                  {modelsLoading() ? t('common.loading') : t('analysis.thresholds.empty')}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </SettingsSection>
+  <div class="space-y-10">
+    <!-- Group 1. Confidence: how sure a classifier must be -->
+    <section class="space-y-4" aria-labelledby={GROUP_CONFIDENCE_ID}>
+      {@render groupHeading(GROUP_CONFIDENCE_ID, t('analysis.groups.confidence'))}
 
-    <!-- 2. Bird Detection -->
-    <SettingsSection
-      title={t('analysis.bird.title')}
-      description={t('analysis.bird.description')}
-      defaultOpen={true}
-      originalData={birdDetectionChange.original}
-      currentData={birdDetectionChange.current}
-    >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <SelectDropdown
-          options={birdnetLocaleOptions}
-          value={birdnet?.locale ?? 'en'}
-          label={t('analysis.detection.locale.label')}
-          helpText={t('analysis.detection.locale.helpText')}
-          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          variant="select"
-          groupBy={false}
-          searchable={true}
-          onChange={value => updateBirdnetSetting('locale', value as string)}
-        >
-          {#snippet renderOption(option)}
-            {@const localeOption = option as BirdnetLocaleOption}
-            <div class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
-            </div>
-          {/snippet}
-          {#snippet renderSelected(options)}
-            {#if options[0]}
-              {@const localeOption = options[0] as BirdnetLocaleOption}
-              <span class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </span>
-            {:else}
-              <span>{birdnet?.locale ?? 'en'}</span>
-            {/if}
-          {/snippet}
-        </SelectDropdown>
-      </div>
-
-      <!-- Bird False Positive Filter -->
-      <div class="mt-6">
-        <FalsePositiveFilterControl
-          id="false-positive-filter-level"
-          level={falsePositiveFilter.level}
-          levels={BIRD_FP_LEVELS}
-          onUpdate={updateFalsePositiveFilterLevel}
-          getDescription={level => getFalsePositiveFilterDescription(level, birdnet?.overlap ?? 0)}
-          disabled={store.isLoading || store.isSaving}
-        />
-      </div>
-
-      {#if falsePositiveFilter.level === 0}
-        <SettingsNote>
-          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
-          <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
-        </SettingsNote>
-      {:else}
-        {#if fpCadenceNotice}
-          <!-- The overloaded notice is an error, so it is an alert. Keyed on the
-               type so a capped notice that turns overloaded is inserted anew as
-               an alert instead of an element that only changes its role. -->
-          {#key fpCadenceNotice.type}
-            <ErrorAlert
-              type={fpCadenceNotice.type}
-              role={fpCadenceNotice.type === 'error' ? 'alert' : 'note'}
-              className="mt-4"
-              data-testid={fpCadenceNotice.testId}
-            >
-              <span class="block font-medium">{fpCadenceNotice.title}</span>
-              <span class="mt-1 block">{fpCadenceNotice.body}</span>
-            </ErrorAlert>
-          {/key}
-        {/if}
-
-        <SettingsNote>
-          <div class="space-y-2">
-            {#if fpReadoutRows.length > 0}
-              <div data-testid="fp-cadence-readout">
-                <p class="font-medium text-[var(--color-base-content)]">
-                  {fpReadoutIsEstimate
-                    ? t('settings.main.sections.falsePositiveFilter.readoutPreviewTitle')
-                    : t('settings.main.sections.falsePositiveFilter.readoutTitle')}
-                </p>
-                <p class="mt-1 text-[var(--color-base-content)]/80">
-                  {t('settings.main.sections.falsePositiveFilter.readoutIntro', {
-                    seconds: REFERENCE_WINDOW_SECONDS,
-                  })}
-                </p>
-                <ul class="mt-2 space-y-1 text-[var(--color-base-content)]">
-                  {#each fpReadoutRows as row (row.id)}
-                    <li class="tabular-nums">
-                      {t('settings.main.sections.falsePositiveFilter.readoutLine', {
-                        model: row.name,
-                        count: row.confirmations,
-                        windows: formatWindows(row.windows),
-                        step: formatSeconds(row.stepSeconds),
-                      })}
-                    </li>
-                  {/each}
-                </ul>
-                {#if fpReadoutIsEstimate}
-                  <p class="mt-2 text-xs text-[var(--color-base-content)]/80">
-                    {fpCadenceEdited
-                      ? t('settings.main.sections.falsePositiveFilter.readoutPreview')
-                      : t('settings.main.sections.falsePositiveFilter.readoutPending')}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-            {#if fpUnknownLatencyNames.length > 0}
-              <p
-                class="text-[var(--color-base-content)]/80"
-                data-testid="fp-cadence-unknown-latency"
-              >
-                {t('settings.main.sections.falsePositiveFilter.unknownLatency', {
-                  models: fpUnknownLatencyNames.join(', '),
-                })}
-              </p>
-            {/if}
-            <p class="text-[var(--color-base-content)]/80">
-              {t('settings.main.sections.falsePositiveFilter.cpuNote')}
-            </p>
-          </div>
-        </SettingsNote>
-      {/if}
-    </SettingsSection>
-
-    <!-- 3. Bat Detection (only when a bat model is installed) -->
-    {#if hasBatModel}
+      <!-- Detection thresholds: one row per enabled classifier -->
       <SettingsSection
-        title={t('analysis.bat.title')}
-        description={t('analysis.bat.description')}
+        title={t('analysis.thresholds.title')}
+        description={t('analysis.thresholds.description')}
         defaultOpen={true}
-        originalData={batChange.original}
-        currentData={batChange.current}
+        originalData={thresholdsChange.original}
+        currentData={thresholdsChange.current}
       >
-        {#if hasBsgBatModel}
-          <SettingsNote>
-            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
-            <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
-          </SettingsNote>
+        <ul class="divide-y divide-[var(--border-100)]" data-testid="threshold-list">
+          {#each thresholdTableRows as row (row.model.id)}
+            {@const section = row.descriptor.section}
+            {@const follows = rowFollowsBirdnet(row)}
+            {@const value = rowThresholdValue(row)}
+            {@const nameId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-name`}
+            {@const sourceId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-source`}
+            {@const controlsDisabled = store.isLoading || store.isSaving || follows}
+            <li
+              class="grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+              data-testid="threshold-row-{row.model.id}"
+            >
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span id={nameId} class="text-sm font-medium text-[var(--color-base-content)]">
+                    {row.model.name}
+                  </span>
+                  {#if row.descriptor.kind === 'primary'}
+                    <Badge variant="primary" size="xs">
+                      {t('analysis.thresholds.primary')}
+                    </Badge>
+                  {/if}
+                  {#if row.model.category === 'bat'}
+                    <Badge variant="neutral" size="xs">
+                      {t('analysis.thresholds.category.bat')}
+                    </Badge>
+                  {/if}
+                  {#if row.model.state === 'pending'}
+                    <Badge variant="warning" size="xs">
+                      {t('analysis.thresholds.state.pending')}
+                    </Badge>
+                  {:else if row.model.state === 'failed'}
+                    <Badge variant="error" size="xs">
+                      {t('analysis.thresholds.state.failed')}
+                    </Badge>
+                  {/if}
+                </div>
+                <p id={sourceId} class="help-text mt-1">
+                  {#if row.descriptor.kind === 'primary'}
+                    {t('analysis.thresholds.primaryNote')}
+                  {:else if follows}
+                    {t('analysis.thresholds.followsBirdnet')}
+                  {:else}
+                    {t('analysis.thresholds.ownAlways')}
+                  {/if}
+                </p>
+              </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div>
-              <NumberField
-                label={t('analysis.detection.bsgBatStep.label')}
-                value={bsgBatStepFrames}
-                onUpdate={updateBsgBatStep}
-                min={BSG_BAT_STEP_MIN_FRAMES}
-                max={BSG_BAT_STEP_MAX_FRAMES}
-                step={BSG_BAT_STEP_INCREMENT}
-                disabled={store.isLoading || store.isSaving}
-                helpText={t('analysis.detection.bsgBatStep.helpText')}
-                describedByExtra={BSG_BAT_STEP_READOUT_ID}
-              />
-              <p
-                id={BSG_BAT_STEP_READOUT_ID}
-                class="mt-1 text-xs text-[var(--color-base-content)]/70"
-              >
-                {#if batFPLevel === 0}
-                  {t('analysis.detection.bsgBatStep.readout', { seconds: bsgBatStepSecondsText })}
-                {:else}
-                  {t('analysis.detection.bsgBatStep.readoutWithFilter', {
-                    seconds: bsgBatStepSecondsText,
-                    level: t(fpLevelNameKey(batFPLevel)),
-                    count: bsgBatMinDetections(batFPLevel).toString(),
-                  })}
-                {/if}
-                {t('analysis.detection.bsgBatStep.restartNote')}
-              </p>
-            </div>
+              <!-- Slider and number edit the same value; the switch column keeps its width on
+                   rows without a switch, so the sliders line up and compare across rows -->
+              <div class="flex min-w-0 items-center gap-4">
+                <input
+                  type="range"
+                  class="range threshold-range min-w-0 flex-1"
+                  style:--threshold-fill="{thresholdFillPercent(row, value)}%"
+                  aria-label={t('analysis.thresholds.sliderLabel', { name: row.model.name })}
+                  aria-describedby={sourceId}
+                  min={row.descriptor.min}
+                  max={row.descriptor.max}
+                  step={row.descriptor.step}
+                  {value}
+                  disabled={controlsDisabled}
+                  oninput={event =>
+                    section && updateRowThreshold(section, event.currentTarget.valueAsNumber)}
+                />
+                <NumberField
+                  label={row.model.name}
+                  labelClassName="sr-only"
+                  className="w-24 shrink-0"
+                  {value}
+                  onUpdate={newValue => section && updateRowThreshold(section, newValue)}
+                  min={row.descriptor.min}
+                  max={row.descriptor.max}
+                  step={row.descriptor.step}
+                  describedByExtra={sourceId}
+                  disabled={controlsDisabled}
+                />
+                <div class="flex w-40 shrink-0 justify-end">
+                  {#if row.descriptor.kind === 'override' && section}
+                    <ToggleField
+                      variant="inline"
+                      label={t('analysis.thresholds.useOwn')}
+                      value={!follows}
+                      describedBy={nameId}
+                      disabled={store.isLoading || store.isSaving}
+                      onUpdate={enabled => updateRowOverride(section, enabled)}
+                    />
+                  {/if}
+                </div>
+              </div>
+            </li>
+          {:else}
+            <li class="py-3 text-sm text-[var(--color-base-content)]/70">
+              {modelsLoading() ? t('common.loading') : t('analysis.thresholds.empty')}
+            </li>
+          {/each}
+        </ul>
+      </SettingsSection>
+
+      <!-- Dynamic threshold -->
+      <SettingsSection
+        title={t('settings.main.sections.dynamicThreshold.title')}
+        description={t('settings.main.sections.dynamicThreshold.description')}
+        originalData={dynamicThresholdChange.original}
+        currentData={dynamicThresholdChange.current}
+      >
+        <ToggleField
+          value={dynamicThreshold.enabled}
+          label={t('settings.main.sections.dynamicThreshold.enable.label')}
+          description={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onUpdate={enabled => updateDynamicThreshold('enabled', enabled)}
+        />
+
+        {#if dynamicThreshold.enabled}
+          <div
+            class="mt-5 grid grid-cols-1 gap-6 border-t border-[var(--border-100)] pt-5 md:grid-cols-2 xl:grid-cols-3"
+          >
+            <NumberField
+              label={t('settings.main.sections.dynamicThreshold.trigger.label')}
+              value={dynamicThreshold.trigger}
+              onUpdate={value => updateDynamicThreshold('trigger', value)}
+              min={0.0}
+              max={1.0}
+              step={0.01}
+              helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
+
+            <NumberField
+              label={t('settings.main.sections.dynamicThreshold.minimum.label')}
+              value={dynamicThreshold.min}
+              onUpdate={value => updateDynamicThreshold('min', value)}
+              min={0.0}
+              max={0.99}
+              step={0.01}
+              helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
+
+            <NumberField
+              label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
+              value={dynamicThreshold.validHours}
+              onUpdate={value => updateDynamicThreshold('validHours', value)}
+              min={0}
+              max={1000}
+              step={1}
+              helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
           </div>
         {/if}
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          <Checkbox
-            checked={bat.nighttimeOnly ?? true}
-            label={t('analysis.detection.batNighttimeOnly.label')}
-            helpText={t('analysis.detection.batNighttimeOnly.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateBatNighttimeOnly}
-          />
-          <!-- One grid cell, so the dependent checkbox sits under the filter it belongs to -->
-          <div class="flex flex-col gap-6">
-            <Checkbox
-              checked={bat.ultrasonicFilter?.enabled ?? true}
-              label={t('analysis.detection.batUltrasonicFilter.label')}
-              helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateBatUltrasonicFilter}
-            />
-            {#if bat.ultrasonicFilter?.enabled ?? true}
-              <Checkbox
-                checked={bat.ultrasonicFilter?.discardUnlikely ?? false}
-                label={t('analysis.detection.batDiscardUnlikely.label')}
-                helpText={t('analysis.detection.batDiscardUnlikely.helpText')}
-                disabled={store.isLoading || store.isSaving}
-                onchange={updateBatDiscardUnlikely}
-              />
-            {/if}
-          </div>
-        </div>
+        <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
+      </SettingsSection>
+    </section>
 
-        <!-- Bat False Positive Filter -->
-        <div class="mt-6">
+    <!-- Group 2. Filters: what is dropped after a classifier is confident -->
+    <section class="space-y-4" aria-labelledby={GROUP_FILTERS_ID}>
+      {@render groupHeading(GROUP_FILTERS_ID, t('analysis.groups.filters'))}
+
+      <!-- Bird false positive filter -->
+      <SettingsSection
+        title={t('settings.main.sections.falsePositiveFilter.title')}
+        description={t('settings.main.sections.falsePositiveFilter.description')}
+        defaultOpen={true}
+        originalData={falsePositiveChange.original}
+        currentData={falsePositiveChange.current}
+      >
+        <!-- Bird False Positive Filter -->
+        <div>
           <FalsePositiveFilterControl
-            id="bat-false-positive-filter-level"
-            level={batFPLevel}
-            levels={BAT_FP_LEVELS}
-            onUpdate={updateBatFalsePositiveFilterLevel}
-            getDescription={level => getBatFalsePositiveFilterDescription(level)}
+            id="false-positive-filter-level"
+            level={falsePositiveFilter.level}
+            levels={BIRD_FP_LEVELS}
+            onUpdate={updateFalsePositiveFilterLevel}
+            getDescription={level =>
+              getFalsePositiveFilterDescription(level, birdnet?.overlap ?? 0)}
             disabled={store.isLoading || store.isSaving}
           />
         </div>
 
-        {#if batFPLevel === 0}
+        {#if falsePositiveFilter.level === 0}
           <SettingsNote>
             {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
-            <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
+            <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
+          </SettingsNote>
+        {:else}
+          {#if fpCadenceNotice}
+            <!-- The overloaded notice is an error, so it is an alert. Keyed on the
+                 type so a capped notice that turns overloaded is inserted anew as
+                 an alert instead of an element that only changes its role. -->
+            {#key fpCadenceNotice.type}
+              <ErrorAlert
+                type={fpCadenceNotice.type}
+                role={fpCadenceNotice.type === 'error' ? 'alert' : 'note'}
+                className="mt-4"
+                data-testid={fpCadenceNotice.testId}
+              >
+                <span class="block font-medium">{fpCadenceNotice.title}</span>
+                <span class="mt-1 block">{fpCadenceNotice.body}</span>
+              </ErrorAlert>
+            {/key}
+          {/if}
+
+          <SettingsNote>
+            <div class="space-y-2">
+              {#if fpReadoutRows.length > 0}
+                <div data-testid="fp-cadence-readout">
+                  <p class="font-medium text-[var(--color-base-content)]">
+                    {fpReadoutIsEstimate
+                      ? t('settings.main.sections.falsePositiveFilter.readoutPreviewTitle')
+                      : t('settings.main.sections.falsePositiveFilter.readoutTitle')}
+                  </p>
+                  <p class="mt-1 text-[var(--color-base-content)]/80">
+                    {t('settings.main.sections.falsePositiveFilter.readoutIntro', {
+                      seconds: REFERENCE_WINDOW_SECONDS,
+                    })}
+                  </p>
+                  <ul class="mt-2 space-y-1 text-[var(--color-base-content)]">
+                    {#each fpReadoutRows as row (row.id)}
+                      <li class="tabular-nums">
+                        {t('settings.main.sections.falsePositiveFilter.readoutLine', {
+                          model: row.name,
+                          count: row.confirmations,
+                          windows: formatWindows(row.windows),
+                          step: formatSeconds(row.stepSeconds),
+                        })}
+                      </li>
+                    {/each}
+                  </ul>
+                  {#if fpReadoutIsEstimate}
+                    <p class="mt-2 text-xs text-[var(--color-base-content)]/80">
+                      {fpCadenceEdited
+                        ? t('settings.main.sections.falsePositiveFilter.readoutPreview')
+                        : t('settings.main.sections.falsePositiveFilter.readoutPending')}
+                    </p>
+                  {/if}
+                </div>
+              {/if}
+              {#if fpUnknownLatencyNames.length > 0}
+                <p
+                  class="text-[var(--color-base-content)]/80"
+                  data-testid="fp-cadence-unknown-latency"
+                >
+                  {t('settings.main.sections.falsePositiveFilter.unknownLatency', {
+                    models: fpUnknownLatencyNames.join(', '),
+                  })}
+                </p>
+              {/if}
+              <p class="text-[var(--color-base-content)]/80">
+                {t('settings.main.sections.falsePositiveFilter.cpuNote')}
+              </p>
+            </div>
           </SettingsNote>
         {/if}
       </SettingsSection>
-    {/if}
 
-    <!-- 4. Range Filter -->
-    <SettingsSection
-      title={t('settings.main.sections.rangeFilter.title')}
-      description={t('settings.main.sections.rangeFilter.description')}
-      originalData={rangeFilterChange.original}
-      currentData={rangeFilterChange.current}
-    >
-      <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-        <NumberField
-          label={t('settings.main.sections.rangeFilter.threshold.label')}
-          value={birdnet?.rangeFilter?.threshold ?? 0.01}
-          onUpdate={value =>
-            settingsActions.updateSection('birdnet', {
-              rangeFilter: { ...birdnet?.rangeFilter, threshold: value },
-            })}
-          min={0.0}
-          max={0.99}
-          step={0.01}
-          helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <div>
-          <div class="flex justify-start mb-1">
-            <span class="text-sm text-[var(--color-base-content)]"
-              >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-            >
-          </div>
-          <div class="flex items-center gap-3">
-            <div
-              class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
-              class:opacity-60={rangeFilterState.testing}
-            >
-              {rangeFilterState.speciesCount !== null
-                ? formatNumber(rangeFilterState.speciesCount)
-                : '-'}
-            </div>
-            {#if rangeFilterState.testing}
-              <!-- Decorative: the status region below announces the state. -->
-              <LoadingSpinner size="sm" aria-hidden="true" />
-            {/if}
-            <!-- Always rendered so screen readers hear loading and the new count. -->
-            <span class="sr-only" role="status">
-              {rangeFilterState.testing
-                ? t('settings.main.sections.rangeFilter.speciesCount.loading')
-                : rangeFilterState.speciesCount !== null
-                  ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
-                  : ''}
-            </span>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 mt-2">
-            <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
-                 natively disabled button would drop focus before the dialog could return it here -->
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
-              aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
-              aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
-              onclick={() => {
-                if (viewSpeciesBlocked) return;
-                rangeFilterState.showModal = true;
-                loadRangeFilterSpecies();
-              }}
-            >
-              {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.downloading ||
-                !birdnet?.locationConfigured}
-              onclick={downloadSpeciesCSV}
-            >
-              <Download class="size-4" />
-              {t('analytics.filters.exportCsv')}
-            </button>
-            <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
-            {#if viewSpeciesBlockedReason}
-              <span
-                id="range-species-blocked-reason"
-                class="text-xs text-[var(--color-base-content)]/70"
-              >
-                {viewSpeciesBlockedReason}
-              </span>
-            {/if}
-          </div>
-          <span class="help-text mt-1">
-            {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-          </span>
-        </div>
-      </div>
-
-      {#if rangeFilterStatus && rangeFilterStatus.geomodel}
-        <details
-          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
-        >
-          <summary
-            class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
-          >
-            {t('analysis.rangeFilter.status.title')}
-          </summary>
-          <div class="px-4 pb-4">
-            <!-- Geomodel info line -->
-            <div class="flex items-center gap-2 text-sm mb-3">
-              <span class="font-medium">
-                {t('analysis.rangeFilter.status.geomodelInfo', {
-                  version: rangeFilterStatus.geomodel.version,
-                  species: formatNumber(rangeFilterStatus.geomodel.totalSpecies),
-                })}
-              </span>
-              <span
-                class={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  rangeFilterStatus.geomodel.autoSelected
-                    ? 'bg-[var(--color-success)]/15 text-[var(--text-success)]'
-                    : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
-                )}
-              >
-                {rangeFilterStatus.geomodel.autoSelected
-                  ? t('analysis.rangeFilter.status.autoSelected')
-                  : t('analysis.rangeFilter.status.manual')}
-              </span>
-            </div>
-
-            <!-- Per-classifier coverage table -->
-            {#if rangeFilterStatus.classifiers.length > 0}
-              <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                  <thead>
-                    <tr class="border-b border-[var(--color-base-300)]">
-                      <th
-                        scope="col"
-                        class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
-                        >{t('analysis.rangeFilter.status.classifier')}</th
-                      >
-                      <th
-                        scope="col"
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
-                        >{t('analysis.rangeFilter.status.totalSpecies')}</th
-                      >
-                      <th
-                        scope="col"
-                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
-                        title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
-                        >{t('analysis.rangeFilter.status.withRangeData')}</th
-                      >
-                      <th
-                        scope="col"
-                        class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
-                        title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
-                        >{t('analysis.rangeFilter.status.withoutRangeData')}</th
-                      >
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
-                      <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
-                        <td class="py-2 pr-4 font-medium">{classifier.name}</td>
-                        <td class="py-2 px-4 text-right tabular-nums"
-                          >{formatNumber(classifier.totalSpecies)}</td
-                        >
-                        <td class="py-2 px-4 text-right tabular-nums"
-                          >{formatNumber(classifier.withRangeData)}</td
-                        >
-                        <td class="py-2 pl-4 text-right tabular-nums"
-                          >{formatNumber(classifier.withoutRangeData)}</td
-                        >
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {/if}
-          </div>
-        </details>
-
-        <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
-        <div class="mt-3">
-          <Checkbox
-            label={t('analysis.rangeFilter.status.passUnmapped.label')}
-            checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
-            onchange={value =>
+      <!-- Range filter -->
+      <SettingsSection
+        title={t('settings.main.sections.rangeFilter.title')}
+        description={t('settings.main.sections.rangeFilter.description')}
+        originalData={rangeFilterChange.original}
+        currentData={rangeFilterChange.current}
+      >
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.threshold.label')}
+            value={birdnet?.rangeFilter?.threshold ?? 0.01}
+            onUpdate={value =>
               settingsActions.updateSection('birdnet', {
-                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
+                rangeFilter: { ...birdnet?.rangeFilter, threshold: value },
               })}
-            helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-      {/if}
-
-      {#if rangeFilterState.error}
-        <div
-          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
-          role="alert"
-        >
-          <XCircle class="size-5 shrink-0" aria-hidden="true" />
-          <span>{rangeFilterState.error}</span>
-          <button
-            type="button"
-            class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-            aria-label={t('common.aria.dismissAlert')}
-            onclick={() => (rangeFilterState.error = null)}
-          >
-            <X class="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      {/if}
-    </SettingsSection>
-
-    <!-- 5. Dynamic Threshold -->
-    <SettingsSection
-      title={t('settings.main.sections.dynamicThreshold.title')}
-      description={t('settings.main.sections.dynamicThreshold.description')}
-      originalData={dynamicThresholdChange.original}
-      currentData={dynamicThresholdChange.current}
-    >
-      <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
-
-      <div class="mt-4">
-        <Checkbox
-          checked={dynamicThreshold.enabled}
-          label={t('settings.main.sections.dynamicThreshold.enable.label')}
-          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateDynamicThreshold('enabled', value)}
-        />
-      </div>
-
-      {#if dynamicThreshold.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.trigger.label')}
-            value={dynamicThreshold.trigger}
-            onUpdate={value => updateDynamicThreshold('trigger', value)}
-            min={0.0}
-            max={1.0}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.minimum.label')}
-            value={dynamicThreshold.min}
-            onUpdate={value => updateDynamicThreshold('min', value)}
             min={0.0}
             max={0.99}
             step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
+            helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
             disabled={store.isLoading || store.isSaving}
           />
 
+          <div>
+            <div class="flex justify-start mb-1">
+              <span class="text-sm text-[var(--color-base-content)]"
+                >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
+              >
+            </div>
+            <div class="flex items-center gap-3">
+              <div
+                class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
+                class:opacity-60={rangeFilterState.testing}
+              >
+                {rangeFilterState.speciesCount !== null
+                  ? formatNumber(rangeFilterState.speciesCount)
+                  : '-'}
+              </div>
+              {#if rangeFilterState.testing}
+                <!-- Decorative: the status region below announces the state. -->
+                <LoadingSpinner size="sm" aria-hidden="true" />
+              {/if}
+              <!-- Always rendered so screen readers hear loading and the new count. -->
+              <span class="sr-only" role="status">
+                {rangeFilterState.testing
+                  ? t('settings.main.sections.rangeFilter.speciesCount.loading')
+                  : rangeFilterState.speciesCount !== null
+                    ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
+                    : ''}
+              </span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mt-2">
+              <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
+                   natively disabled button would drop focus before the dialog could return it here -->
+              <button
+                type="button"
+                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
+                aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
+                aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
+                onclick={() => {
+                  if (viewSpeciesBlocked) return;
+                  rangeFilterState.showModal = true;
+                  loadRangeFilterSpecies();
+                }}
+              >
+                {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!rangeFilterState.speciesCount ||
+                  rangeFilterState.downloading ||
+                  !birdnet?.locationConfigured}
+                onclick={downloadSpeciesCSV}
+              >
+                <Download class="size-4" />
+                {t('analytics.filters.exportCsv')}
+              </button>
+              <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
+              {#if viewSpeciesBlockedReason}
+                <span
+                  id="range-species-blocked-reason"
+                  class="text-xs text-[var(--color-base-content)]/70"
+                >
+                  {viewSpeciesBlockedReason}
+                </span>
+              {/if}
+            </div>
+            <span class="help-text mt-1">
+              {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
+            </span>
+          </div>
+        </div>
+
+        {#if rangeFilterStatus && rangeFilterStatus.geomodel}
+          <details
+            class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
+          >
+            <summary
+              class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
+            >
+              {t('analysis.rangeFilter.status.title')}
+            </summary>
+            <div class="px-4 pb-4">
+              <!-- Geomodel info line -->
+              <div class="flex items-center gap-2 text-sm mb-3">
+                <span class="font-medium">
+                  {t('analysis.rangeFilter.status.geomodelInfo', {
+                    version: rangeFilterStatus.geomodel.version,
+                    species: formatNumber(rangeFilterStatus.geomodel.totalSpecies),
+                  })}
+                </span>
+                <span
+                  class={cn(
+                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                    rangeFilterStatus.geomodel.autoSelected
+                      ? 'bg-[var(--color-success)]/15 text-[var(--text-success)]'
+                      : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
+                  )}
+                >
+                  {rangeFilterStatus.geomodel.autoSelected
+                    ? t('analysis.rangeFilter.status.autoSelected')
+                    : t('analysis.rangeFilter.status.manual')}
+                </span>
+              </div>
+
+              <!-- Per-classifier coverage table -->
+              {#if rangeFilterStatus.classifiers.length > 0}
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-[var(--color-base-300)]">
+                        <th
+                          scope="col"
+                          class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                          >{t('analysis.rangeFilter.status.classifier')}</th
+                        >
+                        <th
+                          scope="col"
+                          class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                          >{t('analysis.rangeFilter.status.totalSpecies')}</th
+                        >
+                        <th
+                          scope="col"
+                          class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                          title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
+                          >{t('analysis.rangeFilter.status.withRangeData')}</th
+                        >
+                        <th
+                          scope="col"
+                          class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                          title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
+                          >{t('analysis.rangeFilter.status.withoutRangeData')}</th
+                        >
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                        <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
+                          <td class="py-2 pr-4 font-medium">{classifier.name}</td>
+                          <td class="py-2 px-4 text-right tabular-nums"
+                            >{formatNumber(classifier.totalSpecies)}</td
+                          >
+                          <td class="py-2 px-4 text-right tabular-nums"
+                            >{formatNumber(classifier.withRangeData)}</td
+                          >
+                          <td class="py-2 pl-4 text-right tabular-nums"
+                            >{formatNumber(classifier.withoutRangeData)}</td
+                          >
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/if}
+            </div>
+          </details>
+
+          <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
+          <div class="mt-5 border-t border-[var(--border-100)] pt-5">
+            <ToggleField
+              label={t('analysis.rangeFilter.status.passUnmapped.label')}
+              description={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+              value={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={enabled =>
+                settingsActions.updateSection('birdnet', {
+                  rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: enabled },
+                })}
+            />
+          </div>
+        {/if}
+
+        {#if rangeFilterState.error}
+          <div
+            class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--text-error)]"
+            role="alert"
+          >
+            <XCircle class="size-5 shrink-0" aria-hidden="true" />
+            <span>{rangeFilterState.error}</span>
+            <button
+              type="button"
+              class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              aria-label={t('common.aria.dismissAlert')}
+              onclick={() => (rangeFilterState.error = null)}
+            >
+              <X class="size-4" aria-hidden="true" />
+            </button>
+          </div>
+        {/if}
+
+        <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
+      </SettingsSection>
+
+      <!-- Bat detection (only when a bat model is installed) -->
+      {#if hasBatModel}
+        <SettingsSection
+          title={t('analysis.bat.title')}
+          description={t('analysis.bat.description')}
+          defaultOpen={true}
+          originalData={batChange.original}
+          currentData={batChange.current}
+        >
+          <div class="divide-y divide-[var(--border-100)]">
+            <ToggleField
+              className="pb-4"
+              value={bat.nighttimeOnly ?? true}
+              label={t('analysis.detection.batNighttimeOnly.label')}
+              description={t('analysis.detection.batNighttimeOnly.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={updateBatNighttimeOnly}
+            />
+            <ToggleField
+              className="py-4"
+              value={bat.ultrasonicFilter?.enabled ?? true}
+              label={t('analysis.detection.batUltrasonicFilter.label')}
+              description={t('analysis.detection.batUltrasonicFilter.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={updateBatUltrasonicFilter}
+            />
+            {#if bat.ultrasonicFilter?.enabled ?? true}
+              <!-- Indented under the filter it depends on -->
+              <ToggleField
+                className="py-4 pl-6"
+                value={bat.ultrasonicFilter?.discardUnlikely ?? false}
+                label={t('analysis.detection.batDiscardUnlikely.label')}
+                description={t('analysis.detection.batDiscardUnlikely.helpText')}
+                disabled={store.isLoading || store.isSaving}
+                onUpdate={updateBatDiscardUnlikely}
+              />
+            {/if}
+          </div>
+
+          <!-- Bat False Positive Filter -->
+          <div class="mt-2 border-t border-[var(--border-100)] pt-5">
+            <FalsePositiveFilterControl
+              id="bat-false-positive-filter-level"
+              level={batFPLevel}
+              levels={BAT_FP_LEVELS}
+              onUpdate={updateBatFalsePositiveFilterLevel}
+              getDescription={level => getBatFalsePositiveFilterDescription(level)}
+              disabled={store.isLoading || store.isSaving}
+            />
+          </div>
+
+          {#if batFPLevel === 0}
+            <SettingsNote>
+              {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+              <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
+            </SettingsNote>
+          {/if}
+
+          {#if hasBsgBatModel}
+            <SettingsNote>
+              {#snippet icon()}<AlertTriangle class="size-4 text-[var(--text-warning)]" />{/snippet}
+              <span>{t('analysis.detection.bsgBatThreshold.sampleRateWarning')}</span>
+            </SettingsNote>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <div>
+                <NumberField
+                  label={t('analysis.detection.bsgBatStep.label')}
+                  value={bsgBatStepFrames}
+                  onUpdate={updateBsgBatStep}
+                  min={BSG_BAT_STEP_MIN_FRAMES}
+                  max={BSG_BAT_STEP_MAX_FRAMES}
+                  step={BSG_BAT_STEP_INCREMENT}
+                  disabled={store.isLoading || store.isSaving}
+                  helpText={t('analysis.detection.bsgBatStep.helpText')}
+                  describedByExtra={BSG_BAT_STEP_READOUT_ID}
+                />
+                <p
+                  id={BSG_BAT_STEP_READOUT_ID}
+                  class="mt-1 text-xs text-[var(--color-base-content)]/70"
+                >
+                  {#if batFPLevel === 0}
+                    {t('analysis.detection.bsgBatStep.readout', { seconds: bsgBatStepSecondsText })}
+                  {:else}
+                    {t('analysis.detection.bsgBatStep.readoutWithFilter', {
+                      seconds: bsgBatStepSecondsText,
+                      level: t(fpLevelNameKey(batFPLevel)),
+                      count: bsgBatMinDetections(batFPLevel).toString(),
+                    })}
+                  {/if}
+                  {t('analysis.detection.bsgBatStep.restartNote')}
+                </p>
+              </div>
+            </div>
+          {/if}
+        </SettingsSection>
+      {/if}
+    </section>
+
+    <!-- Group 3. General: naming and processing -->
+    <section class="space-y-4" aria-labelledby={GROUP_GENERAL_ID}>
+      {@render groupHeading(GROUP_GENERAL_ID, t('analysis.groups.general'))}
+
+      <!-- Species names -->
+      <SettingsSection
+        title={t('analysis.speciesNames.title')}
+        description={t('analysis.speciesNames.description')}
+        originalData={speciesNamesChange.original}
+        currentData={speciesNamesChange.current}
+      >
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <SelectDropdown
+            options={birdnetLocaleOptions}
+            value={birdnet?.locale ?? 'en'}
+            label={t('analysis.detection.locale.label')}
+            helpText={t('analysis.detection.locale.helpText')}
+            disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
+            variant="select"
+            groupBy={false}
+            searchable={true}
+            onChange={value => updateBirdnetSetting('locale', value as string)}
+          >
+            {#snippet renderOption(option)}
+              {@const localeOption = option as BirdnetLocaleOption}
+              <div class="flex items-center gap-2">
+                <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                <span>{localeOption.label}</span>
+              </div>
+            {/snippet}
+            {#snippet renderSelected(options)}
+              {#if options[0]}
+                {@const localeOption = options[0] as BirdnetLocaleOption}
+                <span class="flex items-center gap-2">
+                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  <span>{localeOption.label}</span>
+                </span>
+              {:else}
+                <span>{birdnet?.locale ?? 'en'}</span>
+              {/if}
+            {/snippet}
+          </SelectDropdown>
+        </div>
+      </SettingsSection>
+
+      <!-- Advanced -->
+      <SettingsSection
+        title={t('analysis.advanced.title')}
+        description={t('analysis.advanced.description')}
+        defaultOpen={false}
+        originalData={advancedChange.original}
+        currentData={advancedChange.current}
+      >
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <NumberField
-            label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
-            value={dynamicThreshold.validHours}
-            onUpdate={value => updateDynamicThreshold('validHours', value)}
+            label={t('settings.main.fields.inferenceThreads.label')}
+            value={birdnet?.threads ?? 0}
+            onUpdate={value => updateBirdnetSetting('threads', value)}
             min={0}
-            max={1000}
+            max={32}
             step={1}
-            helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
+            helpText={t('settings.main.fields.inferenceThreads.helpText')}
             disabled={store.isLoading || store.isSaving}
           />
         </div>
-      {/if}
-    </SettingsSection>
 
-    <!-- 6. Advanced (collapsed by default) -->
-    <SettingsSection
-      title={t('analysis.advanced.title')}
-      description={t('analysis.advanced.description')}
-      defaultOpen={false}
-      originalData={advancedChange.original}
-      currentData={advancedChange.current}
-    >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <NumberField
-          label={t('settings.main.fields.inferenceThreads.label')}
-          value={birdnet?.threads ?? 0}
-          onUpdate={value => updateBirdnetSetting('threads', value)}
-          min={0}
-          max={32}
-          step={1}
-          helpText={t('settings.main.fields.inferenceThreads.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-      </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <TextInput
+            id="model-path"
+            value={birdnet?.modelPath ?? ''}
+            label={t('settings.main.sections.customClassifier.modelPath.label')}
+            placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
+            helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateBirdnetSetting('modelPath', value)}
+          />
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-        <TextInput
-          id="model-path"
-          value={birdnet?.modelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.modelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('modelPath', value)}
-        />
-
-        <TextInput
-          id="label-path"
-          value={birdnet?.labelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.labelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('labelPath', value)}
-        />
-      </div>
-    </SettingsSection>
+          <TextInput
+            id="label-path"
+            value={birdnet?.labelPath ?? ''}
+            label={t('settings.main.sections.customClassifier.labelPath.label')}
+            placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
+            helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateBirdnetSetting('labelPath', value)}
+          />
+        </div>
+      </SettingsSection>
+    </section>
   </div>
 {/snippet}
 
@@ -3137,3 +3178,31 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* The filled part of a threshold slider's track, up to the thumb. The fill is set per row
+     from the value; a disabled row (one that follows BirdNET) shows it in a neutral shade. */
+  .threshold-range {
+    background-image: linear-gradient(
+      to right,
+      var(--color-primary) var(--threshold-fill),
+      var(--border-200) var(--threshold-fill)
+    );
+  }
+
+  .threshold-range:dir(rtl) {
+    background-image: linear-gradient(
+      to left,
+      var(--color-primary) var(--threshold-fill),
+      var(--border-200) var(--threshold-fill)
+    );
+  }
+
+  .threshold-range:disabled {
+    background-image: linear-gradient(
+      to right,
+      var(--border-300) var(--threshold-fill),
+      var(--border-200) var(--threshold-fill)
+    );
+  }
+</style>

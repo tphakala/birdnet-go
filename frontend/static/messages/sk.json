@@ -6124,7 +6124,17 @@
         "pending": "Loading",
         "failed": "Failed to load"
       },
-      "empty": "No classifiers are enabled."
+      "empty": "No classifiers are enabled.",
+      "sliderLabel": "{name} threshold"
+    },
+    "groups": {
+      "confidence": "Confidence",
+      "filters": "Filters",
+      "general": "General"
+    },
+    "speciesNames": {
+      "title": "Species names",
+      "description": "How detected species are named in the interface."
     }
   },
   "restart": {
