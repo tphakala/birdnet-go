@@ -5,6 +5,7 @@ import (
 	"math"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -269,6 +270,8 @@ func TestBuildDocuments_Validation(t *testing.T) {
 		{name: "two licenses", in: []namedManifest{mk("o/a", lic, external)}, wantErr: "repeated"},
 		{name: "repeated kind", in: []namedManifest{mk("o/a", lic, hosted("x"), hosted("x"))}, wantErr: "repeated"},
 		{name: "hosted without sha256", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.SHA256 = "" })}, wantErr: "hosted document needs"},
+		{name: "hosted without path", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.Path = "" })}, wantErr: "hosted document needs"},
+		{name: "hosted with uppercase sha256", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.SHA256 = strings.ToUpper(d.SHA256) })}, wantErr: "hosted document needs"},
 		{name: "hosted with short revision", in: []namedManifest{with(mk("o/a", lic), func(d *manifestDocument) { d.Revision = "abc" })}, wantErr: "hosted document needs"},
 		{name: "external requiring agreement", in: []namedManifest{with(mk("o/a", external), func(d *manifestDocument) { d.RequiresAgreement = true })}, wantErr: "cannot require agreement"},
 		{name: "external with http url", in: []namedManifest{with(mk("o/a", external), func(d *manifestDocument) { d.URL = "http://example.org" })}, wantErr: "not https"},
