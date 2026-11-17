@@ -184,7 +184,6 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 
 	p := findEntry(catalog, apiDepP)
 	require.NotNil(t, p)
-	assert.Equal(t, classifier.RegistryIDBirdNETV24, p.RegistryID, "a classifier entry reports its registry ID")
 	assert.True(t, p.HasGeomodel, "the default variant brings the geomodel through the dependency")
 	builtin := findVariant(p, "builtin")
 	require.NotNil(t, builtin)
@@ -195,7 +194,6 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 
 	g := findEntry(catalog, apiDepG)
 	require.NotNil(t, g)
-	assert.Empty(t, g.RegistryID, "an entry that is not a classifier reports no registry ID")
 	assert.Empty(t, g.DependsOn)
 	assert.True(t, g.HasGeomodel, "the geomodel entry provides its own geomodel files")
 	assert.Equal(t, classifier.ChannelPreview, g.Channel, "a declared channel is passed through")
@@ -204,6 +202,35 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 	n := findEntry(catalog, apiDepN)
 	require.NotNil(t, n)
 	assert.False(t, n.HasGeomodel, "an entry with no geomodel file and no dependency has no geomodel")
+}
+
+// TestGetModelCatalog_RegistryIDWireKey pins the registryId JSON key that clients
+// join on, and its omission for an entry that is not a classifier. It decodes the
+// raw body into maps so a renamed tag or a dropped omitempty fails.
+func TestGetModelCatalog_RegistryIDWireKey(t *testing.T) {
+	useCatalog(t, apiDependencyCatalog())
+	h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/models/catalog", http.NoBody)
+	rec := httptest.NewRecorder()
+	require.NoError(t, h.GetModelCatalog(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Catalog []map[string]any `json:"catalog"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	byID := make(map[string]map[string]any, len(resp.Catalog))
+	for _, entry := range resp.Catalog {
+		id, _ := entry["id"].(string)
+		byID[id] = entry
+	}
+
+	require.Contains(t, byID, apiDepP)
+	assert.Equal(t, classifier.RegistryIDBirdNETV24, byID[apiDepP]["registryId"], "a classifier entry reports its registry ID")
+	require.Contains(t, byID, apiDepG)
+	assert.NotContains(t, byID[apiDepG], "registryId", "an entry that is not a classifier omits the key")
 }
 
 func TestGetModelCatalog_SupersededBy(t *testing.T) {
