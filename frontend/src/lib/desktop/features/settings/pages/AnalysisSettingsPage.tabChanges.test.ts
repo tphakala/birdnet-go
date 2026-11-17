@@ -717,6 +717,32 @@ describe('AnalysisSettingsPage inference runtime', () => {
     await waitFor(() => expect(backend).toHaveFocus());
   });
 
+  it('keeps a loaded runtime list when a later overlapping lookup fails', async () => {
+    const pending: Array<{ resolve: (value: unknown) => void; reject: (error: Error) => void }> =
+      [];
+    mockRuntime(() => new Promise((resolve, reject) => pending.push({ resolve, reject })));
+    render(AnalysisSettingsPage);
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    const started = pending.length;
+
+    // Leaving the tab and coming back starts another lookup while the first is in flight.
+    const user = userEvent.setup();
+    await user.click(tab('detection'));
+    await user.click(tab('inference'));
+    await waitFor(() => expect(pending.length).toBeGreaterThan(started));
+    // The first lookup succeeds, then every later one fails.
+    pending[0]?.resolve(runtimeStatus());
+    await tick();
+    for (const lookup of pending.slice(1)) lookup.reject(new Error('late runtime lookup failure'));
+    // Let the rejected lookups reach their catch before checking the page.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await tick();
+
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+    await waitFor(() => expect(backend).toBeEnabled());
+    expect(screen.queryByText('analysis.inference.backendsUnavailable')).toBeNull();
+  });
+
   it('offers only Auto when the host reports neither ONNX Runtime nor OpenVINO', async () => {
     mockRuntime(async () => runtimeStatus({ onnx: false, openvino: false }));
     render(AnalysisSettingsPage);
