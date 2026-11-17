@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Ota käyttöön äänilähteissä",
         "intro": "{name} on asennettu. Valitse äänilähteet, joiden ääni analysoidaan sillä.",
-        "saveHint": "Valintasi tallennetaan, kun valitset Valmis. Ei nyt sulkee tämän ilman muutoksia.",
+        "saveHint": "Valintasi tallennetaan, kun valitset Valmis. Ei nyt sulkee tämän tallentamatta.",
         "allSources": "Kaikki äänilähteet",
         "soundCardsHeading": "Äänikortit",
         "streamsHeading": "Streamit",

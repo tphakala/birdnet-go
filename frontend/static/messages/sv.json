@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Aktivera för ljudkällor",
         "intro": "{name} är installerad. Välj de ljudkällor som ska analyseras med den.",
-        "saveHint": "Ditt val sparas när du väljer Klar. Inte nu stänger detta utan ändringar.",
+        "saveHint": "Ditt val sparas när du väljer Klar. Inte nu stänger detta utan att spara.",
         "allSources": "Alla ljudkällor",
         "soundCardsHeading": "Ljudkort",
         "streamsHeading": "Strömmar",

@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Włącz dla źródeł dźwięku",
         "intro": "Model {name} jest zainstalowany. Wybierz źródła dźwięku, które mają być nim analizowane.",
-        "saveHint": "Wybór zostanie zapisany po wybraniu Gotowe. Nie teraz zamyka to okno bez zmian.",
+        "saveHint": "Wybór zostanie zapisany po wybraniu Gotowe. Nie teraz zamyka to okno bez zapisywania.",
         "allSources": "Wszystkie źródła dźwięku",
         "soundCardsHeading": "Karty dźwiękowe",
         "streamsHeading": "Strumienie",

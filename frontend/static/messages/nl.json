@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Inschakelen voor audiobronnen",
         "intro": "{name} is geïnstalleerd. Kies de audiobronnen die ermee geanalyseerd moeten worden.",
-        "saveHint": "Uw keuze wordt opgeslagen wanneer u Gereed kiest. Niet nu sluit dit zonder wijzigingen.",
+        "saveHint": "Uw keuze wordt opgeslagen wanneer u Gereed kiest. Niet nu sluit dit zonder op te slaan.",
         "allSources": "Alle audiobronnen",
         "soundCardsHeading": "Geluidskaarten",
         "streamsHeading": "Audiostreams",

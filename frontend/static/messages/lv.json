@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Ieslēgt audio avotos",
         "intro": "{name} ir instalēts. Izvēlieties audio avotus, kurus ar to analizēt.",
-        "saveHint": "Izvēle tiek saglabāta, kad izvēlaties Gatavs. Ne tagad aizver šo bez izmaiņām.",
+        "saveHint": "Izvēle tiek saglabāta, kad izvēlaties Gatavs. Ne tagad aizver šo, nesaglabājot.",
         "allSources": "Visi audio avoti",
         "soundCardsHeading": "Skaņas kartes",
         "streamsHeading": "Straumes",

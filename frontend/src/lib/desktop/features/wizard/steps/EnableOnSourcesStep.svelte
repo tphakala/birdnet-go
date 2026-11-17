@@ -4,7 +4,7 @@
   Purpose: The first recommended step after a model install. Installing a model
   does not add it to the audio sources that list their models, so this step
   offers to turn the new model on for every sound card and stream, or for
-  chosen ones. Nothing is saved until Done; closing the wizard saves nothing.
+  chosen ones. Nothing is saved until Done; closing without Done starts no save.
 
   States: the model list loading (skeleton) or failed to load (reason, Retry);
   the model not listed, still loading or failed to load (explained, no
@@ -196,9 +196,6 @@
     handleAppLinkClick(event);
   }
 
-  // Sources turned on by saves that already succeeded, for the confirmation
-  let enabledCount = 0;
-
   // Applies the model to the chosen entries of a stored list; null when none changes
   function withModel<T extends { models?: string[] }>(
     list: readonly T[],
@@ -218,28 +215,32 @@
 
   // Runs on Done. The payloads are built from the stored settings at this
   // moment (a successful save updates them), so a retry after a failed save
-  // resends only what still differs.
+  // resends only what still differs. The sources a save turned on are reported
+  // even when a later save fails or the wizard was closed meanwhile.
   async function commit(): Promise<void> {
     const alias = listed?.id;
     if (view !== 'sources' || alias === undefined || chosen.length === 0) return;
 
-    const nextSources = withModel(sources, cardKey, alias);
-    if (nextSources) {
-      await settingsActions.saveSection('audio', { sources: nextSources.list });
-      enabledCount += nextSources.changed;
-    }
-    const nextStreams = withModel(streams, streamKey, alias);
-    if (nextStreams) {
-      await settingsActions.saveSection('rtsp', { streams: nextStreams.list });
-      enabledCount += nextStreams.changed;
-    }
-    if (enabledCount > 0) {
-      toastActions.success(
-        t('wizard.steps.enableOnSources.enabledToast', {
-          name: modelName,
-          count: enabledCount,
-        })
-      );
+    let enabled = 0;
+    try {
+      const nextSources = withModel(sources, cardKey, alias);
+      if (nextSources) {
+        await settingsActions.saveSection('audio', { sources: nextSources.list });
+        enabled += nextSources.changed;
+      }
+      // Not now during the sound card save closed the wizard: start no other save
+      if (wizardState.installedModel !== model) return;
+      const nextStreams = withModel(streams, streamKey, alias);
+      if (nextStreams) {
+        await settingsActions.saveSection('rtsp', { streams: nextStreams.list });
+        enabled += nextStreams.changed;
+      }
+    } finally {
+      if (enabled > 0) {
+        toastActions.success(
+          t('wizard.steps.enableOnSources.enabledToast', { name: modelName, count: enabled })
+        );
+      }
     }
   }
 

@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Ativar nas fontes de áudio",
         "intro": "{name} está instalado. Escolha as fontes de áudio que devem ser analisadas com ele.",
-        "saveHint": "A sua escolha é guardada quando seleciona Concluído. Agora não fecha isto sem alterações.",
+        "saveHint": "A sua escolha é guardada quando seleciona Concluído. Agora não fecha isto sem guardar.",
         "allSources": "Todas as fontes de áudio",
         "soundCardsHeading": "Placas de som",
         "streamsHeading": "Fluxos",

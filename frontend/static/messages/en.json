@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Enable on audio sources",
         "intro": "{name} is installed. Choose the audio sources that should analyze with it.",
-        "saveHint": "Your choice is saved when you select Done. Not now closes this without changes.",
+        "saveHint": "Your choice is saved when you select Done. Not now closes this without saving.",
         "allSources": "All audio sources",
         "soundCardsHeading": "Sound cards",
         "streamsHeading": "Streams",

@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Slå på for lydkilder",
         "intro": "{name} er installert. Velg lydkildene som skal analyseres med den.",
-        "saveHint": "Valget lagres når du velger Ferdig. Ikke nå lukker dette uten endringer.",
+        "saveHint": "Valget lagres når du velger Ferdig. Ikke nå lukker dette uten å lagre.",
         "allSources": "Alle lydkilder",
         "soundCardsHeading": "Lydkort",
         "streamsHeading": "Strømmer",

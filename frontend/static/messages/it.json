@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Attiva sulle sorgenti audio",
         "intro": "{name} è installato. Scegli le sorgenti audio da analizzare con questo modello.",
-        "saveHint": "La scelta viene salvata quando selezioni Fine. Non ora chiude senza modifiche.",
+        "saveHint": "La scelta viene salvata quando selezioni Fine. Non ora chiude senza salvare.",
         "allSources": "Tutte le sorgenti audio",
         "soundCardsHeading": "Schede audio",
         "streamsHeading": "Stream",

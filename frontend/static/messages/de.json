@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Für Audioquellen aktivieren",
         "intro": "{name} ist installiert. Wählen Sie die Audioquellen, die damit analysiert werden sollen.",
-        "saveHint": "Ihre Auswahl wird gespeichert, wenn Sie Fertig wählen. Nicht jetzt schließt dies ohne Änderungen.",
+        "saveHint": "Ihre Auswahl wird gespeichert, wenn Sie Fertig wählen. Nicht jetzt schließt dies, ohne zu speichern.",
         "allSources": "Alle Audioquellen",
         "soundCardsHeading": "Soundkarten",
         "streamsHeading": "Audiostreams",

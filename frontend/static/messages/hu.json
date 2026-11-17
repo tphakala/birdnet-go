@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Bekapcsolás hangforrásokon",
         "intro": "A(z) {name} telepítve van. Válassza ki, mely hangforrásokat elemezze.",
-        "saveHint": "A választás a Kész gombra kattintva mentődik. A Most nem módosítás nélkül bezárja ezt.",
+        "saveHint": "A választás a Kész gombra kattintva mentődik. A Most nem mentés nélkül bezárja ezt.",
         "allSources": "Összes hangforrás",
         "soundCardsHeading": "Hangkártyák",
         "streamsHeading": "Streamek",

@@ -50,6 +50,8 @@ import type { AudioSourceConfig, SettingsFormData, StreamConfig } from '$lib/sto
 import { api } from '$lib/utils/api';
 import { resetModelsForTest, type BackendModel } from '$lib/stores/models.svelte';
 import { renderStep } from './stepTestUtils';
+import { toastActions } from '$lib/stores/toast';
+import { t } from '$lib/i18n';
 
 const KEY = 'wizard.steps.enableOnSources';
 
@@ -128,7 +130,9 @@ async function renderLoaded(model = PERCH_CONTEXT) {
 describe('EnableOnSourcesStep', () => {
   beforeEach(() => {
     resetModelsForTest();
-    vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
+    vi.mocked(settingsActions.saveSection).mockReset().mockResolvedValue(undefined);
+    vi.mocked(toastActions.success).mockClear();
+    vi.mocked(t).mockClear();
     acoustic.availability = { kind: 'ready', defaultTargets: ['BirdNET_V2.4', 'Perch_V2'] };
     serveModels([BIRDNET, PERCH]);
     seed([card('Garden', ['birdnet'])], [stream('Feeder', ['birdnet'])]);
@@ -207,6 +211,36 @@ describe('EnableOnSourcesStep', () => {
     expect(settingsActions.saveSection).toHaveBeenCalledWith('audio', {
       sources: [card('Default', ['birdnet', 'perch_v2', 'bat'])],
     });
+  });
+
+  it('stops after the sound card save when the wizard closes during it', async () => {
+    const { leave } = await renderLoaded();
+    vi.mocked(settingsActions.saveSection).mockImplementation(async () => {
+      // Not now pressed while the sound card save runs
+      wizard.model = null;
+    });
+
+    await fireEvent.click(sourceSwitch(`${KEY}.allSources`));
+    await leave();
+
+    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('audio', expect.anything());
+    // The sound card that did change is still reported
+    expect(t).toHaveBeenCalledWith(`${KEY}.enabledToast`, { name: 'Perch v2', count: 1 });
+    expect(toastActions.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the sound cards that changed when the stream save then fails', async () => {
+    const { leave } = await renderLoaded();
+    vi.mocked(settingsActions.saveSection).mockImplementation(async section => {
+      if (section === 'rtsp') throw new Error('save rtsp failed');
+    });
+
+    await fireEvent.click(sourceSwitch(`${KEY}.allSources`));
+    await expect(leave()).rejects.toThrow('save rtsp failed');
+
+    expect(t).toHaveBeenCalledWith(`${KEY}.enabledToast`, { name: 'Perch v2', count: 1 });
+    expect(toastActions.success).toHaveBeenCalledTimes(1);
   });
 
   it('saves nothing when the user leaves without turning a source on', async () => {

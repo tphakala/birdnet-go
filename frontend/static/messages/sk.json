@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Zapnúť na zvukových zdrojoch",
         "intro": "Model {name} je nainštalovaný. Vyberte zvukové zdroje, ktoré ním majú analyzovať zvuk.",
-        "saveHint": "Voľba sa uloží, keď vyberiete Hotovo. Teraz nie toto okno zavrie bez zmien.",
+        "saveHint": "Voľba sa uloží, keď vyberiete Hotovo. Teraz nie toto okno zavrie bez uloženia.",
         "allSources": "Všetky zvukové zdroje",
         "soundCardsHeading": "Zvukové karty",
         "streamsHeading": "Streamy",

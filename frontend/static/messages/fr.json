@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Activer sur les sources audio",
         "intro": "{name} est installé. Choisissez les sources audio à analyser avec ce modèle.",
-        "saveHint": "Votre choix est enregistré lorsque vous sélectionnez Terminé. Pas maintenant ferme cette fenêtre sans modification.",
+        "saveHint": "Votre choix est enregistré lorsque vous sélectionnez Terminé. Pas maintenant ferme cette fenêtre sans enregistrer.",
         "allSources": "Toutes les sources audio",
         "soundCardsHeading": "Cartes son",
         "streamsHeading": "Flux",

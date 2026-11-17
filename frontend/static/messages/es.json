@@ -5783,7 +5783,7 @@
       "enableOnSources": {
         "title": "Activar en fuentes de audio",
         "intro": "{name} está instalado. Elija las fuentes de audio que deben analizarse con él.",
-        "saveHint": "Su elección se guarda al seleccionar Listo. Ahora no cierra esto sin cambios.",
+        "saveHint": "Su elección se guarda al seleccionar Listo. Ahora no cierra esto sin guardar.",
         "allSources": "Todas las fuentes de audio",
         "soundCardsHeading": "Tarjetas de sonido",
         "streamsHeading": "Transmisiones",
