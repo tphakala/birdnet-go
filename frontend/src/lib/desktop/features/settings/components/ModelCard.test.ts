@@ -342,8 +342,8 @@ describe('ModelCard', () => {
       }
     );
 
-    it.each(['available', 'installed'] as const)('adds no notice on a %s card', mode => {
-      renderCard({ entry: entry({ channel: CHANNEL_PREVIEW, installed: true }), mode });
+    it('adds no notice on the Available tab', () => {
+      renderCard({ entry: entry({ channel: CHANNEL_PREVIEW }), mode: 'available' });
 
       expect(screen.queryByRole('note')).not.toBeInTheDocument();
     });

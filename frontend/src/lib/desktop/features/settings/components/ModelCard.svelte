@@ -168,17 +168,13 @@
       ? entry.upstreamUrl
       : null
   );
-  // The pill and the Available-tab notice that flag a non-stable release channel; a preview
-  // entry carries the pill and its build label only
-  const channelCopy = $derived.by((): { badge: string; notice: string | null } | null => {
+  // The pill that flags a non-stable release channel
+  const channelBadge = $derived.by(() => {
     switch (entry.channel) {
       case CHANNEL_PREVIEW:
-        return { badge: t('analysis.gallery.preview.badge'), notice: null };
+        return t('analysis.gallery.preview.badge');
       case CHANNEL_EXPERIMENTAL:
-        return {
-          badge: t('analysis.gallery.experimental.badge'),
-          notice: t('analysis.gallery.experimental.cardNotice'),
-        };
+        return t('analysis.gallery.experimental.badge');
       default:
         return null;
     }
@@ -198,7 +194,12 @@
   const inFlight = $derived(actionInFlight || busy !== null);
   // Available cards dim the logo of an entry this host cannot run; the text keeps full contrast
   const unavailable = $derived(mode === 'available' && !entry.compatible);
-  const channelNoticeText = $derived(mode === 'available' ? (channelCopy?.notice ?? null) : null);
+  // Only the experimental channel adds a notice, on the Available tab
+  const channelNoticeText = $derived(
+    mode === 'available' && entry.channel === CHANNEL_EXPERIMENTAL
+      ? t('analysis.gallery.experimental.cardNotice')
+      : null
+  );
   // Unlike the channel notice, the successor note shows in both modes: an installed card is where the user acts on it
   const supersededNoticeText = $derived(
     entry.supersededBy
@@ -362,12 +363,12 @@
         <h4 id={titleId} class="text-sm font-semibold text-[var(--color-base-content)]">
           {entry.name}
         </h4>
-        {#if channelCopy}
+        {#if channelBadge}
           <StatusPill
             variant="warning"
             size="sm"
             showDot={false}
-            label={channelCopy.badge}
+            label={channelBadge}
             className="whitespace-nowrap"
           />
         {/if}
