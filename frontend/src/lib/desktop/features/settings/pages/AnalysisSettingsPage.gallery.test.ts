@@ -1224,6 +1224,124 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     expect(toastActions.success).not.toHaveBeenCalled();
   });
 
+  describe('with a document agreement', () => {
+    const POLICY_SHA = 'a'.repeat(64);
+
+    beforeEach(() => {
+      vi.mocked(modelsApi.fetchModelDocument).mockResolvedValue({
+        repo: 'org/model',
+        kind: 'acceptable_use',
+        requiresAgreement: true,
+        sha256: POLICY_SHA,
+        text: 'policy text',
+      });
+    });
+
+    afterEach(() => {
+      vi.mocked(modelsApi.installModel).mockReset();
+    });
+
+    function gatedEntry(): CatalogEntry {
+      return birdEntry({
+        registryId: 'Test_Bird',
+        documents: [
+          {
+            repo: 'org/model',
+            kind: 'acceptable_use',
+            requiresAgreement: true,
+            agreed: false,
+            sha256: POLICY_SHA,
+          },
+        ],
+      });
+    }
+
+    async function openLicenseDialog(): Promise<void> {
+      render(AnalysisSettingsPage);
+      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+      await fireEvent.click(
+        await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+      );
+      await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    }
+
+    async function agree(): Promise<void> {
+      await fireEvent.click(
+        await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ })
+      );
+      await fireEvent.click(
+        screen.getByRole('button', { name: /analysis\.gallery\.agreement\.agreeAndContinue/ })
+      );
+    }
+
+    it('offers the next steps after an install that went through the agreement dialog', async () => {
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [gatedEntry()] });
+      vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+      await openLicenseDialog();
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+      );
+      await agree();
+
+      await waitFor(() =>
+        expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', undefined, [POLICY_SHA])
+      );
+      await runCompletionTimer();
+
+      expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL });
+    });
+
+    it('offers the next steps after a refused install is resumed with the agreement', async () => {
+      const refusal = new ApiError('needs agreement', 409, new Response(null, { status: 409 }));
+      refusal.errorKey = MODEL_AGREEMENT_REQUIRED_KEY;
+      refusal.errorParams = {
+        name: 'Test Bird Model',
+        documents: [{ repo: 'org/model', kind: 'acceptable_use', sha256: POLICY_SHA }],
+      };
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+        catalog: [birdEntry({ registryId: 'Test_Bird' })],
+      });
+      vi.mocked(modelsApi.installModel).mockRejectedValueOnce(refusal).mockResolvedValue(undefined);
+      await openLicenseDialog();
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+      );
+      await agree();
+
+      await waitFor(() =>
+        expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined, [
+          POLICY_SHA,
+        ])
+      );
+      await runCompletionTimer();
+
+      expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL });
+    });
+
+    it('keeps the next steps and the agreement when a failed agreed install is retried', async () => {
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [gatedEntry()] });
+      vi.mocked(modelsApi.installModel)
+        .mockRejectedValueOnce(
+          new ApiError('server error', 500, new Response(null, { status: 500 }))
+        )
+        .mockResolvedValue(undefined);
+      await openLicenseDialog();
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+      );
+      await agree();
+
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.retry/ })
+      );
+      await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
+      expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined, [POLICY_SHA]);
+      await runCompletionTimer();
+
+      expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL });
+    });
+  });
+
   it('shows the success toast instead when no next step applies', async () => {
     vi.mocked(wizardState.launch).mockReturnValue(false);
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
