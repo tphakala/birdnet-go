@@ -34,12 +34,18 @@ export interface EntryDocumentSplit {
   reference: CatalogDocument[];
 }
 
-/** Split an entry's documents into those still to agree to and those to show for reference. */
+/**
+ * Split an entry's documents into those still to agree to and those to show for
+ * reference. A text listed twice is asked for once, since agreeing is per text.
+ */
 export function splitEntryDocuments(entry: CatalogEntry): EntryDocumentSplit {
   const split: EntryDocumentSplit = { outstanding: [], reference: [] };
   for (const doc of entry.documents ?? []) {
     if (doc.requiresAgreement && !doc.agreed && doc.sha256) {
-      split.outstanding.push({ repo: doc.repo, kind: doc.kind, sha256: doc.sha256 });
+      const sha256 = doc.sha256;
+      if (!split.outstanding.some(d => d.sha256 === sha256)) {
+        split.outstanding.push({ repo: doc.repo, kind: doc.kind, sha256 });
+      }
     } else {
       split.reference.push(doc);
     }
@@ -59,13 +65,19 @@ function isAgreementDocument(doc: unknown): doc is AgreementDocument {
 
 /**
  * The documents listed by the server's agreement refusal (error_params.documents).
- * Malformed items are dropped, so an empty result means the refusal named nothing
- * the user could agree to.
+ * Malformed items are dropped and a repeated sha256 is kept once (the dialog lists
+ * one checkbox per text), so an empty result means the refusal named nothing the
+ * user could agree to.
  */
 export function refusalDocuments(params: Record<string, unknown> | undefined): AgreementDocument[] {
   const docs = params?.documents;
   if (!Array.isArray(docs)) return [];
-  return docs
-    .filter(isAgreementDocument)
-    .map(d => ({ repo: d.repo, kind: d.kind, sha256: d.sha256 }));
+  const seen = new Set<string>();
+  const out: AgreementDocument[] = [];
+  for (const d of docs) {
+    if (!isAgreementDocument(d) || seen.has(d.sha256)) continue;
+    seen.add(d.sha256);
+    out.push({ repo: d.repo, kind: d.kind, sha256: d.sha256 });
+  }
+  return out;
 }
