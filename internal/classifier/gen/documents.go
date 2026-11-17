@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/format"
 	"maps"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -25,6 +26,9 @@ const (
 	sha256HexLen   = 64
 
 	externalDocumentScheme = "https://"
+	// unsafeLocatorChars are characters a hosted path or an external URL never
+	// contains: a backslash and whitespace.
+	unsafeLocatorChars = "\\ \t\r\n"
 )
 
 // documentManifests lists every vendored manifest whose documents reach the
@@ -141,11 +145,12 @@ func validateDocuments(docs []manifestDocument) error {
 }
 
 // validateDocumentSource checks that a document is either fully hosted or purely
-// external, and that its path stays inside the repo.
+// external, that a hosted path names a file inside the repo, and that an
+// external URL is https with a host.
 func validateDocumentSource(d *manifestDocument) error {
 	if d.URL != "" {
-		if !strings.HasPrefix(d.URL, externalDocumentScheme) {
-			return fmt.Errorf("external url %q is not https", d.URL)
+		if !validExternalURL(d.URL) {
+			return fmt.Errorf("external url %q is not https with a host", d.URL)
 		}
 		if d.RequiresAgreement {
 			return fmt.Errorf("an external document cannot require agreement (its text cannot be verified)")
@@ -158,10 +163,28 @@ func validateDocumentSource(d *manifestDocument) error {
 	if d.Path == "" || !revisionPattern.MatchString(d.Revision) || !sha256Pattern.MatchString(d.SHA256) {
 		return fmt.Errorf("a hosted document needs a path, a %d-hex revision and a %d-hex sha256", revisionHexLen, sha256HexLen)
 	}
-	if path.IsAbs(d.Path) || slices.Contains(strings.Split(d.Path, "/"), "..") {
-		return fmt.Errorf("path %q must be relative and stay inside the repo", d.Path)
+	if !validHostedPath(d.Path) {
+		return fmt.Errorf("path %q must name a file by a clean relative path that stays inside the repo", d.Path)
 	}
 	return nil
+}
+
+// validExternalURL reports whether u is an https URL with a host and no
+// whitespace, so a link the gallery shows can be opened.
+func validExternalURL(u string) bool {
+	if !strings.HasPrefix(u, externalDocumentScheme) || strings.ContainsAny(u, unsafeLocatorChars) {
+		return false
+	}
+	parsed, err := url.Parse(u)
+	return err == nil && parsed.Hostname() != ""
+}
+
+// validHostedPath reports whether p names a file inside the repo: relative, in
+// clean form (no "." or ".." segment, no trailing slash), and free of
+// backslashes and whitespace, so the resolve URL built from it points at that file.
+func validHostedPath(p string) bool {
+	return !path.IsAbs(p) && p != "." && path.Clean(p) == p &&
+		!slices.Contains(strings.Split(p, "/"), "..") && !strings.ContainsAny(p, unsafeLocatorChars)
 }
 
 // runDocuments reads every document manifest and writes the registry file.
