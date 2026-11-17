@@ -116,16 +116,19 @@
               label={kindLabel}
               onStatus={status => (statuses[doc.sha256] = status)}
             />
-            {#if statuses[doc.sha256] === 'loaded'}
-              <Checkbox
-                id="{idPrefix}-{i}-agree"
-                size="sm"
-                className="mt-3"
-                checked={ticked[doc.sha256] === true}
-                label={t('analysis.gallery.agreement.agree', { document: kindLabel })}
-                onchange={checked => (ticked[doc.sha256] = checked)}
-              />
-            {/if}
+            <!-- The row keeps the checkbox's height before the text loads, so the
+                 checkbox appearing does not move the buttons below. -->
+            <div data-agree-row class="mt-3 min-h-7">
+              {#if statuses[doc.sha256] === 'loaded'}
+                <Checkbox
+                  id="{idPrefix}-{i}-agree"
+                  size="sm"
+                  checked={ticked[doc.sha256] === true}
+                  label={t('analysis.gallery.agreement.agree', { document: kindLabel })}
+                  onchange={checked => (ticked[doc.sha256] = checked)}
+                />
+              {/if}
+            </div>
           </section>
         {/each}
       </div>

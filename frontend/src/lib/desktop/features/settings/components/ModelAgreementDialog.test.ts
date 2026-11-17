@@ -111,6 +111,46 @@ describe('ModelAgreementDialog', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
+  // The skeleton holds the text's place, so the loaded box must not change height
+  // and move the checkbox and buttons under the pointer.
+  it('keeps the text box at the skeleton height', async () => {
+    let release: (value: Awaited<ReturnType<typeof fetchModelDocument>>) => void = () => {};
+    vi.mocked(fetchModelDocument).mockReturnValue(
+      new Promise(resolve => {
+        release = resolve;
+      })
+    );
+    renderDialog([policy]);
+    const heightOf = (el: Element | null | undefined) =>
+      el?.getAttribute('class')?.match(/(?:^|\s)(h-\d+)(?:\s|$)/)?.[1];
+    const skeletonBox = screen.getByText('analysis.gallery.documents.loading').parentElement;
+    const skeletonHeight = heightOf(skeletonBox);
+    expect(skeletonHeight).toBeDefined();
+
+    release({
+      repo: 'org/model',
+      kind: 'acceptable_use',
+      requiresAgreement: true,
+      sha256: 'aaa',
+      text: 'short',
+    });
+
+    const region = await screen.findByRole('region', {
+      name: 'analysis.gallery.documents.textRegion',
+    });
+    expect(heightOf(region)).toBe(skeletonHeight);
+  });
+
+  it('reserves the checkbox row while the text loads', async () => {
+    vi.mocked(fetchModelDocument).mockReturnValue(new Promise(() => {}));
+    renderDialog([policy]);
+
+    const row = document.querySelector('[data-agree-row]');
+    expect(row).not.toBeNull();
+    expect(row?.getAttribute('class')).toMatch(/(?:^|\s)min-h-\d+(?:\s|$)/);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
   it('names a document kind it does not know generically', async () => {
     vi.mocked(fetchModelDocument).mockResolvedValue({
       repo: 'org/model',

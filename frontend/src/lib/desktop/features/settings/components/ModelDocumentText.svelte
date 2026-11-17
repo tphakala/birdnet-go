@@ -89,13 +89,14 @@
       {/each}
     </div>
   {:else}
-    <!-- Focusable so keyboard users can scroll the text; named after the document. -->
+    <!-- Focusable so keyboard users can scroll the text; named after the document. The
+         height matches the skeleton, so nothing below moves when the text arrives. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
       role="region"
       aria-label={t('analysis.gallery.documents.textRegion', { document: label })}
       tabindex="0"
-      class="max-h-64 overflow-y-auto rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+      class="h-64 overflow-y-auto rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
     >
       <pre
         class="font-sans text-sm leading-relaxed break-words whitespace-pre-wrap text-[var(--color-base-content)]">{text}</pre>
