@@ -48,6 +48,7 @@
   import type { BackendModel } from '$lib/stores/models.svelte';
   import { effectiveSourceModels, sourceModelsWith } from '$lib/utils/defaultModelSelection';
   import ToggleField from './ToggleField.svelte';
+  import SampleRateBadge from './SampleRateBadge.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
 
@@ -83,7 +84,6 @@
     onRetry,
   }: Props = $props();
 
-  const KHZ = 1000;
   const listId = generateId('model-toggles');
 
   /** Number of skeleton rows shown while the list loads. */
@@ -206,11 +206,6 @@
         {@const isOn = effective.includes(model.id)}
         {@const reason = blockedReason(model, isOn)}
         {@const runtime = runtimeBadge(model)}
-        {@const minRate = model.minSampleRate ?? 0}
-        {@const recommendedRate = model.recommendedSampleRate ?? 0}
-        {@const belowMin = minRate > 0 && sourceSampleRate < minRate}
-        {@const belowRecommended =
-          !belowMin && recommendedRate > 0 && sourceSampleRate < recommendedRate}
         {@const badgesId = `${listId}-${model.id}-badges`}
         <li class="py-2 first:pt-0 last:pb-0">
           <ToggleField
@@ -252,28 +247,11 @@
                     {t('settings.audio.models.state.failed')}
                   </span>
                 {/if}
-                {#if belowMin}
-                  <span
-                    class={cn(BADGE_CLASS, 'bg-[var(--color-error)]/15 text-[var(--text-error)]')}
-                  >
-                    <AlertTriangle class="size-3" aria-hidden="true" />
-                    {t('settings.audio.soundCards.compatibility.minSampleRate', {
-                      rate: String(minRate / KHZ),
-                    })}
-                  </span>
-                {:else if belowRecommended}
-                  <span
-                    class={cn(
-                      BADGE_CLASS,
-                      'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-                    )}
-                  >
-                    <AlertTriangle class="size-3" aria-hidden="true" />
-                    {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
-                      rate: String(recommendedRate / KHZ),
-                    })}
-                  </span>
-                {/if}
+                <SampleRateBadge
+                  sampleRate={sourceSampleRate}
+                  minRate={model.minSampleRate}
+                  recommendedRate={model.recommendedSampleRate}
+                />
               </span>
             {/snippet}
           </ToggleField>

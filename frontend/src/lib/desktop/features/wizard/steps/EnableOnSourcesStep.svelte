@@ -24,7 +24,6 @@
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { get } from 'svelte/store';
   import { AlertTriangle, Info, Mic, Radio } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -57,23 +56,25 @@
     subscribeAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
+  import SampleRateBadge from '$lib/desktop/components/forms/SampleRateBadge.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { wizardState } from '../wizardState.svelte';
   import type { WizardStepProps } from '../types';
+  import { sourcesOf, streamsOf } from './audioSourceChoice';
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
-  const KHZ = 1000;
   /** Number of skeleton rows shown while the model list loads. */
   const SKELETON_ROWS = 3;
   const SOUND_CARDS_HEADING_ID = generateId('enable-sound-cards');
   const STREAMS_HEADING_ID = generateId('enable-streams');
-  const BADGE_CLASS = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium';
   const LIST_CLASS =
     'divide-y divide-[var(--border-100)] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)]';
+  const LINK_CLASS =
+    'mt-2 inline-block text-sm underline hover:decoration-2 text-[var(--text-primary)]';
 
   // The flow is launched for one model and closes before another can start
   const model = wizardState.installedModel;
@@ -97,13 +98,10 @@
   const cardKey = (source: AudioSourceConfig) => `soundcard\n${source.name}\n${source.device}`;
   const streamKey = (stream: StreamConfig) => `stream\n${stream.name}\n${stream.url}`;
 
-  onMount(() => watchModels());
-  onMount(() => subscribeAcousticModels());
-
   // What the server holds, not the form copy: arrays are sent back whole
   let realtime = $derived($settingsStore.originalData?.realtime);
-  let sources = $derived(Array.isArray(realtime?.audio?.sources) ? realtime.audio.sources : []);
-  let streams = $derived(Array.isArray(realtime?.rtsp?.streams) ? realtime.rtsp.streams : []);
+  let sources = $derived(sourcesOf(realtime?.audio));
+  let streams = $derived(streamsOf(realtime?.rtsp));
 
   let models = $derived(getAvailableModels());
   let listFailed = $derived(modelsFailed());
@@ -155,7 +153,6 @@
 
   type View = 'loading' | 'listFailed' | 'notListed' | 'notLoaded' | 'noSources' | 'sources';
   let view = $derived.by((): View => {
-    if (!model?.registryId) return 'notListed';
     if (listLoading) return 'loading';
     if (listFailed) return 'listFailed';
     if (!listed) return 'notListed';
@@ -164,14 +161,9 @@
     return 'sources';
   });
 
-  let minRate = $derived(listed?.minSampleRate ?? 0);
-  let recommendedRate = $derived(listed?.recommendedSampleRate ?? 0);
   let showBatStreamWarning = $derived(
     listed?.category === 'bat' && streamRows.some(row => row.runs || chosen.includes(row.key))
   );
-
-  // Every state can be left with Done; a state without switches saves nothing
-  onMount(() => untrack(() => onValidChange?.(true)));
 
   function setChosen(key: string, on: boolean) {
     chosen = on ? [...chosen, key] : chosen.filter(existing => existing !== key);
@@ -225,20 +217,18 @@
   }
 
   // Runs on Done. The payloads are built from the stored settings at this
-  // moment, so a retry after a failed save resends only what still differs.
+  // moment (a successful save updates them), so a retry after a failed save
+  // resends only what still differs.
   async function commit(): Promise<void> {
     const alias = listed?.id;
     if (view !== 'sources' || alias === undefined || chosen.length === 0) return;
-    const stored = get(settingsStore).originalData?.realtime;
-    const storedSources = Array.isArray(stored?.audio?.sources) ? stored.audio.sources : [];
-    const storedStreams = Array.isArray(stored?.rtsp?.streams) ? stored.rtsp.streams : [];
 
-    const nextSources = withModel(storedSources, cardKey, alias);
+    const nextSources = withModel(sources, cardKey, alias);
     if (nextSources) {
       await settingsActions.saveSection('audio', { sources: nextSources.list });
       enabledCount += nextSources.changed;
     }
-    const nextStreams = withModel(storedStreams, streamKey, alias);
+    const nextStreams = withModel(streams, streamKey, alias);
     if (nextStreams) {
       await settingsActions.saveSection('rtsp', { streams: nextStreams.list });
       enabledCount += nextStreams.changed;
@@ -253,22 +243,28 @@
     }
   }
 
-  onMount(() => registerLeaveHandler?.(commit));
+  onMount(() => {
+    // Every state can be left with Done; a state without switches saves nothing
+    untrack(() => onValidChange?.(true));
+    const unregister = registerLeaveHandler?.(commit);
+    const unwatchModels = watchModels();
+    const unsubscribeAcoustic = subscribeAcousticModels();
+    return () => {
+      unregister?.();
+      unwatchModels();
+      unsubscribeAcoustic();
+    };
+  });
 </script>
 
-{#snippet sourceList(rows: SourceRow[], headingId: string, headingKey: 'soundCards' | 'streams')}
+{#snippet sourceList(rows: SourceRow[], headingId: string, heading: string)}
   {#if rows.length > 0}
     <section aria-labelledby={headingId}>
       <h4 id={headingId} class="mb-2 text-sm font-semibold text-[var(--color-base-content)]">
-        {headingKey === 'soundCards'
-          ? t('wizard.steps.enableOnSources.soundCardsHeading')
-          : t('wizard.steps.enableOnSources.streamsHeading')}
+        {heading}
       </h4>
       <ul class={LIST_CLASS}>
         {#each rows as row, index (`${row.kind}-${index}`)}
-          {@const belowMin = minRate > 0 && row.sampleRate < minRate}
-          {@const belowRecommended =
-            !belowMin && recommendedRate > 0 && row.sampleRate < recommendedRate}
           <li class="px-3 py-2.5">
             <ToggleField
               label={row.name}
@@ -279,28 +275,11 @@
               onUpdate={on => setChosen(row.key, on)}
             >
               {#snippet badges()}
-                {#if belowMin}
-                  <span
-                    class={cn(BADGE_CLASS, 'bg-[var(--color-error)]/15 text-[var(--text-error)]')}
-                  >
-                    <AlertTriangle class="size-3" aria-hidden="true" />
-                    {t('settings.audio.soundCards.compatibility.minSampleRate', {
-                      rate: String(minRate / KHZ),
-                    })}
-                  </span>
-                {:else if belowRecommended}
-                  <span
-                    class={cn(
-                      BADGE_CLASS,
-                      'bg-[var(--color-warning)]/15 text-[var(--text-warning)]'
-                    )}
-                  >
-                    <AlertTriangle class="size-3" aria-hidden="true" />
-                    {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
-                      rate: String(recommendedRate / KHZ),
-                    })}
-                  </span>
-                {/if}
+                <SampleRateBadge
+                  sampleRate={row.sampleRate}
+                  minRate={listed?.minSampleRate}
+                  recommendedRate={listed?.recommendedSampleRate}
+                />
               {/snippet}
             </ToggleField>
           </li>
@@ -341,11 +320,7 @@
     <SettingsNote className="mt-0">
       {#if listed?.state === 'failed'}
         <p>{t('wizard.steps.enableOnSources.notLoadedFailed', { name: modelName })}</p>
-        <a
-          href={buildAppUrl(SYSTEM_ROUTES.inference)}
-          onclick={followLink}
-          class="mt-2 inline-block text-sm underline hover:decoration-2 text-[var(--text-primary)]"
-        >
+        <a href={buildAppUrl(SYSTEM_ROUTES.inference)} onclick={followLink} class={LINK_CLASS}>
           {t('settings.audio.models.loadFailedLink')}
         </a>
       {:else}
@@ -355,11 +330,7 @@
   {:else if view === 'noSources'}
     <SettingsNote className="mt-0">
       <p>{t('wizard.steps.enableOnSources.noSources', { name: modelName })}</p>
-      <a
-        href={buildAppUrl(SETTINGS_ROUTES.audio)}
-        onclick={followLink}
-        class="mt-2 inline-block text-sm underline hover:decoration-2 text-[var(--text-primary)]"
-      >
+      <a href={buildAppUrl(SETTINGS_ROUTES.audio)} onclick={followLink} class={LINK_CLASS}>
         {t('wizard.steps.enableOnSources.openAudioSettings')}
       </a>
     </SettingsNote>
@@ -377,10 +348,10 @@
 
     {#if toggleable.length === 0}
       <SettingsNote className="mt-0">
-        <p class="flex items-start gap-2">
-          <Info class="mt-0.5 size-4 shrink-0 text-[var(--text-info)]" aria-hidden="true" />
-          <span>{t('wizard.steps.enableOnSources.allRunning', { name: modelName })}</span>
-        </p>
+        {#snippet icon()}
+          <Info class="mt-0.5 size-4 text-[var(--text-info)]" aria-hidden="true" />
+        {/snippet}
+        <p>{t('wizard.steps.enableOnSources.allRunning', { name: modelName })}</p>
       </SettingsNote>
     {:else if toggleable.length > 1}
       <div class={cn(LIST_CLASS, 'px-3 py-2.5')}>
@@ -392,8 +363,16 @@
       </div>
     {/if}
 
-    {@render sourceList(cardRows, SOUND_CARDS_HEADING_ID, 'soundCards')}
-    {@render sourceList(streamRows, STREAMS_HEADING_ID, 'streams')}
+    {@render sourceList(
+      cardRows,
+      SOUND_CARDS_HEADING_ID,
+      t('wizard.steps.enableOnSources.soundCardsHeading')
+    )}
+    {@render sourceList(
+      streamRows,
+      STREAMS_HEADING_ID,
+      t('wizard.steps.enableOnSources.streamsHeading')
+    )}
 
     {#if showBatStreamWarning}
       <div

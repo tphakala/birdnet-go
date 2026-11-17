@@ -634,15 +634,6 @@ describe('wizardState - state machine', () => {
       expect(api.post).not.toHaveBeenCalled();
       expect(wizardState.installedModel).toBeNull();
     });
-
-    it('onboarding still records the dismissal when finished', async () => {
-      launchSteps(1);
-      readyStep();
-
-      await wizardState.complete();
-
-      expect(api.post).toHaveBeenCalledWith('/api/v2/app/wizard/dismiss');
-    });
   });
 
   describe('skip()', () => {

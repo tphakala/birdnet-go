@@ -1898,6 +1898,11 @@
     installError = null;
     installingId = modelId;
     downloadProgress = null;
+    // A failed install keeps its next steps, so Retry still offers them
+    const installFailed = (message: string, blocked = false): GalleryActionError => ({
+      ...reportActionError(modelId, modelName, 'install', message, variantId, blocked),
+      nextSteps,
+    });
 
     try {
       await installModel(modelId, variantId);
@@ -1936,10 +1941,7 @@
           }, 2000);
         },
         (err: string) => {
-          installError = {
-            ...reportActionError(modelId, modelName, 'install', err, variantId),
-            nextSteps,
-          };
+          installError = installFailed(err);
           installingId = null;
           downloadProgress = null;
           progressCleanup = null;
@@ -1947,17 +1949,7 @@
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = {
-        ...reportActionError(
-          modelId,
-          modelName,
-          'install',
-          message,
-          variantId,
-          isOperationInProgress(e)
-        ),
-        nextSteps,
-      };
+      installError = installFailed(message, isOperationInProgress(e));
       installingId = null;
     }
   }
