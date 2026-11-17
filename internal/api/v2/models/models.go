@@ -11,7 +11,6 @@ package models
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"sort"
@@ -81,6 +80,11 @@ type Handler struct {
 	// announceListChange tells connected clients that the model list changed. nil
 	// means a topology broadcast on the metrics store, and tests inject a counter.
 	announceListChange func()
+	// documents serves document text and records agreements. nil means the live
+	// service (documentSvc), and tests inject a fake.
+	documents documentService
+	// documentTimeout overrides documentRequestTimeout when positive; tests set it.
+	documentTimeout time.Duration
 }
 
 // Model load states reported in ModelListItem.State.
@@ -120,6 +124,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Public: serves fixed embedded SVG bytes selected by a public region slug,
 	// nothing user-derived, matching the public /models/catalog route.
 	g.GET("/models/regions/:slug/map", c.GetRegionCoverageMap)
+	g.GET("/models/documents/:sha256", c.GetModelDocument, c.AuthMiddleware)
 	g.GET("/models/installed", c.GetInstalledModels)
 	g.POST("/models/install/:id", c.InstallModel, c.AuthMiddleware)
 	g.POST("/models/reinstall/:id", c.ReinstallModel, c.AuthMiddleware)
@@ -161,6 +166,9 @@ type CatalogDocumentResponse struct {
 	Kind string `json:"kind"`
 	// RequiresAgreement marks a document the user must agree to before installing.
 	RequiresAgreement bool `json:"requiresAgreement"`
+	// Agreed reports whether an agreement is recorded for this exact text. It is
+	// only meaningful for a document that requires agreement.
+	Agreed bool `json:"agreed"`
 	// SHA256 identifies a hosted document; omitted for an external one.
 	SHA256 string `json:"sha256,omitempty"`
 	// URL is the location of an external document; omitted for a hosted one.
@@ -298,6 +306,10 @@ type installModelRequest struct {
 	// the install; it still proceeds but a WARN is logged so the choice is visible
 	// in logs and support dumps.
 	AllowIncompatible bool `json:"allowIncompatible"`
+	// AcceptedDocuments lists the SHA-256 digests of the requires-agreement
+	// documents the user agreed to in this request. Each must be a document of the
+	// requested entry's own repo. Optional: absence means none accepted.
+	AcceptedDocuments []string `json:"acceptedDocuments"`
 }
 
 // liveModelRuntime reads the backend and precision of every loaded model, keyed
@@ -546,6 +558,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 		recsByVariant, recommendedVariant, hostArch = c.rankCatalog(visible, ortStatus)
 	}
 
+	docSvc := c.documentSvc()
 	for i := range visible {
 		entry := &visible[i]
 
@@ -595,7 +608,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			HasGeomodel:          classifier.ProvidesGeomodel(entry, ""),
 			DependsOn:            entry.DependsOn,
 			Permanent:            classifier.IsPermanentEntry(entry),
-			Documents:            buildDocumentResponses(entry),
+			Documents:            buildDocumentResponses(docSvc, entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID], hostArch),
@@ -625,14 +638,15 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 
 // buildDocumentResponses maps the documents of the entry's own repo to their API
 // form; an entry with none gets an empty slice, which omitempty drops.
-func buildDocumentResponses(entry *classifier.CatalogEntry) []CatalogDocumentResponse {
-	docs := classifier.EntryDocuments(entry)
+func buildDocumentResponses(svc documentService, entry *classifier.CatalogEntry) []CatalogDocumentResponse {
+	docs := svc.EntryDocuments(entry)
 	out := make([]CatalogDocumentResponse, 0, len(docs))
 	for i := range docs {
 		out = append(out, CatalogDocumentResponse{
 			Repo:              docs[i].Repo,
 			Kind:              docs[i].Kind,
 			RequiresAgreement: docs[i].RequiresAgreement,
+			Agreed:            svc.Agreed(&docs[i]),
 			SHA256:            docs[i].SHA256,
 			URL:               docs[i].URL,
 		})
@@ -1062,17 +1076,12 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
-	// Parse the optional variant selection from the request body. The body is
-	// optional: an absent or empty body installs the default variant, preserving
-	// the pre-variant call shape, so an empty-body io.EOF is tolerated. Decoding the
-	// body directly (rather than ctx.Bind, which 400s an empty body under a JSON
-	// content-type, and rather than gating on ContentLength, which is -1 for chunked
-	// requests) keeps that contract robust while still binding a real chunked body.
-	// Malformed JSON is a 400 so the client sees the error synchronously rather than
-	// as a silent async failure over the progress stream. The body reader is bounded
-	// by the server's body-limit middleware.
-	var req installModelRequest
-	if err := json.NewDecoder(ctx.Request().Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+	// Parse the optional variant selection and accepted documents from the request
+	// body (see decodeInstallRequest for the empty-body contract). Malformed JSON is
+	// a 400 so the client sees the error synchronously rather than as a silent async
+	// failure over the progress stream.
+	req, err := decodeInstallRequest(ctx)
+	if err != nil {
 		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
 	}
 	if !classifier.VariantSelectable(&entry, req.VariantID) {
@@ -1122,6 +1131,14 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 			logger.String("operation", "model_install_incompatible_override"))
 	}
 
+	// Resolve the agreements the user accepted through the verified text path. This
+	// sits after every other request check, so a request refused for another reason
+	// never fetches a document, and it records nothing yet.
+	acceptedDocs, handled, err := c.acceptDocuments(ctx, &entry, req.AcceptedDocuments)
+	if handled {
+		return err
+	}
+
 	// Reserve the operation slot synchronously, so a refusal reaches the client as a
 	// 409. The lease is handed to the goroutine below, which releases it; nothing
 	// between here and c.Go can return.
@@ -1129,6 +1146,9 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	if err != nil {
 		return c.beginOperationError(ctx, err)
 	}
+
+	// The last synchronous step: only a request that is answered 202 records.
+	c.recordAgreements(catalogID, acceptedDocs)
 
 	// Start async install in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
@@ -1169,6 +1189,27 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	})
 }
 
+// reinstallRefusal returns a responder for the first check that refuses a
+// reinstall of entry (the model is not installed, or it needs an ONNX Runtime that
+// is not available), or nil when every check passes.
+func (c *Handler) reinstallRefusal(ctx echo.Context, entry *classifier.CatalogEntry, catalogID string) func() error {
+	if !c.ModelManager.IsInstalled(catalogID) {
+		return func() error {
+			return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
+		}
+	}
+	if entry.RequiresONNX {
+		if ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath); !ortStatus.Available {
+			return func() error {
+				return c.HandleError(ctx, nil,
+					"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
+					http.StatusConflict)
+			}
+		}
+	}
+	return nil
+}
+
 // ReinstallModel re-downloads missing or corrupt files for an installed model.
 // Files that pass SHA256 validation are skipped. It returns 202 Accepted
 // immediately while the re-download runs in the background. Like InstallModel it
@@ -1202,6 +1243,31 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
+	// An optional body carries the accepted documents; it is decoded like the
+	// install body, and an empty body keeps working.
+	req, err := decodeInstallRequest(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
+	}
+
+	// A request that names documents runs the reinstall checks before fetching
+	// them, so a refused request never fetches a document. The checks run again
+	// under the lease below, where they are authoritative; without documents
+	// there is nothing to fetch, and the busy-slot answer keeps coming first.
+	if len(req.AcceptedDocuments) > 0 {
+		if refused := c.reinstallRefusal(ctx, &entry, catalogID); refused != nil {
+			return refused()
+		}
+	}
+
+	// Resolve the accepted agreements before taking the operation slot, as
+	// InstallModel does, so a slow document fetch never holds the slot and blocks
+	// other operations. It records nothing yet.
+	acceptedDocs, handled, err := c.acceptDocuments(ctx, &entry, req.AcceptedDocuments)
+	if handled {
+		return err
+	}
+
 	// Reserve the operation slot synchronously (see InstallModel), before the
 	// installed check, so an uninstall cannot complete between the check and the
 	// 202. A validation failure below releases it; the goroutine owns it after.
@@ -1216,19 +1282,12 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		}
 	}()
 
-	if !c.ModelManager.IsInstalled(catalogID) {
-		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
+	if refused := c.reinstallRefusal(ctx, &entry, catalogID); refused != nil {
+		return refused()
 	}
 
-	// Reject reinstall of ONNX-dependent models when ORT is unavailable.
-	if entry.RequiresONNX {
-		ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath)
-		if !ortStatus.Available {
-			return c.HandleError(ctx, nil,
-				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
-				http.StatusConflict)
-		}
-	}
+	// The last synchronous step: only a request that is answered 202 records.
+	c.recordAgreements(catalogID, acceptedDocs)
 
 	// Start async reinstall in a background goroutine, which now owns the lease.
 	handedOff = true

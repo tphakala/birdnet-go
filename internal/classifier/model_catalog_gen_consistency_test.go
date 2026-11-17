@@ -435,14 +435,14 @@ func TestDocumentBySHA256(t *testing.T) {
 	t.Parallel()
 
 	const geomodelPolicy = "acef17f7e6fc94463b2d9e4614d37f38448a332bbdb48e73a4a286941c492272"
-	got, ok := documentBySHA256(geomodelPolicy)
+	got, ok := DocumentBySHA256(geomodelPolicy)
 	require.True(t, ok)
 	assert.Equal(t, "tphakala/BirdNET-Geomodel", got.Repo)
 	assert.Equal(t, DocumentKindAcceptableUse, got.Kind)
 
-	_, ok = documentBySHA256("")
+	_, ok = DocumentBySHA256("")
 	assert.False(t, ok, "an empty digest must not match an external document")
-	_, ok = documentBySHA256("00")
+	_, ok = DocumentBySHA256("00")
 	assert.False(t, ok)
 }
 
@@ -461,7 +461,7 @@ func TestDocumentBySHA256_TieBreakIsSortedRepoOrder(t *testing.T) {
 	// Map iteration order is random, so repeat the lookup to make an unsorted
 	// implementation fail with near certainty.
 	for range 50 {
-		got, ok := documentBySHA256(shared)
+		got, ok := DocumentBySHA256(shared)
 		require.True(t, ok)
 		require.Equal(t, "a/first", got.Repo)
 	}
