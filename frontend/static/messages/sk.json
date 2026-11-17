@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Zmena backendu alebo zariadenia znovu načíta modely, takže sa detekcia na niekoľko sekúnd pozastaví.",
+      "backendsLoading": "Zisťuje sa, ktoré runtime prostredia toto zariadenie podporuje.",
       "backendsUnavailable": "Nepodarilo sa zistiť, ktoré runtime prostredia toto zariadenie podporuje. Backend a zariadenie možno zmeniť po načítaní.",
       "running": {
         "title": "Aktuálne spustené",

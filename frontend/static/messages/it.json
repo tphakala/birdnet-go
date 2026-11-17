@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "La modifica del backend o del dispositivo ricarica i modelli, quindi il rilevamento si interrompe per qualche secondo.",
+      "backendsLoading": "Verifica dei runtime supportati da questo dispositivo.",
       "backendsUnavailable": "Impossibile leggere quali runtime supporta questo dispositivo. Il backend e il dispositivo possono essere modificati al termine del caricamento.",
       "running": {
         "title": "In esecuzione",

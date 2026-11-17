@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "A háttérrendszer vagy az eszköz módosítása újratölti a modelleket, így az észlelés néhány másodpercre szünetel.",
+      "backendsLoading": "Annak ellenőrzése, mely futtatókörnyezeteket támogatja ez az eszköz.",
       "backendsUnavailable": "Nem sikerült kiolvasni, mely futtatókörnyezeteket támogatja ez az eszköz. A háttérrendszer és az eszköz betöltés után módosítható.",
       "running": {
         "title": "Jelenleg futó",

@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Byte av backend eller enhet laddar om modellerna, så detekteringen pausar i några sekunder.",
+      "backendsLoading": "Kontrollerar vilka körtider den här enheten stöder.",
       "backendsUnavailable": "Kunde inte läsa vilka körtider den här enheten stöder. Backend och enhet kan ändras när den har lästs in.",
       "running": {
         "title": "Körs nu",

@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Alterar o backend ou o dispositivo recarrega os modelos, pelo que a deteção pausa durante alguns segundos.",
+      "backendsLoading": "A verificar que ambientes de execução este dispositivo suporta.",
       "backendsUnavailable": "Não foi possível ler que ambientes de execução este dispositivo suporta. O backend e o dispositivo podem ser alterados assim que carregar.",
       "running": {
         "title": "Em execução",

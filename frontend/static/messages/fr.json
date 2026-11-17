@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Changer le backend ou l'appareil recharge les modèles, ce qui met la détection en pause pendant quelques secondes.",
+      "backendsLoading": "Vérification des moteurs d'exécution pris en charge par cet appareil.",
       "backendsUnavailable": "Impossible de lire les moteurs d'exécution pris en charge par cet appareil. Le backend et l'appareil peuvent être modifiés après le chargement.",
       "running": {
         "title": "En cours d'exécution",

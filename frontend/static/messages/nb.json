@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Endring av backend eller enhet laster inn modellene på nytt, slik at deteksjonen tar en pause i noen sekunder.",
+      "backendsLoading": "Sjekker hvilke kjøretider denne enheten støtter.",
       "backendsUnavailable": "Kunne ikke lese hvilke kjøretider denne enheten støtter. Backend og enhet kan endres når den er lastet inn.",
       "running": {
         "title": "Kjører nå",

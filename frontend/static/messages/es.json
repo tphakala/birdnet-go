@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Cambiar el backend o el dispositivo recarga los modelos, por lo que la detección se pausa unos segundos.",
+      "backendsLoading": "Comprobando qué entornos de ejecución admite este dispositivo.",
       "backendsUnavailable": "No se pudo leer qué entornos de ejecución admite este dispositivo. El backend y el dispositivo se pueden cambiar cuando cargue.",
       "running": {
         "title": "En ejecución",

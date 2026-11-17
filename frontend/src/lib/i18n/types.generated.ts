@@ -4501,6 +4501,7 @@ export type TranslationKey =
   | 'analysis.inference.device.options.cpu'
   | 'analysis.inference.device.options.gpu'
   | 'analysis.inference.reloadNote'
+  | 'analysis.inference.backendsLoading'
   | 'analysis.inference.backendsUnavailable'
   | 'analysis.inference.running.title'
   | 'analysis.inference.running.description'

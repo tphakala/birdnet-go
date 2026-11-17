@@ -92,6 +92,7 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
   import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
@@ -338,6 +339,10 @@
   const DEVICE_CPU = 'cpu';
   const DEVICE_GPU = 'gpu';
   const INFERENCE_STATUS_ENDPOINT = '/api/v2/system/inference';
+  // The line that says why the runtime selects are disabled: loading, or the failure warning.
+  const INFERENCE_STATUS_ID = generateId('inference-status');
+  // The Backend select, where focus goes when a successful Retry removes the warning.
+  const INFERENCE_BACKEND_ID = generateId('inference-backend');
   /** Prefix of the element IDs inside one threshold row (its name and its source note). */
   const THRESHOLD_ROW_ID_PREFIX = generateId('threshold-row');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
@@ -573,7 +578,8 @@
       inferenceBackendsFailed = false;
     } catch (e) {
       logger.error('Failed to load inference backends:', e);
-      inferenceBackendsFailed = true;
+      // A list that already loaded stays valid, so a later failure does not warn beside it.
+      if (!inferenceBackends) inferenceBackendsFailed = true;
     }
   }
 
@@ -2724,17 +2730,32 @@
       currentData={inferenceChange.current}
     >
       {#if inferenceBackendsFailed}
-        <ErrorAlert type="warning" className="mb-6">
+        <ErrorAlert
+          id={INFERENCE_STATUS_ID}
+          type="warning"
+          className="mb-6"
+          onRetry={loadInferenceBackends}
+          focusFallback={() => [document.getElementById(INFERENCE_BACKEND_ID)]}
+        >
           {t('analysis.inference.backendsUnavailable')}
         </ErrorAlert>
+      {:else if !inferenceBackends}
+        <p class="mb-6 text-sm">
+          <SkeletonStatus
+            id={INFERENCE_STATUS_ID}
+            label={t('analysis.inference.backendsLoading')}
+          />
+        </p>
       {/if}
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
         <SelectDropdown
+          id={INFERENCE_BACKEND_ID}
           options={backendOptions}
           value={selectedBackend}
           label={t('analysis.inference.backend.label')}
           helpText={t('analysis.inference.backend.helpText')}
           disabled={store.isLoading || store.isSaving || !inferenceBackends}
+          aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
           variant="select"
           size="md"
           groupBy={false}
@@ -2747,6 +2768,7 @@
             label={t('analysis.inference.device.label')}
             helpText={t('analysis.inference.device.helpText')}
             disabled={store.isLoading || store.isSaving || !inferenceBackends}
+            aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
             variant="select"
             size="md"
             groupBy={false}

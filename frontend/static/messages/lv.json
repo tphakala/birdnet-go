@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Aizmugursistēmas vai ierīces maiņa pārlādē modeļus, tāpēc noteikšana tiek apturēta uz dažām sekundēm.",
+      "backendsLoading": "Pārbauda, kuras izpildvides šī ierīce atbalsta.",
       "backendsUnavailable": "Neizdevās nolasīt, kuras izpildvides šī ierīce atbalsta. Aizmugursistēmu un ierīci var mainīt pēc ielādes.",
       "running": {
         "title": "Pašlaik darbojas",

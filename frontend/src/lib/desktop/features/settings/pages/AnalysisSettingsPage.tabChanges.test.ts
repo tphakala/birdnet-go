@@ -635,6 +635,108 @@ describe('AnalysisSettingsPage detection thresholds', () => {
   });
 });
 
+describe('AnalysisSettingsPage inference runtime', () => {
+  const INFERENCE_URL = '/api/v2/system/inference';
+  const BACKEND_LABEL = 'analysis.inference.backend.label';
+  const DEVICE_LABEL = 'analysis.inference.device.label';
+
+  /** A runtime status as GET /api/v2/system/inference reports it. */
+  function runtimeStatus({ onnx = true, openvino = true, devices = ['CPU'] } = {}) {
+    return {
+      backends: {
+        tflite: { available: true },
+        onnx: { available: onnx },
+        openvino: { supported: openvino, active: false, devices },
+      },
+    };
+  }
+
+  /** Answer the runtime request with the given handler and every other GET with {}. */
+  function mockRuntime(handler: () => Promise<unknown>) {
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url === INFERENCE_URL ? handler() : {}
+    );
+  }
+
+  /** Labels of the options a select offers, read from its open list. */
+  async function optionLabels(select: HTMLElement): Promise<string[]> {
+    await userEvent.setup().click(select);
+    return screen.getAllByRole('option').map(option => option.textContent.trim());
+  }
+
+  beforeEach(() => resetPage('inference'));
+
+  it('says why the runtime selects are disabled while the runtime list loads', async () => {
+    mockRuntime(() => new Promise(() => {}));
+    render(AnalysisSettingsPage);
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+
+    expect(backend).toBeDisabled();
+    const status = screen.getByText('analysis.inference.backendsLoading');
+    expect(backend.getAttribute('aria-describedby')?.split(' ')).toContain(status.id);
+  });
+
+  it('retries a failed runtime lookup from the warning and enables the selects', async () => {
+    // Every lookup fails until the test lets them through, so only Retry can load the list.
+    let failing = true;
+    mockRuntime(async () => {
+      if (failing) throw new Error('runtime lookup failed');
+      return runtimeStatus();
+    });
+    render(AnalysisSettingsPage);
+    const warning = await screen.findByText('analysis.inference.backendsUnavailable');
+    const backend = screen.getByRole('combobox', { name: BACKEND_LABEL });
+    expect(backend).toBeDisabled();
+    const alert = warning.closest('[id]');
+    expect(alert).not.toBeNull();
+    expect(backend.getAttribute('aria-describedby')?.split(' ')).toContain(alert?.id);
+
+    failing = false;
+    await userEvent.setup().click(screen.getByRole('button', { name: 'common.retry' }));
+
+    await waitFor(() => expect(backend).toBeEnabled());
+    expect(warning).not.toBeInTheDocument();
+    await waitFor(() => expect(backend).toHaveFocus());
+  });
+
+  it('offers only Auto when the host reports neither ONNX Runtime nor OpenVINO', async () => {
+    mockRuntime(async () => runtimeStatus({ onnx: false, openvino: false }));
+    render(AnalysisSettingsPage);
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+    await waitFor(() => expect(backend).toBeEnabled());
+
+    expect(await optionLabels(backend)).toEqual(['analysis.inference.backend.options.auto']);
+    expect(screen.queryByRole('combobox', { name: DEVICE_LABEL })).toBeNull();
+  });
+
+  it('keeps a saved backend the host lacks and hides the device for ONNX Runtime', async () => {
+    seedSection('birdnet', { ...BASE_BIRDNET, backend: 'onnx', openVinoDevice: 'gpu' });
+    mockRuntime(async () => runtimeStatus({ onnx: false }));
+    render(AnalysisSettingsPage);
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+    await waitFor(() => expect(backend).toBeEnabled());
+
+    expect(await optionLabels(backend)).toContain('analysis.inference.backend.options.onnx');
+    expect(screen.queryByRole('combobox', { name: DEVICE_LABEL })).toBeNull();
+  });
+
+  it('offers GPU only when the host has one or it is saved', async () => {
+    mockRuntime(async () => runtimeStatus({ devices: ['CPU'] }));
+    render(AnalysisSettingsPage);
+    const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    await waitFor(() => expect(device).toBeEnabled());
+    expect(await optionLabels(device)).not.toContain('analysis.inference.device.options.gpu');
+
+    resetPage('inference');
+    seedSection('birdnet', { ...BASE_BIRDNET, openVinoDevice: 'gpu' });
+    mockRuntime(async () => runtimeStatus({ devices: ['CPU'] }));
+    render(AnalysisSettingsPage);
+    const savedGpu = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    await waitFor(() => expect(savedGpu).toBeEnabled());
+    expect(await optionLabels(savedGpu)).toContain('analysis.inference.device.options.gpu');
+  });
+});
+
 describe('AnalysisSettingsPage range filter scope', () => {
   beforeEach(() => resetPage('filters'));
 

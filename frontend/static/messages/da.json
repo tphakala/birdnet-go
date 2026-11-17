@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Ændring af backend eller enhed genindlæser modellerne, så detektionen sættes på pause i et par sekunder.",
+      "backendsLoading": "Kontrollerer, hvilke runtimes denne enhed understøtter.",
       "backendsUnavailable": "Kunne ikke aflæse, hvilke runtimes denne enhed understøtter. Backend og enhed kan ændres, når den er indlæst.",
       "running": {
         "title": "Kører nu",

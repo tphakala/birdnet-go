@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Taustajärjestelmän tai laitteen vaihtaminen lataa mallit uudelleen, joten tunnistus keskeytyy muutamaksi sekunniksi.",
+      "backendsLoading": "Tarkistetaan, mitä suoritusympäristöjä tämä laite tukee.",
       "backendsUnavailable": "Ei voitu lukea, mitä suoritusympäristöjä tämä laite tukee. Taustajärjestelmä ja laite voidaan vaihtaa latauksen jälkeen.",
       "running": {
         "title": "Nyt käynnissä",

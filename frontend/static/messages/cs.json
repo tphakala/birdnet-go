@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Změna backendu nebo zařízení znovu načte modely, takže se detekce na několik sekund pozastaví.",
+      "backendsLoading": "Zjišťuje se, která běhová prostředí toto zařízení podporuje.",
       "backendsUnavailable": "Nepodařilo se zjistit, která běhová prostředí toto zařízení podporuje. Backend a zařízení lze změnit po jejich načtení.",
       "running": {
         "title": "Aktuálně spuštěno",

@@ -6120,6 +6120,7 @@
         }
       },
       "reloadNote": "Het wijzigen van de backend of het apparaat laadt de modellen opnieuw, waardoor de detectie enkele seconden pauzeert.",
+      "backendsLoading": "Controleren welke runtimes dit apparaat ondersteunt.",
       "backendsUnavailable": "Kon niet lezen welke runtimes dit apparaat ondersteunt. De backend en het apparaat kunnen worden gewijzigd zodra dit is geladen.",
       "running": {
         "title": "Nu actief",
