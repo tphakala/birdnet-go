@@ -325,6 +325,7 @@ func (d *ModelDocuments) fetch(ctx context.Context, doc *RepoDocument) ([]byte, 
 		lastErr = errors.Newf("no HuggingFace endpoint available for %s", doc.Repo).
 			Component(documentComponent).
 			Category(errors.CategoryValidation).
+			Context("operation", "select_document_endpoint").
 			Build()
 	}
 	if errors.Is(lastErr, ErrDocumentMismatch) {
@@ -354,6 +355,7 @@ func fetchDocumentFrom(ctx context.Context, endpoint string, doc *RepoDocument) 
 			err: errors.Newf("read error fetching %s: %v", url, err).
 				Component(documentComponent).
 				Category(errors.CategoryNetwork).
+				Context("operation", "read_document_body").
 				Context("url", url).
 				Build(),
 		}
@@ -362,6 +364,7 @@ func fetchDocumentFrom(ctx context.Context, endpoint string, doc *RepoDocument) 
 		return nil, errors.Newf("document at %s is larger than %d bytes", url, documentMaxBytes).
 			Component(documentComponent).
 			Category(errors.CategoryValidation).
+			Context("operation", "check_document_size").
 			Context("url", url).
 			Build()
 	}

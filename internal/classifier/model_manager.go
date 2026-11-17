@@ -2700,6 +2700,7 @@ func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http
 		return nil, errors.Newf("failed to create request for %s: %v", url, err).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
+			Context("operation", "build_huggingface_request").
 			Context("url", url).
 			Build()
 	}
@@ -2713,6 +2714,7 @@ func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http
 			err: errors.Newf("HTTP request failed for %s: %v", url, err).
 				Component("classifier.model_manager").
 				Category(errors.CategoryNetwork).
+				Context("operation", "huggingface_request").
 				Context("url", url).
 				Build(),
 		}
@@ -2727,6 +2729,7 @@ func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http
 			err: errors.Newf("HTTP %d for %s", resp.StatusCode, url).
 				Component("classifier.model_manager").
 				Category(errors.CategoryNetwork).
+				Context("operation", "huggingface_status").
 				Context("url", url).
 				Context("status", fmt.Sprintf("%d", resp.StatusCode)).
 				Build(),
